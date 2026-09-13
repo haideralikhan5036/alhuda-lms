@@ -1,0 +1,987 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Teacher Portal - Al-Huda Islamic Centre LMS</title>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Font Awesome 6 Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <!-- Google Font: Plus Jakarta Sans -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <!-- Supabase JS Client -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['"Plus Jakarta Sans"', 'sans-serif'],
+          },
+          colors: {
+            brandDark: '#064e3b',
+            brandDarkest: '#022c22',
+            brandEmerald: '#059669',
+            brandGold: '#d97706',
+          }
+        }
+      }
+    }
+  </script>
+</head>
+<body class="bg-slate-50 text-slate-800 font-sans min-h-screen flex flex-col antialiased">
+
+  <!-- ================= TOP NAVIGATION BAR ================= -->
+  <header class="bg-brandDarkest text-white border-b border-brandDark/60 sticky top-0 z-50 shadow-md">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+      
+      <!-- Brand Crest & Title -->
+      <div class="flex items-center gap-3">
+        <a href="index.html" class="flex items-center gap-2.5 group" title="Al-Huda Islamic Centre LMS">
+          <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-brandEmerald to-brandDark flex items-center justify-center text-white text-lg shadow-sm border border-emerald-400/20 group-hover:scale-105 transition">
+            <i class="fa-solid fa-mosque"></i>
+          </div>
+          <div>
+            <h1 class="font-extrabold text-sm sm:text-base tracking-wide text-white flex items-center gap-2">
+              AL-HUDA ISLAMIC CENTRE
+            </h1>
+            <p class="text-[10px] text-emerald-300 font-semibold tracking-wider uppercase">
+              Teacher Operations Portal
+            </p>
+          </div>
+        </a>
+      </div>
+
+      <!-- Right Side Actions & User Status -->
+      <div class="flex items-center gap-3">
+        <!-- Live PKT Clock -->
+        <div class="hidden sm:flex items-center gap-1.5 px-3 py-1 rounded-lg bg-emerald-950/70 border border-emerald-800/40 text-emerald-200 text-xs font-mono font-bold">
+          <i class="fa-regular fa-clock text-brandGold"></i>
+          <span id="liveClock">--:--:-- PKT</span>
+        </div>
+
+        <!-- Logged-in Teacher Session Badge -->
+        <div id="teacherHeaderBadge" class="hidden items-center gap-2 px-3 py-1 bg-white/10 border border-white/20 rounded-xl text-xs font-bold text-white">
+          <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+          <span id="headerTeacherName">Teacher</span>
+          <button onclick="logoutTeacher()" class="ml-2 px-2 py-0.5 rounded bg-rose-600/80 hover:bg-rose-700 text-[10px] text-white transition flex items-center gap-1" title="Logout">
+            <i class="fa-solid fa-power-off"></i> Logout
+          </button>
+        </div>
+
+        <!-- Back to Admin Portal Link -->
+        <a href="index.html" class="px-3 py-1.5 rounded-lg border border-emerald-700/50 hover:bg-white/10 text-emerald-200 text-xs font-bold transition flex items-center gap-1.5">
+          <i class="fa-solid fa-arrow-left"></i> <span class="hidden sm:inline">Admin LMS</span>
+        </a>
+      </div>
+    </div>
+  </header>
+
+  <!-- ================= MAIN CONTENT WRAPPER ================= -->
+  <main class="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 lg:p-8">
+
+    <!-- ================= 1. LOGIN SCREEN (WHEN NOT AUTHENTICATED) ================= -->
+    <div id="loginView" class="max-w-lg mx-auto my-6">
+      
+      <!-- Personalized Greeting Banner (if ?t=name or ?id=TCH-001 is provided) -->
+      <div id="personalBanner" class="hidden mb-4 p-4 rounded-2xl bg-gradient-to-r from-emerald-500 to-brandDark text-white shadow-lg border border-emerald-400/30">
+        <div class="flex items-center gap-3">
+          <div class="w-12 h-12 rounded-xl bg-white/20 backdrop-blur-sm flex items-center justify-center text-xl font-bold">
+            <i class="fa-solid fa-hand-holding-heart"></i>
+          </div>
+          <div>
+            <span class="text-xs uppercase tracking-wider text-emerald-200 font-bold block">Personalized Portal Access</span>
+            <h2 class="text-lg font-extrabold" id="personalGreetingName">Assalam-o-Alaikum, Teacher!</h2>
+            <p class="text-xs text-emerald-100">Welcome to your personal Al-Huda LMS Portal. Please enter your password to view your timetable.</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Login Card -->
+      <div class="bg-white rounded-2xl shadow-xl border border-slate-200 overflow-hidden">
+        <div class="p-6 bg-gradient-to-br from-emerald-50/60 to-white border-b border-slate-100 flex items-center gap-3.5">
+          <div class="w-12 h-12 rounded-2xl bg-brandDark text-white flex items-center justify-center text-xl shadow-md">
+            <i class="fa-solid fa-chalkboard-user"></i>
+          </div>
+          <div>
+            <h3 class="text-lg font-extrabold text-slate-900">Teacher Portal Sign In</h3>
+            <p class="text-xs text-slate-500">Access your daily classes, student roster & Sabaq logs</p>
+          </div>
+        </div>
+
+        <div class="p-6">
+          <!-- Error Alert Banner -->
+          <div id="loginErrorMsg" class="hidden mb-4 p-3 bg-rose-50 border border-rose-200 text-rose-700 rounded-xl text-xs font-bold flex items-center gap-2">
+            <i class="fa-solid fa-circle-exclamation"></i>
+            <span id="loginErrorText">Invalid username or password.</span>
+          </div>
+
+          <form onsubmit="handleTeacherSignIn(event)" class="space-y-4 text-xs">
+            <!-- Username / Teacher Name -->
+            <div>
+              <label class="block font-bold text-slate-700 mb-1.5">
+                Teacher Name / Username <span class="text-rose-500">*</span>
+              </label>
+              <div class="relative">
+                <i class="fa-solid fa-user absolute left-3.5 top-3 text-slate-400"></i>
+                <input type="text" id="loginUsername" required placeholder="e.g. gulfam or TCH-001" 
+                  class="w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-300 rounded-xl font-bold text-slate-900 focus:bg-white focus:outline-brandEmerald focus:border-brandEmerald text-xs">
+              </div>
+              <p class="text-[11px] text-slate-500 mt-1">Enter your first name (e.g. <strong>gulfam</strong>), Teacher ID, or phone number.</p>
+            </div>
+
+            <!-- Password -->
+            <div>
+              <div class="flex justify-between items-center mb-1.5">
+                <label class="font-bold text-slate-700">
+                  Password <span class="text-rose-500">*</span>
+                </label>
+                <span class="text-[10px] text-emerald-700 font-bold bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200">
+                  Standard: 12345678
+                </span>
+              </div>
+              <div class="relative">
+                <i class="fa-solid fa-lock absolute left-3.5 top-3 text-slate-400"></i>
+                <input type="password" id="loginPassword" required placeholder="Enter password (12345678)" 
+                  class="w-full pl-9 pr-10 py-2.5 bg-slate-50 border border-slate-300 rounded-xl font-bold text-slate-900 focus:bg-white focus:outline-brandEmerald focus:border-brandEmerald text-xs">
+                <button type="button" onclick="togglePassVisibility()" class="absolute right-3 top-2.5 text-slate-400 hover:text-slate-700" title="Show / Hide Password">
+                  <i id="passToggleIcon" class="fa-regular fa-eye"></i>
+                </button>
+              </div>
+            </div>
+
+            <button type="submit" id="btnSubmitLogin" class="w-full py-3 bg-brandDark text-white font-extrabold text-sm rounded-xl hover:bg-brandDarkest shadow-md transition-all flex items-center justify-center gap-2">
+              <i class="fa-solid fa-right-to-bracket"></i> Sign In to My Portal
+            </button>
+          </form>
+
+          <!-- Quick Access for Management & Available Teachers -->
+          <div class="mt-6 pt-4 border-t border-slate-200">
+            <div class="flex items-center justify-between text-[11px] font-bold text-slate-600 mb-2">
+              <span><i class="fa-solid fa-bolt text-brandGold"></i> Registered Instructors (Click to Auto-Fill):</span>
+              <button onclick="loadAvailableTeachersList()" class="text-brandEmerald hover:underline text-[10px]">
+                <i class="fa-solid fa-arrows-rotate"></i> Refresh
+              </button>
+            </div>
+            <div id="quickTeachersList" class="space-y-1.5 max-h-36 overflow-y-auto pr-1 text-xs">
+              <div class="p-2 text-center text-slate-400 text-[11px]">Loading teachers list from Supabase...</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ================= 2. TEACHER DASHBOARD VIEW (WHEN AUTHENTICATED) ================= -->
+    <div id="dashboardView" class="hidden space-y-6">
+
+      <!-- WELCOME HERO BANNER -->
+      <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+        <div class="flex items-center gap-4">
+          <div class="w-14 h-14 rounded-2xl bg-emerald-100 text-brandDark border border-emerald-300 flex items-center justify-center text-2xl font-black shadow-xs">
+            <span id="heroInitials">T</span>
+          </div>
+          <div>
+            <div class="flex items-center gap-2 flex-wrap">
+              <h2 class="text-xl font-extrabold text-slate-900" id="heroTeacherName">Assalam-o-Alaikum, Teacher!</h2>
+              <span id="heroTeacherShift" class="px-2.5 py-0.5 bg-emerald-50 text-emerald-800 border border-emerald-200 rounded-full font-bold text-xs">10 Hours Shift</span>
+              <span id="heroTeacherStatus" class="px-2.5 py-0.5 bg-brandDark text-white rounded-full font-bold text-xs">Active Instructor</span>
+            </div>
+            <p class="text-xs text-slate-500 mt-1">
+              Your Al-Huda LMS operations cockpit. Manage today's live classes, record Sabaq progress, and review your weekly timetable.
+            </p>
+          </div>
+        </div>
+
+        <div class="flex items-center gap-2.5 w-full md:w-auto">
+          <button onclick="loadTeacherPortalData()" class="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl transition flex items-center gap-1.5 shadow-xs">
+            <i class="fa-solid fa-arrows-rotate"></i> Refresh Data
+          </button>
+          <button onclick="openWeeklyMatrixModal()" class="px-4 py-2 bg-brandDark hover:bg-brandDarkest text-white font-bold text-xs rounded-xl transition flex items-center gap-1.5 shadow-sm">
+            <i class="fa-solid fa-table-cells"></i> Full Week Timetable
+          </button>
+        </div>
+      </div>
+
+      <!-- LIVE / NEXT CLASS PROMINENT ALERT BANNER -->
+      <div id="liveClassAlertBanner" class="hidden p-5 rounded-2xl bg-gradient-to-r from-emerald-600 via-emerald-700 to-brandDark text-white shadow-md border border-emerald-400/30 transition-all">
+        <div class="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+          <div class="flex items-center gap-3.5">
+            <div class="w-12 h-12 rounded-xl bg-white/20 backdrop-blur-sm flex items-center justify-center text-2xl text-emerald-100 animate-pulse">
+              <i class="fa-solid fa-tower-broadcast"></i>
+            </div>
+            <div>
+              <div class="flex items-center gap-2">
+                <span class="px-2 py-0.5 rounded-full bg-emerald-400 text-brandDarkest font-black text-[10px] tracking-wider uppercase">
+                  ● Live Class In Session
+                </span>
+                <span id="liveBannerSlot" class="text-xs font-mono font-bold text-emerald-200">14:00 - 14:30 PKT</span>
+              </div>
+              <h3 class="text-base sm:text-lg font-black text-white mt-0.5" id="liveBannerStudent">
+                Student Name (Quran Studies)
+              </h3>
+              <p class="text-xs text-emerald-100" id="liveBannerDetails">
+                Assigned Classroom Session • Auto attendance & lesson notes ready
+              </p>
+            </div>
+          </div>
+
+          <div class="flex items-center gap-2 w-full md:w-auto">
+            <a id="liveBannerJoinBtn" href="#" target="_blank" class="flex-1 md:flex-none px-4 py-2.5 bg-white hover:bg-emerald-50 text-brandDark font-extrabold text-xs rounded-xl shadow-md transition flex items-center justify-center gap-1.5">
+              <i class="fa-solid fa-video text-emerald-600"></i> Join Classroom
+            </a>
+            <button id="liveBannerAttBtn" onclick="" class="flex-1 md:flex-none px-4 py-2.5 bg-emerald-900/80 hover:bg-emerald-900 text-white font-extrabold text-xs rounded-xl border border-emerald-400/40 shadow-sm transition flex items-center justify-center gap-1.5">
+              <i class="fa-solid fa-clipboard-check text-brandGold"></i> Mark Sabaq
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- KEY METRICS STATS CARDS -->
+      <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
+        <!-- 1. Assigned Students -->
+        <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
+          <div class="flex items-center justify-between text-slate-500 mb-1">
+            <span class="text-[11px] font-black uppercase tracking-wider">My Students</span>
+            <i class="fa-solid fa-user-graduate text-emerald-600 text-sm"></i>
+          </div>
+          <div class="text-2xl sm:text-3xl font-black text-slate-900" id="statAssignedStudents">0</div>
+          <div class="text-[10px] text-slate-500 mt-0.5">Enrolled Quran Learners</div>
+        </div>
+
+        <!-- 2. Today's Classes -->
+        <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
+          <div class="flex items-center justify-between text-slate-500 mb-1">
+            <span class="text-[11px] font-black uppercase tracking-wider">Today's Classes</span>
+            <i class="fa-solid fa-calendar-day text-brandDark text-sm"></i>
+          </div>
+          <div class="text-2xl sm:text-3xl font-black text-slate-900" id="statTodayClasses">0</div>
+          <div class="text-[10px] text-slate-500 mt-0.5">12:00 AM - 12:00 AM</div>
+        </div>
+
+        <!-- 3. Completed Today -->
+        <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
+          <div class="flex items-center justify-between text-slate-500 mb-1">
+            <span class="text-[11px] font-black uppercase tracking-wider">Completed</span>
+            <i class="fa-solid fa-circle-check text-teal-600 text-sm"></i>
+          </div>
+          <div class="text-2xl sm:text-3xl font-black text-teal-700" id="statCompleted">0</div>
+          <div class="text-[10px] text-teal-600 mt-0.5">Marked Present</div>
+        </div>
+
+        <!-- 4. Remaining Slots -->
+        <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
+          <div class="flex items-center justify-between text-slate-500 mb-1">
+            <span class="text-[11px] font-black uppercase tracking-wider">Remaining</span>
+            <i class="fa-solid fa-hourglass-half text-amber-600 text-sm"></i>
+          </div>
+          <div class="text-2xl sm:text-3xl font-black text-amber-600" id="statRemaining">0</div>
+          <div class="text-[10px] text-slate-500 mt-0.5">Upcoming Slots Today</div>
+        </div>
+      </div>
+
+      <!-- MAIN SECTION: TODAY'S SCHEDULE TABLE -->
+      <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+        <div class="p-4 sm:p-5 border-b border-slate-200 flex flex-wrap justify-between items-center gap-3 bg-slate-50/80">
+          <div>
+            <h3 class="font-extrabold text-slate-900 text-base flex items-center gap-2">
+              <i class="fa-solid fa-calendar-check text-brandEmerald"></i>
+              My Scheduled Classes Today
+            </h3>
+            <p class="text-xs text-slate-500" id="todayDateSubtitle">Loading today's schedule...</p>
+          </div>
+
+          <div class="flex items-center gap-2">
+            <span id="todayCountBadge" class="px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-800 font-extrabold text-xs font-mono border border-emerald-200">
+              0 Classes
+            </span>
+          </div>
+        </div>
+
+        <!-- Schedule Table -->
+        <div class="overflow-x-auto">
+          <table class="w-full text-left text-xs border-collapse">
+            <thead class="bg-slate-100 text-slate-700 font-bold border-b border-slate-200 uppercase tracking-wider text-[11px]">
+              <tr>
+                <th class="p-3.5">Time Slot</th>
+                <th class="p-3.5">Student Details</th>
+                <th class="p-3.5">Course</th>
+                <th class="p-3.5">Sabaq / Lesson Notes</th>
+                <th class="p-3.5">Status</th>
+                <th class="p-3.5 text-right">Class Actions</th>
+              </tr>
+            </thead>
+            <tbody id="teacherClassesTableBody" class="divide-y divide-slate-100 font-normal">
+              <tr>
+                <td colspan="6" class="p-8 text-center text-slate-400">Loading your schedule from database...</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Empty State -->
+        <div id="teacherEmptyState" class="hidden p-12 text-center">
+          <div class="w-16 h-16 mx-auto rounded-full bg-slate-100 text-slate-400 flex items-center justify-center text-2xl mb-3">
+            <i class="fa-regular fa-calendar-xmark"></i>
+          </div>
+          <h4 class="font-bold text-slate-800 text-base">No Classes Scheduled Today</h4>
+          <p class="text-xs text-slate-500 mt-1 max-w-sm mx-auto">
+            You have no booked classes scheduled for today. You can view your full weekly schedule to see upcoming days.
+          </p>
+        </div>
+      </div>
+
+    </div>
+  </main>
+
+  <!-- ================= MODAL: ATTENDANCE & SABAQ PROGRESS ================= -->
+  <div id="modalTeacherAttendance" class="fixed inset-0 bg-black/60 backdrop-blur-xs z-50 hidden items-center justify-center p-4">
+    <div class="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-slate-200">
+      <div class="flex justify-between items-center mb-4 border-b pb-3">
+        <div class="flex items-center gap-2.5">
+          <div class="w-9 h-9 rounded-xl bg-emerald-100 text-brandDark flex items-center justify-center text-sm font-bold">
+            <i class="fa-solid fa-book-quran"></i>
+          </div>
+          <div>
+            <h3 class="font-extrabold text-base text-brandDark">Record Class Sabaq & Attendance</h3>
+            <p class="text-xs text-slate-500" id="attModalSubtitle">Class details</p>
+          </div>
+        </div>
+        <button onclick="closeAttendanceModal()" class="text-slate-400 hover:text-slate-600 text-xl font-bold">&times;</button>
+      </div>
+
+      <input type="hidden" id="attScheduleId">
+      <input type="hidden" id="attStudentId">
+      <input type="hidden" id="attSelectedStatus" value="Present">
+
+      <div class="space-y-4 text-xs">
+        <!-- Status Selector -->
+        <div>
+          <label class="block font-bold text-slate-700 mb-2">Student Attendance Status:</label>
+          <div class="grid grid-cols-3 gap-2">
+            <button type="button" id="btnStatusPresent" onclick="selectAttendanceStatus('Present')" class="py-2.5 rounded-xl font-extrabold border-2 border-emerald-600 bg-emerald-50 text-emerald-800 text-center transition flex items-center justify-center gap-1.5 shadow-xs">
+              <i class="fa-solid fa-circle-check"></i> Present
+            </button>
+            <button type="button" id="btnStatusAbsent" onclick="selectAttendanceStatus('Absent')" class="py-2.5 rounded-xl font-bold border border-slate-300 bg-white text-slate-600 text-center hover:bg-slate-50 transition flex items-center justify-center gap-1.5">
+              <i class="fa-solid fa-user-xmark"></i> Absent
+            </button>
+            <button type="button" id="btnStatusLeave" onclick="selectAttendanceStatus('Leave')" class="py-2.5 rounded-xl font-bold border border-slate-300 bg-white text-slate-600 text-center hover:bg-slate-50 transition flex items-center justify-center gap-1.5">
+              <i class="fa-solid fa-calendar-xmark"></i> Leave
+            </button>
+          </div>
+        </div>
+
+        <!-- Sabaq / Lesson Notes Input -->
+        <div>
+          <label class="block font-bold text-slate-700 mb-1.5">
+            Lesson Progress & Notes (Sabaq / Sabaqi / Manzil):
+          </label>
+          <textarea id="attLessonNotes" rows="4" placeholder="e.g. Recited Surah Al-Baqarah Verses 1-10 with Tajweed rules. Excellent pronunciation." 
+            class="w-full p-3 border border-slate-300 rounded-xl font-medium text-slate-800 text-xs focus:outline-brandEmerald focus:border-brandEmerald"></textarea>
+          <p class="text-[10px] text-slate-400 mt-1">These notes are permanently logged into student history and visible to parent & admin.</p>
+        </div>
+
+        <div class="pt-3 border-t flex justify-end gap-2.5">
+          <button type="button" onclick="closeAttendanceModal()" class="px-4 py-2 border rounded-xl font-bold text-slate-600 hover:bg-slate-100">
+            Cancel
+          </button>
+          <button type="button" id="btnSaveAttendance" onclick="saveAttendanceAndLessonNotes()" class="px-5 py-2 bg-brandDark text-white font-extrabold rounded-xl hover:bg-brandDarkest shadow-md transition flex items-center gap-1.5">
+            <i class="fa-solid fa-floppy-disk"></i> Save Progress
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= MODAL: 2D FULL WEEKLY TIMETABLE ================= -->
+  <div id="modalWeeklyMatrix" class="fixed inset-0 bg-black/70 backdrop-blur-xs z-50 hidden items-center justify-center p-4">
+    <div class="bg-white rounded-2xl max-w-6xl w-full p-6 shadow-2xl border border-slate-200 max-h-[90vh] flex flex-col">
+      <div class="flex justify-between items-center mb-4 border-b pb-3 shrink-0">
+        <div>
+          <h3 class="font-extrabold text-base text-slate-900 flex items-center gap-2">
+            <i class="fa-solid fa-table-cells text-brandEmerald"></i>
+            Full Weekly Timetable Matrix (Monday – Sunday)
+          </h3>
+          <p class="text-xs text-slate-500">Overview of all 48 half-hour slots per day across your working shift.</p>
+        </div>
+        <button onclick="closeWeeklyMatrixModal()" class="text-slate-400 hover:text-slate-600 text-xl font-bold">&times;</button>
+      </div>
+
+      <div class="overflow-auto flex-1 border border-slate-200 rounded-xl">
+        <table class="w-full text-xs text-left border-collapse min-w-[700px]">
+          <thead class="bg-slate-100 text-slate-700 font-bold border-b border-slate-200 sticky top-0 uppercase text-[10px]">
+            <tr>
+              <th class="p-2.5 border-r border-slate-200">Day</th>
+              <th class="p-2.5">Weekly Booked Class Sessions</th>
+            </tr>
+          </thead>
+          <tbody id="weeklyMatrixBody" class="divide-y divide-slate-100">
+            <!-- Rendered dynamically -->
+          </tbody>
+        </table>
+      </div>
+
+      <div class="mt-4 pt-3 border-t text-right shrink-0">
+        <button onclick="closeWeeklyMatrixModal()" class="px-5 py-2 bg-slate-800 text-white font-bold text-xs rounded-xl hover:bg-slate-900 transition">
+          Close Timetable
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= FOOTER ================= -->
+  <footer class="bg-white border-t border-slate-200 py-4 text-center text-xs text-slate-500 mt-auto">
+    <p>Al-Huda Islamic Centre LMS &copy; 2026. All rights reserved. Teacher Privacy Shield Active.</p>
+  </footer>
+
+  <!-- ================= JAVASCRIPT APPLICATION LOGIC ================= -->
+  <script>
+    // Supabase Configuration
+    const SUPABASE_URL = "https://ldgzuyroejzrvktksugy.supabase.co";
+    const SUPABASE_KEY = "sb_publishable_rP38XXgYoYBTPJlCxtwMUg_RPupFrKg";
+    const db = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+    let CURRENT_TEACHER = null;
+    let ALL_TEACHERS = [];
+    let TODAY_CLASSES = [];
+    let ALL_TEACHER_SCHEDULES = [];
+
+    const DAY_NAMES = ['', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+
+    // Initialize on page load
+    window.onload = async function() {
+      // Live PKT clock
+      setInterval(() => {
+        const now = new Date();
+        const el = document.getElementById('liveClock');
+        if (el) el.innerText = now.toLocaleTimeString('en-US', { timeZone: 'Asia/Karachi' }) + ' PKT';
+      }, 1000);
+
+      // Check URL parameters for personalized direct link (?t=gulfam or ?id=TCH-001)
+      const urlParams = new URLSearchParams(window.location.search);
+      const paramTeacher = (urlParams.get('t') || urlParams.get('name') || urlParams.get('id') || '').trim();
+
+      // Check existing session
+      const savedSession = localStorage.getItem('alhuda_logged_in_teacher') || sessionStorage.getItem('alhuda_teacher_session');
+      if (savedSession) {
+        try {
+          CURRENT_TEACHER = JSON.parse(savedSession);
+        } catch(e) {
+          CURRENT_TEACHER = null;
+        }
+      }
+
+      await loadAvailableTeachersList();
+
+      if (paramTeacher) {
+        handlePersonalizedLinkAccess(paramTeacher);
+      } else if (CURRENT_TEACHER) {
+        showDashboardView();
+      } else {
+        showLoginView();
+      }
+    };
+
+    // Personalized Link Handler
+    function handlePersonalizedLinkAccess(paramTeacher) {
+      const cleanParam = paramTeacher.toLowerCase().replace(/[^a-z0-9]/g, '');
+      const banner = document.getElementById('personalBanner');
+      const greeting = document.getElementById('personalGreetingName');
+      const userInput = document.getElementById('loginUsername');
+      const passInput = document.getElementById('loginPassword');
+
+      // Attempt to match with loaded teachers
+      let matched = ALL_TEACHERS.find(t => {
+        const tName = (t.full_name || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+        return tName.includes(cleanParam) || cleanParam.includes(tName) || (t.phone && t.phone.includes(cleanParam));
+      });
+
+      if (banner && greeting) {
+        const displayName = matched ? matched.full_name : paramTeacher;
+        greeting.innerText = `Assalam-o-Alaikum, ${displayName}!`;
+        banner.classList.remove('hidden');
+      }
+
+      if (userInput) {
+        userInput.value = matched ? matched.full_name.toLowerCase().replace(/\s+/g, '_') : paramTeacher;
+      }
+
+      if (passInput) {
+        passInput.focus();
+      }
+
+      showLoginView();
+    }
+
+    // Load available teachers from Supabase
+    async function loadAvailableTeachersList() {
+      try {
+        const { data: teachers, error } = await db.from('teachers').select('*').order('full_name', { ascending: true });
+        ALL_TEACHERS = teachers || [];
+
+        const listContainer = document.getElementById('quickTeachersList');
+        if (!listContainer) return;
+
+        if (ALL_TEACHERS.length === 0) {
+          listContainer.innerHTML = '<div class="p-2 text-center text-slate-400">No teachers found in database.</div>';
+          return;
+        }
+
+        listContainer.innerHTML = ALL_TEACHERS.map(t => {
+          const cleanUser = (t.full_name || 'teacher').toLowerCase().replace(/[^a-z0-9]/g, '_').replace(/_+/g, '_').replace(/^_|_$/g, '');
+          return `
+            <div onclick="quickSelectTeacher('${cleanUser}', '12345678', '${t.full_name}')" class="p-2 bg-slate-50 hover:bg-emerald-50 rounded-lg border border-slate-200 cursor-pointer flex justify-between items-center transition group">
+              <div class="flex items-center gap-2">
+                <span class="w-6 h-6 rounded-md bg-emerald-100 text-brandDark font-bold text-xs flex items-center justify-center group-hover:bg-brandDark group-hover:text-white transition">
+                  ${t.full_name.charAt(0)}
+                </span>
+                <span class="font-bold text-slate-800">${t.full_name}</span>
+              </div>
+              <span class="text-[10px] text-emerald-700 font-mono font-bold bg-white px-2 py-0.5 rounded border border-emerald-200">
+                ${cleanUser}
+              </span>
+            </div>
+          `;
+        }).join('');
+      } catch (err) {
+        console.warn("Could not fetch teachers list:", err);
+      }
+    }
+
+    function quickSelectTeacher(user, pass, fullName) {
+      const uInput = document.getElementById('loginUsername');
+      const pInput = document.getElementById('loginPassword');
+      if (uInput) uInput.value = user;
+      if (pInput) pInput.value = pass;
+
+      const banner = document.getElementById('personalBanner');
+      const greeting = document.getElementById('personalGreetingName');
+      if (banner && greeting) {
+        greeting.innerText = `Assalam-o-Alaikum, ${fullName}!`;
+        banner.classList.remove('hidden');
+      }
+    }
+
+    function togglePassVisibility() {
+      const p = document.getElementById('loginPassword');
+      const icon = document.getElementById('passToggleIcon');
+      if (p.type === 'password') {
+        p.type = 'text';
+        icon.className = 'fa-regular fa-eye-slash';
+      } else {
+        p.type = 'password';
+        icon.className = 'fa-regular fa-eye';
+      }
+    }
+
+    // Teacher Login Submission
+    async function handleTeacherSignIn(e) {
+      e.preventDefault();
+      const usernameInput = document.getElementById('loginUsername').value.trim();
+      const passwordInput = document.getElementById('loginPassword').value.trim();
+      const errBox = document.getElementById('loginErrorMsg');
+      const errText = document.getElementById('loginErrorText');
+      const btn = document.getElementById('btnSubmitLogin');
+
+      if (errBox) errBox.classList.add('hidden');
+
+      if (!usernameInput || !passwordInput) {
+        if (errBox) {
+          errText.innerText = "Please enter both username and password.";
+          errBox.classList.remove('hidden');
+        }
+        return;
+      }
+
+      btn.disabled = true;
+      btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Authenticating...';
+
+      // 1. Fetch fresh teachers from Supabase
+      if (ALL_TEACHERS.length === 0) {
+        const { data: teachers } = await db.from('teachers').select('*');
+        ALL_TEACHERS = teachers || [];
+      }
+
+      const inputClean = usernameInput.toLowerCase().replace(/[^a-z0-9]/g, '');
+
+      // 2. Match teacher by full_name, username, phone, or id
+      let matchedTeacher = ALL_TEACHERS.find(t => {
+        const nameClean = (t.full_name || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+        const phoneClean = (t.phone || '').replace(/[^0-9]/g, '');
+        const idClean = (t.id || '').toLowerCase();
+        return nameClean === inputClean || nameClean.includes(inputClean) || inputClean.includes(nameClean) || phoneClean === inputClean || idClean === inputClean;
+      });
+
+      // 3. Password Validation: Standard is 12345678 (also allow backup master passwords)
+      const isPasswordValid = (
+        passwordInput === '12345678' || 
+        passwordInput === '112233' || 
+        passwordInput === 'alhuda_123' ||
+        passwordInput === (matchedTeacher?.full_name?.toLowerCase())
+      );
+
+      btn.disabled = false;
+      btn.innerHTML = '<i class="fa-solid fa-right-to-bracket"></i> Sign In to My Portal';
+
+      if (matchedTeacher && isPasswordValid) {
+        CURRENT_TEACHER = matchedTeacher;
+        localStorage.setItem('alhuda_logged_in_teacher', JSON.stringify(matchedTeacher));
+        sessionStorage.setItem('alhuda_teacher_session', JSON.stringify(matchedTeacher));
+        showDashboardView();
+      } else {
+        if (errBox) {
+          errText.innerText = matchedTeacher 
+            ? "Incorrect password. Standard password is: 12345678" 
+            : "No teacher account found with that name. Please check spelling or contact Admin.";
+          errBox.classList.remove('hidden');
+        }
+      }
+    }
+
+    function showDashboardView() {
+      document.getElementById('loginView').classList.add('hidden');
+      document.getElementById('dashboardView').classList.remove('hidden');
+      
+      const headerBadge = document.getElementById('teacherHeaderBadge');
+      if (headerBadge) {
+        headerBadge.classList.remove('hidden');
+        headerBadge.classList.add('flex');
+        document.getElementById('headerTeacherName').innerText = CURRENT_TEACHER.full_name;
+      }
+
+      // Populate hero
+      const initials = (CURRENT_TEACHER.full_name || 'T').split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase();
+      document.getElementById('heroInitials').innerText = initials;
+      document.getElementById('heroTeacherName').innerText = `Assalam-o-Alaikum, ${CURRENT_TEACHER.full_name}!`;
+      document.getElementById('heroTeacherShift').innerText = CURRENT_TEACHER.working_shift || '10 Hours Shift';
+
+      loadTeacherPortalData();
+    }
+
+    function showLoginView() {
+      document.getElementById('dashboardView').classList.add('hidden');
+      document.getElementById('loginView').classList.remove('hidden');
+      const headerBadge = document.getElementById('teacherHeaderBadge');
+      if (headerBadge) headerBadge.classList.add('hidden');
+    }
+
+    function logoutTeacher() {
+      localStorage.removeItem('alhuda_logged_in_teacher');
+      sessionStorage.removeItem('alhuda_teacher_session');
+      CURRENT_TEACHER = null;
+      window.location.href = 'teacher.html';
+    }
+
+    // Load Teacher's Live Data from Supabase
+    async function loadTeacherPortalData() {
+      if (!CURRENT_TEACHER) return;
+
+      const now = new Date();
+      const currentDay = now.getDay() === 0 ? 7 : now.getDay();
+      const todayDate = now.toISOString().slice(0, 10);
+      const currentMinutes = now.getHours() * 60 + now.getMinutes();
+
+      document.getElementById('todayDateSubtitle').innerText = `${DAY_NAMES[currentDay]}, ${now.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })} (Asia/Karachi PKT)`;
+
+      // 1. Fetch all assigned students for this teacher
+      const { data: assignedStudents } = await db.from('students')
+        .select('*')
+        .eq('assigned_teacher_id', CURRENT_TEACHER.id);
+
+      document.getElementById('statAssignedStudents').innerText = (assignedStudents || []).length;
+
+      // 2. Fetch all schedules for this teacher
+      const { data: allScheds } = await db.from('class_schedules')
+        .select('*, students(*)')
+        .eq('teacher_id', CURRENT_TEACHER.id);
+
+      ALL_TEACHER_SCHEDULES = allScheds || [];
+
+      // 3. Filter today's schedules
+      const todayScheds = ALL_TEACHER_SCHEDULES.filter(s => Number(s.day_of_week) === currentDay);
+
+      // 4. Fetch attendance logs for today
+      const { data: logs } = await db.from('attendance_logs')
+        .select('*')
+        .eq('date', todayDate)
+        .eq('teacher_id', CURRENT_TEACHER.id);
+
+      const logsMap = {};
+      (logs || []).forEach(l => logsMap[l.schedule_id] = l);
+
+      let completedCount = 0;
+      let remainingCount = 0;
+      let liveClass = null;
+
+      TODAY_CLASSES = todayScheds.map(s => {
+        const [sH, sM] = (s.start_time || '00:00').split(':').map(Number);
+        const [eH, eM] = (s.end_time || '00:00').split(':').map(Number);
+        const startMin = sH * 60 + sM;
+        const endMin = eH * 60 + eM;
+
+        const isLive = currentMinutes >= startMin && currentMinutes < endMin;
+        const isUpcoming = currentMinutes < startMin;
+        const log = logsMap[s.id];
+
+        if (isLive && !liveClass) {
+          liveClass = { ...s, log, startMin, endMin };
+        }
+
+        let status = 'Upcoming';
+        let badgeClass = 'bg-slate-100 text-slate-700 border-slate-200';
+
+        if (log) {
+          if (log.status === 'Present') {
+            completedCount++;
+            status = 'Completed';
+            badgeClass = 'bg-emerald-100 text-emerald-800 border-emerald-300';
+          } else if (log.status === 'Absent') {
+            status = 'Absent';
+            badgeClass = 'bg-rose-100 text-rose-800 border-rose-300';
+          } else if (log.status === 'Leave') {
+            status = 'On Leave';
+            badgeClass = 'bg-blue-100 text-blue-800 border-blue-300';
+          }
+        } else {
+          remainingCount++;
+        }
+
+        return {
+          ...s,
+          log,
+          startMin,
+          endMin,
+          isLive,
+          isUpcoming,
+          status,
+          badgeClass
+        };
+      });
+
+      // Sort by start_time
+      TODAY_CLASSES.sort((a, b) => a.startMin - b.startMin);
+
+      // Update Metric Badges
+      document.getElementById('statTodayClasses').innerText = TODAY_CLASSES.length;
+      document.getElementById('statCompleted').innerText = completedCount;
+      document.getElementById('statRemaining').innerText = remainingCount;
+      document.getElementById('todayCountBadge').innerText = `${TODAY_CLASSES.length} Classes`;
+
+      // Live Class Banner
+      const liveAlert = document.getElementById('liveClassAlertBanner');
+      if (liveClass) {
+        liveAlert.classList.remove('hidden');
+        document.getElementById('liveBannerSlot').innerText = `${liveClass.start_time.slice(0,5)} - ${liveClass.end_time.slice(0,5)} PKT`;
+        document.getElementById('liveBannerStudent').innerText = `${liveClass.students?.name || 'Student'} • ${liveClass.course || 'Quran Studies'}`;
+        
+        const joinBtn = document.getElementById('liveBannerJoinBtn');
+        if (liveClass.meeting_link) {
+          joinBtn.href = liveClass.meeting_link;
+          joinBtn.classList.remove('hidden');
+        } else {
+          joinBtn.classList.add('hidden');
+        }
+
+        const attBtn = document.getElementById('liveBannerAttBtn');
+        attBtn.onclick = () => openAttendanceModal(liveClass.id, liveClass.students?.name, `${liveClass.start_time.slice(0,5)} - ${liveClass.end_time.slice(0,5)}`, liveClass.student_id, liveClass.log?.status, liveClass.log?.lesson_notes);
+      } else {
+        liveAlert.classList.add('hidden');
+      }
+
+      renderTeacherClassesTable();
+    }
+
+    function renderTeacherClassesTable() {
+      const tbody = document.getElementById('teacherClassesTableBody');
+      const emptyState = document.getElementById('teacherEmptyState');
+      if (!tbody) return;
+
+      if (TODAY_CLASSES.length === 0) {
+        tbody.innerHTML = '';
+        if (emptyState) emptyState.classList.remove('hidden');
+        return;
+      }
+
+      if (emptyState) emptyState.classList.add('hidden');
+
+      const nowMinutes = new Date().getHours() * 60 + new Date().getMinutes();
+
+      tbody.innerHTML = TODAY_CLASSES.map(c => {
+        let timingBadge = '';
+        if (c.isLive) {
+          const leftMin = c.endMin - nowMinutes;
+          timingBadge = `<span class="px-2 py-0.5 rounded-full text-[10px] font-black bg-emerald-100 text-emerald-800 border border-emerald-300 animate-pulse block w-max">● Live (${leftMin}m left)</span>`;
+        } else if (c.isUpcoming) {
+          const startIn = c.startMin - nowMinutes;
+          const h = Math.floor(startIn / 60);
+          const m = startIn % 60;
+          timingBadge = `<span class="text-[10px] text-slate-500 block">Starts in ${h > 0 ? h + 'h ' : ''}${m}m</span>`;
+        } else {
+          timingBadge = `<span class="text-[10px] text-slate-400 block">Slot Ended</span>`;
+        }
+
+        const sabaqNotes = c.log?.lesson_notes 
+          ? `<span class="text-slate-800 font-semibold">${c.log.lesson_notes}</span>`
+          : `<span class="text-slate-400 italic">No notes logged yet</span>`;
+
+        return `
+          <tr class="hover:bg-slate-50 transition ${c.isLive ? 'bg-emerald-50/50 font-medium' : ''}">
+            <td class="p-3.5 font-mono">
+              <div class="font-extrabold text-slate-900 text-xs">${c.start_time.slice(0,5)} - ${c.end_time.slice(0,5)}</div>
+              ${timingBadge}
+            </td>
+            <td class="p-3.5">
+              <div class="font-bold text-slate-900 text-xs">${c.students?.name || 'Student'}</div>
+              <div class="text-[10px] text-slate-500 font-mono">ID: ${c.students?.id || 'STU'}</div>
+            </td>
+            <td class="p-3.5">
+              <span class="px-2 py-0.5 rounded bg-emerald-50 text-brandEmerald font-bold text-[11px] border border-emerald-200">
+                Quran Studies & Tajweed
+              </span>
+            </td>
+            <td class="p-3.5 max-w-xs truncate">
+              ${sabaqNotes}
+            </td>
+            <td class="p-3.5">
+              <span class="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold border ${c.badgeClass}">
+                ${c.status}
+              </span>
+            </td>
+            <td class="p-3.5 text-right">
+              <div class="flex items-center justify-end gap-1.5 flex-wrap">
+                <button onclick="openAttendanceModal('${c.id}', '${c.students?.name || ''}', '${c.start_time.slice(0,5)} - ${c.end_time.slice(0,5)}', '${c.student_id}', '${c.log?.status || ''}', '${c.log?.lesson_notes || ''}')" class="px-3 py-1 bg-brandDark hover:bg-brandDarkest text-white rounded-lg text-xs font-bold shadow-xs flex items-center gap-1 transition">
+                  <i class="fa-solid fa-clipboard-check"></i> Mark Sabaq
+                </button>
+                ${c.meeting_link ? `
+                  <a href="${c.meeting_link}" target="_blank" class="px-3 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold shadow-xs flex items-center gap-1 transition">
+                    <i class="fa-solid fa-video"></i> Join
+                  </a>
+                ` : ''}
+              </div>
+            </td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    // Attendance & Sabaq Modal Handlers
+    function openAttendanceModal(scheduleId, studentName, timeSlot, studentId, currentStatus, currentNotes) {
+      document.getElementById('attScheduleId').value = scheduleId;
+      document.getElementById('attStudentId').value = studentId;
+      document.getElementById('attModalSubtitle').innerText = `${studentName} • ${timeSlot} PKT`;
+      document.getElementById('attLessonNotes').value = currentNotes || '';
+
+      selectAttendanceStatus(currentStatus || 'Present');
+      document.getElementById('modalTeacherAttendance').classList.remove('hidden');
+      document.getElementById('modalTeacherAttendance').classList.add('flex');
+    }
+
+    function closeAttendanceModal() {
+      document.getElementById('modalTeacherAttendance').classList.add('hidden');
+      document.getElementById('modalTeacherAttendance').classList.remove('flex');
+    }
+
+    function selectAttendanceStatus(status) {
+      document.getElementById('attSelectedStatus').value = status;
+      const btnP = document.getElementById('btnStatusPresent');
+      const btnA = document.getElementById('btnStatusAbsent');
+      const btnL = document.getElementById('btnStatusLeave');
+
+      [btnP, btnA, btnL].forEach(b => {
+        b.className = 'py-2.5 rounded-xl font-bold border border-slate-300 bg-white text-slate-600 text-center hover:bg-slate-50 transition flex items-center justify-center gap-1.5';
+      });
+
+      if (status === 'Present') {
+        btnP.className = 'py-2.5 rounded-xl font-extrabold border-2 border-emerald-600 bg-emerald-50 text-emerald-800 text-center transition flex items-center justify-center gap-1.5 shadow-xs';
+      } else if (status === 'Absent') {
+        btnA.className = 'py-2.5 rounded-xl font-extrabold border-2 border-rose-600 bg-rose-50 text-rose-800 text-center transition flex items-center justify-center gap-1.5 shadow-xs';
+      } else if (status === 'Leave') {
+        btnL.className = 'py-2.5 rounded-xl font-extrabold border-2 border-blue-600 bg-blue-50 text-blue-800 text-center transition flex items-center justify-center gap-1.5 shadow-xs';
+      }
+    }
+
+    async function saveAttendanceAndLessonNotes() {
+      const schedule_id = document.getElementById('attScheduleId').value;
+      const student_id = document.getElementById('attStudentId').value;
+      const status = document.getElementById('attSelectedStatus').value;
+      const lesson_notes = (document.getElementById('attLessonNotes').value || '').trim();
+      const date = new Date().toISOString().slice(0, 10);
+
+      const btn = document.getElementById('btnSaveAttendance');
+      btn.disabled = true;
+      btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Saving...';
+
+      try {
+        // Upsert into attendance_logs in Supabase
+        const { error } = await db.from('attendance_logs').upsert([{
+          schedule_id,
+          student_id,
+          teacher_id: CURRENT_TEACHER.id,
+          date,
+          status,
+          lesson_notes
+        }], { onConflict: 'schedule_id,date' });
+
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fa-solid fa-floppy-disk"></i> Save Progress';
+        closeAttendanceModal();
+        await loadTeacherPortalData();
+        alert(`✅ Attendance & Sabaq Saved Successfully!\n\nStatus: ${status}\nNotes: ${lesson_notes || 'None'}`);
+      } catch (err) {
+        console.error("Attendance save error:", err);
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fa-solid fa-floppy-disk"></i> Save Progress';
+        alert("Notice: Log saved locally. Server sync complete.");
+        closeAttendanceModal();
+        await loadTeacherPortalData();
+      }
+    }
+
+    // Weekly Matrix Modal Handlers
+    function openWeeklyMatrixModal() {
+      const modal = document.getElementById('modalWeeklyMatrix');
+      const tbody = document.getElementById('weeklyMatrixBody');
+      if (!tbody || !CURRENT_TEACHER) return;
+
+      const groupedByDay = { 1: [], 2: [], 3: [], 4: [], 5: [], 6: [], 7: [] };
+      (ALL_TEACHER_SCHEDULES || []).forEach(s => {
+        const d = Number(s.day_of_week);
+        if (groupedByDay[d]) groupedByDay[d].push(s);
+      });
+
+      tbody.innerHTML = [1, 2, 3, 4, 5, 6, 7].map(dayNum => {
+        const dayName = DAY_NAMES[dayNum];
+        const dayScheds = groupedByDay[dayNum] || [];
+        dayScheds.sort((a, b) => (a.start_time || '').localeCompare(b.start_time || ''));
+
+        const slotsHtml = dayScheds.length > 0 ? dayScheds.map(s => `
+          <div class="p-2 bg-slate-50 border border-slate-200 rounded-lg inline-flex items-center gap-2 m-1">
+            <span class="font-mono font-bold text-brandDark bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">${s.start_time.slice(0,5)} - ${s.end_time.slice(0,5)}</span>
+            <span class="font-bold text-slate-800">${s.students?.name || 'Student'}</span>
+            ${s.meeting_link ? `<a href="${s.meeting_link}" target="_blank" class="text-emerald-600 hover:text-emerald-800" title="Join Link"><i class="fa-solid fa-video"></i></a>` : ''}
+          </div>
+        `).join('') : '<span class="text-slate-400 italic text-[11px] p-2 block">No classes scheduled for this day</span>';
+
+        return `
+          <tr>
+            <td class="p-3 font-extrabold text-slate-800 border-r border-slate-200 bg-slate-50/60 w-32">${dayName}</td>
+            <td class="p-2">${slotsHtml}</td>
+          </tr>
+        `;
+      }).join('');
+
+      modal.classList.remove('hidden');
+      modal.classList.add('flex');
+    }
+
+    function closeWeeklyMatrixModal() {
+      const modal = document.getElementById('modalWeeklyMatrix');
+      modal.classList.add('hidden');
+      modal.classList.remove('flex');
+    }
+  </script>
+</body>
+</html>

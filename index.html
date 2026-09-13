@@ -80,6 +80,9 @@
             <option value="student" class="text-slate-900 font-bold">🎓 Student / Parent Portal</option>
           </select>
         </div>
+        <a href="teacher.html" target="_blank" class="px-3 py-1.5 rounded-full bg-emerald-800/60 hover:bg-emerald-700 text-emerald-200 border border-emerald-500/40 text-xs font-bold transition flex items-center gap-1.5 shadow-xs" title="Open Dedicated Teacher Operations Portal">
+          <i class="fa-solid fa-chalkboard-user text-brandGold"></i> <span class="hidden md:inline">Teacher Portal</span>
+        </a>
         <div id="liveClock" class="hidden sm:block text-xs font-mono text-emerald-100 bg-white/10 px-2.5 py-1 rounded-md">--:--:--</div>
       </div>
     </div>
@@ -1231,13 +1234,13 @@
             </div>
             <div>
               <label class="block font-bold mb-1 text-slate-700">Login Username *:</label>
-              <input type="text" id="tUsername" required placeholder="e.g. qari_bilal" class="w-full p-2.5 bg-white border border-slate-300 rounded-lg font-mono font-bold text-slate-800">
+              <input type="text" id="tUsername" required placeholder="e.g. gulfam" class="w-full p-2.5 bg-white border border-slate-300 rounded-lg font-mono font-bold text-slate-800">
             </div>
             <div>
               <label class="block font-bold mb-1 text-slate-700">Login Password *:</label>
               <div class="relative">
-                <input type="text" id="tPassword" required value="alhuda_123" class="w-full p-2.5 bg-white border border-slate-300 rounded-lg font-mono font-bold text-slate-800 pr-8">
-                <button type="button" onclick="generateRandomTeacherPass()" class="absolute right-2 top-2.5 text-slate-400 hover:text-brandDark font-bold" title="Generate New Password">
+                <input type="text" id="tPassword" required value="12345678" class="w-full p-2.5 bg-white border border-slate-300 rounded-lg font-mono font-bold text-slate-800 pr-8">
+                <button type="button" onclick="generateRandomTeacherPass()" class="absolute right-2 top-2.5 text-slate-400 hover:text-brandDark font-bold" title="Reset Standard Password (12345678)">
                   <i class="fa-solid fa-arrows-rotate"></i>
                 </button>
               </div>
@@ -2673,7 +2676,7 @@
 
     // TEACHER ACCOUNTS & CREDENTIALS STORAGE ENGINE
     function getTeacherAccounts() {
-      return JSON.parse(localStorage.getItem('bqi_teacher_accounts') || '{}');
+      return JSON.parse(localStorage.getItem('alhuda_teacher_accounts') || localStorage.getItem('bqi_teacher_accounts') || '{}');
     }
 
     function saveTeacherAccount(tId, creds) {
@@ -2727,11 +2730,14 @@
       }
       const assignedId = `TCH-${String(seqNum).padStart(3, '0')}`;
 
-      const baseUser = (t.full_name || 'teacher').toLowerCase().replace(/[^a-z0-9]/g, '_').replace(/_+/g, '_').replace(/^_|_$/g, '').slice(0, 15) || 'teacher';
+      // Clean first name for username (e.g. "Gulfam" -> "gulfam")
+      const firstWord = (t.full_name || 'teacher').trim().split(/\s+/)[0];
+      const baseUser = firstWord.toLowerCase().replace(/[^a-z0-9]/g, '') || 'teacher';
+
       const defaultCred = {
         teacher_id: assignedId,
-        username: 'teacher_' + baseUser,
-        password: 'alhuda_' + Math.floor(100 + Math.random() * 900),
+        username: baseUser,
+        password: '12345678',
         working_shift: t.working_shift || '10 Hours Shift (02:00 PM - 12:00 AM PKT)',
         full_name: t.full_name,
         phone: t.phone
@@ -2741,17 +2747,21 @@
     }
 
     function autoSuggestTeacherUsername(fullName) {
-      const clean = fullName.toLowerCase().replace(/[^a-z0-9]/g, '_').replace(/_+/g, '_').replace(/^_|_$/g, '');
+      const firstWord = fullName.trim().split(/\s+/)[0] || '';
+      const clean = firstWord.toLowerCase().replace(/[^a-z0-9]/g, '');
       const uInput = document.getElementById('tUsername');
       if (uInput) {
-        uInput.value = clean ? 'teacher_' + clean : 'teacher_user';
+        uInput.value = clean || 'teacher';
+      }
+      const pInput = document.getElementById('tPassword');
+      if (pInput && !pInput.value) {
+        pInput.value = '12345678';
       }
     }
 
     function generateRandomTeacherPass() {
-      const rand = Math.floor(100 + Math.random() * 900);
       const pInput = document.getElementById('tPassword');
-      if (pInput) pInput.value = 'alhuda_' + rand;
+      if (pInput) pInput.value = '12345678';
     }
 
     function handleShiftChange(val) {
@@ -2832,8 +2842,8 @@
         const bookedCount = countMap[t.id] || 0;
         const creds = getTeacherCreds(t);
         const cleanPhone = (t.phone || '').replace(/[^0-9]/g, '');
-        const currentUrl = window.location.origin + window.location.pathname;
-        const waMsg = `Assalam-o-Alaikum Respected ${t.full_name},\nWelcome to *Al-Huda Islamic Centre LMS*.\nHere are your Teacher Portal Login Credentials:\n\n🌐 *Portal Link:* ${currentUrl}\n🆔 *Teacher ID:* ${creds.teacher_id}\n👤 *Username:* ${creds.username}\n🔑 *Password:* ${creds.password}\n🕒 *Configured Shift:* ${t.working_shift || '10 Hours Shift'}\n💰 *Rate per Slot:* ${t.rate_per_slot || 200} PKR\n\nPlease log in and check your weekly timetable.\nJazakAllahu Khairan!`;
+        const directPortalUrl = `${window.location.origin}/teacher.html?t=${creds.username}`;
+        const waMsg = `السلام علیکم محترم ${t.full_name} صاحب!\nالھدیٰ اسلامک سینٹر کے ٹیچر پورٹل میں خوش آمدید۔\n\n🌐 *آپ کا پرسنلائزڈ پورٹل لنک:*\n${directPortalUrl}\n\n👤 *یوزر نیم:* ${creds.username}\n🔑 *پاسورڈ:* ${creds.password || '12345678'}\n🕒 *شفٹ:* ${t.working_shift || '10 Hours Shift'}\n💰 *ریٹ فی سلاٹ:* ${t.rate_per_slot || 200} PKR\n\nبراہ کرم اوپر دیے گئے لنک کو کھول کر اپنا ہفتہ وار شیڈول اور کلاسز چیک فرمائیں۔\nجزاکم اللہ خیراً!`;
         const waUrl = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(waMsg)}`;
 
         return `
@@ -2881,17 +2891,17 @@
               <div class="bg-gradient-to-r from-emerald-50/80 to-amber-50/50 p-2.5 rounded-xl border border-brandEmerald/30 mb-3 space-y-1.5">
                 <div class="flex justify-between items-center text-[10px] font-bold text-slate-500 uppercase tracking-wide">
                   <span class="text-brandDark flex items-center gap-1"><i class="fa-solid fa-key text-brandGold"></i> LMS Login Credentials</span>
-                  <button onclick="copyTeacherCredentials('${creds.username}', '${creds.password}')" class="text-brandEmerald hover:text-brandDark font-bold" title="Copy Login Details">
+                  <button onclick="copyTeacherCredentials('${creds.username}', '${creds.password}', '${t.full_name}')" class="text-brandEmerald hover:text-brandDark font-bold" title="Copy Login Details">
                     <i class="fa-regular fa-copy"></i> Copy
                   </button>
                 </div>
                 <div class="grid grid-cols-2 gap-2 text-xs font-mono">
                   <div class="bg-white px-2 py-1 rounded border border-slate-200 truncate">
-                    <span class="text-[9px] text-slate-400 block">User:</span>
+                    <span class="text-[9px] text-slate-400 block">Username:</span>
                     <strong class="text-slate-800">${creds.username}</strong>
                   </div>
                   <div class="bg-white px-2 py-1 rounded border border-slate-200 truncate">
-                    <span class="text-[9px] text-slate-400 block">Pass:</span>
+                    <span class="text-[9px] text-slate-400 block">Password:</span>
                     <strong class="text-brandDark">${creds.password}</strong>
                   </div>
                 </div>
@@ -2911,17 +2921,18 @@
               <button onclick="open2DMatrixForTeacher('${t.id}')" class="w-full py-2.5 bg-gradient-to-r from-brandDark to-brandEmerald text-white font-extrabold text-xs rounded-xl hover:shadow-lg transition flex items-center justify-center gap-2">
                 <i class="fa-solid fa-table-cells"></i> Open 2D Full-Week Timetable
               </button>
-              <button onclick="loginDirectAsTeacher('${t.id}')" class="w-full py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-[11px] rounded-lg transition">
-                <i class="fa-solid fa-arrow-right-to-bracket text-emerald-600"></i> Test Login As This Teacher
-              </button>
+              <a href="teacher.html?t=${creds.username}" target="_blank" class="w-full py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-[11px] rounded-lg transition flex items-center justify-center gap-1.5">
+                <i class="fa-solid fa-arrow-up-right-from-square text-emerald-600"></i> Open Dedicated Teacher Portal
+              </a>
             </div>
           </div>
         `;
       }).join('');
     }
 
-    function copyTeacherCredentials(user, pass) {
-      const txt = `LMS Username: ${user}\nLMS Password: ${pass}`;
+    function copyTeacherCredentials(user, pass, teacherName) {
+      const url = `${window.location.origin}/teacher.html?t=${user}`;
+      const txt = `Al-Huda Islamic Centre LMS - Teacher Portal\nTeacher: ${teacherName}\nDirect Link: ${url}\nUsername: ${user}\nPassword: ${pass}`;
       navigator.clipboard.writeText(txt);
       alert(`Copied to clipboard!\n\n${txt}`);
     }
