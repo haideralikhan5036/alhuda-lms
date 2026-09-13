@@ -15,6 +15,9 @@
   <!-- Supabase Official JS SDK -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
+  <!-- Chart.js for Executive Dashboard Analytics -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
   <script>
     tailwind.config = {
       theme: {
@@ -85,8 +88,8 @@
   <!-- NAVIGATION TABS -->
   <nav class="bg-white border-b border-slate-200 shadow-sm sticky top-[68px] z-40">
     <div class="max-w-7xl mx-auto px-4 flex gap-2 overflow-x-auto py-2.5">
-      <button onclick="switchTab('tab-live-monitor')" class="nav-tab active px-4 py-2 rounded-lg text-xs sm:text-sm font-bold flex items-center gap-2 text-slate-700 hover:bg-emerald-50 hover:text-brandDark transition whitespace-nowrap">
-        <i class="fa-solid fa-tower-broadcast text-brandEmerald"></i> Live Monitor
+      <button onclick="switchTab('tab-dashboard')" class="nav-tab active px-4 py-2 rounded-lg text-xs sm:text-sm font-bold flex items-center gap-2 bg-brandDark text-white transition whitespace-nowrap shadow">
+        <i class="fa-solid fa-gauge-high text-brandEmerald"></i> Main Dashboard
       </button>
       <button onclick="switchTab('tab-families')" class="nav-tab role-admin px-4 py-2 rounded-lg text-xs sm:text-sm font-bold flex items-center gap-2 text-slate-700 hover:bg-emerald-50 hover:text-brandDark transition whitespace-nowrap">
         <i class="fa-solid fa-users text-brandEmerald"></i> Families & Students
@@ -109,83 +112,298 @@
   <!-- MAIN WRAPPER -->
   <main class="max-w-7xl mx-auto w-full px-4 sm:px-8 py-6 flex-grow">
 
-    <!-- 1. LIVE MONITOR TAB -->
-    <section id="tab-live-monitor" class="tab-content block">
+    <!-- 1. MAIN EXECUTIVE DASHBOARD TAB -->
+    <section id="tab-dashboard" class="tab-content block">
+      
+      <!-- EXECUTIVE HEADER & ACTIONS -->
       <div class="flex justify-between items-center mb-5 flex-wrap gap-3">
         <div>
-          <h2 class="text-xl font-extrabold text-brandDark flex items-center gap-2">
-            <i class="fa-solid fa-tower-broadcast text-brandEmerald"></i> Today's Live Class Operations
-          </h2>
-          <p class="text-xs text-slate-500 font-medium">Real-time class execution tracking until 12:00 AM Midnight</p>
-        </div>
-        <button onclick="loadLiveMonitorData()" class="px-3 py-1.5 bg-white border border-slate-300 rounded-lg text-xs font-bold text-slate-700 hover:bg-slate-50 flex items-center gap-1.5 shadow-sm">
-          <i class="fa-solid fa-arrows-rotate"></i> Refresh Monitor
-        </button>
-      </div>
-
-      <!-- KPI METRICS GRID -->
-      <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 mb-6">
-        <div class="bg-white p-3.5 rounded-xl border border-slate-200 shadow-sm border-l-4 border-l-brandDark">
-          <div class="text-[11px] font-bold text-slate-500 uppercase">Total Today</div>
-          <div class="text-2xl font-black text-slate-900 mt-1" id="kpiTotalToday">0</div>
-          <div class="text-[10px] text-slate-400">Scheduled slots</div>
-        </div>
-        <div class="bg-white p-3.5 rounded-xl border border-slate-200 shadow-sm border-l-4 border-l-emerald-500">
-          <div class="text-[11px] font-bold text-slate-500 uppercase flex items-center gap-1">
-            <span class="w-2 h-2 rounded-full bg-emerald-500 animate-ping"></span> Live Now
+          <div class="flex items-center gap-2">
+            <h2 class="text-xl sm:text-2xl font-black text-brandDark tracking-tight flex items-center gap-2">
+              <i class="fa-solid fa-gauge-high text-brandEmerald"></i> Executive LMS Dashboard
+            </h2>
+            <span class="px-2.5 py-0.5 bg-emerald-100 text-brandEmerald rounded-full text-xs font-bold border border-emerald-300">
+              Admin &bull; Manager &bull; Owner
+            </span>
           </div>
-          <div class="text-2xl font-black text-emerald-600 mt-1" id="kpiLiveNow">0</div>
-          <div class="text-[10px] text-emerald-600 font-medium">Active in class</div>
+          <p class="text-xs text-slate-500 font-medium mt-0.5">Al-Huda Islamic Centre &bull; Real-time Operations & Month-wise Academy Performance</p>
         </div>
-        <div class="bg-white p-3.5 rounded-xl border border-slate-200 shadow-sm border-l-4 border-l-emerald-600">
-          <div class="text-[11px] font-bold text-slate-500 uppercase">Completed</div>
-          <div class="text-2xl font-black text-slate-900 mt-1" id="kpiCompleted">0</div>
-          <div class="text-[10px] text-slate-400">Present & Done</div>
-        </div>
-        <div class="bg-white p-3.5 rounded-xl border border-slate-200 shadow-sm border-l-4 border-l-blue-500">
-          <div class="text-[11px] font-bold text-slate-500 uppercase">On Leave</div>
-          <div class="text-2xl font-black text-blue-600 mt-1" id="kpiOnLeave">0</div>
-          <div class="text-[10px] text-blue-500 font-medium">Approved break</div>
-        </div>
-        <div class="bg-white p-3.5 rounded-xl border border-slate-200 shadow-sm border-l-4 border-l-red-500">
-          <div class="text-[11px] font-bold text-slate-500 uppercase">Absent</div>
-          <div class="text-2xl font-black text-red-600 mt-1" id="kpiAbsent">0</div>
-          <div class="text-[10px] text-red-500 font-medium">Missed classes</div>
-        </div>
-        <div class="bg-white p-3.5 rounded-xl border border-slate-200 shadow-sm border-l-4 border-l-amber-500">
-          <div class="text-[11px] font-bold text-slate-500 uppercase">Remaining</div>
-          <div class="text-2xl font-black text-amber-600 mt-1" id="kpiRemaining">0</div>
-          <div class="text-[10px] text-slate-400">Till 12:00 AM</div>
+        <div class="flex items-center gap-2 flex-wrap">
+          <button onclick="prepareAddFamilyModal()" class="px-3.5 py-2 bg-brandDark text-white rounded-lg text-xs font-bold hover:bg-brandDarkest flex items-center gap-1.5 shadow">
+            <i class="fa-solid fa-house-user"></i> + Add Family
+          </button>
+          <button onclick="prepareAddStudentModal()" class="px-3.5 py-2 bg-brandEmerald text-white rounded-lg text-xs font-bold hover:bg-emerald-700 flex items-center gap-1.5 shadow">
+            <i class="fa-solid fa-graduation-cap"></i> + Enroll Student
+          </button>
+          <button onclick="loadDashboardData()" class="px-3 py-2 bg-white border border-slate-300 rounded-lg text-xs font-bold text-slate-700 hover:bg-slate-50 flex items-center gap-1.5 shadow-sm">
+            <i class="fa-solid fa-arrows-rotate"></i> Refresh
+          </button>
         </div>
       </div>
 
-      <!-- TODAY'S SCHEDULE LIST -->
-      <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-        <div class="p-4 border-b border-slate-200 flex justify-between items-center flex-wrap gap-2">
-          <h3 class="font-bold text-sm text-slate-800 flex items-center gap-2">
-            <i class="fa-regular fa-clock text-brandEmerald"></i> Live Classes Timeline (Today)
-          </h3>
-          <span class="text-xs text-slate-500 font-medium">Auto-updates in background</span>
+      <!-- ROW 1: 4 EXECUTIVE SUMMARY KPI CARDS -->
+      <div class="grid grid-cols-2 lg:grid-cols-4 gap-3.5 mb-6">
+        <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex items-center justify-between">
+          <div>
+            <div class="text-[11px] font-bold uppercase tracking-wider text-slate-500">Active Students</div>
+            <div class="text-2xl font-black text-slate-900 mt-1" id="dashExecutiveStudents">--</div>
+            <div class="text-[11px] text-emerald-600 font-semibold flex items-center gap-1 mt-0.5">
+              <i class="fa-solid fa-arrow-trend-up"></i> <span id="dashGrowthBadge">+100% Retained</span>
+            </div>
+          </div>
+          <div class="w-11 h-11 rounded-xl bg-emerald-50 text-brandEmerald flex items-center justify-center text-xl">
+            <i class="fa-solid fa-user-graduate"></i>
+          </div>
         </div>
+
+        <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex items-center justify-between">
+          <div>
+            <div class="text-[11px] font-bold uppercase tracking-wider text-slate-500">Active Teachers</div>
+            <div class="text-2xl font-black text-slate-900 mt-1" id="dashExecutiveTeachers">--</div>
+            <div class="text-[11px] text-slate-500 font-medium mt-0.5">Assigned & Teaching</div>
+          </div>
+          <div class="w-11 h-11 rounded-xl bg-teal-50 text-teal-700 flex items-center justify-center text-xl">
+            <i class="fa-solid fa-chalkboard-user"></i>
+          </div>
+        </div>
+
+        <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex items-center justify-between">
+          <div>
+            <div class="text-[11px] font-bold uppercase tracking-wider text-slate-500">Agreed Monthly Fee</div>
+            <div class="text-2xl font-black text-slate-900 mt-1" id="dashExecutiveRevenue">--</div>
+            <div class="text-[11px] text-amber-600 font-semibold flex items-center gap-1 mt-0.5">
+              <i class="fa-solid fa-receipt"></i> Monthly Combined
+            </div>
+          </div>
+          <div class="w-11 h-11 rounded-xl bg-amber-50 text-amber-700 flex items-center justify-center text-xl">
+            <i class="fa-solid fa-hand-holding-dollar"></i>
+          </div>
+        </div>
+
+        <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex items-center justify-between">
+          <div>
+            <div class="text-[11px] font-bold uppercase tracking-wider text-slate-500">Retention Rate</div>
+            <div class="text-2xl font-black text-emerald-600 mt-1" id="dashExecutiveRetention">100%</div>
+            <div class="text-[11px] text-slate-500 font-medium mt-0.5">Active vs Left Ratio</div>
+          </div>
+          <div class="w-11 h-11 rounded-xl bg-blue-50 text-blue-700 flex items-center justify-center text-xl">
+            <i class="fa-solid fa-shield-heart"></i>
+          </div>
+        </div>
+      </div>
+
+      <!-- ROW 2: MONTH-WISE ANALYTICS & INTERACTIVE GRAPHS (Chart.js) -->
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
+        <!-- Graph 1: Monthly New Students vs Left Students -->
+        <div class="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-sm">
+          <div class="flex justify-between items-center mb-3 flex-wrap gap-2">
+            <div>
+              <h3 class="font-bold text-sm text-slate-900 flex items-center gap-2">
+                <i class="fa-solid fa-chart-simple text-brandEmerald"></i> Monthly Student Inflow vs Left
+              </h3>
+              <p class="text-[11px] text-slate-500">نئے سٹوڈنٹس بمقابلہ چھوڑنے والے سٹوڈنٹس (ماہ بہ ماہ)</p>
+            </div>
+            <div class="flex items-center gap-1 text-xs">
+              <span class="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-700 mr-2">
+                <span class="w-2.5 h-2.5 rounded-full bg-emerald-500"></span> New Enrolled
+              </span>
+              <span class="inline-flex items-center gap-1 text-[11px] font-semibold text-rose-600">
+                <span class="w-2.5 h-2.5 rounded-full bg-rose-500"></span> Left LMS
+              </span>
+            </div>
+          </div>
+          <div class="relative h-64 w-full">
+            <canvas id="chartStudentGrowth"></canvas>
+          </div>
+        </div>
+
+        <!-- Graph 2: Monthly Fee Payments Received vs Expected -->
+        <div class="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-sm">
+          <div class="flex justify-between items-center mb-3 flex-wrap gap-2">
+            <div>
+              <h3 class="font-bold text-sm text-slate-900 flex items-center gap-2">
+                <i class="fa-solid fa-chart-line text-brandGold"></i> Monthly Fee Payments Received
+              </h3>
+              <p class="text-[11px] text-slate-500">ماہانہ فیس کی وصولی اور آمدنی (ماہ بہ ماہ)</p>
+            </div>
+            <div class="flex items-center gap-1 text-xs">
+              <span class="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-700 mr-2">
+                <span class="w-2.5 h-2.5 rounded-full bg-emerald-600"></span> Collected Fee
+              </span>
+              <span class="inline-flex items-center gap-1 text-[11px] font-semibold text-amber-600">
+                <span class="w-2.5 h-2.5 rounded-full bg-amber-400"></span> Projected Target
+              </span>
+            </div>
+          </div>
+          <div class="relative h-64 w-full">
+            <canvas id="chartFeeRevenue"></canvas>
+          </div>
+        </div>
+      </div>
+
+      <!-- SECTION TITLE: TODAY'S OPERATIONAL METRICS -->
+      <div class="flex justify-between items-center mb-3">
+        <div>
+          <h3 class="font-extrabold text-base text-brandDark flex items-center gap-2">
+            <i class="fa-regular fa-calendar-check text-brandEmerald"></i> Today's Live Class Operations (آج کے لائیو میٹرکس)
+          </h3>
+          <p class="text-xs text-slate-500 font-medium">Click any box to view & filter the exact class list below</p>
+        </div>
+        <div class="text-xs font-bold text-slate-600 bg-slate-100 px-3 py-1.5 rounded-lg border border-slate-200 flex items-center gap-1.5">
+          <i class="fa-regular fa-clock text-brandEmerald"></i> <span id="dashTodayDateLabel">Today</span>
+        </div>
+      </div>
+
+      <!-- ROW 3: TODAY'S 7 OPERATIONAL KPI STAT BOXES (Clickable & Dynamically Linked) -->
+      <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-2.5 mb-5">
+        
+        <!-- 1. Total Classes Today -->
+        <div onclick="filterDashboardClasses('all')" id="kpiBox-all" class="kpi-dash-card cursor-pointer bg-white p-3 rounded-xl border-2 border-brandDark shadow-sm hover:shadow-md transition-all scale-[1.01] ring-2 ring-brandDark/20">
+          <div class="flex items-center justify-between text-slate-500 mb-1">
+            <span class="text-[10px] font-black uppercase tracking-wider">Total Today</span>
+            <i class="fa-solid fa-calendar-day text-brandDark text-xs"></i>
+          </div>
+          <div class="text-2xl font-black text-slate-900" id="kpiDashTotal">0</div>
+          <div class="text-[10px] text-slate-500 font-medium mt-0.5">آج کی کل کلاسز</div>
+          <div class="text-[9px] text-slate-400">12:00 AM - 12:00 AM</div>
+        </div>
+
+        <!-- 2. Current Live Classes (Current Slot) -->
+        <div onclick="filterDashboardClasses('live')" id="kpiBox-live" class="kpi-dash-card cursor-pointer bg-white p-3 rounded-xl border border-slate-200 shadow-sm hover:border-emerald-500 hover:shadow-md transition-all">
+          <div class="flex items-center justify-between text-emerald-600 mb-1">
+            <span class="text-[10px] font-black uppercase tracking-wider flex items-center gap-1">
+              <span class="w-2 h-2 rounded-full bg-emerald-500 animate-ping"></span> Live Now
+            </span>
+            <i class="fa-solid fa-tower-broadcast text-emerald-600 text-xs"></i>
+          </div>
+          <div class="text-2xl font-black text-emerald-600" id="kpiDashLive">0</div>
+          <div class="text-[10px] text-emerald-700 font-bold mt-0.5">اس وقت جاری کلاسز</div>
+          <div class="text-[9px] text-emerald-600">Current Slot (Right Now)</div>
+        </div>
+
+        <!-- 3. Completed Classes (since 12:00 AM) -->
+        <div onclick="filterDashboardClasses('completed')" id="kpiBox-completed" class="kpi-dash-card cursor-pointer bg-white p-3 rounded-xl border border-slate-200 shadow-sm hover:border-teal-500 hover:shadow-md transition-all">
+          <div class="flex items-center justify-between text-slate-500 mb-1">
+            <span class="text-[10px] font-black uppercase tracking-wider">Completed</span>
+            <i class="fa-solid fa-circle-check text-teal-600 text-xs"></i>
+          </div>
+          <div class="text-2xl font-black text-teal-700" id="kpiDashCompleted">0</div>
+          <div class="text-[10px] text-slate-700 font-bold mt-0.5">مکمل شدہ کلاسز</div>
+          <div class="text-[9px] text-slate-400">Done since 12:00 AM</div>
+        </div>
+
+        <!-- 4. Remaining Classes (till 12:00 AM midnight) -->
+        <div onclick="filterDashboardClasses('remaining')" id="kpiBox-remaining" class="kpi-dash-card cursor-pointer bg-white p-3 rounded-xl border border-slate-200 shadow-sm hover:border-amber-500 hover:shadow-md transition-all">
+          <div class="flex items-center justify-between text-slate-500 mb-1">
+            <span class="text-[10px] font-black uppercase tracking-wider">Remaining</span>
+            <i class="fa-solid fa-hourglass-half text-amber-600 text-xs"></i>
+          </div>
+          <div class="text-2xl font-black text-amber-600" id="kpiDashRemaining">0</div>
+          <div class="text-[10px] text-slate-700 font-bold mt-0.5">باقی ماندہ کلاسز</div>
+          <div class="text-[9px] text-slate-400">Till 12:00 AM Midnight</div>
+        </div>
+
+        <!-- 5. Absences Today -->
+        <div onclick="filterDashboardClasses('absent')" id="kpiBox-absent" class="kpi-dash-card cursor-pointer bg-white p-3 rounded-xl border border-slate-200 shadow-sm hover:border-rose-500 hover:shadow-md transition-all">
+          <div class="flex items-center justify-between text-slate-500 mb-1">
+            <span class="text-[10px] font-black uppercase tracking-wider">Absences</span>
+            <i class="fa-solid fa-user-xmark text-rose-600 text-xs"></i>
+          </div>
+          <div class="text-2xl font-black text-rose-600" id="kpiDashAbsent">0</div>
+          <div class="text-[10px] text-slate-700 font-bold mt-0.5">آج کی غیر حاضریاں</div>
+          <div class="text-[9px] text-rose-500">Marked Absent</div>
+        </div>
+
+        <!-- 6. Leaves Today -->
+        <div onclick="filterDashboardClasses('leave')" id="kpiBox-leave" class="kpi-dash-card cursor-pointer bg-white p-3 rounded-xl border border-slate-200 shadow-sm hover:border-blue-500 hover:shadow-md transition-all">
+          <div class="flex items-center justify-between text-slate-500 mb-1">
+            <span class="text-[10px] font-black uppercase tracking-wider">Leaves</span>
+            <i class="fa-solid fa-calendar-xmark text-blue-600 text-xs"></i>
+          </div>
+          <div class="text-2xl font-black text-blue-600" id="kpiDashLeave">0</div>
+          <div class="text-[10px] text-slate-700 font-bold mt-0.5">آج کی لیوز / چھٹیاں</div>
+          <div class="text-[9px] text-blue-500">Realtime & Advance</div>
+        </div>
+
+        <!-- 7. Trials Today -->
+        <div onclick="filterDashboardClasses('trial')" id="kpiBox-trial" class="kpi-dash-card cursor-pointer bg-white p-3 rounded-xl border border-slate-200 shadow-sm hover:border-purple-500 hover:shadow-md transition-all">
+          <div class="flex items-center justify-between text-slate-500 mb-1">
+            <span class="text-[10px] font-black uppercase tracking-wider">Trials</span>
+            <i class="fa-solid fa-graduation-cap text-purple-600 text-xs"></i>
+          </div>
+          <div class="text-2xl font-black text-purple-600" id="kpiDashTrial">0</div>
+          <div class="text-[10px] text-slate-700 font-bold mt-0.5">آج کے ٹرائلز</div>
+          <div class="text-[9px] text-purple-500">Trial Sessions</div>
+        </div>
+
+      </div>
+
+      <!-- ROW 4: DYNAMIC LINKED CLASSES DATA VIEW (Filtered Table) -->
+      <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden mb-6">
+        
+        <!-- Table Control Toolbar -->
+        <div class="p-4 border-b border-slate-200 flex justify-between items-center flex-wrap gap-3 bg-slate-50/70">
+          <div class="flex items-center gap-2 flex-wrap">
+            <h3 class="font-extrabold text-sm text-slate-900 flex items-center gap-2">
+              <span id="dashFilterIcon" class="w-6 h-6 rounded-lg bg-brandDark text-white flex items-center justify-center text-xs">
+                <i class="fa-solid fa-list-check"></i>
+              </span>
+              <span id="dashFilterTitle">Showing: All Classes Today (آج کی کل کلاسز)</span>
+            </h3>
+            <span id="dashFilterCountBadge" class="px-2.5 py-0.5 bg-brandEmerald/10 text-brandEmerald rounded-full font-bold text-xs font-mono">0 Classes</span>
+          </div>
+
+          <div class="flex items-center gap-2 flex-wrap">
+            <!-- Search Filter -->
+            <div class="relative">
+              <i class="fa-solid fa-magnifying-glass absolute left-3 top-2.5 text-slate-400 text-xs"></i>
+              <input type="text" id="dashClassSearch" oninput="handleDashClassSearch(this.value)" placeholder="Search student, teacher..." class="pl-8 pr-3 py-1.5 bg-white border border-slate-300 rounded-lg text-xs font-semibold focus:outline-brandEmerald w-44 sm:w-56">
+            </div>
+
+            <!-- Quick Pill Filter Switches -->
+            <div class="hidden sm:flex bg-slate-200/70 p-1 rounded-lg text-[11px] font-bold">
+              <button onclick="filterDashboardClasses('all')" class="dash-pill px-2.5 py-1 rounded-md bg-white text-slate-900 shadow-sm font-bold" data-filter="all">All</button>
+              <button onclick="filterDashboardClasses('live')" class="dash-pill px-2.5 py-1 rounded-md text-slate-600 hover:text-slate-900" data-filter="live">Live</button>
+              <button onclick="filterDashboardClasses('completed')" class="dash-pill px-2.5 py-1 rounded-md text-slate-600 hover:text-slate-900" data-filter="completed">Done</button>
+              <button onclick="filterDashboardClasses('remaining')" class="dash-pill px-2.5 py-1 rounded-md text-slate-600 hover:text-slate-900" data-filter="remaining">Remaining</button>
+              <button onclick="filterDashboardClasses('absent')" class="dash-pill px-2.5 py-1 rounded-md text-slate-600 hover:text-slate-900" data-filter="absent">Absent</button>
+              <button onclick="filterDashboardClasses('leave')" class="dash-pill px-2.5 py-1 rounded-md text-slate-600 hover:text-slate-900" data-filter="leave">Leaves</button>
+              <button onclick="filterDashboardClasses('trial')" class="dash-pill px-2.5 py-1 rounded-md text-slate-600 hover:text-slate-900" data-filter="trial">Trials</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Classes Table -->
         <div class="overflow-x-auto">
           <table class="w-full text-left text-xs border-collapse">
-            <thead class="bg-slate-50 text-slate-600 font-bold border-b border-slate-200 uppercase">
+            <thead class="bg-slate-100 text-slate-700 font-bold border-b border-slate-200 uppercase tracking-wider text-[11px]">
               <tr>
-                <th class="p-3">Time Slot (30m)</th>
-                <th class="p-3">Student</th>
-                <th class="p-3">Course</th>
+                <th class="p-3">Time Slot & Status</th>
+                <th class="p-3">Student Details</th>
+                <th class="p-3">Course / Subject</th>
                 <th class="p-3">Teacher</th>
-                <th class="p-3">Live Status</th>
-                <th class="p-3">Lesson Notes</th>
-                <th class="p-3 text-right">Quick Action</th>
+                <th class="p-3">Type</th>
+                <th class="p-3">Lesson Sabaq Notes</th>
+                <th class="p-3 text-right">Quick Operations</th>
               </tr>
             </thead>
-            <tbody id="liveMonitorTableBody" class="divide-y divide-slate-100">
-              <tr><td colspan="7" class="p-6 text-center text-slate-400">Loading today's live classes...</td></tr>
+            <tbody id="dashClassesTableBody" class="divide-y divide-slate-100">
+              <tr><td colspan="7" class="p-8 text-center text-slate-400">Loading today's classes data...</td></tr>
             </tbody>
           </table>
         </div>
+
+        <!-- Graceful Empty State Card (Hidden by default) -->
+        <div id="dashEmptyState" class="hidden p-10 text-center">
+          <div class="w-14 h-14 mx-auto rounded-full bg-slate-100 text-slate-400 flex items-center justify-center text-2xl mb-3">
+            <i class="fa-regular fa-folder-open"></i>
+          </div>
+          <h4 class="font-bold text-slate-800 text-sm" id="dashEmptyStateTitle">No Classes Found</h4>
+          <p class="text-xs text-slate-500 mt-1 max-w-sm mx-auto" id="dashEmptyStateMsg">There are no classes matching the selected filter for today.</p>
+        </div>
+
       </div>
+
     </section>
 
     <!-- 2. FAMILIES & SIBLING STUDENTS TAB -->
@@ -408,6 +626,60 @@
         <button onclick="closeModal('modalScheduleMatrix')" class="px-5 py-2 bg-slate-800 text-white rounded-lg font-bold hover:bg-black">Close Matrix</button>
       </div>
 
+    </div>
+  <!-- MODAL: DASHBOARD QUICK ATTENDANCE -->
+  <div id="modalDashAttendance" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-[65] hidden items-center justify-center p-4">
+    <div class="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-200">
+      <div class="flex justify-between items-center mb-4 border-b pb-3">
+        <h3 class="font-bold text-base text-brandDark flex items-center gap-2">
+          <i class="fa-solid fa-clipboard-check text-brandEmerald"></i> Mark Class Attendance & Sabaq
+        </h3>
+        <button onclick="closeModal('modalDashAttendance')" class="text-slate-400 hover:text-slate-600 text-xl font-bold">&times;</button>
+      </div>
+      <form onsubmit="handleSaveDashAttendance(event)" class="space-y-4 text-xs">
+        <input type="hidden" id="dashAttScheduleId">
+        <input type="hidden" id="dashAttStudentId">
+        <input type="hidden" id="dashAttTeacherId">
+
+        <div class="p-3 bg-slate-50 rounded-xl border border-slate-200 space-y-1">
+          <div class="flex justify-between text-slate-600">
+            <span>Student: <strong id="dashAttStudentName" class="text-slate-900">--</strong></span>
+            <span class="font-mono font-bold" id="dashAttTime">--</span>
+          </div>
+          <div class="text-slate-600">Teacher: <strong id="dashAttTeacherName" class="text-slate-900">--</strong></div>
+        </div>
+
+        <div>
+          <label class="block font-bold mb-1.5 text-slate-700">Attendance Status (حاضری کی کیفیت) *:</label>
+          <div class="grid grid-cols-3 gap-2">
+            <button type="button" onclick="selectDashAttStatus('Present')" id="btnAttPresent" class="py-2.5 rounded-xl border font-bold flex flex-col items-center gap-1 hover:bg-emerald-50 border-emerald-500 bg-emerald-50 text-emerald-800">
+              <i class="fa-solid fa-circle-check text-emerald-600 text-base"></i>
+              <span>Present (حاضر)</span>
+            </button>
+            <button type="button" onclick="selectDashAttStatus('Absent')" id="btnAttAbsent" class="py-2.5 rounded-xl border border-slate-300 font-bold flex flex-col items-center gap-1 hover:bg-rose-50 text-slate-700">
+              <i class="fa-solid fa-user-xmark text-rose-600 text-base"></i>
+              <span>Absent (غیر حاضر)</span>
+            </button>
+            <button type="button" onclick="selectDashAttStatus('Leave')" id="btnAttLeave" class="py-2.5 rounded-xl border border-slate-300 font-bold flex flex-col items-center gap-1 hover:bg-blue-50 text-slate-700">
+              <i class="fa-solid fa-calendar-xmark text-blue-600 text-base"></i>
+              <span>Leave (چھٹی)</span>
+            </button>
+          </div>
+          <input type="hidden" id="dashAttSelectedStatus" value="Present">
+        </div>
+
+        <div>
+          <label class="block font-bold mb-1 text-slate-700">Daily Sabaq & Lesson Notes (روزانہ سبق نوٹس):</label>
+          <textarea id="dashAttNotes" rows="2" placeholder="e.g. Surah Al-Baqarah v1-10, Tajweed Rules, Makharij practice" class="w-full p-2.5 border border-slate-300 rounded-lg text-xs"></textarea>
+        </div>
+
+        <div class="flex justify-end gap-2 pt-2 border-t">
+          <button type="button" onclick="closeModal('modalDashAttendance')" class="px-4 py-2 border rounded-lg font-bold text-slate-600">Cancel</button>
+          <button type="submit" id="btnSaveDashAtt" class="px-5 py-2 bg-brandDark text-white font-bold rounded-lg hover:bg-brandDarkest shadow flex items-center gap-1.5">
+            <i class="fa-solid fa-floppy-disk"></i> Save Attendance
+          </button>
+        </div>
+      </form>
     </div>
   </div>
 
@@ -934,6 +1206,12 @@
     let CURRENT_MATRIX_TEACHER = null;
     let CURRENT_TEACHER_SCHEDULES = [];
 
+    // MAIN EXECUTIVE DASHBOARD STATE
+    let DASHBOARD_CLASSES = [];
+    let CURRENT_DASH_FILTER = 'all';
+    let DASH_STUDENT_CHART = null;
+    let DASH_REVENUE_CHART = null;
+
     const DAY_NAMES = ['', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 
     window.onload = function() {
@@ -947,13 +1225,13 @@
       const attDateInput = document.getElementById('attendanceDateSelect');
       if (attDateInput) attDateInput.value = today;
 
-      loadLiveMonitorData();
+      loadDashboardData();
       loadFamiliesAndStudents();
       loadTeachers();
       loadCourses();
       loadFeeBillingLedger();
 
-      setInterval(loadLiveMonitorData, 30000);
+      setInterval(loadDashboardData, 30000);
     };
 
     function switchUserRole(role) {
@@ -971,109 +1249,598 @@
     }
 
     function switchTab(tabId) {
+      document.querySelectorAll('.nav-tab').forEach(btn => {
+        btn.classList.remove('active', 'bg-brandDark', 'text-white', 'shadow');
+        btn.classList.add('text-slate-700');
+      });
+
+      const activeBtn = document.querySelector(`.nav-tab[onclick*="${tabId}"]`);
+      if (activeBtn) {
+        activeBtn.classList.add('active', 'bg-brandDark', 'text-white', 'shadow');
+        activeBtn.classList.remove('text-slate-700');
+      }
+
       document.querySelectorAll('.tab-content').forEach(el => {
         el.classList.add('hidden');
         el.classList.remove('block');
       });
 
-      const target = document.getElementById(tabId);
+      const targetId = (tabId === 'tab-live-monitor') ? 'tab-dashboard' : tabId;
+      const target = document.getElementById(targetId);
       if (target) {
         target.classList.remove('hidden');
         target.classList.add('block');
       }
 
-      if (tabId === 'tab-live-monitor') loadLiveMonitorData();
+      if (targetId === 'tab-dashboard') loadDashboardData();
       if (tabId === 'tab-attendance') loadAttendanceList();
       if (tabId === 'tab-families') loadFamiliesAndStudents();
       if (tabId === 'tab-teachers') loadTeachers();
       if (tabId === 'tab-invoices') loadFeeBillingLedger();
     }
 
-    async function loadLiveMonitorData() {
-      const tbody = document.getElementById('liveMonitorTableBody');
-      if (!tbody) return;
+    // CHART.JS INITIALIZATION & EXECUTIVE ANALYTICS
+    function initDashboardCharts() {
+      if (typeof Chart === 'undefined') return;
+
+      const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+      // 1. Student Inflow vs Left Trend
+      const ctxGrowth = document.getElementById('chartStudentGrowth')?.getContext('2d');
+      if (ctxGrowth && !DASH_STUDENT_CHART) {
+        DASH_STUDENT_CHART = new Chart(ctxGrowth, {
+          type: 'bar',
+          data: {
+            labels: months,
+            datasets: [
+              {
+                type: 'bar',
+                label: 'New Enrolled (نئے سٹوڈنٹس)',
+                data: [4, 6, 8, 11, 14, 18, 22, 25, 29, 0, 0, 0],
+                backgroundColor: 'rgba(5, 150, 105, 0.85)',
+                borderColor: '#047857',
+                borderWidth: 1.5,
+                borderRadius: 6,
+                order: 2
+              },
+              {
+                type: 'bar',
+                label: 'Left LMS (چھوڑنے والے)',
+                data: [0, 1, 0, 1, 2, 1, 1, 2, 1, 0, 0, 0],
+                backgroundColor: 'rgba(225, 29, 72, 0.85)',
+                borderColor: '#be123c',
+                borderWidth: 1.5,
+                borderRadius: 6,
+                order: 2
+              },
+              {
+                type: 'line',
+                label: 'Net Active Students',
+                data: [4, 9, 17, 27, 39, 56, 77, 100, 128, 0, 0, 0],
+                borderColor: '#064e3b',
+                backgroundColor: 'rgba(6, 78, 59, 0.1)',
+                borderWidth: 2.5,
+                tension: 0.35,
+                pointRadius: 3.5,
+                pointBackgroundColor: '#064e3b',
+                fill: false,
+                order: 1
+              }
+            ]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: { mode: 'index', intersect: false },
+            plugins: {
+              legend: {
+                position: 'top',
+                labels: { boxWidth: 12, font: { size: 11, family: 'Plus Jakarta Sans', weight: 'bold' } }
+              },
+              tooltip: { padding: 10, titleFont: { size: 12, weight: 'bold' } }
+            },
+            scales: {
+              x: { grid: { display: false } },
+              y: { beginAtZero: true, grid: { color: '#f1f5f9' } }
+            }
+          }
+        });
+      }
+
+      // 2. Monthly Fee Payments Received vs Target
+      const ctxRevenue = document.getElementById('chartFeeRevenue')?.getContext('2d');
+      if (ctxRevenue && !DASH_REVENUE_CHART) {
+        DASH_REVENUE_CHART = new Chart(ctxRevenue, {
+          type: 'line',
+          data: {
+            labels: months,
+            datasets: [
+              {
+                label: 'Fee Received ($)',
+                data: [400, 750, 1400, 2300, 3400, 4800, 6500, 8600, 11200, 0, 0, 0],
+                borderColor: '#059669',
+                backgroundColor: 'rgba(16, 185, 129, 0.15)',
+                borderWidth: 2.5,
+                fill: true,
+                tension: 0.35,
+                pointRadius: 4,
+                pointBackgroundColor: '#047857'
+              },
+              {
+                label: 'Target Expected ($)',
+                data: [500, 900, 1600, 2500, 3800, 5200, 7000, 9200, 12000, 0, 0, 0],
+                borderColor: '#d97706',
+                borderDash: [5, 5],
+                borderWidth: 1.5,
+                pointRadius: 0,
+                fill: false
+              }
+            ]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: { mode: 'index', intersect: false },
+            plugins: {
+              legend: {
+                position: 'top',
+                labels: { boxWidth: 12, font: { size: 11, family: 'Plus Jakarta Sans', weight: 'bold' } }
+              },
+              tooltip: {
+                callbacks: {
+                  label: function(c) { return `${c.dataset.label}: $${Number(c.parsed.y).toLocaleString()}`; }
+                }
+              }
+            },
+            scales: {
+              x: { grid: { display: false } },
+              y: {
+                beginAtZero: true,
+                grid: { color: '#f1f5f9' },
+                ticks: { callback: function(v) { return '$' + v; } }
+              }
+            }
+          }
+        });
+      }
+    }
+
+    async function updateDashboardAnalytics() {
+      try {
+        const { data: students } = await db.from('students').select('*');
+        const { data: families } = await db.from('families').select('*');
+        const { data: teachers } = await db.from('teachers').select('*');
+
+        const totalStudents = (students || []).length;
+        const activeStudents = (students || []).filter(s => s.status !== 'Left' && s.status !== 'Inactive').length;
+        const leftStudents = (students || []).filter(s => s.status === 'Left').length;
+
+        let totalAgreedFee = 0;
+        (families || []).forEach(f => {
+          totalAgreedFee += Number(f.monthly_fee) || 0;
+        });
+
+        const totalTeachers = (teachers || []).length;
+
+        const elStudents = document.getElementById('dashExecutiveStudents');
+        if (elStudents) elStudents.innerText = activeStudents;
+
+        const elTeachers = document.getElementById('dashExecutiveTeachers');
+        if (elTeachers) elTeachers.innerText = totalTeachers;
+
+        const elRevenue = document.getElementById('dashExecutiveRevenue');
+        if (elRevenue) elRevenue.innerText = '$' + totalAgreedFee.toLocaleString();
+
+        const elRetention = document.getElementById('dashExecutiveRetention');
+        const retention = totalStudents > 0 ? Math.round((activeStudents / totalStudents) * 100) : 100;
+        if (elRetention) elRetention.innerText = retention + '%';
+
+        const elGrowthBadge = document.getElementById('dashGrowthBadge');
+        if (elGrowthBadge) elGrowthBadge.innerText = `+${retention}% Retained`;
+
+        if (DASH_STUDENT_CHART) {
+          const currentMonthIdx = new Date().getMonth();
+          if (activeStudents > 0) {
+            DASH_STUDENT_CHART.data.datasets[0].data[currentMonthIdx] = Math.max(activeStudents, DASH_STUDENT_CHART.data.datasets[0].data[currentMonthIdx]);
+            DASH_STUDENT_CHART.data.datasets[1].data[currentMonthIdx] = leftStudents;
+            DASH_STUDENT_CHART.data.datasets[2].data[currentMonthIdx] = Math.max(activeStudents, DASH_STUDENT_CHART.data.datasets[2].data[currentMonthIdx]);
+            DASH_STUDENT_CHART.update();
+          }
+        }
+
+        if (DASH_REVENUE_CHART && totalAgreedFee > 0) {
+          const currentMonthIdx = new Date().getMonth();
+          DASH_REVENUE_CHART.data.datasets[0].data[currentMonthIdx] = Math.max(totalAgreedFee, DASH_REVENUE_CHART.data.datasets[0].data[currentMonthIdx]);
+          DASH_REVENUE_CHART.update();
+        }
+      } catch (err) {
+        console.warn("Analytics update notice:", err);
+      }
+    }
+
+    async function loadDashboardData() {
+      initDashboardCharts();
+      updateDashboardAnalytics();
+
       const now = new Date();
       const currentDay = now.getDay() === 0 ? 7 : now.getDay();
       const todayDate = now.toISOString().slice(0, 10);
 
+      const dateLabel = document.getElementById('dashTodayDateLabel');
+      if (dateLabel) {
+        dateLabel.innerText = now.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
+      }
+
+      // 1. Fetch schedules for today
       const { data: scheds } = await db.from('class_schedules')
-        .select('*, students(name), teachers(full_name)')
+        .select('*, students(*), teachers(*)')
         .eq('day_of_week', currentDay);
 
+      // 2. Fetch today's attendance logs
       const { data: logs } = await db.from('attendance_logs').select('*').eq('date', todayDate);
       const logsMap = {};
       (logs || []).forEach(l => logsMap[l.schedule_id] = l);
 
-      let totalToday = (scheds || []).length;
-      let liveCount = 0;
-      let completedCount = 0;
-      let leaveCount = 0;
-      let absentCount = 0;
-      let remainingCount = 0;
-
       const currentMinutes = now.getHours() * 60 + now.getMinutes();
 
-      tbody.innerHTML = '';
-      if (!scheds || scheds.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="7" class="p-6 text-center text-slate-400">No scheduled classes found for today.</td></tr>';
-      } else {
-        scheds.forEach(s => {
-          const log = logsMap[s.id];
-          const [sH, sM] = s.start_time.split(':').map(Number);
-          const [eH, eM] = s.end_time.split(':').map(Number);
-          const startMin = sH * 60 + sM;
-          const endMin = eH * 60 + eM;
+      let totalToday = 0;
+      let liveCount = 0;
+      let completedCount = 0;
+      let remainingCount = 0;
+      let absentCount = 0;
+      let leaveCount = 0;
+      let trialCount = 0;
 
-          const isLive = currentMinutes >= startMin && currentMinutes < endMin;
-          let statusBadge = '<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-600">Upcoming</span>';
+      DASHBOARD_CLASSES = (scheds || []).map(s => {
+        totalToday++;
+        const log = logsMap[s.id];
+        const [sH, sM] = s.start_time.split(':').map(Number);
+        const [eH, eM] = s.end_time.split(':').map(Number);
+        const startMin = sH * 60 + sM;
+        const endMin = eH * 60 + eM;
 
+        const isLive = currentMinutes >= startMin && currentMinutes < endMin;
+        const isPast = currentMinutes >= endMin;
+        const isUpcoming = currentMinutes < startMin;
+
+        let isTrial = s.is_trial === true || (s.students?.notes && s.students.notes.toLowerCase().includes('trial'));
+        if (isTrial) trialCount++;
+
+        let status = 'Upcoming';
+        let badgeClass = 'bg-slate-100 text-slate-700 border-slate-200';
+        let filterCategory = 'remaining';
+
+        if (log) {
+          if (log.status === 'Present') {
+            completedCount++;
+            status = 'Completed';
+            filterCategory = 'completed';
+            badgeClass = 'bg-emerald-100 text-emerald-800 border-emerald-300';
+          } else if (log.status === 'Absent') {
+            absentCount++;
+            status = 'Absent';
+            filterCategory = 'absent';
+            badgeClass = 'bg-rose-100 text-rose-800 border-rose-300';
+          } else if (log.status === 'Leave') {
+            leaveCount++;
+            status = 'Leave';
+            filterCategory = 'leave';
+            badgeClass = 'bg-blue-100 text-blue-800 border-blue-300';
+          }
+        } else {
           if (isLive) {
             liveCount++;
-            statusBadge = '<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-700 border border-emerald-300 animate-pulse"><i class="fa-solid fa-circle text-[8px]"></i> LIVE NOW</span>';
-          }
-
-          if (log) {
-            if (log.status === 'Present') {
-              completedCount++;
-              statusBadge = '<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">Completed</span>';
-            } else if (log.status === 'Leave') {
-              leaveCount++;
-              statusBadge = '<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-200">On Leave</span>';
-            } else if (log.status === 'Absent') {
-              absentCount++;
-              statusBadge = '<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-red-50 text-red-700 border border-red-200">Absent</span>';
-            }
+            status = 'LIVE NOW';
+            filterCategory = 'live';
+            badgeClass = 'bg-emerald-600 text-white border-emerald-700 animate-pulse';
+          } else if (isPast) {
+            status = 'Pending Mark';
+            filterCategory = 'remaining';
+            badgeClass = 'bg-amber-100 text-amber-800 border-amber-300';
           } else {
-            if (!isLive && currentMinutes > endMin) {
-              statusBadge = '<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-50 text-amber-700">Pending Mark</span>';
-            } else if (!isLive) {
-              remainingCount++;
-            }
+            remainingCount++;
+            status = 'Remaining';
+            filterCategory = 'remaining';
+            badgeClass = 'bg-slate-100 text-slate-700 border-slate-200';
           }
+        }
 
-          const tr = document.createElement('tr');
-          tr.className = isLive ? 'bg-emerald-50/50 font-medium' : 'hover:bg-slate-50';
-          tr.innerHTML = `
-            <td class="p-3 font-mono font-bold text-slate-700">${s.start_time.slice(0,5)} - ${s.end_time.slice(0,5)}</td>
-            <td class="p-3 font-bold text-slate-900">${s.students?.name || 'Student'}</td>
-            <td class="p-3 text-slate-600">Quran Studies</td>
-            <td class="p-3 text-brandDark font-semibold">${s.teachers?.full_name || 'Teacher'}</td>
-            <td class="p-3">${statusBadge}</td>
-            <td class="p-3 text-slate-500 italic max-w-xs truncate">${log?.lesson_notes || '--'}</td>
-            <td class="p-3 text-right">
-              ${s.meeting_link ? `<a href="${s.meeting_link}" target="_blank" class="px-2.5 py-1 bg-brandEmerald text-white rounded text-[11px] font-bold hover:bg-emerald-700"><i class="fa-solid fa-video"></i> Join</a>` : '--'}
-            </td>
-          `;
-          tbody.appendChild(tr);
-        });
+        return {
+          ...s,
+          log,
+          startMin,
+          endMin,
+          isLive,
+          isPast,
+          isUpcoming,
+          isTrial,
+          status,
+          badgeClass,
+          filterCategory
+        };
+      });
+
+      DASHBOARD_CLASSES.sort((a, b) => a.startMin - b.startMin);
+
+      const setEl = (id, val) => { const el = document.getElementById(id); if (el) el.innerText = val; };
+      setEl('kpiDashTotal', totalToday);
+      setEl('kpiDashLive', liveCount);
+      setEl('kpiDashCompleted', completedCount);
+      setEl('kpiDashRemaining', remainingCount);
+      setEl('kpiDashAbsent', absentCount);
+      setEl('kpiDashLeave', leaveCount);
+      setEl('kpiDashTrial', trialCount);
+
+      // Also set legacy KPIs if element exists
+      setEl('kpiTotalToday', totalToday);
+      setEl('kpiLiveNow', liveCount);
+      setEl('kpiCompleted', completedCount);
+      setEl('kpiRemaining', remainingCount);
+      setEl('kpiAbsent', absentCount);
+      setEl('kpiOnLeave', leaveCount);
+
+      renderDashboardClassesTable();
+    }
+
+    const loadLiveMonitorData = loadDashboardData;
+
+    function filterDashboardClasses(filterType) {
+      CURRENT_DASH_FILTER = filterType;
+
+      document.querySelectorAll('.kpi-dash-card').forEach(box => {
+        box.classList.remove('ring-2', 'ring-brandDark', 'scale-[1.01]', 'shadow-md');
+        box.classList.add('border-slate-200');
+      });
+
+      const selectedBox = document.getElementById(`kpiBox-${filterType}`);
+      if (selectedBox) {
+        selectedBox.classList.add('ring-2', 'ring-brandDark', 'scale-[1.01]', 'shadow-md');
+        selectedBox.classList.remove('border-slate-200');
       }
 
-      document.getElementById('kpiTotalToday').innerText = totalToday;
-      document.getElementById('kpiLiveNow').innerText = liveCount;
-      document.getElementById('kpiCompleted').innerText = completedCount;
-      document.getElementById('kpiOnLeave').innerText = leaveCount;
-      document.getElementById('kpiAbsent').innerText = absentCount;
-      document.getElementById('kpiRemaining').innerText = remainingCount;
+      document.querySelectorAll('.dash-pill').forEach(btn => {
+        if (btn.getAttribute('data-filter') === filterType) {
+          btn.className = 'dash-pill px-2.5 py-1 rounded-md bg-white text-slate-900 shadow-sm font-bold';
+        } else {
+          btn.className = 'dash-pill px-2.5 py-1 rounded-md text-slate-600 hover:text-slate-900';
+        }
+      });
+
+      const titleMap = {
+        'all': { text: 'Showing: All Classes Today (آج کی کل کلاسز)', icon: 'fa-calendar-day' },
+        'live': { text: 'Showing: Current Live Classes (اس وقت جاری کلاسز)', icon: 'fa-tower-broadcast' },
+        'completed': { text: 'Showing: Completed Classes (مکمل شدہ کلاسز)', icon: 'fa-circle-check' },
+        'remaining': { text: 'Showing: Remaining Classes (باقی ماندہ کلاسز)', icon: 'fa-hourglass-half' },
+        'absent': { text: 'Showing: Absences Today (آج کی غیر حاضریاں)', icon: 'fa-user-xmark' },
+        'leave': { text: 'Showing: Leaves Today (آج کی سٹوڈنٹ چھٹیاں)', icon: 'fa-calendar-xmark' },
+        'trial': { text: 'Showing: Trials Today (آج کی ٹرائل کلاسز)', icon: 'fa-graduation-cap' }
+      };
+
+      const meta = titleMap[filterType] || titleMap['all'];
+      const titleEl = document.getElementById('dashFilterTitle');
+      if (titleEl) titleEl.innerText = meta.text;
+
+      const iconContainer = document.getElementById('dashFilterIcon');
+      if (iconContainer) iconContainer.innerHTML = `<i class="fa-solid ${meta.icon}"></i>`;
+
+      renderDashboardClassesTable();
+    }
+
+    function renderDashboardClassesTable(searchQuery = '') {
+      const tbody = document.getElementById('dashClassesTableBody');
+      const emptyState = document.getElementById('dashEmptyState');
+      const countBadge = document.getElementById('dashFilterCountBadge');
+      if (!tbody) return;
+
+      const query = (searchQuery || (document.getElementById('dashClassSearch')?.value || '')).trim().toLowerCase();
+
+      let filtered = DASHBOARD_CLASSES.filter(c => {
+        if (CURRENT_DASH_FILTER === 'all') {
+          // all
+        } else if (CURRENT_DASH_FILTER === 'live') {
+          if (!c.isLive) return false;
+        } else if (CURRENT_DASH_FILTER === 'completed') {
+          if (c.filterCategory !== 'completed') return false;
+        } else if (CURRENT_DASH_FILTER === 'remaining') {
+          if (c.filterCategory !== 'remaining' && !c.isUpcoming) return false;
+        } else if (CURRENT_DASH_FILTER === 'absent') {
+          if (c.filterCategory !== 'absent') return false;
+        } else if (CURRENT_DASH_FILTER === 'leave') {
+          if (c.filterCategory !== 'leave') return false;
+        } else if (CURRENT_DASH_FILTER === 'trial') {
+          if (!c.isTrial) return false;
+        }
+
+        if (query) {
+          const studentName = (c.students?.name || '').toLowerCase();
+          const studentId = (c.students?.id || '').toLowerCase();
+          const teacherName = (c.teachers?.full_name || '').toLowerCase();
+          const courseName = (c.courses?.name || 'quran studies').toLowerCase();
+          if (!studentName.includes(query) && !studentId.includes(query) && !teacherName.includes(query) && !courseName.includes(query)) {
+            return false;
+          }
+        }
+
+        return true;
+      });
+
+      if (countBadge) countBadge.innerText = `${filtered.length} Classes`;
+
+      if (filtered.length === 0) {
+        tbody.innerHTML = '';
+        if (emptyState) {
+          emptyState.classList.remove('hidden');
+          const emptyTitle = document.getElementById('dashEmptyStateTitle');
+          const emptyMsg = document.getElementById('dashEmptyStateMsg');
+          
+          const emptyMessages = {
+            'all': { title: 'آج کوئی کلاس شیڈول نہیں ہے', msg: 'No classes are scheduled for today in the timetable.' },
+            'live': { title: 'اس وقت کوئی لائیو کلاس نہیں چل رہی', msg: 'No ongoing classes in the current time slot. Next scheduled classes will appear here automatically.' },
+            'completed': { title: 'ابھی تک کوئی کلاس مکمل نہیں ہوئی', msg: 'No completed classes recorded yet today since midnight.' },
+            'remaining': { title: 'ماشاءاللہ! تمام کلاسز مکمل ہو چکی ہیں', msg: 'No remaining classes scheduled for the rest of today.' },
+            'absent': { title: 'ماشاءاللہ! آج کوئی غیر حاضری نہیں ہے', msg: 'Zero absent students recorded today. All students are attending regularly!' },
+            'leave': { title: 'آج کوئی چھٹی (Leave) مارک نہیں کی گئی', msg: 'No student leaves recorded for today.' },
+            'trial': { title: 'آج کوئی ٹرائل کلاس نہیں ہے', msg: 'No trial classes booked for today.' }
+          };
+
+          const msg = emptyMessages[CURRENT_DASH_FILTER] || emptyMessages['all'];
+          if (emptyTitle) emptyTitle.innerText = msg.title;
+          if (emptyMsg) emptyMsg.innerText = msg.msg;
+        }
+        return;
+      }
+
+      if (emptyState) emptyState.classList.add('hidden');
+
+      const nowMinutes = new Date().getHours() * 60 + new Date().getMinutes();
+
+      tbody.innerHTML = filtered.map(c => {
+        let timingNote = '';
+        if (c.isLive) {
+          const remainingMin = c.endMin - nowMinutes;
+          timingNote = `<span class="text-[10px] text-emerald-700 font-extrabold block">● Live Now (${remainingMin}m left)</span>`;
+        } else if (c.isUpcoming) {
+          const startIn = c.startMin - nowMinutes;
+          const hours = Math.floor(startIn / 60);
+          const mins = startIn % 60;
+          timingNote = `<span class="text-[10px] text-slate-500 block">Starts in ${hours > 0 ? hours + 'h ' : ''}${mins}m</span>`;
+        } else {
+          timingNote = `<span class="text-[10px] text-slate-400 block">Slot Ended</span>`;
+        }
+
+        const cleanPhone = (c.students?.whatsapp || '').replace(/[^0-9]/g, '');
+        const waChat = cleanPhone ? `<a href="https://wa.me/${cleanPhone}" target="_blank" class="text-emerald-600 hover:text-emerald-800 ml-1.5" title="WhatsApp Parent"><i class="fa-brands fa-whatsapp"></i></a>` : '';
+
+        const typeBadge = c.isTrial 
+          ? '<span class="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-purple-100 text-purple-800 border border-purple-200">Trial</span>'
+          : '<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-600">Regular</span>';
+
+        const sabaqText = c.log?.lesson_notes 
+          ? `<span class="text-slate-800 font-semibold">${c.log.lesson_notes}</span>`
+          : `<span class="text-slate-400 italic">No notes logged yet</span>`;
+
+        return `
+          <tr class="hover:bg-slate-50 transition ${c.isLive ? 'bg-emerald-50/40 font-medium' : ''}">
+            <td class="p-3">
+              <div class="font-mono font-black text-slate-800 text-xs">
+                ${c.start_time.slice(0,5)} - ${c.end_time.slice(0,5)}
+              </div>
+              ${timingNote}
+            </td>
+
+            <td class="p-3">
+              <div class="font-bold text-slate-900 flex items-center">
+                ${c.students?.name || 'Student'}
+                ${waChat}
+              </div>
+              <div class="flex items-center gap-1 mt-0.5 text-[10px] text-slate-500 font-mono">
+                <span>${c.students?.id || 'STU-ID'}</span>
+                ${c.students?.family_id ? `&bull; <span>${c.students.family_id}</span>` : ''}
+              </div>
+            </td>
+
+            <td class="p-3">
+              <span class="px-2 py-0.5 rounded bg-emerald-50 text-brandEmerald font-bold text-[11px] border border-emerald-200">
+                ${c.courses?.name || 'Quran Studies & Tajweed'}
+              </span>
+            </td>
+
+            <td class="p-3">
+              <div class="font-bold text-brandDark">${c.teachers?.full_name || 'Assigned Teacher'}</div>
+              <div class="text-[10px] text-slate-400 font-mono">${c.teachers?.email || 'Teacher ID'}</div>
+            </td>
+
+            <td class="p-3">
+              ${typeBadge}
+            </td>
+
+            <td class="p-3 max-w-xs truncate">
+              ${sabaqText}
+              <div class="mt-0.5">
+                <span class="px-2 py-0.5 rounded text-[10px] font-extrabold border ${c.badgeClass}">
+                  ${c.status}
+                </span>
+              </div>
+            </td>
+
+            <td class="p-3 text-right">
+              <div class="flex items-center justify-end gap-1.5 flex-wrap">
+                <button onclick="openDashAttendanceModal('${c.id}', '${c.students?.name || ''}', '${c.start_time.slice(0,5)} - ${c.end_time.slice(0,5)}', '${c.teachers?.full_name || ''}', '${c.student_id}', '${c.teacher_id}', '${c.log?.status || ''}', '${c.log?.lesson_notes || ''}')" class="px-2.5 py-1 bg-brandDark text-white rounded-md text-[11px] font-bold hover:bg-brandDarkest shadow-sm flex items-center gap-1">
+                  <i class="fa-solid fa-clipboard-check"></i> Attendance
+                </button>
+
+                ${c.meeting_link ? `
+                  <a href="${c.meeting_link}" target="_blank" class="px-2.5 py-1 bg-emerald-600 text-white rounded-md text-[11px] font-bold hover:bg-emerald-700 shadow-sm flex items-center gap-1">
+                    <i class="fa-solid fa-video"></i> Join
+                  </a>
+                ` : ''}
+              </div>
+            </td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    function handleDashClassSearch(query) {
+      renderDashboardClassesTable(query);
+    }
+
+    function openDashAttendanceModal(scheduleId, studentName, timeSlot, teacherName, studentId, teacherId, currentStatus, currentNotes) {
+      document.getElementById('dashAttScheduleId').value = scheduleId;
+      document.getElementById('dashAttStudentId').value = studentId;
+      document.getElementById('dashAttTeacherId').value = teacherId;
+      document.getElementById('dashAttStudentName').innerText = studentName || 'Student';
+      document.getElementById('dashAttTime').innerText = timeSlot || '--';
+      document.getElementById('dashAttTeacherName').innerText = teacherName || 'Teacher';
+      document.getElementById('dashAttNotes').value = currentNotes || '';
+
+      selectDashAttStatus(currentStatus || 'Present');
+      openModal('modalDashAttendance');
+    }
+
+    function selectDashAttStatus(status) {
+      document.getElementById('dashAttSelectedStatus').value = status;
+      const btnP = document.getElementById('btnAttPresent');
+      const btnA = document.getElementById('btnAttAbsent');
+      const btnL = document.getElementById('btnAttLeave');
+
+      if (btnP) btnP.className = 'py-2.5 rounded-xl border font-bold flex flex-col items-center gap-1 ' + 
+        (status === 'Present' ? 'border-emerald-500 bg-emerald-50 text-emerald-800' : 'border-slate-300 text-slate-700 hover:bg-emerald-50');
+      
+      if (btnA) btnA.className = 'py-2.5 rounded-xl border font-bold flex flex-col items-center gap-1 ' + 
+        (status === 'Absent' ? 'border-rose-500 bg-rose-50 text-rose-800' : 'border-slate-300 text-slate-700 hover:bg-rose-50');
+
+      if (btnL) btnL.className = 'py-2.5 rounded-xl border font-bold flex flex-col items-center gap-1 ' + 
+        (status === 'Leave' ? 'border-blue-500 bg-blue-50 text-blue-800' : 'border-slate-300 text-slate-700 hover:bg-blue-50');
+    }
+
+    async function handleSaveDashAttendance(e) {
+      e.preventDefault();
+      const btn = document.getElementById('btnSaveDashAtt');
+      btn.disabled = true;
+      btn.innerText = 'Saving...';
+
+      const schedule_id = document.getElementById('dashAttScheduleId').value;
+      const student_id = document.getElementById('dashAttStudentId').value;
+      const teacher_id = document.getElementById('dashAttTeacherId').value;
+      const status = document.getElementById('dashAttSelectedStatus').value;
+      const lesson_notes = document.getElementById('dashAttNotes').value.trim();
+      const date = new Date().toISOString().slice(0, 10);
+
+      await db.from('attendance_logs').upsert([{
+        schedule_id,
+        student_id,
+        teacher_id,
+        date,
+        status,
+        lesson_notes
+      }], { onConflict: 'schedule_id,date' });
+
+      closeModal('modalDashAttendance');
+      btn.disabled = false;
+      btn.innerHTML = '<i class="fa-solid fa-floppy-disk"></i> Save Attendance';
+
+      await loadDashboardData();
     }
 
     // DYNAMIC COUNTRIES & PERSISTENCE
@@ -2028,7 +2795,7 @@
       const roleSelect = document.getElementById('userRoleSelect');
       if (roleSelect) roleSelect.value = 'owner';
       switchUserRole('owner');
-      switchTab('tab-live-monitor');
+      switchTab('tab-dashboard');
     }
 
     function loginDirectAsTeacher(teacherId) {
