@@ -100,6 +100,9 @@
       <button onclick="switchTab('tab-teachers')" class="nav-tab role-admin px-4 py-2 rounded-lg text-xs sm:text-sm font-bold flex items-center gap-2 text-slate-700 hover:bg-emerald-50 hover:text-brandDark transition whitespace-nowrap">
         <i class="fa-solid fa-chalkboard-user text-brandEmerald"></i> Teachers Directory
       </button>
+      <button onclick="switchTab('tab-trials')" class="nav-tab role-admin px-4 py-2 rounded-lg text-xs sm:text-sm font-bold flex items-center gap-2 text-slate-700 hover:bg-purple-50 hover:text-purple-900 transition whitespace-nowrap">
+        <i class="fa-solid fa-graduation-cap text-purple-600"></i> Trial Classes
+      </button>
       <button onclick="switchTab('tab-attendance')" class="nav-tab px-4 py-2 rounded-lg text-xs sm:text-sm font-bold flex items-center gap-2 text-slate-700 hover:bg-emerald-50 hover:text-brandDark transition whitespace-nowrap">
         <i class="fa-solid fa-clipboard-check text-brandEmerald"></i> Daily Attendance & Notes
       </button>
@@ -402,6 +405,123 @@
 
       <div id="teachersGrid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
         <div class="col-span-full p-8 text-center text-slate-400">Loading registered teachers...</div>
+      </div>
+    </section>
+
+    <!-- 3. TRIAL CLASSES MANAGEMENT & 3-DAY EVALUATION -->
+    <section id="tab-trials" class="tab-content hidden space-y-5">
+      <!-- HEADER BAR -->
+      <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex flex-wrap justify-between items-center gap-4">
+        <div>
+          <div class="flex items-center gap-2">
+            <span class="w-9 h-9 rounded-xl bg-purple-100 text-purple-800 flex items-center justify-center text-base font-bold shadow-xs">
+              <i class="fa-solid fa-graduation-cap"></i>
+            </span>
+            <h2 class="text-xl font-extrabold text-slate-900 tracking-tight">
+              Trial Classes & 3-Day Free Evaluation
+            </h2>
+            <span id="trialTotalHeaderBadge" class="px-2.5 py-0.5 rounded-full text-xs font-mono font-bold bg-purple-100 text-purple-800 border border-purple-200">
+              0 Enquiries
+            </span>
+          </div>
+          <p class="text-xs text-slate-500 mt-1">
+            Register prospective students for 3-day free evaluations, monitor teacher trial conduct, and 1-click convert to regular enrollments.
+          </p>
+        </div>
+
+        <div class="flex items-center gap-2.5">
+          <button onclick="loadTrialClassesData()" class="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-xs">
+            <i class="fa-solid fa-arrows-rotate"></i> Refresh
+          </button>
+          <button onclick="prepareAddTrialModal()" class="px-4 py-2.5 bg-gradient-to-r from-purple-700 via-purple-800 to-indigo-800 text-white rounded-xl text-xs font-bold hover:shadow-lg transition flex items-center gap-1.5 shadow-md">
+            <i class="fa-solid fa-user-plus"></i> + Add New Trial Class
+          </button>
+        </div>
+      </div>
+
+      <!-- 4 KPI SUMMARY CARDS -->
+      <div class="grid grid-cols-2 sm:grid-cols-4 gap-3.5">
+        <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
+          <div class="flex items-center justify-between text-slate-500 mb-1">
+            <span class="text-[10px] font-black uppercase tracking-wider">Active 3-Day Trials</span>
+            <i class="fa-solid fa-clock text-purple-600 text-xs"></i>
+          </div>
+          <div class="text-2xl font-black text-purple-700" id="trialsKpiActive">0</div>
+          <div class="text-[10px] text-purple-600 mt-0.5">In Progress (0-2 Days)</div>
+        </div>
+
+        <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
+          <div class="flex items-center justify-between text-slate-500 mb-1">
+            <span class="text-[10px] font-black uppercase tracking-wider">Evaluation Completed</span>
+            <i class="fa-solid fa-circle-check text-amber-600 text-xs"></i>
+          </div>
+          <div class="text-2xl font-black text-amber-600" id="trialsKpiCompleted">0</div>
+          <div class="text-[10px] text-amber-700 mt-0.5">3/3 Sessions • Ready to Convert</div>
+        </div>
+
+        <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
+          <div class="flex items-center justify-between text-slate-500 mb-1">
+            <span class="text-[10px] font-black uppercase tracking-wider">Converted to Regular</span>
+            <i class="fa-solid fa-user-check text-emerald-600 text-xs"></i>
+          </div>
+          <div class="text-2xl font-black text-emerald-600" id="trialsKpiConverted">0</div>
+          <div class="text-[10px] text-emerald-700 mt-0.5">Successfully Enrolled</div>
+        </div>
+
+        <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
+          <div class="flex items-center justify-between text-slate-500 mb-1">
+            <span class="text-[10px] font-black uppercase tracking-wider">Total Trials Booked</span>
+            <i class="fa-solid fa-list-check text-slate-600 text-xs"></i>
+          </div>
+          <div class="text-2xl font-black text-slate-900" id="trialsKpiTotal">0</div>
+          <div class="text-[10px] text-slate-500 mt-0.5">All-Time Evaluation Pool</div>
+        </div>
+      </div>
+
+      <!-- FILTER TABS & SEARCH ROSTER TOOLBAR -->
+      <div class="bg-white p-3.5 rounded-2xl border border-slate-200 shadow-sm flex flex-wrap justify-between items-center gap-3">
+        <div class="flex items-center gap-1.5 flex-wrap text-xs font-bold">
+          <button onclick="filterTrialCards('all')" id="trialTab-all" class="trial-filter-pill px-3 py-1.5 rounded-lg bg-purple-700 text-white shadow-xs">
+            All Trials
+          </button>
+          <button onclick="filterTrialCards('active')" id="trialTab-active" class="trial-filter-pill px-3 py-1.5 rounded-lg text-slate-600 hover:bg-purple-50 hover:text-purple-800 transition">
+            In Progress (3-Day)
+          </button>
+          <button onclick="filterTrialCards('completed')" id="trialTab-completed" class="trial-filter-pill px-3 py-1.5 rounded-lg text-slate-600 hover:bg-amber-50 hover:text-amber-800 transition">
+            Ready to Convert (3/3)
+          </button>
+          <button onclick="filterTrialCards('converted')" id="trialTab-converted" class="trial-filter-pill px-3 py-1.5 rounded-lg text-slate-600 hover:bg-emerald-50 hover:text-emerald-800 transition">
+            Converted Regular
+          </button>
+          <button onclick="filterTrialCards('discontinued')" id="trialTab-discontinued" class="trial-filter-pill px-3 py-1.5 rounded-lg text-slate-600 hover:bg-rose-50 hover:text-rose-800 transition">
+            Discontinued
+          </button>
+        </div>
+
+        <div class="relative w-full sm:w-64">
+          <i class="fa-solid fa-magnifying-glass absolute left-3 top-2.5 text-slate-400 text-xs"></i>
+          <input type="text" id="trialSearchInput" oninput="handleTrialSearch(this.value)" placeholder="Search student, parent, teacher..." 
+            class="w-full pl-8 pr-3 py-1.5 bg-slate-50 border border-slate-300 rounded-lg text-xs font-semibold focus:bg-white focus:outline-brandEmerald">
+        </div>
+      </div>
+
+      <!-- TRIAL CARDS LIST GRID -->
+      <div id="trialsListContainer" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+        <div class="col-span-full p-12 text-center text-slate-400 bg-white rounded-2xl border border-slate-200">
+          <i class="fa-solid fa-graduation-cap text-4xl text-purple-200 mb-3"></i>
+          <h4 class="font-bold text-slate-700 text-sm">Loading Trial Classes...</h4>
+        </div>
+      </div>
+
+      <!-- EMPTY STATE -->
+      <div id="trialsEmptyState" class="hidden p-12 text-center bg-white rounded-2xl border border-slate-200">
+        <div class="w-16 h-16 mx-auto rounded-full bg-purple-50 text-purple-400 flex items-center justify-center text-2xl mb-3">
+          <i class="fa-regular fa-folder-open"></i>
+        </div>
+        <h4 class="font-bold text-slate-800 text-base" id="trialsEmptyTitle">No Trial Classes Found</h4>
+        <p class="text-xs text-slate-500 mt-1 max-w-sm mx-auto" id="trialsEmptyDesc">
+          There are no trial classes matching the selected filter. Click "+ Add New Trial Class" above to register new prospective students.
+        </p>
       </div>
     </section>
 
@@ -1258,6 +1378,289 @@
     </div>
   </div>
 
+  <!-- MODAL: ADD TRIAL CLASS (3-DAY FREE TRIAL REGISTRATION) -->
+  <div id="modalAddTrialClass" class="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 hidden items-center justify-center p-4">
+    <div class="bg-white rounded-2xl max-w-2xl w-full p-6 max-h-[92vh] overflow-y-auto shadow-2xl border border-slate-200">
+      
+      <!-- Modal Header -->
+      <div class="flex justify-between items-center mb-4 border-b pb-3">
+        <div class="flex items-center gap-3">
+          <div class="w-10 h-10 rounded-xl bg-purple-100 text-purple-800 flex items-center justify-center font-bold text-lg shadow-xs">
+            <i class="fa-solid fa-graduation-cap"></i>
+          </div>
+          <div>
+            <h3 class="font-extrabold text-base text-slate-900">Register 3-Day Free Trial Class</h3>
+            <p class="text-xs text-slate-500">Auto-schedules 3 consecutive evaluation sessions in Teacher's timetable</p>
+          </div>
+        </div>
+        <button onclick="closeModal('modalAddTrialClass')" class="text-slate-400 hover:text-slate-600 text-xl font-bold">&times;</button>
+      </div>
+
+      <form onsubmit="handleSaveTrialClass(event)" class="space-y-4 text-xs">
+        
+        <!-- 1. PARENT & LOCATION DETAILS -->
+        <div class="bg-purple-50/60 p-4 rounded-xl border border-purple-200 space-y-3">
+          <div class="font-extrabold text-purple-900 text-xs flex items-center gap-1.5 uppercase tracking-wide">
+            <i class="fa-solid fa-user-group text-purple-600"></i> 1. Parent & Location Information
+          </div>
+          
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label class="block font-bold mb-1 text-slate-700">Parent Full Name *:</label>
+              <input type="text" id="trialParentName" required placeholder="e.g. Brother Farhan" class="w-full p-2.5 bg-white border border-slate-300 rounded-lg font-bold text-slate-800 focus:outline-purple-600">
+            </div>
+            <div>
+              <label class="block font-bold mb-1 text-slate-700">Parent Primary WhatsApp Number *:</label>
+              <input type="text" id="trialParentPhone" required placeholder="e.g. +447123456789" class="w-full p-2.5 bg-white border border-slate-300 rounded-lg font-mono font-bold text-slate-800 focus:outline-purple-600">
+            </div>
+          </div>
+
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label class="block font-bold mb-1 text-slate-700">Country of Residence *:</label>
+              <select id="trialCountry" class="w-full p-2.5 bg-white border border-slate-300 rounded-lg font-bold text-slate-800 focus:outline-purple-600">
+                <option value="United Kingdom">🇬🇧 United Kingdom</option>
+                <option value="United States">🇺🇸 United States</option>
+                <option value="Canada">🇨🇦 Canada</option>
+                <option value="Australia">🇦🇺 Australia</option>
+                <option value="United Arab Emirates">🇦🇪 United Arab Emirates</option>
+                <option value="Saudi Arabia">🇸🇦 Saudi Arabia</option>
+                <option value="Pakistan">🇵🇰 Pakistan</option>
+                <option value="Qatar">🇶🇦 Qatar</option>
+                <option value="Germany">🇩🇪 Germany</option>
+                <option value="France">🇫🇷 France</option>
+                <option value="Other">🌍 Other International</option>
+              </select>
+            </div>
+            <div>
+              <label class="block font-bold mb-1 text-slate-700">Student Local Timezone *:</label>
+              <select id="trialTimezone" class="w-full p-2.5 bg-white border border-slate-300 rounded-lg font-bold text-slate-800 focus:outline-purple-600">
+                <option value="Europe/London">London (GMT/BST - UK)</option>
+                <option value="America/New_York">New York / Toronto (EST - US/CA)</option>
+                <option value="America/Chicago">Chicago / Houston (CST - US)</option>
+                <option value="America/Denver">Denver / Calgary (MST - US/CA)</option>
+                <option value="America/Los_Angeles">Los Angeles / Vancouver (PST - US/CA)</option>
+                <option value="Australia/Sydney">Sydney / Melbourne (AEST - Australia)</option>
+                <option value="Asia/Dubai">Dubai / Abu Dhabi (GST - UAE)</option>
+                <option value="Asia/Riyadh">Riyadh (AST - Saudi Arabia)</option>
+                <option value="Asia/Karachi">Karachi / Islamabad (PKT - Pakistan)</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <!-- 2. STUDENT PROFILE DETAILS -->
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-3">
+          <div class="font-extrabold text-slate-800 text-xs flex items-center gap-1.5 uppercase tracking-wide">
+            <i class="fa-solid fa-child-reaching text-brandEmerald"></i> 2. Student Profile Details
+          </div>
+
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div class="sm:col-span-1">
+              <label class="block font-bold mb-1 text-slate-700">Student Name *:</label>
+              <input type="text" id="trialStudentName" required placeholder="e.g. Ibrahim Farhan" class="w-full p-2.5 bg-white border border-slate-300 rounded-lg font-bold text-slate-800 focus:outline-brandEmerald">
+            </div>
+            <div>
+              <label class="block font-bold mb-1 text-slate-700">Student Age *:</label>
+              <input type="number" id="trialStudentAge" required value="8" min="4" max="70" class="w-full p-2.5 bg-white border border-slate-300 rounded-lg font-bold text-slate-800">
+            </div>
+            <div>
+              <label class="block font-bold mb-1 text-slate-700">Gender *:</label>
+              <select id="trialStudentGender" class="w-full p-2.5 bg-white border border-slate-300 rounded-lg font-bold text-slate-800">
+                <option value="Male">Male (Boy)</option>
+                <option value="Female">Female (Girl)</option>
+              </select>
+            </div>
+          </div>
+
+          <div>
+            <label class="block font-bold mb-1 text-slate-700">Course for Evaluation *:</label>
+            <select id="trialCourse" class="w-full p-2.5 bg-white border border-slate-300 rounded-lg font-bold text-slate-800 focus:outline-brandEmerald">
+              <option value="Noorani Qaida & Basic Arabic">📖 Noorani Qaida & Arabic Pronunciation</option>
+              <option value="Nazra Quran with Tajweed">🕌 Nazra Quran with Tajweed Rules</option>
+              <option value="Quran Memorization (Hifz-ul-Quran)">⭐ Quran Memorization (Hifz-ul-Quran)</option>
+              <option value="Islamic Studies & Daily Duas">🤲 Islamic Studies & Daily Masnoon Duas</option>
+              <option value="Advanced Tajweed & Tarteel">✨ Advanced Tajweed & Tarteel</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- 3. ASSIGNED TEACHER & 3-DAY TIMETABLE SLOTS -->
+        <div class="bg-gradient-to-br from-purple-50 to-indigo-50 p-4 rounded-xl border border-purple-200 space-y-3">
+          <div class="flex justify-between items-center">
+            <div class="font-extrabold text-purple-900 text-xs flex items-center gap-1.5 uppercase tracking-wide">
+              <i class="fa-solid fa-chalkboard-user text-purple-700"></i> 3. Assigned Teacher & 3-Day Timetable
+            </div>
+            <span class="text-[10px] bg-purple-700 text-white px-2 py-0.5 rounded-full font-bold">3 Consecutive Days</span>
+          </div>
+
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label class="block font-bold mb-1 text-slate-700">Select Quran Instructor *:</label>
+              <select id="trialTeacherSelect" required class="w-full p-2.5 bg-white border border-purple-300 rounded-lg font-bold text-slate-800 focus:outline-purple-600">
+                <!-- Populated dynamically -->
+              </select>
+            </div>
+            <div>
+              <label class="block font-bold mb-1 text-slate-700">Trial Start Date (Day 1) *:</label>
+              <input type="date" id="trialStartDate" required class="w-full p-2.5 bg-white border border-purple-300 rounded-lg font-bold text-slate-800">
+            </div>
+          </div>
+
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label class="block font-bold mb-1 text-slate-700">Teacher Time Slot (Pakistan PKT) *:</label>
+              <select id="trialPktSlot" required class="w-full p-2.5 bg-white border border-purple-300 rounded-lg font-mono font-bold text-brandDark focus:outline-purple-600">
+                <!-- Populated with 48 half-hour slots -->
+              </select>
+            </div>
+            <div>
+              <label class="block font-bold mb-1 text-slate-700">Student Local Time Slot (e.g. 6:00 PM UK):</label>
+              <input type="text" id="trialStudentTime" placeholder="e.g. 06:00 PM - 06:30 PM (UK Time)" class="w-full p-2.5 bg-white border border-purple-300 rounded-lg font-bold text-slate-800">
+            </div>
+          </div>
+
+          <div>
+            <label class="block font-bold mb-1 text-slate-700">Meeting Room URL (Zoom / Google Meet):</label>
+            <div class="relative">
+              <i class="fa-solid fa-video absolute left-3 top-3 text-purple-400"></i>
+              <input type="url" id="trialMeetingLink" placeholder="https://us04web.zoom.us/j/... or https://meet.google.com/..." class="w-full pl-8 pr-3 py-2 bg-white border border-purple-300 rounded-lg font-mono text-xs">
+            </div>
+          </div>
+        </div>
+
+        <div class="flex justify-end gap-2.5 pt-3 border-t">
+          <button type="button" onclick="closeModal('modalAddTrialClass')" class="px-4 py-2 border rounded-xl font-bold text-slate-600 hover:bg-slate-100">Cancel</button>
+          <button type="submit" id="btnSaveTrial" class="px-6 py-2.5 bg-gradient-to-r from-purple-700 to-indigo-800 text-white rounded-xl font-extrabold hover:shadow-lg shadow-md flex items-center gap-1.5 transition">
+            <i class="fa-solid fa-check"></i> Book 3-Day Free Trial
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL: CONVERT TRIAL TO REGULAR STUDENT (ZERO RE-TYPING) -->
+  <div id="modalConvertTrialToRegular" class="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 hidden items-center justify-center p-4">
+    <div class="bg-white rounded-2xl max-w-xl w-full p-6 max-h-[92vh] overflow-y-auto shadow-2xl border border-slate-200">
+      
+      <!-- Modal Header -->
+      <div class="flex justify-between items-center mb-4 border-b pb-3">
+        <div class="flex items-center gap-3">
+          <div class="w-10 h-10 rounded-xl bg-emerald-100 text-brandEmerald flex items-center justify-center font-bold text-lg shadow-xs">
+            <i class="fa-solid fa-user-check"></i>
+          </div>
+          <div>
+            <h3 class="font-extrabold text-base text-slate-900">Convert Trial to Regular Student</h3>
+            <p class="text-xs text-slate-500">All trial details are pre-filled. Enter fee to complete enrollment.</p>
+          </div>
+        </div>
+        <button onclick="closeModal('modalConvertTrialToRegular')" class="text-slate-400 hover:text-slate-600 text-xl font-bold">&times;</button>
+      </div>
+
+      <form onsubmit="handleConvertTrialSubmit(event)" class="space-y-4 text-xs">
+        <input type="hidden" id="convTrialId">
+
+        <!-- PRE-FILLED TRIAL SUMMARY CARD -->
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-2">
+          <div class="flex justify-between items-center text-[10px] font-extrabold uppercase tracking-wide text-slate-500">
+            <span>Pre-Loaded Student & Family Details</span>
+            <span class="text-emerald-700 font-bold bg-emerald-100 px-2 py-0.5 rounded-full">Zero Re-typing</span>
+          </div>
+
+          <div class="grid grid-cols-2 gap-3 text-xs">
+            <div>
+              <span class="text-slate-400 text-[10px] block">Student Name:</span>
+              <strong id="convSummaryStudent" class="text-slate-900 font-extrabold text-sm">--</strong>
+            </div>
+            <div>
+              <span class="text-slate-400 text-[10px] block">Parent / Guardian:</span>
+              <strong id="convSummaryParent" class="text-slate-900 font-bold">--</strong>
+            </div>
+            <div>
+              <span class="text-slate-400 text-[10px] block">WhatsApp Contact:</span>
+              <strong id="convSummaryPhone" class="text-slate-900 font-mono">--</strong>
+            </div>
+            <div>
+              <span class="text-slate-400 text-[10px] block">Country & Timezone:</span>
+              <strong id="convSummaryLocation" class="text-slate-900">--</strong>
+            </div>
+            <div>
+              <span class="text-slate-400 text-[10px] block">Selected Course:</span>
+              <span id="convSummaryCourse" class="text-brandEmerald font-bold bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200 text-[11px] inline-block">--</span>
+            </div>
+            <div>
+              <span class="text-slate-400 text-[10px] block">Assigned Quran Instructor:</span>
+              <strong id="convSummaryTeacher" class="text-brandDark font-bold">--</strong>
+            </div>
+          </div>
+        </div>
+
+        <!-- NEW INPUTS: AGREED MONTHLY FEE & SCHEDULE PREFERENCES -->
+        <div class="bg-gradient-to-br from-emerald-50 to-amber-50/60 p-4 rounded-xl border-2 border-brandEmerald/40 space-y-3">
+          <div class="font-extrabold text-brandDark text-xs flex items-center gap-1.5 uppercase tracking-wide">
+            <i class="fa-solid fa-file-invoice-dollar text-brandGold"></i> Agreed Monthly Tuition & Regular Schedule
+          </div>
+
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label class="block font-bold mb-1 text-slate-800">Agreed Monthly Fee *:</label>
+              <input type="number" id="convMonthlyFee" required placeholder="e.g. 10000 or 50" class="w-full p-2.5 bg-white border border-emerald-400 rounded-lg font-black text-sm text-brandDark focus:outline-brandEmerald">
+            </div>
+            <div>
+              <label class="block font-bold mb-1 text-slate-800">Billing Currency *:</label>
+              <select id="convCurrency" class="w-full p-2.5 bg-white border border-emerald-400 rounded-lg font-bold text-slate-800">
+                <option value="PKR">PKR (Pakistani Rupee)</option>
+                <option value="USD">USD (US Dollar)</option>
+                <option value="GBP">GBP (British Pound)</option>
+                <option value="CAD">CAD (Canadian Dollar)</option>
+                <option value="EUR">EUR (Euro)</option>
+                <option value="AUD">AUD (Australian Dollar)</option>
+                <option value="AED">AED (UAE Dirham)</option>
+                <option value="SAR">SAR (Saudi Riyal)</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label class="block font-bold mb-1 text-slate-800">Monthly Billing Due Day:</label>
+              <select id="convBillingDay" class="w-full p-2.5 bg-white border border-slate-300 rounded-lg font-bold text-slate-800">
+                <option value="1">1st of every month</option>
+                <option value="5">5th of every month</option>
+                <option value="10">10th of every month</option>
+                <option value="15">15th of every month</option>
+                <option value="20">20th of every month</option>
+                <option value="25">25th of every month</option>
+              </select>
+            </div>
+            <div>
+              <label class="block font-bold mb-1 text-slate-800">Regular Days / Week Preference:</label>
+              <select id="convDaysPerWeek" class="w-full p-2.5 bg-white border border-slate-300 rounded-lg font-bold text-slate-800">
+                <option value="5 Days (Mon - Fri)">5 Days a Week (Monday - Friday)</option>
+                <option value="4 Days (Mon - Thu)">4 Days a Week (Monday - Thursday)</option>
+                <option value="3 Days (Mon, Wed, Fri)">3 Days a Week (Monday, Wednesday, Friday)</option>
+                <option value="2 Days (Sat - Sun)">Weekend Classes (Saturday & Sunday)</option>
+                <option value="6 Days (Mon - Sat)">6 Days a Week (Monday - Saturday)</option>
+              </select>
+            </div>
+          </div>
+
+          <div>
+            <label class="block font-bold mb-1 text-slate-800">Official Regular Enrollment Date:</label>
+            <input type="date" id="convJoiningDate" class="w-full p-2.5 bg-white border border-slate-300 rounded-lg font-bold text-slate-800">
+          </div>
+        </div>
+
+        <div class="flex justify-end gap-2.5 pt-3 border-t">
+          <button type="button" onclick="closeModal('modalConvertTrialToRegular')" class="px-4 py-2 border rounded-xl font-bold text-slate-600 hover:bg-slate-100">Cancel</button>
+          <button type="submit" id="btnConfirmConvert" class="px-6 py-2.5 bg-brandDark text-white rounded-xl font-extrabold hover:bg-brandDarkest shadow-md flex items-center gap-1.5 transition">
+            <i class="fa-solid fa-circle-check text-brandGold"></i> Confirm & Enroll as Regular Student
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
   <!-- MODAL: TEACHER PORTAL LOGIN (AUTHENTICATE TEACHER) -->
   <div id="modalTeacherLogin" class="fixed inset-0 bg-black/70 backdrop-blur-sm z-[70] hidden items-center justify-center p-4">
     <div class="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-200">
@@ -1316,6 +1719,10 @@
     let CURRENT_MODAL_STUDENT_ID = null;
     let CURRENT_MODAL_TEACHER_ID = null;
 
+    // TRIAL CLASSES MANAGEMENT STATE
+    let ALL_TRIALS = [];
+    let CURRENT_TRIAL_FILTER = 'all';
+
     // MAIN EXECUTIVE DASHBOARD STATE
     let DASHBOARD_CLASSES = [];
     let CURRENT_DASH_FILTER = null;
@@ -1340,6 +1747,7 @@
       loadTeachers();
       loadCourses();
       loadFeeBillingLedger();
+      loadTrialClassesData();
 
       setInterval(loadDashboardData, 30000);
     };
@@ -1373,6 +1781,7 @@
       if (tabId === 'tab-families') loadFamiliesAndStudents();
       if (tabId === 'tab-teachers') loadTeachers();
       if (tabId === 'tab-invoices') loadFeeBillingLedger();
+      if (tabId === 'tab-trials') loadTrialClassesData();
     }
 
     // CHART.JS INITIALIZATION & EXECUTIVE ANALYTICS
@@ -1602,7 +2011,7 @@
         const isPast = currentMinutes >= endMin;
         const isUpcoming = currentMinutes < startMin;
 
-        let isTrial = s.is_trial === true || (s.students?.notes && s.students.notes.toLowerCase().includes('trial'));
+        let isTrial = s.status === 'Trial' || s.is_trial === true || s.students?.status === 'Trial' || (s.students?.notes && s.students.notes.toLowerCase().includes('trial'));
         if (isTrial) trialCount++;
 
         let status = 'Upcoming';
@@ -3526,6 +3935,790 @@
       const cSelect = document.getElementById('stuCourseId');
       if (cSelect) {
         cSelect.innerHTML = (courses || []).map(c => `<option value="${c.id}">${c.name}</option>`).join('');
+      }
+    }
+
+    // ==========================================
+    // TRIAL CLASSES MANAGEMENT & 3-DAY EVALUATION
+    // ==========================================
+
+    function getStoredTrials() {
+      try {
+        return JSON.parse(localStorage.getItem('alhuda_trial_classes') || '[]');
+      } catch (e) {
+        return [];
+      }
+    }
+
+    function saveStoredTrials(trials) {
+      try {
+        localStorage.setItem('alhuda_trial_classes', JSON.stringify(trials));
+      } catch (e) {
+        console.error("Error saving trials to localStorage:", e);
+      }
+    }
+
+    async function loadTrialClassesData() {
+      try {
+        let storedTrials = getStoredTrials();
+
+        // 1. Fetch trials from Supabase students table (status = 'Trial')
+        try {
+          const { data: supaTrials, error } = await db.from('students')
+            .select('*, families(*), teachers(*)')
+            .eq('status', 'Trial');
+
+          if (!error && supaTrials && supaTrials.length > 0) {
+            supaTrials.forEach(st => {
+              const exists = storedTrials.find(t => t.student_id === st.id || t.id === st.id);
+              let parsedNotes = {};
+              try {
+                parsedNotes = JSON.parse(st.notes || '{}');
+              } catch(e){}
+
+              if (!exists) {
+                storedTrials.unshift({
+                  id: 'TRL-' + st.id.replace(/[^0-9]/g, ''),
+                  student_id: st.id,
+                  family_id: st.family_id,
+                  student_name: st.name,
+                  student_age: st.age,
+                  student_gender: st.gender,
+                  parent_name: st.families?.parent_name || 'Guardian',
+                  whatsapp: st.families?.whatsapp || '',
+                  country: st.families?.country || 'International',
+                  timezone: st.families?.timezone || 'UTC',
+                  course: parsedNotes.trial_course || 'Noorani Qaida & Basic Arabic',
+                  teacher_id: st.assigned_teacher_id,
+                  teacher_name: st.teachers?.full_name || 'Assigned Teacher',
+                  start_date: st.joining_date || new Date().toISOString().slice(0, 10),
+                  pkt_slot: parsedNotes.pkt_slot || '16:00 - 16:30',
+                  student_time: parsedNotes.student_time || '',
+                  meeting_link: parsedNotes.meeting_link || '',
+                  conducted_sessions: 0,
+                  status: 'Active',
+                  created_at: st.created_at || new Date().toISOString()
+                });
+              }
+            });
+          }
+        } catch(err) {
+          console.warn("Could not query Supabase trial students:", err);
+        }
+
+        // 2. Fetch attendance logs to sync conducted sessions
+        try {
+          const { data: attLogs } = await db.from('attendance_logs').select('student_id, status, lesson_notes');
+          if (attLogs && attLogs.length > 0) {
+            storedTrials.forEach(trial => {
+              const stuLogs = attLogs.filter(l => l.student_id === trial.student_id && (l.status === 'Present' || l.status === 'Completed'));
+              if (stuLogs.length > (trial.conducted_sessions || 0)) {
+                trial.conducted_sessions = Math.min(3, stuLogs.length);
+                if (trial.conducted_sessions >= 3 && trial.status === 'Active') {
+                  trial.status = 'Completed';
+                }
+              }
+            });
+          }
+        } catch(err) {
+          console.warn("Could not query trial attendance logs:", err);
+        }
+
+        ALL_TRIALS = storedTrials;
+        saveStoredTrials(ALL_TRIALS);
+
+        // 3. Update KPI summary cards
+        updateTrialKpis();
+
+        // 4. Render trial cards
+        renderTrialCards(CURRENT_TRIAL_FILTER);
+
+      } catch(e) {
+        console.error("Error loading trial classes data:", e);
+      }
+    }
+
+    function updateTrialKpis() {
+      const activeCount = ALL_TRIALS.filter(t => t.status === 'Active' || (t.status !== 'Converted' && t.status !== 'Discontinued' && (t.conducted_sessions || 0) < 3)).length;
+      const completedCount = ALL_TRIALS.filter(t => t.status === 'Completed' || (t.status !== 'Converted' && t.status !== 'Discontinued' && (t.conducted_sessions || 0) >= 3)).length;
+      const convertedCount = ALL_TRIALS.filter(t => t.status === 'Converted').length;
+      const totalCount = ALL_TRIALS.length;
+
+      const setEl = (id, val) => { const el = document.getElementById(id); if (el) el.innerText = val; };
+      setEl('trialsKpiActive', activeCount);
+      setEl('trialsKpiCompleted', completedCount);
+      setEl('trialsKpiConverted', convertedCount);
+      setEl('trialsKpiTotal', totalCount);
+      setEl('trialTotalHeaderBadge', `${totalCount} Enquiries`);
+    }
+
+    function filterTrialCards(filter) {
+      CURRENT_TRIAL_FILTER = filter;
+      document.querySelectorAll('.trial-filter-pill').forEach(btn => {
+        btn.classList.remove('bg-purple-700', 'text-white', 'shadow-xs');
+        btn.classList.add('text-slate-600');
+      });
+      const activeBtn = document.getElementById(`trialTab-${filter}`);
+      if (activeBtn) {
+        activeBtn.classList.add('bg-purple-700', 'text-white', 'shadow-xs');
+        activeBtn.classList.remove('text-slate-600');
+      }
+      renderTrialCards(filter);
+    }
+
+    function handleTrialSearch(query) {
+      renderTrialCards(CURRENT_TRIAL_FILTER, query);
+    }
+
+    function renderTrialCards(filter = 'all', searchQuery = '') {
+      const container = document.getElementById('trialsListContainer');
+      const emptyState = document.getElementById('trialsEmptyState');
+      if (!container) return;
+
+      const query = (searchQuery || document.getElementById('trialSearchInput')?.value || '').trim().toLowerCase();
+
+      let filtered = ALL_TRIALS.filter(t => {
+        if (filter === 'active') {
+          return (t.status === 'Active' || !t.status) && (t.conducted_sessions || 0) < 3;
+        }
+        if (filter === 'completed') {
+          return t.status === 'Completed' || (t.status !== 'Converted' && t.status !== 'Discontinued' && (t.conducted_sessions || 0) >= 3);
+        }
+        if (filter === 'converted') {
+          return t.status === 'Converted';
+        }
+        if (filter === 'discontinued') {
+          return t.status === 'Discontinued';
+        }
+        return true;
+      });
+
+      if (query) {
+        filtered = filtered.filter(t => 
+          (t.student_name || '').toLowerCase().includes(query) ||
+          (t.parent_name || '').toLowerCase().includes(query) ||
+          (t.whatsapp || '').includes(query) ||
+          (t.course || '').toLowerCase().includes(query) ||
+          (t.country || '').toLowerCase().includes(query) ||
+          (t.teacher_name || '').toLowerCase().includes(query)
+        );
+      }
+
+      if (filtered.length === 0) {
+        container.innerHTML = '';
+        if (emptyState) emptyState.classList.remove('hidden');
+        return;
+      }
+
+      if (emptyState) emptyState.classList.add('hidden');
+
+      container.innerHTML = filtered.map(t => {
+        const teacher = ALL_TEACHERS.find(tch => tch.id === t.teacher_id);
+        const teacherName = teacher ? teacher.full_name : (t.teacher_name || 'Assigned Instructor');
+        const cleanPhone = (t.whatsapp || '').replace(/[^0-9]/g, '');
+
+        const conducted = t.conducted_sessions || 0;
+        const isReadyToConvert = conducted >= 3 && t.status !== 'Converted';
+        const isConverted = t.status === 'Converted';
+        const isDiscontinued = t.status === 'Discontinued';
+
+        let statusBadge = '';
+        if (isConverted) {
+          statusBadge = `<span class="px-2.5 py-1 rounded-full text-[10px] font-black bg-emerald-100 text-emerald-800 border border-emerald-300 flex items-center gap-1">
+            <i class="fa-solid fa-circle-check"></i> Regular (${t.converted_student_id || 'Active'})
+          </span>`;
+        } else if (isDiscontinued) {
+          statusBadge = `<span class="px-2.5 py-1 rounded-full text-[10px] font-black bg-rose-100 text-rose-800 border border-rose-300 flex items-center gap-1">
+            <i class="fa-solid fa-circle-xmark"></i> Discontinued
+          </span>`;
+        } else if (isReadyToConvert) {
+          statusBadge = `<span class="px-2.5 py-1 rounded-full text-[10px] font-black bg-amber-100 text-amber-800 border border-amber-300 flex items-center gap-1 animate-pulse">
+            <i class="fa-solid fa-star text-amber-500"></i> Ready to Convert (3/3)
+          </span>`;
+        } else {
+          statusBadge = `<span class="px-2.5 py-1 rounded-full text-[10px] font-black bg-purple-100 text-purple-800 border border-purple-300 flex items-center gap-1">
+            <i class="fa-solid fa-clock"></i> Day ${conducted + 1} of 3
+          </span>`;
+        }
+
+        const dayPills = [1, 2, 3].map(d => {
+          const isDone = conducted >= d;
+          const isCurrent = conducted === d - 1 && !isDone && !isConverted && !isDiscontinued;
+          if (isDone) {
+            return `<button onclick="toggleTrialSession('${t.id}', ${d})" title="Day ${d} Completed (Click to toggle)" class="flex-1 py-1 px-1.5 rounded-lg bg-emerald-600 text-white font-black text-[10px] flex items-center justify-center gap-1 shadow-xs hover:bg-emerald-700 transition">
+              <i class="fa-solid fa-check text-[9px]"></i> Day ${d}
+            </button>`;
+          } else if (isCurrent) {
+            return `<button onclick="toggleTrialSession('${t.id}', ${d})" title="Click to Mark Day ${d} Completed" class="flex-1 py-1 px-1.5 rounded-lg bg-purple-100 text-purple-800 border-2 border-purple-600 font-black text-[10px] flex items-center justify-center gap-1 hover:bg-purple-200 transition">
+              <i class="fa-regular fa-circle text-[9px]"></i> Day ${d}
+            </button>`;
+          } else {
+            return `<button onclick="toggleTrialSession('${t.id}', ${d})" title="Click to Mark Day ${d} Completed" class="flex-1 py-1 px-1.5 rounded-lg bg-slate-100 text-slate-400 font-bold text-[10px] flex items-center justify-center gap-1 hover:bg-slate-200 transition">
+              Day ${d}
+            </button>`;
+          }
+        }).join('');
+
+        const waText = encodeURIComponent(
+          `Assalam-o-Alaikum Respected ${t.parent_name},\n` +
+          `This is a message from *Al-Huda Islamic Centre* regarding the 3-Day Free Trial Class for *${t.student_name}*.\n\n` +
+          `📖 *Course:* ${t.course}\n` +
+          `👨‍🏫 *Quran Instructor:* ${teacherName}\n` +
+          `⏰ *Class Time:* ${t.pkt_slot} PKT${t.student_time ? ' (' + t.student_time + ')' : ''}\n` +
+          (t.meeting_link ? `🔗 *Class Link:* ${t.meeting_link}\n\n` : '\n') +
+          `JazakAllahu Khairan!`
+        );
+        const waLink = cleanPhone ? `https://wa.me/${cleanPhone}?text=${waText}` : '#';
+
+        return `
+          <div class="bg-white rounded-2xl border ${isReadyToConvert ? 'border-amber-400 ring-2 ring-amber-200' : isConverted ? 'border-emerald-200' : 'border-purple-200'} p-5 shadow-sm hover:shadow-md transition flex flex-col justify-between space-y-4">
+            
+            <div>
+              <div class="flex justify-between items-start gap-2 mb-2">
+                <div>
+                  <span class="text-[10px] font-mono font-bold text-purple-700 uppercase tracking-wide block">
+                    ID: ${t.student_id || t.id}
+                  </span>
+                  <h3 class="font-extrabold text-base text-slate-900 leading-tight">
+                    ${t.student_name}
+                  </h3>
+                  <span class="text-xs text-slate-500 font-medium">
+                    ${t.student_age} yrs • ${t.student_gender || 'Child'}
+                  </span>
+                </div>
+                ${statusBadge}
+              </div>
+
+              <div class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-purple-50 text-purple-900 font-bold text-xs border border-purple-200 mb-3">
+                <i class="fa-solid fa-book-quran text-purple-600"></i>
+                <span>${t.course}</span>
+              </div>
+
+              <div class="space-y-1.5 text-xs text-slate-600 bg-slate-50 p-3 rounded-xl border border-slate-100 mb-3">
+                <div class="flex items-center justify-between">
+                  <span class="text-slate-400 font-medium text-[11px]"><i class="fa-solid fa-user text-slate-400"></i> Parent:</span>
+                  <span class="font-bold text-slate-800">${t.parent_name}</span>
+                </div>
+                <div class="flex items-center justify-between">
+                  <span class="text-slate-400 font-medium text-[11px]"><i class="fa-brands fa-whatsapp text-emerald-600"></i> WhatsApp:</span>
+                  <a href="${waLink}" target="_blank" class="font-mono font-bold text-emerald-700 hover:underline flex items-center gap-1">
+                    ${t.whatsapp} <i class="fa-solid fa-arrow-up-right-from-square text-[10px]"></i>
+                  </a>
+                </div>
+                <div class="flex items-center justify-between">
+                  <span class="text-slate-400 font-medium text-[11px]"><i class="fa-solid fa-earth-americas text-blue-500"></i> Location:</span>
+                  <span class="font-bold text-slate-700">${t.country} (${t.timezone ? (t.timezone.split('/')[1] || t.timezone) : 'UTC'})</span>
+                </div>
+                <div class="flex items-center justify-between">
+                  <span class="text-slate-400 font-medium text-[11px]"><i class="fa-solid fa-chalkboard-user text-purple-600"></i> Teacher:</span>
+                  <span class="font-bold text-brandDark">${teacherName}</span>
+                </div>
+                <div class="flex items-center justify-between">
+                  <span class="text-slate-400 font-medium text-[11px]"><i class="fa-solid fa-clock text-amber-500"></i> Timetable:</span>
+                  <span class="font-mono font-bold text-purple-900">${t.pkt_slot} PKT</span>
+                </div>
+                ${t.student_time ? `
+                  <div class="flex items-center justify-between text-[11px]">
+                    <span class="text-slate-400">Student Local:</span>
+                    <span class="font-bold text-slate-700">${t.student_time}</span>
+                  </div>
+                ` : ''}
+              </div>
+
+              <div>
+                <div class="flex justify-between items-center text-[10px] font-extrabold uppercase tracking-wide text-slate-500 mb-1.5">
+                  <span>3-Day Free Evaluation Progress</span>
+                  <span class="${conducted >= 3 ? 'text-amber-700 font-black' : 'text-purple-700'}">
+                    ${conducted}/3 Sessions Logged
+                  </span>
+                </div>
+                <div class="flex gap-1.5">
+                  ${dayPills}
+                </div>
+              </div>
+            </div>
+
+            <div class="pt-3 border-t border-slate-100 flex flex-col gap-2">
+              ${!isConverted ? `
+                <button onclick="openConvertTrialModal('${t.id}')" class="w-full py-2.5 px-3 bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-700 hover:to-teal-800 text-white rounded-xl text-xs font-black shadow-sm flex items-center justify-center gap-1.5 transition">
+                  <i class="fa-solid fa-user-check"></i> Convert to Regular Student
+                </button>
+              ` : `
+                <div class="w-full py-2 px-3 bg-emerald-50 text-emerald-800 rounded-xl text-xs font-black text-center border border-emerald-200">
+                  <i class="fa-solid fa-circle-check"></i> Enrolled: ${t.converted_student_id || 'Active'} (${t.agreed_fee || 'Regular'})
+                </div>
+              `}
+
+              <div class="flex items-center justify-between gap-1.5">
+                <a href="${waLink}" target="_blank" class="flex-1 py-1.5 px-2 bg-slate-100 hover:bg-emerald-50 hover:text-emerald-700 text-slate-600 rounded-lg text-[11px] font-bold text-center transition flex items-center justify-center gap-1">
+                  <i class="fa-brands fa-whatsapp text-emerald-600"></i> WhatsApp
+                </a>
+
+                ${t.meeting_link ? `
+                  <a href="${t.meeting_link}" target="_blank" class="flex-1 py-1.5 px-2 bg-slate-100 hover:bg-blue-50 hover:text-blue-700 text-slate-600 rounded-lg text-[11px] font-bold text-center transition flex items-center justify-center gap-1">
+                    <i class="fa-solid fa-video text-blue-600"></i> Class Link
+                  </a>
+                ` : ''}
+
+                <button onclick="deleteTrial('${t.id}')" title="Discontinue / Remove Trial" class="py-1.5 px-2.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg text-xs font-bold transition">
+                  <i class="fa-regular fa-trash-can"></i>
+                </button>
+              </div>
+            </div>
+
+          </div>
+        `;
+      }).join('');
+    }
+
+    function prepareAddTrialModal() {
+      document.getElementById('trialParentName').value = '';
+      document.getElementById('trialParentPhone').value = '';
+      document.getElementById('trialStudentName').value = '';
+      document.getElementById('trialStudentAge').value = '8';
+      document.getElementById('trialStudentTime').value = '';
+      document.getElementById('trialMeetingLink').value = '';
+
+      const today = new Date().toISOString().slice(0, 10);
+      document.getElementById('trialStartDate').value = today;
+
+      // Populate teacher dropdown
+      const tSelect = document.getElementById('trialTeacherSelect');
+      if (tSelect) {
+        if (ALL_TEACHERS && ALL_TEACHERS.length > 0) {
+          tSelect.innerHTML = ALL_TEACHERS.map(t => 
+            `<option value="${t.id}">${t.full_name} (${t.gender || 'Teacher'})</option>`
+          ).join('');
+        } else {
+          tSelect.innerHTML = '<option value="">No Teachers Registered Yet</option>';
+        }
+      }
+
+      // Populate 48 half-hour slots
+      const slotSelect = document.getElementById('trialPktSlot');
+      if (slotSelect) {
+        const slots = [];
+        for (let h = 0; h < 24; h++) {
+          const hStr = String(h).padStart(2, '0');
+          const nextHStr = String((h + 1) % 24).padStart(2, '0');
+          slots.push(`${hStr}:00 - ${hStr}:30`);
+          slots.push(`${hStr}:30 - ${nextHStr}:00`);
+        }
+        slotSelect.innerHTML = slots.map(s => {
+          const isDefault = s === '16:00 - 16:30';
+          return `<option value="${s}" ${isDefault ? 'selected' : ''}>${s} PKT</option>`;
+        }).join('');
+      }
+
+      openModal('modalAddTrialClass');
+    }
+
+    async function handleSaveTrialClass(e) {
+      e.preventDefault();
+      const btn = document.getElementById('btnSaveTrial');
+      if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Booking 3-Day Free Trial...';
+      }
+
+      const parent_name = (document.getElementById('trialParentName').value || '').trim();
+      const whatsapp = (document.getElementById('trialParentPhone').value || '').trim();
+      const country = document.getElementById('trialCountry').value;
+      const timezone = document.getElementById('trialTimezone').value;
+      const student_name = (document.getElementById('trialStudentName').value || '').trim();
+      const student_age = parseInt(document.getElementById('trialStudentAge').value) || 8;
+      const student_gender = document.getElementById('trialStudentGender').value;
+      const course = document.getElementById('trialCourse').value;
+      const teacher_id = document.getElementById('trialTeacherSelect').value;
+      const start_date = document.getElementById('trialStartDate').value;
+      const pkt_slot = document.getElementById('trialPktSlot').value;
+      const student_time = (document.getElementById('trialStudentTime').value || '').trim();
+      const meeting_link = (document.getElementById('trialMeetingLink').value || '').trim();
+
+      if (!parent_name || !whatsapp || !student_name || !teacher_id || !start_date || !pkt_slot) {
+        alert("Please fill in all required fields.");
+        if (btn) {
+          btn.disabled = false;
+          btn.innerHTML = '<i class="fa-solid fa-check"></i> Book 3-Day Free Trial';
+        }
+        return;
+      }
+
+      const randomSuffix = Date.now().toString().slice(-4);
+      const trialFamId = `TRL-FAM-${randomSuffix}`;
+      const trialStuId = `TRL-STU-${randomSuffix}`;
+
+      // 1. Insert Family in Supabase
+      try {
+        await db.from('families').insert([{
+          id: trialFamId,
+          parent_name,
+          whatsapp,
+          country,
+          timezone,
+          monthly_fee: 0,
+          currency: 'USD',
+          status: 'Trial',
+          notes: JSON.stringify({ is_trial: true, student_time })
+        }]);
+      } catch (err) {
+        console.warn("Supabase family insert notice:", err);
+      }
+
+      // 2. Insert Student in Supabase
+      try {
+        await db.from('students').insert([{
+          id: trialStuId,
+          family_id: trialFamId,
+          name: student_name,
+          age: student_age,
+          gender: student_gender,
+          course_id: null,
+          assigned_teacher_id: teacher_id,
+          joining_date: start_date,
+          status: 'Trial',
+          notes: JSON.stringify({ trial_course: course, student_time, meeting_link, pkt_slot })
+        }]);
+      } catch (err) {
+        console.warn("Supabase student insert notice:", err);
+      }
+
+      // 3. Auto-Book 3 Consecutive Days in Teacher Timetable
+      const [startTimeRaw, endTimeRaw] = pkt_slot.split(' - ');
+      const startTime = startTimeRaw.trim() + ':00';
+      const endTime = endTimeRaw.trim() + ':00';
+      const startD = new Date(start_date);
+      const scheduleRows = [];
+      const scheduledDates = [];
+
+      for (let i = 0; i < 3; i++) {
+        const d = new Date(startD);
+        d.setDate(startD.getDate() + i);
+        const dayOfWeek = d.getDay() === 0 ? 7 : d.getDay();
+        const isoDate = d.toISOString().slice(0, 10);
+        scheduledDates.push(isoDate);
+
+        scheduleRows.push({
+          student_id: trialStuId,
+          teacher_id,
+          day_of_week: dayOfWeek,
+          start_time: startTime,
+          end_time: endTime,
+          timezone: 'Asia/Karachi',
+          meeting_link,
+          status: 'Trial'
+        });
+      }
+
+      try {
+        await db.from('class_schedules').insert(scheduleRows);
+      } catch (err) {
+        console.warn("Supabase schedule insert notice:", err);
+      }
+
+      // 4. Save Trial locally
+      const teacher = ALL_TEACHERS.find(t => t.id === teacher_id);
+      const teacherName = teacher ? teacher.full_name : 'Teacher';
+
+      const newTrial = {
+        id: 'TRL-' + Date.now(),
+        family_id: trialFamId,
+        student_id: trialStuId,
+        student_name,
+        student_age,
+        student_gender,
+        parent_name,
+        whatsapp,
+        country,
+        timezone,
+        course,
+        teacher_id,
+        teacher_name: teacherName,
+        start_date,
+        scheduled_dates: scheduledDates,
+        pkt_slot,
+        student_time,
+        meeting_link,
+        conducted_sessions: 0,
+        status: 'Active',
+        created_at: new Date().toISOString()
+      };
+
+      ALL_TRIALS.unshift(newTrial);
+      saveStoredTrials(ALL_TRIALS);
+
+      if (btn) {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fa-solid fa-check"></i> Book 3-Day Free Trial';
+      }
+
+      closeModal('modalAddTrialClass');
+      updateTrialKpis();
+      renderTrialCards(CURRENT_TRIAL_FILTER);
+
+      loadDashboardData();
+      loadFamiliesAndStudents();
+
+      alert(`🎉 3-Day Free Trial Booked Successfully!\n\n` +
+        `👤 Student: ${student_name} (${student_age} yrs)\n` +
+        `👨‍🏫 Assigned Quran Instructor: ${teacherName}\n` +
+        `⏰ Timetable Slot: ${pkt_slot} PKT\n` +
+        `📅 3 Consecutive Trial Days: ${scheduledDates.join(', ')}\n\n` +
+        `The 3 trial days have been automatically inserted into the teacher's schedule and will appear with a purple Trial badge.`
+      );
+    }
+
+    async function toggleTrialSession(trialId, sessionNum) {
+      const trial = ALL_TRIALS.find(t => t.id === trialId);
+      if (!trial) return;
+
+      const current = trial.conducted_sessions || 0;
+      if (current >= sessionNum) {
+        trial.conducted_sessions = sessionNum - 1;
+      } else {
+        trial.conducted_sessions = sessionNum;
+      }
+
+      if (trial.conducted_sessions >= 3) {
+        if (trial.status === 'Active' || !trial.status) {
+          trial.status = 'Completed';
+        }
+      } else if (trial.status === 'Completed') {
+        trial.status = 'Active';
+      }
+
+      try {
+        const todayIso = new Date().toISOString().slice(0, 10);
+        await db.from('attendance_logs').insert([{
+          student_id: trial.student_id,
+          teacher_id: trial.teacher_id,
+          date: todayIso,
+          status: 'Present',
+          lesson_notes: `3-Day Trial Session ${trial.conducted_sessions}/3 Logged`
+        }]);
+      } catch(e) {}
+
+      saveStoredTrials(ALL_TRIALS);
+      updateTrialKpis();
+      renderTrialCards(CURRENT_TRIAL_FILTER);
+    }
+
+    function openConvertTrialModal(trialId) {
+      const trial = ALL_TRIALS.find(t => t.id === trialId);
+      if (!trial) return;
+
+      const teacher = ALL_TEACHERS.find(t => t.id === trial.teacher_id);
+      const teacherName = teacher ? teacher.full_name : (trial.teacher_name || 'Assigned Instructor');
+
+      // Pre-fill summary card (Zero Re-typing!)
+      document.getElementById('convTrialId').value = trial.id;
+      document.getElementById('convSummaryStudent').innerText = `${trial.student_name} (${trial.student_age} yrs, ${trial.student_gender || 'Child'})`;
+      document.getElementById('convSummaryParent').innerText = trial.parent_name;
+      document.getElementById('convSummaryPhone').innerText = trial.whatsapp;
+      document.getElementById('convSummaryLocation').innerText = `${trial.country} • ${trial.timezone || 'UTC'}`;
+      document.getElementById('convSummaryCourse').innerText = trial.course;
+      document.getElementById('convSummaryTeacher').innerText = teacherName;
+
+      // Smart default currency based on student country
+      const country = (trial.country || '').toLowerCase();
+      let defaultCurr = 'USD';
+      let defaultFee = '60';
+      if (country.includes('pakistan')) {
+        defaultCurr = 'PKR';
+        defaultFee = '10000';
+      } else if (country.includes('united kingdom') || country.includes('uk') || country.includes('britain')) {
+        defaultCurr = 'GBP';
+        defaultFee = '50';
+      } else if (country.includes('canada')) {
+        defaultCurr = 'CAD';
+        defaultFee = '70';
+      } else if (country.includes('australia')) {
+        defaultCurr = 'AUD';
+        defaultFee = '80';
+      } else if (country.includes('emirates') || country.includes('dubai') || country.includes('uae')) {
+        defaultCurr = 'AED';
+        defaultFee = '250';
+      } else if (country.includes('saudi')) {
+        defaultCurr = 'SAR';
+        defaultFee = '250';
+      } else if (country.includes('germany') || country.includes('france') || country.includes('europe')) {
+        defaultCurr = 'EUR';
+        defaultFee = '60';
+      }
+
+      const currSelect = document.getElementById('convCurrency');
+      if (currSelect) currSelect.value = defaultCurr;
+
+      const feeInput = document.getElementById('convMonthlyFee');
+      if (feeInput) {
+        feeInput.value = defaultFee;
+        feeInput.focus();
+      }
+
+      const joiningInput = document.getElementById('convJoiningDate');
+      if (joiningInput) joiningInput.value = new Date().toISOString().slice(0, 10);
+
+      openModal('modalConvertTrialToRegular');
+    }
+
+    async function handleConvertTrialSubmit(e) {
+      e.preventDefault();
+      const btn = document.getElementById('btnConfirmConvert');
+      if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Enrolling Regular Student...';
+      }
+
+      const trialId = document.getElementById('convTrialId').value;
+      const trial = ALL_TRIALS.find(t => t.id === trialId);
+      if (!trial) {
+        alert("Trial record not found.");
+        if (btn) {
+          btn.disabled = false;
+          btn.innerHTML = '<i class="fa-solid fa-circle-check text-brandGold"></i> Confirm & Enroll as Regular Student';
+        }
+        return;
+      }
+
+      const monthly_fee = parseFloat(document.getElementById('convMonthlyFee').value) || 0;
+      const currency = document.getElementById('convCurrency').value;
+      const billing_day = parseInt(document.getElementById('convBillingDay').value) || 1;
+      const days_per_week = document.getElementById('convDaysPerWeek').value;
+      const joining_date = document.getElementById('convJoiningDate').value || new Date().toISOString().slice(0, 10);
+
+      if (monthly_fee <= 0) {
+        alert("Please enter the agreed monthly fee.");
+        if (btn) {
+          btn.disabled = false;
+          btn.innerHTML = '<i class="fa-solid fa-circle-check text-brandGold"></i> Confirm & Enroll as Regular Student';
+        }
+        return;
+      }
+
+      // 1. Generate Formal Sequence IDs
+      const newFamId = getNextFamilyId();
+      const newStuId = getNextStudentId();
+
+      // 2. Parent Account credentials
+      const rawParent = (trial.parent_name || 'parent').toLowerCase().replace(/[^a-z0-9]/g, '');
+      const username = rawParent.length > 2 ? rawParent : `parent_${newFamId.toLowerCase()}`;
+      const password = 'alhuda_' + Math.floor(1000 + Math.random() * 9000);
+
+      // 3. Save Regular Family in Supabase
+      try {
+        await db.from('families').insert([{
+          id: newFamId,
+          parent_name: trial.parent_name,
+          whatsapp: trial.whatsapp,
+          country: trial.country,
+          timezone: trial.timezone || 'UTC',
+          monthly_fee,
+          currency,
+          billing_day,
+          status: 'Active',
+          notes: `Converted from Trial ${trial.id}`
+        }]);
+
+        saveParentAccount(newFamId, {
+          username,
+          password,
+          parent_name: trial.parent_name,
+          whatsapp: trial.whatsapp,
+          country: trial.country,
+          monthly_fee,
+          currency
+        });
+      } catch(err) {
+        console.warn("Supabase family regular insert notice:", err);
+      }
+
+      // 4. Save Regular Student in Supabase
+      try {
+        await db.from('students').insert([{
+          id: newStuId,
+          family_id: newFamId,
+          name: trial.student_name,
+          age: parseInt(trial.student_age) || 8,
+          gender: trial.student_gender,
+          course_id: null,
+          assigned_teacher_id: trial.teacher_id,
+          joining_date,
+          status: 'Active',
+          notes: JSON.stringify({
+            course: trial.course,
+            days_per_week,
+            converted_from_trial: trial.id,
+            parent_user: username
+          })
+        }]);
+      } catch(err) {
+        console.warn("Supabase student regular insert notice:", err);
+      }
+
+      // 5. Promote Class Schedules from Trial to Active Regular
+      try {
+        await db.from('class_schedules')
+          .update({
+            student_id: newStuId,
+            status: 'Active'
+          })
+          .eq('student_id', trial.student_id);
+      } catch(err) {
+        console.warn("Supabase schedule update notice:", err);
+      }
+
+      // 6. Mark Trial Record as Converted
+      trial.status = 'Converted';
+      trial.converted_student_id = newStuId;
+      trial.converted_family_id = newFamId;
+      trial.agreed_fee = `${currency} ${monthly_fee}`;
+      trial.converted_at = new Date().toISOString();
+
+      saveStoredTrials(ALL_TRIALS);
+
+      if (btn) {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fa-solid fa-circle-check text-brandGold"></i> Confirm & Enroll as Regular Student';
+      }
+
+      closeModal('modalConvertTrialToRegular');
+      updateTrialKpis();
+      renderTrialCards(CURRENT_TRIAL_FILTER);
+
+      // Refresh systems
+      await loadFamiliesAndStudents();
+      loadFeeBillingLedger();
+      loadDashboardData();
+
+      alert(`🎉 Conversion Completed Successfully!\n\n` +
+        `👨‍👩‍👧 New Family ID: ${newFamId}\n` +
+        `🎓 New Student ID: ${newStuId}\n` +
+        `👤 Student: ${trial.student_name}\n` +
+        `💰 Agreed Monthly Fee: ${currency} ${monthly_fee}\n` +
+        `📅 Billing Due Day: ${billing_day}th of every month\n\n` +
+        `🔑 Parent Portal Credentials Generated:\n` +
+        `Username: ${username}\n` +
+        `Password: ${password}\n\n` +
+        `The trial timetable has been permanently activated as regular classes in the teacher's schedule!`
+      );
+    }
+
+    async function deleteTrial(trialId) {
+      const trial = ALL_TRIALS.find(t => t.id === trialId);
+      if (!trial) return;
+
+      if (confirm(`Are you sure you want to discontinue / remove the trial for "${trial.student_name}"?\n\nThis will release the assigned timetable slots for the teacher.`)) {
+        try {
+          if (trial.student_id) {
+            await db.from('class_schedules').delete().eq('student_id', trial.student_id);
+          }
+        } catch(e) {}
+
+        trial.status = 'Discontinued';
+        saveStoredTrials(ALL_TRIALS);
+        updateTrialKpis();
+        renderTrialCards(CURRENT_TRIAL_FILTER);
+        loadDashboardData();
       }
     }
 

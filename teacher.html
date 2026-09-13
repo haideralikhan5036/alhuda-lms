@@ -827,6 +827,8 @@
           ? `<span class="text-slate-800 font-semibold">${c.log.lesson_notes}</span>`
           : `<span class="text-slate-400 italic">No notes logged yet</span>`;
 
+        const isTrialClass = c.status === 'Trial' || c.students?.status === 'Trial' || (c.students?.notes && c.students.notes.includes('trial'));
+
         return `
           <tr class="hover:bg-slate-50 transition ${c.isLive ? 'bg-emerald-50/50 font-medium' : ''}">
             <td class="p-3.5 font-mono">
@@ -834,12 +836,15 @@
               ${timingBadge}
             </td>
             <td class="p-3.5">
-              <div class="font-bold text-slate-900 text-xs">${c.students?.name || 'Student'}</div>
+              <div class="flex items-center gap-1.5">
+                <span class="font-bold text-slate-900 text-xs">${c.students?.name || 'Student'}</span>
+                ${isTrialClass ? '<span class="px-2 py-0.5 rounded text-[10px] font-extrabold bg-purple-100 text-purple-800 border border-purple-200">✨ Trial</span>' : ''}
+              </div>
               <div class="text-[10px] text-slate-500 font-mono">ID: ${c.students?.id || 'STU'}</div>
             </td>
             <td class="p-3.5">
-              <span class="px-2 py-0.5 rounded bg-emerald-50 text-brandEmerald font-bold text-[11px] border border-emerald-200">
-                Quran Studies & Tajweed
+              <span class="px-2 py-0.5 rounded ${isTrialClass ? 'bg-purple-50 text-purple-900 border-purple-200' : 'bg-emerald-50 text-brandEmerald border-emerald-200'} font-bold text-[11px] border">
+                ${isTrialClass ? '3-Day Free Evaluation' : 'Quran Studies & Tajweed'}
               </span>
             </td>
             <td class="p-3.5 max-w-xs truncate">
