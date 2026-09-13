@@ -116,19 +116,22 @@
     <section id="tab-dashboard" class="tab-content block">
       
       <!-- EXECUTIVE HEADER & ACTIONS -->
-      <div class="flex justify-between items-center mb-5 flex-wrap gap-3">
+      <div class="flex justify-between items-center mb-4 flex-wrap gap-3">
         <div>
           <div class="flex items-center gap-2">
             <h2 class="text-xl sm:text-2xl font-black text-brandDark tracking-tight flex items-center gap-2">
-              <i class="fa-solid fa-gauge-high text-brandEmerald"></i> Executive LMS Dashboard
+              <i class="fa-solid fa-gauge-high text-brandEmerald"></i> Executive Operations Dashboard
             </h2>
             <span class="px-2.5 py-0.5 bg-emerald-100 text-brandEmerald rounded-full text-xs font-bold border border-emerald-300">
               Admin &bull; Manager &bull; Owner
             </span>
           </div>
-          <p class="text-xs text-slate-500 font-medium mt-0.5">Al-Huda Islamic Centre &bull; Real-time Operations & Month-wise Academy Performance</p>
+          <p class="text-xs text-slate-500 font-medium mt-0.5">Al-Huda Islamic Centre &bull; Real-time Timetable Execution & Monthly Performance</p>
         </div>
         <div class="flex items-center gap-2 flex-wrap">
+          <div class="text-xs font-bold text-slate-700 bg-white px-3 py-2 rounded-lg border border-slate-200 shadow-sm flex items-center gap-1.5">
+            <i class="fa-regular fa-calendar-days text-brandEmerald"></i> <span id="dashTodayDateLabel">Today</span>
+          </div>
           <button onclick="prepareAddFamilyModal()" class="px-3.5 py-2 bg-brandDark text-white rounded-lg text-xs font-bold hover:bg-brandDarkest flex items-center gap-1.5 shadow">
             <i class="fa-solid fa-house-user"></i> + Add Family
           </button>
@@ -141,121 +144,8 @@
         </div>
       </div>
 
-      <!-- ROW 1: 4 EXECUTIVE SUMMARY KPI CARDS -->
-      <div class="grid grid-cols-2 lg:grid-cols-4 gap-3.5 mb-6">
-        <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex items-center justify-between">
-          <div>
-            <div class="text-[11px] font-bold uppercase tracking-wider text-slate-500">Active Students</div>
-            <div class="text-2xl font-black text-slate-900 mt-1" id="dashExecutiveStudents">--</div>
-            <div class="text-[11px] text-emerald-600 font-semibold flex items-center gap-1 mt-0.5">
-              <i class="fa-solid fa-arrow-trend-up"></i> <span id="dashGrowthBadge">+100% Retained</span>
-            </div>
-          </div>
-          <div class="w-11 h-11 rounded-xl bg-emerald-50 text-brandEmerald flex items-center justify-center text-xl">
-            <i class="fa-solid fa-user-graduate"></i>
-          </div>
-        </div>
-
-        <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex items-center justify-between">
-          <div>
-            <div class="text-[11px] font-bold uppercase tracking-wider text-slate-500">Active Teachers</div>
-            <div class="text-2xl font-black text-slate-900 mt-1" id="dashExecutiveTeachers">--</div>
-            <div class="text-[11px] text-slate-500 font-medium mt-0.5">Assigned & Teaching</div>
-          </div>
-          <div class="w-11 h-11 rounded-xl bg-teal-50 text-teal-700 flex items-center justify-center text-xl">
-            <i class="fa-solid fa-chalkboard-user"></i>
-          </div>
-        </div>
-
-        <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex items-center justify-between">
-          <div>
-            <div class="text-[11px] font-bold uppercase tracking-wider text-slate-500">Agreed Monthly Fee</div>
-            <div class="text-2xl font-black text-slate-900 mt-1" id="dashExecutiveRevenue">--</div>
-            <div class="text-[11px] text-amber-600 font-semibold flex items-center gap-1 mt-0.5">
-              <i class="fa-solid fa-receipt"></i> Monthly Combined
-            </div>
-          </div>
-          <div class="w-11 h-11 rounded-xl bg-amber-50 text-amber-700 flex items-center justify-center text-xl">
-            <i class="fa-solid fa-hand-holding-dollar"></i>
-          </div>
-        </div>
-
-        <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex items-center justify-between">
-          <div>
-            <div class="text-[11px] font-bold uppercase tracking-wider text-slate-500">Retention Rate</div>
-            <div class="text-2xl font-black text-emerald-600 mt-1" id="dashExecutiveRetention">100%</div>
-            <div class="text-[11px] text-slate-500 font-medium mt-0.5">Active vs Left Ratio</div>
-          </div>
-          <div class="w-11 h-11 rounded-xl bg-blue-50 text-blue-700 flex items-center justify-center text-xl">
-            <i class="fa-solid fa-shield-heart"></i>
-          </div>
-        </div>
-      </div>
-
-      <!-- ROW 2: MONTH-WISE ANALYTICS & INTERACTIVE GRAPHS (Chart.js) -->
-      <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
-        <!-- Graph 1: Monthly New Students vs Left Students -->
-        <div class="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-sm">
-          <div class="flex justify-between items-center mb-3 flex-wrap gap-2">
-            <div>
-              <h3 class="font-bold text-sm text-slate-900 flex items-center gap-2">
-                <i class="fa-solid fa-chart-simple text-brandEmerald"></i> Monthly Student Inflow vs Left
-              </h3>
-              <p class="text-[11px] text-slate-500">نئے سٹوڈنٹس بمقابلہ چھوڑنے والے سٹوڈنٹس (ماہ بہ ماہ)</p>
-            </div>
-            <div class="flex items-center gap-1 text-xs">
-              <span class="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-700 mr-2">
-                <span class="w-2.5 h-2.5 rounded-full bg-emerald-500"></span> New Enrolled
-              </span>
-              <span class="inline-flex items-center gap-1 text-[11px] font-semibold text-rose-600">
-                <span class="w-2.5 h-2.5 rounded-full bg-rose-500"></span> Left LMS
-              </span>
-            </div>
-          </div>
-          <div class="relative h-64 w-full">
-            <canvas id="chartStudentGrowth"></canvas>
-          </div>
-        </div>
-
-        <!-- Graph 2: Monthly Fee Payments Received vs Expected -->
-        <div class="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-sm">
-          <div class="flex justify-between items-center mb-3 flex-wrap gap-2">
-            <div>
-              <h3 class="font-bold text-sm text-slate-900 flex items-center gap-2">
-                <i class="fa-solid fa-chart-line text-brandGold"></i> Monthly Fee Payments Received
-              </h3>
-              <p class="text-[11px] text-slate-500">ماہانہ فیس کی وصولی اور آمدنی (ماہ بہ ماہ)</p>
-            </div>
-            <div class="flex items-center gap-1 text-xs">
-              <span class="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-700 mr-2">
-                <span class="w-2.5 h-2.5 rounded-full bg-emerald-600"></span> Collected Fee
-              </span>
-              <span class="inline-flex items-center gap-1 text-[11px] font-semibold text-amber-600">
-                <span class="w-2.5 h-2.5 rounded-full bg-amber-400"></span> Projected Target
-              </span>
-            </div>
-          </div>
-          <div class="relative h-64 w-full">
-            <canvas id="chartFeeRevenue"></canvas>
-          </div>
-        </div>
-      </div>
-
-      <!-- SECTION TITLE: TODAY'S OPERATIONAL METRICS -->
-      <div class="flex justify-between items-center mb-3">
-        <div>
-          <h3 class="font-extrabold text-base text-brandDark flex items-center gap-2">
-            <i class="fa-regular fa-calendar-check text-brandEmerald"></i> Today's Live Class Operations (آج کے لائیو میٹرکس)
-          </h3>
-          <p class="text-xs text-slate-500 font-medium">Click any box to view & filter the exact class list below</p>
-        </div>
-        <div class="text-xs font-bold text-slate-600 bg-slate-100 px-3 py-1.5 rounded-lg border border-slate-200 flex items-center gap-1.5">
-          <i class="fa-regular fa-clock text-brandEmerald"></i> <span id="dashTodayDateLabel">Today</span>
-        </div>
-      </div>
-
-      <!-- ROW 3: TODAY'S 7 OPERATIONAL KPI STAT BOXES (Clickable & Dynamically Linked) -->
-      <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-2.5 mb-5">
+      <!-- TOP ROW: 8 OPERATIONAL KPI STAT BOXES (Centered & Prominent) -->
+      <div class="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-2.5 mb-5">
         
         <!-- 1. Total Classes Today -->
         <div onclick="filterDashboardClasses('all')" id="kpiBox-all" class="kpi-dash-card cursor-pointer bg-white p-3 rounded-xl border-2 border-brandDark shadow-sm hover:shadow-md transition-all scale-[1.01] ring-2 ring-brandDark/20">
@@ -264,7 +154,7 @@
             <i class="fa-solid fa-calendar-day text-brandDark text-xs"></i>
           </div>
           <div class="text-2xl font-black text-slate-900" id="kpiDashTotal">0</div>
-          <div class="text-[10px] text-slate-500 font-medium mt-0.5">آج کی کل کلاسز</div>
+          <div class="text-[10px] text-slate-500 font-medium mt-0.5">All Scheduled</div>
           <div class="text-[9px] text-slate-400">12:00 AM - 12:00 AM</div>
         </div>
 
@@ -277,8 +167,8 @@
             <i class="fa-solid fa-tower-broadcast text-emerald-600 text-xs"></i>
           </div>
           <div class="text-2xl font-black text-emerald-600" id="kpiDashLive">0</div>
-          <div class="text-[10px] text-emerald-700 font-bold mt-0.5">اس وقت جاری کلاسز</div>
-          <div class="text-[9px] text-emerald-600">Current Slot (Right Now)</div>
+          <div class="text-[10px] text-emerald-700 font-bold mt-0.5">Active Classes</div>
+          <div class="text-[9px] text-emerald-600">Current Time Slot</div>
         </div>
 
         <!-- 3. Completed Classes (since 12:00 AM) -->
@@ -288,8 +178,8 @@
             <i class="fa-solid fa-circle-check text-teal-600 text-xs"></i>
           </div>
           <div class="text-2xl font-black text-teal-700" id="kpiDashCompleted">0</div>
-          <div class="text-[10px] text-slate-700 font-bold mt-0.5">مکمل شدہ کلاسز</div>
-          <div class="text-[9px] text-slate-400">Done since 12:00 AM</div>
+          <div class="text-[10px] text-slate-700 font-bold mt-0.5">Present & Done</div>
+          <div class="text-[9px] text-slate-400">Since 12:00 AM</div>
         </div>
 
         <!-- 4. Remaining Classes (till 12:00 AM midnight) -->
@@ -299,8 +189,8 @@
             <i class="fa-solid fa-hourglass-half text-amber-600 text-xs"></i>
           </div>
           <div class="text-2xl font-black text-amber-600" id="kpiDashRemaining">0</div>
-          <div class="text-[10px] text-slate-700 font-bold mt-0.5">باقی ماندہ کلاسز</div>
-          <div class="text-[9px] text-slate-400">Till 12:00 AM Midnight</div>
+          <div class="text-[10px] text-slate-700 font-bold mt-0.5">Pending Slots</div>
+          <div class="text-[9px] text-slate-400">Till 12:00 AM</div>
         </div>
 
         <!-- 5. Absences Today -->
@@ -310,96 +200,168 @@
             <i class="fa-solid fa-user-xmark text-rose-600 text-xs"></i>
           </div>
           <div class="text-2xl font-black text-rose-600" id="kpiDashAbsent">0</div>
-          <div class="text-[10px] text-slate-700 font-bold mt-0.5">آج کی غیر حاضریاں</div>
+          <div class="text-[10px] text-slate-700 font-bold mt-0.5">Missed Sessions</div>
           <div class="text-[9px] text-rose-500">Marked Absent</div>
         </div>
 
-        <!-- 6. Leaves Today -->
+        <!-- 6. Student Leaves Today -->
         <div onclick="filterDashboardClasses('leave')" id="kpiBox-leave" class="kpi-dash-card cursor-pointer bg-white p-3 rounded-xl border border-slate-200 shadow-sm hover:border-blue-500 hover:shadow-md transition-all">
           <div class="flex items-center justify-between text-slate-500 mb-1">
             <span class="text-[10px] font-black uppercase tracking-wider">Leaves</span>
             <i class="fa-solid fa-calendar-xmark text-blue-600 text-xs"></i>
           </div>
           <div class="text-2xl font-black text-blue-600" id="kpiDashLeave">0</div>
-          <div class="text-[10px] text-slate-700 font-bold mt-0.5">آج کی لیوز / چھٹیاں</div>
+          <div class="text-[10px] text-slate-700 font-bold mt-0.5">Student Leaves</div>
           <div class="text-[9px] text-blue-500">Realtime & Advance</div>
         </div>
 
-        <!-- 7. Trials Today -->
+        <!-- 7. Trial Classes Today -->
         <div onclick="filterDashboardClasses('trial')" id="kpiBox-trial" class="kpi-dash-card cursor-pointer bg-white p-3 rounded-xl border border-slate-200 shadow-sm hover:border-purple-500 hover:shadow-md transition-all">
           <div class="flex items-center justify-between text-slate-500 mb-1">
             <span class="text-[10px] font-black uppercase tracking-wider">Trials</span>
             <i class="fa-solid fa-graduation-cap text-purple-600 text-xs"></i>
           </div>
           <div class="text-2xl font-black text-purple-600" id="kpiDashTrial">0</div>
-          <div class="text-[10px] text-slate-700 font-bold mt-0.5">آج کے ٹرائلز</div>
-          <div class="text-[9px] text-purple-500">Trial Sessions</div>
+          <div class="text-[10px] text-slate-700 font-bold mt-0.5">Trial Sessions</div>
+          <div class="text-[9px] text-purple-500">Trial Enquiries</div>
+        </div>
+
+        <!-- 8. Active Teaching Staff (Merged into KPI boxes) -->
+        <div onclick="switchTab('tab-teachers')" id="kpiBox-teachers" class="kpi-dash-card cursor-pointer bg-white p-3 rounded-xl border border-slate-200 shadow-sm hover:border-teal-500 hover:shadow-md transition-all">
+          <div class="flex items-center justify-between text-slate-500 mb-1">
+            <span class="text-[10px] font-black uppercase tracking-wider">Teachers</span>
+            <i class="fa-solid fa-chalkboard-user text-teal-700 text-xs"></i>
+          </div>
+          <div class="text-2xl font-black text-teal-800" id="kpiDashTeachers">0</div>
+          <div class="text-[10px] text-slate-700 font-bold mt-0.5">Active Staff</div>
+          <div class="text-[9px] text-teal-600">Assigned Roster</div>
         </div>
 
       </div>
 
-      <!-- ROW 4: DYNAMIC LINKED CLASSES DATA VIEW (Filtered Table) -->
-      <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden mb-6">
+      <!-- MAIN COCKPIT: 2-COLUMN SPLIT LAYOUT -->
+      <!-- Left Column: Interactive Filtered Classes List (Timeline) -->
+      <!-- Right Column: Stacked Month-wise Analytics Graphs (Graph 1 Top, Graph 2 Bottom) -->
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
         
-        <!-- Table Control Toolbar -->
-        <div class="p-4 border-b border-slate-200 flex justify-between items-center flex-wrap gap-3 bg-slate-50/70">
-          <div class="flex items-center gap-2 flex-wrap">
-            <h3 class="font-extrabold text-sm text-slate-900 flex items-center gap-2">
-              <span id="dashFilterIcon" class="w-6 h-6 rounded-lg bg-brandDark text-white flex items-center justify-center text-xs">
-                <i class="fa-solid fa-list-check"></i>
+        <!-- LEFT COLUMN: CLASSES TIMELINE & DETAILS TABLE (~65% width) -->
+        <div class="lg:col-span-8 bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+          
+          <!-- Table Control Toolbar -->
+          <div class="p-3.5 sm:p-4 border-b border-slate-200 flex justify-between items-center flex-wrap gap-2.5 bg-slate-50/80">
+            <div class="flex items-center gap-2 flex-wrap">
+              <h3 class="font-extrabold text-sm text-slate-900 flex items-center gap-2">
+                <span id="dashFilterIcon" class="w-6 h-6 rounded-lg bg-brandDark text-white flex items-center justify-center text-xs">
+                  <i class="fa-solid fa-calendar-day"></i>
+                </span>
+                <span id="dashFilterTitle">Showing: All Classes Today</span>
+              </h3>
+              <span id="dashFilterCountBadge" class="px-2.5 py-0.5 bg-brandEmerald/10 text-brandEmerald rounded-full font-bold text-xs font-mono">0 Classes</span>
+            </div>
+
+            <div class="flex items-center gap-2 flex-wrap">
+              <!-- Search Filter -->
+              <div class="relative">
+                <i class="fa-solid fa-magnifying-glass absolute left-3 top-2.5 text-slate-400 text-xs"></i>
+                <input type="text" id="dashClassSearch" oninput="handleDashClassSearch(this.value)" placeholder="Search student, teacher, course..." class="pl-8 pr-3 py-1.5 bg-white border border-slate-300 rounded-lg text-xs font-semibold focus:outline-brandEmerald w-40 sm:w-52">
+              </div>
+
+              <!-- Quick Pill Filter Switches -->
+              <div class="hidden sm:flex bg-slate-200/70 p-1 rounded-lg text-[11px] font-bold">
+                <button onclick="filterDashboardClasses('all')" class="dash-pill px-2.5 py-1 rounded-md bg-white text-slate-900 shadow-sm font-bold" data-filter="all">All</button>
+                <button onclick="filterDashboardClasses('live')" class="dash-pill px-2.5 py-1 rounded-md text-slate-600 hover:text-slate-900" data-filter="live">Live</button>
+                <button onclick="filterDashboardClasses('completed')" class="dash-pill px-2.5 py-1 rounded-md text-slate-600 hover:text-slate-900" data-filter="completed">Done</button>
+                <button onclick="filterDashboardClasses('remaining')" class="dash-pill px-2.5 py-1 rounded-md text-slate-600 hover:text-slate-900" data-filter="remaining">Remaining</button>
+                <button onclick="filterDashboardClasses('absent')" class="dash-pill px-2.5 py-1 rounded-md text-slate-600 hover:text-slate-900" data-filter="absent">Absent</button>
+                <button onclick="filterDashboardClasses('leave')" class="dash-pill px-2.5 py-1 rounded-md text-slate-600 hover:text-slate-900" data-filter="leave">Leaves</button>
+                <button onclick="filterDashboardClasses('trial')" class="dash-pill px-2.5 py-1 rounded-md text-slate-600 hover:text-slate-900" data-filter="trial">Trials</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Classes Table -->
+          <div class="overflow-x-auto">
+            <table class="w-full text-left text-xs border-collapse">
+              <thead class="bg-slate-100 text-slate-700 font-bold border-b border-slate-200 uppercase tracking-wider text-[11px]">
+                <tr>
+                  <th class="p-3">Time Slot</th>
+                  <th class="p-3">Student Details</th>
+                  <th class="p-3">Course</th>
+                  <th class="p-3">Teacher</th>
+                  <th class="p-3">Type</th>
+                  <th class="p-3">Lesson Notes & Status</th>
+                  <th class="p-3 text-right">Quick Operations</th>
+                </tr>
+              </thead>
+              <tbody id="dashClassesTableBody" class="divide-y divide-slate-100">
+                <tr><td colspan="7" class="p-8 text-center text-slate-400">Loading today's classes data...</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <!-- Graceful Empty State Card -->
+          <div id="dashEmptyState" class="hidden p-10 text-center">
+            <div class="w-14 h-14 mx-auto rounded-full bg-slate-100 text-slate-400 flex items-center justify-center text-2xl mb-3">
+              <i class="fa-regular fa-folder-open"></i>
+            </div>
+            <h4 class="font-bold text-slate-800 text-sm" id="dashEmptyStateTitle">No Classes Found</h4>
+            <p class="text-xs text-slate-500 mt-1 max-w-sm mx-auto" id="dashEmptyStateMsg">There are no classes matching the selected filter for today.</p>
+          </div>
+
+        </div>
+
+        <!-- RIGHT COLUMN: STACKED MONTH-WISE ANALYTICS GRAPHS (~35% width) -->
+        <div class="lg:col-span-4 space-y-5">
+          
+          <!-- Graph 1 (Top): Monthly Student Enrollments vs Left -->
+          <div class="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-sm">
+            <div class="flex justify-between items-center mb-2.5 flex-wrap gap-1">
+              <div>
+                <h3 class="font-bold text-xs sm:text-sm text-slate-900 flex items-center gap-1.5">
+                  <i class="fa-solid fa-chart-simple text-brandEmerald"></i> Monthly Student Inflow vs Left
+                </h3>
+                <p class="text-[11px] text-slate-500">New Enrollments vs Left Students (Month-wise)</p>
+              </div>
+            </div>
+            <div class="flex items-center gap-2 mb-2 text-[11px] font-semibold">
+              <span class="inline-flex items-center gap-1 text-emerald-700">
+                <span class="w-2.5 h-2.5 rounded-full bg-emerald-500"></span> New Enrolled
               </span>
-              <span id="dashFilterTitle">Showing: All Classes Today (آج کی کل کلاسز)</span>
-            </h3>
-            <span id="dashFilterCountBadge" class="px-2.5 py-0.5 bg-brandEmerald/10 text-brandEmerald rounded-full font-bold text-xs font-mono">0 Classes</span>
-          </div>
-
-          <div class="flex items-center gap-2 flex-wrap">
-            <!-- Search Filter -->
-            <div class="relative">
-              <i class="fa-solid fa-magnifying-glass absolute left-3 top-2.5 text-slate-400 text-xs"></i>
-              <input type="text" id="dashClassSearch" oninput="handleDashClassSearch(this.value)" placeholder="Search student, teacher..." class="pl-8 pr-3 py-1.5 bg-white border border-slate-300 rounded-lg text-xs font-semibold focus:outline-brandEmerald w-44 sm:w-56">
+              <span class="inline-flex items-center gap-1 text-rose-600">
+                <span class="w-2.5 h-2.5 rounded-full bg-rose-500"></span> Left LMS
+              </span>
+              <span class="inline-flex items-center gap-1 text-slate-700 ml-auto">
+                <span class="w-2.5 h-0.5 bg-brandDark"></span> Net Active
+              </span>
             </div>
-
-            <!-- Quick Pill Filter Switches -->
-            <div class="hidden sm:flex bg-slate-200/70 p-1 rounded-lg text-[11px] font-bold">
-              <button onclick="filterDashboardClasses('all')" class="dash-pill px-2.5 py-1 rounded-md bg-white text-slate-900 shadow-sm font-bold" data-filter="all">All</button>
-              <button onclick="filterDashboardClasses('live')" class="dash-pill px-2.5 py-1 rounded-md text-slate-600 hover:text-slate-900" data-filter="live">Live</button>
-              <button onclick="filterDashboardClasses('completed')" class="dash-pill px-2.5 py-1 rounded-md text-slate-600 hover:text-slate-900" data-filter="completed">Done</button>
-              <button onclick="filterDashboardClasses('remaining')" class="dash-pill px-2.5 py-1 rounded-md text-slate-600 hover:text-slate-900" data-filter="remaining">Remaining</button>
-              <button onclick="filterDashboardClasses('absent')" class="dash-pill px-2.5 py-1 rounded-md text-slate-600 hover:text-slate-900" data-filter="absent">Absent</button>
-              <button onclick="filterDashboardClasses('leave')" class="dash-pill px-2.5 py-1 rounded-md text-slate-600 hover:text-slate-900" data-filter="leave">Leaves</button>
-              <button onclick="filterDashboardClasses('trial')" class="dash-pill px-2.5 py-1 rounded-md text-slate-600 hover:text-slate-900" data-filter="trial">Trials</button>
+            <div class="relative h-56 w-full">
+              <canvas id="chartStudentGrowth"></canvas>
             </div>
           </div>
-        </div>
 
-        <!-- Classes Table -->
-        <div class="overflow-x-auto">
-          <table class="w-full text-left text-xs border-collapse">
-            <thead class="bg-slate-100 text-slate-700 font-bold border-b border-slate-200 uppercase tracking-wider text-[11px]">
-              <tr>
-                <th class="p-3">Time Slot & Status</th>
-                <th class="p-3">Student Details</th>
-                <th class="p-3">Course / Subject</th>
-                <th class="p-3">Teacher</th>
-                <th class="p-3">Type</th>
-                <th class="p-3">Lesson Sabaq Notes</th>
-                <th class="p-3 text-right">Quick Operations</th>
-              </tr>
-            </thead>
-            <tbody id="dashClassesTableBody" class="divide-y divide-slate-100">
-              <tr><td colspan="7" class="p-8 text-center text-slate-400">Loading today's classes data...</td></tr>
-            </tbody>
-          </table>
-        </div>
-
-        <!-- Graceful Empty State Card (Hidden by default) -->
-        <div id="dashEmptyState" class="hidden p-10 text-center">
-          <div class="w-14 h-14 mx-auto rounded-full bg-slate-100 text-slate-400 flex items-center justify-center text-2xl mb-3">
-            <i class="fa-regular fa-folder-open"></i>
+          <!-- Graph 2 (Bottom): Monthly Fee Payments Received vs Target -->
+          <div class="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-sm">
+            <div class="flex justify-between items-center mb-2.5 flex-wrap gap-1">
+              <div>
+                <h3 class="font-bold text-xs sm:text-sm text-slate-900 flex items-center gap-1.5">
+                  <i class="fa-solid fa-chart-line text-brandGold"></i> Monthly Fee Payments Received
+                </h3>
+                <p class="text-[11px] text-slate-500">Payments Collected vs Projected Target ($)</p>
+              </div>
+            </div>
+            <div class="flex items-center gap-2 mb-2 text-[11px] font-semibold">
+              <span class="inline-flex items-center gap-1 text-emerald-700">
+                <span class="w-2.5 h-2.5 rounded-full bg-emerald-600"></span> Fee Received
+              </span>
+              <span class="inline-flex items-center gap-1 text-amber-600 ml-auto">
+                <span class="w-2.5 h-0.5 border-t-2 border-dashed border-amber-500"></span> Target Target
+              </span>
+            </div>
+            <div class="relative h-56 w-full">
+              <canvas id="chartFeeRevenue"></canvas>
+            </div>
           </div>
-          <h4 class="font-bold text-slate-800 text-sm" id="dashEmptyStateTitle">No Classes Found</h4>
-          <p class="text-xs text-slate-500 mt-1 max-w-sm mx-auto" id="dashEmptyStateMsg">There are no classes matching the selected filter for today.</p>
+
         </div>
 
       </div>
@@ -627,12 +589,14 @@
       </div>
 
     </div>
+  </div>
+
   <!-- MODAL: DASHBOARD QUICK ATTENDANCE -->
   <div id="modalDashAttendance" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-[65] hidden items-center justify-center p-4">
     <div class="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-200">
       <div class="flex justify-between items-center mb-4 border-b pb-3">
         <h3 class="font-bold text-base text-brandDark flex items-center gap-2">
-          <i class="fa-solid fa-clipboard-check text-brandEmerald"></i> Mark Class Attendance & Sabaq
+          <i class="fa-solid fa-clipboard-check text-brandEmerald"></i> Mark Class Attendance & Lesson Notes
         </h3>
         <button onclick="closeModal('modalDashAttendance')" class="text-slate-400 hover:text-slate-600 text-xl font-bold">&times;</button>
       </div>
@@ -650,26 +614,26 @@
         </div>
 
         <div>
-          <label class="block font-bold mb-1.5 text-slate-700">Attendance Status (حاضری کی کیفیت) *:</label>
+          <label class="block font-bold mb-1.5 text-slate-700">Attendance Status *:</label>
           <div class="grid grid-cols-3 gap-2">
             <button type="button" onclick="selectDashAttStatus('Present')" id="btnAttPresent" class="py-2.5 rounded-xl border font-bold flex flex-col items-center gap-1 hover:bg-emerald-50 border-emerald-500 bg-emerald-50 text-emerald-800">
               <i class="fa-solid fa-circle-check text-emerald-600 text-base"></i>
-              <span>Present (حاضر)</span>
+              <span>Present</span>
             </button>
             <button type="button" onclick="selectDashAttStatus('Absent')" id="btnAttAbsent" class="py-2.5 rounded-xl border border-slate-300 font-bold flex flex-col items-center gap-1 hover:bg-rose-50 text-slate-700">
               <i class="fa-solid fa-user-xmark text-rose-600 text-base"></i>
-              <span>Absent (غیر حاضر)</span>
+              <span>Absent</span>
             </button>
             <button type="button" onclick="selectDashAttStatus('Leave')" id="btnAttLeave" class="py-2.5 rounded-xl border border-slate-300 font-bold flex flex-col items-center gap-1 hover:bg-blue-50 text-slate-700">
               <i class="fa-solid fa-calendar-xmark text-blue-600 text-base"></i>
-              <span>Leave (چھٹی)</span>
+              <span>Leave</span>
             </button>
           </div>
           <input type="hidden" id="dashAttSelectedStatus" value="Present">
         </div>
 
         <div>
-          <label class="block font-bold mb-1 text-slate-700">Daily Sabaq & Lesson Notes (روزانہ سبق نوٹس):</label>
+          <label class="block font-bold mb-1 text-slate-700">Daily Sabaq & Lesson Progress Notes:</label>
           <textarea id="dashAttNotes" rows="2" placeholder="e.g. Surah Al-Baqarah v1-10, Tajweed Rules, Makharij practice" class="w-full p-2.5 border border-slate-300 rounded-lg text-xs"></textarea>
         </div>
 
@@ -680,6 +644,155 @@
           </button>
         </div>
       </form>
+    </div>
+  </div>
+
+  <!-- MODAL: STUDENT PROFILE & DETAILS -->
+  <div id="modalStudentDetail" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-[75] hidden items-center justify-center p-4">
+    <div class="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-slate-200 max-h-[90vh] overflow-y-auto">
+      <div class="flex justify-between items-center mb-4 border-b pb-3">
+        <div class="flex items-center gap-2">
+          <div class="w-10 h-10 rounded-xl bg-emerald-100 text-brandEmerald flex items-center justify-center font-bold text-lg">
+            <i class="fa-solid fa-graduation-cap"></i>
+          </div>
+          <div>
+            <h3 class="font-extrabold text-base text-brandDark" id="stuDetailName">Student Profile</h3>
+            <span id="stuDetailIdBadge" class="px-2 py-0.5 bg-emerald-100 text-emerald-800 rounded font-mono font-bold text-[10px]">STU-001</span>
+          </div>
+        </div>
+        <button onclick="closeModal('modalStudentDetail')" class="text-slate-400 hover:text-slate-600 text-xl font-bold">&times;</button>
+      </div>
+
+      <div class="space-y-3.5 text-xs">
+        <div class="bg-slate-50 p-3.5 rounded-xl border border-slate-200 grid grid-cols-2 gap-3">
+          <div>
+            <span class="text-slate-400 block text-[10px] uppercase font-bold">Age & Gender</span>
+            <span class="font-bold text-slate-800" id="stuDetailAgeGender">--</span>
+          </div>
+          <div>
+            <span class="text-slate-400 block text-[10px] uppercase font-bold">Spoken Language</span>
+            <span class="font-bold text-slate-800" id="stuDetailLanguage">--</span>
+          </div>
+          <div>
+            <span class="text-slate-400 block text-[10px] uppercase font-bold">Enrolled Course</span>
+            <span class="font-bold text-brandEmerald" id="stuDetailCourse">--</span>
+          </div>
+          <div>
+            <span class="text-slate-400 block text-[10px] uppercase font-bold">Schedule Days</span>
+            <span class="font-bold text-slate-800" id="stuDetailDays">--</span>
+          </div>
+          <div>
+            <span class="text-slate-400 block text-[10px] uppercase font-bold">Joining Date</span>
+            <span class="font-bold text-slate-800" id="stuDetailJoining">--</span>
+          </div>
+          <div>
+            <span class="text-slate-400 block text-[10px] uppercase font-bold">Assigned Teacher</span>
+            <span class="font-bold text-brandDark" id="stuDetailTeacher">--</span>
+          </div>
+        </div>
+
+        <!-- Family & Parent Contact Box -->
+        <div class="bg-emerald-50/60 p-3.5 rounded-xl border border-emerald-200 space-y-2">
+          <div class="font-bold text-brandDark uppercase text-[10px] flex items-center justify-between">
+            <span>Family & Parent Contact</span>
+            <span id="stuDetailFamilyId" class="font-mono text-emerald-700 font-bold">FAM-001</span>
+          </div>
+          <div class="flex justify-between items-center text-slate-800">
+            <div>
+              <div class="font-bold" id="stuDetailParentName">Parent Name</div>
+              <div class="text-[11px] text-slate-500" id="stuDetailLocation">Location</div>
+            </div>
+            <a id="stuDetailWhatsAppBtn" href="#" target="_blank" class="px-3 py-1.5 bg-emerald-600 text-white rounded-lg font-bold text-xs hover:bg-emerald-700 shadow-sm flex items-center gap-1.5">
+              <i class="fa-brands fa-whatsapp"></i> Chat WhatsApp
+            </a>
+          </div>
+        </div>
+
+        <div class="flex justify-end gap-2 pt-2 border-t">
+          <button onclick="closeModal('modalStudentDetail')" class="px-4 py-2 border rounded-lg font-bold text-slate-600">Close</button>
+          <button onclick="viewStudentInFamilyDirectory()" class="px-4 py-2 bg-brandDark text-white rounded-lg font-bold hover:bg-brandDarkest shadow flex items-center gap-1.5">
+            <i class="fa-solid fa-users"></i> Open in Family Directory
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: TEACHER PROFILE & QUICK ACTIONS -->
+  <div id="modalTeacherOptions" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-[75] hidden items-center justify-center p-4">
+    <div class="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-slate-200 max-h-[90vh] overflow-y-auto">
+      <div class="flex justify-between items-center mb-4 border-b pb-3">
+        <div class="flex items-center gap-2">
+          <div class="w-10 h-10 rounded-xl bg-teal-100 text-teal-800 flex items-center justify-center font-bold text-lg">
+            <i class="fa-solid fa-chalkboard-user"></i>
+          </div>
+          <div>
+            <h3 class="font-extrabold text-base text-brandDark" id="tOptionName">Teacher Details</h3>
+            <span id="tOptionIdBadge" class="px-2 py-0.5 bg-teal-100 text-teal-800 rounded font-mono font-bold text-[10px]">TCH-101</span>
+          </div>
+        </div>
+        <button onclick="closeModal('modalTeacherOptions')" class="text-slate-400 hover:text-slate-600 text-xl font-bold">&times;</button>
+      </div>
+
+      <div class="space-y-4 text-xs">
+        <!-- Quick Bio details -->
+        <div class="bg-slate-50 p-3.5 rounded-xl border border-slate-200 grid grid-cols-2 gap-3">
+          <div>
+            <span class="text-slate-400 block text-[10px] uppercase font-bold">Qualification</span>
+            <span class="font-bold text-slate-800" id="tOptionQual">--</span>
+          </div>
+          <div>
+            <span class="text-slate-400 block text-[10px] uppercase font-bold">Rate per Slot</span>
+            <span class="font-bold text-brandEmerald" id="tOptionRate">--</span>
+          </div>
+          <div class="col-span-2">
+            <span class="text-slate-400 block text-[10px] uppercase font-bold">Working Shift</span>
+            <span class="font-bold text-slate-800" id="tOptionShift">--</span>
+          </div>
+        </div>
+
+        <!-- Interactive Actions for Teacher -->
+        <div class="space-y-2">
+          <span class="font-bold text-slate-700 uppercase tracking-wider text-[10px]">Teacher Actions & Timetable:</span>
+          
+          <!-- Option 1: Open 2D Timetable Matrix -->
+          <button onclick="triggerTeacherMatrixFromOptions()" class="w-full p-3 rounded-xl border border-emerald-300 bg-emerald-50 hover:bg-emerald-100 text-brandDark flex items-center justify-between font-bold text-left transition shadow-sm">
+            <div class="flex items-center gap-2.5">
+              <i class="fa-solid fa-calendar-days text-brandEmerald text-base"></i>
+              <div>
+                <div class="font-extrabold">View 2D Weekly Schedule Matrix</div>
+                <div class="text-[10px] text-slate-500 font-normal">Check time slots, booked students & available hours</div>
+              </div>
+            </div>
+            <i class="fa-solid fa-arrow-right text-slate-400"></i>
+          </button>
+
+          <!-- Option 2: View Assigned Students List -->
+          <div class="p-3 rounded-xl border border-slate-200 bg-white space-y-2">
+            <div class="flex items-center justify-between">
+              <span class="font-bold text-slate-800 flex items-center gap-1.5">
+                <i class="fa-solid fa-users text-teal-600"></i> Assigned Students List
+              </span>
+              <span id="tOptionStudentCount" class="px-2 py-0.5 rounded bg-slate-100 font-mono text-[10px] font-bold text-slate-600">0 Students</span>
+            </div>
+            <div id="tOptionStudentsList" class="space-y-1.5 max-h-36 overflow-y-auto pr-1">
+              <!-- Dynamically populated -->
+            </div>
+          </div>
+
+          <!-- Option 3: WhatsApp Contact -->
+          <a id="tOptionWhatsAppBtn" href="#" target="_blank" class="w-full p-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-center flex items-center justify-center gap-2 shadow-sm">
+            <i class="fa-brands fa-whatsapp text-sm"></i> Contact Teacher on WhatsApp
+          </a>
+        </div>
+
+        <div class="flex justify-end gap-2 pt-2 border-t">
+          <button onclick="closeModal('modalTeacherOptions')" class="px-4 py-2 border rounded-lg font-bold text-slate-600">Close</button>
+          <button onclick="viewTeacherInDirectory()" class="px-4 py-2 bg-brandDark text-white rounded-lg font-bold hover:bg-brandDarkest shadow">
+            Open in Teachers Directory
+          </button>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -771,11 +884,11 @@
           </div>
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
-              <label class="block font-bold mb-1">Email Address (Optional / اختیاری):</label>
+              <label class="block font-bold mb-1">Email Address (Optional):</label>
               <input type="email" id="famEmail" placeholder="parent@example.com" class="w-full p-2.5 border rounded-lg">
             </div>
             <div>
-              <label class="block font-bold mb-1">City / State (شہر):</label>
+              <label class="block font-bold mb-1">City / State:</label>
               <input type="text" id="famCity" placeholder="e.g. London / Dallas / Toronto" class="w-full p-2.5 border rounded-lg">
             </div>
           </div>
@@ -789,7 +902,7 @@
           </div>
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
-              <label class="block font-bold mb-1">Country (ملک) *:</label>
+              <label class="block font-bold mb-1">Country *:</label>
               <select id="famCountrySelect" onchange="handleCountrySelectionChange(this.value)" class="w-full p-2.5 border border-slate-300 rounded-lg font-bold text-slate-800">
                 <!-- Pre-populated countries -->
               </select>
@@ -835,11 +948,11 @@
 
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
-              <label class="block font-bold mb-1 text-slate-700">LMS Portal Username (یوزر نیم) *:</label>
+              <label class="block font-bold mb-1 text-slate-700">LMS Portal Username *:</label>
               <input type="text" id="famUsername" required placeholder="e.g. parent_bilal" class="w-full p-2.5 bg-white border border-slate-300 rounded-lg font-mono font-bold text-slate-800">
             </div>
             <div>
-              <label class="block font-bold mb-1 text-slate-700">LMS Portal Password (پاسورڈ) *:</label>
+              <label class="block font-bold mb-1 text-slate-700">LMS Portal Password *:</label>
               <div class="relative">
                 <input type="text" id="famPassword" required value="alhuda_482" class="w-full p-2.5 bg-white border border-slate-300 rounded-lg font-mono font-bold text-slate-800 pr-8">
                 <button type="button" onclick="generateRandomParentPass()" class="absolute right-2 top-2.5 text-slate-400 hover:text-brandDark font-bold" title="Generate New Password">
@@ -895,20 +1008,20 @@
               <input type="text" id="stuName" required placeholder="Child / Student Full Name" class="w-full p-2.5 border rounded-lg font-semibold">
             </div>
             <div>
-              <label class="block font-bold mb-1">Age (عمر):</label>
+              <label class="block font-bold mb-1">Age:</label>
               <input type="number" id="stuAge" value="8" min="3" max="80" class="w-full p-2.5 border rounded-lg font-semibold">
             </div>
           </div>
           <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div>
-              <label class="block font-bold mb-1">Gender (جنس):</label>
+              <label class="block font-bold mb-1">Gender:</label>
               <select id="stuGender" class="w-full p-2.5 border rounded-lg font-semibold">
-                <option value="Male">Male (Boy / طالب علم)</option>
-                <option value="Female">Female (Girl / طالبہ)</option>
+                <option value="Male">Male</option>
+                <option value="Female">Female</option>
               </select>
             </div>
             <div>
-              <label class="block font-bold mb-1">Spoken Language (زبان):</label>
+              <label class="block font-bold mb-1">Spoken Language:</label>
               <select id="stuLanguage" class="w-full p-2.5 border rounded-lg font-semibold">
                 <option value="English">English</option>
                 <option value="Urdu">Urdu</option>
@@ -921,7 +1034,7 @@
               </select>
             </div>
             <div>
-              <label class="block font-bold mb-1 text-brandEmerald">Student Joining Date (شروع کی تاریخ) *:</label>
+              <label class="block font-bold mb-1 text-brandEmerald">Student Joining Date *:</label>
               <input type="date" id="stuJoiningDate" required class="w-full p-2.5 border border-emerald-400 rounded-lg font-bold text-slate-800">
             </div>
           </div>
@@ -935,19 +1048,19 @@
           </div>
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
-              <label class="block font-bold mb-1 text-slate-800">Course Selection (منتخب کورس) *:</label>
+              <label class="block font-bold mb-1 text-slate-800">Course Selection *:</label>
               <select id="stuCourseSelect" required class="w-full p-2.5 border border-emerald-400 rounded-lg font-bold text-slate-800">
-                <option value="Noorani Qaida (قاعدہ نورانیہ)">1. Noorani Qaida (قاعدہ نورانیہ)</option>
-                <option value="Quran Reading with Tajweed (ناظرہ قرآن مع تجوید)">2. Quran Reading with Tajweed (ناظرہ قرآن مع تجوید)</option>
-                <option value="Quran Memorization / Hifz (حفظ قرآن مجید)">3. Quran Memorization / Hifz (حفظ قرآن مجید)</option>
-                <option value="Advanced Tajweed Rules (تجوید و قرأت)">4. Advanced Tajweed Rules (تجوید و قرأت)</option>
-                <option value="Tafseer-ul-Quran (تفسیر القرآن)">5. Tafseer-ul-Quran (تفسیر القرآن)</option>
-                <option value="Arabic Language & Grammar (عربی زبان و گرامر)">6. Arabic Language & Grammar (عربی زبان و گرامر)</option>
-                <option value="Islamic Studies & Tarbiyah (اسلامک ایجوکیشن و تربیت)">7. Islamic Studies & Tarbiyah (اسلامک ایجوکیشن و تربیت)</option>
+                <option value="Noorani Qaida">1. Noorani Qaida</option>
+                <option value="Quran Reading with Tajweed">2. Quran Reading with Tajweed</option>
+                <option value="Quran Memorization / Hifz">3. Quran Memorization / Hifz</option>
+                <option value="Advanced Tajweed Rules">4. Advanced Tajweed Rules</option>
+                <option value="Tafseer-ul-Quran">5. Tafseer-ul-Quran</option>
+                <option value="Arabic Language & Grammar">6. Arabic Language & Grammar</option>
+                <option value="Islamic Studies & Tarbiyah">7. Islamic Studies & Tarbiyah</option>
               </select>
             </div>
             <div>
-              <label class="block font-bold mb-1 text-slate-800">Days per Week Preference (ہفتہ وار کلاسز) *:</label>
+              <label class="block font-bold mb-1 text-slate-800">Days per Week Preference *:</label>
               <select id="stuDaysPerWeek" class="w-full p-2.5 border border-emerald-400 rounded-lg font-bold text-slate-800">
                 <option value="5 Days / Week (Mon - Fri)">5 Days / Week (Monday to Friday - Standard Class)</option>
                 <option value="3 Days / Week (Alternative Days)">3 Days / Week (Mon, Wed, Fri or Custom)</option>
@@ -1025,12 +1138,12 @@
             <div>
               <label class="block font-bold mb-1">Gender:</label>
               <select id="tGender" class="w-full p-2.5 border rounded-lg font-semibold">
-                <option value="Male">Male (Qari Sahab)</option>
-                <option value="Female">Female (Muallima / Teacher)</option>
+                <option value="Male">Male</option>
+                <option value="Female">Female</option>
               </select>
             </div>
             <div>
-              <label class="block font-bold mb-1">Qualification & Ijazah (تعلیمی قابلیت و اسناد):</label>
+              <label class="block font-bold mb-1">Qualification & Ijazah:</label>
               <input type="text" id="tQualification" placeholder="e.g. Hafiz-e-Quran / Dars-e-Nizami / Shahadat-ul-Almiyah" class="w-full p-2.5 border rounded-lg font-semibold">
             </div>
           </div>
@@ -1062,11 +1175,11 @@
           </div>
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
-              <label class="block font-bold mb-1">Witness / Reference Name (Optional / اختیاری):</label>
+              <label class="block font-bold mb-1">Witness / Reference Name (Optional):</label>
               <input type="text" id="tWitnessName" placeholder="Witness Full Name (Optional)" class="w-full p-2.5 border rounded-lg">
             </div>
             <div>
-              <label class="block font-bold mb-1">Witness Phone Number (Optional / اختیاری):</label>
+              <label class="block font-bold mb-1">Witness Phone Number (Optional):</label>
               <input type="text" id="tWitnessPhone" placeholder="Witness Contact Number (Optional)" class="w-full p-2.5 border rounded-lg">
             </div>
           </div>
@@ -1171,11 +1284,11 @@
 
       <form onsubmit="handleTeacherLoginSubmit(event)" class="space-y-3.5 text-xs">
         <div>
-          <label class="block font-bold mb-1 text-slate-700">Username (یوزر نیم) *:</label>
+          <label class="block font-bold mb-1 text-slate-700">Username *:</label>
           <input type="text" id="tLoginUser" required placeholder="Enter Username (e.g. teacher_abdul)" class="w-full p-2.5 border rounded-lg font-bold text-slate-800">
         </div>
         <div>
-          <label class="block font-bold mb-1 text-slate-700">Password (پاسورڈ) *:</label>
+          <label class="block font-bold mb-1 text-slate-700">Password *:</label>
           <input type="password" id="tLoginPass" required placeholder="Enter Password" class="w-full p-2.5 border rounded-lg font-bold text-slate-800">
         </div>
 
@@ -1202,9 +1315,12 @@
 
     let ALL_TEACHERS = [];
     let ALL_STUDENTS = [];
+    let ALL_FAMILIES = [];
     let CURRENT_ROLE = 'owner';
     let CURRENT_MATRIX_TEACHER = null;
     let CURRENT_TEACHER_SCHEDULES = [];
+    let CURRENT_MODAL_STUDENT_ID = null;
+    let CURRENT_MODAL_TEACHER_ID = null;
 
     // MAIN EXECUTIVE DASHBOARD STATE
     let DASHBOARD_CLASSES = [];
@@ -1295,7 +1411,7 @@
             datasets: [
               {
                 type: 'bar',
-                label: 'New Enrolled (نئے سٹوڈنٹس)',
+                label: 'New Enrolled',
                 data: [4, 6, 8, 11, 14, 18, 22, 25, 29, 0, 0, 0],
                 backgroundColor: 'rgba(5, 150, 105, 0.85)',
                 borderColor: '#047857',
@@ -1305,7 +1421,7 @@
               },
               {
                 type: 'bar',
-                label: 'Left LMS (چھوڑنے والے)',
+                label: 'Left LMS',
                 data: [0, 1, 0, 1, 2, 1, 1, 2, 1, 0, 0, 0],
                 backgroundColor: 'rgba(225, 29, 72, 0.85)',
                 borderColor: '#be123c',
@@ -1427,6 +1543,9 @@
 
         const elTeachers = document.getElementById('dashExecutiveTeachers');
         if (elTeachers) elTeachers.innerText = totalTeachers;
+
+        const elKpiDashTeachers = document.getElementById('kpiDashTeachers');
+        if (elKpiDashTeachers) elKpiDashTeachers.innerText = totalTeachers;
 
         const elRevenue = document.getElementById('dashExecutiveRevenue');
         if (elRevenue) elRevenue.innerText = '$' + totalAgreedFee.toLocaleString();
@@ -1607,13 +1726,13 @@
       });
 
       const titleMap = {
-        'all': { text: 'Showing: All Classes Today (آج کی کل کلاسز)', icon: 'fa-calendar-day' },
-        'live': { text: 'Showing: Current Live Classes (اس وقت جاری کلاسز)', icon: 'fa-tower-broadcast' },
-        'completed': { text: 'Showing: Completed Classes (مکمل شدہ کلاسز)', icon: 'fa-circle-check' },
-        'remaining': { text: 'Showing: Remaining Classes (باقی ماندہ کلاسز)', icon: 'fa-hourglass-half' },
-        'absent': { text: 'Showing: Absences Today (آج کی غیر حاضریاں)', icon: 'fa-user-xmark' },
-        'leave': { text: 'Showing: Leaves Today (آج کی سٹوڈنٹ چھٹیاں)', icon: 'fa-calendar-xmark' },
-        'trial': { text: 'Showing: Trials Today (آج کی ٹرائل کلاسز)', icon: 'fa-graduation-cap' }
+        'all': { text: 'Showing: All Classes Today', icon: 'fa-calendar-day' },
+        'live': { text: 'Showing: Current Live Classes', icon: 'fa-tower-broadcast' },
+        'completed': { text: 'Showing: Completed Classes', icon: 'fa-circle-check' },
+        'remaining': { text: 'Showing: Remaining Classes', icon: 'fa-hourglass-half' },
+        'absent': { text: 'Showing: Absences Today', icon: 'fa-user-xmark' },
+        'leave': { text: 'Showing: Leaves Today', icon: 'fa-calendar-xmark' },
+        'trial': { text: 'Showing: Trials Today', icon: 'fa-graduation-cap' }
       };
 
       const meta = titleMap[filterType] || titleMap['all'];
@@ -1674,13 +1793,13 @@
           const emptyMsg = document.getElementById('dashEmptyStateMsg');
           
           const emptyMessages = {
-            'all': { title: 'آج کوئی کلاس شیڈول نہیں ہے', msg: 'No classes are scheduled for today in the timetable.' },
-            'live': { title: 'اس وقت کوئی لائیو کلاس نہیں چل رہی', msg: 'No ongoing classes in the current time slot. Next scheduled classes will appear here automatically.' },
-            'completed': { title: 'ابھی تک کوئی کلاس مکمل نہیں ہوئی', msg: 'No completed classes recorded yet today since midnight.' },
-            'remaining': { title: 'ماشاءاللہ! تمام کلاسز مکمل ہو چکی ہیں', msg: 'No remaining classes scheduled for the rest of today.' },
-            'absent': { title: 'ماشاءاللہ! آج کوئی غیر حاضری نہیں ہے', msg: 'Zero absent students recorded today. All students are attending regularly!' },
-            'leave': { title: 'آج کوئی چھٹی (Leave) مارک نہیں کی گئی', msg: 'No student leaves recorded for today.' },
-            'trial': { title: 'آج کوئی ٹرائل کلاس نہیں ہے', msg: 'No trial classes booked for today.' }
+            'all': { title: 'No Classes Scheduled Today', msg: 'No classes are scheduled for today in the timetable.' },
+            'live': { title: 'No Live Classes In This Slot', msg: 'No ongoing classes in the current time slot. Next scheduled classes will appear here automatically.' },
+            'completed': { title: 'No Completed Classes Yet', msg: 'No completed classes recorded yet today since midnight.' },
+            'remaining': { title: 'All Scheduled Classes Completed', msg: 'No remaining classes scheduled for the rest of today.' },
+            'absent': { title: 'Zero Absences Today', msg: 'Zero absent students recorded today. All students are attending regularly!' },
+            'leave': { title: 'No Student Leaves Marked Today', msg: 'No student leaves recorded for today.' },
+            'trial': { title: 'No Trial Classes Scheduled Today', msg: 'No trial classes booked for today.' }
           };
 
           const msg = emptyMessages[CURRENT_DASH_FILTER] || emptyMessages['all'];
@@ -1729,8 +1848,11 @@
             </td>
 
             <td class="p-3">
-              <div class="font-bold text-slate-900 flex items-center">
-                ${c.students?.name || 'Student'}
+              <div class="flex items-center">
+                <button onclick="openStudentDetailModal('${c.student_id || c.students?.id || ''}')" class="font-bold text-slate-900 hover:text-brandEmerald hover:underline text-left flex items-center gap-1 group" title="Click to view Student Profile & Family">
+                  <span>${c.students?.name || 'Student'}</span>
+                  <i class="fa-solid fa-circle-info text-[10px] text-slate-400 group-hover:text-brandEmerald"></i>
+                </button>
                 ${waChat}
               </div>
               <div class="flex items-center gap-1 mt-0.5 text-[10px] text-slate-500 font-mono">
@@ -1746,8 +1868,13 @@
             </td>
 
             <td class="p-3">
-              <div class="font-bold text-brandDark">${c.teachers?.full_name || 'Assigned Teacher'}</div>
-              <div class="text-[10px] text-slate-400 font-mono">${c.teachers?.email || 'Teacher ID'}</div>
+              <div>
+                <button onclick="openTeacherOptionsModal('${c.teacher_id || c.teachers?.id || ''}')" class="font-bold text-brandDark hover:text-brandEmerald hover:underline text-left flex items-center gap-1 group" title="Click for Teacher Profile & 2D Weekly Schedule">
+                  <span>${c.teachers?.full_name || 'Assigned Teacher'}</span>
+                  <i class="fa-solid fa-arrow-up-right-from-square text-[10px] text-slate-400 group-hover:text-brandEmerald"></i>
+                </button>
+              </div>
+              <div class="text-[10px] text-slate-400 font-mono">${c.teachers?.phone || c.teachers?.email || 'Teacher ID'}</div>
             </td>
 
             <td class="p-3">
@@ -1843,6 +1970,202 @@
       await loadDashboardData();
     }
 
+    // INTERACTIVE STUDENT DETAIL MODAL
+    async function openStudentDetailModal(studentId) {
+      if (!studentId) return;
+      CURRENT_MODAL_STUDENT_ID = studentId;
+
+      let student = (ALL_STUDENTS || []).find(s => s.id === studentId);
+      if (!student) {
+        const foundInDash = (DASHBOARD_CLASSES || []).find(c => c.student_id === studentId || c.students?.id === studentId);
+        if (foundInDash && foundInDash.students) {
+          student = foundInDash.students;
+        }
+      }
+
+      if (!student) {
+        const { data } = await db.from('students').select('*').eq('id', studentId).maybeSingle();
+        student = data;
+      }
+
+      if (!student) {
+        alert("Student profile details could not be found.");
+        return;
+      }
+
+      // Find family
+      let family = (ALL_FAMILIES || []).find(f => f.id === student.family_id);
+      if (!family && student.family_id) {
+        const { data } = await db.from('families').select('*').eq('id', student.family_id).maybeSingle();
+        family = data;
+      }
+
+      let lang = 'English';
+      let days = '5 Days / Week (Mon - Fri)';
+      if (student.notes) {
+        try {
+          const meta = JSON.parse(student.notes);
+          if (meta.language) lang = meta.language;
+          if (meta.days_per_week) days = meta.days_per_week;
+        } catch (e) {}
+      }
+      if (student.language) lang = student.language;
+
+      let teacherName = 'Not Assigned';
+      const teacherId = student.assigned_teacher_id;
+      if (teacherId) {
+        const t = (ALL_TEACHERS || []).find(tc => tc.id === teacherId);
+        if (t) teacherName = t.full_name;
+      } else {
+        const dashMatch = (DASHBOARD_CLASSES || []).find(c => c.student_id === studentId);
+        if (dashMatch && dashMatch.teachers) teacherName = dashMatch.teachers.full_name;
+      }
+
+      // Populate Modal Fields
+      document.getElementById('stuDetailName').innerText = student.name || 'Student Details';
+      document.getElementById('stuDetailIdBadge').innerText = student.id || '--';
+      document.getElementById('stuDetailAgeGender').innerText = `${student.age || 'N/A'} yrs • ${student.gender || 'N/A'}`;
+      document.getElementById('stuDetailLanguage').innerText = lang;
+      document.getElementById('stuDetailCourse').innerText = student.course_id || 'Quran Studies & Tajweed';
+      document.getElementById('stuDetailDays').innerText = days;
+      document.getElementById('stuDetailJoining').innerText = student.joining_date || 'N/A';
+      document.getElementById('stuDetailTeacher').innerText = teacherName;
+      document.getElementById('stuDetailFamilyId').innerText = student.family_id || 'N/A';
+      document.getElementById('stuDetailParentName').innerText = family ? family.parent_name : 'Parent / Family';
+      document.getElementById('stuDetailLocation').innerText = family ? `${family.country || 'Global'} • ${family.whatsapp || ''}` : 'Location N/A';
+
+      // WhatsApp direct contact
+      const rawPhone = student.whatsapp || family?.whatsapp || '';
+      const cleanPhone = rawPhone.replace(/[^0-9]/g, '');
+      const waBtn = document.getElementById('stuDetailWhatsAppBtn');
+      if (waBtn) {
+        if (cleanPhone) {
+          const waMsg = `Assalam-o-Alaikum,\nRegarding student *${student.name}* (ID: ${student.id}) from *Al-Huda Islamic Centre LMS*.`;
+          waBtn.href = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(waMsg)}`;
+          waBtn.style.display = 'inline-flex';
+        } else {
+          waBtn.style.display = 'none';
+        }
+      }
+
+      openModal('modalStudentDetail');
+    }
+
+    function viewStudentInFamilyDirectory() {
+      closeModal('modalStudentDetail');
+      switchTab('tab-families');
+    }
+
+    // INTERACTIVE TEACHER OPTIONS & MATRIX MODAL
+    async function openTeacherOptionsModal(teacherId) {
+      if (!teacherId) return;
+      CURRENT_MODAL_TEACHER_ID = teacherId;
+
+      let teacher = (ALL_TEACHERS || []).find(t => t.id === teacherId);
+      if (!teacher) {
+        const foundInDash = (DASHBOARD_CLASSES || []).find(c => c.teacher_id === teacherId || c.teachers?.id === teacherId);
+        if (foundInDash && foundInDash.teachers) {
+          teacher = foundInDash.teachers;
+        }
+      }
+
+      if (!teacher) {
+        const { data } = await db.from('teachers').select('*').eq('id', teacherId).maybeSingle();
+        teacher = data;
+      }
+
+      if (!teacher) {
+        alert("Teacher profile details could not be found.");
+        return;
+      }
+
+      document.getElementById('tOptionName').innerText = teacher.full_name || 'Teacher Profile';
+      document.getElementById('tOptionIdBadge').innerText = teacher.id || '--';
+      document.getElementById('tOptionQual').innerText = teacher.qualification || 'Quran & Tajweed Instructor';
+      document.getElementById('tOptionRate').innerText = `${teacher.rate_per_slot || 200} PKR / slot`;
+      document.getElementById('tOptionShift').innerText = teacher.working_shift || '10 Hours Shift (Morning / Evening)';
+
+      // WhatsApp Button
+      const cleanPhone = (teacher.phone || '').replace(/[^0-9]/g, '');
+      const waBtn = document.getElementById('tOptionWhatsAppBtn');
+      if (waBtn) {
+        if (cleanPhone) {
+          const waMsg = `Assalam-o-Alaikum Teacher *${teacher.full_name}*,\nContact from Al-Huda Islamic Centre Administration.`;
+          waBtn.href = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(waMsg)}`;
+          waBtn.classList.remove('hidden');
+          waBtn.classList.add('flex');
+        } else {
+          waBtn.classList.add('hidden');
+          waBtn.classList.remove('flex');
+        }
+      }
+
+      // Fetch & populate assigned students for this teacher
+      const countBadge = document.getElementById('tOptionStudentCount');
+      const listContainer = document.getElementById('tOptionStudentsList');
+      if (countBadge) countBadge.innerText = 'Loading...';
+      if (listContainer) listContainer.innerHTML = '<div class="text-slate-400 py-1">Loading assigned students...</div>';
+
+      try {
+        const { data: scheds } = await db.from('class_schedules')
+          .select('student_id, students(name, course_id, family_id)')
+          .eq('teacher_id', teacherId);
+
+        const uniqueStudentsMap = {};
+        (scheds || []).forEach(s => {
+          if (s.students && s.student_id) {
+            uniqueStudentsMap[s.student_id] = s.students;
+          }
+        });
+
+        (ALL_STUDENTS || []).forEach(st => {
+          if (st.assigned_teacher_id === teacherId) {
+            uniqueStudentsMap[st.id] = st;
+          }
+        });
+
+        const studentsArr = Object.entries(uniqueStudentsMap);
+        if (countBadge) countBadge.innerText = `${studentsArr.length} Students`;
+
+        if (studentsArr.length === 0) {
+          if (listContainer) listContainer.innerHTML = '<div class="text-slate-400 italic py-1">No students currently assigned to this teacher.</div>';
+        } else {
+          if (listContainer) {
+            listContainer.innerHTML = studentsArr.map(([sId, sObj]) => `
+              <div class="flex items-center justify-between p-2 rounded-lg bg-slate-50 border border-slate-200">
+                <div>
+                  <div class="font-bold text-slate-800">${sObj.name || 'Student'}</div>
+                  <div class="text-[10px] text-slate-500 font-mono">${sId} &bull; ${sObj.course_id || 'Quran'}</div>
+                </div>
+                <button onclick="closeModal('modalTeacherOptions'); openStudentDetailModal('${sId}')" class="px-2 py-1 bg-brandDark text-white text-[10px] font-bold rounded hover:bg-brandDarkest shadow-xs">
+                  View Student
+                </button>
+              </div>
+            `).join('');
+          }
+        }
+      } catch (err) {
+        console.error("Error loading teacher students:", err);
+        if (countBadge) countBadge.innerText = '0 Students';
+        if (listContainer) listContainer.innerHTML = '<div class="text-slate-400 py-1">Could not fetch students list.</div>';
+      }
+
+      openModal('modalTeacherOptions');
+    }
+
+    function triggerTeacherMatrixFromOptions() {
+      if (!CURRENT_MODAL_TEACHER_ID) return;
+      const tId = CURRENT_MODAL_TEACHER_ID;
+      closeModal('modalTeacherOptions');
+      switchTab('tab-teachers');
+      open2DMatrixForTeacher(tId);
+    }
+
+    function viewTeacherInDirectory() {
+      closeModal('modalTeacherOptions');
+      switchTab('tab-teachers');
+    }
+
     // DYNAMIC COUNTRIES & PERSISTENCE
     const DEFAULT_COUNTRIES = [
       "United States", "United Kingdom", "Canada", "Australia", 
@@ -1861,7 +2184,7 @@
       if (!select) return;
       const list = getSavedCountries();
       let html = list.map(c => `<option value="${c}" ${c === selectedCountry ? 'selected' : ''}>${c}</option>`).join('');
-      html += `<option value="__NEW_COUNTRY__" class="font-bold text-emerald-700">+ Add New Country... / نیا ملک شامل کریں</option>`;
+      html += `<option value="__NEW_COUNTRY__" class="font-bold text-emerald-700">+ Add New Country...</option>`;
       select.innerHTML = html;
     }
 
@@ -1905,7 +2228,7 @@
       if (!select) return;
       const list = getSavedCurrencies();
       let html = list.map(c => `<option value="${c}" ${c === selectedCurr ? 'selected' : ''}>${c}</option>`).join('');
-      html += `<option value="__NEW_CURR__" class="font-bold text-emerald-700">+ Add New Currency... / نئی کرنسی شامل کریں</option>`;
+      html += `<option value="__NEW_CURR__" class="font-bold text-emerald-700">+ Add New Currency...</option>`;
       select.innerHTML = html;
     }
 
@@ -2092,19 +2415,19 @@
       const password = (document.getElementById('famPassword').value || '').trim();
 
       if (!parent_name) {
-        alert("⚠️ براہ کرم سرپرست / والد کا مکمل نام درج کریں!\nPlease enter Parent / Guardian Name.");
+        alert("Please enter Parent / Guardian Name.");
         btn.disabled = false;
         btn.innerText = 'Save Family & Generate LMS Account';
         return;
       }
       if (!whatsapp) {
-        alert("⚠️ واٹس ایپ نمبر درج کرنا لازمی ہے!\nPlease enter WhatsApp Contact Number.");
+        alert("Please enter WhatsApp Contact Number.");
         btn.disabled = false;
         btn.innerText = 'Save Family & Generate LMS Account';
         return;
       }
       if (!username || !password) {
-        alert("⚠️ پیرنٹ پورٹل کا یوزر نیم اور پاسورڈ لازمی ہے!\nParent Portal Username and Password are required.");
+        alert("Parent Portal Username and Password are required.");
         btn.disabled = false;
         btn.innerText = 'Save Family & Generate LMS Account';
         return;
@@ -2154,14 +2477,14 @@
       const id = document.getElementById('stuGeneratedIdVal').value || getNextStudentId();
 
       if (!name) {
-        alert("⚠️ طالب علم کا نام درج کرنا لازمی ہے!\nPlease enter Student Full Name.");
+        alert("Please enter Student Full Name.");
         btn.disabled = false;
         btn.innerText = 'Enroll Student';
         return;
       }
 
       if (!family_id) {
-        alert("⚠️ فیملی اکاؤنٹ سلیکٹ کرنا لازمی ہے!\nPlease select Family / Parent.");
+        alert("Please select Family / Parent.");
         btn.disabled = false;
         btn.innerText = 'Enroll Student';
         return;
@@ -2613,25 +2936,25 @@
 
       // Mandatory Validations
       if (!full_name) {
-        alert("⚠️ استاد کا نام درج کرنا لازمی ہے!\nPlease enter the Teacher's Full Name.");
+        alert("Please enter the Teacher's Full Name.");
         document.getElementById('tFullName').focus();
         return;
       }
 
       if (!phone) {
-        alert("⚠️ استاد کا بنیادی واٹس ایپ نمبر درج کرنا لازمی ہے!\nPlease enter Teacher's Primary WhatsApp Number.");
+        alert("Please enter Teacher's Primary WhatsApp Number.");
         document.getElementById('tPhone').focus();
         return;
       }
 
       if (!username) {
-        alert("⚠️ استاد کے پورٹل کے لیے یوزر نیم (Username) درج کرنا لازمی ہے!\nPlease enter Teacher Portal Username.");
+        alert("Please enter Teacher Portal Username.");
         document.getElementById('tUsername').focus();
         return;
       }
 
       if (!password) {
-        alert("⚠️ استاد کے پورٹل کے لیے پاسورڈ (Password) درج کرنا لازمی ہے!\nPlease enter Teacher Portal Password.");
+        alert("Please enter Teacher Portal Password.");
         document.getElementById('tPassword').focus();
         return;
       }
@@ -2767,7 +3090,7 @@
         alert(`Welcome, ${matchedTeacher.full_name}! You are now logged into your Teacher Portal.`);
       } else {
         if (err) {
-          err.innerText = "غلط یوزر نیم یا پاسورڈ / Invalid Username or Password. Please check with Admin.";
+          err.innerText = "Invalid Username or Password. Please check with Admin.";
           err.classList.remove('hidden');
         }
       }
