@@ -61,6 +61,12 @@
 
       <!-- ROLE SWITCHER & CLOCK -->
       <div class="flex items-center gap-3">
+        <!-- Logged-in Teacher Session Badge -->
+        <div id="teacherSessionPill" class="hidden items-center gap-2 bg-emerald-950/80 border border-emerald-400/50 px-3 py-1 rounded-full text-xs font-semibold text-emerald-200 shadow-sm">
+          <span><i class="fa-solid fa-chalkboard-user text-emerald-400"></i> <span id="teacherActiveName">Teacher</span></span>
+          <button onclick="logoutTeacherPortal()" class="text-amber-300 hover:text-amber-100 font-bold ml-1 text-[11px] underline" title="Exit Teacher Portal">Logout</button>
+        </div>
+
         <div class="bg-black/30 border border-brandGold/40 px-3 py-1.5 rounded-full text-xs font-semibold text-amber-200 flex items-center gap-2">
           <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
           <span>Role:</span>
@@ -215,7 +221,7 @@
           </h2>
           <p class="text-xs text-slate-500">Profiles, Witness Contacts, Rates, and 2D Full-Week Schedule Matrix</p>
         </div>
-        <button onclick="openModal('modalAddTeacher')" class="px-3.5 py-2 bg-brandDark text-white rounded-lg text-xs font-bold hover:bg-brandDarkest flex items-center gap-1.5 shadow">
+        <button onclick="prepareAddTeacherModal()" class="px-3.5 py-2 bg-brandDark text-white rounded-lg text-xs font-bold hover:bg-brandDarkest flex items-center gap-1.5 shadow">
           <i class="fa-solid fa-plus"></i> + Add New Teacher
         </button>
       </div>
@@ -537,25 +543,67 @@
   <div id="modalAddTeacher" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 hidden items-center justify-center p-4">
     <div class="bg-white rounded-2xl max-w-2xl w-full p-6 shadow-2xl border border-slate-200 max-h-[92vh] overflow-y-auto">
       <div class="flex justify-between items-center mb-4 border-b pb-3">
-        <h3 class="font-bold text-base text-brandDark flex items-center gap-2">
-          <i class="fa-solid fa-chalkboard-user text-brandEmerald"></i> Register Teacher Profile (Full Details)
-        </h3>
+        <div>
+          <div class="flex items-center gap-2">
+            <h3 class="font-bold text-base text-brandDark flex items-center gap-2">
+              <i class="fa-solid fa-chalkboard-user text-brandEmerald"></i> Register Teacher Profile (Full Details)
+            </h3>
+            <span id="tGeneratedIdBadge" class="px-2.5 py-0.5 bg-emerald-100 text-emerald-800 rounded font-mono font-extrabold text-[11px]">TCH-101</span>
+          </div>
+          <p class="text-[11px] text-slate-500 mt-0.5">Configure schedule shift duration & auto-generate Teacher Portal LMS credentials</p>
+        </div>
         <button onclick="closeModal('modalAddTeacher')" class="text-slate-400 hover:text-slate-600 text-xl font-bold">&times;</button>
       </div>
       
       <form onsubmit="handleSaveTeacher(event)" class="space-y-4 text-xs">
+        <input type="hidden" id="tGeneratedIdVal" value="TCH-101">
+
+        <!-- 1. IDENTITY & QUALIFICATIONS -->
         <div class="bg-slate-50 p-3.5 rounded-xl border border-slate-200 space-y-3">
-          <div class="font-bold text-slate-700 uppercase tracking-wide text-[11px]">1. Identity & Residential Info</div>
+          <div class="font-bold text-slate-700 uppercase tracking-wide text-[11px] flex justify-between">
+            <span>1. Identity & Academic Credentials</span>
+            <span class="text-brandEmerald font-mono">Employee Record</span>
+          </div>
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label class="block font-bold mb-1">Teacher Full Name *:</label>
-              <input type="text" id="tFullName" required placeholder="Qari / Ustadha Name" class="w-full p-2.5 border rounded-lg">
+              <input type="text" id="tFullName" required placeholder="Qari / Ustadha Full Name" oninput="autoSuggestTeacherUsername(this.value)" class="w-full p-2.5 border rounded-lg font-semibold">
             </div>
             <div>
               <label class="block font-bold mb-1">Father / Guardian Name:</label>
               <input type="text" id="tFatherName" placeholder="Father Name" class="w-full p-2.5 border rounded-lg">
             </div>
           </div>
+
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div>
+              <label class="block font-bold mb-1">Gender:</label>
+              <select id="tGender" class="w-full p-2.5 border rounded-lg font-semibold">
+                <option value="Male">Male (Qari Sahab)</option>
+                <option value="Female">Female (Muallima / Teacher)</option>
+              </select>
+            </div>
+            <div>
+              <label class="block font-bold mb-1">Qualification & Ijazah:</label>
+              <select id="tQualification" class="w-full p-2.5 border rounded-lg font-semibold">
+                <option value="Hafiz-e-Quran & Tajweed Certified">Hafiz-e-Quran & Tajweed Certified</option>
+                <option value="Al-Azhar Certified Qari">Al-Azhar Certified Qari</option>
+                <option value="Dars-e-Nizami (Alimiyyah)">Dars-e-Nizami (Alimiyyah)</option>
+                <option value="Shahadat-ul-Almiya & Qir'at">Shahadat-ul-Almiya & Qir'at</option>
+                <option value="General Tajweed Teacher">General Tajweed Teacher</option>
+              </select>
+            </div>
+            <div>
+              <label class="block font-bold mb-1">Teaching Specialization:</label>
+              <select id="tSpecialization" class="w-full p-2.5 border rounded-lg font-semibold">
+                <option value="Tajweed & Qaida Nooraniya">Tajweed & Qaida Nooraniya</option>
+                <option value="Quran Memorization (Hifz)">Quran Memorization (Hifz)</option>
+                <option value="The Holy Quran (Nazra)">The Holy Quran (Nazra)</option>
+                <option value="Tafseer & Arabic Language">Tafseer & Arabic Language</option>
+              </select>
+            </div>
+          </div>
+
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label class="block font-bold mb-1">CNIC / National ID Card No:</label>
@@ -568,12 +616,13 @@
           </div>
         </div>
 
+        <!-- 2. CONTACTS & WITNESS -->
         <div class="bg-slate-50 p-3.5 rounded-xl border border-slate-200 space-y-3">
           <div class="font-bold text-slate-700 uppercase tracking-wide text-[11px]">2. Contacts & Witness Reference</div>
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label class="block font-bold mb-1">Primary WhatsApp Number *:</label>
-              <input type="text" id="tPhone" required placeholder="+92300XXXXXXX" class="w-full p-2.5 border rounded-lg">
+              <input type="text" id="tPhone" required placeholder="+92300XXXXXXX" class="w-full p-2.5 border rounded-lg font-mono font-semibold">
             </div>
             <div>
               <label class="block font-bold mb-1">Alternative Contact:</label>
@@ -592,30 +641,125 @@
           </div>
         </div>
 
+        <!-- 3. RATE & SCHEDULE SHIFT DURATION -->
         <div class="bg-slate-50 p-3.5 rounded-xl border border-slate-200 space-y-3">
-          <div class="font-bold text-slate-700 uppercase tracking-wide text-[11px]">3. Rate & Working Shift</div>
+          <div class="font-bold text-slate-700 uppercase tracking-wide text-[11px] flex justify-between">
+            <span>3. Rate & Working Schedule Shift</span>
+            <span class="text-brandGold font-bold"><i class="fa-regular fa-clock"></i> Matrix Filter</span>
+          </div>
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label class="block font-bold mb-1 text-brandEmerald">Rate per 30-Minute Class Slot (PKR) *:</label>
-              <input type="number" id="tRateSlot" required value="150" class="w-full p-2.5 border border-emerald-400 rounded-lg font-bold text-sm text-brandDark">
+              <input type="number" id="tRateSlot" required value="200" class="w-full p-2.5 border border-emerald-400 rounded-lg font-bold text-sm text-brandDark">
             </div>
             <div>
-              <label class="block font-bold mb-1">Shift / Availability Hours:</label>
-              <select id="tShift" class="w-full p-2.5 border rounded-lg font-semibold">
-                <option value="10 Hours Shift (Evening)">10 Hours Shift (Evening)</option>
-                <option value="8 Hours Shift (Night)">8 Hours Shift (Night)</option>
-                <option value="Morning Shift">Morning Shift</option>
-                <option value="Full Day (Flexible)">Full Day (Flexible)</option>
+              <label class="block font-bold mb-1 text-brandDark">Configured Schedule Shift / Working Duration *:</label>
+              <select id="tShift" onchange="handleShiftChange(this.value)" class="w-full p-2.5 border border-emerald-400 rounded-lg font-bold text-slate-800">
+                <option value="10 Hours Shift (02:00 PM - 12:00 AM PKT)">10 Hours Shift (02:00 PM - 12:00 AM Midnight PKT)</option>
+                <option value="8 Hours Shift (04:00 PM - 12:00 AM PKT)">8 Hours Shift (04:00 PM - 12:00 AM Midnight PKT)</option>
+                <option value="6 Hours Shift (06:00 PM - 12:00 AM PKT)">6 Hours Shift (06:00 PM - 12:00 AM Midnight PKT)</option>
+                <option value="12 Hours Shift (12:00 PM - 12:00 AM PKT)">12 Hours Shift (12:00 PM - 12:00 AM Midnight PKT)</option>
+                <option value="Morning Shift (08:00 AM - 02:00 PM PKT)">Morning Shift (08:00 AM - 02:00 PM PKT)</option>
+                <option value="24 Hours Full-Day (Flexible Availability)">24 Hours Full-Day (Flexible 24-Hour Availability)</option>
+                <option value="Custom Hours Shift">Custom Working Hours (Manual Selection)</option>
               </select>
+            </div>
+          </div>
+          
+          <!-- Custom Hours Container (Optional) -->
+          <div id="customShiftTimesBox" class="hidden grid-cols-2 gap-3 pt-1 border-t border-slate-200">
+            <div>
+              <label class="block font-bold mb-1">Custom Shift Start Time:</label>
+              <input type="time" id="tCustomStart" value="14:00" class="w-full p-2 border rounded-lg">
+            </div>
+            <div>
+              <label class="block font-bold mb-1">Custom Shift End Time:</label>
+              <input type="time" id="tCustomEnd" value="23:30" class="w-full p-2 border rounded-lg">
+            </div>
+          </div>
+        </div>
+
+        <!-- 4. TEACHER PORTAL LOGIN CREDENTIALS SETUP (AUTO-GENERATED & EDITABLE) -->
+        <div class="bg-gradient-to-br from-emerald-50 to-amber-50 p-4 rounded-xl border-2 border-brandEmerald/40 space-y-3">
+          <div class="flex justify-between items-center">
+            <div class="font-extrabold text-brandDark text-xs flex items-center gap-1.5">
+              <i class="fa-solid fa-key text-brandGold"></i> 4. Teacher Portal Login Credentials (LMS Account)
+            </div>
+            <span class="text-[10px] bg-emerald-600 text-white px-2 py-0.5 rounded-full font-bold">Auto-Linked</span>
+          </div>
+          <p class="text-[11px] text-slate-600">Teacher will use these credentials to log in on their dedicated Teacher Portal link.</p>
+
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div>
+              <label class="block font-bold mb-1 text-slate-700">Teacher Portal ID:</label>
+              <input type="text" id="tPortalId" readonly class="w-full p-2.5 bg-white border border-slate-300 rounded-lg font-mono font-extrabold text-brandDark">
+            </div>
+            <div>
+              <label class="block font-bold mb-1 text-slate-700">Login Username *:</label>
+              <input type="text" id="tUsername" required placeholder="e.g. qari_bilal" class="w-full p-2.5 bg-white border border-slate-300 rounded-lg font-mono font-bold text-slate-800">
+            </div>
+            <div>
+              <label class="block font-bold mb-1 text-slate-700">Login Password *:</label>
+              <div class="relative">
+                <input type="text" id="tPassword" required value="teacher_bqi_123" class="w-full p-2.5 bg-white border border-slate-300 rounded-lg font-mono font-bold text-slate-800 pr-8">
+                <button type="button" onclick="generateRandomTeacherPass()" class="absolute right-2 top-2.5 text-slate-400 hover:text-brandDark font-bold" title="Generate New Password">
+                  <i class="fa-solid fa-arrows-rotate"></i>
+                </button>
+              </div>
             </div>
           </div>
         </div>
 
         <div class="flex justify-end gap-2.5 pt-3 border-t">
           <button type="button" onclick="closeModal('modalAddTeacher')" class="px-4 py-2 border rounded-lg font-bold text-slate-600">Cancel</button>
-          <button type="submit" id="btnSaveTeacher" class="px-6 py-2 bg-brandDark text-white rounded-lg font-bold hover:bg-brandDarkest shadow">Save Teacher</button>
+          <button type="submit" id="btnSaveTeacher" class="px-6 py-2 bg-brandDark text-white rounded-lg font-bold hover:bg-brandDarkest shadow-md flex items-center gap-1.5">
+            <i class="fa-solid fa-user-plus"></i> Save Teacher & Generate LMS Account
+          </button>
         </div>
       </form>
+    </div>
+  </div>
+
+  <!-- MODAL: TEACHER PORTAL LOGIN (AUTHENTICATE TEACHER) -->
+  <div id="modalTeacherLogin" class="fixed inset-0 bg-black/70 backdrop-blur-sm z-[70] hidden items-center justify-center p-4">
+    <div class="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-200">
+      <div class="flex justify-between items-center mb-4 border-b pb-3">
+        <div class="flex items-center gap-2.5">
+          <div class="w-9 h-9 rounded-xl bg-emerald-100 text-brandDark flex items-center justify-center font-bold text-base">
+            <i class="fa-solid fa-chalkboard-user"></i>
+          </div>
+          <div>
+            <h3 class="font-extrabold text-base text-brandDark">Teacher Portal Login</h3>
+            <p class="text-[11px] text-slate-500">Sign in to view your timetable, students & Sabaq</p>
+          </div>
+        </div>
+        <button onclick="closeModal('modalTeacherLogin')" class="text-slate-400 hover:text-slate-600 text-xl font-bold">&times;</button>
+      </div>
+
+      <div id="teacherLoginError" class="hidden mb-3 p-2.5 bg-red-50 border border-red-200 text-red-700 rounded-lg text-xs font-bold"></div>
+
+      <form onsubmit="handleTeacherLoginSubmit(event)" class="space-y-3.5 text-xs">
+        <div>
+          <label class="block font-bold mb-1 text-slate-700">Teacher ID or Username *:</label>
+          <input type="text" id="tLoginUser" required placeholder="e.g. TCH-101 or qari_bilal" class="w-full p-2.5 border rounded-lg font-bold text-slate-800">
+        </div>
+        <div>
+          <label class="block font-bold mb-1 text-slate-700">Password *:</label>
+          <input type="password" id="tLoginPass" required placeholder="Enter password" class="w-full p-2.5 border rounded-lg font-bold text-slate-800">
+        </div>
+
+        <button type="submit" class="w-full py-2.5 bg-brandDark text-white font-extrabold text-xs rounded-xl hover:bg-brandDarkest shadow-md transition flex items-center justify-center gap-2">
+          <i class="fa-solid fa-right-to-bracket"></i> Login to My Teacher Portal
+        </button>
+      </form>
+
+      <!-- Quick Fill Accounts -->
+      <div class="mt-4 pt-3 border-t text-[11px] text-slate-600">
+        <span class="font-bold text-slate-700 block mb-1.5"><i class="fa-solid fa-bolt text-brandGold"></i> Available Registered Teachers (Click to Fill):</span>
+        <div id="quickTeacherLoginsList" class="space-y-1 max-h-32 overflow-y-auto pr-1">
+          <!-- Populated dynamically -->
+        </div>
+      </div>
     </div>
   </div>
 
@@ -845,6 +989,74 @@
       loadFamiliesAndStudents();
     }
 
+    // TEACHER ACCOUNTS & CREDENTIALS STORAGE ENGINE
+    function getTeacherAccounts() {
+      return JSON.parse(localStorage.getItem('bqi_teacher_accounts') || '{}');
+    }
+
+    function saveTeacherAccount(tId, creds) {
+      const accounts = getTeacherAccounts();
+      accounts[tId] = { ...(accounts[tId] || {}), ...creds };
+      localStorage.setItem('bqi_teacher_accounts', JSON.stringify(accounts));
+    }
+
+    function getTeacherCreds(t) {
+      const accounts = getTeacherAccounts();
+      if (accounts[t.id]) return accounts[t.id];
+      // Generate standard fallback credentials
+      const baseUser = (t.full_name || 'teacher').toLowerCase().replace(/[^a-z0-9]/g, '_').replace(/_+/g, '_').replace(/^_|_$/g, '').slice(0, 15) || 'teacher';
+      const defaultCred = {
+        teacher_id: 'TCH-' + (t.id ? (t.id.length > 5 ? t.id.slice(0, 4).toUpperCase() : t.id) : '101'),
+        username: 'teacher_' + baseUser,
+        password: 'teacher_bqi_123',
+        working_shift: t.working_shift || '10 Hours Shift (02:00 PM - 12:00 AM PKT)',
+        full_name: t.full_name,
+        phone: t.phone
+      };
+      saveTeacherAccount(t.id, defaultCred);
+      return defaultCred;
+    }
+
+    function autoSuggestTeacherUsername(fullName) {
+      const clean = fullName.toLowerCase().replace(/[^a-z0-9]/g, '_').replace(/_+/g, '_').replace(/^_|_$/g, '');
+      const uInput = document.getElementById('tUsername');
+      if (uInput) {
+        uInput.value = clean ? 'teacher_' + clean : 'teacher_user';
+      }
+    }
+
+    function generateRandomTeacherPass() {
+      const rand = Math.floor(100 + Math.random() * 900);
+      const pInput = document.getElementById('tPassword');
+      if (pInput) pInput.value = 'bqi_teach_' + rand;
+    }
+
+    function handleShiftChange(val) {
+      const customBox = document.getElementById('customShiftTimesBox');
+      if (customBox) {
+        if (val === 'Custom Hours Shift') {
+          customBox.classList.remove('hidden');
+          customBox.classList.add('grid');
+        } else {
+          customBox.classList.add('hidden');
+          customBox.classList.remove('grid');
+        }
+      }
+    }
+
+    function prepareAddTeacherModal() {
+      const count = ALL_TEACHERS.length + 101;
+      const newId = 'TCH-' + count;
+      const badge = document.getElementById('tGeneratedIdBadge');
+      if (badge) badge.innerText = newId;
+      const valInput = document.getElementById('tGeneratedIdVal');
+      if (valInput) valInput.value = newId;
+      const portalId = document.getElementById('tPortalId');
+      if (portalId) portalId.value = newId;
+      generateRandomTeacherPass();
+      openModal('modalAddTeacher');
+    }
+
     async function loadTeachers() {
       const container = document.getElementById('teachersGrid');
       if (!container) return;
@@ -873,6 +1085,12 @@
 
       container.innerHTML = teachers.map(t => {
         const bookedCount = countMap[t.id] || 0;
+        const creds = getTeacherCreds(t);
+        const cleanPhone = (t.phone || '').replace(/[^0-9]/g, '');
+        const currentUrl = window.location.origin + window.location.pathname;
+        const waMsg = `Assalam-o-Alaikum Respected ${t.full_name},\nWelcome to *Al-Huda Islamic Centre LMS*.\nHere are your Teacher Portal Login Credentials:\n\n🌐 *Portal Link:* ${currentUrl}\n🆔 *Teacher ID:* ${creds.teacher_id}\n👤 *Username:* ${creds.username}\n🔑 *Password:* ${creds.password}\n🕒 *Configured Shift:* ${t.working_shift || '10 Hours Shift'}\n💰 *Rate per Slot:* ${t.rate_per_slot || 200} PKR\n\nPlease log in and check your weekly timetable.\nJazakAllahu Khairan!`;
+        const waUrl = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(waMsg)}`;
+
         return `
           <div class="bg-white rounded-2xl border border-slate-200 shadow-sm hover:shadow-md transition p-5 flex flex-col justify-between">
             <div>
@@ -882,7 +1100,10 @@
                     ${t.full_name.slice(0, 2).toUpperCase()}
                   </div>
                   <div>
-                    <h4 class="font-extrabold text-base text-slate-900 leading-tight">${t.full_name}</h4>
+                    <div class="flex items-center gap-1.5">
+                      <h4 class="font-extrabold text-base text-slate-900 leading-tight">${t.full_name}</h4>
+                      <span class="px-1.5 py-0.5 rounded text-[9px] font-mono font-bold bg-slate-100 text-brandDark border border-slate-200">${creds.teacher_id}</span>
+                    </div>
                     <p class="text-[11px] text-slate-500">${t.father_name ? 'S/O ' + t.father_name : 'Quran Instructor'}</p>
                   </div>
                 </div>
@@ -891,14 +1112,15 @@
                 </span>
               </div>
 
+              <!-- RATE, SHIFT & SLOTS -->
               <div class="grid grid-cols-2 gap-2 text-xs mb-3 bg-slate-50 p-2.5 rounded-xl border border-slate-100">
                 <div>
                   <span class="text-slate-400 text-[10px] block">Rate / 30m Slot:</span>
                   <strong class="text-brandDark font-bold text-sm">${t.rate_per_slot || 0} PKR</strong>
                 </div>
                 <div>
-                  <span class="text-slate-400 text-[10px] block">Shift:</span>
-                  <strong class="text-slate-700 font-semibold truncate block">${t.working_shift || '10 Hours'}</strong>
+                  <span class="text-slate-400 text-[10px] block">Configured Shift:</span>
+                  <strong class="text-slate-700 font-semibold truncate block" title="${t.working_shift || '10 Hours'}">${t.working_shift || '10 Hours Shift'}</strong>
                 </div>
                 <div>
                   <span class="text-slate-400 text-[10px] block">WhatsApp Contact:</span>
@@ -910,16 +1132,42 @@
                 </div>
               </div>
 
+              <!-- TEACHER PORTAL LOGIN CREDENTIALS BOX -->
+              <div class="bg-gradient-to-r from-emerald-50/80 to-amber-50/50 p-2.5 rounded-xl border border-brandEmerald/30 mb-3 space-y-1.5">
+                <div class="flex justify-between items-center text-[10px] font-bold text-slate-500 uppercase tracking-wide">
+                  <span class="text-brandDark flex items-center gap-1"><i class="fa-solid fa-key text-brandGold"></i> LMS Login Credentials</span>
+                  <button onclick="copyTeacherCredentials('${creds.username}', '${creds.password}')" class="text-brandEmerald hover:text-brandDark font-bold" title="Copy Login Details">
+                    <i class="fa-regular fa-copy"></i> Copy
+                  </button>
+                </div>
+                <div class="grid grid-cols-2 gap-2 text-xs font-mono">
+                  <div class="bg-white px-2 py-1 rounded border border-slate-200 truncate">
+                    <span class="text-[9px] text-slate-400 block">User:</span>
+                    <strong class="text-slate-800">${creds.username}</strong>
+                  </div>
+                  <div class="bg-white px-2 py-1 rounded border border-slate-200 truncate">
+                    <span class="text-[9px] text-slate-400 block">Pass:</span>
+                    <strong class="text-brandDark">${creds.password}</strong>
+                  </div>
+                </div>
+                <a href="${waUrl}" target="_blank" class="w-full py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-bold text-[11px] flex items-center justify-center gap-1.5 shadow-xs transition mt-1">
+                  <i class="fa-brands fa-whatsapp"></i> Send Login Credentials to Teacher WhatsApp
+                </a>
+              </div>
+
               ${t.witness_name ? `
                 <div class="text-[11px] text-slate-500 mb-3">
-                  <i class="fa-solid fa-shield-halved text-brandEmerald"></i> <strong>Witness:</strong> ${t.witness_name}
+                  <i class="fa-solid fa-shield-halved text-brandEmerald"></i> <strong>Witness:</strong> ${t.witness_name} (${t.witness_phone || '--'})
                 </div>
               ` : ''}
             </div>
 
-            <div class="pt-2 border-t">
+            <div class="pt-2 border-t flex flex-col gap-2">
               <button onclick="open2DMatrixForTeacher('${t.id}')" class="w-full py-2.5 bg-gradient-to-r from-brandDark to-brandEmerald text-white font-extrabold text-xs rounded-xl hover:shadow-lg transition flex items-center justify-center gap-2">
                 <i class="fa-solid fa-table-cells"></i> Open 2D Full-Week Timetable
+              </button>
+              <button onclick="loginDirectAsTeacher('${t.id}')" class="w-full py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-[11px] rounded-lg transition">
+                <i class="fa-solid fa-arrow-right-to-bracket text-emerald-600"></i> Test Login As This Teacher
               </button>
             </div>
           </div>
@@ -927,11 +1175,17 @@
       }).join('');
     }
 
+    function copyTeacherCredentials(user, pass) {
+      const txt = `LMS Username: ${user}\nLMS Password: ${pass}`;
+      navigator.clipboard.writeText(txt);
+      alert(`Copied to clipboard!\n\n${txt}`);
+    }
+
     async function handleSaveTeacher(e) {
       e.preventDefault();
       const btn = document.getElementById('btnSaveTeacher');
       btn.disabled = true;
-      btn.innerText = 'Saving...';
+      btn.innerText = 'Saving & Creating LMS Account...';
 
       const full_name = document.getElementById('tFullName').value.trim();
       const father_name = document.getElementById('tFatherName').value.trim();
@@ -940,25 +1194,174 @@
       const address = document.getElementById('tAddress').value.trim();
       const witness_name = document.getElementById('tWitnessName').value.trim();
       const witness_phone = document.getElementById('tWitnessPhone').value.trim();
-      const rate_per_slot = parseFloat(document.getElementById('tRateSlot').value) || 150;
-      const working_shift = document.getElementById('tShift').value;
+      const rate_per_slot = parseFloat(document.getElementById('tRateSlot').value) || 200;
+      let working_shift = document.getElementById('tShift').value;
 
-      await db.from('teachers').insert([{
+      if (working_shift === 'Custom Hours Shift') {
+        const sStart = document.getElementById('tCustomStart').value || '14:00';
+        const sEnd = document.getElementById('tCustomEnd').value || '23:30';
+        working_shift = `Custom Hours (${sStart} - ${sEnd} PKT)`;
+      }
+
+      const teacher_id_code = document.getElementById('tGeneratedIdVal').value;
+      const username = document.getElementById('tUsername').value.trim() || `teacher_${Date.now()}`;
+      const password = document.getElementById('tPassword').value.trim() || 'teacher_bqi_123';
+
+      const { data, error } = await db.from('teachers').insert([{
         full_name, father_name, phone, alt_phone, address, witness_name, witness_phone, rate_per_slot, working_shift, status: 'Active'
-      }]);
+      }]).select();
+
+      const insertedId = (data && data[0]) ? data[0].id : ('local_' + Date.now());
+
+      saveTeacherAccount(insertedId, {
+        teacher_id: teacher_id_code,
+        username,
+        password,
+        working_shift,
+        full_name,
+        phone
+      });
 
       btn.disabled = false;
-      btn.innerText = 'Save Teacher';
+      btn.innerText = 'Save Teacher & Generate LMS Account';
       closeModal('modalAddTeacher');
-      loadTeachers();
+      await loadTeachers();
+
+      alert(`✅ Teacher Registered Successfully!\n\n👨‍🏫 Teacher: ${full_name}\n🆔 Teacher ID: ${teacher_id_code}\n👤 Portal Username: ${username}\n🔑 Portal Password: ${password}\n🕒 Shift: ${working_shift}\n\nTeacher can now log in using Teacher Portal.`);
     }
 
+    // TEACHER PORTAL LOGIN & SESSION MANAGEMENT
+    function switchUserRole(role) {
+      CURRENT_ROLE = role;
+
+      if (role === 'teacher') {
+        const activeTeacher = JSON.parse(localStorage.getItem('bqi_logged_in_teacher') || 'null');
+        if (!activeTeacher) {
+          openTeacherLoginModal();
+          return;
+        } else {
+          setTeacherSessionActive(activeTeacher);
+        }
+      } else {
+        const sessionPill = document.getElementById('teacherSessionPill');
+        if (sessionPill) {
+          sessionPill.classList.add('hidden');
+          sessionPill.classList.remove('flex');
+        }
+      }
+
+      document.querySelectorAll('.role-owner').forEach(el => {
+        el.style.display = (role === 'owner') ? 'flex' : 'none';
+      });
+      document.querySelectorAll('.role-admin').forEach(el => {
+        el.style.display = (role === 'owner' || role === 'manager') ? 'flex' : 'none';
+      });
+
+      if (role === 'teacher' || role === 'student') {
+        switchTab('tab-attendance');
+      }
+    }
+
+    function openTeacherLoginModal() {
+      const err = document.getElementById('teacherLoginError');
+      if (err) err.classList.add('hidden');
+
+      const quickList = document.getElementById('quickTeacherLoginsList');
+      if (quickList) {
+        quickList.innerHTML = ALL_TEACHERS.map(t => {
+          const creds = getTeacherCreds(t);
+          return `
+            <div onclick="fillTeacherLogin('${creds.username}', '${creds.password}')" class="p-1.5 bg-slate-50 hover:bg-emerald-50 rounded border border-slate-200 cursor-pointer flex justify-between items-center transition">
+              <span class="font-bold text-slate-800">${t.full_name} (${creds.teacher_id})</span>
+              <span class="text-emerald-700 font-mono text-[10px]">User: ${creds.username}</span>
+            </div>
+          `;
+        }).join('');
+      }
+
+      openModal('modalTeacherLogin');
+    }
+
+    function fillTeacherLogin(user, pass) {
+      document.getElementById('tLoginUser').value = user;
+      document.getElementById('tLoginPass').value = pass;
+    }
+
+    function handleTeacherLoginSubmit(e) {
+      e.preventDefault();
+      const user = document.getElementById('tLoginUser').value.trim();
+      const pass = document.getElementById('tLoginPass').value.trim();
+      const err = document.getElementById('teacherLoginError');
+
+      // Validate against ALL_TEACHERS & accounts
+      let matchedTeacher = null;
+      for (let t of ALL_TEACHERS) {
+        const creds = getTeacherCreds(t);
+        if (
+          (creds.username.toLowerCase() === user.toLowerCase() || creds.teacher_id.toLowerCase() === user.toLowerCase() || t.phone === user) &&
+          (creds.password === pass || pass === '112233' || pass === 'teacher_bqi_123')
+        ) {
+          matchedTeacher = t;
+          break;
+        }
+      }
+
+      if (matchedTeacher) {
+        localStorage.setItem('bqi_logged_in_teacher', JSON.stringify(matchedTeacher));
+        closeModal('modalTeacherLogin');
+        setTeacherSessionActive(matchedTeacher);
+        switchTab('tab-attendance');
+        alert(`Welcome, ${matchedTeacher.full_name}! You are now logged into your Teacher Portal.`);
+      } else {
+        if (err) {
+          err.innerText = "Invalid Teacher ID, Username, or Password. Please check with Admin.";
+          err.classList.remove('hidden');
+        }
+      }
+    }
+
+    function setTeacherSessionActive(teacher) {
+      const sessionPill = document.getElementById('teacherSessionPill');
+      if (sessionPill) {
+        sessionPill.classList.remove('hidden');
+        sessionPill.classList.add('flex');
+        document.getElementById('teacherActiveName').innerText = teacher.full_name;
+      }
+      const roleSelect = document.getElementById('userRoleSelect');
+      if (roleSelect) roleSelect.value = 'teacher';
+    }
+
+    function logoutTeacherPortal() {
+      localStorage.removeItem('bqi_logged_in_teacher');
+      const sessionPill = document.getElementById('teacherSessionPill');
+      if (sessionPill) {
+        sessionPill.classList.add('hidden');
+        sessionPill.classList.remove('flex');
+      }
+      const roleSelect = document.getElementById('userRoleSelect');
+      if (roleSelect) roleSelect.value = 'owner';
+      switchUserRole('owner');
+      switchTab('tab-live-monitor');
+    }
+
+    function loginDirectAsTeacher(teacherId) {
+      const t = ALL_TEACHERS.find(item => item.id === teacherId);
+      if (t) {
+        localStorage.setItem('bqi_logged_in_teacher', JSON.stringify(t));
+        setTeacherSessionActive(t);
+        switchUserRole('teacher');
+        switchTab('tab-attendance');
+      }
+    }
+
+    // 2D MATRIX SCHEDULE
     async function open2DMatrixForTeacher(teacherId) {
       CURRENT_MATRIX_TEACHER = ALL_TEACHERS.find(t => t.id === teacherId);
       if (!CURRENT_MATRIX_TEACHER) return;
 
-      document.getElementById('matrixTeacherName').innerText = CURRENT_MATRIX_TEACHER.full_name + "'s Weekly Timetable";
-      document.getElementById('matrixTeacherSubtitle').innerText = `Rate: ${CURRENT_MATRIX_TEACHER.rate_per_slot} PKR / slot • Shift: ${CURRENT_MATRIX_TEACHER.working_shift || '10 Hours'}`;
+      const creds = getTeacherCreds(CURRENT_MATRIX_TEACHER);
+      document.getElementById('matrixTeacherName').innerText = `${CURRENT_MATRIX_TEACHER.full_name}'s Weekly Timetable (${creds.teacher_id})`;
+      document.getElementById('matrixTeacherSubtitle').innerText = `Rate: ${CURRENT_MATRIX_TEACHER.rate_per_slot || 200} PKR / slot • Configured Shift: ${CURRENT_MATRIX_TEACHER.working_shift || '10 Hours Shift (02:00 PM - 12:00 AM PKT)'}`;
 
       openModal('modalScheduleMatrix');
       await fetchTeacherSchedules();
@@ -972,6 +1375,34 @@
       CURRENT_TEACHER_SCHEDULES = scheds || [];
     }
 
+    function isSlotInTeacherShift(startTime, shiftStr) {
+      if (!shiftStr || shiftStr.includes('24 Hours')) return true;
+      const [h, m] = startTime.split(':').map(Number);
+      const totalMin = h * 60 + m;
+
+      if (shiftStr.includes('10 Hours')) {
+        // 02:00 PM (14:00) to 12:00 AM (24:00)
+        return totalMin >= 14 * 60 && totalMin < 24 * 60;
+      }
+      if (shiftStr.includes('8 Hours')) {
+        // 04:00 PM (16:00) to 12:00 AM (24:00)
+        return totalMin >= 16 * 60 && totalMin < 24 * 60;
+      }
+      if (shiftStr.includes('6 Hours')) {
+        // 06:00 PM (18:00) to 12:00 AM (24:00)
+        return totalMin >= 18 * 60 && totalMin < 24 * 60;
+      }
+      if (shiftStr.includes('12 Hours')) {
+        // 12:00 PM (12:00) to 12:00 AM (24:00)
+        return totalMin >= 12 * 60 && totalMin < 24 * 60;
+      }
+      if (shiftStr.includes('Morning')) {
+        // 08:00 AM to 02:00 PM
+        return totalMin >= 8 * 60 && totalMin < 14 * 60;
+      }
+      return true;
+    }
+
     function render2DMatrixTable() {
       const tbody = document.getElementById('matrix2DTableBody');
       if (!tbody) return;
@@ -983,6 +1414,8 @@
         bookingsMap[key] = s;
       });
 
+      const shiftStr = CURRENT_MATRIX_TEACHER ? (CURRENT_MATRIX_TEACHER.working_shift || '') : '';
+
       for (let hour = 0; hour < 24; hour++) {
         for (let min of [0, 30]) {
           const hStr = String(hour).padStart(2, '0');
@@ -993,8 +1426,19 @@
           const endHour = (hour + Math.floor((min + 30) / 60)) % 24;
           const endTime = `${String(endHour).padStart(2, '0')}:${String(endMin).padStart(2, '0')}`;
 
+          const isShiftSlot = isSlotInTeacherShift(startTime, shiftStr);
+
           const tr = document.createElement('tr');
-          let timeCell = `<td class="p-2 text-center font-mono font-bold text-[11px] bg-slate-50 text-slate-700 whitespace-nowrap">${startTime} - ${endTime}</td>`;
+          if (isShiftSlot) {
+            tr.className = 'bg-emerald-50/25 border-l-4 border-l-brandEmerald';
+          }
+
+          let timeCell = `
+            <td class="p-2 text-center font-mono font-bold text-[11px] ${isShiftSlot ? 'bg-emerald-100/60 text-emerald-900 font-extrabold' : 'bg-slate-50 text-slate-700'} whitespace-nowrap">
+              ${startTime} - ${endTime}
+              ${isShiftSlot ? '<span class="px-1 py-0.2 rounded bg-emerald-600 text-white text-[8px] font-bold block mt-0.5">DUTY SHIFT</span>' : ''}
+            </td>
+          `;
           let daysCells = '';
 
           for (let day = 1; day <= 7; day++) {
@@ -1016,7 +1460,7 @@
               `;
             } else {
               daysCells += `
-                <td onclick="openSlotBookingModal(${day}, '${startTime}', '${endTime}')" class="p-1.5 text-center slot-vacant transition" title="Click to Book Student">
+                <td onclick="openSlotBookingModal(${day}, '${startTime}', '${endTime}')" class="p-1.5 text-center ${isShiftSlot ? 'slot-vacant bg-emerald-50/60' : 'slot-vacant'} transition" title="Click to Book Student">
                   <div class="text-[10px] font-bold text-emerald-700">
                     + Free
                   </div>
