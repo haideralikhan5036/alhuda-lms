@@ -1350,20 +1350,6 @@
       setInterval(loadDashboardData, 30000);
     };
 
-    function switchUserRole(role) {
-      CURRENT_ROLE = role;
-      document.querySelectorAll('.role-owner').forEach(el => {
-        el.style.display = (role === 'owner') ? 'flex' : 'none';
-      });
-      document.querySelectorAll('.role-admin').forEach(el => {
-        el.style.display = (role === 'owner' || role === 'manager') ? 'flex' : 'none';
-      });
-
-      if (role === 'teacher' || role === 'student') {
-        switchTab('tab-attendance');
-      }
-    }
-
     function switchTab(tabId) {
       document.querySelectorAll('.nav-tab').forEach(btn => {
         btn.classList.remove('active', 'bg-brandDark', 'text-white', 'shadow');
@@ -2296,8 +2282,6 @@
       const pInput = document.getElementById('famPassword');
       if (pInput) pInput.value = 'alhuda_' + rand;
     }
-
-    let ALL_FAMILIES = [];
 
     function getNextFamilyId() {
       const existingNums = [];
