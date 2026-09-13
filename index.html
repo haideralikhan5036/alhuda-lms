@@ -201,7 +201,6 @@
         </div>
       </div>
 
-      <!-- DIRECTORY LIST CONTAINER -->
       <div id="familiesCardsContainer" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         <!-- Family Cards populated via JS -->
       </div>
@@ -412,7 +411,6 @@
           <select id="bookStudentSelect" required class="w-full p-2.5 border rounded-lg font-semibold"></select>
         </div>
 
-        <!-- RECURRING REPEAT OPTIONS (THE USER'S REQUEST) -->
         <div class="bg-slate-50 p-3 rounded-xl border border-slate-200 space-y-2">
           <label class="block font-bold text-slate-700"><i class="fa-solid fa-repeat text-brandEmerald"></i> Weekly Repeat Schedule:</label>
           <div class="space-y-1.5">
@@ -623,9 +621,6 @@
 
   <!-- JAVASCRIPT APPLICATION LOGIC -->
   <script>
-    // -------------------------------------------------------------
-    // SUPABASE CLIENT INITIALIZATION
-    // -------------------------------------------------------------
     const SUPABASE_URL = "https://ldgzuyroejzrvktksugy.supabase.co";
     const SUPABASE_KEY = "sb_publishable_rP38XXgYoYBTPJlCxtwMUg_RPupFrKg";
     const db = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
@@ -639,31 +634,25 @@
     const DAY_NAMES = ['', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 
     window.onload = function() {
-      // Live Clock
       setInterval(() => {
         const now = new Date();
         const el = document.getElementById('liveClock');
         if (el) el.innerText = now.toLocaleTimeString('en-US', { timeZone: 'Asia/Karachi' }) + ' PKT';
       }, 1000);
 
-      // Default attendance date
       const today = new Date().toISOString().slice(0, 10);
-      document.getElementById('attendanceDateSelect').value = today;
+      const attDateInput = document.getElementById('attendanceDateSelect');
+      if (attDateInput) attDateInput.value = today;
 
-      // Master initial loaders
       loadLiveMonitorData();
       loadFamiliesAndStudents();
       loadTeachers();
       loadCourses();
       loadFeeBillingLedger();
 
-      // Auto-refresh live monitor every 30s
       setInterval(loadLiveMonitorData, 30000);
     };
 
-    // -------------------------------------------------------------
-    // ROLE SWITCHER
-    // -------------------------------------------------------------
     function switchUserRole(role) {
       CURRENT_ROLE = role;
       document.querySelectorAll('.role-owner').forEach(el => {
@@ -679,8 +668,10 @@
     }
 
     function switchTab(tabId) {
-      document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
-      document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('block'));
+      document.querySelectorAll('.tab-content').forEach(el => {
+        el.classList.add('hidden');
+        el.classList.remove('block');
+      });
 
       const target = document.getElementById(tabId);
       if (target) {
@@ -695,11 +686,9 @@
       if (tabId === 'tab-invoices') loadFeeBillingLedger();
     }
 
-    // -------------------------------------------------------------
-    // 1. LIVE MONITOR ENGINE
-    // -------------------------------------------------------------
     async function loadLiveMonitorData() {
       const tbody = document.getElementById('liveMonitorTableBody');
+      if (!tbody) return;
       const now = new Date();
       const currentDay = now.getDay() === 0 ? 7 : now.getDay();
       const todayDate = now.toISOString().slice(0, 10);
@@ -784,11 +773,9 @@
       document.getElementById('kpiRemaining').innerText = remainingCount;
     }
 
-    // -------------------------------------------------------------
-    // 2. FAMILIES & SIBLINGS DIRECTORY
-    // -------------------------------------------------------------
     async function loadFamiliesAndStudents() {
       const container = document.getElementById('familiesCardsContainer');
+      if (!container) return;
       const { data: families } = await db.from('families').select('*, students(*)');
 
       const famSelect = document.getElementById('stuFamilyId');
@@ -858,20 +845,16 @@
       loadFamiliesAndStudents();
     }
 
-    // -------------------------------------------------------------
-    // 3. TEACHERS & CONTRACTS
-    // -------------------------------------------------------------
     async function loadTeachers() {
       const container = document.getElementById('teachersGrid');
+      if (!container) return;
       const { data: teachers } = await db.from('teachers').select('*').order('created_at', { ascending: false });
       ALL_TEACHERS = teachers || [];
 
-      // Student count
       const { data: scheds } = await db.from('class_schedules').select('teacher_id, student_id');
       const countMap = {};
       (scheds || []).forEach(s => countMap[s.teacher_id] = (countMap[s.teacher_id] || 0) + 1);
 
-      // Populate student assign teacher dropdown
       const sTeacherSelect = document.getElementById('stuTeacherId');
       if (sTeacherSelect) {
         sTeacherSelect.innerHTML = (teachers || []).map(t => `<option value="${t.id}">${t.full_name} (${t.rate_per_slot} PKR)</option>`).join('');
@@ -934,7 +917,6 @@
               ` : ''}
             </div>
 
-            <!-- Primary Action Button to Open 2D Timetable -->
             <div class="pt-2 border-t">
               <button onclick="open2DMatrixForTeacher('${t.id}')" class="w-full py-2.5 bg-gradient-to-r from-brandDark to-brandEmerald text-white font-extrabold text-xs rounded-xl hover:shadow-lg transition flex items-center justify-center gap-2">
                 <i class="fa-solid fa-table-cells"></i> Open 2D Full-Week Timetable
@@ -971,9 +953,6 @@
       loadTeachers();
     }
 
-    // -------------------------------------------------------------
-    // 4. ADVANCED 2D WEEKLY MATRIX (TIME ROWS & MON-SUN COLUMNS)
-    // -------------------------------------------------------------
     async function open2DMatrixForTeacher(teacherId) {
       CURRENT_MATRIX_TEACHER = ALL_TEACHERS.find(t => t.id === teacherId);
       if (!CURRENT_MATRIX_TEACHER) return;
@@ -995,16 +974,15 @@
 
     function render2DMatrixTable() {
       const tbody = document.getElementById('matrix2DTableBody');
+      if (!tbody) return;
       tbody.innerHTML = '';
 
-      // Map existing bookings: key = "day_time" e.g. "1_17:00"
       const bookingsMap = {};
       CURRENT_TEACHER_SCHEDULES.forEach(s => {
         const key = `${s.day_of_week}_${s.start_time.slice(0, 5)}`;
         bookingsMap[key] = s;
       });
 
-      // Generate 48 Half-Hour Rows (00:00 to 23:30)
       for (let hour = 0; hour < 24; hour++) {
         for (let min of [0, 30]) {
           const hStr = String(hour).padStart(2, '0');
@@ -1016,18 +994,14 @@
           const endTime = `${String(endHour).padStart(2, '0')}:${String(endMin).padStart(2, '0')}`;
 
           const tr = document.createElement('tr');
-          
-          // Column 1: Time Interval Label
           let timeCell = `<td class="p-2 text-center font-mono font-bold text-[11px] bg-slate-50 text-slate-700 whitespace-nowrap">${startTime} - ${endTime}</td>`;
           let daysCells = '';
 
-          // Columns 2 to 8: Monday (1) to Sunday (7)
           for (let day = 1; day <= 7; day++) {
             const key = `${day}_${startTime}`;
             const slot = bookingsMap[key];
 
             if (slot) {
-              // BOOKED SLOT CELL
               daysCells += `
                 <td class="p-1.5 text-center bg-blue-50/70 border border-blue-200">
                   <div class="flex flex-col justify-between p-1 rounded bg-white shadow-xs border border-blue-300">
@@ -1041,7 +1015,6 @@
                 </td>
               `;
             } else {
-              // FREE VACANT SLOT CELL
               daysCells += `
                 <td onclick="openSlotBookingModal(${day}, '${startTime}', '${endTime}')" class="p-1.5 text-center slot-vacant transition" title="Click to Book Student">
                   <div class="text-[10px] font-bold text-emerald-700">
@@ -1058,9 +1031,6 @@
       }
     }
 
-    // -------------------------------------------------------------
-    // 5. BOOK STUDENT (SINGLE DAY VS MON-TO-FRI REPEAT)
-    // -------------------------------------------------------------
     let ACTIVE_DAY = 1;
     let ACTIVE_START_TIME = '';
     let ACTIVE_END_TIME = '';
@@ -1098,17 +1068,15 @@
         return;
       }
 
-      // Determine days array based on repeat option
       let targetDays = [ACTIVE_DAY];
       if (repeatOption === 'mon_to_fri') {
-        targetDays =; // Mon, Tue, Wed, Thu, Fri
+        targetDays =;
       } else if (repeatOption === 'all_week') {
-        targetDays =; // All 7 days
+        targetDays =;
       } else if (repeatOption === 'weekend') {
-        targetDays =; // Sat, Sun
+        targetDays =;
       }
 
-      // Prepare rows for Supabase insert
       const rows = targetDays.map(d => ({
         student_id,
         teacher_id: CURRENT_MATRIX_TEACHER.id,
@@ -1140,12 +1108,11 @@
       }
     }
 
-    // -------------------------------------------------------------
-    // 6. ATTENDANCE & LESSON NOTES
-    // -------------------------------------------------------------
     async function loadAttendanceList() {
       const tbody = document.getElementById('attendanceTableBody');
-      const date = document.getElementById('attendanceDateSelect').value;
+      if (!tbody) return;
+      const dateInput = document.getElementById('attendanceDateSelect');
+      const date = dateInput ? dateInput.value : new Date().toISOString().slice(0, 10);
       const dObj = new Date(date);
       const day = dObj.getDay() === 0 ? 7 : dObj.getDay();
 
@@ -1208,11 +1175,9 @@
       loadLiveMonitorData();
     }
 
-    // -------------------------------------------------------------
-    // 7. AUTO-SALARIES & FEE BILLING (OWNER ONLY)
-    // -------------------------------------------------------------
     async function calculateMonthlySalaries() {
       const tbody = document.getElementById('salariesTableBody');
+      if (!tbody) return;
       tbody.innerHTML = '<tr><td colspan="6" class="p-6 text-center text-slate-400">Computing attendance payroll...</td></tr>';
 
       const { data: teachers } = await db.from('teachers').select('*');
@@ -1235,6 +1200,7 @@
             <td class="p-3 font-black text-sm text-brandDark">${grossSalary.toLocaleString()} PKR</td>
             <td class="p-3"><span class="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800">Pending Transfer</span></td>
             <td class="p-3 text-right">
+              <button class="px-3 py-1 bg-brand class="p-3 text-right">
               <button class="px-3 py-1 bg-brandDark text-white rounded text-xs font-bold hover:bg-brandDarkest">Mark Paid</button>
             </td>
           </tr>
@@ -1244,6 +1210,7 @@
 
     async function loadFeeBillingLedger() {
       const tbody = document.getElementById('feeBillingTableBody');
+      if (!tbody) return;
       const { data: families } = await db.from('families').select('*, students(*)');
 
       if (!families || families.length === 0) {
@@ -1282,9 +1249,20 @@
       }
     }
 
-    // MODAL UTILS
-    function openModal(id) { document.getElementById(id).classList.remove('hidden'); document.getElementById(id).classList.add('flex'); }
-    function closeModal(id) { document.getElementById(id).classList.add('hidden'); document.getElementById(id).classList.remove('flex'); }
+    function openModal(id) {
+      const m = document.getElementById(id);
+      if (m) {
+        m.classList.remove('hidden');
+        m.classList.add('flex');
+      }
+    }
+    function closeModal(id) {
+      const m = document.getElementById(id);
+      if (m) {
+        m.classList.add('hidden');
+        m.classList.remove('flex');
+      }
+    }
   </script>
 </body>
 </html>
