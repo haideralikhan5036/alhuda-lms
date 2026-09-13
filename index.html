@@ -1070,11 +1070,11 @@
 
       let targetDays = [ACTIVE_DAY];
       if (repeatOption === 'mon_to_fri') {
-        targetDays =;
+        targetDays = [1, 2, 3, 4, 5];
       } else if (repeatOption === 'all_week') {
-        targetDays =;
+        targetDays = [1, 2, 3, 4, 5, 6, 7];
       } else if (repeatOption === 'weekend') {
-        targetDays =;
+        targetDays = [6, 7];
       }
 
       const rows = targetDays.map(d => ({
@@ -1200,7 +1200,6 @@
             <td class="p-3 font-black text-sm text-brandDark">${grossSalary.toLocaleString()} PKR</td>
             <td class="p-3"><span class="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800">Pending Transfer</span></td>
             <td class="p-3 text-right">
-              <button class="px-3 py-1 bg-brand class="p-3 text-right">
               <button class="px-3 py-1 bg-brandDark text-white rounded text-xs font-bold hover:bg-brandDarkest">Mark Paid</button>
             </td>
           </tr>
