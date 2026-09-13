@@ -3,16 +3,16 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, viewport-fit=cover">
-  <title>Al-Huda Islamic Centre - Zero-Cost Cloud LMS</title>
+  <title>Al-Huda Islamic Centre - Teachers & 30-Min Schedule Matrix</title>
   
-  <!-- Modern Fonts & Icons -->
+  <!-- Fonts & Icons -->
   <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700;800&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   
-  <!-- Tailwind CSS via CDN -->
+  <!-- Tailwind CSS -->
   <script src="https://cdn.tailwindcss.com"></script>
   
-  <!-- Supabase Official JS SDK -->
+  <!-- Supabase JS SDK -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
   <script>
@@ -35,955 +35,552 @@
       }
     }
   </script>
-
   <style>
-    body { font-family: 'Plus Jakarta Sans', sans-serif; background-color: #f1f5f9; }
-    .badge-paid { background-color: #ecfdf5; color: #047857; border: 1px solid #a7f3d0; }
-    .badge-pending { background-color: #fef2f2; color: #dc2626; border: 1px solid #fecaca; }
-    .badge-leave { background-color: #eff6ff; color: #1d4ed8; border: 1px solid #bfdbfe; }
-    .spinner {
-      width: 16px; height: 16px; border: 2px solid rgba(255, 255, 255, 0.3);
-      border-top-color: #ffffff; border-radius: 50%; animation: spin 0.8s linear infinite; display: inline-block;
-    }
-    @keyframes spin { to { transform: rotate(360deg); } }
+    body { font-family: 'Plus Jakarta Sans', sans-serif; background-color: #f8fafc; }
+    .slot-vacant { background-color: #f0fdf4; border: 1.5px dashed #86efac; color: #166534; }
+    .slot-vacant:hover { background-color: #dcfce7; border-color: #22c55e; }
+    .slot-booked { background-color: #eff6ff; border: 1.5px solid #93c5fd; color: #1e40af; }
   </style>
 </head>
-<body class="text-slate-800 flex flex-col min-h-screen">
+<body class="text-slate-800 min-h-screen flex flex-col">
 
-  <!-- TOP HEADER -->
+  <!-- TOP APP BAR -->
   <header class="bg-gradient-to-r from-[#022c22] via-[#064e3b] to-[#047857] text-white py-3 px-4 sm:px-8 border-b-4 border-[#d97706] sticky top-0 z-50 shadow-md">
-    <div class="max-w-7xl mx-auto flex flex-wrap justify-between items-center gap-3">
+    <div class="max-w-7xl mx-auto flex justify-between items-center flex-wrap gap-3">
       <div class="flex items-center gap-3">
-        <div class="w-11 h-11 rounded-full border-2 border-brandGold bg-black flex items-center justify-center text-brandGold font-cinzel font-bold text-lg shadow">
+        <div class="w-10 h-10 rounded-full border-2 border-brandGold bg-black flex items-center justify-center text-brandGold font-cinzel font-bold text-base shadow">
           AH
         </div>
         <div>
-          <h1 class="font-cinzel text-lg sm:text-xl font-bold tracking-wide">AL-HUDA ISLAMIC CENTRE</h1>
-          <p class="text-xs text-emerald-200 font-medium">Online Quran & Islamic Academy &bull; Cloud LMS</p>
+          <h1 class="font-cinzel text-base sm:text-lg font-bold tracking-wide">AL-HUDA ISLAMIC CENTRE</h1>
+          <p class="text-[11px] text-emerald-200">Phase 1: Teachers Registry & 30-Minute Schedule Matrix</p>
         </div>
       </div>
-
-      <!-- ROLE SWITCHER & ACTIVE STATUS -->
       <div class="flex items-center gap-3">
-        <div class="bg-black/30 border border-brandGold/40 px-3 py-1.5 rounded-full text-xs font-semibold text-amber-200 flex items-center gap-2">
-          <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-          <span>Role:</span>
-          <select id="userRoleSelect" onchange="switchUserRole(this.value)" class="bg-transparent text-white font-bold cursor-pointer focus:outline-none">
-            <option value="owner" class="text-slate-900 font-bold">👑 Owner (Super Admin)</option>
-            <option value="manager" class="text-slate-900 font-bold">💼 Manager (Operations)</option>
-            <option value="teacher" class="text-slate-900 font-bold">👨‍🏫 Teacher Portal</option>
-            <option value="student" class="text-slate-900 font-bold">🎓 Student / Parent Portal</option>
-          </select>
-        </div>
-        <div id="liveClock" class="hidden sm:block text-xs font-mono text-emerald-100 bg-white/10 px-2.5 py-1 rounded-md">--:--:--</div>
+        <span class="text-xs font-mono bg-black/30 border border-brandGold/40 px-3 py-1 rounded-full text-amber-200">
+          <span class="w-2 h-2 inline-block rounded-full bg-emerald-400 mr-1.5 animate-pulse"></span> Cloud Active
+        </span>
       </div>
     </div>
   </header>
 
-  <!-- NAVIGATION TABS -->
-  <nav class="bg-white border-b border-slate-200 shadow-sm sticky top-[68px] z-40">
-    <div class="max-w-7xl mx-auto px-4 flex gap-2 overflow-x-auto py-2.5">
-      <button onclick="switchTab('tab-live-monitor')" class="nav-tab active px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 text-slate-700 hover:bg-emerald-50 hover:text-brandDark transition whitespace-nowrap">
-        <i class="fa-solid fa-tower-broadcast text-brandEmerald"></i> Live Monitor
-      </button>
-      <button onclick="switchTab('tab-families')" class="nav-tab role-admin px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 text-slate-700 hover:bg-emerald-50 hover:text-brandDark transition whitespace-nowrap">
-        <i class="fa-solid fa-users text-brandEmerald"></i> Families & Students
-      </button>
-      <button onclick="switchTab('tab-teachers')" class="nav-tab role-admin px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 text-slate-700 hover:bg-emerald-50 hover:text-brandDark transition whitespace-nowrap">
-        <i class="fa-solid fa-chalkboard-user text-brandEmerald"></i> Teachers Directory
-      </button>
-      <button onclick="switchTab('tab-scheduler')" class="nav-tab role-admin px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 text-slate-700 hover:bg-emerald-50 hover:text-brandDark transition whitespace-nowrap">
-        <i class="fa-solid fa-calendar-plus text-brandEmerald"></i> 30-Min Scheduler
-      </button>
-      <button onclick="switchTab('tab-attendance')" class="nav-tab px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 text-slate-700 hover:bg-emerald-50 hover:text-brandDark transition whitespace-nowrap">
-        <i class="fa-solid fa-clipboard-check text-brandEmerald"></i> Daily Attendance
-      </button>
-      <button onclick="switchTab('tab-salaries')" class="nav-tab role-owner px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 text-slate-700 hover:bg-emerald-50 hover:text-brandDark transition whitespace-nowrap">
-        <i class="fa-solid fa-hand-holding-dollar text-brandGold"></i> Teacher Salaries
-      </button>
-      <button onclick="switchTab('tab-invoices')" class="nav-tab role-owner px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 text-slate-700 hover:bg-emerald-50 hover:text-brandDark transition whitespace-nowrap">
-        <i class="fa-solid fa-file-invoice-dollar text-brandGold"></i> Fee Billing
-      </button>
-    </div>
-  </nav>
-
-  <!-- MAIN WRAPPER -->
+  <!-- MAIN CONTAINER -->
   <main class="max-w-7xl mx-auto w-full px-4 sm:px-8 py-6 flex-grow">
 
-    <!-- 1. LIVE MONITOR TAB -->
-    <section id="tab-live-monitor" class="tab-content block">
-      <div class="flex justify-between items-center mb-5 flex-wrap gap-3">
-        <div>
-          <h2 class="text-xl font-extrabold text-brandDark flex items-center gap-2">
-            <i class="fa-solid fa-tower-broadcast text-brandEmerald"></i> Today's Live Class Operations
-          </h2>
-          <p class="text-xs text-slate-500 font-medium">Real-time class execution tracking until 12:00 AM Midnight</p>
-        </div>
-        <button onclick="loadLiveMonitorData()" class="px-3 py-1.5 bg-white border border-slate-300 rounded-lg text-xs font-bold text-slate-700 hover:bg-slate-50 flex items-center gap-1.5 shadow-sm">
-          <i class="fa-solid fa-arrows-rotate"></i> Refresh Monitor
-        </button>
-      </div>
-
-      <!-- KPI METRICS GRID -->
-      <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 mb-6">
-        <div class="bg-white p-3.5 rounded-xl border border-slate-200 shadow-sm border-l-4 border-l-brandDark">
-          <div class="text-[11px] font-bold text-slate-500 uppercase">Total Today</div>
-          <div class="text-2xl font-black text-slate-900 mt-1" id="kpiTotalToday">0</div>
-          <div class="text-[10px] text-slate-400">Scheduled slots</div>
-        </div>
-        <div class="bg-white p-3.5 rounded-xl border border-slate-200 shadow-sm border-l-4 border-l-emerald-500">
-          <div class="text-[11px] font-bold text-slate-500 uppercase flex items-center gap-1">
-            <span class="w-2 h-2 rounded-full bg-emerald-500 animate-ping"></span> Live Now
-          </div>
-          <div class="text-2xl font-black text-emerald-600 mt-1" id="kpiLiveNow">0</div>
-          <div class="text-[10px] text-emerald-600 font-medium">Active in class</div>
-        </div>
-        <div class="bg-white p-3.5 rounded-xl border border-slate-200 shadow-sm border-l-4 border-l-emerald-600">
-          <div class="text-[11px] font-bold text-slate-500 uppercase">Completed</div>
-          <div class="text-2xl font-black text-slate-900 mt-1" id="kpiCompleted">0</div>
-          <div class="text-[10px] text-slate-400">Present & Done</div>
-        </div>
-        <div class="bg-white p-3.5 rounded-xl border border-slate-200 shadow-sm border-l-4 border-l-blue-500">
-          <div class="text-[11px] font-bold text-slate-500 uppercase">On Leave</div>
-          <div class="text-2xl font-black text-blue-600 mt-1" id="kpiOnLeave">0</div>
-          <div class="text-[10px] text-blue-500 font-medium">Approved break</div>
-        </div>
-        <div class="bg-white p-3.5 rounded-xl border border-slate-200 shadow-sm border-l-4 border-l-red-500">
-          <div class="text-[11px] font-bold text-slate-500 uppercase">Absent</div>
-          <div class="text-2xl font-black text-red-600 mt-1" id="kpiAbsent">0</div>
-          <div class="text-[10px] text-red-500 font-medium">Missed classes</div>
-        </div>
-        <div class="bg-white p-3.5 rounded-xl border border-slate-200 shadow-sm border-l-4 border-l-amber-500">
-          <div class="text-[11px] font-bold text-slate-500 uppercase">Remaining</div>
-          <div class="text-2xl font-black text-amber-600 mt-1" id="kpiRemaining">0</div>
-          <div class="text-[10px] text-slate-400">Till 12:00 AM</div>
-        </div>
-      </div>
-
-      <!-- TODAY'S SCHEDULE LIST -->
-      <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-        <div class="p-4 border-b border-slate-200 flex justify-between items-center flex-wrap gap-2">
-          <h3 class="font-bold text-sm text-slate-800 flex items-center gap-2">
-            <i class="fa-regular fa-clock text-brandEmerald"></i> Live Classes Timeline (Today)
-          </h3>
-          <span class="text-xs text-slate-500 font-medium">Auto-refreshes every 30 seconds</span>
-        </div>
-        <div class="overflow-x-auto">
-          <table class="w-full text-left text-xs border-collapse">
-            <thead class="bg-slate-50 text-slate-600 font-bold border-b border-slate-200 uppercase">
-              <tr>
-                <th class="p-3">Time Slot (30m)</th>
-                <th class="p-3">Student</th>
-                <th class="p-3">Course</th>
-                <th class="p-3">Teacher</th>
-                <th class="p-3">Live Status</th>
-                <th class="p-3">Lesson Notes</th>
-                <th class="p-3 text-right">Quick Action</th>
-              </tr>
-            </thead>
-            <tbody id="liveMonitorTableBody" class="divide-y divide-slate-100">
-              <tr><td colspan="7" class="p-6 text-center text-slate-400">Loading today's live classes...</td></tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </section>
-
-    <!-- 2. FAMILIES & STUDENTS TAB -->
-    <section id="tab-families" class="tab-content hidden">
-      <div class="flex justify-between items-center mb-5 flex-wrap gap-3">
-        <div>
-          <h2 class="text-xl font-extrabold text-brandDark">
-            <i class="fa-solid fa-users text-brandEmerald"></i> Families & Students Directory
-          </h2>
-          <p class="text-xs text-slate-500">1 Parent Account &bull; Multiple Enrolled Sibling Students</p>
-        </div>
-        <div class="flex gap-2">
-          <button onclick="openModal('modalAddFamily')" class="px-3.5 py-2 bg-brandDark text-white rounded-lg text-xs font-bold hover:bg-brandDarkest flex items-center gap-1.5 shadow">
-            <i class="fa-solid fa-user-plus"></i> + Add Family
-          </button>
-          <button onclick="openModal('modalAddStudent')" class="px-3.5 py-2 bg-brandEmerald text-white rounded-lg text-xs font-bold hover:bg-emerald-700 flex items-center gap-1.5 shadow">
-            <i class="fa-solid fa-graduation-cap"></i> + Enroll Student
-          </button>
-        </div>
-      </div>
-
-      <!-- DIRECTORY LIST CONTAINER -->
-      <div id="familiesCardsContainer" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        <!-- Family Cards populated via JS -->
-      </div>
-    </section>
-
-    <!-- 3. TEACHERS DIRECTORY TAB -->
-    <section id="tab-teachers" class="tab-content hidden">
-      <div class="flex justify-between items-center mb-5 flex-wrap gap-3">
-        <div>
-          <h2 class="text-xl font-extrabold text-brandDark">
-            <i class="fa-solid fa-chalkboard-user text-brandEmerald"></i> Teachers Registry & Contracts
-          </h2>
-          <p class="text-xs text-slate-500">Profiles, Witness Contacts & Per-Slot Salary Rates</p>
-        </div>
-        <button onclick="openModal('modalAddTeacher')" class="px-3.5 py-2 bg-brandDark text-white rounded-lg text-xs font-bold hover:bg-brandDarkest flex items-center gap-1.5 shadow">
-          <i class="fa-solid fa-plus"></i> + Register Teacher
-        </button>
-      </div>
-
-      <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-        <div class="overflow-x-auto">
-          <table class="w-full text-left text-xs border-collapse">
-            <thead class="bg-slate-50 text-slate-600 font-bold border-b border-slate-200 uppercase">
-              <tr>
-                <th class="p-3">Teacher Name</th>
-                <th class="p-3">Phone</th>
-                <th class="p-3">Working Shift</th>
-                <th class="p-3">Rate / 30m Slot</th>
-                <th class="p-3">Witness Info</th>
-                <th class="p-3">Status</th>
-              </tr>
-            </thead>
-            <tbody id="teachersTableBody" class="divide-y divide-slate-100">
-              <tr><td colspan="6" class="p-6 text-center text-slate-400">Loading teachers...</td></tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </section>
-
-    <!-- 4. 30-MIN SCHEDULER TAB -->
-    <section id="tab-scheduler" class="tab-content hidden">
-      <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm mb-6">
-        <h2 class="text-lg font-bold text-brandDark mb-3 flex items-center gap-2">
-          <i class="fa-solid fa-calendar-plus text-brandEmerald"></i> Assign New 30-Minute Class Slot
+    <!-- TOP CONTROL BAR -->
+    <div class="flex justify-between items-center mb-6 flex-wrap gap-4">
+      <div>
+        <h2 class="text-xl font-extrabold text-brandDark flex items-center gap-2">
+          <i class="fa-solid fa-chalkboard-user text-brandEmerald"></i> Teachers Directory & Timetable Hub
         </h2>
-        <form id="formAddSchedule" onsubmit="handleSaveSchedule(event)" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
-          <div>
-            <label class="block text-xs font-bold text-slate-600 mb-1">Select Student:</label>
-            <select id="schedStudentId" required class="w-full text-xs p-2.5 border border-slate-300 rounded-lg"></select>
-          </div>
-          <div>
-            <label class="block text-xs font-bold text-slate-600 mb-1">Select Teacher:</label>
-            <select id="schedTeacherId" required class="w-full text-xs p-2.5 border border-slate-300 rounded-lg"></select>
-          </div>
-          <div>
-            <label class="block text-xs font-bold text-slate-600 mb-1">Day of Week:</label>
-            <select id="schedDayOfWeek" required class="w-full text-xs p-2.5 border border-slate-300 rounded-lg">
-              <option value="1">Monday</option>
-              <option value="2">Tuesday</option>
-              <option value="3">Wednesday</option>
-              <option value="4">Thursday</option>
-              <option value="5">Friday</option>
-              <option value="6">Saturday</option>
-              <option value="7">Sunday</option>
-            </select>
-          </div>
-          <div>
-            <label class="block text-xs font-bold text-slate-600 mb-1">Start Time (PKT):</label>
-            <input type="time" id="schedStartTime" required value="17:00" class="w-full text-xs p-2 border border-slate-300 rounded-lg">
-          </div>
-          <div class="flex items-end">
-            <button type="submit" class="w-full py-2.5 bg-brandEmerald text-white font-bold rounded-lg text-xs hover:bg-emerald-700 shadow">
-              <i class="fa-solid fa-check"></i> Assign Slot
-            </button>
-          </div>
-        </form>
+        <p class="text-xs text-slate-500 font-medium">Manage teacher profiles, contract rates, and live 30-minute weekly schedules</p>
       </div>
+      <div class="flex gap-2.5">
+        <button onclick="loadTeachers()" class="px-3.5 py-2 bg-white border border-slate-300 rounded-lg text-xs font-bold text-slate-700 hover:bg-slate-50 flex items-center gap-1.5 shadow-sm">
+          <i class="fa-solid fa-arrows-rotate"></i> Refresh
+        </button>
+        <button onclick="openModal('modalAddTeacher')" class="px-4 py-2 bg-brandDark text-white rounded-lg text-xs font-bold hover:bg-brandDarkest flex items-center gap-1.5 shadow">
+          <i class="fa-solid fa-user-plus"></i> + Add New Teacher
+        </button>
+      </div>
+    </div>
 
-      <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-        <div class="p-4 border-b border-slate-200 font-bold text-sm text-slate-800">
-          Master Weekly Scheduled Class Slots
-        </div>
-        <div class="overflow-x-auto">
-          <table class="w-full text-left text-xs border-collapse">
-            <thead class="bg-slate-50 text-slate-600 font-bold border-b border-slate-200 uppercase">
-              <tr>
-                <th class="p-3">Day</th>
-                <th class="p-3">Slot (PKT)</th>
-                <th class="p-3">Student</th>
-                <th class="p-3">Teacher</th>
-                <th class="p-3">Meeting Link</th>
-                <th class="p-3 text-right">Action</th>
-              </tr>
-            </thead>
-            <tbody id="schedulesTableBody" class="divide-y divide-slate-100">
-              <tr><td colspan="6" class="p-6 text-center text-slate-400">Loading schedules...</td></tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </section>
-
-    <!-- 5. DAILY ATTENDANCE & TEACHER VIEW -->
-    <section id="tab-attendance" class="tab-content hidden">
-      <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm mb-5 flex flex-wrap justify-between items-center gap-3">
-        <div>
-          <h2 class="text-lg font-extrabold text-brandDark">
-            <i class="fa-solid fa-clipboard-check text-brandEmerald"></i> Daily Class Attendance & Lesson Notes
-          </h2>
-          <p class="text-xs text-slate-500">Teachers mark Present, Absent, or Leave. Verified attendance drives monthly payroll.</p>
-        </div>
-        <div class="flex items-center gap-2">
-          <label class="text-xs font-bold text-slate-700">Date:</label>
-          <input type="date" id="attendanceDateSelect" onchange="loadAttendanceList()" class="text-xs p-2 border border-slate-300 rounded-lg font-bold">
-        </div>
-      </div>
-
-      <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-        <div class="overflow-x-auto">
-          <table class="w-full text-left text-xs border-collapse">
-            <thead class="bg-slate-50 text-slate-600 font-bold border-b border-slate-200 uppercase">
-              <tr>
-                <th class="p-3">Time Slot</th>
-                <th class="p-3">Student</th>
-                <th class="p-3">Teacher</th>
-                <th class="p-3">Attendance Status</th>
-                <th class="p-3">Lesson Notes (Seen by Parent)</th>
-                <th class="p-3 text-right">Save</th>
-              </tr>
-            </thead>
-            <tbody id="attendanceTableBody" class="divide-y divide-slate-100">
-              <tr><td colspan="6" class="p-6 text-center text-slate-400">Loading attendance sheet...</td></tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </section>
-
-    <!-- 6. TEACHER SALARIES (OWNER ONLY) -->
-    <section id="tab-salaries" class="tab-content hidden">
-      <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm mb-5 flex flex-wrap justify-between items-center gap-3">
-        <div>
-          <h2 class="text-lg font-extrabold text-brandDark flex items-center gap-2">
-            <i class="fa-solid fa-hand-holding-dollar text-brandGold"></i> Automated Attendance-Driven Teacher Salaries
-          </h2>
-          <p class="text-xs text-slate-500">Calculates exact monthly payroll based on verified conducted classes</p>
-        </div>
-        <div class="flex gap-2 items-center">
-          <select id="salaryMonthSelect" class="text-xs font-bold p-2 border border-slate-300 rounded-lg">
-            <option value="September">September 2026</option>
-            <option value="October">October 2026</option>
-          </select>
-          <button onclick="calculateMonthlySalaries()" class="px-3.5 py-2 bg-brandGold text-slate-900 font-bold rounded-lg text-xs hover:bg-amber-500 shadow">
-            <i class="fa-solid fa-calculator"></i> Auto-Generate Salaries
-          </button>
-        </div>
-      </div>
-
-      <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-        <div class="overflow-x-auto">
-          <table class="w-full text-left text-xs border-collapse">
-            <thead class="bg-slate-50 text-slate-600 font-bold border-b border-slate-200 uppercase">
-              <tr>
-                <th class="p-3">Teacher</th>
-                <th class="p-3">Conducted Classes (Present)</th>
-                <th class="p-3">Rate / Slot</th>
-                <th class="p-3">Gross Salary</th>
-                <th class="p-3">Status</th>
-                <th class="p-3 text-right">Action</th>
-              </tr>
-            </thead>
-            <tbody id="salariesTableBody" class="divide-y divide-slate-100">
-              <tr><td colspan="6" class="p-6 text-center text-slate-400">Click "Auto-Generate Salaries" to compute monthly payroll.</td></tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </section>
-
-    <!-- 7. FEE INVOICES & BILLING (OWNER ONLY) -->
-    <section id="tab-invoices" class="tab-content hidden">
-      <div class="flex justify-between items-center mb-5 flex-wrap gap-3">
-        <div>
-          <h2 class="text-xl font-extrabold text-brandDark">
-            <i class="fa-solid fa-file-invoice-dollar text-brandGold"></i> Family Fee Ledger & 1-Click WhatsApp Invoicing
-          </h2>
-          <p class="text-xs text-slate-500">Combined billing per family with arrears carry-forward</p>
-        </div>
-      </div>
-      <div id="invoicesListContainer" class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden p-6 text-center text-slate-400 text-xs">
-        Loading billing records...
-      </div>
-    </section>
+    <!-- TEACHERS GRID CARDS -->
+    <div id="teachersGrid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+      <div class="col-span-full p-10 text-center text-slate-400">Loading registered teachers...</div>
+    </div>
 
   </main>
 
-  <!-- MODAL: ADD FAMILY -->
-  <div id="modalAddFamily" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 hidden items-center justify-center p-4">
-    <div class="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-slate-200">
-      <div class="flex justify-between items-center mb-4 border-b pb-3">
-        <h3 class="font-bold text-base text-brandDark"><i class="fa-solid fa-house-user"></i> Register New Family</h3>
-        <button onclick="closeModal('modalAddFamily')" class="text-slate-400 hover:text-slate-600 text-lg">&times;</button>
-      </div>
-      <form onsubmit="handleSaveFamily(event)" class="space-y-3 text-xs">
-        <div>
-          <label class="block font-bold mb-1">Family ID (e.g. FAM-105):</label>
-          <input type="text" id="famId" required class="w-full p-2.5 border rounded-lg uppercase">
-        </div>
-        <div>
-          <label class="block font-bold mb-1">Parent / Guardian Name:</label>
-          <input type="text" id="famParentName" required class="w-full p-2.5 border rounded-lg">
-        </div>
-        <div class="grid grid-cols-2 gap-2">
-          <div>
-            <label class="block font-bold mb-1">WhatsApp Number:</label>
-            <input type="text" id="famWhatsApp" required placeholder="+1..." class="w-full p-2.5 border rounded-lg">
-          </div>
-          <div>
-            <label class="block font-bold mb-1">Country:</label>
-            <input type="text" id="famCountry" value="USA" class="w-full p-2.5 border rounded-lg">
-          </div>
-        </div>
-        <div class="grid grid-cols-2 gap-2">
-          <div>
-            <label class="block font-bold mb-1">Monthly Fee:</label>
-            <input type="number" id="famMonthlyFee" required value="100" class="w-full p-2.5 border rounded-lg font-bold">
-          </div>
-          <div>
-            <label class="block font-bold mb-1">Currency:</label>
-            <select id="famCurrency" class="w-full p-2.5 border rounded-lg font-bold">
-              <option value="USD">USD ($)</option>
-              <option value="GBP">GBP (£)</option>
-              <option value="CAD">CAD ($)</option>
-              <option value="EUR">EUR (€)</option>
-              <option value="PKR">PKR (Rs)</option>
-            </select>
-          </div>
-        </div>
-        <div class="flex justify-end gap-2 pt-3">
-          <button type="button" onclick="closeModal('modalAddFamily')" class="px-4 py-2 border rounded-lg font-bold">Cancel</button>
-          <button type="submit" class="px-5 py-2 bg-brandDark text-white rounded-lg font-bold hover:bg-brandDarkest shadow">Save Family</button>
-        </div>
-      </form>
-    </div>
-  </div>
-
-  <!-- MODAL: ADD STUDENT -->
-  <div id="modalAddStudent" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 hidden items-center justify-center p-4">
-    <div class="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-slate-200">
-      <div class="flex justify-between items-center mb-4 border-b pb-3">
-        <h3 class="font-bold text-base text-brandDark"><i class="fa-solid fa-graduation-cap"></i> Enroll Sibling Student</h3>
-        <button onclick="closeModal('modalAddStudent')" class="text-slate-400 hover:text-slate-600 text-lg">&times;</button>
-      </div>
-      <form onsubmit="handleSaveStudent(event)" class="space-y-3 text-xs">
-        <div>
-          <label class="block font-bold mb-1">Select Family / Parent:</label>
-          <select id="stuFamilyId" required class="w-full p-2.5 border rounded-lg"></select>
-        </div>
-        <div>
-          <label class="block font-bold mb-1">Student Full Name:</label>
-          <input type="text" id="stuName" required class="w-full p-2.5 border rounded-lg">
-        </div>
-        <div class="grid grid-cols-2 gap-2">
-          <div>
-            <label class="block font-bold mb-1">Age:</label>
-            <input type="number" id="stuAge" value="8" class="w-full p-2.5 border rounded-lg">
-          </div>
-          <div>
-            <label class="block font-bold mb-1">Course:</label>
-            <select id="stuCourseId" class="w-full p-2.5 border rounded-lg"></select>
-          </div>
-        </div>
-        <div>
-          <label class="block font-bold mb-1">Assign Teacher:</label>
-          <select id="stuTeacherId" class="w-full p-2.5 border rounded-lg"></select>
-        </div>
-        <div class="flex justify-end gap-2 pt-3">
-          <button type="button" onclick="closeModal('modalAddStudent')" class="px-4 py-2 border rounded-lg font-bold">Cancel</button>
-          <button type="submit" class="px-5 py-2 bg-brandEmerald text-white rounded-lg font-bold hover:bg-emerald-700 shadow">Enroll Student</button>
-        </div>
-      </form>
-    </div>
-  </div>
-
-  <!-- MODAL: ADD TEACHER -->
+  <!-- MODAL: ADD / EDIT DETAILED TEACHER -->
   <div id="modalAddTeacher" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 hidden items-center justify-center p-4">
-    <div class="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-slate-200">
+    <div class="bg-white rounded-2xl max-w-2xl w-full p-6 shadow-2xl border border-slate-200 max-h-[92vh] overflow-y-auto">
       <div class="flex justify-between items-center mb-4 border-b pb-3">
-        <h3 class="font-bold text-base text-brandDark"><i class="fa-solid fa-chalkboard-user"></i> Register New Teacher</h3>
-        <button onclick="closeModal('modalAddTeacher')" class="text-slate-400 hover:text-slate-600 text-lg">&times;</button>
+        <h3 class="font-bold text-base text-brandDark flex items-center gap-2">
+          <i class="fa-solid fa-chalkboard-user text-brandEmerald"></i> Register Teacher Profile (Full Details)
+        </h3>
+        <button onclick="closeModal('modalAddTeacher')" class="text-slate-400 hover:text-slate-600 text-xl font-bold">&times;</button>
       </div>
-      <form onsubmit="handleSaveTeacher(event)" class="space-y-3 text-xs">
-        <div>
-          <label class="block font-bold mb-1">Full Name:</label>
-          <input type="text" id="teachName" required class="w-full p-2.5 border rounded-lg">
-        </div>
-        <div class="grid grid-cols-2 gap-2">
-          <div>
-            <label class="block font-bold mb-1">Phone Number:</label>
-            <input type="text" id="teachPhone" required class="w-full p-2.5 border rounded-lg">
+      
+      <form onsubmit="handleSaveTeacher(event)" class="space-y-4 text-xs">
+        <!-- 1. Basic Info -->
+        <div class="bg-slate-50 p-3.5 rounded-xl border border-slate-200 space-y-3">
+          <div class="font-bold text-slate-700 uppercase tracking-wide text-[11px]">1. Personal Identity & Address</div>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label class="block font-bold mb-1">Teacher Full Name *:</label>
+              <input type="text" id="tFullName" required placeholder="Qari / Ustadha Name" class="w-full p-2.5 border rounded-lg">
+            </div>
+            <div>
+              <label class="block font-bold mb-1">Father / Guardian Name:</label>
+              <input type="text" id="tFatherName" placeholder="Father Name" class="w-full p-2.5 border rounded-lg">
+            </div>
           </div>
-          <div>
-            <label class="block font-bold mb-1">Rate / 30-Min Slot (PKR):</label>
-            <input type="number" id="teachRate" value="150" class="w-full p-2.5 border rounded-lg font-bold">
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label class="block font-bold mb-1">CNIC / National ID Card No:</label>
+              <input type="text" id="tCnic" placeholder="e.g. 37405-XXXXXXX-X" class="w-full p-2.5 border rounded-lg">
+            </div>
+            <div>
+              <label class="block font-bold mb-1">Residential Address:</label>
+              <input type="text" id="tAddress" placeholder="City, Area Address" class="w-full p-2.5 border rounded-lg">
+            </div>
           </div>
         </div>
-        <div>
-          <label class="block font-bold mb-1">Witness Name & Contact:</label>
-          <input type="text" id="teachWitness" placeholder="Name - Phone" class="w-full p-2.5 border rounded-lg">
+
+        <!-- 2. Contacts & Witness -->
+        <div class="bg-slate-50 p-3.5 rounded-xl border border-slate-200 space-y-3">
+          <div class="font-bold text-slate-700 uppercase tracking-wide text-[11px]">2. Communication & Emergency Witness</div>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label class="block font-bold mb-1">Primary WhatsApp Number *:</label>
+              <input type="text" id="tPhone" required placeholder="+92300XXXXXXX" class="w-full p-2.5 border rounded-lg">
+            </div>
+            <div>
+              <label class="block font-bold mb-1">Alternative / Emergency Contact:</label>
+              <input type="text" id="tAltPhone" placeholder="Alternate Phone" class="w-full p-2.5 border rounded-lg">
+            </div>
+          </div>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label class="block font-bold mb-1">Witness / Reference Name:</label>
+              <input type="text" id="tWitnessName" placeholder="Witness Full Name" class="w-full p-2.5 border rounded-lg">
+            </div>
+            <div>
+              <label class="block font-bold mb-1">Witness Phone Number:</label>
+              <input type="text" id="tWitnessPhone" placeholder="Witness Contact Number" class="w-full p-2.5 border rounded-lg">
+            </div>
+          </div>
         </div>
-        <div class="flex justify-end gap-2 pt-3">
-          <button type="button" onclick="closeModal('modalAddTeacher')" class="px-4 py-2 border rounded-lg font-bold">Cancel</button>
-          <button type="submit" class="px-5 py-2 bg-brandDark text-white rounded-lg font-bold hover:bg-brandDarkest shadow">Save Teacher</button>
+
+        <!-- 3. Contract, Working Shift & Rate -->
+        <div class="bg-slate-50 p-3.5 rounded-xl border border-slate-200 space-y-3">
+          <div class="font-bold text-slate-700 uppercase tracking-wide text-[11px]">3. Contract & Salary Slot Rate</div>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label class="block font-bold mb-1 text-brandEmerald">Rate per 30-Minute Class Slot (PKR) *:</label>
+              <input type="number" id="tRateSlot" required value="150" class="w-full p-2.5 border border-emerald-400 rounded-lg font-bold text-sm text-brandDark">
+              <span class="text-[10px] text-slate-500">Auto-multiplied with conducted classes for monthly payroll</span>
+            </div>
+            <div>
+              <label class="block font-bold mb-1">Shift / Availability Hours:</label>
+              <select id="tShift" class="w-full p-2.5 border rounded-lg font-semibold">
+                <option value="10 Hours Shift (Evening)">10 Hours Shift (Evening)</option>
+                <option value="8 Hours Shift (Night)">8 Hours Shift (Night)</option>
+                <option value="Morning Shift">Morning Shift</option>
+                <option value="Full Day (Flexible)">Full Day (Flexible)</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <div class="flex justify-end gap-2.5 pt-3 border-t">
+          <button type="button" onclick="closeModal('modalAddTeacher')" class="px-4 py-2 border rounded-lg font-bold text-slate-600">Cancel</button>
+          <button type="submit" id="btnSaveTeacher" class="px-6 py-2 bg-brandDark text-white rounded-lg font-bold hover:bg-brandDarkest shadow">Save Teacher</button>
         </div>
       </form>
     </div>
   </div>
 
-  <!-- APP SCRIPTS -->
+  <!-- MODAL: INTERACTIVE 30-MINUTE SCHEDULE MATRIX -->
+  <div id="modalScheduleMatrix" class="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 hidden items-center justify-center p-3 sm:p-6">
+    <div class="bg-white rounded-2xl max-w-6xl w-full p-6 shadow-2xl border border-slate-200 max-h-[94vh] flex flex-col">
+      
+      <!-- Modal Header with Teacher Info -->
+      <div class="flex justify-between items-start border-b pb-4 mb-4 flex-wrap gap-3">
+        <div>
+          <div class="flex items-center gap-2">
+            <span class="px-2 py-0.5 bg-emerald-100 text-emerald-800 text-[10px] font-extrabold rounded uppercase">Live Master Schedule</span>
+            <h3 class="font-black text-lg text-slate-900" id="matrixTeacherName">Teacher Schedule</h3>
+          </div>
+          <p class="text-xs text-slate-500 mt-0.5" id="matrixTeacherSubtitle">Rate: -- PKR / slot &bull; Shift: --</p>
+        </div>
+
+        <!-- Day Filter Tabs -->
+        <div class="flex items-center gap-1.5 bg-slate-100 p-1 rounded-xl overflow-x-auto text-xs font-bold" id="dayTabsContainer">
+          <button onclick="switchMatrixDay(1)" class="day-tab px-3 py-1.5 rounded-lg active bg-brandDark text-white">Mon</button>
+          <button onclick="switchMatrixDay(2)" class="day-tab px-3 py-1.5 rounded-lg text-slate-600 hover:bg-white">Tue</button>
+          <button onclick="switchMatrixDay(3)" class="day-tab px-3 py-1.5 rounded-lg text-slate-600 hover:bg-white">Wed</button>
+          <button onclick="switchMatrixDay(4)" class="day-tab px-3 py-1.5 rounded-lg text-slate-600 hover:bg-white">Thu</button>
+          <button onclick="switchMatrixDay(5)" class="day-tab px-3 py-1.5 rounded-lg text-slate-600 hover:bg-white">Fri</button>
+          <button onclick="switchMatrixDay(6)" class="day-tab px-3 py-1.5 rounded-lg text-slate-600 hover:bg-white">Sat</button>
+          <button onclick="switchMatrixDay(7)" class="day-tab px-3 py-1.5 rounded-lg text-slate-600 hover:bg-white">Sun</button>
+        </div>
+
+        <button onclick="closeModal('modalScheduleMatrix')" class="text-slate-400 hover:text-slate-600 text-2xl font-bold leading-none">&times;</button>
+      </div>
+
+      <!-- Schedule Slots Grid (Scrollable) -->
+      <div class="flex-grow overflow-y-auto pr-1">
+        <div class="flex justify-between items-center mb-3">
+          <div class="text-xs font-bold text-slate-600">
+            <i class="fa-regular fa-clock text-brandEmerald mr-1"></i> 30-Minute Class Time Slots (<span id="activeDayLabel">Monday</span>)
+          </div>
+          <div class="flex gap-4 text-xs font-semibold">
+            <span class="flex items-center gap-1.5"><span class="w-3 h-3 rounded bg-blue-100 border border-blue-400 inline-block"></span> Booked with Student</span>
+            <span class="flex items-center gap-1.5"><span class="w-3 h-3 rounded bg-emerald-50 border border-emerald-400 inline-block"></span> Available / Free Slot</span>
+          </div>
+        </div>
+
+        <div id="matrixSlotsGrid" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+          <!-- Slots rendered dynamically -->
+        </div>
+      </div>
+
+      <div class="border-t pt-3 mt-4 flex justify-between items-center text-xs">
+        <span class="text-slate-400">Click any green "Vacant Slot" to immediately book a student.</span>
+        <button onclick="closeModal('modalScheduleMatrix')" class="px-5 py-2 bg-slate-800 text-white rounded-lg font-bold hover:bg-black">Close Timetable</button>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- MODAL: QUICK BOOK STUDENT INTO VACANT SLOT -->
+  <div id="modalBookSlot" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-[60] hidden items-center justify-center p-4">
+    <div class="bg-white rounded-2xl max-w-md w-full p-5 shadow-2xl border border-slate-200">
+      <div class="flex justify-between items-center mb-3 border-b pb-2">
+        <h4 class="font-bold text-sm text-brandDark"><i class="fa-solid fa-calendar-check text-brandEmerald"></i> Book Student to Slot</h4>
+        <button onclick="closeModal('modalBookSlot')" class="text-slate-400 hover:text-slate-600 font-bold">&times;</button>
+      </div>
+      <form onsubmit="handleConfirmSlotBooking(event)" class="space-y-3 text-xs">
+        <div>
+          <label class="block font-bold mb-1">Selected Slot Time:</label>
+          <input type="text" id="bookSlotDisplay" readonly class="w-full p-2 bg-slate-100 border rounded font-mono font-bold text-slate-700">
+        </div>
+        <div>
+          <label class="block font-bold mb-1">Select Student to Assign *:</label>
+          <select id="bookStudentSelect" required class="w-full p-2.5 border rounded-lg font-semibold"></select>
+        </div>
+        <div>
+          <label class="block font-bold mb-1">Classroom Link (Zoom / Meet / Skype):</label>
+          <input type="text" id="bookMeetingLink" placeholder="https://zoom.us/j/..." class="w-full p-2.5 border rounded-lg">
+        </div>
+        <div class="flex justify-end gap-2 pt-2">
+          <button type="button" onclick="closeModal('modalBookSlot')" class="px-4 py-2 border rounded font-bold">Cancel</button>
+          <button type="submit" class="px-5 py-2 bg-brandEmerald text-white font-bold rounded hover:bg-emerald-700 shadow">Confirm Booking</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- JAVASCRIPT LOGIC -->
   <script>
-    // -------------------------------------------------------------
-    // SUPABASE CLIENT INITIALIZATION
-    // -------------------------------------------------------------
     const SUPABASE_URL = "https://ldgzuyroejzrvktksugy.supabase.co";
     const SUPABASE_KEY = "sb_publishable_rP38XXgYoYBTPJlCxtwMUg_RPupFrKg";
     const db = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
-    let CURRENT_ROLE = 'owner';
+    let ALL_TEACHERS = [];
+    let ALL_STUDENTS = [];
+    let CURRENT_TEACHER = null;
+    let CURRENT_DAY = 1; // 1 = Mon, 7 = Sun
+    let CURRENT_TEACHER_SCHEDULES = [];
+
+    const DAY_NAMES = ['', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 
     window.onload = function() {
-      // Live Clock
-      setInterval(() => {
-        const now = new Date();
-        const el = document.getElementById('liveClock');
-        if (el) el.innerText = now.toLocaleTimeString('en-US', { timeZone: 'Asia/Karachi' }) + ' PKT';
-      }, 1000);
-
-      // Set Attendance Date Default
-      const today = new Date().toISOString().slice(0, 10);
-      document.getElementById('attendanceDateSelect').value = today;
-
-      // Load Master Data
-      loadLiveMonitorData();
-      loadFamiliesAndStudents();
       loadTeachers();
-      loadCourses();
-      loadSchedules();
-
-      // Auto-refresh live monitor every 30s
-      setInterval(loadLiveMonitorData, 30000);
+      loadStudentsList();
     };
 
     // -------------------------------------------------------------
-    // ROLE-BASED ACCESS CONTROL (RBAC)
-    // -------------------------------------------------------------
-    function switchUserRole(role) {
-      CURRENT_ROLE = role;
-      document.querySelectorAll('.role-owner').forEach(el => {
-        el.style.display = (role === 'owner') ? 'flex' : 'none';
-      });
-      document.querySelectorAll('.role-admin').forEach(el => {
-        el.style.display = (role === 'owner' || role === 'manager') ? 'flex' : 'none';
-      });
-
-      if (role === 'teacher') {
-        switchTab('tab-attendance');
-      } else if (role === 'student') {
-        switchTab('tab-attendance');
-      }
-    }
-
-    function switchTab(tabId) {
-      document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
-      document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('block'));
-      document.querySelectorAll('.nav-tab').forEach(el => el.classList.remove('bg-emerald-100', 'text-brandDark'));
-
-      const target = document.getElementById(tabId);
-      if (target) {
-        target.classList.remove('hidden');
-        target.classList.add('block');
-      }
-
-      if (tabId === 'tab-live-monitor') loadLiveMonitorData();
-      if (tabId === 'tab-attendance') loadAttendanceList();
-      if (tabId === 'tab-families') loadFamiliesAndStudents();
-      if (tabId === 'tab-teachers') loadTeachers();
-    }
-
-    // -------------------------------------------------------------
-    // 1. LIVE MONITOR ENGINE
-    // -------------------------------------------------------------
-    async function loadLiveMonitorData() {
-      const tbody = document.getElementById('liveMonitorTableBody');
-      const now = new Date();
-      const currentDay = now.getDay() === 0 ? 7 : now.getDay(); // 1=Mon, 7=Sun
-      const todayDate = now.toISOString().slice(0, 10);
-
-      // Fetch today's schedules & attendance logs
-      const { data: scheds } = await db.from('class_schedules')
-        .select('*, students(name), teachers(full_name)')
-        .eq('day_of_week', currentDay);
-
-      const { data: logs } = await db.from('attendance_logs')
-        .select('*')
-        .eq('date', todayDate);
-
-      const logsMap = {};
-      (logs || []).forEach(l => logsMap[l.schedule_id] = l);
-
-      let totalToday = (scheds || []).length;
-      let liveCount = 0;
-      let completedCount = 0;
-      let leaveCount = 0;
-      let absentCount = 0;
-      let remainingCount = 0;
-
-      const currentMinutes = now.getHours() * 60 + now.getMinutes();
-
-      tbody.innerHTML = '';
-      if (!scheds || scheds.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="7" class="p-6 text-center text-slate-400">No scheduled classes found for today.</td></tr>';
-      } else {
-        scheds.forEach(s => {
-          const log = logsMap[s.id];
-          const [sH, sM] = s.start_time.split(':').map(Number);
-          const [eH, eM] = s.end_time.split(':').map(Number);
-          const startMin = sH * 60 + sM;
-          const endMin = eH * 60 + eM;
-
-          const isLive = currentMinutes >= startMin && currentMinutes < endMin;
-          let statusBadge = '<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-600">Upcoming</span>';
-
-          if (isLive) {
-            liveCount++;
-            statusBadge = '<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-700 border border-emerald-300 animate-pulse"><i class="fa-solid fa-circle text-[8px]"></i> LIVE NOW</span>';
-          }
-
-          if (log) {
-            if (log.status === 'Present') {
-              completedCount++;
-              statusBadge = '<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">Completed</span>';
-            } else if (log.status === 'Leave') {
-              leaveCount++;
-              statusBadge = '<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-200">On Leave</span>';
-            } else if (log.status === 'Absent') {
-              absentCount++;
-              statusBadge = '<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-red-50 text-red-700 border border-red-200">Absent</span>';
-            }
-          } else {
-            if (!isLive && currentMinutes > endMin) {
-              statusBadge = '<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-50 text-amber-700">Pending Mark</span>';
-            } else if (!isLive) {
-              remainingCount++;
-            }
-          }
-
-          const tr = document.createElement('tr');
-          tr.className = isLive ? 'bg-emerald-50/50 font-medium' : 'hover:bg-slate-50';
-          tr.innerHTML = `
-            <td class="p-3 font-mono font-bold text-slate-700">${s.start_time.slice(0,5)} - ${s.end_time.slice(0,5)}</td>
-            <td class="p-3 font-bold text-slate-900">${s.students?.name || 'Student'}</td>
-            <td class="p-3 text-slate-600">Quran Studies</td>
-            <td class="p-3 text-brandDark font-semibold">${s.teachers?.full_name || 'Teacher'}</td>
-            <td class="p-3">${statusBadge}</td>
-            <td class="p-3 text-slate-500 italic max-w-xs truncate">${log?.lesson_notes || '--'}</td>
-            <td class="p-3 text-right">
-              ${s.meeting_link ? `<a href="${s.meeting_link}" target="_blank" class="px-2 py-1 bg-brandEmerald text-white rounded text-[11px] font-bold hover:bg-emerald-700"><i class="fa-solid fa-video"></i> Join</a>` : '--'}
-            </td>
-          `;
-          tbody.appendChild(tr);
-        });
-      }
-
-      document.getElementById('kpiTotalToday').innerText = totalToday;
-      document.getElementById('kpiLiveNow').innerText = liveCount;
-      document.getElementById('kpiCompleted').innerText = completedCount;
-      document.getElementById('kpiOnLeave').innerText = leaveCount;
-      document.getElementById('kpiAbsent').innerText = absentCount;
-      document.getElementById('kpiRemaining').innerText = remainingCount;
-    }
-
-    // -------------------------------------------------------------
-    // 2. FAMILIES & STUDENTS (1:N SIBLINGS)
-    // -------------------------------------------------------------
-    async function loadFamiliesAndStudents() {
-      const container = document.getElementById('familiesCardsContainer');
-      const { data: families } = await db.from('families').select('*, students(*)');
-
-      // Populate dropdowns
-      const famSelect = document.getElementById('stuFamilyId');
-      if (famSelect) {
-        famSelect.innerHTML = (families || []).map(f => `<option value="${f.id}">${f.parent_name} (${f.id})</option>`).join('');
-      }
-
-      if (!families || families.length === 0) {
-        container.innerHTML = '<div class="col-span-full p-8 text-center bg-white rounded-xl border border-slate-200 text-slate-400">No families registered yet. Click "+ Add Family" above.</div>';
-        return;
-      }
-
-      container.innerHTML = families.map(f => `
-        <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm hover:shadow-md transition">
-          <div class="flex justify-between items-start border-b pb-2 mb-3">
-            <div>
-              <span class="text-[10px] font-mono px-2 py-0.5 bg-slate-100 rounded text-slate-600 font-bold">${f.id}</span>
-              <h4 class="font-extrabold text-sm text-slate-900 mt-1">${f.parent_name}</h4>
-              <p class="text-[11px] text-slate-500">${f.country} &bull; ${f.whatsapp}</p>
-            </div>
-            <div class="text-right">
-              <span class="font-black text-sm text-brandDark">${f.currency} ${f.monthly_fee}</span>
-              <div class="text-[10px] text-slate-400">Monthly Combined</div>
-            </div>
-          </div>
-          <div class="space-y-1.5">
-            <div class="text-[11px] font-bold text-slate-500 uppercase">Enrolled Sibling Students:</div>
-            ${(f.students || []).length === 0 ? '<div class="text-xs text-slate-400 italic">No students linked</div>' : 
-              f.students.map(s => `
-                <div class="flex justify-between items-center bg-slate-50 px-2.5 py-1.5 rounded text-xs border border-slate-100">
-                  <span class="font-bold text-slate-800"><i class="fa-solid fa-user-graduate text-brandEmerald"></i> ${s.name} (${s.age}y)</span>
-                  <span class="text-[10px] bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded font-bold">${s.status}</span>
-                </div>
-              `).join('')
-            }
-          </div>
-        </div>
-      `).join('');
-    }
-
-    async function handleSaveFamily(e) {
-      e.preventDefault();
-      const id = document.getElementById('famId').value.trim().toUpperCase();
-      const parent_name = document.getElementById('famParentName').value.trim();
-      const whatsapp = document.getElementById('famWhatsApp').value.trim();
-      const country = document.getElementById('famCountry').value.trim();
-      const monthly_fee = parseFloat(document.getElementById('famMonthlyFee').value) || 0;
-      const currency = document.getElementById('famCurrency').value;
-
-      await db.from('families').insert([{ id, parent_name, whatsapp, country, monthly_fee, currency }]);
-      closeModal('modalAddFamily');
-      loadFamiliesAndStudents();
-    }
-
-    async function handleSaveStudent(e) {
-      e.preventDefault();
-      const family_id = document.getElementById('stuFamilyId').value;
-      const name = document.getElementById('stuName').value.trim();
-      const age = parseInt(document.getElementById('stuAge').value) || 7;
-      const course_id = document.getElementById('stuCourseId').value || null;
-      const assigned_teacher_id = document.getElementById('stuTeacherId').value || null;
-      const id = 'STU-' + Math.floor(1000 + Math.random() * 9000);
-
-      await db.from('students').insert([{ id, family_id, name, age, course_id, assigned_teacher_id }]);
-      closeModal('modalAddStudent');
-      loadFamiliesAndStudents();
-      loadSchedules();
-    }
-
-    // -------------------------------------------------------------
-    // 3. TEACHERS & CONTRACT SETUP
+    // 1. TEACHERS DIRECTORY
     // -------------------------------------------------------------
     async function loadTeachers() {
-      const tbody = document.getElementById('teachersTableBody');
-      const { data: teachers } = await db.from('teachers').select('*');
+      const container = document.getElementById('teachersGrid');
+      container.innerHTML = '<div class="col-span-full p-8 text-center text-slate-400">Fetching teachers from database...</div>';
 
-      // Populate selects
-      const sSelect = document.getElementById('stuTeacherId');
-      const schSelect = document.getElementById('schedTeacherId');
-      const opts = (teachers || []).map(t => `<option value="${t.id}">${t.full_name} (${t.rate_per_slot} PKR/slot)</option>`).join('');
-      if (sSelect) sSelect.innerHTML = opts;
-      if (schSelect) schSelect.innerHTML = opts;
+      const { data: teachers, error } = await db.from('teachers').select('*').order('created_at', { ascending: false });
+      ALL_TEACHERS = teachers || [];
+
+      // Also get student counts for each teacher
+      const { data: scheds } = await db.from('class_schedules').select('teacher_id, student_id');
+      const countMap = {};
+      (scheds || []).forEach(s => {
+        countMap[s.teacher_id] = (countMap[s.teacher_id] || 0) + 1;
+      });
 
       if (!teachers || teachers.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="6" class="p-6 text-center text-slate-400">No teachers registered yet.</td></tr>';
+        container.innerHTML = `
+          <div class="col-span-full p-10 text-center bg-white rounded-2xl border border-slate-200">
+            <i class="fa-solid fa-chalkboard-user text-4xl text-slate-300 mb-3"></i>
+            <h4 class="font-extrabold text-slate-700 text-base">No Teachers Registered Yet</h4>
+            <p class="text-xs text-slate-400 mt-1 mb-4">Click "+ Add New Teacher" above to register your Quran tutors.</p>
+            <button onclick="openModal('modalAddTeacher')" class="px-4 py-2 bg-brandDark text-white text-xs font-bold rounded-lg">+ Add First Teacher</button>
+          </div>
+        `;
         return;
       }
 
-      tbody.innerHTML = teachers.map(t => `
-        <tr class="hover:bg-slate-50">
-          <td class="p-3 font-bold text-slate-900">${t.full_name}</td>
-          <td class="p-3 text-slate-600">${t.phone}</td>
-          <td class="p-3 text-slate-600">${t.working_shift || 'Standard'}</td>
-          <td class="p-3 font-bold text-brandDark">${t.rate_per_slot} PKR</td>
-          <td class="p-3 text-slate-500">${t.witness_name || 'N/A'}</td>
-          <td class="p-3"><span class="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-800">${t.status}</span></td>
-        </tr>
-      `).join('');
+      container.innerHTML = teachers.map(t => {
+        const bookedSlots = countMap[t.id] || 0;
+        return `
+          <div class="bg-white rounded-2xl border border-slate-200 shadow-sm hover:shadow-md transition p-5 flex flex-col justify-between">
+            <div>
+              <div class="flex justify-between items-start mb-3 border-b pb-3">
+                <div class="flex items-center gap-3">
+                  <div class="w-12 h-12 rounded-xl bg-emerald-50 border border-emerald-200 text-brandDark flex items-center justify-center font-black text-base">
+                    ${t.full_name.slice(0, 2).toUpperCase()}
+                  </div>
+                  <div>
+                    <h4 class="font-extrabold text-base text-slate-900 leading-tight">${t.full_name}</h4>
+                    <p class="text-[11px] text-slate-500">${t.father_name ? 'S/O ' + t.father_name : 'Quran Instructor'}</p>
+                  </div>
+                </div>
+                <span class="px-2 py-0.5 rounded text-[10px] font-extrabold ${t.status === 'Active' ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-600'}">
+                  ${t.status}
+                </span>
+              </div>
+
+              <!-- Key Specs -->
+              <div class="grid grid-cols-2 gap-2 text-xs mb-3 bg-slate-50 p-2.5 rounded-xl border border-slate-100">
+                <div>
+                  <span class="text-slate-400 text-[10px] block">Rate / 30m Slot:</span>
+                  <strong class="text-brandDark font-bold text-sm">${t.rate_per_slot || 0} PKR</strong>
+                </div>
+                <div>
+                  <span class="text-slate-400 text-[10px] block">Shift:</span>
+                  <strong class="text-slate-700 font-semibold truncate block">${t.working_shift || '10 Hours'}</strong>
+                </div>
+                <div>
+                  <span class="text-slate-400 text-[10px] block">WhatsApp Contact:</span>
+                  <strong class="text-slate-800 font-mono">${t.phone}</strong>
+                </div>
+                <div>
+                  <span class="text-slate-400 text-[10px] block">Weekly Booked Slots:</span>
+                  <strong class="text-emerald-700 font-bold">${bookedSlots} Slots</strong>
+                </div>
+              </div>
+
+              ${t.witness_name ? `
+                <div class="text-[11px] text-slate-500 mb-3">
+                  <i class="fa-solid fa-shield-halved text-brandEmerald"></i> <strong>Witness:</strong> ${t.witness_name}
+                </div>
+              ` : ''}
+            </div>
+
+            <!-- Action: Open Schedule Grid -->
+            <div class="pt-2 border-t flex gap-2">
+              <button onclick="openScheduleGridForTeacher('${t.id}')" class="w-full py-2.5 bg-gradient-to-r from-brandDark to-brandEmerald text-white font-extrabold text-xs rounded-xl hover:shadow-lg transition flex items-center justify-center gap-2">
+                <i class="fa-solid fa-calendar-days"></i> Open 30-Min Schedule Grid
+              </button>
+            </div>
+          </div>
+        `;
+      }).join('');
     }
 
     async function handleSaveTeacher(e) {
       e.preventDefault();
-      const full_name = document.getElementById('teachName').value.trim();
-      const phone = document.getElementById('teachPhone').value.trim();
-      const rate_per_slot = parseFloat(document.getElementById('teachRate').value) || 150;
-      const witness_name = document.getElementById('teachWitness').value.trim();
+      const btn = document.getElementById('btnSaveTeacher');
+      btn.disabled = true;
+      btn.innerText = 'Saving to Database...';
 
-      await db.from('teachers').insert([{ full_name, phone, rate_per_slot, witness_name }]);
-      closeModal('modalAddTeacher');
-      loadTeachers();
+      const full_name = document.getElementById('tFullName').value.trim();
+      const father_name = document.getElementById('tFatherName').value.trim();
+      const phone = document.getElementById('tPhone').value.trim();
+      const alt_phone = document.getElementById('tAltPhone').value.trim();
+      const address = document.getElementById('tAddress').value.trim();
+      const witness_name = document.getElementById('tWitnessName').value.trim();
+      const witness_phone = document.getElementById('tWitnessPhone').value.trim();
+      const rate_per_slot = parseFloat(document.getElementById('tRateSlot').value) || 150;
+      const working_shift = document.getElementById('tShift').value;
+
+      const { error } = await db.from('teachers').insert([{
+        full_name, father_name, phone, alt_phone, address, witness_name, witness_phone, rate_per_slot, working_shift, status: 'Active'
+      }]);
+
+      btn.disabled = false;
+      btn.innerText = 'Save Teacher';
+
+      if (error) {
+        alert('Error saving teacher: ' + error.message);
+      } else {
+        closeModal('modalAddTeacher');
+        loadTeachers();
+      }
     }
 
     // -------------------------------------------------------------
-    // 4. SCHEDULER & ATTENDANCE
+    // 2. INTERACTIVE 30-MIN SCHEDULE MATRIX ENGINE
     // -------------------------------------------------------------
-    async function loadCourses() {
-      const { data: courses } = await db.from('courses').select('*');
-      const cSelect = document.getElementById('stuCourseId');
-      if (cSelect) {
-        cSelect.innerHTML = (courses || []).map(c => `<option value="${c.id}">${c.name}</option>`).join('');
-      }
+    async function openScheduleGridForTeacher(teacherId) {
+      CURRENT_TEACHER = ALL_TEACHERS.find(t => t.id === teacherId);
+      if (!CURRENT_TEACHER) return;
+
+      document.getElementById('matrixTeacherName').innerText = CURRENT_TEACHER.full_name + "'s Timetable";
+      document.getElementById('matrixTeacherSubtitle').innerText = `Rate: ${CURRENT_TEACHER.rate_per_slot} PKR / 30-min slot • Shift: ${CURRENT_TEACHER.working_shift || '10 Hours'}`;
+
+      openModal('modalScheduleMatrix');
+      CURRENT_DAY = 1;
+      updateDayTabsUI();
+      await fetchTeacherSchedules();
+      renderMatrixSlots();
     }
 
-    async function loadSchedules() {
-      const tbody = document.getElementById('schedulesTableBody');
-      const { data: scheds } = await db.from('class_schedules').select('*, students(name), teachers(full_name)');
-      
-      const stuSelect = document.getElementById('schedStudentId');
-      const { data: students } = await db.from('students').select('*');
-      if (stuSelect) {
-        stuSelect.innerHTML = (students || []).map(s => `<option value="${s.id}">${s.name}</option>`).join('');
-      }
-
-      if (!scheds || scheds.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="6" class="p-6 text-center text-slate-400">No scheduled slots created.</td></tr>';
-        return;
-      }
-
-      const days = ['', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-      tbody.innerHTML = scheds.map(s => `
-        <tr class="hover:bg-slate-50">
-          <td class="p-3 font-bold text-brandDark">${days[s.day_of_week]}</td>
-          <td class="p-3 font-mono">${s.start_time.slice(0,5)} - ${s.end_time.slice(0,5)}</td>
-          <td class="p-3 font-bold">${s.students?.name || 'Student'}</td>
-          <td class="p-3">${s.teachers?.full_name || 'Teacher'}</td>
-          <td class="p-3 text-blue-600 truncate max-w-xs">${s.meeting_link || 'Standard Classroom'}</td>
-          <td class="p-3 text-right">
-            <button onclick="deleteSchedule('${s.id}')" class="text-red-500 hover:text-red-700"><i class="fa-solid fa-trash"></i></button>
-          </td>
-        </tr>
-      `).join('');
+    function switchMatrixDay(day) {
+      CURRENT_DAY = day;
+      updateDayTabsUI();
+      renderMatrixSlots();
     }
 
-    async function handleSaveSchedule(e) {
-      e.preventDefault();
-      const student_id = document.getElementById('schedStudentId').value;
-      const teacher_id = document.getElementById('schedTeacherId').value;
-      const day_of_week = parseInt(document.getElementById('schedDayOfWeek').value);
-      const start_time = document.getElementById('schedStartTime').value;
-      
-      // Calculate 30-min end time
-      const [h, m] = start_time.split(':').map(Number);
-      const endM = (m + 30) % 60;
-      const endH = h + Math.floor((m + 30) / 60);
-      const end_time = String(endH).padStart(2, '0') + ':' + String(endM).padStart(2, '0');
-
-      await db.from('class_schedules').insert([{ student_id, teacher_id, day_of_week, start_time, end_time }]);
-      loadSchedules();
-      loadLiveMonitorData();
+    function updateDayTabsUI() {
+      document.getElementById('activeDayLabel').innerText = DAY_NAMES[CURRENT_DAY];
+      document.querySelectorAll('.day-tab').forEach((b, idx) => {
+        if (idx + 1 === CURRENT_DAY) {
+          b.className = 'day-tab px-3 py-1.5 rounded-lg active bg-brandDark text-white font-bold';
+        } else {
+          b.className = 'day-tab px-3 py-1.5 rounded-lg text-slate-600 hover:bg-white font-bold';
+        }
+      });
     }
 
-    async function deleteSchedule(id) {
-      if (confirm('Delete this class schedule slot?')) {
-        await db.from('class_schedules').delete().eq('id', id);
-        loadSchedules();
-        loadLiveMonitorData();
-      }
-    }
-
-    async function loadAttendanceList() {
-      const tbody = document.getElementById('attendanceTableBody');
-      const date = document.getElementById('attendanceDateSelect').value;
-      const dObj = new Date(date);
-      const day = dObj.getDay() === 0 ? 7 : dObj.getDay();
-
+    async function fetchTeacherSchedules() {
       const { data: scheds } = await db.from('class_schedules')
-        .select('*, students(name), teachers(full_name)')
-        .eq('day_of_week', day);
+        .select('*, students(name)')
+        .eq('teacher_id', CURRENT_TEACHER.id);
+      CURRENT_TEACHER_SCHEDULES = scheds || [];
+    }
 
-      const { data: logs } = await db.from('attendance_logs').select('*').eq('date', date);
-      const logsMap = {};
-      (logs || []).forEach(l => logsMap[l.schedule_id] = l);
+    function renderMatrixSlots() {
+      const grid = document.getElementById('matrixSlotsGrid');
+      grid.innerHTML = '';
 
-      if (!scheds || scheds.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="6" class="p-6 text-center text-slate-400">No classes scheduled on this day.</td></tr>';
-        return;
-      }
+      // Filter schedules for the active selected day
+      const dayScheds = CURRENT_TEACHER_SCHEDULES.filter(s => s.day_of_week === CURRENT_DAY);
+      const bookedMap = {};
+      dayScheds.forEach(s => {
+        const timeKey = s.start_time.slice(0, 5); // '17:00'
+        bookedMap[timeKey] = s;
+      });
 
-      tbody.innerHTML = scheds.map(s => {
-        const log = logsMap[s.id];
-        const status = log?.status || 'Pending';
-        const notes = log?.lesson_notes || '';
+      // Generate 48 Half-Hour Slots (24 Hours: 00:00 to 23:30)
+      for (let hour = 0; hour < 24; hour++) {
+        for (let min of [0, 30]) {
+          const hStr = String(hour).padStart(2, '0');
+          const mStr = String(min).padStart(2, '0');
+          const startTime = `${hStr}:${mStr}`;
+          
+          // Calculate end time
+          const endMin = (min + 30) % 60;
+          const endHour = (hour + Math.floor((min + 30) / 60)) % 24;
+          const endTime = `${String(endHour).padStart(2, '0')}:${String(endMin).padStart(2, '0')}`;
 
-        return `
-          <tr class="hover:bg-slate-50">
-            <td class="p-3 font-mono font-bold">${s.start_time.slice(0,5)} - ${s.end_time.slice(0,5)}</td>
-            <td class="p-3 font-bold text-slate-900">${s.students?.name || 'Student'}</td>
-            <td class="p-3 text-brandDark">${s.teachers?.full_name || 'Teacher'}</td>
-            <td class="p-3">
-              <div class="flex gap-1">
-                <button onclick="saveAttendance('${s.id}', '${s.student_id}', '${s.teacher_id}', 'Present')" class="px-2.5 py-1 rounded text-xs font-bold ${status === 'Present' ? 'bg-emerald-600 text-white' : 'bg-slate-100 text-slate-700 hover:bg-emerald-100'}">Present</button>
-                <button onclick="saveAttendance('${s.id}', '${s.student_id}', '${s.teacher_id}', 'Absent')" class="px-2.5 py-1 rounded text-xs font-bold ${status === 'Absent' ? 'bg-red-600 text-white' : 'bg-slate-100 text-slate-700 hover:bg-red-100'}">Absent</button>
-                <button onclick="saveAttendance('${s.id}', '${s.student_id}', '${s.teacher_id}', 'Leave')" class="px-2.5 py-1 rounded text-xs font-bold ${status === 'Leave' ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-700 hover:bg-blue-100'}">Leave</button>
+          const slot = bookedMap[startTime];
+
+          const card = document.createElement('div');
+          card.className = 'p-3 rounded-xl transition flex flex-col justify-between ';
+
+          if (slot) {
+            // BOOKED SLOT
+            card.className += 'slot-booked shadow-sm';
+            card.innerHTML = `
+              <div>
+                <div class="flex justify-between items-center mb-1">
+                  <span class="font-mono font-bold text-xs text-blue-900">${startTime} - ${endTime}</span>
+                  <span class="text-[9px] font-extrabold bg-blue-200 text-blue-800 px-1.5 py-0.5 rounded">BOOKED</span>
+                </div>
+                <div class="font-black text-sm text-slate-900 truncate">
+                  <i class="fa-solid fa-user-graduate text-brandEmerald"></i> ${slot.students?.name || 'Assigned Student'}
+                </div>
+                <div class="text-[11px] text-blue-700 truncate mt-0.5">${slot.meeting_link || 'Standard Classroom'}</div>
               </div>
-            </td>
-            <td class="p-3">
-              <input type="text" id="note_${s.id}" value="${notes}" placeholder="e.g. Surah Baqarah v1-5 recited" class="w-full text-xs p-1.5 border rounded">
-            </td>
-            <td class="p-3 text-right">
-              <button onclick="saveAttendance('${s.id}', '${s.student_id}', '${s.teacher_id}', '${status}')" class="px-3 py-1 bg-slate-800 text-white rounded text-xs font-bold hover:bg-black"><i class="fa-solid fa-floppy-disk"></i></button>
-            </td>
-          </tr>
-        `;
-      }).join('');
-    }
+              <div class="mt-2.5 pt-2 border-t border-blue-200 flex justify-between items-center">
+                <span class="text-[10px] text-slate-500 font-semibold">Duration: 30m</span>
+                <button onclick="handleDeleteScheduleSlot('${slot.id}')" class="text-red-500 hover:text-red-700 text-xs font-bold" title="Unassign Student">
+                  <i class="fa-solid fa-trash-can"></i> Unassign
+                </button>
+              </div>
+            `;
+          } else {
+            // VACANT AVAILABLE SLOT
+            card.className += 'slot-vacant cursor-pointer';
+            card.onclick = () => openBookingModal(startTime, endTime);
+            card.innerHTML = `
+              <div>
+                <div class="flex justify-between items-center mb-1">
+                  <span class="font-mono font-bold text-xs">${startTime} - ${endTime}</span>
+                  <span class="text-[9px] font-bold bg-emerald-200/80 px-1.5 py-0.5 rounded">FREE</span>
+                </div>
+                <div class="text-xs font-extrabold text-emerald-800 mt-2">
+                  <i class="fa-solid fa-plus-circle"></i> Click to Book Student
+                </div>
+              </div>
+              <div class="text-[10px] text-emerald-600 font-medium mt-3">30-Min Vacant Slot</div>
+            `;
+          }
 
-    async function saveAttendance(schedule_id, student_id, teacher_id, status) {
-      const date = document.getElementById('attendanceDateSelect').value;
-      const noteInput = document.getElementById('note_' + schedule_id);
-      const lesson_notes = noteInput ? noteInput.value.trim() : '';
-
-      await db.from('attendance_logs').upsert([{
-        schedule_id,
-        student_id,
-        teacher_id,
-        date,
-        status: status === 'Pending' ? 'Present' : status,
-        lesson_notes
-      }], { onConflict: 'schedule_id,date' });
-
-      loadAttendanceList();
-      loadLiveMonitorData();
+          grid.appendChild(card);
+        }
+      }
     }
 
     // -------------------------------------------------------------
-    // 5. ATTENDANCE-DRIVEN SALARIES (OWNER)
+    // 3. BOOK STUDENT INTO VACANT SLOT
     // -------------------------------------------------------------
-    async function calculateMonthlySalaries() {
-      const tbody = document.getElementById('salariesTableBody');
-      tbody.innerHTML = '<tr><td colspan="6" class="p-6 text-center text-slate-400"><span class="spinner"></span> Calculating verified attendance payroll...</td></tr>';
+    let ACTIVE_BOOKING_START_TIME = '';
+    let ACTIVE_BOOKING_END_TIME = '';
 
-      const { data: teachers } = await db.from('teachers').select('*');
-      const { data: logs } = await db.from('attendance_logs').select('*').eq('status', 'Present');
+    async function loadStudentsList() {
+      const { data: students } = await db.from('students').select('id, name');
+      ALL_STUDENTS = students || [];
+      const select = document.getElementById('bookStudentSelect');
+      if (select) {
+        select.innerHTML = (ALL_STUDENTS.length === 0) 
+          ? '<option value="">No students enrolled yet</option>' 
+          : ALL_STUDENTS.map(s => `<option value="${s.id}">${s.name} (${s.id})</option>`).join('');
+      }
+    }
 
-      if (!teachers || teachers.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="6" class="p-6 text-center text-slate-400">No teachers found.</td></tr>';
+    function openBookingModal(startTime, endTime) {
+      ACTIVE_BOOKING_START_TIME = startTime;
+      ACTIVE_BOOKING_END_TIME = endTime;
+
+      document.getElementById('bookSlotDisplay').value = `${DAY_NAMES[CURRENT_DAY]} • ${startTime} to ${endTime} (30 Mins)`;
+      openModal('modalBookSlot');
+    }
+
+    async function handleConfirmSlotBooking(e) {
+      e.preventDefault();
+      const student_id = document.getElementById('bookStudentSelect').value;
+      const meeting_link = document.getElementById('bookMeetingLink').value.trim();
+
+      if (!student_id) {
+        alert('Please enroll a student first in Phase 2 before assigning to schedule.');
         return;
       }
 
-      tbody.innerHTML = teachers.map(t => {
-        const conductedCount = (logs || []).filter(l => l.teacher_id === t.id).length;
-        const grossSalary = conductedCount * (t.rate_per_slot || 0);
+      const { error } = await db.from('class_schedules').insert([{
+        student_id,
+        teacher_id: CURRENT_TEACHER.id,
+        day_of_week: CURRENT_DAY,
+        start_time: ACTIVE_BOOKING_START_TIME,
+        end_time: ACTIVE_BOOKING_END_TIME,
+        meeting_link,
+        status: 'Active'
+      }]);
 
-        return `
-          <tr class="hover:bg-slate-50 font-medium">
-            <td class="p-3 font-bold text-slate-900">${t.full_name}</td>
-            <td class="p-3 font-bold text-emerald-700"><i class="fa-solid fa-circle-check"></i> ${conductedCount} Classes</td>
-            <td class="p-3">${t.rate_per_slot} PKR</td>
-            <td class="p-3 font-black text-sm text-brandDark">${grossSalary.toLocaleString()} PKR</td>
-            <td class="p-3"><span class="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800">Pending Transfer</span></td>
-            <td class="p-3 text-right">
-              <button class="px-3 py-1 bg-brandDark text-white rounded text-xs font-bold hover:bg-brandDarkest">Mark Paid</button>
-            </td>
-          </tr>
-        `;
-      }).join('');
+      if (error) {
+        alert('Error booking slot: ' + error.message);
+      } else {
+        closeModal('modalBookSlot');
+        await fetchTeacherSchedules();
+        renderMatrixSlots();
+        loadTeachers();
+      }
     }
 
-    // MODAL UTILITIES
-    function openModal(id) {
-      const m = document.getElementById(id);
-      if (m) m.classList.remove('hidden'), m.classList.add('flex');
+    async function handleDeleteScheduleSlot(scheduleId) {
+      if (confirm('Unassign this student from this 30-minute slot?')) {
+        await db.from('class_schedules').delete().eq('id', scheduleId);
+        await fetchTeacherSchedules();
+        renderMatrixSlots();
+        loadTeachers();
+      }
     }
-    function closeModal(id) {
-      const m = document.getElementById(id);
-      if (m) m.classList.add('hidden'), m.classList.remove('flex');
-    }
+
+    // MODAL UTILS
+    function openModal(id) { document.getElementById(id).classList.remove('hidden'); document.getElementById(id).classList.add('flex'); }
+    function closeModal(id) { document.getElementById(id).classList.add('hidden'); document.getElementById(id).classList.remove('flex'); }
   </script>
 </body>
 </html>
