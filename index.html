@@ -58,7 +58,7 @@
         </div>
         <div>
           <h1 class="font-cinzel text-lg sm:text-xl font-bold tracking-wide">AL-HUDA ISLAMIC CENTRE</h1>
-          <p class="text-xs text-emerald-200 font-medium">Online Quran & Islamic Studies Academy &bull; Complete Cloud LMS</p>
+          <p class="text-xs text-emerald-200 font-medium">Online Quran & Islamic Studies Academy</p>
         </div>
       </div>
 
@@ -122,9 +122,6 @@
             <h2 class="text-xl sm:text-2xl font-black text-brandDark tracking-tight flex items-center gap-2">
               <i class="fa-solid fa-gauge-high text-brandEmerald"></i> Executive Operations Dashboard
             </h2>
-            <span class="px-2.5 py-0.5 bg-emerald-100 text-brandEmerald rounded-full text-xs font-bold border border-emerald-300">
-              Admin &bull; Manager &bull; Owner
-            </span>
           </div>
           <p class="text-xs text-slate-500 font-medium mt-0.5">Al-Huda Islamic Centre &bull; Real-time Timetable Execution & Monthly Performance</p>
         </div>
@@ -148,7 +145,7 @@
       <div class="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-2.5 mb-5">
         
         <!-- 1. Total Classes Today -->
-        <div onclick="filterDashboardClasses('all')" id="kpiBox-all" class="kpi-dash-card cursor-pointer bg-white p-3 rounded-xl border-2 border-brandDark shadow-sm hover:shadow-md transition-all scale-[1.01] ring-2 ring-brandDark/20">
+        <div onclick="filterDashboardClasses('all')" id="kpiBox-all" class="kpi-dash-card cursor-pointer bg-white p-3 rounded-xl border border-slate-200 shadow-sm hover:border-brandDark hover:shadow-md transition-all">
           <div class="flex items-center justify-between text-slate-500 mb-1">
             <span class="text-[10px] font-black uppercase tracking-wider">Total Today</span>
             <i class="fa-solid fa-calendar-day text-brandDark text-xs"></i>
@@ -239,129 +236,123 @@
 
       </div>
 
-      <!-- MAIN COCKPIT: 2-COLUMN SPLIT LAYOUT -->
-      <!-- Left Column: Interactive Filtered Classes List (Timeline) -->
-      <!-- Right Column: Stacked Month-wise Analytics Graphs (Graph 1 Top, Graph 2 Bottom) -->
-      <div class="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
+      <!-- 1. CLASSES LIST / TIMETABLE SECTION (Expands above graphs when any KPI card is selected) -->
+      <div id="dashClassesSection" class="hidden mb-6 bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden transition-all duration-300">
         
-        <!-- LEFT COLUMN: CLASSES TIMELINE & DETAILS TABLE (~65% width) -->
-        <div class="lg:col-span-8 bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-          
-          <!-- Table Control Toolbar -->
-          <div class="p-3.5 sm:p-4 border-b border-slate-200 flex justify-between items-center flex-wrap gap-2.5 bg-slate-50/80">
-            <div class="flex items-center gap-2 flex-wrap">
-              <h3 class="font-extrabold text-sm text-slate-900 flex items-center gap-2">
-                <span id="dashFilterIcon" class="w-6 h-6 rounded-lg bg-brandDark text-white flex items-center justify-center text-xs">
-                  <i class="fa-solid fa-calendar-day"></i>
-                </span>
-                <span id="dashFilterTitle">Showing: All Classes Today</span>
-              </h3>
-              <span id="dashFilterCountBadge" class="px-2.5 py-0.5 bg-brandEmerald/10 text-brandEmerald rounded-full font-bold text-xs font-mono">0 Classes</span>
-            </div>
-
-            <div class="flex items-center gap-2 flex-wrap">
-              <!-- Search Filter -->
-              <div class="relative">
-                <i class="fa-solid fa-magnifying-glass absolute left-3 top-2.5 text-slate-400 text-xs"></i>
-                <input type="text" id="dashClassSearch" oninput="handleDashClassSearch(this.value)" placeholder="Search student, teacher, course..." class="pl-8 pr-3 py-1.5 bg-white border border-slate-300 rounded-lg text-xs font-semibold focus:outline-brandEmerald w-40 sm:w-52">
+        <!-- Elegant Header Toolbar -->
+        <div class="p-4 border-b border-slate-200 flex justify-between items-center flex-wrap gap-3 bg-slate-50/90">
+          <div class="flex items-center gap-3">
+            <span id="dashFilterIcon" class="w-9 h-9 rounded-xl bg-brandDark text-white flex items-center justify-center text-sm shadow-xs">
+              <i class="fa-solid fa-calendar-day"></i>
+            </span>
+            <div>
+              <div class="flex items-center gap-2">
+                <h3 id="dashFilterTitle" class="font-extrabold text-sm sm:text-base text-slate-900">All Scheduled Classes</h3>
+                <span id="dashFilterCountBadge" class="px-2.5 py-0.5 bg-emerald-100 text-brandEmerald rounded-full font-extrabold text-xs font-mono border border-emerald-200">0 Classes</span>
               </div>
-
-              <!-- Quick Pill Filter Switches -->
-              <div class="hidden sm:flex bg-slate-200/70 p-1 rounded-lg text-[11px] font-bold">
-                <button onclick="filterDashboardClasses('all')" class="dash-pill px-2.5 py-1 rounded-md bg-white text-slate-900 shadow-sm font-bold" data-filter="all">All</button>
-                <button onclick="filterDashboardClasses('live')" class="dash-pill px-2.5 py-1 rounded-md text-slate-600 hover:text-slate-900" data-filter="live">Live</button>
-                <button onclick="filterDashboardClasses('completed')" class="dash-pill px-2.5 py-1 rounded-md text-slate-600 hover:text-slate-900" data-filter="completed">Done</button>
-                <button onclick="filterDashboardClasses('remaining')" class="dash-pill px-2.5 py-1 rounded-md text-slate-600 hover:text-slate-900" data-filter="remaining">Remaining</button>
-                <button onclick="filterDashboardClasses('absent')" class="dash-pill px-2.5 py-1 rounded-md text-slate-600 hover:text-slate-900" data-filter="absent">Absent</button>
-                <button onclick="filterDashboardClasses('leave')" class="dash-pill px-2.5 py-1 rounded-md text-slate-600 hover:text-slate-900" data-filter="leave">Leaves</button>
-                <button onclick="filterDashboardClasses('trial')" class="dash-pill px-2.5 py-1 rounded-md text-slate-600 hover:text-slate-900" data-filter="trial">Trials</button>
-              </div>
+              <p class="text-[11px] text-slate-500" id="dashFilterSubtitle">Filtered list of students and classes for selected indicator</p>
             </div>
           </div>
 
-          <!-- Classes Table -->
-          <div class="overflow-x-auto">
-            <table class="w-full text-left text-xs border-collapse">
-              <thead class="bg-slate-100 text-slate-700 font-bold border-b border-slate-200 uppercase tracking-wider text-[11px]">
-                <tr>
-                  <th class="p-3">Time Slot</th>
-                  <th class="p-3">Student Details</th>
-                  <th class="p-3">Course</th>
-                  <th class="p-3">Teacher</th>
-                  <th class="p-3">Type</th>
-                  <th class="p-3">Lesson Notes & Status</th>
-                  <th class="p-3 text-right">Quick Operations</th>
-                </tr>
-              </thead>
-              <tbody id="dashClassesTableBody" class="divide-y divide-slate-100">
-                <tr><td colspan="7" class="p-8 text-center text-slate-400">Loading today's classes data...</td></tr>
-              </tbody>
-            </table>
-          </div>
-
-          <!-- Graceful Empty State Card -->
-          <div id="dashEmptyState" class="hidden p-10 text-center">
-            <div class="w-14 h-14 mx-auto rounded-full bg-slate-100 text-slate-400 flex items-center justify-center text-2xl mb-3">
-              <i class="fa-regular fa-folder-open"></i>
+          <div class="flex items-center gap-2.5">
+            <!-- Search Filter -->
+            <div class="relative">
+              <i class="fa-solid fa-magnifying-glass absolute left-3 top-2.5 text-slate-400 text-xs"></i>
+              <input type="text" id="dashClassSearch" oninput="handleDashClassSearch(this.value)" placeholder="Search student or teacher..." class="pl-8 pr-3 py-1.5 bg-white border border-slate-300 rounded-lg text-xs font-semibold focus:outline-brandEmerald w-48 sm:w-64 shadow-xs">
             </div>
-            <h4 class="font-bold text-slate-800 text-sm" id="dashEmptyStateTitle">No Classes Found</h4>
-            <p class="text-xs text-slate-500 mt-1 max-w-sm mx-auto" id="dashEmptyStateMsg">There are no classes matching the selected filter for today.</p>
-          </div>
 
+            <!-- Close / Collapse Button -->
+            <button onclick="closeDashboardClassesView()" class="px-3 py-1.5 rounded-lg border border-slate-300 bg-white hover:bg-slate-100 text-slate-700 font-bold text-xs flex items-center gap-1.5 shadow-xs transition" title="Hide classes list and return to overview">
+              <i class="fa-solid fa-xmark"></i> Close List
+            </button>
+          </div>
         </div>
 
-        <!-- RIGHT COLUMN: STACKED MONTH-WISE ANALYTICS GRAPHS (~35% width) -->
-        <div class="lg:col-span-4 space-y-5">
-          
-          <!-- Graph 1 (Top): Monthly Student Enrollments vs Left -->
-          <div class="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-sm">
-            <div class="flex justify-between items-center mb-2.5 flex-wrap gap-1">
+        <!-- Classes Table -->
+        <div class="overflow-x-auto">
+          <table class="w-full text-left text-xs border-collapse">
+            <thead class="bg-slate-100 text-slate-700 font-bold border-b border-slate-200 uppercase tracking-wider text-[11px]">
+              <tr>
+                <th class="p-3">Time Slot</th>
+                <th class="p-3">Student Details</th>
+                <th class="p-3">Course</th>
+                <th class="p-3">Teacher</th>
+                <th class="p-3">Type</th>
+                <th class="p-3">Lesson Notes & Status</th>
+                <th class="p-3 text-right">Quick Operations</th>
+              </tr>
+            </thead>
+            <tbody id="dashClassesTableBody" class="divide-y divide-slate-100">
+              <tr><td colspan="7" class="p-8 text-center text-slate-400">Loading today's classes data...</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Graceful Empty State Card -->
+        <div id="dashEmptyState" class="hidden p-10 text-center">
+          <div class="w-14 h-14 mx-auto rounded-full bg-slate-100 text-slate-400 flex items-center justify-center text-2xl mb-3">
+            <i class="fa-regular fa-folder-open"></i>
+          </div>
+          <h4 class="font-bold text-slate-800 text-sm" id="dashEmptyStateTitle">No Classes Found</h4>
+          <p class="text-xs text-slate-500 mt-1 max-w-sm mx-auto" id="dashEmptyStateMsg">There are no classes matching the selected filter for today.</p>
+        </div>
+
+      </div>
+
+      <!-- 2. MONTH-WISE ANALYTICS GRAPHS (Full width large size, sits directly under KPI cards or below table) -->
+      <div id="dashGraphsSection" class="grid grid-cols-1 lg:grid-cols-2 gap-5 mb-6">
+        
+        <!-- Graph 1: Monthly Student Inflow vs Left (Large & Wide) -->
+        <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex flex-col justify-between">
+          <div>
+            <div class="flex justify-between items-center mb-2 flex-wrap gap-1">
               <div>
-                <h3 class="font-bold text-xs sm:text-sm text-slate-900 flex items-center gap-1.5">
+                <h3 class="font-extrabold text-sm sm:text-base text-slate-900 flex items-center gap-2">
                   <i class="fa-solid fa-chart-simple text-brandEmerald"></i> Monthly Student Inflow vs Left
                 </h3>
-                <p class="text-[11px] text-slate-500">New Enrollments vs Left Students (Month-wise)</p>
+                <p class="text-xs text-slate-500">New Enrollments vs Left Students (Month-wise Breakdown)</p>
               </div>
             </div>
-            <div class="flex items-center gap-2 mb-2 text-[11px] font-semibold">
-              <span class="inline-flex items-center gap-1 text-emerald-700">
+            <div class="flex items-center gap-3 mb-3 text-xs font-semibold">
+              <span class="inline-flex items-center gap-1.5 text-emerald-700">
                 <span class="w-2.5 h-2.5 rounded-full bg-emerald-500"></span> New Enrolled
               </span>
-              <span class="inline-flex items-center gap-1 text-rose-600">
+              <span class="inline-flex items-center gap-1.5 text-rose-600">
                 <span class="w-2.5 h-2.5 rounded-full bg-rose-500"></span> Left LMS
               </span>
-              <span class="inline-flex items-center gap-1 text-slate-700 ml-auto">
-                <span class="w-2.5 h-0.5 bg-brandDark"></span> Net Active
+              <span class="inline-flex items-center gap-1.5 text-slate-700 ml-auto">
+                <span class="w-3 h-0.5 bg-brandDark"></span> Net Active
               </span>
             </div>
-            <div class="relative h-56 w-full">
-              <canvas id="chartStudentGrowth"></canvas>
-            </div>
           </div>
+          <div class="relative h-72 w-full">
+            <canvas id="chartStudentGrowth"></canvas>
+          </div>
+        </div>
 
-          <!-- Graph 2 (Bottom): Monthly Fee Payments Received vs Target -->
-          <div class="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-sm">
-            <div class="flex justify-between items-center mb-2.5 flex-wrap gap-1">
+        <!-- Graph 2: Monthly Fee Payments Received vs Target (Large & Wide) -->
+        <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex flex-col justify-between">
+          <div>
+            <div class="flex justify-between items-center mb-2 flex-wrap gap-1">
               <div>
-                <h3 class="font-bold text-xs sm:text-sm text-slate-900 flex items-center gap-1.5">
+                <h3 class="font-extrabold text-sm sm:text-base text-slate-900 flex items-center gap-2">
                   <i class="fa-solid fa-chart-line text-brandGold"></i> Monthly Fee Payments Received
                 </h3>
-                <p class="text-[11px] text-slate-500">Payments Collected vs Projected Target ($)</p>
+                <p class="text-xs text-slate-500">Actual Revenue Collected vs Projected Target ($)</p>
               </div>
             </div>
-            <div class="flex items-center gap-2 mb-2 text-[11px] font-semibold">
-              <span class="inline-flex items-center gap-1 text-emerald-700">
+            <div class="flex items-center gap-3 mb-3 text-xs font-semibold">
+              <span class="inline-flex items-center gap-1.5 text-emerald-700">
                 <span class="w-2.5 h-2.5 rounded-full bg-emerald-600"></span> Fee Received
               </span>
-              <span class="inline-flex items-center gap-1 text-amber-600 ml-auto">
-                <span class="w-2.5 h-0.5 border-t-2 border-dashed border-amber-500"></span> Target Target
+              <span class="inline-flex items-center gap-1.5 text-amber-600 ml-auto">
+                <span class="w-3 h-0.5 border-t-2 border-dashed border-amber-500"></span> Target Projected
               </span>
             </div>
-            <div class="relative h-56 w-full">
-              <canvas id="chartFeeRevenue"></canvas>
-            </div>
           </div>
-
+          <div class="relative h-72 w-full">
+            <canvas id="chartFeeRevenue"></canvas>
+          </div>
         </div>
 
       </div>
@@ -1324,7 +1315,7 @@
 
     // MAIN EXECUTIVE DASHBOARD STATE
     let DASHBOARD_CLASSES = [];
-    let CURRENT_DASH_FILTER = 'all';
+    let CURRENT_DASH_FILTER = null;
     let DASH_STUDENT_CHART = null;
     let DASH_REVENUE_CHART = null;
 
@@ -1684,12 +1675,18 @@
       setEl('kpiAbsent', absentCount);
       setEl('kpiOnLeave', leaveCount);
 
-      renderDashboardClassesTable();
+      if (CURRENT_DASH_FILTER) {
+        renderDashboardClassesTable();
+      }
     }
 
     const loadLiveMonitorData = loadDashboardData;
 
     function filterDashboardClasses(filterType) {
+      if (CURRENT_DASH_FILTER === filterType) {
+        closeDashboardClassesView();
+        return;
+      }
       CURRENT_DASH_FILTER = filterType;
 
       document.querySelectorAll('.kpi-dash-card').forEach(box => {
@@ -1703,32 +1700,52 @@
         selectedBox.classList.remove('border-slate-200');
       }
 
-      document.querySelectorAll('.dash-pill').forEach(btn => {
-        if (btn.getAttribute('data-filter') === filterType) {
-          btn.className = 'dash-pill px-2.5 py-1 rounded-md bg-white text-slate-900 shadow-sm font-bold';
-        } else {
-          btn.className = 'dash-pill px-2.5 py-1 rounded-md text-slate-600 hover:text-slate-900';
-        }
-      });
+      const classesSection = document.getElementById('dashClassesSection');
+      if (classesSection) {
+        classesSection.classList.remove('hidden');
+      }
 
       const titleMap = {
-        'all': { text: 'Showing: All Classes Today', icon: 'fa-calendar-day' },
-        'live': { text: 'Showing: Current Live Classes', icon: 'fa-tower-broadcast' },
-        'completed': { text: 'Showing: Completed Classes', icon: 'fa-circle-check' },
-        'remaining': { text: 'Showing: Remaining Classes', icon: 'fa-hourglass-half' },
-        'absent': { text: 'Showing: Absences Today', icon: 'fa-user-xmark' },
-        'leave': { text: 'Showing: Leaves Today', icon: 'fa-calendar-xmark' },
-        'trial': { text: 'Showing: Trials Today', icon: 'fa-graduation-cap' }
+        'all': { text: 'All Scheduled Classes Today', subtitle: 'Full schedule roster across morning, afternoon & evening batches', icon: 'fa-calendar-day' },
+        'live': { text: 'Current Live Classes', subtitle: 'Classes taking place right now in current time slot', icon: 'fa-tower-broadcast' },
+        'completed': { text: 'Completed Classes Today', subtitle: 'Sessions marked Present since 12:00 AM midnight', icon: 'fa-circle-check' },
+        'remaining': { text: 'Remaining Classes Today', subtitle: 'Upcoming classes scheduled to take place before midnight', icon: 'fa-hourglass-half' },
+        'absent': { text: 'Absences Marked Today', subtitle: 'Students marked Absent for their sessions today', icon: 'fa-user-xmark' },
+        'leave': { text: 'Student Leaves Today', subtitle: 'Students on excused leave for sessions today', icon: 'fa-calendar-xmark' },
+        'trial': { text: 'Trial Classes Today', subtitle: 'Trial and evaluation lessons scheduled for today', icon: 'fa-graduation-cap' }
       };
 
       const meta = titleMap[filterType] || titleMap['all'];
       const titleEl = document.getElementById('dashFilterTitle');
       if (titleEl) titleEl.innerText = meta.text;
-
+      const subEl = document.getElementById('dashFilterSubtitle');
+      if (subEl) subEl.innerText = meta.subtitle;
       const iconContainer = document.getElementById('dashFilterIcon');
       if (iconContainer) iconContainer.innerHTML = `<i class="fa-solid ${meta.icon}"></i>`;
 
       renderDashboardClassesTable();
+
+      setTimeout(() => {
+        classesSection?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        DASH_STUDENT_CHART?.resize();
+        DASH_REVENUE_CHART?.resize();
+      }, 50);
+    }
+
+    function closeDashboardClassesView() {
+      CURRENT_DASH_FILTER = null;
+      document.querySelectorAll('.kpi-dash-card').forEach(box => {
+        box.classList.remove('ring-2', 'ring-brandDark', 'scale-[1.01]', 'shadow-md');
+        box.classList.add('border-slate-200');
+      });
+      const classesSection = document.getElementById('dashClassesSection');
+      if (classesSection) {
+        classesSection.classList.add('hidden');
+      }
+      setTimeout(() => {
+        DASH_STUDENT_CHART?.resize();
+        DASH_REVENUE_CHART?.resize();
+      }, 50);
     }
 
     function renderDashboardClassesTable(searchQuery = '') {
