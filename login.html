@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Al-Huda Islamic Centre LMS</title>
+    <script>window.location.replace("index.html");</script>
+</head>
+<body>
+
+            <div id="errorAlert" class="alert-error"></div>
+
+            <form id="loginForm">
+                <div class="form-group">
+                    <label for="username">Username</label>
+                    <input type="text" id="username" class="form-input" placeholder="Enter username (e.g. beacon_admin)" required autocomplete="off">
+                </div>
+
+                <div class="form-group">
+                    <label for="password">Password</label>
+                    <input type="password" id="password" class="form-input" placeholder="Enter password" required>
+                </div>
+
+                <button type="submit" class="btn-primary" style="width: 100%; padding: 13px; font-size: 15px;">Login to Dashboard</button>
+            </form>
+
+            <div class="credentials-hint">
+                <strong style="color:var(--primary); display:block; margin-bottom:6px;">Quick Login Accounts (Click any account to auto-fill):</strong>
+                <ul>
+                    <li onclick="autoFill('beacon_admin', 'admin_bqi_123')" style="cursor: pointer;">
+                        <strong>Super Admin (Owner):</strong> <code>beacon_admin</code> / <code>admin_bqi_123</code>
+                    </li>
+                    <li onclick="autoFill('beacon_manager', 'manager_bqi_123')" style="cursor: pointer;">
+                        <strong>Manager:</strong> <code>beacon_manager</code> / <code>manager_bqi_123</code>
+                    </li>
+                    <li onclick="autoFill('beacon_rec_manager', 'rec_bqi_123')" style="cursor: pointer;">
+                        <strong>Recording Auditor:</strong> <code>beacon_rec_manager</code> / <code>rec_bqi_123</code>
+                    </li>
+                    <li onclick="autoFill('beacon_teacher', 'teacher_bqi_123')" style="cursor: pointer;">
+                        <strong>Teacher:</strong> <code>beacon_teacher</code> / <code>teacher_bqi_123</code>
+                    </li>
+                    <li onclick="autoFill('beacon_student', 'student_bqi_123')" style="cursor: pointer;">
+                        <strong>Student / Parent:</strong> <code>beacon_student</code> / <code>student_bqi_123</code>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <script src="database.js"></script>
+    <script>
+        BQI_DB.clearSession();
+
+        function autoFill(user, pass) {
+            document.getElementById("username").value = user;
+            document.getElementById("password").value = pass;
+            document.getElementById("errorAlert").style.display = "none";
+        }
+
+        document.getElementById("loginForm").addEventListener("submit", function(e) {
+            e.preventDefault();
+            const username = document.getElementById("username").value.trim();
+            const password = document.getElementById("password").value;
+            const errorAlert = document.getElementById("errorAlert");
+
+            const result = BQI_DB.login(username, password);
+
+            if (result.success) {
+                redirectUser(result.role);
+            } else {
+                errorAlert.innerText = result.message;
+                errorAlert.style.display = "block";
+            }
+        });
+
+        function redirectUser(role) {
+            switch(role) {
+                case "super_admin":
+                    window.location.href = "admin.html";
+                    break;
+                case "manager":
+                    window.location.href = "manager.html";
+                    break;
+                case "recording_manager":
+                    window.location.href = "auditor.html";
+                    break;
+                case "teacher":
+                    window.location.href = "teacher.html";
+                    break;
+                case "parent":
+                    window.location.href = "parent.html";
+                    break;
+                default:
+                    window.location.href = "login.html";
+            }
+        }
+    </script>
+</body>
+</html>

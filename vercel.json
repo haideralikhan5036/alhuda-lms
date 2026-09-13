@@ -1,0 +1,34 @@
+{
+  "version": 2,
+  "cleanUrls": true,
+  "routes": [
+    {
+      "src": "/",
+      "dest": "/index.html"
+    },
+    {
+      "src": "/admin",
+      "dest": "/admin.html"
+    },
+    {
+      "src": "/manager",
+      "dest": "/manager.html"
+    },
+    {
+      "src": "/teacher",
+      "dest": "/teacher.html"
+    },
+    {
+      "src": "/parent",
+      "dest": "/parent.html"
+    },
+    {
+      "src": "/class",
+      "dest": "/class.html"
+    },
+    {
+      "src": "/auditor",
+      "dest": "/auditor.html"
+    }
+  ]
+}

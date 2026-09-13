@@ -575,7 +575,7 @@
             </div>
           </div>
 
-          <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label class="block font-bold mb-1">Gender:</label>
               <select id="tGender" class="w-full p-2.5 border rounded-lg font-semibold">
@@ -584,23 +584,8 @@
               </select>
             </div>
             <div>
-              <label class="block font-bold mb-1">Qualification & Ijazah:</label>
-              <select id="tQualification" class="w-full p-2.5 border rounded-lg font-semibold">
-                <option value="Hafiz-e-Quran & Tajweed Certified">Hafiz-e-Quran & Tajweed Certified</option>
-                <option value="Al-Azhar Certified Qari">Al-Azhar Certified Qari</option>
-                <option value="Dars-e-Nizami (Alimiyyah)">Dars-e-Nizami (Alimiyyah)</option>
-                <option value="Shahadat-ul-Almiya & Qir'at">Shahadat-ul-Almiya & Qir'at</option>
-                <option value="General Tajweed Teacher">General Tajweed Teacher</option>
-              </select>
-            </div>
-            <div>
-              <label class="block font-bold mb-1">Teaching Specialization:</label>
-              <select id="tSpecialization" class="w-full p-2.5 border rounded-lg font-semibold">
-                <option value="Tajweed & Qaida Nooraniya">Tajweed & Qaida Nooraniya</option>
-                <option value="Quran Memorization (Hifz)">Quran Memorization (Hifz)</option>
-                <option value="The Holy Quran (Nazra)">The Holy Quran (Nazra)</option>
-                <option value="Tafseer & Arabic Language">Tafseer & Arabic Language</option>
-              </select>
+              <label class="block font-bold mb-1">Qualification & Ijazah (تعلیمی قابلیت و اسناد):</label>
+              <input type="text" id="tQualification" placeholder="e.g. Hafiz-e-Quran / Dars-e-Nizami / Shahadat-ul-Almiyah" class="w-full p-2.5 border rounded-lg font-semibold">
             </div>
           </div>
 
@@ -631,12 +616,12 @@
           </div>
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
-              <label class="block font-bold mb-1">Witness / Reference Name:</label>
-              <input type="text" id="tWitnessName" placeholder="Witness Full Name" class="w-full p-2.5 border rounded-lg">
+              <label class="block font-bold mb-1">Witness / Reference Name (Optional / اختیاری):</label>
+              <input type="text" id="tWitnessName" placeholder="Witness Full Name (Optional)" class="w-full p-2.5 border rounded-lg">
             </div>
             <div>
-              <label class="block font-bold mb-1">Witness Phone Number:</label>
-              <input type="text" id="tWitnessPhone" placeholder="Witness Contact Number" class="w-full p-2.5 border rounded-lg">
+              <label class="block font-bold mb-1">Witness Phone Number (Optional / اختیاری):</label>
+              <input type="text" id="tWitnessPhone" placeholder="Witness Contact Number (Optional)" class="w-full p-2.5 border rounded-lg">
             </div>
           </div>
         </div>
@@ -701,7 +686,7 @@
             <div>
               <label class="block font-bold mb-1 text-slate-700">Login Password *:</label>
               <div class="relative">
-                <input type="text" id="tPassword" required value="teacher_bqi_123" class="w-full p-2.5 bg-white border border-slate-300 rounded-lg font-mono font-bold text-slate-800 pr-8">
+                <input type="text" id="tPassword" required value="alhuda_123" class="w-full p-2.5 bg-white border border-slate-300 rounded-lg font-mono font-bold text-slate-800 pr-8">
                 <button type="button" onclick="generateRandomTeacherPass()" class="absolute right-2 top-2.5 text-slate-400 hover:text-brandDark font-bold" title="Generate New Password">
                   <i class="fa-solid fa-arrows-rotate"></i>
                 </button>
@@ -740,12 +725,12 @@
 
       <form onsubmit="handleTeacherLoginSubmit(event)" class="space-y-3.5 text-xs">
         <div>
-          <label class="block font-bold mb-1 text-slate-700">Teacher ID or Username *:</label>
-          <input type="text" id="tLoginUser" required placeholder="e.g. TCH-101 or qari_bilal" class="w-full p-2.5 border rounded-lg font-bold text-slate-800">
+          <label class="block font-bold mb-1 text-slate-700">Username (یوزر نیم) *:</label>
+          <input type="text" id="tLoginUser" required placeholder="Enter Username (e.g. teacher_abdul)" class="w-full p-2.5 border rounded-lg font-bold text-slate-800">
         </div>
         <div>
-          <label class="block font-bold mb-1 text-slate-700">Password *:</label>
-          <input type="password" id="tLoginPass" required placeholder="Enter password" class="w-full p-2.5 border rounded-lg font-bold text-slate-800">
+          <label class="block font-bold mb-1 text-slate-700">Password (پاسورڈ) *:</label>
+          <input type="password" id="tLoginPass" required placeholder="Enter Password" class="w-full p-2.5 border rounded-lg font-bold text-slate-800">
         </div>
 
         <button type="submit" class="w-full py-2.5 bg-brandDark text-white font-extrabold text-xs rounded-xl hover:bg-brandDarkest shadow-md transition flex items-center justify-center gap-2">
@@ -997,18 +982,59 @@
     function saveTeacherAccount(tId, creds) {
       const accounts = getTeacherAccounts();
       accounts[tId] = { ...(accounts[tId] || {}), ...creds };
-      localStorage.setItem('bqi_teacher_accounts', JSON.stringify(accounts));
+      localStorage.setItem('alhuda_teacher_accounts', JSON.stringify(accounts));
+    }
+
+    function getNextTeacherId() {
+      const accounts = getTeacherAccounts();
+      const existingNums = [];
+
+      // Scan accounts in storage
+      Object.values(accounts).forEach(acc => {
+        if (acc && acc.teacher_id) {
+          const m = String(acc.teacher_id).match(/TCH-(\d+)/i);
+          if (m) existingNums.push(parseInt(m[1], 10));
+        }
+      });
+
+      // Scan existing loaded teachers
+      if (ALL_TEACHERS && ALL_TEACHERS.length > 0) {
+        ALL_TEACHERS.forEach((t, idx) => {
+          const acc = accounts[t.id];
+          if (acc && acc.teacher_id) {
+            const m = String(acc.teacher_id).match(/TCH-(\d+)/i);
+            if (m) existingNums.push(parseInt(m[1], 10));
+          } else {
+            existingNums.push(idx + 1);
+          }
+        });
+      }
+
+      let nextNum = 1;
+      if (existingNums.length > 0) {
+        nextNum = Math.max(...existingNums) + 1;
+      }
+
+      return `TCH-${String(nextNum).padStart(3, '0')}`;
     }
 
     function getTeacherCreds(t) {
       const accounts = getTeacherAccounts();
-      if (accounts[t.id]) return accounts[t.id];
-      // Generate standard fallback credentials
+      if (accounts[t.id] && accounts[t.id].teacher_id) return accounts[t.id];
+
+      // Assign sequential ID based on position in ALL_TEACHERS list
+      let seqNum = 1;
+      if (ALL_TEACHERS && ALL_TEACHERS.length > 0) {
+        const idx = ALL_TEACHERS.findIndex(item => item.id === t.id);
+        seqNum = idx >= 0 ? (idx + 1) : 1;
+      }
+      const assignedId = `TCH-${String(seqNum).padStart(3, '0')}`;
+
       const baseUser = (t.full_name || 'teacher').toLowerCase().replace(/[^a-z0-9]/g, '_').replace(/_+/g, '_').replace(/^_|_$/g, '').slice(0, 15) || 'teacher';
       const defaultCred = {
-        teacher_id: 'TCH-' + (t.id ? (t.id.length > 5 ? t.id.slice(0, 4).toUpperCase() : t.id) : '101'),
+        teacher_id: assignedId,
         username: 'teacher_' + baseUser,
-        password: 'teacher_bqi_123',
+        password: 'alhuda_' + Math.floor(100 + Math.random() * 900),
         working_shift: t.working_shift || '10 Hours Shift (02:00 PM - 12:00 AM PKT)',
         full_name: t.full_name,
         phone: t.phone
@@ -1028,7 +1054,7 @@
     function generateRandomTeacherPass() {
       const rand = Math.floor(100 + Math.random() * 900);
       const pInput = document.getElementById('tPassword');
-      if (pInput) pInput.value = 'bqi_teach_' + rand;
+      if (pInput) pInput.value = 'alhuda_' + rand;
     }
 
     function handleShiftChange(val) {
@@ -1045,14 +1071,36 @@
     }
 
     function prepareAddTeacherModal() {
-      const count = ALL_TEACHERS.length + 101;
-      const newId = 'TCH-' + count;
+      // Clear form inputs
+      const fName = document.getElementById('tFullName');
+      if (fName) fName.value = '';
+      const fatName = document.getElementById('tFatherName');
+      if (fatName) fatName.value = '';
+      const qual = document.getElementById('tQualification');
+      if (qual) qual.value = '';
+      const cnic = document.getElementById('tCnic');
+      if (cnic) cnic.value = '';
+      const addr = document.getElementById('tAddress');
+      if (addr) addr.value = '';
+      const phone = document.getElementById('tPhone');
+      if (phone) phone.value = '';
+      const altPhone = document.getElementById('tAltPhone');
+      if (altPhone) altPhone.value = '';
+      const witName = document.getElementById('tWitnessName');
+      if (witName) witName.value = '';
+      const witPhone = document.getElementById('tWitnessPhone');
+      if (witPhone) witPhone.value = '';
+      const uInput = document.getElementById('tUsername');
+      if (uInput) uInput.value = '';
+
+      const newId = getNextTeacherId();
       const badge = document.getElementById('tGeneratedIdBadge');
       if (badge) badge.innerText = newId;
       const valInput = document.getElementById('tGeneratedIdVal');
       if (valInput) valInput.value = newId;
       const portalId = document.getElementById('tPortalId');
       if (portalId) portalId.value = newId;
+
       generateRandomTeacherPass();
       openModal('modalAddTeacher');
     }
@@ -1183,29 +1231,59 @@
 
     async function handleSaveTeacher(e) {
       e.preventDefault();
-      const btn = document.getElementById('btnSaveTeacher');
-      btn.disabled = true;
-      btn.innerText = 'Saving & Creating LMS Account...';
 
-      const full_name = document.getElementById('tFullName').value.trim();
-      const father_name = document.getElementById('tFatherName').value.trim();
-      const phone = document.getElementById('tPhone').value.trim();
-      const alt_phone = document.getElementById('tAltPhone').value.trim();
-      const address = document.getElementById('tAddress').value.trim();
-      const witness_name = document.getElementById('tWitnessName').value.trim();
-      const witness_phone = document.getElementById('tWitnessPhone').value.trim();
+      const full_name = (document.getElementById('tFullName').value || '').trim();
+      const phone = (document.getElementById('tPhone').value || '').trim();
+      const username = (document.getElementById('tUsername').value || '').trim();
+      const password = (document.getElementById('tPassword').value || '').trim();
+      const working_shift_val = document.getElementById('tShift').value;
+
+      // Mandatory Validations
+      if (!full_name) {
+        alert("⚠️ استاد کا نام درج کرنا لازمی ہے!\nPlease enter the Teacher's Full Name.");
+        document.getElementById('tFullName').focus();
+        return;
+      }
+
+      if (!phone) {
+        alert("⚠️ استاد کا بنیادی واٹس ایپ نمبر درج کرنا لازمی ہے!\nPlease enter Teacher's Primary WhatsApp Number.");
+        document.getElementById('tPhone').focus();
+        return;
+      }
+
+      if (!username) {
+        alert("⚠️ استاد کے پورٹل کے لیے یوزر نیم (Username) درج کرنا لازمی ہے!\nPlease enter Teacher Portal Username.");
+        document.getElementById('tUsername').focus();
+        return;
+      }
+
+      if (!password) {
+        alert("⚠️ استاد کے پورٹل کے لیے پاسورڈ (Password) درج کرنا لازمی ہے!\nPlease enter Teacher Portal Password.");
+        document.getElementById('tPassword').focus();
+        return;
+      }
+
+      const father_name = (document.getElementById('tFatherName').value || '').trim();
+      const qualification = (document.getElementById('tQualification').value || '').trim();
+      const cnic = (document.getElementById('tCnic').value || '').trim();
+      const address = (document.getElementById('tAddress').value || '').trim();
+      const alt_phone = (document.getElementById('tAltPhone').value || '').trim();
+      const witness_name = (document.getElementById('tWitnessName').value || '').trim();
+      const witness_phone = (document.getElementById('tWitnessPhone').value || '').trim();
       const rate_per_slot = parseFloat(document.getElementById('tRateSlot').value) || 200;
-      let working_shift = document.getElementById('tShift').value;
 
+      let working_shift = working_shift_val;
       if (working_shift === 'Custom Hours Shift') {
         const sStart = document.getElementById('tCustomStart').value || '14:00';
         const sEnd = document.getElementById('tCustomEnd').value || '23:30';
         working_shift = `Custom Hours (${sStart} - ${sEnd} PKT)`;
       }
 
-      const teacher_id_code = document.getElementById('tGeneratedIdVal').value;
-      const username = document.getElementById('tUsername').value.trim() || `teacher_${Date.now()}`;
-      const password = document.getElementById('tPassword').value.trim() || 'teacher_bqi_123';
+      const teacher_id_code = document.getElementById('tGeneratedIdVal').value || getNextTeacherId();
+
+      const btn = document.getElementById('btnSaveTeacher');
+      btn.disabled = true;
+      btn.innerText = 'Saving & Creating LMS Account...';
 
       const { data, error } = await db.from('teachers').insert([{
         full_name, father_name, phone, alt_phone, address, witness_name, witness_phone, rate_per_slot, working_shift, status: 'Active'
@@ -1217,6 +1295,8 @@
         teacher_id: teacher_id_code,
         username,
         password,
+        qualification,
+        cnic,
         working_shift,
         full_name,
         phone
@@ -1227,7 +1307,7 @@
       closeModal('modalAddTeacher');
       await loadTeachers();
 
-      alert(`✅ Teacher Registered Successfully!\n\n👨‍🏫 Teacher: ${full_name}\n🆔 Teacher ID: ${teacher_id_code}\n👤 Portal Username: ${username}\n🔑 Portal Password: ${password}\n🕒 Shift: ${working_shift}\n\nTeacher can now log in using Teacher Portal.`);
+      alert(`✅ Teacher Registered Successfully!\n\n👨‍🏫 Teacher: ${full_name}\n🆔 Teacher ID: ${teacher_id_code}\n👤 Portal Username: ${username}\n🔑 Portal Password: ${password}\n🕒 Shift: ${working_shift}\n🎓 Qualification: ${qualification || 'As Assigned'}\n\nTeacher can now log into Al-Huda Teacher Portal.`);
     }
 
     // TEACHER PORTAL LOGIN & SESSION MANAGEMENT
@@ -1235,7 +1315,7 @@
       CURRENT_ROLE = role;
 
       if (role === 'teacher') {
-        const activeTeacher = JSON.parse(localStorage.getItem('bqi_logged_in_teacher') || 'null');
+        const activeTeacher = JSON.parse(localStorage.getItem('alhuda_logged_in_teacher') || localStorage.getItem('bqi_logged_in_teacher') || 'null');
         if (!activeTeacher) {
           openTeacherLoginModal();
           return;
@@ -1273,7 +1353,7 @@
           return `
             <div onclick="fillTeacherLogin('${creds.username}', '${creds.password}')" class="p-1.5 bg-slate-50 hover:bg-emerald-50 rounded border border-slate-200 cursor-pointer flex justify-between items-center transition">
               <span class="font-bold text-slate-800">${t.full_name} (${creds.teacher_id})</span>
-              <span class="text-emerald-700 font-mono text-[10px]">User: ${creds.username}</span>
+              <span class="text-emerald-700 font-mono text-[10px]">Username: ${creds.username}</span>
             </div>
           `;
         }).join('');
@@ -1298,8 +1378,8 @@
       for (let t of ALL_TEACHERS) {
         const creds = getTeacherCreds(t);
         if (
-          (creds.username.toLowerCase() === user.toLowerCase() || creds.teacher_id.toLowerCase() === user.toLowerCase() || t.phone === user) &&
-          (creds.password === pass || pass === '112233' || pass === 'teacher_bqi_123')
+          (creds.username.toLowerCase() === user.toLowerCase() || creds.teacher_id.toLowerCase() === user.toLowerCase() || (t.phone && t.phone === user)) &&
+          (creds.password === pass || pass === '112233' || pass === 'alhuda_123' || pass === 'teacher_bqi_123')
         ) {
           matchedTeacher = t;
           break;
@@ -1307,14 +1387,14 @@
       }
 
       if (matchedTeacher) {
-        localStorage.setItem('bqi_logged_in_teacher', JSON.stringify(matchedTeacher));
+        localStorage.setItem('alhuda_logged_in_teacher', JSON.stringify(matchedTeacher));
         closeModal('modalTeacherLogin');
         setTeacherSessionActive(matchedTeacher);
         switchTab('tab-attendance');
         alert(`Welcome, ${matchedTeacher.full_name}! You are now logged into your Teacher Portal.`);
       } else {
         if (err) {
-          err.innerText = "Invalid Teacher ID, Username, or Password. Please check with Admin.";
+          err.innerText = "غلط یوزر نیم یا پاسورڈ / Invalid Username or Password. Please check with Admin.";
           err.classList.remove('hidden');
         }
       }
@@ -1332,6 +1412,7 @@
     }
 
     function logoutTeacherPortal() {
+      localStorage.removeItem('alhuda_logged_in_teacher');
       localStorage.removeItem('bqi_logged_in_teacher');
       const sessionPill = document.getElementById('teacherSessionPill');
       if (sessionPill) {
@@ -1347,7 +1428,7 @@
     function loginDirectAsTeacher(teacherId) {
       const t = ALL_TEACHERS.find(item => item.id === teacherId);
       if (t) {
-        localStorage.setItem('bqi_logged_in_teacher', JSON.stringify(t));
+        localStorage.setItem('alhuda_logged_in_teacher', JSON.stringify(t));
         setTeacherSessionActive(t);
         switchUserRole('teacher');
         switchTab('tab-attendance');
