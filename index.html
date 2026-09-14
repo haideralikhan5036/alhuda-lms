@@ -561,42 +561,99 @@
       </div>
     </section>
 
-    <!-- 5. TEACHER SALARIES (OWNER ONLY) -->
-    <section id="tab-salaries" class="tab-content hidden">
-      <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm mb-5 flex flex-wrap justify-between items-center gap-3">
+    <!-- 5. TEACHER SALARIES & COURSE-BASED AUTO PAYROLL -->
+    <section id="tab-salaries" class="tab-content hidden space-y-5">
+      <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex flex-wrap justify-between items-center gap-4">
         <div>
-          <h2 class="text-lg font-extrabold text-brandDark flex items-center gap-2">
-            <i class="fa-solid fa-hand-holding-dollar text-brandGold"></i> Automated Attendance-Driven Teacher Salaries
-          </h2>
-          <p class="text-xs text-slate-500">Calculates exact monthly payroll based on verified conducted classes</p>
+          <div class="flex items-center gap-2">
+            <span class="w-9 h-9 rounded-xl bg-amber-100 text-amber-800 flex items-center justify-center text-base font-bold shadow-xs">
+              <i class="fa-solid fa-hand-holding-dollar"></i>
+            </span>
+            <h2 class="text-xl font-extrabold text-slate-900 tracking-tight">
+              Teacher Salaries & Course-Based Auto Payroll
+            </h2>
+          </div>
+          <p class="text-xs text-slate-500 mt-1">
+            Calculates exact monthly payroll per enrolled student, course tiers, weekend schedules, and annual seniority increments (+200 PKR/yr).
+          </p>
         </div>
-        <div class="flex gap-2 items-center">
-          <select id="salaryMonthSelect" class="text-xs font-bold p-2 border border-slate-300 rounded-lg">
-            <option value="September">September 2026</option>
-            <option value="October">October 2026</option>
-            <option value="August">August 2026</option>
+        <div class="flex gap-2.5 items-center flex-wrap">
+          <select id="salaryMonthSelect" onchange="calculateMonthlySalaries()" class="text-xs font-bold p-2.5 bg-slate-50 border border-slate-300 rounded-xl focus:bg-white">
+            <option value="September 2026">September 2026</option>
+            <option value="October 2026">October 2026</option>
+            <option value="August 2026">August 2026</option>
+            <option value="July 2026">July 2026</option>
+            <option value="November 2026">November 2026</option>
+            <option value="December 2026">December 2026</option>
           </select>
-          <button onclick="calculateMonthlySalaries()" class="px-3.5 py-2 bg-brandGold text-slate-900 font-bold rounded-lg text-xs hover:bg-amber-500 shadow">
-            <i class="fa-solid fa-calculator"></i> Auto-Generate Salaries
+          <button onclick="calculateMonthlySalaries()" class="px-4 py-2.5 bg-brandDark text-white font-extrabold rounded-xl text-xs hover:bg-brandDarkest shadow-md transition flex items-center gap-1.5">
+            <i class="fa-solid fa-arrows-rotate text-brandGold"></i> Recalculate Payroll
           </button>
         </div>
       </div>
 
-      <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+      <!-- 4 PAYROLL KPI CARDS -->
+      <div class="grid grid-cols-2 sm:grid-cols-4 gap-3.5">
+        <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
+          <div class="flex items-center justify-between text-slate-500 mb-1">
+            <span class="text-[10px] font-black uppercase tracking-wider">Total Monthly Payroll</span>
+            <i class="fa-solid fa-money-bill-wave text-emerald-600 text-xs"></i>
+          </div>
+          <div class="text-2xl font-black text-slate-900" id="payrollKpiTotal">0 PKR</div>
+          <div class="text-[10px] text-emerald-700 mt-0.5">Calculated Net Payable</div>
+        </div>
+
+        <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
+          <div class="flex items-center justify-between text-slate-500 mb-1">
+            <span class="text-[10px] font-black uppercase tracking-wider">Active Instructors</span>
+            <i class="fa-solid fa-chalkboard-user text-purple-600 text-xs"></i>
+          </div>
+          <div class="text-2xl font-black text-purple-700" id="payrollKpiTeachers">0</div>
+          <div class="text-[10px] text-purple-600 mt-0.5">Faculty on Monthly Roster</div>
+        </div>
+
+        <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
+          <div class="flex items-center justify-between text-slate-500 mb-1">
+            <span class="text-[10px] font-black uppercase tracking-wider">Total Students Taught</span>
+            <i class="fa-solid fa-graduation-cap text-blue-600 text-xs"></i>
+          </div>
+          <div class="text-2xl font-black text-blue-700" id="payrollKpiStudents">0</div>
+          <div class="text-[10px] text-blue-600 mt-0.5">Assigned Learners Active</div>
+        </div>
+
+        <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
+          <div class="flex items-center justify-between text-slate-500 mb-1">
+            <span class="text-[10px] font-black uppercase tracking-wider">Paid vs Pending</span>
+            <i class="fa-solid fa-receipt text-amber-600 text-xs"></i>
+          </div>
+          <div class="text-2xl font-black text-amber-600" id="payrollKpiDisbursed">0 / 0</div>
+          <div class="text-[10px] text-slate-500 mt-0.5">Salaries Transferred</div>
+        </div>
+      </div>
+
+      <!-- PAYROLL ROSTER TABLE -->
+      <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+        <div class="p-4 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
+          <div class="font-extrabold text-xs text-slate-800 flex items-center gap-1.5 uppercase tracking-wide">
+            <i class="fa-solid fa-table-list text-brandEmerald"></i> Monthly Teacher Payroll Ledger & Editable Slips
+          </div>
+          <span class="text-[11px] text-slate-500 italic">Click "View & Edit Slip" to adjust bonuses, deductions, or student rates</span>
+        </div>
         <div class="overflow-x-auto">
           <table class="w-full text-left text-xs border-collapse">
-            <thead class="bg-slate-50 text-slate-600 font-bold border-b border-slate-200 uppercase">
+            <thead class="bg-slate-100 text-slate-700 font-bold border-b border-slate-200 uppercase tracking-wide text-[11px]">
               <tr>
-                <th class="p-3">Teacher</th>
-                <th class="p-3">Conducted Classes (Present)</th>
-                <th class="p-3">Rate / Slot</th>
-                <th class="p-3">Gross Salary</th>
-                <th class="p-3">Status</th>
-                <th class="p-3 text-right">Action</th>
+                <th class="p-3.5">Teacher & Seniority</th>
+                <th class="p-3.5">Assigned Students</th>
+                <th class="p-3.5">Base Course Total</th>
+                <th class="p-3.5">Bonus / Deductions</th>
+                <th class="p-3.5">Net Payable Salary</th>
+                <th class="p-3.5">Payment Status</th>
+                <th class="p-3.5 text-right">Actions & Slip</th>
               </tr>
             </thead>
-            <tbody id="salariesTableBody" class="divide-y divide-slate-100">
-              <tr><td colspan="6" class="p-6 text-center text-slate-400">Click "Auto-Generate Salaries" to compute monthly payroll.</td></tr>
+            <tbody id="salariesTableBody" class="divide-y divide-slate-100 font-medium">
+              <tr><td colspan="7" class="p-8 text-center text-slate-400">Loading automated teacher salaries...</td></tr>
             </tbody>
           </table>
         </div>
@@ -1218,17 +1275,18 @@
       <div class="flex justify-between items-center mb-4 border-b pb-3">
         <div>
           <div class="flex items-center gap-2">
-            <h3 class="font-bold text-base text-brandDark flex items-center gap-2">
+            <h3 id="modalTeacherTitle" class="font-bold text-base text-brandDark flex items-center gap-2">
               <i class="fa-solid fa-chalkboard-user text-brandEmerald"></i> Register Teacher Profile (Full Details)
             </h3>
             <span id="tGeneratedIdBadge" class="px-2.5 py-0.5 bg-emerald-100 text-emerald-800 rounded font-mono font-extrabold text-[11px]">TCH-101</span>
           </div>
-          <p class="text-[11px] text-slate-500 mt-0.5">Configure schedule shift duration & auto-generate Teacher Portal LMS credentials</p>
+          <p class="text-[11px] text-slate-500 mt-0.5">Configure schedule shift duration, seniority increments & auto-generate Teacher Portal credentials</p>
         </div>
         <button onclick="closeModal('modalAddTeacher')" class="text-slate-400 hover:text-slate-600 text-xl font-bold">&times;</button>
       </div>
       
       <form onsubmit="handleSaveTeacher(event)" class="space-y-4 text-xs">
+        <input type="hidden" id="editTeacherId" value="">
         <input type="hidden" id="tGeneratedIdVal" value="TCH-101">
 
         <!-- 1. IDENTITY & QUALIFICATIONS -->
@@ -1259,6 +1317,25 @@
             <div>
               <label class="block font-bold mb-1">Qualification & Ijazah:</label>
               <input type="text" id="tQualification" placeholder="e.g. Hafiz-e-Quran / Dars-e-Nizami / Shahadat-ul-Almiyah" class="w-full p-2.5 border rounded-lg font-semibold">
+            </div>
+          </div>
+
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label class="block font-bold mb-1">Academy Joining Date:</label>
+              <input type="date" id="tJoiningDate" class="w-full p-2.5 border rounded-lg font-semibold text-slate-800">
+            </div>
+            <div>
+              <label class="block font-bold mb-1">Annual Seniority Increment:</label>
+              <select id="tIncrementTier" class="w-full p-2.5 border rounded-lg font-semibold text-slate-800">
+                <option value="auto">Auto-Calculate from Joining Date (+200/yr)</option>
+                <option value="0">Base Level / New (0 PKR)</option>
+                <option value="200">1 Year Seniority (+200 PKR / student)</option>
+                <option value="400">2 Years Seniority (+400 PKR / student)</option>
+                <option value="600">3 Years Seniority (+600 PKR / student)</option>
+                <option value="800">4 Years Seniority (+800 PKR / student)</option>
+                <option value="1000">5+ Years Seniority (+1000 PKR / student)</option>
+              </select>
             </div>
           </div>
 
@@ -1307,8 +1384,8 @@
           </div>
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
-              <label class="block font-bold mb-1 text-brandEmerald">Rate per 30-Minute Class Slot (PKR) *:</label>
-              <input type="number" id="tRateSlot" required value="200" class="w-full p-2.5 border border-emerald-400 rounded-lg font-bold text-sm text-brandDark">
+              <label class="block font-bold mb-1 text-brandEmerald">Default Base Quran Rate / Student (PKR) *:</label>
+              <input type="number" id="tRateSlot" required value="2200" class="w-full p-2.5 border border-emerald-400 rounded-lg font-bold text-sm text-brandDark">
             </div>
             <div>
               <label class="block font-bold mb-1 text-brandDark">Configured Schedule Shift / Working Duration *:</label>
@@ -1370,11 +1447,147 @@
 
         <div class="flex justify-end gap-2.5 pt-3 border-t">
           <button type="button" onclick="closeModal('modalAddTeacher')" class="px-4 py-2 border rounded-lg font-bold text-slate-600">Cancel</button>
-          <button type="submit" id="btnSaveTeacher" class="px-6 py-2 bg-brandDark text-white rounded-lg font-bold hover:bg-brandDarkest shadow-md flex items-center gap-1.5">
-            <i class="fa-solid fa-user-plus"></i> Save Teacher & Generate LMS Account
+          <button type="submit" id="btnSaveTeacher" class="px-6 py-2.5 bg-brandDark text-white rounded-lg font-bold hover:bg-brandDarkest shadow-md flex items-center gap-1.5 transition">
+            <i class="fa-solid fa-user-plus"></i> <span id="btnSaveTeacherText">Save Teacher & Generate LMS Account</span>
           </button>
         </div>
       </form>
+    </div>
+  </div>
+
+  <!-- MODAL: EDITABLE ITEMIZED SALARY SLIP (VOUCHER) -->
+  <div id="modalSalarySlip" class="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 hidden items-center justify-center p-4">
+    <div class="bg-white rounded-2xl max-w-3xl w-full p-6 max-h-[92vh] overflow-y-auto shadow-2xl border border-slate-200">
+      
+      <!-- Voucher Header -->
+      <div class="flex justify-between items-start border-b pb-4 mb-4">
+        <div class="flex items-center gap-3">
+          <div class="w-12 h-12 rounded-2xl bg-gradient-to-br from-amber-400 to-amber-600 text-brandDarkest flex items-center justify-center font-black text-xl shadow-md">
+            <i class="fa-solid fa-receipt"></i>
+          </div>
+          <div>
+            <div class="flex items-center gap-2">
+              <h3 class="font-black text-lg text-slate-900">Al-Huda Islamic Centre</h3>
+              <span class="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-amber-100 text-amber-900 border border-amber-300">Monthly Salary Voucher</span>
+            </div>
+            <p class="text-xs text-slate-500" id="slipMonthSubtitle">Official Teacher Compensation & Course Payroll Statement</p>
+          </div>
+        </div>
+        <button onclick="closeModal('modalSalarySlip')" class="text-slate-400 hover:text-slate-600 text-2xl font-bold">&times;</button>
+      </div>
+
+      <input type="hidden" id="slipTeacherId">
+
+      <!-- Teacher Meta Card -->
+      <div class="bg-slate-50 p-4 rounded-xl border border-slate-200 grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs mb-4">
+        <div>
+          <span class="text-slate-400 text-[10px] block">Instructor Name:</span>
+          <strong id="slipTeacherName" class="text-slate-900 text-sm font-extrabold">--</strong>
+        </div>
+        <div>
+          <span class="text-slate-400 text-[10px] block">Teacher ID:</span>
+          <strong id="slipTeacherCode" class="text-brandDark font-mono font-bold">--</strong>
+        </div>
+        <div>
+          <span class="text-slate-400 text-[10px] block">Joining Date:</span>
+          <span id="slipJoiningDate" class="text-slate-700 font-semibold">--</span>
+        </div>
+        <div>
+          <span class="text-slate-400 text-[10px] block">Seniority Increment:</span>
+          <span id="slipIncrementTierBadge" class="text-emerald-800 font-bold bg-emerald-100 px-2 py-0.5 rounded-full text-[11px] inline-block">--</span>
+        </div>
+      </div>
+
+      <!-- Itemized Students & Course Rate Table -->
+      <div class="space-y-2 mb-4">
+        <div class="flex justify-between items-center">
+          <h4 class="font-extrabold text-xs text-slate-800 uppercase tracking-wide flex items-center gap-1.5">
+            <i class="fa-solid fa-graduation-cap text-brandEmerald"></i> Enrolled Students & Course Rates Breakdown
+          </h4>
+          <span class="text-[11px] text-amber-700 font-bold bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
+            <i class="fa-solid fa-pen"></i> Rates Below Are 100% Editable
+          </span>
+        </div>
+
+        <div class="border border-slate-200 rounded-xl overflow-hidden shadow-xs">
+          <table class="w-full text-left text-xs">
+            <thead class="bg-slate-100 text-slate-700 font-bold border-b border-slate-200 text-[11px] uppercase tracking-wide">
+              <tr>
+                <th class="p-2.5">#</th>
+                <th class="p-2.5">Student Name</th>
+                <th class="p-2.5">Course Enrolled</th>
+                <th class="p-2.5">Schedule</th>
+                <th class="p-2.5">Course Base + Inc</th>
+                <th class="p-2.5 text-right">Agreed Rate (PKR)</th>
+              </tr>
+            </thead>
+            <tbody id="slipStudentsTableBody" class="divide-y divide-slate-100 font-medium">
+              <!-- Populated dynamically with editable inputs -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Adjustments & Final Settlement Card -->
+      <div class="bg-gradient-to-br from-amber-50 to-emerald-50/60 p-4 rounded-xl border border-amber-300/60 space-y-3 mb-4">
+        <div class="font-extrabold text-brandDark text-xs uppercase tracking-wide flex items-center gap-1.5">
+          <i class="fa-solid fa-sliders text-amber-600"></i> Payroll Adjustments (Bonus / Deductions)
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+          <div>
+            <label class="block font-bold mb-1 text-slate-700">Base Teaching Subtotal (PKR):</label>
+            <input type="number" id="slipBaseSubtotal" readonly class="w-full p-2 bg-slate-100 border border-slate-300 rounded-lg font-mono font-black text-slate-800">
+          </div>
+          <div>
+            <label class="block font-bold mb-1 text-emerald-800"><i class="fa-solid fa-plus text-emerald-600"></i> Additional Bonus (PKR):</label>
+            <input type="number" id="slipBonus" oninput="recalculateSlipNetTotal()" placeholder="0" class="w-full p-2 bg-white border border-emerald-400 rounded-lg font-mono font-bold text-emerald-800 focus:outline-emerald-600">
+          </div>
+          <div>
+            <label class="block font-bold mb-1 text-rose-800"><i class="fa-solid fa-minus text-rose-600"></i> Deductions / Advance (PKR):</label>
+            <input type="number" id="slipDeduction" oninput="recalculateSlipNetTotal()" placeholder="0" class="w-full p-2 bg-white border border-rose-400 rounded-lg font-mono font-bold text-rose-800 focus:outline-rose-600">
+          </div>
+        </div>
+
+        <div>
+          <label class="block font-bold mb-1 text-slate-700 text-xs">Adjustment Remarks / Notes:</label>
+          <input type="text" id="slipRemarks" placeholder="e.g. Performance bonus for extra weekend classes or advance adjustment" class="w-full p-2 bg-white border border-slate-300 rounded-lg text-xs">
+        </div>
+
+        <!-- Net Payable Display -->
+        <div class="flex justify-between items-center bg-white p-3.5 rounded-xl border-2 border-brandDark shadow-xs">
+          <div>
+            <span class="text-[11px] font-bold text-slate-500 uppercase block">Total Net Payable Salary</span>
+            <span class="text-xs text-slate-400 font-semibold" id="slipTotalStudentsCount">For 0 Assigned Students</span>
+          </div>
+          <div class="text-right">
+            <span class="text-2xl font-black text-brandDark font-mono" id="slipNetPayable">0 PKR</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Action Buttons -->
+      <div class="flex flex-wrap items-center justify-between gap-2.5 pt-3 border-t">
+        <div class="flex items-center gap-2">
+          <button type="button" onclick="toggleSalaryPaidStatus()" id="btnSlipMarkPaid" class="px-4 py-2 rounded-xl text-xs font-bold border transition flex items-center gap-1.5 bg-slate-100 text-slate-700 hover:bg-emerald-50 hover:text-emerald-800">
+            <i class="fa-solid fa-circle-check"></i> <span id="btnSlipMarkPaidText">Mark as Paid</span>
+          </button>
+          <button type="button" onclick="printSalarySlip()" class="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition flex items-center gap-1">
+            <i class="fa-solid fa-print"></i> Print Voucher
+          </button>
+        </div>
+
+        <div class="flex items-center gap-2">
+          <button type="button" onclick="closeModal('modalSalarySlip')" class="px-4 py-2 border rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100">Close</button>
+          <button type="button" onclick="saveSalarySlipRecord()" class="px-4 py-2 bg-slate-800 hover:bg-black text-white rounded-xl text-xs font-bold shadow transition flex items-center gap-1.5">
+            <i class="fa-solid fa-floppy-disk"></i> Save Slip
+          </button>
+          <button type="button" onclick="sendSalarySlipWhatsApp()" class="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black shadow-md transition flex items-center gap-1.5">
+            <i class="fa-brands fa-whatsapp text-base"></i> Send WhatsApp Slip
+          </button>
+        </div>
+      </div>
+
     </div>
   </div>
 
@@ -1723,6 +1936,11 @@
     let ALL_TRIALS = [];
     let CURRENT_TRIAL_FILTER = 'all';
 
+    // TEACHER SALARIES & PAYROLL STATE
+    let ALL_TEACHER_SALARIES = {};
+    let CURRENT_SLIP_TEACHER_ID = null;
+    let CURRENT_SLIP_DATA = null;
+
     // MAIN EXECUTIVE DASHBOARD STATE
     let DASHBOARD_CLASSES = [];
     let CURRENT_DASH_FILTER = null;
@@ -1780,6 +1998,7 @@
       if (tabId === 'tab-attendance') loadAttendanceList();
       if (tabId === 'tab-families') loadFamiliesAndStudents();
       if (tabId === 'tab-teachers') loadTeachers();
+      if (tabId === 'tab-salaries') calculateMonthlySalaries();
       if (tabId === 'tab-invoices') loadFeeBillingLedger();
       if (tabId === 'tab-trials') loadTrialClassesData();
     }
@@ -3187,6 +3406,15 @@
     }
 
     function prepareAddTeacherModal() {
+      const editIdInput = document.getElementById('editTeacherId');
+      if (editIdInput) editIdInput.value = '';
+
+      const titleEl = document.getElementById('modalTeacherTitle');
+      if (titleEl) titleEl.innerHTML = '<i class="fa-solid fa-chalkboard-user text-brandEmerald"></i> Register Teacher Profile (Full Details)';
+
+      const btnText = document.getElementById('btnSaveTeacherText');
+      if (btnText) btnText.innerText = 'Save Teacher & Generate LMS Account';
+
       // Clear form inputs
       const fName = document.getElementById('tFullName');
       if (fName) fName.value = '';
@@ -3208,6 +3436,13 @@
       if (witPhone) witPhone.value = '';
       const uInput = document.getElementById('tUsername');
       if (uInput) uInput.value = '';
+      const rSlot = document.getElementById('tRateSlot');
+      if (rSlot) rSlot.value = '2200';
+
+      const jDate = document.getElementById('tJoiningDate');
+      if (jDate) jDate.value = new Date().toISOString().slice(0, 10);
+      const incTier = document.getElementById('tIncrementTier');
+      if (incTier) incTier.value = 'auto';
 
       const newId = getNextTeacherId();
       const badge = document.getElementById('tGeneratedIdBadge');
@@ -3219,6 +3454,76 @@
 
       generateRandomTeacherPass();
       openModal('modalAddTeacher');
+    }
+
+    function openEditTeacherModal(teacherId) {
+      const teacher = ALL_TEACHERS.find(t => t.id === teacherId);
+      if (!teacher) {
+        alert("Teacher record not found.");
+        return;
+      }
+
+      const creds = getTeacherCreds(teacher);
+      const accounts = getTeacherAccounts();
+      const acc = accounts[teacherId] || {};
+
+      document.getElementById('editTeacherId').value = teacher.id;
+      const titleEl = document.getElementById('modalTeacherTitle');
+      if (titleEl) titleEl.innerHTML = `<i class="fa-solid fa-pen-to-square text-amber-500"></i> Edit Teacher Profile: <span class="text-slate-900">${teacher.full_name}</span>`;
+
+      const btnText = document.getElementById('btnSaveTeacherText');
+      if (btnText) btnText.innerText = 'Update Teacher Profile';
+
+      document.getElementById('tGeneratedIdBadge').innerText = creds.teacher_id || 'TCH';
+      document.getElementById('tGeneratedIdVal').value = creds.teacher_id || 'TCH';
+      document.getElementById('tPortalId').value = creds.teacher_id || 'TCH';
+
+      document.getElementById('tFullName').value = teacher.full_name || '';
+      document.getElementById('tFatherName').value = teacher.father_name || '';
+      document.getElementById('tGender').value = teacher.gender || acc.gender || 'Male';
+      document.getElementById('tQualification').value = acc.qualification || '';
+      document.getElementById('tCnic').value = acc.cnic || '';
+      document.getElementById('tAddress').value = teacher.address || '';
+      document.getElementById('tPhone').value = teacher.phone || '';
+      document.getElementById('tAltPhone').value = teacher.alt_phone || '';
+      document.getElementById('tWitnessName').value = teacher.witness_name || '';
+      document.getElementById('tWitnessPhone').value = teacher.witness_phone || '';
+      document.getElementById('tRateSlot').value = teacher.rate_per_slot || 2200;
+
+      if (teacher.working_shift) {
+        document.getElementById('tShift').value = teacher.working_shift;
+      }
+
+      const joiningDate = acc.joining_date || (teacher.created_at ? teacher.created_at.slice(0, 10) : new Date().toISOString().slice(0, 10));
+      document.getElementById('tJoiningDate').value = joiningDate;
+      document.getElementById('tIncrementTier').value = acc.increment_tier || 'auto';
+
+      document.getElementById('tUsername').value = creds.username || '';
+      document.getElementById('tPassword').value = creds.password || '12345678';
+
+      openModal('modalAddTeacher');
+    }
+
+    async function deleteTeacher(teacherId) {
+      const teacher = ALL_TEACHERS.find(t => t.id === teacherId);
+      const tName = teacher ? teacher.full_name : 'this teacher';
+      if (!confirm(`Are you sure you want to delete teacher "${tName}"?\n\nThis will remove their profile and unassign their timetable schedule slots.`)) {
+        return;
+      }
+
+      try {
+        await db.from('class_schedules').delete().eq('teacher_id', teacherId);
+        await db.from('teachers').delete().eq('id', teacherId);
+
+        const accounts = getTeacherAccounts();
+        delete accounts[teacherId];
+        localStorage.setItem('alhuda_teacher_accounts', JSON.stringify(accounts));
+
+        await loadTeachers();
+        alert(`Teacher "${tName}" has been deleted successfully.`);
+      } catch (err) {
+        alert('Error deleting teacher: ' + err.message);
+      }
     }
 
     async function loadTeachers() {
@@ -3233,7 +3538,7 @@
 
       const sTeacherSelect = document.getElementById('stuTeacherId');
       if (sTeacherSelect) {
-        sTeacherSelect.innerHTML = (teachers || []).map(t => `<option value="${t.id}">${t.full_name} (${t.rate_per_slot} PKR)</option>`).join('');
+        sTeacherSelect.innerHTML = (teachers || []).map(t => `<option value="${t.id}">${t.full_name} (${t.rate_per_slot || 2200} PKR)</option>`).join('');
       }
 
       if (!teachers || teachers.length === 0) {
@@ -3247,13 +3552,26 @@
         return;
       }
 
+      const accounts = getTeacherAccounts();
+
       container.innerHTML = teachers.map(t => {
         const bookedCount = countMap[t.id] || 0;
         const creds = getTeacherCreds(t);
+        const acc = accounts[t.id] || {};
         const cleanPhone = (t.phone || '').replace(/[^0-9]/g, '');
         const directPortalUrl = `${window.location.origin}/teacher.html?t=${creds.username}`;
-        const waMsg = `السلام علیکم محترم ${t.full_name} صاحب!\nالھدیٰ اسلامک سینٹر کے ٹیچر پورٹل میں خوش آمدید۔\n\n🌐 *آپ کا پرسنلائزڈ پورٹل لنک:*\n${directPortalUrl}\n\n👤 *یوزر نیم:* ${creds.username}\n🔑 *پاسورڈ:* ${creds.password || '12345678'}\n🕒 *شفٹ:* ${t.working_shift || '10 Hours Shift'}\n💰 *ریٹ فی سلاٹ:* ${t.rate_per_slot || 200} PKR\n\nبراہ کرم اوپر دیے گئے لنک کو کھول کر اپنا ہفتہ وار شیڈول اور کلاسز چیک فرمائیں۔\nجزاکم اللہ خیراً!`;
+        const waMsg = `السلام علیکم محترم ${t.full_name} صاحب!\nالھدیٰ اسلامک سینٹر کے ٹیچر پورٹل میں خوش آمدید۔\n\n🌐 *آپ کا پرسنلائزڈ پورٹل لنک:*\n${directPortalUrl}\n\n👤 *یوزر نیم:* ${creds.username}\n🔑 *پاسورڈ:* ${creds.password || '12345678'}\n🕒 *شفٹ:* ${t.working_shift || '10 Hours Shift'}\n💰 *ریٹ:* ${t.rate_per_slot || 2200} PKR\n\nبراہ کرم اوپر دیے گئے لنک کو کھول کر اپنا ہفتہ وار شیڈول اور کلاسز چیک فرمائیں۔\nجزاکم اللہ خیراً!`;
         const waUrl = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(waMsg)}`;
+
+        // Seniority increment text
+        const joiningDate = acc.joining_date || (t.created_at ? t.created_at.slice(0, 10) : '2025-01-01');
+        let incrementText = '+0 PKR (Base)';
+        if (acc.increment_tier && acc.increment_tier !== 'auto') {
+          incrementText = `+${acc.increment_tier} PKR/stu`;
+        } else {
+          const yrs = Math.floor((new Date() - new Date(joiningDate)) / (365.25 * 24 * 3600 * 1000));
+          if (yrs >= 1) incrementText = `+${yrs * 200} PKR/stu (Yr ${yrs})`;
+        }
 
         return `
           <div class="bg-white rounded-2xl border border-slate-200 shadow-sm hover:shadow-md transition p-5 flex flex-col justify-between">
@@ -3271,20 +3589,25 @@
                     <p class="text-[11px] text-slate-500">${t.father_name ? 'S/O ' + t.father_name : 'Quran Instructor'}</p>
                   </div>
                 </div>
-                <span class="px-2 py-0.5 rounded text-[10px] font-extrabold ${t.status === 'Active' ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-600'}">
-                  ${t.status}
-                </span>
+                <div class="flex items-center gap-1">
+                  <span class="px-2 py-0.5 rounded text-[10px] font-extrabold ${t.status === 'Active' ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-600'}">
+                    ${t.status}
+                  </span>
+                  <button onclick="deleteTeacher('${t.id}')" title="Delete Teacher" class="text-slate-300 hover:text-rose-600 transition p-1 text-xs">
+                    <i class="fa-regular fa-trash-can"></i>
+                  </button>
+                </div>
               </div>
 
-              <!-- RATE, SHIFT & SLOTS -->
+              <!-- RATE, SHIFT, SENIORITY & SLOTS -->
               <div class="grid grid-cols-2 gap-2 text-xs mb-3 bg-slate-50 p-2.5 rounded-xl border border-slate-100">
                 <div>
-                  <span class="text-slate-400 text-[10px] block">Rate / 30m Slot:</span>
-                  <strong class="text-brandDark font-bold text-sm">${t.rate_per_slot || 0} PKR</strong>
+                  <span class="text-slate-400 text-[10px] block">Base Course Rate:</span>
+                  <strong class="text-brandDark font-bold text-xs">${t.rate_per_slot || 2200} PKR / stu</strong>
                 </div>
                 <div>
-                  <span class="text-slate-400 text-[10px] block">Configured Shift:</span>
-                  <strong class="text-slate-700 font-semibold truncate block" title="${t.working_shift || '10 Hours'}">${t.working_shift || '10 Hours Shift'}</strong>
+                  <span class="text-slate-400 text-[10px] block">Seniority Increment:</span>
+                  <span class="text-amber-800 font-extrabold text-[11px] bg-amber-100 px-1.5 py-0.5 rounded inline-block">${incrementText}</span>
                 </div>
                 <div>
                   <span class="text-slate-400 text-[10px] block">WhatsApp Contact:</span>
@@ -3327,7 +3650,10 @@
             </div>
 
             <div class="pt-2 border-t flex flex-col gap-2">
-              <button onclick="open2DMatrixForTeacher('${t.id}')" class="w-full py-2.5 bg-gradient-to-r from-brandDark to-brandEmerald text-white font-extrabold text-xs rounded-xl hover:shadow-lg transition flex items-center justify-center gap-2">
+              <button onclick="openEditTeacherModal('${t.id}')" class="w-full py-2 bg-amber-50 hover:bg-amber-100 text-amber-900 font-extrabold text-xs rounded-xl border border-amber-300 transition flex items-center justify-center gap-1.5 shadow-xs">
+                <i class="fa-solid fa-pen-to-square text-amber-600"></i> Edit Teacher Profile & Credentials
+              </button>
+              <button onclick="open2DMatrixForTeacher('${t.id}')" class="w-full py-2.5 bg-gradient-to-r from-brandDark to-brandEmerald text-white font-extrabold text-xs rounded-xl hover:shadow-lg transition flex items-center justify-center gap-2 shadow-xs">
                 <i class="fa-solid fa-table-cells"></i> Open 2D Full-Week Timetable
               </button>
               <a href="teacher.html?t=${creds.username}" target="_blank" class="w-full py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-[11px] rounded-lg transition flex items-center justify-center gap-1.5">
@@ -3348,6 +3674,8 @@
 
     async function handleSaveTeacher(e) {
       e.preventDefault();
+
+      const editTeacherId = (document.getElementById('editTeacherId')?.value || '').trim();
 
       const full_name = (document.getElementById('tFullName').value || '').trim();
       const phone = (document.getElementById('tPhone').value || '').trim();
@@ -3381,13 +3709,16 @@
       }
 
       const father_name = (document.getElementById('tFatherName').value || '').trim();
+      const gender = document.getElementById('tGender').value;
       const qualification = (document.getElementById('tQualification').value || '').trim();
       const cnic = (document.getElementById('tCnic').value || '').trim();
       const address = (document.getElementById('tAddress').value || '').trim();
       const alt_phone = (document.getElementById('tAltPhone').value || '').trim();
       const witness_name = (document.getElementById('tWitnessName').value || '').trim();
       const witness_phone = (document.getElementById('tWitnessPhone').value || '').trim();
-      const rate_per_slot = parseFloat(document.getElementById('tRateSlot').value) || 200;
+      const rate_per_slot = parseFloat(document.getElementById('tRateSlot').value) || 2200;
+      const joining_date = document.getElementById('tJoiningDate').value || new Date().toISOString().slice(0, 10);
+      const increment_tier = document.getElementById('tIncrementTier').value || 'auto';
 
       let working_shift = working_shift_val;
       if (working_shift === 'Custom Hours Shift') {
@@ -3400,31 +3731,67 @@
 
       const btn = document.getElementById('btnSaveTeacher');
       btn.disabled = true;
-      btn.innerText = 'Saving & Creating LMS Account...';
+      btn.innerText = editTeacherId ? 'Updating Teacher Profile...' : 'Saving & Creating LMS Account...';
 
-      const { data, error } = await db.from('teachers').insert([{
-        full_name, father_name, phone, alt_phone, address, witness_name, witness_phone, rate_per_slot, working_shift, status: 'Active'
-      }]).select();
+      if (editTeacherId) {
+        // UPDATE MODE
+        const { error } = await db.from('teachers').update({
+          full_name, father_name, phone, alt_phone, address, witness_name, witness_phone, rate_per_slot, working_shift
+        }).eq('id', editTeacherId);
 
-      const insertedId = (data && data[0]) ? data[0].id : ('local_' + Date.now());
+        if (error) {
+          console.warn("Supabase update error:", error);
+        }
 
-      saveTeacherAccount(insertedId, {
-        teacher_id: teacher_id_code,
-        username,
-        password,
-        qualification,
-        cnic,
-        working_shift,
-        full_name,
-        phone
-      });
+        saveTeacherAccount(editTeacherId, {
+          teacher_id: teacher_id_code,
+          username,
+          password,
+          qualification,
+          cnic,
+          gender,
+          working_shift,
+          full_name,
+          phone,
+          joining_date,
+          increment_tier
+        });
 
-      btn.disabled = false;
-      btn.innerText = 'Save Teacher & Generate LMS Account';
-      closeModal('modalAddTeacher');
-      await loadTeachers();
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fa-solid fa-check"></i> <span id="btnSaveTeacherText">Update Teacher Profile</span>';
+        closeModal('modalAddTeacher');
+        await loadTeachers();
 
-      alert(`✅ Teacher Registered Successfully!\n\n👨‍🏫 Teacher: ${full_name}\n🆔 Teacher ID: ${teacher_id_code}\n👤 Portal Username: ${username}\n🔑 Portal Password: ${password}\n🕒 Shift: ${working_shift}\n🎓 Qualification: ${qualification || 'As Assigned'}\n\nTeacher can now log into Al-Huda Teacher Portal.`);
+        alert(`✅ Teacher Profile Updated Successfully!\n\n👨‍🏫 Teacher: ${full_name}\n🆔 Teacher ID: ${teacher_id_code}\n👤 Portal Username: ${username}\n🔑 Portal Password: ${password}\n🕒 Shift: ${working_shift}`);
+      } else {
+        // INSERT MODE
+        const { data, error } = await db.from('teachers').insert([{
+          full_name, father_name, phone, alt_phone, address, witness_name, witness_phone, rate_per_slot, working_shift, status: 'Active'
+        }]).select();
+
+        const insertedId = (data && data[0]) ? data[0].id : ('local_' + Date.now());
+
+        saveTeacherAccount(insertedId, {
+          teacher_id: teacher_id_code,
+          username,
+          password,
+          qualification,
+          cnic,
+          gender,
+          working_shift,
+          full_name,
+          phone,
+          joining_date,
+          increment_tier
+        });
+
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fa-solid fa-user-plus"></i> <span id="btnSaveTeacherText">Save Teacher & Generate LMS Account</span>';
+        closeModal('modalAddTeacher');
+        await loadTeachers();
+
+        alert(`✅ Teacher Registered Successfully!\n\n👨‍🏫 Teacher: ${full_name}\n🆔 Teacher ID: ${teacher_id_code}\n👤 Portal Username: ${username}\n🔑 Portal Password: ${password}\n🕒 Shift: ${working_shift}\n🎓 Qualification: ${qualification || 'As Assigned'}\n\nTeacher can now log into Al-Huda Teacher Portal.`);
+      }
     }
 
     // TEACHER PORTAL LOGIN & SESSION MANAGEMENT
@@ -3864,37 +4231,569 @@
       loadAttendanceList();
       loadLiveMonitorData();
     }
+    // ==========================================
+    // COURSE-BASED AUTO PAYROLL & EDITABLE SLIPS
+    // ==========================================
+
+    const ACADEMY_COURSE_RATES = {
+      'noorani_qaida': 2200,
+      'nazra_quran': 2200,
+      'weekend_basic': 3200,
+      'islamic_studies': 3500,
+      'urdu_tafseer': 3500,
+      'english_tafseer': 4500
+    };
+
+    function getTeacherSeniorityIncrement(teacher, acc) {
+      if (!teacher) return 0;
+      const account = acc || (getTeacherAccounts()[teacher.id] || {});
+      
+      if (account.increment_tier && account.increment_tier !== 'auto') {
+        return parseInt(account.increment_tier, 10) || 0;
+      }
+
+      const joiningDate = account.joining_date || (teacher.created_at ? teacher.created_at.slice(0, 10) : null);
+      if (joiningDate) {
+        const joinYear = new Date(joiningDate);
+        const now = new Date();
+        const yearsDiff = Math.floor((now - joinYear) / (365.25 * 24 * 3600 * 1000));
+        if (yearsDiff >= 1) {
+          return yearsDiff * 200;
+        }
+      }
+      return 0;
+    }
+
+    function getStudentCourseSalaryRate(student, scheds, teacherIncrement) {
+      // 1. Detect if Weekend Schedule
+      let isWeekend = false;
+      const dayNums = (scheds || []).map(s => Number(s.day_of_week));
+      if (dayNums.length > 0 && dayNums.every(d => d === 6 || d === 7)) {
+        isWeekend = true;
+      }
+
+      // 2. Parse course details
+      let cName = '';
+      if (student.course_id && typeof student.course_id === 'string' && student.course_id.length > 10) {
+        // Find course name by UUID if matched
+        const matchedCourse = (window.ALL_COURSES_CACHE || []).find(c => c.id === student.course_id);
+        if (matchedCourse) cName = matchedCourse.name;
+      }
+      if (!cName && student.notes) {
+        try {
+          const nObj = JSON.parse(student.notes);
+          cName = nObj.course || nObj.trial_course || '';
+          if (!isWeekend && (nObj.days_per_week || '').toLowerCase().includes('weekend')) {
+            isWeekend = true;
+          }
+        } catch(e) {
+          cName = student.notes;
+        }
+      }
+      cName = (cName || 'Noorani Qaida & Basic Quran').toLowerCase();
+
+      let baseRate = 2200;
+      let courseLabel = 'Noorani Qaida & Basic Quran';
+
+      if (cName.includes('english') && (cName.includes('tafseer') || cName.includes('translation'))) {
+        baseRate = 4500;
+        courseLabel = 'English Translation & Tafseer';
+      } else if (cName.includes('urdu') && (cName.includes('tafseer') || cName.includes('translation'))) {
+        baseRate = 3500;
+        courseLabel = 'Urdu Translation & Tafseer';
+      } else if (cName.includes('tafseer') || cName.includes('translation')) {
+        baseRate = 4500;
+        courseLabel = 'Tafseer & Translation';
+      } else if (cName.includes('islamic') || cName.includes('dua')) {
+        baseRate = 3500;
+        courseLabel = 'Islamic Studies & Duas';
+      } else if (isWeekend) {
+        baseRate = 3200;
+        courseLabel = 'Weekend Quran (Saturday & Sunday)';
+      } else {
+        baseRate = 2200;
+        courseLabel = 'Noorani Qaida / Nazra Quran';
+      }
+
+      const finalRate = baseRate + teacherIncrement;
+
+      let scheduleText = 'Regular Days';
+      if (isWeekend) {
+        scheduleText = 'Weekend (Sat - Sun)';
+      } else if (dayNums.length > 0) {
+        scheduleText = `${dayNums.length} Days / Week`;
+      }
+
+      return {
+        baseRate,
+        increment: teacherIncrement,
+        finalRate,
+        courseLabel,
+        scheduleText,
+        isWeekend
+      };
+    }
 
     async function calculateMonthlySalaries() {
       const tbody = document.getElementById('salariesTableBody');
       if (!tbody) return;
-      tbody.innerHTML = '<tr><td colspan="6" class="p-6 text-center text-slate-400">Computing attendance payroll...</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="7" class="p-8 text-center text-slate-400"><i class="fa-solid fa-spinner fa-spin text-xl text-brandGold mb-2 block"></i> Compiling automated course-based teacher payroll...</td></tr>';
 
-      const { data: teachers } = await db.from('teachers').select('*');
-      const { data: logs } = await db.from('attendance_logs').select('*').eq('status', 'Present');
+      const selectedMonth = document.getElementById('salaryMonthSelect')?.value || 'September 2026';
+
+      // 1. Fetch live teachers, schedules, and students
+      const { data: teachers } = await db.from('teachers').select('*').order('created_at', { ascending: false });
+      ALL_TEACHERS = teachers || [];
+
+      const { data: scheds } = await db.from('class_schedules').select('*, students(*)');
+      const { data: students } = await db.from('students').select('*');
+      ALL_STUDENTS = students || [];
+
+      // Fetch courses cache
+      try {
+        const { data: courses } = await db.from('courses').select('*');
+        window.ALL_COURSES_CACHE = courses || [];
+      } catch(e){}
 
       if (!teachers || teachers.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="6" class="p-6 text-center text-slate-400">No teachers found.</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="7" class="p-8 text-center text-slate-400">No teachers found in the academy database.</td></tr>';
         return;
       }
 
-      tbody.innerHTML = teachers.map(t => {
-        const conductedCount = (logs || []).filter(l => l.teacher_id === t.id).length;
-        const grossSalary = conductedCount * (t.rate_per_slot || 0);
+      // Load saved salary slips from localStorage
+      let savedSalaries = {};
+      try {
+        savedSalaries = JSON.parse(localStorage.getItem('alhuda_teacher_salaries') || '{}');
+      } catch(e) {
+        savedSalaries = {};
+      }
+
+      const accounts = getTeacherAccounts();
+      ALL_TEACHER_SALARIES = {};
+
+      let totalGrossPayroll = 0;
+      let totalAssignedStudentsCount = 0;
+      let paidCount = 0;
+      let activeTeachersCount = 0;
+
+      const teacherCardsData = teachers.map(t => {
+        const acc = accounts[t.id] || {};
+        const teacherIncrement = getTeacherSeniorityIncrement(t, acc);
+
+        // Find all active students for this teacher
+        // Method A: from schedules
+        const teacherScheds = (scheds || []).filter(s => s.teacher_id === t.id);
+        const studentIdsFromScheds = [...new Set(teacherScheds.map(s => s.student_id))];
+
+        // Method B: from students.assigned_teacher_id
+        const studentIdsFromStudents = (students || []).filter(s => s.assigned_teacher_id === t.id && s.status !== 'Trial').map(s => s.id);
+
+        const allStudentIds = [...new Set([...studentIdsFromScheds, ...studentIdsFromStudents])];
+
+        // Fetch student objects
+        const assignedStudents = allStudentIds.map(sid => {
+          const fromSched = teacherScheds.find(s => s.student_id === sid)?.students;
+          const fromStu = (students || []).find(s => s.id === sid);
+          return fromSched || fromStu || { id: sid, name: 'Student ' + sid };
+        }).filter(s => s && s.name);
+
+        if (assignedStudents.length > 0) activeTeachersCount++;
+        totalAssignedStudentsCount += assignedStudents.length;
+
+        // Compile student rate items
+        const slipKey = `${t.id}_${selectedMonth.replace(/\s+/g, '_')}`;
+        const savedSlip = savedSalaries[slipKey] || null;
+
+        let baseSubtotal = 0;
+        const studentRateItems = assignedStudents.map((stu, idx) => {
+          const stuScheds = teacherScheds.filter(s => s.student_id === stu.id);
+          const rateInfo = getStudentCourseSalaryRate(stu, stuScheds, teacherIncrement);
+
+          // Check if admin custom edited this student's rate previously
+          let finalRate = rateInfo.finalRate;
+          if (savedSlip && savedSlip.students && savedSlip.students[stu.id] !== undefined) {
+            finalRate = parseFloat(savedSlip.students[stu.id]) || rateInfo.finalRate;
+          }
+
+          baseSubtotal += finalRate;
+
+          return {
+            index: idx + 1,
+            student_id: stu.id,
+            student_name: stu.name,
+            course_label: rateInfo.courseLabel,
+            schedule_text: rateInfo.scheduleText,
+            base_rate: rateInfo.baseRate,
+            increment: teacherIncrement,
+            calculated_rate: rateInfo.finalRate,
+            final_rate: finalRate
+          };
+        });
+
+        // Bonuses and Deductions
+        const bonus = savedSlip ? (parseFloat(savedSlip.bonus) || 0) : 0;
+        const deduction = savedSlip ? (parseFloat(savedSlip.deduction) || 0) : 0;
+        const remarks = savedSlip ? (savedSlip.remarks || '') : '';
+        const netPayable = Math.max(0, baseSubtotal + bonus - deduction);
+        const status = savedSlip ? (savedSlip.status || 'Pending') : 'Pending';
+
+        if (status === 'Paid') paidCount++;
+        totalGrossPayroll += netPayable;
+
+        // Store in global state
+        const compiledSlip = {
+          teacher_id: t.id,
+          teacher_name: t.full_name,
+          phone: t.phone,
+          month: selectedMonth,
+          joining_date: acc.joining_date || (t.created_at ? t.created_at.slice(0, 10) : '2025-01-01'),
+          seniority_increment: teacherIncrement,
+          assigned_students: studentRateItems,
+          base_subtotal: baseSubtotal,
+          bonus,
+          deduction,
+          remarks,
+          net_payable: netPayable,
+          status,
+          slip_key: slipKey
+        };
+
+        ALL_TEACHER_SALARIES[t.id] = compiledSlip;
+
+        // Seniority text
+        const yrs = Math.floor((new Date() - new Date(compiledSlip.joining_date)) / (365.25 * 24 * 3600 * 1000));
+        let seniorityBadge = `<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-700">Base</span>`;
+        if (teacherIncrement > 0) {
+          seniorityBadge = `<span class="px-2 py-0.5 rounded text-[10px] font-extrabold bg-amber-100 text-amber-900 border border-amber-300">+${teacherIncrement} PKR/stu (Yr ${yrs || 1})</span>`;
+        }
+
+        // Summary breakdown of courses
+        const courseCounts = {};
+        studentRateItems.forEach(s => {
+          courseCounts[s.course_label] = (courseCounts[s.course_label] || 0) + 1;
+        });
+        const courseSummaryPills = Object.entries(courseCounts).map(([cName, count]) => {
+          return `<span class="inline-block px-1.5 py-0.5 rounded text-[9px] font-bold bg-slate-100 text-slate-700 border border-slate-200 mr-1 mb-1">${count}x ${cName}</span>`;
+        }).join('') || '<span class="text-slate-400 italic text-[11px]">No active students assigned</span>';
+
+        // Adjustments summary
+        let adjSummary = '<span class="text-slate-400 text-[11px]">No adjustments</span>';
+        if (bonus > 0 || deduction > 0) {
+          adjSummary = `
+            <div class="text-[11px] font-mono">
+              ${bonus > 0 ? `<span class="text-emerald-700 font-bold block">+${bonus.toLocaleString()} PKR (Bonus)</span>` : ''}
+              ${deduction > 0 ? `<span class="text-rose-700 font-bold block">-${deduction.toLocaleString()} PKR (Deduction)</span>` : ''}
+            </div>
+          `;
+        }
+
+        const isPaid = status === 'Paid';
 
         return `
-          <tr class="hover:bg-slate-50 font-medium">
-            <td class="p-3 font-bold text-slate-900">${t.full_name}</td>
-            <td class="p-3 font-bold text-emerald-700"><i class="fa-solid fa-circle-check"></i> ${conductedCount} Classes</td>
-            <td class="p-3">${t.rate_per_slot} PKR</td>
-            <td class="p-3 font-black text-sm text-brandDark">${grossSalary.toLocaleString()} PKR</td>
-            <td class="p-3"><span class="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800">Pending Transfer</span></td>
-            <td class="p-3 text-right">
-              <button class="px-3 py-1 bg-brandDark text-white rounded text-xs font-bold hover:bg-brandDarkest">Mark Paid</button>
+          <tr class="hover:bg-slate-50/80 transition">
+            <!-- 1. TEACHER & SENIORITY -->
+            <td class="p-3.5">
+              <div class="font-extrabold text-slate-900 text-xs">${t.full_name}</div>
+              <div class="flex items-center gap-1.5 mt-1">
+                ${seniorityBadge}
+                <span class="text-[10px] text-slate-400 font-mono">${t.phone}</span>
+              </div>
+            </td>
+
+            <!-- 2. ASSIGNED STUDENTS -->
+            <td class="p-3.5 max-w-xs">
+              <div class="font-black text-xs text-brandDark mb-1">
+                <i class="fa-solid fa-user-graduate text-emerald-600"></i> ${studentRateItems.length} Enrolled Students
+              </div>
+              <div class="flex flex-wrap">${courseSummaryPills}</div>
+            </td>
+
+            <!-- 3. BASE COURSE TOTAL -->
+            <td class="p-3.5 font-mono">
+              <div class="font-bold text-slate-800 text-xs">${baseSubtotal.toLocaleString()} PKR</div>
+              <span class="text-[10px] text-slate-400 block">From Course Rates</span>
+            </td>
+
+            <!-- 4. BONUS / ADJUSTMENTS -->
+            <td class="p-3.5">
+              ${adjSummary}
+            </td>
+
+            <!-- 5. NET PAYABLE SALARY -->
+            <td class="p-3.5 font-mono">
+              <div class="text-sm font-black text-brandDarkest bg-amber-50 px-2.5 py-1 rounded-lg border border-amber-200 inline-block">
+                ${netPayable.toLocaleString()} PKR
+              </div>
+            </td>
+
+            <!-- 6. PAYMENT STATUS -->
+            <td class="p-3.5">
+              ${isPaid 
+                ? '<span class="px-2.5 py-1 rounded-full text-[10px] font-black bg-emerald-100 text-emerald-800 border border-emerald-300 inline-flex items-center gap-1"><i class="fa-solid fa-circle-check"></i> Paid</span>' 
+                : '<span class="px-2.5 py-1 rounded-full text-[10px] font-black bg-amber-100 text-amber-800 border border-amber-300 inline-flex items-center gap-1"><i class="fa-solid fa-clock"></i> Pending</span>'
+              }
+            </td>
+
+            <!-- 7. ACTIONS & SLIP -->
+            <td class="p-3.5 text-right">
+              <div class="flex items-center justify-end gap-1.5">
+                <button onclick="openSalarySlipModal('${t.id}')" class="px-3 py-1.5 bg-gradient-to-r from-amber-400 via-amber-500 to-amber-600 hover:from-amber-500 hover:to-amber-700 text-brandDarkest font-black rounded-xl text-xs shadow-xs transition flex items-center gap-1.5">
+                  <i class="fa-solid fa-receipt"></i> View & Edit Slip
+                </button>
+                <button onclick="quickToggleSalaryPaid('${t.id}')" title="${isPaid ? 'Mark as Pending' : 'Mark as Paid'}" class="p-2 border rounded-xl text-xs font-bold ${isPaid ? 'bg-emerald-50 text-emerald-700 border-emerald-300' : 'bg-slate-50 text-slate-600 hover:bg-emerald-50 hover:text-emerald-700'} transition">
+                  <i class="fa-solid fa-check"></i>
+                </button>
+                <button onclick="quickSendWhatsAppSlip('${t.id}')" title="Send WhatsApp Salary Slip" class="p-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-300 rounded-xl text-xs font-bold transition">
+                  <i class="fa-brands fa-whatsapp text-sm"></i>
+                </button>
+              </div>
             </td>
           </tr>
         `;
       }).join('');
+
+      tbody.innerHTML = teacherCardsData;
+
+      // Update KPI Cards
+      const setEl = (id, val) => { const el = document.getElementById(id); if (el) el.innerText = val; };
+      setEl('payrollKpiTotal', `${totalGrossPayroll.toLocaleString()} PKR`);
+      setEl('payrollKpiTeachers', `${activeTeachersCount} Active`);
+      setEl('payrollKpiStudents', `${totalAssignedStudentsCount} Enrolled`);
+      setEl('payrollKpiDisbursed', `${paidCount} / ${teachers.length} Paid`);
+    }
+
+    // OPEN ITEMIZED & EDITABLE SALARY SLIP MODAL
+    function openSalarySlipModal(teacherId) {
+      const slipData = ALL_TEACHER_SALARIES[teacherId];
+      if (!slipData) {
+        alert("Salary data not available for this instructor.");
+        return;
+      }
+
+      CURRENT_SLIP_TEACHER_ID = teacherId;
+      CURRENT_SLIP_DATA = slipData;
+
+      document.getElementById('slipTeacherId').value = teacherId;
+      document.getElementById('slipMonthSubtitle').innerText = `Official Teacher Compensation & Course Payroll Statement for ${slipData.month}`;
+      document.getElementById('slipTeacherName').innerText = slipData.teacher_name;
+      document.getElementById('slipTeacherCode').innerText = teacherId.slice(0, 8).toUpperCase();
+      document.getElementById('slipJoiningDate').innerText = slipData.joining_date;
+
+      const incBadge = document.getElementById('slipIncrementTierBadge');
+      if (incBadge) {
+        incBadge.innerText = slipData.seniority_increment > 0 
+          ? `+${slipData.seniority_increment} PKR / Student` 
+          : 'Base Level (0 PKR)';
+      }
+
+      // Render editable students table
+      const tbody = document.getElementById('slipStudentsTableBody');
+      if (tbody) {
+        if (!slipData.assigned_students || slipData.assigned_students.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="6" class="p-6 text-center text-slate-400">No active students currently assigned to this teacher.</td></tr>';
+        } else {
+          tbody.innerHTML = slipData.assigned_students.map(s => {
+            return `
+              <tr class="hover:bg-slate-50">
+                <td class="p-2.5 font-mono text-slate-400 font-bold">${s.index}</td>
+                <td class="p-2.5 font-extrabold text-slate-900">${s.student_name}</td>
+                <td class="p-2.5 font-bold text-brandDark">${s.course_label}</td>
+                <td class="p-2.5 text-slate-600">${s.schedule_text}</td>
+                <td class="p-2.5 font-mono text-slate-500">${s.base_rate} ${s.increment > 0 ? '+ ' + s.increment : ''} PKR</td>
+                <td class="p-2.5 text-right">
+                  <div class="inline-flex items-center gap-1">
+                    <input type="number" class="slip-student-rate w-24 p-1.5 text-right font-mono font-black border border-emerald-400 rounded-lg text-brandDarkest bg-emerald-50/40 focus:bg-white focus:outline-brandEmerald text-xs" 
+                      data-student-id="${s.student_id}" 
+                      value="${s.final_rate}" 
+                      oninput="recalculateSlipNetTotal()">
+                    <span class="text-[10px] text-slate-400 font-bold">PKR</span>
+                  </div>
+                </td>
+              </tr>
+            `;
+          }).join('');
+        }
+      }
+
+      document.getElementById('slipBonus').value = slipData.bonus || '';
+      document.getElementById('slipDeduction').value = slipData.deduction || '';
+      document.getElementById('slipRemarks').value = slipData.remarks || '';
+
+      recalculateSlipNetTotal();
+
+      // Update Paid Button
+      updateSlipPaidButtonUI(slipData.status === 'Paid');
+
+      openModal('modalSalarySlip');
+    }
+
+    function recalculateSlipNetTotal() {
+      const rateInputs = document.querySelectorAll('.slip-student-rate');
+      let baseSubtotal = 0;
+      rateInputs.forEach(inp => {
+        baseSubtotal += parseFloat(inp.value) || 0;
+      });
+
+      const bonus = parseFloat(document.getElementById('slipBonus')?.value) || 0;
+      const deduction = parseFloat(document.getElementById('slipDeduction')?.value) || 0;
+      const netPayable = Math.max(0, baseSubtotal + bonus - deduction);
+
+      const baseInp = document.getElementById('slipBaseSubtotal');
+      if (baseInp) baseInp.value = baseSubtotal;
+
+      const netEl = document.getElementById('slipNetPayable');
+      if (netEl) netEl.innerText = `${netPayable.toLocaleString()} PKR`;
+
+      const countEl = document.getElementById('slipTotalStudentsCount');
+      if (countEl) countEl.innerText = `For ${rateInputs.length} Assigned Students (${baseSubtotal.toLocaleString()} Base ${bonus > 0 ? '+ ' + bonus + ' Bonus' : ''} ${deduction > 0 ? '- ' + deduction + ' Deduction' : ''})`;
+
+      return { baseSubtotal, bonus, deduction, netPayable };
+    }
+
+    function saveSalarySlipRecord() {
+      if (!CURRENT_SLIP_DATA || !CURRENT_SLIP_TEACHER_ID) return;
+
+      const { baseSubtotal, bonus, deduction, netPayable } = recalculateSlipNetTotal();
+      const remarks = (document.getElementById('slipRemarks')?.value || '').trim();
+
+      // Collect edited student rates
+      const editedStudentRates = {};
+      document.querySelectorAll('.slip-student-rate').forEach(inp => {
+        const sId = inp.getAttribute('data-student-id');
+        editedStudentRates[sId] = parseFloat(inp.value) || 0;
+      });
+
+      let savedSalaries = {};
+      try {
+        savedSalaries = JSON.parse(localStorage.getItem('alhuda_teacher_salaries') || '{}');
+      } catch(e) { savedSalaries = {}; }
+
+      const slipKey = CURRENT_SLIP_DATA.slip_key;
+      savedSalaries[slipKey] = {
+        teacher_id: CURRENT_SLIP_TEACHER_ID,
+        month: CURRENT_SLIP_DATA.month,
+        students: editedStudentRates,
+        base_subtotal: baseSubtotal,
+        bonus,
+        deduction,
+        remarks,
+        net_payable: netPayable,
+        status: CURRENT_SLIP_DATA.status || 'Pending',
+        saved_at: new Date().toISOString()
+      };
+
+      localStorage.setItem('alhuda_teacher_salaries', JSON.stringify(savedSalaries));
+
+      calculateMonthlySalaries();
+      alert(`✅ Salary Slip Saved Successfully!\n\n👨‍🏫 Teacher: ${CURRENT_SLIP_DATA.teacher_name}\n💵 Base Teaching: ${baseSubtotal.toLocaleString()} PKR\n💰 Net Payable: ${netPayable.toLocaleString()} PKR\n📌 Status: ${savedSalaries[slipKey].status}`);
+    }
+
+    function updateSlipPaidButtonUI(isPaid) {
+      const btn = document.getElementById('btnSlipMarkPaid');
+      const text = document.getElementById('btnSlipMarkPaidText');
+      if (!btn || !text) return;
+
+      if (isPaid) {
+        btn.className = "px-4 py-2 rounded-xl text-xs font-bold border transition flex items-center gap-1.5 bg-emerald-600 text-white shadow-xs hover:bg-emerald-700";
+        text.innerText = "Payment Completed (Paid)";
+      } else {
+        btn.className = "px-4 py-2 rounded-xl text-xs font-bold border transition flex items-center gap-1.5 bg-slate-100 text-slate-700 hover:bg-emerald-50 hover:text-emerald-800";
+        text.innerText = "Mark as Paid";
+      }
+    }
+
+    function toggleSalaryPaidStatus() {
+      if (!CURRENT_SLIP_DATA || !CURRENT_SLIP_TEACHER_ID) return;
+
+      const nextStatus = (CURRENT_SLIP_DATA.status === 'Paid') ? 'Pending' : 'Paid';
+      CURRENT_SLIP_DATA.status = nextStatus;
+
+      updateSlipPaidButtonUI(nextStatus === 'Paid');
+      saveSalarySlipRecord();
+    }
+
+    function quickToggleSalaryPaid(teacherId) {
+      const slipData = ALL_TEACHER_SALARIES[teacherId];
+      if (!slipData) return;
+
+      let savedSalaries = {};
+      try {
+        savedSalaries = JSON.parse(localStorage.getItem('alhuda_teacher_salaries') || '{}');
+      } catch(e) { savedSalaries = {}; }
+
+      const slipKey = slipData.slip_key;
+      const current = savedSalaries[slipKey] || {};
+      const newStatus = (current.status === 'Paid' || slipData.status === 'Paid') ? 'Pending' : 'Paid';
+
+      savedSalaries[slipKey] = {
+        ...slipData,
+        ...current,
+        status: newStatus,
+        saved_at: new Date().toISOString()
+      };
+
+      localStorage.setItem('alhuda_teacher_salaries', JSON.stringify(savedSalaries));
+      calculateMonthlySalaries();
+    }
+
+    function sendSalarySlipWhatsApp() {
+      if (!CURRENT_SLIP_DATA) return;
+      generateAndOpenWhatsAppSlip(CURRENT_SLIP_DATA);
+    }
+
+    function quickSendWhatsAppSlip(teacherId) {
+      const slipData = ALL_TEACHER_SALARIES[teacherId];
+      if (!slipData) return;
+      generateAndOpenWhatsAppSlip(slipData);
+    }
+
+    function generateAndOpenWhatsAppSlip(slipData) {
+      const cleanPhone = (slipData.phone || '').replace(/[^0-9]/g, '');
+      if (!cleanPhone) {
+        alert("Teacher WhatsApp number is not registered.");
+        return;
+      }
+
+      // Collect itemized student lines
+      const rateInputs = document.querySelectorAll('.slip-student-rate');
+      let studentLines = '';
+
+      if (slipData.assigned_students && slipData.assigned_students.length > 0) {
+        studentLines = slipData.assigned_students.map((s, idx) => {
+          return `${idx + 1}. *${s.student_name}* (${s.course_label}) - ${s.final_rate.toLocaleString()} PKR`;
+        }).join('\n');
+      } else {
+        studentLines = 'No individual students registered this month.';
+      }
+
+      const msg = 
+`السلام علیکم ورحمۃ اللہ محترم *${slipData.teacher_name}* صاحب!
+الھدیٰ اسلامک سینٹر - ماہانہ تدریسی معاوضہ (Salary Statement) برائے *${slipData.month}*
+
+👨‍🏫 *استاد کا نام:* ${slipData.teacher_name}
+🗓️ *تاریخ شمولیت:* ${slipData.joining_date}
+⭐ *سالانہ انکریمنٹ:* ${slipData.seniority_increment > 0 ? '+' + slipData.seniority_increment + ' PKR / طالب علم' : 'بنیادی سطح'}
+
+📋 *زیرِ تدریس طلباء و کورسز کی تفصیل:*
+${studentLines}
+
+──────────────────
+💵 *بنیادی تدریسی رقم:* ${slipData.base_subtotal.toLocaleString()} PKR
+${slipData.bonus > 0 ? `➕ *اضافی بونس / الاؤنس:* +${slipData.bonus.toLocaleString()} PKR\n` : ''}${slipData.deduction > 0 ? `➖ *کٹوتی / ایڈوانس:* -${slipData.deduction.toLocaleString()} PKR\n` : ''}${slipData.remarks ? `📝 *وضاحت:* ${slipData.remarks}\n` : ''}💰 *کل قابلِ ادائیگی سیلری:* *${slipData.net_payable.toLocaleString()} PKR*
+📌 *حالت:* ${slipData.status === 'Paid' ? '✅ ادائیگی مکمل ہو چکی ہے (Paid)' : '⏳ ٹرانسفر پراسیس میں ہے (Pending)'}
+──────────────────
+
+جزاکم اللہ خیراً و احسن الجزاء فی الدارین!
+*الھدیٰ اسلامک سینٹر مینجمنٹ*`;
+
+      const url = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(msg)}`;
+      window.open(url, '_blank');
+    }
+
+    function printSalarySlip() {
+      const modal = document.getElementById('modalSalarySlip');
+      if (!modal) return;
+      window.print();
     }
 
     async function loadFeeBillingLedger() {
