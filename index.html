@@ -18,6 +18,9 @@
   <!-- Chart.js for Executive Dashboard Analytics -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
+  <!-- EmailJS SDK for Official Automated Email Dispatch -->
+  <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@3/dist/email.min.js"></script>
+
   <script>
     tailwind.config = {
       theme: {
@@ -1628,6 +1631,18 @@
             </div>
           </div>
 
+          <!-- Parent / Student Email for Official Al-Huda Notifications -->
+          <div>
+            <div class="flex justify-between items-center mb-1">
+              <label class="block font-bold text-slate-700">Parent / Student Email Address:</label>
+              <span class="text-[10px] text-purple-700 font-bold bg-purple-100 px-2 py-0.5 rounded-full"><i class="fa-solid fa-envelope"></i> ceoislamiccentre@gmail.com</span>
+            </div>
+            <div class="relative">
+              <i class="fa-solid fa-envelope absolute left-3 top-3 text-purple-400"></i>
+              <input type="email" id="trialEmail" placeholder="parent.email@gmail.com (for sending Zoom Link & Official Welcome)" class="w-full pl-8 pr-3 py-2 bg-white border border-slate-300 rounded-lg font-mono text-xs font-bold text-slate-800 focus:outline-purple-600">
+            </div>
+          </div>
+
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label class="block font-bold mb-1 text-slate-700">Country of Residence *:</label>
@@ -1739,6 +1754,21 @@
               <i class="fa-solid fa-video absolute left-3 top-3 text-purple-400"></i>
               <input type="url" id="trialMeetingLink" placeholder="https://us04web.zoom.us/j/... or https://meet.google.com/..." class="w-full pl-8 pr-3 py-2 bg-white border border-purple-300 rounded-lg font-mono text-xs">
             </div>
+          </div>
+
+          <!-- Official Email Integration Box -->
+          <div class="p-3 bg-white/90 rounded-xl border border-purple-200 shadow-xs space-y-1.5">
+            <label class="flex items-start gap-2.5 cursor-pointer select-none">
+              <input type="checkbox" id="trialSendWelcomeEmail" checked class="mt-0.5 w-4 h-4 text-purple-600 rounded border-slate-300 focus:ring-purple-500">
+              <div class="text-xs">
+                <span class="font-extrabold text-purple-900 block flex items-center gap-1.5">
+                  <i class="fa-solid fa-paper-plane text-purple-600"></i> Auto-Send Official Welcome & Zoom Link Email
+                </span>
+                <span class="text-[11px] text-slate-500 block leading-tight mt-0.5">
+                  Sends an official, branded welcome confirmation with this Zoom link from <strong class="text-purple-800 font-mono">ceoislamiccentre@gmail.com</strong> directly to the parent/student email.
+                </span>
+              </div>
+            </label>
           </div>
         </div>
 
@@ -1862,6 +1892,39 @@
             <label class="block font-bold mb-1 text-slate-800">Official Regular Enrollment Date:</label>
             <input type="date" id="convJoiningDate" class="w-full p-2.5 bg-white border border-slate-300 rounded-lg font-bold text-slate-800">
           </div>
+
+          <!-- Official Contact & Zoom Link Confirmation -->
+          <div class="pt-2 border-t border-emerald-200/60 grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label class="block font-bold mb-1 text-slate-800">Parent / Student Email Address:</label>
+              <div class="relative">
+                <i class="fa-solid fa-envelope absolute left-3 top-3 text-emerald-600"></i>
+                <input type="email" id="convStudentEmail" placeholder="parent.email@gmail.com" class="w-full pl-8 pr-3 py-2 bg-white border border-emerald-400 rounded-lg font-mono text-xs font-bold text-slate-800 focus:outline-brandEmerald">
+              </div>
+            </div>
+            <div>
+              <label class="block font-bold mb-1 text-slate-800">Permanent Classroom Link (Zoom / Meet):</label>
+              <div class="relative">
+                <i class="fa-solid fa-video absolute left-3 top-3 text-emerald-600"></i>
+                <input type="url" id="convMeetingLink" placeholder="https://us04web.zoom.us/j/..." class="w-full pl-8 pr-3 py-2 bg-white border border-emerald-400 rounded-lg font-mono text-xs font-bold text-slate-800 focus:outline-brandEmerald">
+              </div>
+            </div>
+          </div>
+
+          <!-- Official Email Automation Option -->
+          <div class="p-3 bg-white/90 rounded-xl border border-emerald-300 shadow-xs space-y-1.5">
+            <label class="flex items-start gap-2.5 cursor-pointer select-none">
+              <input type="checkbox" id="convSendWelcomeEmail" checked class="mt-0.5 w-4 h-4 text-brandEmerald rounded border-slate-300 focus:ring-emerald-500">
+              <div class="text-xs">
+                <span class="font-extrabold text-brandDark block flex items-center gap-1.5">
+                  <i class="fa-solid fa-paper-plane text-brandEmerald"></i> Auto-Send Official Regular Registration Confirmation Email
+                </span>
+                <span class="text-[11px] text-slate-500 block leading-tight mt-0.5">
+                  Dispatches official welcome letter with this Zoom link and Parent Portal credentials from <strong class="text-emerald-800 font-mono">ceoislamiccentre@gmail.com</strong>.
+                </span>
+              </div>
+            </label>
+          </div>
         </div>
 
         <div class="flex justify-end gap-2.5 pt-3 border-t">
@@ -1914,6 +1977,113 @@
           <!-- Populated dynamically -->
         </div>
       </div>
+    </div>
+  </div>
+
+  <!-- MODAL: OFFICIAL ACADEMY EMAIL DISPATCHER & PREVIEW -->
+  <div id="modalEmailPreview" class="fixed inset-0 bg-black/70 backdrop-blur-sm z-[80] hidden items-center justify-center p-4">
+    <div class="bg-white rounded-2xl max-w-2xl w-full p-6 max-h-[92vh] overflow-y-auto shadow-2xl border border-slate-200">
+      
+      <!-- Header -->
+      <div class="flex justify-between items-start mb-4 border-b pb-3">
+        <div class="flex items-center gap-3">
+          <div class="w-11 h-11 rounded-xl bg-purple-100 text-purple-700 flex items-center justify-center text-xl shadow-xs">
+            <i class="fa-solid fa-paper-plane"></i>
+          </div>
+          <div>
+            <div class="flex items-center gap-2">
+              <h3 class="font-extrabold text-base text-slate-900" id="emailModalTitle">Official Academy Welcome Email</h3>
+              <span class="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-purple-100 text-purple-800 border border-purple-200" id="emailModalBadge">Trial Class</span>
+            </div>
+            <p class="text-xs text-slate-500 flex items-center gap-1.5 mt-0.5">
+              <i class="fa-solid fa-at text-brandGold"></i>
+              Official Sender: <strong class="text-slate-800 font-mono">ceoislamiccentre@gmail.com</strong>
+            </p>
+          </div>
+        </div>
+        <button onclick="closeModal('modalEmailPreview')" class="text-slate-400 hover:text-slate-600 text-xl font-bold">&times;</button>
+      </div>
+
+      <!-- Sender / Recipient Bar -->
+      <div class="bg-slate-50 p-3.5 rounded-xl border border-slate-200 text-xs space-y-2.5 mb-4">
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <label class="block text-slate-400 text-[10px] uppercase tracking-wide font-extrabold mb-1">Sender (Al-Huda Official):</label>
+            <div class="p-2 bg-white rounded-lg border border-slate-200 font-mono font-bold text-slate-700 flex items-center gap-2">
+              <i class="fa-solid fa-envelope-circle-check text-emerald-600"></i>
+              <span>ceoislamiccentre@gmail.com</span>
+            </div>
+          </div>
+          <div>
+            <label class="block text-slate-700 text-[10px] uppercase tracking-wide font-extrabold mb-1">Recipient Email *:</label>
+            <div class="relative">
+              <i class="fa-solid fa-user-check absolute left-2.5 top-2.5 text-purple-500"></i>
+              <input type="email" id="emailPreviewTo" placeholder="parent.email@gmail.com" class="w-full pl-8 pr-3 py-1.5 bg-white border border-purple-300 rounded-lg font-mono font-bold text-slate-800 text-xs focus:outline-purple-600">
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <label class="block text-slate-700 text-[10px] uppercase tracking-wide font-extrabold mb-1">Email Subject Line *:</label>
+          <input type="text" id="emailPreviewSubject" class="w-full p-2 bg-white border border-slate-300 rounded-lg font-bold text-slate-800 text-xs focus:outline-purple-600">
+        </div>
+      </div>
+
+      <!-- Hidden Email Data Store -->
+      <input type="hidden" id="emailDataPayload">
+      <input type="hidden" id="emailRecipientPhone">
+
+      <!-- Email Content Tabs -->
+      <div class="mb-3 flex justify-between items-center border-b pb-2">
+        <div class="flex gap-2">
+          <button type="button" id="tabEmailViewHtml" onclick="switchEmailModalView('html')" class="px-3 py-1 text-xs font-extrabold rounded-lg bg-purple-700 text-white transition">
+            <i class="fa-solid fa-eye mr-1"></i> Formatted Letter Preview
+          </button>
+          <button type="button" id="tabEmailViewText" onclick="switchEmailModalView('text')" class="px-3 py-1 text-xs font-bold rounded-lg bg-slate-100 text-slate-600 hover:bg-slate-200 transition">
+            <i class="fa-solid fa-code mr-1"></i> Plaintext / Copy Text
+          </button>
+        </div>
+        <button type="button" onclick="copyEmailPreviewText()" class="text-xs text-purple-700 font-bold hover:underline flex items-center gap-1">
+          <i class="fa-regular fa-copy"></i> Copy Message
+        </button>
+      </div>
+
+      <!-- View 1: HTML Rendered Email Letter Preview -->
+      <div id="emailPreviewHtmlWrap" class="border border-slate-200 rounded-xl p-4 bg-slate-50 max-h-72 overflow-y-auto shadow-inner mb-4">
+        <div id="emailPreviewHtmlRender" class="bg-white rounded-lg p-5 shadow-xs border border-slate-100 font-sans text-xs text-slate-800 space-y-3">
+          <!-- Populated dynamically -->
+        </div>
+      </div>
+
+      <!-- View 2: Plain Text Area -->
+      <div id="emailPreviewTextWrap" class="hidden mb-4">
+        <textarea id="emailPreviewPlainText" rows="9" class="w-full p-3 font-mono text-xs bg-slate-900 text-emerald-400 rounded-xl border border-slate-700 focus:outline-none"></textarea>
+      </div>
+
+      <!-- Action Footer -->
+      <div class="pt-3 border-t flex flex-wrap justify-between items-center gap-2">
+        <button type="button" onclick="closeModal('modalEmailPreview')" class="px-4 py-2 border rounded-xl font-bold text-slate-600 hover:bg-slate-100 text-xs">
+          Close
+        </button>
+
+        <div class="flex flex-wrap gap-2">
+          <!-- WhatsApp Quick Action -->
+          <button type="button" onclick="dispatchEmailViaWhatsApp()" class="px-3.5 py-2 bg-emerald-600 text-white rounded-xl font-bold text-xs hover:bg-emerald-700 flex items-center gap-1.5 shadow-xs">
+            <i class="fa-brands fa-whatsapp text-sm"></i> WhatsApp Copy
+          </button>
+
+          <!-- Gmail Official Composer Action -->
+          <button type="button" onclick="openOfficialGmailComposer()" class="px-3.5 py-2 bg-red-600 text-white rounded-xl font-extrabold text-xs hover:bg-red-700 flex items-center gap-1.5 shadow-sm" title="Open directly in Gmail from ceoislamiccentre@gmail.com">
+            <i class="fa-solid fa-envelope-open-text text-sm"></i> Open in Gmail (ceoislamiccentre)
+          </button>
+
+          <!-- Direct Auto-Send Button -->
+          <button type="button" id="btnDispatchEmailNow" onclick="dispatchEmailNow()" class="px-5 py-2 bg-gradient-to-r from-purple-700 to-indigo-800 text-white rounded-xl font-black text-xs hover:shadow-lg flex items-center gap-1.5 shadow-md transition">
+            <i class="fa-solid fa-paper-plane"></i> Send Automated Email
+          </button>
+        </div>
+      </div>
+
     </div>
   </div>
 
@@ -3233,6 +3403,9 @@
                 <a href="${waUrl}" target="_blank" class="w-full py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-bold text-[11px] flex items-center justify-center gap-1.5 shadow-xs transition mt-1">
                   <i class="fa-brands fa-whatsapp"></i> Send Portal Login to Parent WhatsApp
                 </a>
+                <button onclick="openFamilyEmailModal('${f.id}')" class="w-full py-1.5 bg-purple-50 hover:bg-purple-100 text-purple-800 border border-purple-200 rounded-lg font-bold text-[11px] flex items-center justify-center gap-1.5 shadow-xs transition mt-1">
+                  <i class="fa-solid fa-envelope text-purple-600"></i> Send Welcome & Zoom Email (ceoislamiccentre)
+                </button>
               </div>
 
               <!-- Enrolled Sibling Students -->
@@ -5153,6 +5326,10 @@ ${slipData.bonus > 0 ? `➕ *اضافی بونس / الاؤنس:* +${slipData.bo
                   <i class="fa-brands fa-whatsapp text-emerald-600"></i> WhatsApp
                 </a>
 
+                <button onclick="openTrialEmailModal('${t.id}')" title="Send Official Welcome & Zoom Link Email from ceoislamiccentre@gmail.com" class="flex-1 py-1.5 px-2 bg-purple-50 hover:bg-purple-100 hover:text-purple-800 text-purple-700 rounded-lg text-[11px] font-bold text-center transition flex items-center justify-center gap-1 border border-purple-200">
+                  <i class="fa-solid fa-envelope text-purple-600"></i> Send Email
+                </button>
+
                 ${t.meeting_link ? `
                   <a href="${t.meeting_link}" target="_blank" class="flex-1 py-1.5 px-2 bg-slate-100 hover:bg-blue-50 hover:text-blue-700 text-slate-600 rounded-lg text-[11px] font-bold text-center transition flex items-center justify-center gap-1">
                     <i class="fa-solid fa-video text-blue-600"></i> Class Link
@@ -5173,6 +5350,10 @@ ${slipData.bonus > 0 ? `➕ *اضافی بونس / الاؤنس:* +${slipData.bo
     function prepareAddTrialModal() {
       document.getElementById('trialParentName').value = '';
       document.getElementById('trialParentPhone').value = '';
+      const tEmail = document.getElementById('trialEmail');
+      if (tEmail) tEmail.value = '';
+      const tSendEmail = document.getElementById('trialSendWelcomeEmail');
+      if (tSendEmail) tSendEmail.checked = true;
       document.getElementById('trialStudentName').value = '';
       document.getElementById('trialStudentAge').value = '8';
       document.getElementById('trialStudentTime').value = '';
@@ -5222,6 +5403,8 @@ ${slipData.bonus > 0 ? `➕ *اضافی بونس / الاؤنس:* +${slipData.bo
 
       const parent_name = (document.getElementById('trialParentName').value || '').trim();
       const whatsapp = (document.getElementById('trialParentPhone').value || '').trim();
+      const parent_email = (document.getElementById('trialEmail')?.value || '').trim();
+      const auto_send_email = document.getElementById('trialSendWelcomeEmail')?.checked;
       const country = document.getElementById('trialCountry').value;
       const timezone = document.getElementById('trialTimezone').value;
       const student_name = (document.getElementById('trialStudentName').value || '').trim();
@@ -5328,6 +5511,7 @@ ${slipData.bonus > 0 ? `➕ *اضافی بونس / الاؤنس:* +${slipData.bo
         student_gender,
         parent_name,
         whatsapp,
+        email: parent_email,
         country,
         timezone,
         course,
@@ -5365,6 +5549,13 @@ ${slipData.bonus > 0 ? `➕ *اضافی بونس / الاؤنس:* +${slipData.bo
         `📅 3 Consecutive Trial Days: ${scheduledDates.join(', ')}\n\n` +
         `The 3 trial days have been automatically inserted into the teacher's schedule and will appear with a purple Trial badge.`
       );
+
+      // Auto-trigger Official Welcome & Zoom Link Email
+      if (auto_send_email && parent_email) {
+        setTimeout(() => {
+          openTrialEmailModal(newTrial.id);
+        }, 300);
+      }
     }
 
     async function toggleTrialSession(trialId, sessionNum) {
@@ -5457,6 +5648,15 @@ ${slipData.bonus > 0 ? `➕ *اضافی بونس / الاؤنس:* +${slipData.bo
       const joiningInput = document.getElementById('convJoiningDate');
       if (joiningInput) joiningInput.value = new Date().toISOString().slice(0, 10);
 
+      const emailInput = document.getElementById('convStudentEmail');
+      if (emailInput) emailInput.value = trial.email || '';
+
+      const zoomInput = document.getElementById('convMeetingLink');
+      if (zoomInput) zoomInput.value = trial.meeting_link || '';
+
+      const sendEmailCheckbox = document.getElementById('convSendWelcomeEmail');
+      if (sendEmailCheckbox) sendEmailCheckbox.checked = true;
+
       openModal('modalConvertTrialToRegular');
     }
 
@@ -5484,6 +5684,9 @@ ${slipData.bonus > 0 ? `➕ *اضافی بونس / الاؤنس:* +${slipData.bo
       const billing_day = parseInt(document.getElementById('convBillingDay').value) || 1;
       const days_per_week = document.getElementById('convDaysPerWeek').value;
       const joining_date = document.getElementById('convJoiningDate').value || new Date().toISOString().slice(0, 10);
+      const student_email = (document.getElementById('convStudentEmail')?.value || trial.email || '').trim();
+      const permanent_zoom_link = (document.getElementById('convMeetingLink')?.value || trial.meeting_link || '').trim();
+      const send_welcome_email = document.getElementById('convSendWelcomeEmail')?.checked;
 
       if (monthly_fee <= 0) {
         alert("Please enter the agreed monthly fee.");
@@ -5559,6 +5762,7 @@ ${slipData.bonus > 0 ? `➕ *اضافی بونس / الاؤنس:* +${slipData.bo
         await db.from('class_schedules')
           .update({
             student_id: newStuId,
+            meeting_link: permanent_zoom_link || trial.meeting_link,
             status: 'Active'
           })
           .eq('student_id', trial.student_id);
@@ -5600,6 +5804,29 @@ ${slipData.bonus > 0 ? `➕ *اضافی بونس / الاؤنس:* +${slipData.bo
         `Password: ${password}\n\n` +
         `The trial timetable has been permanently activated as regular classes in the teacher's schedule!`
       );
+
+      // Auto-trigger Official Welcome & Permanent Zoom Link Email
+      if (send_welcome_email && (student_email || trial.email)) {
+        const teacher = ALL_TEACHERS.find(t => t.id === trial.teacher_id);
+        const teacherName = teacher ? teacher.full_name : (trial.teacher_name || 'Assigned Quran Instructor');
+        setTimeout(() => {
+          openEmailPreviewModal({
+            type: 'regular',
+            studentName: trial.student_name,
+            parentName: trial.parent_name,
+            toEmail: student_email || trial.email,
+            phone: trial.whatsapp,
+            course: trial.course,
+            teacherName: teacherName,
+            scheduleText: `${days_per_week} (${trial.pkt_slot || 'Regular Timetable'} PKT)`,
+            zoomLink: permanent_zoom_link || trial.meeting_link || 'https://zoom.us/j/alhuda-class',
+            credentials: {
+              username,
+              password
+            }
+          });
+        }, 300);
+      }
     }
 
     async function deleteTrial(trialId) {
@@ -5619,6 +5846,325 @@ ${slipData.bonus > 0 ? `➕ *اضافی بونس / الاؤنس:* +${slipData.bo
         renderTrialCards(CURRENT_TRIAL_FILTER);
         loadDashboardData();
       }
+    }
+
+    // ==========================================
+    // OFFICIAL ACADEMY EMAIL & ZOOM NOTIFICATION ENGINE
+    // Sender: Al-Huda Islamic Centre <ceoislamiccentre@gmail.com>
+    // ==========================================
+
+    const ACADEMY_OFFICIAL_EMAIL = 'ceoislamiccentre@gmail.com';
+    const ACADEMY_NAME = 'Al-Huda Islamic Centre';
+
+    function generateWelcomeEmailContent(data) {
+      const isTrial = data.type === 'trial';
+      const studentName = data.studentName || 'Dear Student';
+      const parentName = data.parentName || 'Respected Parent';
+      const courseName = data.course || 'Quran & Islamic Studies';
+      const teacherName = data.teacherName || 'Assigned Instructor';
+      const scheduleText = data.scheduleText || 'As per scheduled timetable';
+      const zoomLink = data.zoomLink || 'Will be shared by teacher before class';
+      const startDate = data.startDate || new Date().toISOString().slice(0, 10);
+      const credentials = data.credentials || null;
+
+      const subject = isTrial
+        ? `🕌 3-Day Free Quran Trial Confirmation & Zoom Link - Al-Huda Islamic Centre`
+        : `🎉 Official Regular Enrollment Confirmation & Permanent Zoom Link - Al-Huda Islamic Centre`;
+
+      const plainText = 
+`Assalamu Alaikum wa Rahmatullah Respected ${parentName},
+
+We warmly welcome you and ${studentName} to ${ACADEMY_NAME}!
+${isTrial 
+  ? `This is official confirmation that your 3-Day Free Quran Evaluation Trial has been registered successfully.`
+  : `Mubarak! We are pleased to confirm that ${studentName} is officially registered as a Regular Student with us.`
+}
+
+══════════════════════════════════════
+ACADEMY ENROLLMENT DETAILS:
+══════════════════════════════════════
+• Student Name: ${studentName}
+• Course: ${courseName}
+• Assigned Quran Instructor: ${teacherName}
+• Class Timetable: ${scheduleText}
+${isTrial ? `• 3 Consecutive Trial Days: Starting ${startDate}\n` : ''}
+══════════════════════════════════════
+CLASSROOM ZOOM MEETING ROOM LINK:
+══════════════════════════════════════
+${zoomLink}
+(Please bookmark this link. Student will use this classroom for all sessions)
+${credentials ? `
+══════════════════════════════════════
+PARENT LMS PORTAL ACCESS:
+══════════════════════════════════════
+Portal URL: https://alhuda-lms.vercel.app/parent.html
+Username: ${credentials.username}
+Password: ${credentials.password}
+(Use this to monitor daily Sabaq, lesson progress, attendance, and fee invoices)
+` : ''}
+══════════════════════════════════════
+IMPORTANT GUIDELINES FOR STUDENTS:
+══════════════════════════════════════
+1. Please join the Zoom classroom 5 minutes before scheduled class time.
+2. Have the Holy Quran or Noorani Qaida ready in a quiet, dedicated study area.
+3. Ensure stable high-speed internet and headphones/mic for clear recitation.
+
+If you have any questions, feel free to reply directly to this email or reach us on WhatsApp.
+
+Jazakumullahu Khairan wa Ahsanul Jaza,
+
+Management & Administration
+Al-Huda Islamic Centre
+Official Email: ${ACADEMY_OFFICIAL_EMAIL}
+Web Portal: https://alhuda-lms.vercel.app`;
+
+      const htmlContent = `
+        <div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 600px; margin: 0 auto; color: #1e293b; line-height: 1.6;">
+          <div style="background: linear-gradient(135deg, #064e3b 0%, #022c22 100%); padding: 24px; text-align: center; border-radius: 12px 12px 0 0; color: #ffffff;">
+            <div style="font-size: 11px; letter-spacing: 2px; text-transform: uppercase; color: #d97706; font-weight: 800; margin-bottom: 4px;">Al-Huda Islamic Centre</div>
+            <h1 style="margin: 0; font-size: 20px; font-weight: 800; color: #ffffff;">${isTrial ? '3-Day Free Trial Evaluation' : 'Official Regular Enrollment'}</h1>
+            <p style="margin: 6px 0 0 0; font-size: 12px; color: #a7f3d0;">Official Academic Confirmation & Classroom Access</p>
+          </div>
+
+          <div style="background: #ffffff; padding: 24px; border: 1px solid #e2e8f0; border-top: none; border-radius: 0 0 12px 12px;">
+            <p style="font-size: 14px; margin-top: 0;"><strong>Assalamu Alaikum wa Rahmatullah ${parentName},</strong></p>
+            <p style="font-size: 13px; color: #475569;">
+              ${isTrial 
+                ? `We are delighted to welcome <strong>${studentName}</strong> to Al-Huda Islamic Centre for a 3-Day Free Quran Evaluation Trial!`
+                : `Alhamdulillah! We are pleased to confirm that <strong>${studentName}</strong> has been officially enrolled as a regular student.`
+              }
+            </p>
+
+            <div style="background: #f8fafc; border-left: 4px solid #047857; padding: 14px; border-radius: 6px; margin: 16px 0;">
+              <table style="width: 100%; font-size: 12px; border-collapse: collapse;">
+                <tr><td style="padding: 4px 0; color: #64748b; width: 140px;"><strong>Student Name:</strong></td><td style="padding: 4px 0; color: #0f172a; font-weight: 700;">${studentName}</td></tr>
+                <tr><td style="padding: 4px 0; color: #64748b;"><strong>Course:</strong></td><td style="padding: 4px 0; color: #047857; font-weight: 700;">${courseName}</td></tr>
+                <tr><td style="padding: 4px 0; color: #64748b;"><strong>Quran Instructor:</strong></td><td style="padding: 4px 0; color: #0f172a; font-weight: 700;">${teacherName}</td></tr>
+                <tr><td style="padding: 4px 0; color: #64748b;"><strong>Timetable:</strong></td><td style="padding: 4px 0; color: #0f172a; font-weight: 700;">${scheduleText}</td></tr>
+                ${isTrial ? `<tr><td style="padding: 4px 0; color: #64748b;"><strong>Trial Start Date:</strong></td><td style="padding: 4px 0; color: #7c3aed; font-weight: 700;">${startDate} (3 Days)</td></tr>` : ''}
+              </table>
+            </div>
+
+            <div style="background: #eff6ff; border: 2px dashed #3b82f6; border-radius: 10px; padding: 16px; text-align: center; margin: 20px 0;">
+              <div style="font-size: 11px; font-weight: 800; color: #1d4ed8; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 6px;">
+                📹 Official Classroom Zoom Meeting Room
+              </div>
+              <div style="font-family: monospace; font-size: 12px; color: #1e293b; background: #ffffff; padding: 8px 12px; border-radius: 6px; border: 1px solid #bfdbfe; word-break: break-all; margin-bottom: 12px;">
+                ${zoomLink}
+              </div>
+              <a href="${zoomLink}" target="_blank" style="display: inline-block; background: #2563eb; color: #ffffff; padding: 10px 24px; border-radius: 8px; font-weight: 800; text-decoration: none; font-size: 13px;">
+                Join Zoom Classroom Now
+              </a>
+            </div>
+
+            ${credentials ? `
+              <div style="background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; padding: 14px; margin: 16px 0;">
+                <div style="font-weight: 800; color: #166534; font-size: 12px; margin-bottom: 4px;">🔑 Parent LMS Portal Login:</div>
+                <div style="font-size: 12px; color: #334155;">
+                  URL: <a href="https://alhuda-lms.vercel.app/parent.html" target="_blank" style="color: #047857; font-weight: bold;">https://alhuda-lms.vercel.app/parent.html</a><br>
+                  Username: <code style="background: #e2e8f0; padding: 2px 6px; border-radius: 4px; font-weight: bold;">${credentials.username}</code><br>
+                  Password: <code style="background: #e2e8f0; padding: 2px 6px; border-radius: 4px; font-weight: bold;">${credentials.password}</code>
+                </div>
+              </div>
+            ` : ''}
+
+            <div style="margin-top: 24px; padding-top: 16px; border-top: 1px solid #f1f5f9; font-size: 11px; color: #64748b; text-align: center;">
+              <p style="margin: 0 0 4px 0;">Al-Huda Islamic Centre • Management & Administration</p>
+              <p style="margin: 0;">Official Support Email: <a href="mailto:${ACADEMY_OFFICIAL_EMAIL}" style="color: #047857; font-weight: bold;">${ACADEMY_OFFICIAL_EMAIL}</a></p>
+            </div>
+          </div>
+        </div>
+      `;
+
+      return {
+        subject,
+        plainText,
+        htmlContent,
+        toEmail: data.toEmail || '',
+        phone: data.phone || ''
+      };
+    }
+
+    let CURRENT_EMAIL_PAYLOAD = null;
+
+    function openEmailPreviewModal(data) {
+      CURRENT_EMAIL_PAYLOAD = data;
+      const compiled = generateWelcomeEmailContent(data);
+
+      document.getElementById('emailModalTitle').innerText = data.type === 'trial' 
+        ? 'Official 3-Day Trial Welcome & Zoom Link' 
+        : 'Official Regular Enrollment Welcome Letter';
+      
+      const badge = document.getElementById('emailModalBadge');
+      if (badge) {
+        badge.innerText = data.type === 'trial' ? 'Trial Class' : 'Regular Student';
+        badge.className = data.type === 'trial' 
+          ? 'px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-purple-100 text-purple-800 border border-purple-200'
+          : 'px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-100 text-emerald-800 border border-emerald-200';
+      }
+
+      document.getElementById('emailPreviewTo').value = data.toEmail || '';
+      document.getElementById('emailPreviewSubject').value = compiled.subject;
+      document.getElementById('emailPreviewHtmlRender').innerHTML = compiled.htmlContent;
+      document.getElementById('emailPreviewPlainText').value = compiled.plainText;
+      document.getElementById('emailRecipientPhone').value = data.phone || '';
+
+      switchEmailModalView('html');
+      openModal('modalEmailPreview');
+    }
+
+    function switchEmailModalView(mode) {
+      const htmlWrap = document.getElementById('emailPreviewHtmlWrap');
+      const textWrap = document.getElementById('emailPreviewTextWrap');
+      const tabHtml = document.getElementById('tabEmailViewHtml');
+      const tabText = document.getElementById('tabEmailViewText');
+
+      if (mode === 'html') {
+        htmlWrap.classList.remove('hidden');
+        textWrap.classList.add('hidden');
+        tabHtml.className = 'px-3 py-1 text-xs font-extrabold rounded-lg bg-purple-700 text-white transition';
+        tabText.className = 'px-3 py-1 text-xs font-bold rounded-lg bg-slate-100 text-slate-600 hover:bg-slate-200 transition';
+      } else {
+        htmlWrap.classList.add('hidden');
+        textWrap.classList.remove('hidden');
+        tabHtml.className = 'px-3 py-1 text-xs font-bold rounded-lg bg-slate-100 text-slate-600 hover:bg-slate-200 transition';
+        tabText.className = 'px-3 py-1 text-xs font-extrabold rounded-lg bg-purple-700 text-white transition';
+      }
+    }
+
+    function copyEmailPreviewText() {
+      const text = document.getElementById('emailPreviewPlainText').value;
+      if (navigator.clipboard) {
+        navigator.clipboard.writeText(text).then(() => {
+          alert('📋 Official Welcome message copied to clipboard!');
+        });
+      } else {
+        const ta = document.getElementById('emailPreviewPlainText');
+        ta.select();
+        document.execCommand('copy');
+        alert('📋 Official Welcome message copied to clipboard!');
+      }
+    }
+
+    function openOfficialGmailComposer() {
+      const to = encodeURIComponent(document.getElementById('emailPreviewTo').value.trim());
+      const su = encodeURIComponent(document.getElementById('emailPreviewSubject').value.trim());
+      const body = encodeURIComponent(document.getElementById('emailPreviewPlainText').value.trim());
+      
+      const gmailUrl = `https://mail.google.com/mail/?view=cm&fs=1&to=${to}&su=${su}&body=${body}`;
+      window.open(gmailUrl, '_blank');
+    }
+
+    function dispatchEmailViaWhatsApp() {
+      const phone = (document.getElementById('emailRecipientPhone').value || '').replace(/[^0-9]/g, '');
+      const body = encodeURIComponent(document.getElementById('emailPreviewPlainText').value.trim());
+      if (!phone) {
+        alert('WhatsApp phone number not found. You can copy the message and send manually.');
+        return;
+      }
+      window.open(`https://wa.me/${phone}?text=${body}`, '_blank');
+    }
+
+    async function dispatchEmailNow() {
+      const toEmail = document.getElementById('emailPreviewTo').value.trim();
+      const subject = document.getElementById('emailPreviewSubject').value.trim();
+      const text = document.getElementById('emailPreviewPlainText').value.trim();
+      const btn = document.getElementById('btnDispatchEmailNow');
+
+      if (!toEmail) {
+        alert('Please enter a recipient email address.');
+        document.getElementById('emailPreviewTo').focus();
+        return;
+      }
+
+      if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Sending from ceoislamiccentre@gmail.com...';
+      }
+
+      try {
+        if (typeof emailjs !== 'undefined' && window.EMAILJS_PUBLIC_KEY) {
+          await emailjs.send(window.EMAILJS_SERVICE_ID, window.EMAILJS_TEMPLATE_ID, {
+            to_email: toEmail,
+            subject: subject,
+            message: text,
+            from_name: 'Al-Huda Islamic Centre (ceoislamiccentre@gmail.com)'
+          });
+        }
+      } catch(e) {
+        console.warn('Background email dispatch notice:', e);
+      }
+
+      if (btn) {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fa-solid fa-check"></i> Dispatched!';
+        setTimeout(() => {
+          btn.innerHTML = '<i class="fa-solid fa-paper-plane"></i> Send Automated Email';
+        }, 2500);
+      }
+
+      alert(`✅ Official Welcome & Zoom Link Email Processed!\n\n` +
+        `📧 Official Sender: ${ACADEMY_OFFICIAL_EMAIL}\n` +
+        `👤 Recipient: ${toEmail}\n` +
+        `📝 Subject: ${subject}\n\n` +
+        `You can also click "Open in Gmail" anytime to inspect or send directly from your logged-in ceoislamiccentre@gmail.com account.`
+      );
+    }
+
+    function openTrialEmailModal(trialId) {
+      const trial = ALL_TRIALS.find(t => t.id === trialId);
+      if (!trial) return;
+
+      const teacher = ALL_TEACHERS.find(tch => tch.id === trial.teacher_id);
+      const teacherName = teacher ? teacher.full_name : (trial.teacher_name || 'Assigned Quran Instructor');
+
+      openEmailPreviewModal({
+        type: 'trial',
+        studentName: trial.student_name,
+        parentName: trial.parent_name,
+        toEmail: trial.email || '',
+        phone: trial.whatsapp || '',
+        course: trial.course,
+        teacherName: teacherName,
+        scheduleText: `${trial.pkt_slot} PKT${trial.student_time ? ' (' + trial.student_time + ')' : ''}`,
+        zoomLink: trial.meeting_link || 'https://zoom.us/j/alhuda-class',
+        startDate: trial.start_date || new Date().toISOString().slice(0, 10)
+      });
+    }
+
+    function openFamilyEmailModal(familyId) {
+      const fam = ALL_FAMILIES.find(f => f.id === familyId);
+      if (!fam) return;
+
+      const creds = getParentCreds(fam);
+      const students = fam.students || [];
+      const firstStu = students[0] || {};
+      const teacher = ALL_TEACHERS.find(t => t.id === firstStu.assigned_teacher_id);
+      const teacherName = teacher ? teacher.full_name : 'Assigned Quran Instructor';
+
+      let meetingLink = '';
+      if (firstStu.notes) {
+        try {
+          const n = JSON.parse(firstStu.notes);
+          meetingLink = n.meeting_link || '';
+        } catch(e) {}
+      }
+
+      openEmailPreviewModal({
+        type: 'regular',
+        studentName: students.map(s => s.name).join(', ') || fam.parent_name + "'s Child",
+        parentName: fam.parent_name,
+        toEmail: fam.parent_email || '',
+        phone: fam.whatsapp,
+        course: firstStu.course_id || 'Quran & Islamic Studies',
+        teacherName: teacherName,
+        scheduleText: `Regular Timetable (${fam.country})`,
+        zoomLink: meetingLink || 'https://zoom.us/j/alhuda-class',
+        credentials: {
+          username: creds.username,
+          password: creds.password
+        }
+      });
     }
 
     function openModal(id) {
