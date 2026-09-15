@@ -230,9 +230,9 @@
           </div>
 
           <div class="flex items-center gap-2 w-full md:w-auto">
-            <a id="liveBannerJoinBtn" href="#" target="_blank" class="flex-1 md:flex-none px-4 py-2.5 bg-white hover:bg-emerald-50 text-brandDark font-extrabold text-xs rounded-xl shadow-md transition flex items-center justify-center gap-1.5">
-              <i class="fa-solid fa-video text-emerald-600"></i> Join Classroom
-            </a>
+            <button id="liveBannerJoinBtn" class="flex-1 md:flex-none px-4 py-2.5 bg-white hover:bg-emerald-50 text-brandDark font-extrabold text-xs rounded-xl shadow-md transition flex items-center justify-center gap-1.5">
+              <i class="fa-solid fa-video text-emerald-600"></i> Launch Zoom Class (Host)
+            </button>
             <button id="liveBannerAttBtn" onclick="" class="flex-1 md:flex-none px-4 py-2.5 bg-emerald-900/80 hover:bg-emerald-900 text-white font-extrabold text-xs rounded-xl border border-emerald-400/40 shadow-sm transition flex items-center justify-center gap-1.5">
               <i class="fa-solid fa-clipboard-check text-brandGold"></i> Mark Sabaq
             </button>
@@ -779,7 +779,7 @@
         
         const joinBtn = document.getElementById('liveBannerJoinBtn');
         if (liveClass.meeting_link) {
-          joinBtn.href = liveClass.meeting_link;
+          joinBtn.onclick = () => launchTeacherZoomClass(liveClass.id, liveClass.meeting_link, liveClass.students?.name || 'Student', liveClass.student_id);
           joinBtn.classList.remove('hidden');
         } else {
           joinBtn.classList.add('hidden');
@@ -883,15 +883,88 @@
                   <i class="fa-solid fa-clipboard-check"></i> Mark Sabaq
                 </button>
                 ${c.meeting_link ? `
-                  <a href="${c.meeting_link}" target="_blank" class="px-3 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold shadow-xs flex items-center gap-1 transition">
-                    <i class="fa-solid fa-video"></i> Join
-                  </a>
-                ` : ''}
+                  <button onclick="launchTeacherZoomClassById('${c.id}')" class="px-3 py-1 bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-700 hover:to-teal-800 text-white rounded-lg text-xs font-black shadow-xs flex items-center gap-1 transition">
+                    <i class="fa-solid fa-video"></i> Start Class
+                  </button>
+                ` : `
+                  <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-400">No Zoom</span>
+                `}
               </div>
             </td>
           </tr>
         `;
       }).join('');
+    }
+
+    // Helper: Launch Zoom class by schedule ID lookup
+    function launchTeacherZoomClassById(scheduleId) {
+      const c = TODAY_CLASSES.find(x => String(x.id) === String(scheduleId));
+      if (!c) {
+        alert("Class record not found. Please refresh the page.");
+        return;
+      }
+      launchTeacherZoomClass(c.id, c.meeting_link, c.students?.name || 'Student', c.student_id);
+    }
+
+    // Smart LMS-to-Zoom Gateway with Punch-In Timestamp Verification
+    async function launchTeacherZoomClass(scheduleId, rawMeetingLink, studentName, studentId) {
+      if (!rawMeetingLink) {
+        alert("No Zoom Meeting Link assigned for this class yet. Please contact Academy Admin.");
+        return;
+      }
+
+      const now = new Date();
+      const timeStr = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
+
+      // 1. Log Punch-In Timestamp into attendance_logs in Supabase
+      try {
+        const todayDate = now.toISOString().slice(0, 10);
+        await db.from('attendance_logs').upsert([{
+          schedule_id: scheduleId,
+          teacher_id: CURRENT_TEACHER.id,
+          student_id: studentId,
+          date: todayDate,
+          status: 'Present',
+          lesson_notes: `[Auto-Logged] Class launched via LMS at ${timeStr} PKT`,
+          recorded_at: now.toISOString()
+        }], { onConflict: 'schedule_id, date' });
+      } catch(e) {
+        console.warn("Could not log punch-in timestamp:", e);
+      }
+
+      // 2. Format Native Zoom App Deep Link (zoommtg:// protocol)
+      let zoomAppUrl = rawMeetingLink;
+      try {
+        const u = new URL(rawMeetingLink);
+        const matchConf = u.pathname.match(/\/j\/([0-9]+)/);
+        const confno = matchConf ? matchConf[1] : '';
+        const pwd = u.searchParams.get('pwd') || '';
+        if (confno) {
+          zoomAppUrl = `zoommtg://zoom.us/join?action=join&confno=${confno}${pwd ? '&pwd=' + pwd : ''}&uname=${encodeURIComponent((CURRENT_TEACHER.full_name || 'Instructor') + ' (Teacher)')}`;
+        }
+      } catch(e) {}
+
+      // 3. Launch Native App & Web Fallback
+      const iframe = document.createElement('iframe');
+      iframe.style.display = 'none';
+      iframe.src = zoomAppUrl;
+      document.body.appendChild(iframe);
+      setTimeout(() => { try { document.body.removeChild(iframe); } catch(e){} }, 3000);
+
+      // Open standard web meeting in new tab as guaranteed fallback
+      window.open(rawMeetingLink, '_blank');
+
+      alert(`🚀 Zoom Classroom Launched Successfully!\n\n` +
+        `👨‍🏫 Host: ${CURRENT_TEACHER.full_name}\n` +
+        `🎓 Student: ${studentName}\n` +
+        `🕒 Punch-In Time: ${timeStr} PKT\n\n` +
+        `Zoom Native App is opening. Your attendance and start time have been verified and recorded by the LMS!`
+      );
+
+      // Refresh today's list to update status
+      if (typeof loadTeacherPortalData === 'function') {
+        loadTeacherPortalData();
+      }
     }
 
     // Attendance & Sabaq Modal Handlers

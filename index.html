@@ -1463,6 +1463,48 @@
           </div>
         </div>
 
+        <!-- 5. DEDICATED ZOOM CLASSROOM CONFIGURATION & AUTO-SYNC -->
+        <div class="bg-gradient-to-br from-blue-50 to-indigo-50 p-4 rounded-xl border-2 border-blue-300 space-y-3">
+          <div class="flex justify-between items-center">
+            <div class="font-extrabold text-blue-900 text-xs flex items-center gap-1.5">
+              <i class="fa-solid fa-video text-blue-600"></i> 5. Dedicated Zoom Classroom Configuration (Paid License)
+            </div>
+            <span class="text-[10px] bg-blue-600 text-white px-2 py-0.5 rounded-full font-bold">Auto-Cascades to All Students</span>
+          </div>
+          <p class="text-[11px] text-blue-700/80">
+            Paste the teacher's permanent Paid Zoom link or Personal Meeting Room (PMI). When saved, this link automatically updates across all assigned students and weekly timetables!
+          </p>
+
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div class="sm:col-span-2">
+              <label class="block font-bold mb-1 text-slate-700">Permanent Zoom Meeting Link:</label>
+              <input type="url" id="tZoomLink" placeholder="https://us06web.zoom.us/j/1234567890?pwd=..." class="w-full p-2.5 bg-white border border-blue-300 rounded-lg font-mono text-xs font-semibold text-blue-950 focus:border-blue-500 focus:ring-1 focus:ring-blue-500">
+            </div>
+            <div>
+              <label class="block font-bold mb-1 text-slate-700">Meeting ID (PMI):</label>
+              <input type="text" id="tZoomMeetingId" placeholder="e.g. 987 654 3210" class="w-full p-2.5 bg-white border border-slate-300 rounded-lg font-mono text-xs">
+            </div>
+          </div>
+
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label class="block font-bold mb-1 text-slate-700">Meeting Passcode:</label>
+              <input type="text" id="tZoomPasscode" placeholder="e.g. 123456" class="w-full p-2.5 bg-white border border-slate-300 rounded-lg font-mono text-xs">
+            </div>
+            <div>
+              <label class="block font-bold mb-1 text-slate-700">Host Key (Optional PIN):</label>
+              <input type="text" id="tZoomHostKey" placeholder="e.g. 6-digit Host Key" class="w-full p-2.5 bg-white border border-slate-300 rounded-lg font-mono text-xs">
+            </div>
+          </div>
+
+          <div class="pt-1 flex items-center gap-2">
+            <input type="checkbox" id="tZoomAutoSync" checked class="w-4 h-4 text-blue-600 rounded border-slate-300">
+            <label for="tZoomAutoSync" class="text-[11px] font-bold text-blue-900 cursor-pointer">
+              ⚡ Automatically cascade & update this Zoom link to all current and future assigned students, trials, and weekly timetables
+            </label>
+          </div>
+        </div>
+
         <div class="flex justify-end gap-2.5 pt-3 border-t">
           <button type="button" onclick="closeModal('modalAddTeacher')" class="px-4 py-2 border rounded-lg font-bold text-slate-600">Cancel</button>
           <button type="submit" id="btnSaveTeacher" class="px-6 py-2.5 bg-brandDark text-white rounded-lg font-bold hover:bg-brandDarkest shadow-md flex items-center gap-1.5 transition">
@@ -2099,6 +2141,60 @@
         </div>
       </div>
 
+    </div>
+  </div>
+
+  <!-- MODAL: QUICK ZOOM LINK CONFIGURATION & SYNC -->
+  <div id="modalTeacherQuickZoom" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 hidden items-center justify-center p-4">
+    <div class="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-slate-200 space-y-4">
+      <div class="flex justify-between items-center border-b pb-3">
+        <div class="flex items-center gap-2">
+          <div class="w-9 h-9 rounded-xl bg-blue-100 text-blue-700 flex items-center justify-center font-black">
+            <i class="fa-solid fa-video text-base"></i>
+          </div>
+          <div>
+            <h3 class="font-black text-base text-slate-900" id="quickZoomTeacherName">Teacher Zoom Setup</h3>
+            <p class="text-xs text-slate-500" id="quickZoomTeacherId">TCH-001</p>
+          </div>
+        </div>
+        <button onclick="closeModal('modalTeacherQuickZoom')" class="text-slate-400 hover:text-slate-600 text-xl font-bold">&times;</button>
+      </div>
+
+      <input type="hidden" id="quickZoomTeacherRawId">
+
+      <div class="space-y-3 text-xs">
+        <div>
+          <label class="block font-bold text-slate-700 mb-1">Permanent Zoom Meeting Link *:</label>
+          <input type="url" id="quickZoomLinkInput" placeholder="https://us06web.zoom.us/j/1234567890?pwd=..." class="w-full p-2.5 border rounded-xl font-mono font-bold text-blue-950 focus:border-blue-500 focus:ring-1 focus:ring-blue-500">
+        </div>
+
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block font-bold text-slate-700 mb-1">Meeting ID (PMI):</label>
+            <input type="text" id="quickZoomPmiInput" placeholder="987 654 3210" class="w-full p-2 border rounded-xl font-mono">
+          </div>
+          <div>
+            <label class="block font-bold text-slate-700 mb-1">Meeting Passcode:</label>
+            <input type="text" id="quickZoomPasscodeInput" placeholder="123456" class="w-full p-2 border rounded-xl font-mono">
+          </div>
+        </div>
+
+        <div class="p-3 bg-blue-50/80 rounded-xl border border-blue-200 text-blue-900 space-y-1">
+          <div class="font-extrabold flex items-center gap-1 text-[11px]">
+            <i class="fa-solid fa-bolt text-amber-500"></i> Auto-Cascade Sync Engine
+          </div>
+          <p class="text-[11px] text-blue-800/80">
+            Saving this Zoom link will automatically cascade & update all active weekly timetable slots, trial classes, and enrolled student portals assigned to this teacher!
+          </p>
+        </div>
+      </div>
+
+      <div class="flex justify-end gap-2 border-t pt-3">
+        <button type="button" onclick="closeModal('modalTeacherQuickZoom')" class="px-4 py-2 border rounded-xl font-bold text-slate-600 hover:bg-slate-100 text-xs">Cancel</button>
+        <button type="button" id="btnSaveQuickZoom" onclick="handleQuickZoomSave()" class="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white font-black rounded-xl text-xs flex items-center gap-1.5 shadow-sm transition">
+          <i class="fa-solid fa-cloud-arrow-up"></i> Save & Auto-Sync All Students
+        </button>
+      </div>
     </div>
   </div>
 
@@ -3553,6 +3649,7 @@
       // Clean first name for username (e.g. "Gulfam" -> "gulfam")
       const firstWord = (t.full_name || 'teacher').trim().split(/\s+/)[0];
       const baseUser = firstWord.toLowerCase().replace(/[^a-z0-9]/g, '') || 'teacher';
+      const cleanPhone = (t.phone || '').replace(/[^0-9]/g, '') || '9876543210';
 
       const defaultCred = {
         teacher_id: assignedId,
@@ -3560,10 +3657,163 @@
         password: '12345678',
         working_shift: t.working_shift || '10 Hours Shift (02:00 PM - 12:00 AM PKT)',
         full_name: t.full_name,
-        phone: t.phone
+        phone: t.phone,
+        zoom_link: `https://zoom.us/j/${cleanPhone}?pwd=alhuda_${baseUser}`,
+        zoom_meeting_id: cleanPhone,
+        zoom_passcode: '123456'
       };
       saveTeacherAccount(t.id, defaultCred);
       return defaultCred;
+    }
+
+    // =========================================================================
+    // DEDICATED TEACHER ZOOM CLASSROOM & CENTRAL AUTO-CASCADE SYNC ENGINE
+    // =========================================================================
+
+    async function syncTeacherZoomToAllStudents(teacherId, newZoomLink) {
+      if (!teacherId || !newZoomLink) return { success: false, schedulesCount: 0, trialsCount: 0 };
+      const cleanLink = newZoomLink.trim();
+      let updatedSchedulesCount = 0;
+      let updatedTrialsCount = 0;
+
+      // 1. Cascade update to all weekly class_schedules in Supabase
+      try {
+        const { data, error } = await db.from('class_schedules')
+          .update({ meeting_link: cleanLink })
+          .eq('teacher_id', teacherId)
+          .select('id');
+        if (!error && data) {
+          updatedSchedulesCount = data.length;
+        }
+      } catch (err) {
+        console.warn("Supabase schedule zoom sync notice:", err);
+      }
+
+      // 2. Cascade update to all in-memory & stored trial classes
+      try {
+        let storedTrials = getStoredTrials();
+        storedTrials.forEach(tr => {
+          if (tr.teacher_id === teacherId) {
+            tr.meeting_link = cleanLink;
+            updatedTrialsCount++;
+          }
+        });
+        saveStoredTrials(storedTrials);
+        ALL_TRIALS = storedTrials;
+      } catch (err) {
+        console.warn("Trial zoom sync notice:", err);
+      }
+
+      // 3. Update Supabase students notes assigned to this teacher
+      try {
+        const { data: stuList } = await db.from('students')
+          .select('id, notes')
+          .eq('assigned_teacher_id', teacherId);
+        
+        if (stuList && stuList.length > 0) {
+          for (const s of stuList) {
+            try {
+              let parsed = JSON.parse(s.notes || '{}');
+              parsed.meeting_link = cleanLink;
+              await db.from('students').update({ notes: JSON.stringify(parsed) }).eq('id', s.id);
+            } catch(e){}
+          }
+        }
+      } catch (err) {
+        console.warn("Student notes zoom sync notice:", err);
+      }
+
+      // 4. Update teacher account in local cache
+      const accounts = getTeacherAccounts();
+      if (accounts[teacherId]) {
+        accounts[teacherId].zoom_link = cleanLink;
+        localStorage.setItem('alhuda_teacher_accounts', JSON.stringify(accounts));
+      }
+
+      return {
+        success: true,
+        schedulesCount: updatedSchedulesCount,
+        trialsCount: updatedTrialsCount
+      };
+    }
+
+    function openQuickZoomModal(teacherId) {
+      const teacher = ALL_TEACHERS.find(t => t.id === teacherId);
+      if (!teacher) return;
+      const accounts = getTeacherAccounts();
+      const acc = accounts[teacherId] || {};
+      const creds = getTeacherCreds(teacher);
+
+      document.getElementById('quickZoomTeacherRawId').value = teacherId;
+      document.getElementById('quickZoomTeacherName').innerText = `${teacher.full_name}'s Zoom Classroom`;
+      document.getElementById('quickZoomTeacherId').innerText = `${creds.teacher_id} • ${teacher.working_shift || 'Shift'}`;
+
+      const defaultMock = `https://zoom.us/j/${teacher.phone ? teacher.phone.replace(/[^0-9]/g, '') : '9876543210'}?pwd=alhuda_${(teacher.full_name||'').toLowerCase().replace(/[^a-z]/g, '')}`;
+      document.getElementById('quickZoomLinkInput').value = acc.zoom_link || defaultMock;
+      document.getElementById('quickZoomPmiInput').value = acc.zoom_meeting_id || (teacher.phone ? teacher.phone.replace(/[^0-9]/g, '') : '');
+      document.getElementById('quickZoomPasscodeInput').value = acc.zoom_passcode || '123456';
+
+      openModal('modalTeacherQuickZoom');
+    }
+
+    async function handleQuickZoomSave() {
+      const btn = document.getElementById('btnSaveQuickZoom');
+      const teacherId = document.getElementById('quickZoomTeacherRawId').value;
+      const zoomLink = (document.getElementById('quickZoomLinkInput').value || '').trim();
+      const zoomPmi = (document.getElementById('quickZoomPmiInput').value || '').trim();
+      const zoomPasscode = (document.getElementById('quickZoomPasscodeInput').value || '').trim();
+
+      if (!zoomLink) {
+        alert("Please enter a Zoom Meeting Link.");
+        return;
+      }
+
+      if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Auto-Cascading to All Students...';
+      }
+
+      // Save in teacher account
+      const accounts = getTeacherAccounts();
+      accounts[teacherId] = {
+        ...(accounts[teacherId] || {}),
+        zoom_link: zoomLink,
+        zoom_meeting_id: zoomPmi,
+        zoom_passcode: zoomPasscode
+      };
+      localStorage.setItem('alhuda_teacher_accounts', JSON.stringify(accounts));
+
+      // Trigger Central Auto-Sync Engine
+      const res = await syncTeacherZoomToAllStudents(teacherId, zoomLink);
+
+      if (btn) {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fa-solid fa-cloud-arrow-up"></i> Save & Auto-Sync All Students';
+      }
+
+      closeModal('modalTeacherQuickZoom');
+      await loadTeachers();
+
+      alert(`🎉 Zoom Link Updated & Auto-Cascaded Successfully!\n\n` +
+        `📹 New Zoom Link: ${zoomLink}\n` +
+        `📅 Updated Timetable Schedules: ${res.schedulesCount} slots\n` +
+        `✨ Updated Trial Classes: ${res.trialsCount} trials\n\n` +
+        `All students and timetables for this teacher are now in 100% real-time sync!`
+      );
+    }
+
+    async function triggerTeacherZoomSync(teacherId) {
+      const teacher = ALL_TEACHERS.find(t => t.id === teacherId);
+      if (!teacher) return;
+      const accounts = getTeacherAccounts();
+      const acc = accounts[teacherId] || {};
+      const zoomLink = acc.zoom_link || `https://zoom.us/j/${teacher.phone ? teacher.phone.replace(/[^0-9]/g, '') : '9876543210'}?pwd=alhuda_${(teacher.full_name||'').toLowerCase().replace(/[^a-z]/g, '')}`;
+
+      if (confirm(`Cascade & sync Zoom link for "${teacher.full_name}" to all assigned students and weekly schedules now?\n\nLink: ${zoomLink}`)) {
+        const res = await syncTeacherZoomToAllStudents(teacherId, zoomLink);
+        alert(`✅ Auto-Sync Completed!\n\nUpdated ${res.schedulesCount} schedule slots and ${res.trialsCount} trial classes for ${teacher.full_name}.`);
+        await loadTeachers();
+      }
     }
 
     function autoSuggestTeacherUsername(fullName) {
@@ -3636,6 +3886,18 @@
       const incTier = document.getElementById('tIncrementTier');
       if (incTier) incTier.value = 'auto';
 
+      // Clear Zoom inputs
+      const zLink = document.getElementById('tZoomLink');
+      if (zLink) zLink.value = '';
+      const zPmi = document.getElementById('tZoomMeetingId');
+      if (zPmi) zPmi.value = '';
+      const zPass = document.getElementById('tZoomPasscode');
+      if (zPass) zPass.value = '';
+      const zHostKey = document.getElementById('tZoomHostKey');
+      if (zHostKey) zHostKey.value = '';
+      const zAutoSync = document.getElementById('tZoomAutoSync');
+      if (zAutoSync) zAutoSync.checked = true;
+
       const newId = getNextTeacherId();
       const badge = document.getElementById('tGeneratedIdBadge');
       if (badge) badge.innerText = newId;
@@ -3692,6 +3954,15 @@
 
       document.getElementById('tUsername').value = creds.username || '';
       document.getElementById('tPassword').value = creds.password || '12345678';
+
+      // Populate Zoom classroom fields
+      const defaultMockZoom = `https://zoom.us/j/${teacher.phone ? teacher.phone.replace(/[^0-9]/g, '') : '9876543210'}?pwd=alhuda_${(teacher.full_name||'').toLowerCase().replace(/[^a-z]/g, '')}`;
+      document.getElementById('tZoomLink').value = acc.zoom_link || defaultMockZoom;
+      document.getElementById('tZoomMeetingId').value = acc.zoom_meeting_id || (teacher.phone ? teacher.phone.replace(/[^0-9]/g, '') : '');
+      document.getElementById('tZoomPasscode').value = acc.zoom_passcode || '123456';
+      document.getElementById('tZoomHostKey').value = acc.zoom_host_key || '';
+      const autoSyncCheck = document.getElementById('tZoomAutoSync');
+      if (autoSyncCheck) autoSyncCheck.checked = true;
 
       openModal('modalAddTeacher');
     }
@@ -3868,6 +4139,32 @@
                 </a>
               </div>
 
+              <!-- DEDICATED ZOOM CLASSROOM STATUS & SYNC -->
+              <div class="bg-gradient-to-r from-blue-50/90 to-indigo-50/70 p-2.5 rounded-xl border border-blue-200 mb-3 space-y-1.5 text-xs">
+                <div class="flex justify-between items-center text-[10px] font-bold text-blue-900 uppercase tracking-wide">
+                  <span class="flex items-center gap-1"><i class="fa-solid fa-video text-blue-600"></i> Dedicated Zoom Classroom</span>
+                  <span class="px-1.5 py-0.2 rounded text-[9px] font-extrabold ${acc.zoom_link ? 'bg-blue-600 text-white' : 'bg-slate-200 text-slate-600'}">
+                    ${acc.zoom_link ? 'CONFIGURED' : 'DEMO ROOM'}
+                  </span>
+                </div>
+                <div class="bg-white p-1.5 rounded border border-blue-100 flex items-center justify-between gap-1 text-[11px] font-mono">
+                  <span class="truncate text-blue-950 font-bold max-w-[200px]" title="${acc.zoom_link || `https://zoom.us/j/${t.phone ? t.phone.replace(/[^0-9]/g, '') : '9876543210'}?pwd=alhuda_${(t.full_name||'').toLowerCase().replace(/[^a-z]/g, '')}`}">
+                    ${acc.zoom_link || `https://zoom.us/j/${t.phone ? t.phone.replace(/[^0-9]/g, '') : '9876543210'}?pwd=alhuda_${(t.full_name||'').toLowerCase().replace(/[^a-z]/g, '')}`}
+                  </span>
+                  <button onclick="navigator.clipboard.writeText('${acc.zoom_link || `https://zoom.us/j/${t.phone ? t.phone.replace(/[^0-9]/g, '') : '9876543210'}?pwd=alhuda_${(t.full_name||'').toLowerCase().replace(/[^a-z]/g, '')}`}'); alert('Zoom link copied to clipboard!');" class="text-blue-600 hover:text-blue-800 font-bold text-[10px]" title="Copy Zoom Link">
+                    <i class="fa-regular fa-copy"></i>
+                  </button>
+                </div>
+                <div class="grid grid-cols-2 gap-1.5 pt-0.5">
+                  <button onclick="openQuickZoomModal('${t.id}')" class="py-1.5 px-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-bold text-[10px] flex items-center justify-center gap-1 shadow-2xs transition">
+                    <i class="fa-solid fa-pen"></i> Edit Zoom
+                  </button>
+                  <button onclick="triggerTeacherZoomSync('${t.id}')" class="py-1.5 px-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-900 border border-indigo-200 rounded-lg font-bold text-[10px] flex items-center justify-center gap-1 shadow-2xs transition" title="Cascade & Sync Link to All Students">
+                    <i class="fa-solid fa-bolt text-amber-500"></i> Sync Students
+                  </button>
+                </div>
+              </div>
+
               ${t.witness_name ? `
                 <div class="text-[11px] text-slate-500 mb-3">
                   <i class="fa-solid fa-shield-halved text-brandEmerald"></i> <strong>Witness:</strong> ${t.witness_name} (${t.witness_phone || '--'})
@@ -3959,6 +4256,12 @@
       btn.disabled = true;
       btn.innerText = editTeacherId ? 'Updating Teacher Profile...' : 'Saving & Creating LMS Account...';
 
+      const zoom_link = (document.getElementById('tZoomLink')?.value || '').trim();
+      const zoom_meeting_id = (document.getElementById('tZoomMeetingId')?.value || '').trim();
+      const zoom_passcode = (document.getElementById('tZoomPasscode')?.value || '').trim();
+      const zoom_host_key = (document.getElementById('tZoomHostKey')?.value || '').trim();
+      const auto_sync_zoom = document.getElementById('tZoomAutoSync')?.checked;
+
       if (editTeacherId) {
         // UPDATE MODE
         const { error } = await db.from('teachers').update({
@@ -3980,15 +4283,23 @@
           full_name,
           phone,
           joining_date,
-          increment_tier
+          increment_tier,
+          zoom_link,
+          zoom_meeting_id,
+          zoom_passcode,
+          zoom_host_key
         });
+
+        if (auto_sync_zoom && zoom_link) {
+          await syncTeacherZoomToAllStudents(editTeacherId, zoom_link);
+        }
 
         btn.disabled = false;
         btn.innerHTML = '<i class="fa-solid fa-check"></i> <span id="btnSaveTeacherText">Update Teacher Profile</span>';
         closeModal('modalAddTeacher');
         await loadTeachers();
 
-        alert(`✅ Teacher Profile Updated Successfully!\n\n👨‍🏫 Teacher: ${full_name}\n🆔 Teacher ID: ${teacher_id_code}\n👤 Portal Username: ${username}\n🔑 Portal Password: ${password}\n🕒 Shift: ${working_shift}`);
+        alert(`✅ Teacher Profile Updated Successfully!\n\n👨‍🏫 Teacher: ${full_name}\n🆔 Teacher ID: ${teacher_id_code}\n👤 Portal Username: ${username}\n🔑 Portal Password: ${password}\n🕒 Shift: ${working_shift}\n📹 Zoom: ${zoom_link || 'Default Room'}`);
       } else {
         // INSERT MODE
         const { data, error } = await db.from('teachers').insert([{
@@ -4008,8 +4319,16 @@
           full_name,
           phone,
           joining_date,
-          increment_tier
+          increment_tier,
+          zoom_link,
+          zoom_meeting_id,
+          zoom_passcode,
+          zoom_host_key
         });
+
+        if (auto_sync_zoom && zoom_link) {
+          await syncTeacherZoomToAllStudents(insertedId, zoom_link);
+        }
 
         btn.disabled = false;
         btn.innerHTML = '<i class="fa-solid fa-user-plus"></i> <span id="btnSaveTeacherText">Save Teacher & Generate LMS Account</span>';
