@@ -3340,28 +3340,31 @@
       const container = document.getElementById('familiesCardsContainer');
       if (!container) return;
       const { data: families } = await db.from('families').select('*, students(*)').order('created_at', { ascending: false });
-      ALL_FAMILIES = families || [];
+      
+      // Filter for regular enrolled families (exclude raw trials)
+      const regularFamilies = (families || []).filter(f => f.status !== 'Trial' && f.status !== 'Converted');
+      ALL_FAMILIES = regularFamilies;
 
-      // Extract all students
+      // Extract all regular active students
       const allStu = [];
-      (families || []).forEach(f => {
-        if (f.students) allStu.push(...f.students);
+      regularFamilies.forEach(f => {
+        if (f.students) allStu.push(...f.students.filter(s => s.status !== 'Trial' && s.status !== 'Converted'));
       });
       ALL_STUDENTS = allStu;
 
       const famSelect = document.getElementById('stuFamilyId');
       if (famSelect) {
-        famSelect.innerHTML = (families || []).map(f => `<option value="${f.id}">${f.parent_name} (${f.id} &bull; ${f.country})</option>`).join('');
+        famSelect.innerHTML = regularFamilies.map(f => `<option value="${f.id}">${f.parent_name} (${f.id} &bull; ${f.country})</option>`).join('');
       }
 
-      if (!families || families.length === 0) {
+      if (!regularFamilies || regularFamilies.length === 0) {
         container.innerHTML = '<div class="col-span-full p-8 text-center bg-white rounded-xl border border-slate-200 text-slate-400">No families registered yet. Click "+ Add Family" above.</div>';
         return;
       }
 
       const cachedProfiles = JSON.parse(localStorage.getItem('alhuda_student_profiles') || '{}');
 
-      container.innerHTML = families.map(f => {
+      container.innerHTML = regularFamilies.map(f => {
         const creds = getParentCreds(f);
         const cleanPhone = (f.whatsapp || '').replace(/[^0-9]/g, '');
         const currentUrl = window.location.origin + window.location.pathname;
@@ -4151,23 +4154,39 @@
       document.getElementById('matrixTeacherName').innerText = `${CURRENT_MATRIX_TEACHER.full_name}'s Weekly Timetable (${creds.teacher_id})`;
       document.getElementById('matrixTeacherSubtitle').innerText = `Rate: ${CURRENT_MATRIX_TEACHER.rate_per_slot || 200} PKR / slot • Configured Shift: ${CURRENT_MATRIX_TEACHER.working_shift || '10 Hours Shift (02:00 PM - 12:00 AM PKT)'}`;
 
-      // Populate Assigned Students Bar
+      // Populate Assigned Students & Active Trials Bar
       const studentsListEl = document.getElementById('matrixTeacherStudentsList');
       if (studentsListEl) {
-        const assignedStudents = (ALL_STUDENTS || []).filter(s => s.assigned_teacher_id === teacherId);
-        if (assignedStudents.length === 0) {
-          studentsListEl.innerHTML = `<span class="text-slate-400 italic text-[11px]">No students assigned to this teacher yet. Enroll from Tab 2.</span>`;
+        const assignedStudents = (ALL_STUDENTS || []).filter(s => s.assigned_teacher_id === teacherId && s.status !== 'Trial' && s.status !== 'Converted');
+        const assignedTrials = (ALL_TRIALS || []).filter(t => t.teacher_id === teacherId && t.status !== 'Discontinued');
+
+        if (assignedStudents.length === 0 && assignedTrials.length === 0) {
+          studentsListEl.innerHTML = `<span class="text-slate-400 italic text-[11px]">No students or trials assigned to this teacher yet.</span>`;
         } else {
-          studentsListEl.innerHTML = assignedStudents.map(s => {
-            const courseName = s.course_id || 'Quran';
-            return `
+          let rosterHtml = '';
+          // Regular students
+          assignedStudents.forEach(s => {
+            rosterHtml += `
               <span class="px-2 py-0.5 rounded-lg bg-emerald-100 text-emerald-900 border border-emerald-300 font-bold text-[11px] flex items-center gap-1 shadow-2xs">
                 <i class="fa-solid fa-graduation-cap text-emerald-700"></i>
                 <strong>${s.name}</strong>
                 <span class="text-[9px] font-mono text-emerald-800">(${s.id})</span>
               </span>
             `;
-          }).join('');
+          });
+          // Trial students
+          assignedTrials.forEach(t => {
+            const isConverted = t.status === 'Converted';
+            rosterHtml += `
+              <span class="px-2 py-0.5 rounded-lg ${isConverted ? 'bg-teal-100 text-teal-900 border-teal-300' : 'bg-purple-100 text-purple-900 border-purple-300'} font-bold text-[11px] flex items-center gap-1.5 shadow-2xs">
+                <i class="fa-solid fa-star ${isConverted ? 'text-teal-600' : 'text-amber-500'}"></i>
+                <strong>${t.student_name}</strong>
+                <span class="text-[9px] font-extrabold px-1 rounded ${isConverted ? 'bg-teal-200 text-teal-900' : 'bg-purple-200 text-purple-900'}">${isConverted ? 'CONVERTED' : 'TRIAL'}</span>
+                ${!isConverted ? `<button onclick="openConvertTrialModal('${t.id}')" class="px-1.5 py-0.2 bg-emerald-600 hover:bg-emerald-700 text-white rounded text-[9px] font-black shadow-2xs transition">Regularize</button>` : ''}
+              </span>
+            `;
+          });
+          studentsListEl.innerHTML = rosterHtml;
         }
       }
 
@@ -4178,9 +4197,38 @@
 
     async function fetchTeacherSchedules() {
       const { data: scheds } = await db.from('class_schedules')
-        .select('*, students(name)')
+        .select('*, students(name, status, notes)')
         .eq('teacher_id', CURRENT_MATRIX_TEACHER.id);
       CURRENT_TEACHER_SCHEDULES = scheds || [];
+    }
+
+    function convertTrialFromSchedule(studentId) {
+      const trial = (ALL_TRIALS || []).find(t => t.student_id === studentId || t.id === studentId || t.id === 'TRL-' + String(studentId).replace(/[^0-9]/g, ''));
+      if (trial) {
+        openConvertTrialModal(trial.id);
+      } else {
+        const student = (ALL_STUDENTS || []).find(s => s.id === studentId);
+        if (student) {
+          const tempTrial = {
+            id: 'TRL-' + student.id.replace(/[^0-9]/g, ''),
+            student_id: student.id,
+            family_id: student.family_id,
+            student_name: student.name,
+            student_age: student.age || 8,
+            student_gender: student.gender || 'Child',
+            parent_name: 'Guardian',
+            whatsapp: '',
+            country: 'International',
+            course: student.course_id || 'Quran Studies',
+            teacher_id: student.assigned_teacher_id,
+            status: 'Active'
+          };
+          ALL_TRIALS.unshift(tempTrial);
+          openConvertTrialModal(tempTrial.id);
+        } else {
+          alert("Trial record details not found for student ID: " + studentId);
+        }
+      }
     }
 
     function isSlotInTeacherShift(startTime, shiftStr) {
@@ -4254,18 +4302,51 @@
             const slot = bookingsMap[key];
 
             if (slot) {
-              daysCells += `
-                <td class="p-1.5 text-center bg-blue-50/70 border border-blue-200">
-                  <div class="flex flex-col justify-between p-1 rounded bg-white shadow-xs border border-blue-300">
-                    <span class="font-extrabold text-[11px] text-slate-900 truncate">
-                      <i class="fa-solid fa-graduation-cap text-brandEmerald"></i> ${slot.students?.name || 'Student'}
-                    </span>
-                    <button onclick="handleDeleteSlot('${slot.id}')" class="text-red-500 hover:text-red-700 text-[10px] mt-1 font-bold" title="Unassign">
-                      <i class="fa-solid fa-trash-can"></i> Remove
-                    </button>
-                  </div>
-                </td>
-              `;
+              const stuStatus = slot.students?.status;
+              const isTrialSlot = slot.status === 'Trial' || stuStatus === 'Trial';
+              const stuName = slot.students?.name || 'Student';
+
+              if (isTrialSlot) {
+                daysCells += `
+                  <td class="p-1 text-center bg-purple-50/90 border border-purple-200">
+                    <div class="flex flex-col justify-between p-1.5 rounded-lg bg-white shadow-2xs border border-purple-300 gap-1">
+                      <div class="flex items-center justify-between gap-1">
+                        <span class="font-extrabold text-[11px] text-purple-950 truncate" title="${stuName}">
+                          <i class="fa-solid fa-star text-amber-500"></i> ${stuName}
+                        </span>
+                        <span class="px-1 py-0.2 rounded text-[8px] font-black bg-purple-200 text-purple-900 border border-purple-300">TRIAL</span>
+                      </div>
+                      <div class="flex items-center justify-between gap-1 mt-0.5">
+                        <button onclick="convertTrialFromSchedule('${slot.student_id}')" class="px-1.5 py-0.5 bg-emerald-600 hover:bg-emerald-700 text-white text-[9px] font-black rounded shadow-2xs flex items-center gap-0.5 transition" title="Regularize Student">
+                          <i class="fa-solid fa-circle-check text-[8px]"></i> Regularize
+                        </button>
+                        <button onclick="handleDeleteSlot('${slot.id}')" class="text-rose-500 hover:text-rose-700 text-[10px] font-bold" title="Unassign">
+                          <i class="fa-solid fa-trash-can"></i>
+                        </button>
+                      </div>
+                    </div>
+                  </td>
+                `;
+              } else {
+                daysCells += `
+                  <td class="p-1 text-center bg-emerald-50/50 border border-emerald-200">
+                    <div class="flex flex-col justify-between p-1.5 rounded-lg bg-white shadow-2xs border border-emerald-300 gap-1">
+                      <div class="flex items-center justify-between gap-1">
+                        <span class="font-extrabold text-[11px] text-slate-900 truncate" title="${stuName}">
+                          <i class="fa-solid fa-graduation-cap text-emerald-600"></i> ${stuName}
+                        </span>
+                        <span class="px-1 py-0.2 rounded text-[8px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">REGULAR</span>
+                      </div>
+                      <div class="flex items-center justify-between gap-1 mt-0.5">
+                        <span class="text-[9px] text-slate-400 font-mono truncate max-w-[65px]">${slot.student_id || ''}</span>
+                        <button onclick="handleDeleteSlot('${slot.id}')" class="text-rose-500 hover:text-rose-700 text-[10px] font-bold ml-auto" title="Unassign">
+                          <i class="fa-solid fa-trash-can"></i>
+                        </button>
+                      </div>
+                    </div>
+                  </td>
+                `;
+              }
             } else {
               daysCells += `
                 <td onclick="openSlotBookingModal(${day}, '${startTime}', '${endTime}')" class="p-1.5 text-center ${isShiftSlot ? 'slot-vacant bg-emerald-50/60' : 'slot-vacant'} transition" title="Click to Book Student">
@@ -5084,23 +5165,26 @@ ${slipData.bonus > 0 ? `➕ *اضافی بونس / الاؤنس:* +${slipData.bo
       try {
         let storedTrials = getStoredTrials();
 
-        // 1. Fetch trials from Supabase students table (status = 'Trial')
+        // 1. Fetch trials from Supabase students table (both 'Trial' and 'Converted')
         try {
           const { data: supaTrials, error } = await db.from('students')
             .select('*, families(*), teachers(*)')
-            .eq('status', 'Trial');
+            .in('status', ['Trial', 'Converted']);
 
           if (!error && supaTrials && supaTrials.length > 0) {
             supaTrials.forEach(st => {
-              const exists = storedTrials.find(t => t.student_id === st.id || t.id === st.id);
+              const exists = storedTrials.find(t => t.student_id === st.id || t.id === st.id || t.id === 'TRL-' + String(st.id).replace(/[^0-9]/g, ''));
               let parsedNotes = {};
               try {
                 parsedNotes = JSON.parse(st.notes || '{}');
               } catch(e){}
 
+              const isSupabaseConverted = st.status === 'Converted' || parsedNotes.converted_to_student_id;
+              const effectiveStatus = isSupabaseConverted ? 'Converted' : (parsedNotes.trial_status || 'Active');
+
               if (!exists) {
                 storedTrials.unshift({
-                  id: 'TRL-' + st.id.replace(/[^0-9]/g, ''),
+                  id: 'TRL-' + String(st.id).replace(/[^0-9]/g, ''),
                   student_id: st.id,
                   family_id: st.family_id,
                   student_name: st.name,
@@ -5117,10 +5201,16 @@ ${slipData.bonus > 0 ? `➕ *اضافی بونس / الاؤنس:* +${slipData.bo
                   pkt_slot: parsedNotes.pkt_slot || '16:00 - 16:30',
                   student_time: parsedNotes.student_time || '',
                   meeting_link: parsedNotes.meeting_link || '',
-                  conducted_sessions: 0,
-                  status: 'Active',
+                  conducted_sessions: isSupabaseConverted ? 3 : 0,
+                  status: effectiveStatus,
+                  converted_student_id: parsedNotes.converted_to_student_id || null,
                   created_at: st.created_at || new Date().toISOString()
                 });
+              } else {
+                if (isSupabaseConverted) {
+                  exists.status = 'Converted';
+                  if (parsedNotes.converted_to_student_id) exists.converted_student_id = parsedNotes.converted_to_student_id;
+                }
               }
             });
           }
@@ -5965,20 +6055,83 @@ ${slipData.bonus > 0 ? `➕ *اضافی بونس / الاؤنس:* +${slipData.bo
         console.warn("Supabase student regular insert notice:", err);
       }
 
-      // 5. Promote Class Schedules from Trial to Active Regular
+      // 5. Expand & Promote Class Schedules from Trial to Active Regular across requested days
       try {
-        await db.from('class_schedules')
-          .update({
-            student_id: newStuId,
-            meeting_link: permanent_zoom_link || trial.meeting_link,
-            status: 'Active'
-          })
-          .eq('student_id', trial.student_id);
+        // Map requested days per week to day of week numbers (1 = Mon, 7 = Sun)
+        let daysToSchedule = [1, 2, 3, 4, 5]; // default: 5 Days (Mon - Fri)
+        const dStr = (days_per_week || '').toLowerCase();
+        if (dStr.includes('3 day') || dStr.includes('mon / wed / fri') || dStr.includes('mon, wed, fri')) {
+          daysToSchedule = [1, 3, 5]; // Mon, Wed, Fri
+        } else if (dStr.includes('2 day') || dStr.includes('weekend') || dStr.includes('sat - sun') || dStr.includes('sat, sun')) {
+          daysToSchedule = [6, 7]; // Sat, Sun
+        } else if (dStr.includes('6 day')) {
+          daysToSchedule = [1, 2, 3, 4, 5, 6]; // Mon - Sat
+        } else if (dStr.includes('7 day') || dStr.includes('everyday')) {
+          daysToSchedule = [1, 2, 3, 4, 5, 6, 7];
+        } else if (dStr.includes('5 day')) {
+          daysToSchedule = [1, 2, 3, 4, 5]; // Mon - Fri
+        }
+
+        // Determine Start & End times
+        let startTime = '16:00:00';
+        let endTime = '16:30:00';
+        if (trial.pkt_slot && trial.pkt_slot.includes('-')) {
+          const parts = trial.pkt_slot.split('-');
+          const sT = parts[0].trim();
+          const eT = parts[1].trim();
+          startTime = sT.length === 5 ? `${sT}:00` : sT;
+          endTime = eT.length === 5 ? `${eT}:00` : eT;
+        }
+
+        // Safely delete old temporary 3-day trial slots for this trial student
+        if (trial.student_id) {
+          await db.from('class_schedules').delete().eq('student_id', trial.student_id);
+        }
+
+        // Insert fresh regular schedule rows for the converted regular student across ALL requested days
+        const scheduleRows = daysToSchedule.map(dayNum => ({
+          student_id: newStuId,
+          teacher_id: trial.teacher_id,
+          day_of_week: dayNum,
+          start_time: startTime,
+          end_time: endTime,
+          timezone: 'Asia/Karachi',
+          meeting_link: permanent_zoom_link || trial.meeting_link || '',
+          status: 'Active'
+        }));
+
+        await db.from('class_schedules').insert(scheduleRows);
       } catch(err) {
-        console.warn("Supabase schedule update notice:", err);
+        console.warn("Supabase schedule expansion insert notice:", err);
       }
 
-      // 6. Mark Trial Record as Converted
+      // 6. Update Old Trial Student & Family in Supabase to permanently persist conversion history
+      try {
+        if (trial.student_id) {
+          await db.from('students').update({
+            status: 'Converted',
+            notes: JSON.stringify({
+              trial_course: trial.course,
+              student_time: trial.student_time,
+              meeting_link: trial.meeting_link,
+              pkt_slot: trial.pkt_slot,
+              converted_to_student_id: newStuId,
+              converted_family_id: newFamId,
+              converted_at: new Date().toISOString(),
+              agreed_fee: `${currency} ${monthly_fee}`
+            })
+          }).eq('id', trial.student_id);
+        }
+        if (trial.family_id) {
+          await db.from('families').update({
+            status: 'Converted'
+          }).eq('id', trial.family_id);
+        }
+      } catch(err) {
+        console.warn("Supabase trial student status update notice:", err);
+      }
+
+      // 7. Mark Trial Record in Memory as Converted
       trial.status = 'Converted';
       trial.converted_student_id = newStuId;
       trial.converted_family_id = newFamId;
@@ -5994,12 +6147,20 @@ ${slipData.bonus > 0 ? `➕ *اضافی بونس / الاؤنس:* +${slipData.bo
 
       closeModal('modalConvertTrialToRegular');
       updateTrialKpis();
-      renderTrialCards(CURRENT_TRIAL_FILTER);
+      
+      // Switch filter to 'all' so converted student stays visibly tracked with green badge
+      filterTrialCards('all');
 
       // Refresh systems
       await loadFamiliesAndStudents();
       loadFeeBillingLedger();
       loadDashboardData();
+
+      // If Teacher Schedule Matrix is currently open, refresh timetable immediately
+      if (CURRENT_MATRIX_TEACHER && CURRENT_MATRIX_TEACHER.id === trial.teacher_id) {
+        await fetchTeacherSchedules();
+        render2DMatrixTable();
+      }
 
       alert(`🎉 Conversion Completed Successfully!\n\n` +
         `👨‍👩‍👧 New Family ID: ${newFamId}\n` +

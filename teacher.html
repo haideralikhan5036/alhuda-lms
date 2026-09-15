@@ -827,7 +827,27 @@
           ? `<span class="text-slate-800 font-semibold">${c.log.lesson_notes}</span>`
           : `<span class="text-slate-400 italic">No notes logged yet</span>`;
 
-        const isTrialClass = c.status === 'Trial' || c.students?.status === 'Trial' || (c.students?.notes && c.students.notes.includes('trial'));
+        let isTrialClass = false;
+        if (c.status === 'Trial' || c.students?.status === 'Trial') {
+          isTrialClass = true;
+        } else if (c.students?.notes && c.students?.status !== 'Active') {
+          try {
+            const parsed = JSON.parse(c.students.notes);
+            if (parsed.is_trial && !parsed.converted_from_trial) isTrialClass = true;
+          } catch(e) {}
+        }
+
+        let courseTitle = 'Quran Studies & Tajweed';
+        if (isTrialClass) {
+          courseTitle = '3-Day Free Trial Evaluation';
+        } else if (c.students?.course_id) {
+          courseTitle = c.students.course_id;
+        } else if (c.students?.notes) {
+          try {
+            const pNotes = JSON.parse(c.students.notes);
+            if (pNotes.course) courseTitle = pNotes.course;
+          } catch(e) {}
+        }
 
         return `
           <tr class="hover:bg-slate-50 transition ${c.isLive ? 'bg-emerald-50/50 font-medium' : ''}">
@@ -838,13 +858,15 @@
             <td class="p-3.5">
               <div class="flex items-center gap-1.5">
                 <span class="font-bold text-slate-900 text-xs">${c.students?.name || 'Student'}</span>
-                ${isTrialClass ? '<span class="px-2 py-0.5 rounded text-[10px] font-extrabold bg-purple-100 text-purple-800 border border-purple-200">✨ Trial</span>' : ''}
+                ${isTrialClass 
+                  ? '<span class="px-2 py-0.5 rounded text-[10px] font-extrabold bg-purple-100 text-purple-800 border border-purple-200">✨ Trial Class</span>' 
+                  : '<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">🎓 Regular</span>'}
               </div>
               <div class="text-[10px] text-slate-500 font-mono">ID: ${c.students?.id || 'STU'}</div>
             </td>
             <td class="p-3.5">
               <span class="px-2 py-0.5 rounded ${isTrialClass ? 'bg-purple-50 text-purple-900 border-purple-200' : 'bg-emerald-50 text-brandEmerald border-emerald-200'} font-bold text-[11px] border">
-                ${isTrialClass ? '3-Day Free Evaluation' : 'Quran Studies & Tajweed'}
+                ${courseTitle}
               </span>
             </td>
             <td class="p-3.5 max-w-xs truncate">
