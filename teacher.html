@@ -506,6 +506,16 @@
           <p class="text-[10px] text-slate-400 mt-1">These notes are permanently logged into student history and visible to parent & admin.</p>
         </div>
 
+        <div class="p-2.5 bg-amber-50 rounded-xl border border-amber-200 flex items-center justify-between text-xs">
+          <div class="text-[11px] text-amber-900 font-medium flex items-center gap-1.5">
+            <i class="fa-solid fa-plane-departure text-amber-600"></i>
+            <span>Going on vacation/long holiday?</span>
+          </div>
+          <button type="button" onclick="triggerLeaveRequestFromAttendanceModal()" class="px-2.5 py-1 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-[10px] font-black transition">
+            Request Leave
+          </button>
+        </div>
+
         <div class="pt-3 border-t flex justify-end gap-2.5">
           <button type="button" onclick="closeAttendanceModal()" class="px-4 py-2 border rounded-xl font-bold text-slate-600 hover:bg-slate-100">
             Cancel
@@ -515,6 +525,75 @@
           </button>
         </div>
       </div>
+    </div>
+  </div>
+
+  <!-- ================= MODAL: TEACHER SUBMIT LEAVE / ADJUSTMENT REQUEST ================= -->
+  <div id="modalTeacherLeaveRequest" class="fixed inset-0 bg-black/70 backdrop-blur-xs z-50 hidden items-center justify-center p-4">
+    <div class="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-200 space-y-4 animate-scaleIn">
+      <div class="flex justify-between items-center border-b pb-3">
+        <div class="flex items-center gap-2.5">
+          <div class="w-9 h-9 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center font-black">
+            <i class="fa-solid fa-calendar-plus"></i>
+          </div>
+          <div>
+            <h3 class="font-black text-base text-slate-900">Request Student Leave</h3>
+            <p class="text-xs text-slate-500" id="teacherReqStudentSubtitle">Submit vacation / break to Admin</p>
+          </div>
+        </div>
+        <button onclick="closeTeacherLeaveRequestModal()" class="text-slate-400 hover:text-slate-600 text-xl font-bold">&times;</button>
+      </div>
+
+      <form onsubmit="submitTeacherLeaveRequest(event)" class="space-y-3 text-xs">
+        <input type="hidden" id="teacherReqStudentId">
+        <input type="hidden" id="teacherReqScheduleId">
+
+        <div>
+          <label class="block font-bold text-slate-700 mb-1">Student Name:</label>
+          <input type="text" id="teacherReqStudentName" readonly class="w-full p-2.5 border rounded-xl bg-slate-50 font-bold text-slate-900">
+        </div>
+
+        <div class="grid grid-cols-2 gap-2.5">
+          <div>
+            <label class="block font-bold text-slate-700 mb-1">Leave Start Date *:</label>
+            <input type="date" id="teacherReqStartDate" required class="w-full p-2 border rounded-xl font-mono text-slate-800">
+          </div>
+          <div>
+            <label class="block font-bold text-slate-700 mb-1">Expected Return Date *:</label>
+            <input type="date" id="teacherReqReturnDate" required class="w-full p-2 border rounded-xl font-mono text-slate-800 border-amber-300 bg-amber-50/40">
+          </div>
+        </div>
+
+        <div>
+          <label class="block font-bold text-slate-700 mb-1">Reason / Student's Notice *:</label>
+          <select id="teacherReqReasonSelect" class="w-full p-2 border rounded-xl font-bold text-slate-700 mb-2">
+            <option value="UK/Europe Summer Holidays">UK/Europe Summer Holidays</option>
+            <option value="Family Traveling / Vacation">Family Traveling / Vacation</option>
+            <option value="Umrah / Pilgrimage">Umrah / Pilgrimage</option>
+            <option value="School Exams / Revision">School Exams / Revision</option>
+            <option value="Medical / Sickness">Medical / Sickness</option>
+            <option value="Personal Emergency">Personal Emergency</option>
+            <option value="Other">Other Reason</option>
+          </select>
+          <textarea id="teacherReqNotes" rows="2" placeholder="Provide extra details (e.g. Parent requested 2 weeks off for traveling)..." class="w-full p-2 border rounded-xl text-xs"></textarea>
+        </div>
+
+        <div class="p-3 bg-amber-50 rounded-xl border border-amber-200 text-amber-900 space-y-1">
+          <div class="font-extrabold flex items-center gap-1.5 text-[11px]">
+            <i class="fa-solid fa-lock text-amber-600"></i> Admin Approval Gate
+          </div>
+          <p class="text-[11px] text-amber-800/80">
+            Teachers cannot alter schedule status unilaterally. This request will be sent to Admin Dashboard. Once approved, the student's timetable slots will be paused.
+          </p>
+        </div>
+
+        <div class="flex justify-end gap-2 border-t pt-3">
+          <button type="button" onclick="closeTeacherLeaveRequestModal()" class="px-4 py-2 border rounded-xl font-bold text-slate-600 hover:bg-slate-100">Cancel</button>
+          <button type="submit" id="btnSubmitTeacherReq" class="px-5 py-2 bg-amber-600 hover:bg-amber-700 text-white font-black rounded-xl flex items-center gap-1.5 shadow-sm transition">
+            <i class="fa-solid fa-paper-plane"></i> Submit Request to Admin
+          </button>
+        </div>
+      </form>
     </div>
   </div>
 
@@ -844,11 +923,27 @@
         const startMin = sH * 60 + sM;
         const endMin = eH * 60 + eM;
 
+        let isLeaveStudent = s.students?.status === 'Leave';
+        let leaveMeta = null;
+        let pendingLeaveReq = null;
+        if (s.students?.notes) {
+          try {
+            const pNotes = JSON.parse(s.students.notes);
+            if (pNotes.on_leave) {
+              isLeaveStudent = true;
+              leaveMeta = pNotes;
+            }
+            if (pNotes.leave_request && pNotes.leave_request.status === 'pending') {
+              pendingLeaveReq = pNotes.leave_request;
+            }
+          } catch(e) {}
+        }
+
         const isLive = currentMinutes >= startMin && currentMinutes < endMin;
         const isUpcoming = currentMinutes < startMin;
         const log = logsMap[s.id];
 
-        if (isLive && !liveClass) {
+        if (isLive && !liveClass && !isLeaveStudent) {
           liveClass = { ...s, log, startMin, endMin };
         }
 
@@ -871,7 +966,12 @@
             badgeClass = 'bg-blue-100 text-blue-800 border-blue-300';
           }
         } else {
-          remainingCount++;
+          if (isLeaveStudent) {
+            status = `🏖️ On Leave${leaveMeta?.return_date ? ' (Returns: ' + leaveMeta.return_date.slice(5) + ')' : ''}`;
+            badgeClass = 'bg-blue-100 text-blue-900 border-blue-300 font-bold';
+          } else {
+            remainingCount++;
+          }
         }
 
         return {
@@ -881,6 +981,9 @@
           endMin,
           isLive,
           isUpcoming,
+          isLeaveStudent,
+          leaveMeta,
+          pendingLeaveReq,
           status,
           badgeClass
         };
@@ -986,18 +1089,59 @@
           } catch(e) {}
         }
 
+        let rowClass = 'hover:bg-slate-50 transition';
+        if (c.isLeaveStudent) {
+          rowClass = 'border-l-4 border-blue-500 bg-blue-50/70 hover:bg-blue-100/60 transition font-medium text-blue-950';
+        } else if (c.isLive) {
+          rowClass = 'bg-emerald-50/50 font-medium hover:bg-emerald-100/60 transition';
+        }
+
+        let reqBadge = '';
+        if (c.pendingLeaveReq) {
+          reqBadge = '<span class="px-2 py-0.5 rounded text-[10px] font-extrabold bg-amber-100 text-amber-900 border border-amber-300 animate-pulse">⏳ Leave Pending Admin</span>';
+        }
+
+        let actionButtons = '';
+        if (c.isLeaveStudent) {
+          actionButtons = `
+            <span class="px-3 py-1.5 rounded-lg text-xs font-black bg-blue-100 text-blue-900 border border-blue-300 flex items-center gap-1">
+              <i class="fa-solid fa-umbrella-beach text-blue-600"></i> Slot Paused (On Leave)
+            </span>
+          `;
+        } else {
+          let zoomBtn = '<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-400">No Zoom</span>';
+          if (c.meeting_link) {
+            zoomBtn = `
+              <button onclick="launchTeacherZoomClassById('${c.id}')" class="px-3 py-1 bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-700 hover:to-teal-800 text-white rounded-lg text-xs font-black shadow-xs flex items-center gap-1 transition">
+                <i class="fa-solid fa-video"></i> Start Class
+              </button>
+            `;
+          }
+
+          actionButtons = `
+            <button onclick="openAttendanceModal('${c.id}')" class="px-3 py-1 bg-brandDark hover:bg-brandDarkest text-white rounded-lg text-xs font-bold shadow-xs flex items-center gap-1 transition">
+              <i class="fa-solid fa-clipboard-check"></i> Mark Sabaq
+            </button>
+            ${zoomBtn}
+            <button onclick="openTeacherLeaveRequestModal('${c.student_id}', '${c.id}')" class="px-2.5 py-1 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 rounded-lg text-xs font-bold shadow-2xs flex items-center gap-1 transition" title="Submit student leave request for Admin approval">
+              <i class="fa-solid fa-plane-departure text-amber-600"></i> Request Leave
+            </button>
+          `;
+        }
+
         return `
-          <tr class="hover:bg-slate-50 transition ${c.isLive ? 'bg-emerald-50/50 font-medium' : ''}">
+          <tr class="${rowClass}">
             <td class="p-3.5 font-mono">
               <div class="font-extrabold text-slate-900 text-xs">${c.start_time.slice(0,5)} - ${c.end_time.slice(0,5)}</div>
               ${timingBadge}
             </td>
             <td class="p-3.5">
-              <div class="flex items-center gap-1.5">
+              <div class="flex items-center gap-1.5 flex-wrap">
                 <span class="font-bold text-slate-900 text-xs">${c.students?.name || 'Student'}</span>
                 ${isTrialClass 
                   ? '<span class="px-2 py-0.5 rounded text-[10px] font-extrabold bg-purple-100 text-purple-800 border border-purple-200">✨ Trial Class</span>' 
                   : '<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">🎓 Regular</span>'}
+                ${reqBadge}
               </div>
               <div class="text-[10px] text-slate-500 font-mono">ID: ${c.students?.id || 'STU'}</div>
             </td>
@@ -1016,16 +1160,7 @@
             </td>
             <td class="p-3.5 text-right">
               <div class="flex items-center justify-end gap-1.5 flex-wrap">
-                <button onclick="openAttendanceModal('${c.id}', '${c.students?.name || ''}', '${c.start_time.slice(0,5)} - ${c.end_time.slice(0,5)}', '${c.student_id}', '${c.log?.status || ''}', '${c.log?.lesson_notes || ''}')" class="px-3 py-1 bg-brandDark hover:bg-brandDarkest text-white rounded-lg text-xs font-bold shadow-xs flex items-center gap-1 transition">
-                  <i class="fa-solid fa-clipboard-check"></i> Mark Sabaq
-                </button>
-                ${c.meeting_link ? `
-                  <button onclick="launchTeacherZoomClassById('${c.id}')" class="px-3 py-1 bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-700 hover:to-teal-800 text-white rounded-lg text-xs font-black shadow-xs flex items-center gap-1 transition">
-                    <i class="fa-solid fa-video"></i> Start Class
-                  </button>
-                ` : `
-                  <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-400">No Zoom</span>
-                `}
+                ${actionButtons}
               </div>
             </td>
           </tr>
@@ -1108,6 +1243,16 @@
 
     // Attendance & Sabaq Modal Handlers
     function openAttendanceModal(scheduleId, studentName, timeSlot, studentId, currentStatus, currentNotes) {
+      if (!studentName && scheduleId) {
+        const c = TODAY_CLASSES.find(x => String(x.id) === String(scheduleId));
+        if (c) {
+          studentName = c.students?.name || 'Student';
+          timeSlot = `${c.start_time.slice(0,5)} - ${c.end_time.slice(0,5)}`;
+          studentId = c.student_id;
+          currentStatus = c.log?.status || 'Present';
+          currentNotes = c.log?.lesson_notes || '';
+        }
+      }
       document.getElementById('attScheduleId').value = scheduleId;
       document.getElementById('attStudentId').value = studentId;
       document.getElementById('attModalSubtitle').innerText = `${studentName} • ${timeSlot} PKT`;
@@ -1389,6 +1534,110 @@
           </tr>
         `;
       }).join('');
+    }
+
+    // ==========================================
+    // TEACHER LEAVE / ADJUSTMENT REQUEST ENGINE
+    // ==========================================
+
+    function openTeacherLeaveRequestModal(studentId, scheduleId, studentName) {
+      if (!studentName && scheduleId) {
+        const c = TODAY_CLASSES.find(x => String(x.id) === String(scheduleId));
+        studentName = c?.students?.name || 'Student';
+      }
+      document.getElementById('teacherReqStudentId').value = studentId;
+      document.getElementById('teacherReqScheduleId').value = scheduleId || '';
+      document.getElementById('teacherReqStudentName').value = studentName || 'Student';
+      document.getElementById('teacherReqStudentSubtitle').innerText = `${studentName || 'Student'} • Leave Request`;
+
+      const todayStr = new Date().toISOString().slice(0, 10);
+      const defaultReturn = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+      document.getElementById('teacherReqStartDate').value = todayStr;
+      document.getElementById('teacherReqReturnDate').value = defaultReturn;
+      document.getElementById('teacherReqNotes').value = '';
+
+      const modal = document.getElementById('modalTeacherLeaveRequest');
+      if (modal) {
+        modal.classList.remove('hidden');
+        modal.classList.add('flex');
+      }
+    }
+
+    function closeTeacherLeaveRequestModal() {
+      const modal = document.getElementById('modalTeacherLeaveRequest');
+      if (modal) {
+        modal.classList.add('hidden');
+        modal.classList.remove('flex');
+      }
+    }
+
+    function triggerLeaveRequestFromAttendanceModal() {
+      const scheduleId = document.getElementById('attScheduleId')?.value;
+      const studentId = document.getElementById('attStudentId')?.value;
+      const subTitle = document.getElementById('attModalSubtitle')?.innerText || '';
+      const studentName = subTitle.split('•')[0].trim();
+      closeAttendanceModal();
+      openTeacherLeaveRequestModal(studentId, scheduleId, studentName);
+    }
+
+    async function submitTeacherLeaveRequest(e) {
+      e.preventDefault();
+      const studentId = document.getElementById('teacherReqStudentId')?.value;
+      const studentName = document.getElementById('teacherReqStudentName')?.value;
+      const scheduleId = document.getElementById('teacherReqScheduleId')?.value;
+      const startDate = document.getElementById('teacherReqStartDate')?.value;
+      const returnDate = document.getElementById('teacherReqReturnDate')?.value;
+      const reason = document.getElementById('teacherReqReasonSelect')?.value;
+      const notes = (document.getElementById('teacherReqNotes')?.value || '').trim();
+
+      if (!studentId || !startDate || !returnDate) {
+        alert("Please fill in all required dates.");
+        return;
+      }
+
+      const btn = document.getElementById('btnSubmitTeacherReq');
+      btn.disabled = true;
+      btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Submitting...';
+
+      try {
+        const { data: st, error: fetchErr } = await db.from('students').select('*').eq('id', studentId).single();
+        if (fetchErr || !st) throw new Error("Student not found.");
+
+        let meta = {};
+        try { meta = JSON.parse(st.notes || '{}'); } catch(err) { meta = { text: st.notes || '' }; }
+
+        const reqObj = {
+          id: 'REQ-' + Date.now(),
+          student_id: studentId,
+          student_name: studentName,
+          schedule_id: scheduleId,
+          teacher_id: CURRENT_TEACHER?.id || 'TCH-001',
+          teacher_name: CURRENT_TEACHER?.full_name || 'Teacher',
+          start_date: startDate,
+          return_date: returnDate,
+          reason: reason,
+          notes: notes,
+          status: 'pending',
+          requested_at: new Date().toISOString()
+        };
+
+        meta.leave_request = reqObj;
+
+        const { error: upErr } = await db.from('students').update({
+          notes: JSON.stringify(meta)
+        }).eq('id', studentId);
+
+        if (upErr) throw upErr;
+
+        alert(`✅ Leave request submitted for ${studentName}!\nStatus: Pending Admin Approval.\nAdmin will review and approve on the Main Dashboard.`);
+        closeTeacherLeaveRequestModal();
+        await loadTeacherPortalData();
+      } catch (err) {
+        alert("Error submitting request: " + err.message);
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fa-solid fa-paper-plane"></i> Submit Request to Admin';
+      }
     }
   </script>
 </body>
