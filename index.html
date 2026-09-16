@@ -48,6 +48,10 @@
     .slot-vacant:hover { background-color: #dcfce7; border-color: #22c55e; }
     .slot-booked { background-color: #eff6ff; border: 1.5px solid #93c5fd; color: #1e40af; }
     .matrix-table th, .matrix-table td { border: 1px solid #e2e8f0; }
+    /* Sidebar collapsed state */
+    #mainAppSidebar.sidebar-collapsed { width: 52px !important; }
+    #mainAppSidebar.sidebar-collapsed .sidebar-label { display: none !important; }
+    #mainContentArea.sidebar-collapsed { margin-left: 52px !important; }
   </style>
 </head>
 <body class="text-slate-800 flex flex-col min-h-screen">
@@ -67,6 +71,10 @@
 
       <!-- ROLE SWITCHER & CLOCK -->
       <div class="flex items-center gap-3">
+        <!-- Sidebar Toggle Button in Header -->
+        <button onclick="toggleSidebar()" class="w-9 h-9 rounded-lg bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition flex-shrink-0" title="Toggle Navigation Sidebar">
+          <i class="fa-solid fa-bars text-sm"></i>
+        </button>
         <!-- Logged-in Teacher Session Badge -->
         <div id="teacherSessionPill" class="hidden items-center gap-2 bg-emerald-950/80 border border-emerald-400/50 px-3 py-1 rounded-full text-xs font-semibold text-emerald-200 shadow-sm">
           <span><i class="fa-solid fa-chalkboard-user text-emerald-400"></i> <span id="teacherActiveName">Teacher</span></span>
@@ -106,55 +114,69 @@
     </div>
   </header>
 
-  <!-- NAVIGATION TABS -->
-  <nav class="bg-white border-b border-slate-200 shadow-sm sticky top-[68px] z-40">
-    <div class="max-w-7xl mx-auto px-4 flex items-center justify-between gap-3 py-2.5">
-      <div class="flex gap-2 overflow-x-auto flex-1">
-        <button onclick="switchTab('tab-dashboard')" class="nav-tab active px-4 py-2 rounded-lg text-xs sm:text-sm font-bold flex items-center gap-2 bg-brandDark text-white transition whitespace-nowrap shadow">
-          <i class="fa-solid fa-gauge-high text-brandEmerald"></i> Main Dashboard
-        </button>
-        <button onclick="switchTab('tab-families')" class="nav-tab role-admin px-4 py-2 rounded-lg text-xs sm:text-sm font-bold flex items-center gap-2 text-slate-700 hover:bg-emerald-50 hover:text-brandDark transition whitespace-nowrap">
-          <i class="fa-solid fa-users text-brandEmerald"></i> Families & Students
-        </button>
-        <button onclick="switchTab('tab-teachers')" class="nav-tab role-admin px-4 py-2 rounded-lg text-xs sm:text-sm font-bold flex items-center gap-2 text-slate-700 hover:bg-emerald-50 hover:text-brandDark transition whitespace-nowrap">
-          <i class="fa-solid fa-chalkboard-user text-brandEmerald"></i> Teachers Directory
-        </button>
-        <button onclick="switchTab('tab-trials')" class="nav-tab role-admin px-4 py-2 rounded-lg text-xs sm:text-sm font-bold flex items-center gap-2 text-slate-700 hover:bg-purple-50 hover:text-purple-900 transition whitespace-nowrap">
-          <i class="fa-solid fa-graduation-cap text-purple-600"></i> Trial Classes
-        </button>
-        <button onclick="switchTab('tab-attendance')" class="nav-tab px-4 py-2 rounded-lg text-xs sm:text-sm font-bold flex items-center gap-2 text-slate-700 hover:bg-emerald-50 hover:text-brandDark transition whitespace-nowrap">
-          <i class="fa-solid fa-clipboard-check text-brandEmerald"></i> Daily Attendance & Notes
-        </button>
-        <button onclick="switchTab('tab-salaries')" class="nav-tab role-owner px-4 py-2 rounded-lg text-xs sm:text-sm font-bold flex items-center gap-2 text-slate-700 hover:bg-emerald-50 hover:text-brandDark transition whitespace-nowrap">
-          <i class="fa-solid fa-hand-holding-dollar text-brandGold"></i> Teacher Salaries (Auto)
-        </button>
-        <button onclick="switchTab('tab-leaves')" class="nav-tab role-admin px-4 py-2 rounded-lg text-xs sm:text-sm font-bold flex items-center gap-2 text-slate-700 hover:bg-blue-50 hover:text-blue-900 transition whitespace-nowrap">
-          <i class="fa-solid fa-plane-departure text-blue-600"></i> Leave Tracker
-          <span id="navLeaveCountBadge" class="px-1.5 py-0.2 rounded-full text-[10px] font-mono bg-blue-100 text-blue-800 font-extrabold border border-blue-200">0</span>
-        </button>
-        <button onclick="switchTab('tab-invoices')" class="nav-tab role-owner px-4 py-2 rounded-lg text-xs sm:text-sm font-bold flex items-center gap-2 text-slate-700 hover:bg-emerald-50 hover:text-brandDark transition whitespace-nowrap">
-          <i class="fa-solid fa-file-invoice-dollar text-brandGold"></i> Fee Billing & WhatsApp
-        </button>
-      </div>
+  <!-- SIDEBAR BACKDROP (Mobile overlay) -->
+  <div id="sidebarBackdrop" onclick="toggleSidebar()" class="hidden fixed inset-0 bg-black/40 z-30 lg:hidden"></div>
 
-      <!-- LIVE ACTIVE METRICS COUNTER WIDGET -->
-      <div class="hidden lg:flex items-center gap-2 pl-3 border-l border-slate-200 flex-shrink-0">
-        <div class="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-900 text-xs font-bold shadow-2xs" title="Currently Active Families (Excludes Leave & Inactive)">
-          <i class="fa-solid fa-house-circle-check text-brandEmerald"></i>
-          <span>Active Families:</span>
-          <span id="navLiveActiveFamilies" class="font-mono font-black text-emerald-800 bg-white px-2 py-0.5 rounded-lg border border-emerald-300">0</span>
-        </div>
-        <div class="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-teal-50 border border-teal-200 text-teal-900 text-xs font-bold shadow-2xs" title="Currently Active Regular Students (Excludes Leave & Deactivated)">
-          <i class="fa-solid fa-user-graduate text-teal-600"></i>
-          <span>Active Students:</span>
-          <span id="navLiveActiveStudents" class="font-mono font-black text-teal-800 bg-white px-2 py-0.5 rounded-lg border border-teal-300">0</span>
-        </div>
+  <!-- COLLAPSIBLE LEFT SIDEBAR -->
+  <aside id="mainAppSidebar" class="fixed top-[68px] left-0 h-[calc(100vh-68px)] z-40 bg-white border-r border-slate-200 shadow-xl flex flex-col transition-all duration-300 ease-in-out overflow-hidden" style="width:240px">
+    <!-- Sidebar Header / Toggle -->
+    <div class="flex items-center justify-between px-3 py-3 border-b border-slate-100 bg-brandDark">
+      <span class="text-white font-black text-xs tracking-widest uppercase sidebar-label">Navigation</span>
+      <button onclick="toggleSidebar()" class="w-7 h-7 rounded-md bg-white/20 hover:bg-white/30 text-white flex items-center justify-center transition" title="Collapse Sidebar">
+        <i class="fa-solid fa-bars-staggered text-xs"></i>
+      </button>
+    </div>
+    <!-- Nav Items -->
+    <nav class="flex flex-col gap-1 p-2 flex-1 overflow-y-auto">
+      <button onclick="switchTab('tab-dashboard')" data-tab="tab-dashboard" class="sidebar-nav-btn nav-tab active w-full text-left px-3 py-2.5 rounded-lg text-sm font-bold flex items-center gap-3 bg-brandDark text-white transition">
+        <i class="fa-solid fa-gauge-high text-brandGold w-4 flex-shrink-0"></i>
+        <span class="sidebar-label">Main Dashboard</span>
+      </button>
+      <button onclick="switchTab('tab-families')" data-tab="tab-families" class="sidebar-nav-btn nav-tab role-admin w-full text-left px-3 py-2.5 rounded-lg text-sm font-bold flex items-center gap-3 text-slate-700 hover:bg-emerald-50 hover:text-brandDark transition">
+        <i class="fa-solid fa-users text-brandEmerald w-4 flex-shrink-0"></i>
+        <span class="sidebar-label">Families &amp; Students</span>
+      </button>
+      <button onclick="switchTab('tab-teachers')" data-tab="tab-teachers" class="sidebar-nav-btn nav-tab role-admin w-full text-left px-3 py-2.5 rounded-lg text-sm font-bold flex items-center gap-3 text-slate-700 hover:bg-emerald-50 hover:text-brandDark transition">
+        <i class="fa-solid fa-chalkboard-user text-brandEmerald w-4 flex-shrink-0"></i>
+        <span class="sidebar-label">Teachers Directory</span>
+      </button>
+      <button onclick="switchTab('tab-trials')" data-tab="tab-trials" class="sidebar-nav-btn nav-tab role-admin w-full text-left px-3 py-2.5 rounded-lg text-sm font-bold flex items-center gap-3 text-slate-700 hover:bg-purple-50 hover:text-purple-900 transition">
+        <i class="fa-solid fa-graduation-cap text-purple-600 w-4 flex-shrink-0"></i>
+        <span class="sidebar-label">Trial Classes</span>
+      </button>
+      <button onclick="switchTab('tab-attendance')" data-tab="tab-attendance" class="sidebar-nav-btn nav-tab w-full text-left px-3 py-2.5 rounded-lg text-sm font-bold flex items-center gap-3 text-slate-700 hover:bg-emerald-50 hover:text-brandDark transition">
+        <i class="fa-solid fa-clipboard-check text-brandEmerald w-4 flex-shrink-0"></i>
+        <span class="sidebar-label">Daily Attendance &amp; Notes</span>
+      </button>
+      <button onclick="switchTab('tab-salaries')" data-tab="tab-salaries" class="sidebar-nav-btn nav-tab role-owner w-full text-left px-3 py-2.5 rounded-lg text-sm font-bold flex items-center gap-3 text-slate-700 hover:bg-emerald-50 hover:text-brandDark transition">
+        <i class="fa-solid fa-hand-holding-dollar text-brandGold w-4 flex-shrink-0"></i>
+        <span class="sidebar-label">Teacher Salaries (Auto)</span>
+      </button>
+      <button onclick="switchTab('tab-leaves')" data-tab="tab-leaves" class="sidebar-nav-btn nav-tab role-admin w-full text-left px-3 py-2.5 rounded-lg text-sm font-bold flex items-center gap-3 text-slate-700 hover:bg-blue-50 hover:text-blue-900 transition">
+        <i class="fa-solid fa-plane-departure text-blue-600 w-4 flex-shrink-0"></i>
+        <span class="sidebar-label flex items-center gap-2">Leave Tracker <span id="navLeaveCountBadge" class="px-1.5 rounded-full text-[10px] font-mono bg-blue-100 text-blue-800 font-extrabold border border-blue-200">0</span></span>
+      </button>
+      <button onclick="switchTab('tab-invoices')" data-tab="tab-invoices" class="sidebar-nav-btn nav-tab role-owner w-full text-left px-3 py-2.5 rounded-lg text-sm font-bold flex items-center gap-3 text-slate-700 hover:bg-emerald-50 hover:text-brandDark transition">
+        <i class="fa-solid fa-file-invoice-dollar text-brandGold w-4 flex-shrink-0"></i>
+        <span class="sidebar-label">Fee Billing &amp; WhatsApp</span>
+      </button>
+    </nav>
+    <!-- Sidebar Footer: Active Counters -->
+    <div class="p-2 border-t border-slate-100 space-y-1.5 sidebar-label">
+      <div class="flex items-center gap-2 px-2 py-1.5 rounded-lg bg-emerald-50 border border-emerald-200 text-xs font-bold text-emerald-900">
+        <i class="fa-solid fa-house-circle-check text-brandEmerald"></i>
+        <span>Families: <span id="sidebarActiveFamilies" class="font-mono font-black">0</span></span>
+      </div>
+      <div class="flex items-center gap-2 px-2 py-1.5 rounded-lg bg-teal-50 border border-teal-200 text-xs font-bold text-teal-900">
+        <i class="fa-solid fa-user-graduate text-teal-600"></i>
+        <span>Students: <span id="sidebarActiveStudents" class="font-mono font-black">0</span></span>
       </div>
     </div>
-  </nav>
+  </aside>
 
-  <!-- MAIN WRAPPER -->
-  <main class="max-w-7xl mx-auto w-full px-4 sm:px-8 py-6 flex-grow">
+
+  <!-- MAIN WRAPPER (offset right of sidebar) -->
+  <main id="mainContentArea" class="w-full px-4 sm:px-6 py-6 flex-grow transition-all duration-300 ease-in-out" style="margin-left:240px">
 
     <!-- 1. MAIN EXECUTIVE DASHBOARD TAB -->
     <section id="tab-dashboard" class="tab-content block">
@@ -195,97 +217,98 @@
       <div class="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-2.5 mb-5">
         
         <!-- 1. Total Classes Today -->
-        <div onclick="filterDashboardClasses('all')" id="kpiBox-all" class="kpi-dash-card cursor-pointer bg-white p-3 rounded-xl border border-slate-200 shadow-sm hover:border-brandDark hover:shadow-md transition-all">
-          <div class="flex items-center justify-between text-slate-500 mb-1">
+        <div onclick="filterDashboardClasses('all')" id="kpiBox-all" class="kpi-dash-card cursor-pointer bg-slate-800 text-white p-3 rounded-xl shadow-sm hover:shadow-md hover:scale-[1.02] transition-all">
+          <div class="flex items-center justify-between text-slate-300 mb-1">
             <span class="text-[10px] font-black uppercase tracking-wider">Total Today</span>
-            <i class="fa-solid fa-calendar-day text-brandDark text-xs"></i>
+            <i class="fa-solid fa-calendar-day text-slate-300 text-xs"></i>
           </div>
-          <div class="text-2xl font-black text-slate-900" id="kpiDashTotal">0</div>
-          <div class="text-[10px] text-slate-500 font-medium mt-0.5">All Scheduled</div>
+          <div class="text-2xl font-black text-white" id="kpiDashTotal">0</div>
+          <div class="text-[10px] text-slate-300 font-medium mt-0.5">All Scheduled</div>
           <div class="text-[9px] text-slate-400">12:00 AM - 12:00 AM</div>
         </div>
 
         <!-- 2. Current Live Classes (Current Slot) -->
-        <div onclick="filterDashboardClasses('live')" id="kpiBox-live" class="kpi-dash-card cursor-pointer bg-white p-3 rounded-xl border border-slate-200 shadow-sm hover:border-emerald-500 hover:shadow-md transition-all">
-          <div class="flex items-center justify-between text-emerald-600 mb-1">
+        <div onclick="filterDashboardClasses('live')" id="kpiBox-live" class="kpi-dash-card cursor-pointer bg-emerald-600 text-white p-3 rounded-xl shadow-sm hover:shadow-md hover:scale-[1.02] transition-all">
+          <div class="flex items-center justify-between text-emerald-100 mb-1">
             <span class="text-[10px] font-black uppercase tracking-wider flex items-center gap-1">
-              <span class="w-2 h-2 rounded-full bg-emerald-500 animate-ping"></span> Live Now
+              <span class="w-2 h-2 rounded-full bg-white animate-ping"></span> Live Now
             </span>
-            <i class="fa-solid fa-tower-broadcast text-emerald-600 text-xs"></i>
+            <i class="fa-solid fa-tower-broadcast text-white text-xs"></i>
           </div>
           <div class="flex items-baseline gap-1.5">
-            <span class="text-2xl font-black text-emerald-600" id="kpiDashLive">0</span>
-            <span id="kpiDashWaitingBadge" class="hidden px-1.5 py-0.5 rounded-md bg-amber-100 text-amber-900 border border-amber-300 text-[10px] font-extrabold animate-pulse">0 Waiting</span>
+            <span class="text-2xl font-black text-white" id="kpiDashLive">0</span>
+            <span id="kpiDashWaitingBadge" class="hidden px-1.5 py-0.5 rounded-md bg-amber-300 text-amber-900 text-[10px] font-extrabold animate-pulse">0 Waiting</span>
           </div>
-          <div class="text-[10px] text-emerald-700 font-bold mt-0.5">Active Classes</div>
-          <div class="text-[9px] text-emerald-600">Current Time Slot</div>
+          <div class="text-[10px] text-emerald-100 font-bold mt-0.5">Active Classes</div>
+          <div class="text-[9px] text-emerald-200">Current Time Slot</div>
         </div>
 
         <!-- 3. Completed Classes (since 12:00 AM) -->
-        <div onclick="filterDashboardClasses('completed')" id="kpiBox-completed" class="kpi-dash-card cursor-pointer bg-white p-3 rounded-xl border border-slate-200 shadow-sm hover:border-teal-500 hover:shadow-md transition-all">
-          <div class="flex items-center justify-between text-slate-500 mb-1">
+        <div onclick="filterDashboardClasses('completed')" id="kpiBox-completed" class="kpi-dash-card cursor-pointer bg-teal-600 text-white p-3 rounded-xl shadow-sm hover:shadow-md hover:scale-[1.02] transition-all">
+          <div class="flex items-center justify-between text-teal-100 mb-1">
             <span class="text-[10px] font-black uppercase tracking-wider">Completed</span>
-            <i class="fa-solid fa-circle-check text-teal-600 text-xs"></i>
+            <i class="fa-solid fa-circle-check text-white text-xs"></i>
           </div>
-          <div class="text-2xl font-black text-teal-700" id="kpiDashCompleted">0</div>
-          <div class="text-[10px] text-slate-700 font-bold mt-0.5">Present & Done</div>
-          <div class="text-[9px] text-slate-400">Since 12:00 AM</div>
+          <div class="text-2xl font-black text-white" id="kpiDashCompleted">0</div>
+          <div class="text-[10px] text-teal-100 font-bold mt-0.5">Present &amp; Done</div>
+          <div class="text-[9px] text-teal-200">Since 12:00 AM</div>
         </div>
 
         <!-- 4. Remaining Classes (till 12:00 AM midnight) -->
-        <div onclick="filterDashboardClasses('remaining')" id="kpiBox-remaining" class="kpi-dash-card cursor-pointer bg-white p-3 rounded-xl border border-slate-200 shadow-sm hover:border-amber-500 hover:shadow-md transition-all">
-          <div class="flex items-center justify-between text-slate-500 mb-1">
+        <div onclick="filterDashboardClasses('remaining')" id="kpiBox-remaining" class="kpi-dash-card cursor-pointer bg-amber-500 text-white p-3 rounded-xl shadow-sm hover:shadow-md hover:scale-[1.02] transition-all">
+          <div class="flex items-center justify-between text-amber-100 mb-1">
             <span class="text-[10px] font-black uppercase tracking-wider">Remaining</span>
-            <i class="fa-solid fa-hourglass-half text-amber-600 text-xs"></i>
+            <i class="fa-solid fa-hourglass-half text-white text-xs"></i>
           </div>
-          <div class="text-2xl font-black text-amber-600" id="kpiDashRemaining">0</div>
-          <div class="text-[10px] text-slate-700 font-bold mt-0.5">Pending Slots</div>
-          <div class="text-[9px] text-slate-400">Till 12:00 AM</div>
+          <div class="text-2xl font-black text-white" id="kpiDashRemaining">0</div>
+          <div class="text-[10px] text-amber-100 font-bold mt-0.5">Pending Slots</div>
+          <div class="text-[9px] text-amber-200">Till 12:00 AM</div>
         </div>
 
         <!-- 5. Absences Today -->
-        <div onclick="filterDashboardClasses('absent')" id="kpiBox-absent" class="kpi-dash-card cursor-pointer bg-white p-3 rounded-xl border border-slate-200 shadow-sm hover:border-rose-500 hover:shadow-md transition-all">
-          <div class="flex items-center justify-between text-slate-500 mb-1">
+        <div onclick="filterDashboardClasses('absent')" id="kpiBox-absent" class="kpi-dash-card cursor-pointer bg-rose-600 text-white p-3 rounded-xl shadow-sm hover:shadow-md hover:scale-[1.02] transition-all">
+          <div class="flex items-center justify-between text-rose-100 mb-1">
             <span class="text-[10px] font-black uppercase tracking-wider">Absences</span>
-            <i class="fa-solid fa-user-xmark text-rose-600 text-xs"></i>
+            <i class="fa-solid fa-user-xmark text-white text-xs"></i>
           </div>
-          <div class="text-2xl font-black text-rose-600" id="kpiDashAbsent">0</div>
-          <div class="text-[10px] text-slate-700 font-bold mt-0.5">Missed Sessions</div>
-          <div class="text-[9px] text-rose-500">Marked Absent</div>
+          <div class="text-2xl font-black text-white" id="kpiDashAbsent">0</div>
+          <div class="text-[10px] text-rose-100 font-bold mt-0.5">Missed Sessions</div>
+          <div class="text-[9px] text-rose-200">Marked Absent</div>
         </div>
 
         <!-- 6. Student Leaves Today -->
-        <div onclick="filterDashboardClasses('leave')" id="kpiBox-leave" class="kpi-dash-card cursor-pointer bg-white p-3 rounded-xl border border-slate-200 shadow-sm hover:border-blue-500 hover:shadow-md transition-all">
-          <div class="flex items-center justify-between text-slate-500 mb-1">
+        <div onclick="filterDashboardClasses('leave')" id="kpiBox-leave" class="kpi-dash-card cursor-pointer bg-blue-600 text-white p-3 rounded-xl shadow-sm hover:shadow-md hover:scale-[1.02] transition-all">
+          <div class="flex items-center justify-between text-blue-100 mb-1">
             <span class="text-[10px] font-black uppercase tracking-wider">Leaves</span>
-            <i class="fa-solid fa-calendar-xmark text-blue-600 text-xs"></i>
+            <i class="fa-solid fa-calendar-xmark text-white text-xs"></i>
           </div>
-          <div class="text-2xl font-black text-blue-600" id="kpiDashLeave">0</div>
-          <div class="text-[10px] text-slate-700 font-bold mt-0.5">Student Leaves</div>
-          <div class="text-[9px] text-blue-500">Realtime & Advance</div>
+          <div class="text-2xl font-black text-white" id="kpiDashLeave">0</div>
+          <div class="text-[10px] text-blue-100 font-bold mt-0.5">Student Leaves</div>
+          <div class="text-[9px] text-blue-200">Realtime &amp; Advance</div>
         </div>
 
         <!-- 7. Trial Classes Today -->
-        <div onclick="filterDashboardClasses('trial')" id="kpiBox-trial" class="kpi-dash-card cursor-pointer bg-white p-3 rounded-xl border border-slate-200 shadow-sm hover:border-purple-500 hover:shadow-md transition-all">
-          <div class="flex items-center justify-between text-slate-500 mb-1">
+        <div onclick="filterDashboardClasses('trial')" id="kpiBox-trial" class="kpi-dash-card cursor-pointer bg-purple-600 text-white p-3 rounded-xl shadow-sm hover:shadow-md hover:scale-[1.02] transition-all">
+          <div class="flex items-center justify-between text-purple-100 mb-1">
             <span class="text-[10px] font-black uppercase tracking-wider">Trials</span>
-            <i class="fa-solid fa-graduation-cap text-purple-600 text-xs"></i>
+            <i class="fa-solid fa-graduation-cap text-white text-xs"></i>
           </div>
-          <div class="text-2xl font-black text-purple-600" id="kpiDashTrial">0</div>
-          <div class="text-[10px] text-slate-700 font-bold mt-0.5">Trial Sessions</div>
-          <div class="text-[9px] text-purple-500">Trial Enquiries</div>
+          <div class="text-2xl font-black text-white" id="kpiDashTrial">0</div>
+          <div class="text-[10px] text-purple-100 font-bold mt-0.5">Trial Sessions</div>
+          <div class="text-[9px] text-purple-200">Trial Enquiries</div>
         </div>
 
-        <!-- 8. Active Teaching Staff (Merged into KPI boxes) -->
-        <div onclick="switchTab('tab-teachers')" id="kpiBox-teachers" class="kpi-dash-card cursor-pointer bg-white p-3 rounded-xl border border-slate-200 shadow-sm hover:border-teal-500 hover:shadow-md transition-all">
-          <div class="flex items-center justify-between text-slate-500 mb-1">
+        <!-- 8. Active Teaching Staff -->
+        <div onclick="switchTab('tab-teachers')" id="kpiBox-teachers" class="kpi-dash-card cursor-pointer bg-cyan-700 text-white p-3 rounded-xl shadow-sm hover:shadow-md hover:scale-[1.02] transition-all">
+          <div class="flex items-center justify-between text-cyan-100 mb-1">
             <span class="text-[10px] font-black uppercase tracking-wider">Teachers</span>
-            <i class="fa-solid fa-chalkboard-user text-teal-700 text-xs"></i>
+            <i class="fa-solid fa-chalkboard-user text-white text-xs"></i>
           </div>
-          <div class="text-2xl font-black text-teal-800" id="kpiDashTeachers">0</div>
-          <div class="text-[10px] text-slate-700 font-bold mt-0.5">Active Staff</div>
-          <div class="text-[9px] text-teal-600">Assigned Roster</div>
+          <div class="text-2xl font-black text-white" id="kpiDashTeachers">0</div>
+          <div class="text-[10px] text-cyan-100 font-bold mt-0.5">Active Staff</div>
+          <div class="text-[9px] text-cyan-200">Assigned Roster</div>
         </div>
+
 
       </div>
 
@@ -2652,13 +2675,48 @@
       setInterval(loadDashboardData, 30000);
     };
 
+    function toggleSidebar() {
+      const sidebar = document.getElementById('mainAppSidebar');
+      const content = document.getElementById('mainContentArea');
+      const backdrop = document.getElementById('sidebarBackdrop');
+      const isCollapsed = sidebar.classList.contains('sidebar-collapsed');
+      if (isCollapsed) {
+        // Expand
+        sidebar.classList.remove('sidebar-collapsed');
+        content?.classList.remove('sidebar-collapsed');
+        // Show backdrop on mobile
+        if (window.innerWidth < 1024 && backdrop) backdrop.classList.remove('hidden');
+        localStorage.setItem('alhuda_sidebar_collapsed', 'false');
+      } else {
+        // Collapse
+        sidebar.classList.add('sidebar-collapsed');
+        content?.classList.add('sidebar-collapsed');
+        if (backdrop) backdrop.classList.add('hidden');
+        localStorage.setItem('alhuda_sidebar_collapsed', 'true');
+      }
+    }
+
+    // Restore sidebar state from localStorage
+    (function() {
+      const saved = localStorage.getItem('alhuda_sidebar_collapsed');
+      if (saved === 'true') {
+        const sidebar = document.getElementById('mainAppSidebar');
+        const content = document.getElementById('mainContentArea');
+        if (sidebar) sidebar.classList.add('sidebar-collapsed');
+        if (content) content.classList.add('sidebar-collapsed');
+      }
+    })();
+
     function switchTab(tabId) {
-      document.querySelectorAll('.nav-tab').forEach(btn => {
+      // Reset all sidebar nav buttons
+      document.querySelectorAll('.sidebar-nav-btn').forEach(btn => {
         btn.classList.remove('active', 'bg-brandDark', 'text-white', 'shadow');
         btn.classList.add('text-slate-700');
+        btn.classList.remove('text-white');
       });
 
-      const activeBtn = document.querySelector(`.nav-tab[onclick*="${tabId}"]`);
+      // Highlight the active sidebar button using data-tab attribute
+      const activeBtn = document.querySelector(`.sidebar-nav-btn[data-tab="${tabId}"]`);
       if (activeBtn) {
         activeBtn.classList.add('active', 'bg-brandDark', 'text-white', 'shadow');
         activeBtn.classList.remove('text-slate-700');
@@ -2684,6 +2742,17 @@
       if (tabId === 'tab-invoices') loadFeeBillingLedger();
       if (tabId === 'tab-trials') loadTrialClassesData();
       if (tabId === 'tab-leaves') loadLeaveManagementData();
+
+      // Close sidebar on mobile after navigation
+      if (window.innerWidth < 1024) {
+        const sidebar = document.getElementById('mainAppSidebar');
+        const backdrop = document.getElementById('sidebarBackdrop');
+        if (sidebar && !sidebar.classList.contains('sidebar-collapsed')) {
+          sidebar.classList.add('sidebar-collapsed');
+          document.getElementById('mainContentArea')?.classList.add('sidebar-collapsed');
+          if (backdrop) backdrop.classList.add('hidden');
+        }
+      }
     }
 
     // CHART.JS INITIALIZATION & EXECUTIVE ANALYTICS
@@ -2896,11 +2965,11 @@
         const famCount = activeFams.length;
         const stuCount = activeStus.length;
 
-        ['navLiveActiveFamilies', 'dashLiveActiveFamilies', 'famSummaryActiveFamilies'].forEach(id => {
+        ['dashLiveActiveFamilies', 'famSummaryActiveFamilies', 'sidebarActiveFamilies'].forEach(id => {
           const el = document.getElementById(id);
           if (el) el.innerText = famCount;
         });
-        ['navLiveActiveStudents', 'dashLiveActiveStudents', 'famSummaryActiveStudents'].forEach(id => {
+        ['dashLiveActiveStudents', 'famSummaryActiveStudents', 'sidebarActiveStudents'].forEach(id => {
           const el = document.getElementById(id);
           if (el) el.innerText = stuCount;
         });
@@ -3083,14 +3152,12 @@
       CURRENT_DASH_FILTER = filterType;
 
       document.querySelectorAll('.kpi-dash-card').forEach(box => {
-        box.classList.remove('ring-2', 'ring-brandDark', 'scale-[1.01]', 'shadow-md');
-        box.classList.add('border-slate-200');
+        box.classList.remove('ring-4', 'ring-white', 'ring-offset-2', 'scale-105', 'shadow-xl');
       });
 
       const selectedBox = document.getElementById(`kpiBox-${filterType}`);
       if (selectedBox) {
-        selectedBox.classList.add('ring-2', 'ring-brandDark', 'scale-[1.01]', 'shadow-md');
-        selectedBox.classList.remove('border-slate-200');
+        selectedBox.classList.add('ring-4', 'ring-white', 'ring-offset-2', 'scale-105', 'shadow-xl');
       }
 
       const classesSection = document.getElementById('dashClassesSection');
