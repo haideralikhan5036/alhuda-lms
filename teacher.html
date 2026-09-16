@@ -283,54 +283,176 @@
         </div>
       </div>
 
-      <!-- MAIN SECTION: TODAY'S SCHEDULE TABLE -->
-      <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-        <div class="p-4 sm:p-5 border-b border-slate-200 flex flex-wrap justify-between items-center gap-3 bg-slate-50/80">
-          <div>
-            <h3 class="font-extrabold text-slate-900 text-base flex items-center gap-2">
-              <i class="fa-solid fa-calendar-check text-brandEmerald"></i>
-              My Scheduled Classes Today
-            </h3>
-            <p class="text-xs text-slate-500" id="todayDateSubtitle">Loading today's schedule...</p>
+      <!-- SUB-NAVIGATION: TODAY'S SCHEDULE vs MY TRIALS -->
+      <div class="flex items-center justify-between flex-wrap gap-3 border-b border-slate-200 pb-3">
+        <div class="flex items-center gap-2">
+          <button id="btnTabTeacherToday" onclick="switchTeacherPortalTab('today')" class="px-4 py-2 rounded-xl text-xs font-extrabold bg-brandDark text-white shadow-xs flex items-center gap-2 transition">
+            <i class="fa-solid fa-calendar-check text-brandEmerald"></i> Today's Live Schedule
+          </button>
+          <button id="btnTabTeacherTrials" onclick="switchTeacherPortalTab('trials')" class="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 bg-white hover:bg-purple-50 hover:text-purple-900 border border-slate-200 shadow-2xs flex items-center gap-2 transition">
+            <i class="fa-solid fa-graduation-cap text-purple-600"></i> My Trial Classes & Retention History
+            <span id="badgeTeacherTrialCount" class="px-2 py-0.5 rounded-full text-[10px] font-mono bg-purple-100 text-purple-800 font-extrabold border border-purple-200">0</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- SECTION 1: TODAY'S SCHEDULE TABLE -->
+      <div id="sectionTeacherToday" class="space-y-4">
+        <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+          <div class="p-4 sm:p-5 border-b border-slate-200 flex flex-wrap justify-between items-center gap-3 bg-slate-50/80">
+            <div>
+              <h3 class="font-extrabold text-slate-900 text-base flex items-center gap-2">
+                <i class="fa-solid fa-calendar-check text-brandEmerald"></i>
+                My Scheduled Classes Today
+              </h3>
+              <p class="text-xs text-slate-500" id="todayDateSubtitle">Loading today's schedule...</p>
+            </div>
+
+            <div class="flex items-center gap-2">
+              <span id="todayCountBadge" class="px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-800 font-extrabold text-xs font-mono border border-emerald-200">
+                0 Classes
+              </span>
+            </div>
           </div>
 
-          <div class="flex items-center gap-2">
-            <span id="todayCountBadge" class="px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-800 font-extrabold text-xs font-mono border border-emerald-200">
-              0 Classes
+          <!-- Schedule Table -->
+          <div class="overflow-x-auto">
+            <table class="w-full text-left text-xs border-collapse">
+              <thead class="bg-slate-100 text-slate-700 font-bold border-b border-slate-200 uppercase tracking-wider text-[11px]">
+                <tr>
+                  <th class="p-3.5">Time Slot</th>
+                  <th class="p-3.5">Student Details</th>
+                  <th class="p-3.5">Course</th>
+                  <th class="p-3.5">Lesson Notes / Sabaq</th>
+                  <th class="p-3.5">Attendance</th>
+                  <th class="p-3.5 text-right">Action</th>
+                </tr>
+              </thead>
+              <tbody id="teacherClassesTableBody" class="divide-y divide-slate-100">
+                <tr>
+                  <td colspan="6" class="p-8 text-center text-slate-400">Loading your assigned classes...</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <!-- Empty State (Hidden by default) -->
+          <div id="teacherEmptyState" class="hidden p-12 text-center">
+            <div class="w-16 h-16 rounded-2xl bg-slate-100 text-slate-400 flex items-center justify-center text-2xl mx-auto mb-3">
+              <i class="fa-solid fa-calendar-day"></i>
+            </div>
+            <h4 class="font-bold text-slate-800 text-base">No Classes Scheduled Today</h4>
+            <p class="text-xs text-slate-500 mt-1 max-w-sm mx-auto">
+              You have no booked classes scheduled for today. You can view your full weekly schedule to see upcoming days.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <!-- SECTION 2: MY TRIAL CLASSES & RETENTION HISTORY -->
+      <div id="sectionTeacherTrials" class="hidden space-y-4">
+        <!-- 5 TRIAL RETENTION KPI STATS CARDS -->
+        <div class="grid grid-cols-2 sm:grid-cols-5 gap-3.5">
+          <!-- 1. Total Trials -->
+          <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
+            <div class="flex items-center justify-between text-slate-500 mb-1">
+              <span class="text-[10px] font-black uppercase tracking-wider">Total Trials</span>
+              <i class="fa-solid fa-graduation-cap text-purple-600 text-xs"></i>
+            </div>
+            <div class="text-2xl font-black text-slate-900" id="tStatTotalTrials">0</div>
+            <div class="text-[10px] text-slate-500 mt-0.5">Assigned Evaluations</div>
+          </div>
+
+          <!-- 2. Active Ongoing Trials -->
+          <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
+            <div class="flex items-center justify-between text-purple-600 mb-1">
+              <span class="text-[10px] font-black uppercase tracking-wider">Active Trials</span>
+              <i class="fa-solid fa-clock text-purple-600 text-xs"></i>
+            </div>
+            <div class="text-2xl font-black text-purple-600" id="tStatActiveTrials">0</div>
+            <div class="text-[10px] text-purple-700 font-bold mt-0.5">In Progress (3-Day)</div>
+          </div>
+
+          <!-- 3. Converted to Regular -->
+          <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
+            <div class="flex items-center justify-between text-emerald-600 mb-1">
+              <span class="text-[10px] font-black uppercase tracking-wider">Converted</span>
+              <i class="fa-solid fa-circle-check text-emerald-600 text-xs"></i>
+            </div>
+            <div class="text-2xl font-black text-emerald-700" id="tStatConvertedTrials">0</div>
+            <div class="text-[10px] text-emerald-700 font-bold mt-0.5">Became Regular 🎓</div>
+          </div>
+
+          <!-- 4. Dead / Dropped -->
+          <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
+            <div class="flex items-center justify-between text-slate-500 mb-1">
+              <span class="text-[10px] font-black uppercase tracking-wider">Dead / Dropped</span>
+              <i class="fa-solid fa-user-xmark text-rose-600 text-xs"></i>
+            </div>
+            <div class="text-2xl font-black text-rose-600" id="tStatDeadTrials">0</div>
+            <div class="text-[10px] text-slate-500 mt-0.5">Discontinued Trials</div>
+          </div>
+
+          <!-- 5. Conversion Rate -->
+          <div class="bg-gradient-to-br from-purple-900 to-indigo-950 text-white p-4 rounded-2xl border border-purple-800 shadow-sm col-span-2 sm:col-span-1">
+            <div class="flex items-center justify-between text-purple-200 mb-1">
+              <span class="text-[10px] font-black uppercase tracking-wider">Conversion Rate</span>
+              <i class="fa-solid fa-chart-pie text-brandGold text-xs"></i>
+            </div>
+            <div class="text-2xl font-black text-white" id="tStatConversionRate">0%</div>
+            <div class="w-full bg-white/20 rounded-full h-1.5 mt-1 overflow-hidden">
+              <div id="tStatConversionBar" class="bg-emerald-400 h-1.5 rounded-full transition-all" style="width: 0%"></div>
+            </div>
+            <div class="text-[9px] text-purple-200 font-semibold mt-1">Student Retention Rate</div>
+          </div>
+        </div>
+
+        <!-- TRIAL STUDENTS TABLE -->
+        <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+          <div class="p-4 sm:p-5 border-b border-slate-200 flex flex-wrap justify-between items-center gap-3 bg-purple-50/50">
+            <div>
+              <h3 class="font-extrabold text-slate-900 text-base flex items-center gap-2">
+                <i class="fa-solid fa-graduation-cap text-purple-700"></i>
+                My Assigned Trial Classes & History
+              </h3>
+              <p class="text-xs text-slate-500">Track prospective students, 3-day evaluations, and student conversion outcomes</p>
+            </div>
+            <span id="badgeTeacherTrialListCount" class="px-2.5 py-1 rounded-full bg-purple-100 text-purple-800 font-extrabold text-xs font-mono border border-purple-200">
+              0 Trials
             </span>
           </div>
-        </div>
 
-        <!-- Schedule Table -->
-        <div class="overflow-x-auto">
-          <table class="w-full text-left text-xs border-collapse">
-            <thead class="bg-slate-100 text-slate-700 font-bold border-b border-slate-200 uppercase tracking-wider text-[11px]">
-              <tr>
-                <th class="p-3.5">Time Slot</th>
-                <th class="p-3.5">Student Details</th>
-                <th class="p-3.5">Course</th>
-                <th class="p-3.5">Sabaq / Lesson Notes</th>
-                <th class="p-3.5">Status</th>
-                <th class="p-3.5 text-right">Class Actions</th>
-              </tr>
-            </thead>
-            <tbody id="teacherClassesTableBody" class="divide-y divide-slate-100 font-normal">
-              <tr>
-                <td colspan="6" class="p-8 text-center text-slate-400">Loading your schedule from database...</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-
-        <!-- Empty State -->
-        <div id="teacherEmptyState" class="hidden p-12 text-center">
-          <div class="w-16 h-16 mx-auto rounded-full bg-slate-100 text-slate-400 flex items-center justify-center text-2xl mb-3">
-            <i class="fa-regular fa-calendar-xmark"></i>
+          <div class="overflow-x-auto">
+            <table class="w-full text-left text-xs border-collapse">
+              <thead class="bg-slate-100 text-slate-700 font-bold border-b border-slate-200 uppercase tracking-wider text-[11px]">
+                <tr>
+                  <th class="p-3 w-12 text-center">#</th>
+                  <th class="p-3">Student Name</th>
+                  <th class="p-3">Course</th>
+                  <th class="p-3">Evaluation Dates / Slot</th>
+                  <th class="p-3">Status</th>
+                  <th class="p-3">Sabaq / Trial Notes</th>
+                  <th class="p-3 text-right">Classroom Action</th>
+                </tr>
+              </thead>
+              <tbody id="teacherTrialsTableBody" class="divide-y divide-slate-100">
+                <tr>
+                  <td colspan="7" class="p-8 text-center text-slate-400">Loading trial classes history...</td>
+                </tr>
+              </tbody>
+            </table>
           </div>
-          <h4 class="font-bold text-slate-800 text-base">No Classes Scheduled Today</h4>
-          <p class="text-xs text-slate-500 mt-1 max-w-sm mx-auto">
-            You have no booked classes scheduled for today. You can view your full weekly schedule to see upcoming days.
-          </p>
+
+          <!-- Empty State for Trials -->
+          <div id="teacherTrialsEmptyState" class="hidden p-12 text-center">
+            <div class="w-16 h-16 rounded-2xl bg-purple-50 text-purple-400 flex items-center justify-center text-2xl mx-auto mb-3">
+              <i class="fa-solid fa-graduation-cap"></i>
+            </div>
+            <h4 class="font-bold text-slate-800 text-base">No Trial Classes Assigned</h4>
+            <p class="text-xs text-slate-500 mt-1 max-w-sm mx-auto">
+              You do not have any active or past trial evaluation sessions assigned to your profile yet.
+            </p>
+          </div>
         </div>
       </div>
 
@@ -734,7 +856,10 @@
         let badgeClass = 'bg-slate-100 text-slate-700 border-slate-200';
 
         if (log) {
-          if (log.status === 'Present') {
+          if (log.status === 'Waiting') {
+            status = '⏳ Waiting for Student';
+            badgeClass = 'bg-amber-100 text-amber-900 border-amber-300 font-extrabold animate-pulse';
+          } else if (log.status === 'Present') {
             completedCount++;
             status = 'Completed';
             badgeClass = 'bg-emerald-100 text-emerald-800 border-emerald-300';
@@ -777,6 +902,17 @@
         document.getElementById('liveBannerSlot').innerText = `${liveClass.start_time.slice(0,5)} - ${liveClass.end_time.slice(0,5)} PKT`;
         document.getElementById('liveBannerStudent').innerText = `${liveClass.students?.name || 'Student'} • ${liveClass.course || 'Quran Studies'}`;
         
+        const bannerDetails = document.getElementById('liveBannerDetails');
+        if (bannerDetails) {
+          if (liveClass.log?.status === 'Waiting') {
+            bannerDetails.innerHTML = '<span class="text-amber-200 font-extrabold animate-pulse">⏳ You launched Zoom meeting • Waiting for student to join! Click "Mark Sabaq" when student enters.</span>';
+          } else if (liveClass.log?.status === 'Present') {
+            bannerDetails.innerHTML = '<span class="text-emerald-200 font-bold">✅ Class In Session • Student marked Present</span>';
+          } else {
+            bannerDetails.innerText = 'Assigned Classroom Session • Auto attendance & lesson notes ready';
+          }
+        }
+        
         const joinBtn = document.getElementById('liveBannerJoinBtn');
         if (liveClass.meeting_link) {
           joinBtn.onclick = () => launchTeacherZoomClass(liveClass.id, liveClass.meeting_link, liveClass.students?.name || 'Student', liveClass.student_id);
@@ -792,6 +928,7 @@
       }
 
       renderTeacherClassesTable();
+      loadTeacherTrialsData();
     }
 
     function renderTeacherClassesTable() {
@@ -916,7 +1053,7 @@
       const now = new Date();
       const timeStr = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
 
-      // 1. Log Punch-In Timestamp into attendance_logs in Supabase
+      // 1. Log Punch-In Timestamp into attendance_logs in Supabase as 'Waiting'
       try {
         const todayDate = now.toISOString().slice(0, 10);
         await db.from('attendance_logs').upsert([{
@@ -924,8 +1061,8 @@
           teacher_id: CURRENT_TEACHER.id,
           student_id: studentId,
           date: todayDate,
-          status: 'Present',
-          lesson_notes: `[Auto-Logged] Class launched via LMS at ${timeStr} PKT`,
+          status: 'Waiting',
+          lesson_notes: `[Auto-Logged] Teacher joined Zoom at ${timeStr} PKT (Waiting for Student)`,
           recorded_at: now.toISOString()
         }], { onConflict: 'schedule_id, date' });
       } catch(e) {
@@ -958,7 +1095,9 @@
         `👨‍🏫 Host: ${CURRENT_TEACHER.full_name}\n` +
         `🎓 Student: ${studentName}\n` +
         `🕒 Punch-In Time: ${timeStr} PKT\n\n` +
-        `Zoom Native App is opening. Your attendance and start time have been verified and recorded by the LMS!`
+        `Zoom Native App is opening.\n` +
+        `Status is now set to: ⏳ "Waiting for Student".\n\n` +
+        `When student joins Zoom, please click "Mark Sabaq" to record Present and lesson notes!`
       );
 
       // Refresh today's list to update status
@@ -1081,6 +1220,175 @@
       const modal = document.getElementById('modalWeeklyMatrix');
       modal.classList.add('hidden');
       modal.classList.remove('flex');
+    }
+
+    // ================= TEACHER TRIAL CLASSES & RETENTION LOGIC =================
+    let CURRENT_TEACHER_TAB = 'today';
+    let TEACHER_TRIALS = [];
+
+    function switchTeacherPortalTab(tab) {
+      CURRENT_TEACHER_TAB = tab;
+      const btnToday = document.getElementById('btnTabTeacherToday');
+      const btnTrials = document.getElementById('btnTabTeacherTrials');
+      const secToday = document.getElementById('sectionTeacherToday');
+      const secTrials = document.getElementById('sectionTeacherTrials');
+
+      if (tab === 'today') {
+        if (btnToday) btnToday.className = 'px-4 py-2 rounded-xl text-xs font-extrabold bg-brandDark text-white shadow-xs flex items-center gap-2 transition';
+        if (btnTrials) btnTrials.className = 'px-4 py-2 rounded-xl text-xs font-bold text-slate-600 bg-white hover:bg-purple-50 hover:text-purple-900 border border-slate-200 shadow-2xs flex items-center gap-2 transition';
+        if (secToday) secToday.classList.remove('hidden');
+        if (secTrials) secTrials.classList.add('hidden');
+      } else {
+        if (btnTrials) btnTrials.className = 'px-4 py-2 rounded-xl text-xs font-extrabold bg-purple-800 text-white shadow-xs flex items-center gap-2 transition';
+        if (btnToday) btnToday.className = 'px-4 py-2 rounded-xl text-xs font-bold text-slate-600 bg-white hover:bg-emerald-50 hover:text-brandDark border border-slate-200 shadow-2xs flex items-center gap-2 transition';
+        if (secToday) secToday.classList.add('hidden');
+        if (secTrials) secTrials.classList.remove('hidden');
+        loadTeacherTrialsData();
+      }
+    }
+
+    async function loadTeacherTrialsData() {
+      if (!CURRENT_TEACHER) return;
+
+      const storedTrials = JSON.parse(localStorage.getItem('alhuda_trial_classes_v2') || '[]');
+      
+      const { data: dbTrials } = await db.from('students')
+        .select('*')
+        .eq('assigned_teacher_id', CURRENT_TEACHER.id);
+
+      const allMerged = [...storedTrials];
+      (dbTrials || []).forEach(st => {
+        let isTr = st.status === 'Trial';
+        let parsed = {};
+        if (st.notes) {
+          try {
+            parsed = JSON.parse(st.notes);
+            if (parsed.is_trial) isTr = true;
+          } catch(e) {
+            if (st.notes.toLowerCase().includes('trial')) isTr = true;
+          }
+        }
+        if (isTr && !allMerged.some(x => String(x.student_id) === String(st.id) || String(x.id) === String(st.id))) {
+          allMerged.push({
+            id: 'TRL-' + st.id,
+            student_id: st.id,
+            student_name: st.name,
+            phone: st.whatsapp || '',
+            course: st.course_id || parsed.course || 'Quran Reading & Tajweed',
+            teacher_id: CURRENT_TEACHER.id,
+            status: parsed.converted_from_trial ? 'Converted' : (st.status === 'Trial' ? 'Active' : 'Active'),
+            trial_dates: parsed.trial_dates || '3-Day Evaluation',
+            start_time: parsed.start_time || '18:00',
+            end_time: parsed.end_time || '18:30',
+            notes: parsed.evaluation_notes || st.notes || '',
+            meeting_link: CURRENT_TEACHER.zoom_link || ''
+          });
+        }
+      });
+
+      TEACHER_TRIALS = allMerged.filter(tr => {
+        const tMatch = String(tr.teacher_id) === String(CURRENT_TEACHER.id) ||
+                       String(tr.teacher_name || '').toLowerCase() === String(CURRENT_TEACHER.full_name || '').toLowerCase();
+        return tMatch;
+      });
+
+      const total = TEACHER_TRIALS.length;
+      let active = 0;
+      let converted = 0;
+      let dead = 0;
+
+      TEACHER_TRIALS.forEach(tr => {
+        const s = (tr.status || '').toLowerCase();
+        if (s === 'converted' || s === 'regular' || s === 'enrolled') {
+          converted++;
+        } else if (s === 'dead' || s === 'discontinued' || s === 'cancelled') {
+          dead++;
+        } else {
+          active++;
+        }
+      });
+
+      const conversionRate = total > 0 ? Math.round((converted / total) * 100) : 0;
+
+      const setTStat = (id, val) => { const el = document.getElementById(id); if (el) el.innerText = val; };
+      setTStat('tStatTotalTrials', total);
+      setTStat('tStatActiveTrials', active);
+      setTStat('tStatConvertedTrials', converted);
+      setTStat('tStatDeadTrials', dead);
+      setTStat('tStatConversionRate', conversionRate + '%');
+      const bar = document.getElementById('tStatConversionBar');
+      if (bar) bar.style.width = `${conversionRate}%`;
+
+      const badgeNav = document.getElementById('badgeTeacherTrialCount');
+      if (badgeNav) badgeNav.innerText = active > 0 ? `${active} Active` : total;
+      const badgeList = document.getElementById('badgeTeacherTrialListCount');
+      if (badgeList) badgeList.innerText = `${total} Trials`;
+
+      renderTeacherTrialsTable();
+    }
+
+    function renderTeacherTrialsTable() {
+      const tbody = document.getElementById('teacherTrialsTableBody');
+      const emptyState = document.getElementById('teacherTrialsEmptyState');
+      if (!tbody) return;
+
+      if (TEACHER_TRIALS.length === 0) {
+        tbody.innerHTML = '';
+        if (emptyState) emptyState.classList.remove('hidden');
+        return;
+      }
+
+      if (emptyState) emptyState.classList.add('hidden');
+
+      tbody.innerHTML = TEACHER_TRIALS.map((tr, idx) => {
+        const s = (tr.status || 'Active').toLowerCase();
+        let statusBadge = '';
+        if (s === 'converted' || s === 'regular') {
+          statusBadge = '<span class="px-2.5 py-1 rounded-full text-[10px] font-extrabold bg-emerald-100 text-emerald-800 border border-emerald-300">🎓 Converted Regular</span>';
+        } else if (s === 'dead' || s === 'discontinued') {
+          statusBadge = '<span class="px-2.5 py-1 rounded-full text-[10px] font-extrabold bg-rose-100 text-rose-800 border border-rose-300">❌ Dead / Dropped</span>';
+        } else {
+          statusBadge = '<span class="px-2.5 py-1 rounded-full text-[10px] font-extrabold bg-purple-100 text-purple-800 border border-purple-300 animate-pulse">✨ Active 3-Day Trial</span>';
+        }
+
+        const meetLink = tr.meeting_link || CURRENT_TEACHER?.zoom_link || '';
+
+        return `
+          <tr class="hover:bg-slate-50 transition">
+            <td class="p-3 text-center font-bold text-slate-500 font-mono">${idx + 1}</td>
+            <td class="p-3">
+              <div class="font-extrabold text-slate-900 text-xs">${tr.student_name || 'Prospective Student'}</div>
+              <div class="text-[11px] text-slate-500 flex items-center gap-1 mt-0.5">
+                <i class="fa-brands fa-whatsapp text-emerald-600"></i> ${tr.phone || '--'}
+              </div>
+            </td>
+            <td class="p-3">
+              <span class="px-2 py-0.5 rounded bg-purple-50 text-purple-900 border border-purple-200 font-bold text-[11px]">
+                ${tr.course || 'Quran Evaluation'}
+              </span>
+            </td>
+            <td class="p-3 font-mono text-xs">
+              <div class="font-bold text-slate-800">${tr.trial_dates || 'Day 1 - Day 3'}</div>
+              <div class="text-[10px] text-slate-500">${tr.start_time ? tr.start_time.slice(0,5) : '18:00'} - ${tr.end_time ? tr.end_time.slice(0,5) : '18:30'} PKT</div>
+            </td>
+            <td class="p-3">
+              ${statusBadge}
+            </td>
+            <td class="p-3 max-w-xs truncate text-xs text-slate-600">
+              ${tr.notes || '<span class="text-slate-400 italic">No trial notes logged</span>'}
+            </td>
+            <td class="p-3 text-right">
+              ${meetLink ? `
+                <button onclick="launchTeacherZoomClass('${tr.id}', '${meetLink}', '${(tr.student_name || 'Student').split("'").join(" ")}', '${tr.student_id || tr.id}')" class="px-3 py-1.5 bg-gradient-to-r from-purple-700 to-indigo-800 hover:from-purple-800 hover:to-indigo-900 text-white rounded-lg text-xs font-black shadow-xs flex items-center gap-1.5 ml-auto transition">
+                  <i class="fa-solid fa-video"></i> Start Trial Zoom
+                </button>
+              ` : `
+                <span class="text-slate-400 text-[10px] italic">No Zoom Link</span>
+              `}
+            </td>
+          </tr>
+        `;
+      }).join('');
     }
   </script>
 </body>
