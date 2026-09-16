@@ -597,6 +597,66 @@
     </div>
   </div>
 
+  <!-- ================= MODAL: REQUEST RESCHEDULE (locked class change request) ================= -->
+  <div id="modalRescheduleRequest" class="fixed inset-0 bg-black/70 backdrop-blur-xs z-50 hidden items-center justify-center p-4">
+    <div class="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-orange-200 space-y-4">
+      <div class="flex justify-between items-center border-b pb-3">
+        <div class="flex items-center gap-2.5">
+          <div class="w-9 h-9 rounded-xl bg-orange-100 text-orange-700 flex items-center justify-center font-black">
+            <i class="fa-solid fa-rotate"></i>
+          </div>
+          <div>
+            <h3 class="font-black text-base text-slate-900">Request Reschedule / Status Change</h3>
+            <p class="text-xs text-slate-500" id="reschedModalSubtitle">Submit a change request to Admin</p>
+          </div>
+        </div>
+        <button onclick="closeRescheduleRequestModal()" class="text-slate-400 hover:text-slate-600 text-xl font-bold">&times;</button>
+      </div>
+
+      <div class="p-3 bg-orange-50 border border-orange-200 rounded-xl flex items-start gap-2.5 text-xs">
+        <i class="fa-solid fa-lock text-orange-500 mt-0.5"></i>
+        <div class="text-orange-900">
+          <div class="font-extrabold mb-0.5">Attendance Already Locked</div>
+          <p class="text-orange-800/80">This class has already been marked. To change or reschedule it, you must submit a request. Admin will review and approve the change.</p>
+        </div>
+      </div>
+
+      <form onsubmit="submitRescheduleRequest(event)" class="space-y-3 text-xs">
+        <input type="hidden" id="reschedScheduleId">
+
+        <div>
+          <label class="block font-bold text-slate-700 mb-1">Requested New Status:</label>
+          <select id="reschedNewStatus" class="w-full p-2.5 border border-slate-300 rounded-xl font-bold text-slate-800">
+            <option value="Present">✅ Present (class did happen)</option>
+            <option value="Absent">❌ Absent (student did not attend)</option>
+            <option value="Leave">📅 Leave (student was on leave)</option>
+            <option value="Reschedule">🔄 Reschedule to Another Day</option>
+          </select>
+        </div>
+
+        <div>
+          <label class="block font-bold text-slate-700 mb-1">Reason for Change Request *:</label>
+          <select id="reschedReasonSelect" class="w-full p-2 border rounded-xl font-bold text-slate-700 mb-2">
+            <option value="Marked by mistake">Marked by mistake</option>
+            <option value="Student contacted late to confirm attendance">Student contacted late to confirm</option>
+            <option value="Technical issue / connectivity problem">Technical issue / connectivity problem</option>
+            <option value="Class was rescheduled with student">Class was rescheduled with student</option>
+            <option value="Student was actually on leave">Student was actually on leave</option>
+            <option value="Other reason">Other reason</option>
+          </select>
+          <textarea id="reschedNotes" rows="2" placeholder="Add any extra detail for Admin..." class="w-full p-2 border rounded-xl text-xs"></textarea>
+        </div>
+
+        <div class="flex justify-end gap-2 border-t pt-3">
+          <button type="button" onclick="closeRescheduleRequestModal()" class="px-4 py-2 border rounded-xl font-bold text-slate-600 hover:bg-slate-100">Cancel</button>
+          <button type="submit" id="btnSubmitReschedReq" class="px-5 py-2 bg-orange-600 hover:bg-orange-700 text-white font-black rounded-xl flex items-center gap-1.5 shadow-sm transition">
+            <i class="fa-solid fa-paper-plane"></i> Send Request to Admin
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
   <!-- ================= MODAL: 2D FULL WEEKLY TIMETABLE ================= -->
   <div id="modalWeeklyMatrix" class="fixed inset-0 bg-black/70 backdrop-blur-xs z-50 hidden items-center justify-center p-4">
     <div class="bg-white rounded-2xl max-w-6xl w-full p-6 shadow-2xl border border-slate-200 max-h-[90vh] flex flex-col">
@@ -1109,6 +1169,9 @@
             </span>
           `;
         } else {
+          // Check if already marked (locked) — status must be a real mark, not just Waiting
+          const alreadyMarked = c.log && c.log.status && c.log.status !== 'Waiting';
+
           let zoomBtn = '<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-400">No Zoom</span>';
           if (c.meeting_link) {
             zoomBtn = `
@@ -1118,15 +1181,30 @@
             `;
           }
 
-          actionButtons = `
-            <button onclick="openAttendanceModal('${c.id}')" class="px-3 py-1 bg-brandDark hover:bg-brandDarkest text-white rounded-lg text-xs font-bold shadow-xs flex items-center gap-1 transition">
-              <i class="fa-solid fa-clipboard-check"></i> Mark Sabaq
-            </button>
-            ${zoomBtn}
-            <button onclick="openTeacherLeaveRequestModal('${c.student_id}', '${c.id}')" class="px-2.5 py-1 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 rounded-lg text-xs font-bold shadow-2xs flex items-center gap-1 transition" title="Submit student leave request for Admin approval">
-              <i class="fa-solid fa-plane-departure text-amber-600"></i> Request Leave
-            </button>
-          `;
+          if (alreadyMarked) {
+            // LOCKED STATE — already marked, show reschedule request button
+            const markedStatusColor = c.log.status === 'Present' ? 'bg-emerald-100 text-emerald-800 border-emerald-300' :
+                                      c.log.status === 'Absent'  ? 'bg-rose-100 text-rose-800 border-rose-300' :
+                                      c.log.status === 'Leave'   ? 'bg-blue-100 text-blue-800 border-blue-300' :
+                                                                   'bg-slate-100 text-slate-700 border-slate-300';
+            actionButtons = `
+              <span class="px-2.5 py-1 rounded-lg text-xs font-extrabold border ${markedStatusColor} flex items-center gap-1">
+                <i class="fa-solid fa-lock text-xs opacity-60"></i> ${c.log.status} (Locked)
+              </span>
+              ${zoomBtn}
+              <button onclick="openRescheduleRequestModal('${c.id}')" class="px-2.5 py-1 bg-orange-50 hover:bg-orange-100 text-orange-900 border border-orange-300 rounded-lg text-xs font-bold shadow-2xs flex items-center gap-1 transition" title="Request Admin to approve a reschedule or status change">
+                <i class="fa-solid fa-rotate text-orange-600"></i> Request Reschedule
+              </button>
+            `;
+          } else {
+            // FREE STATE — not yet marked, teacher can freely mark
+            actionButtons = `
+              <button onclick="openAttendanceModal('${c.id}')" class="px-3 py-1 bg-brandDark hover:bg-brandDarkest text-white rounded-lg text-xs font-bold shadow-xs flex items-center gap-1 transition">
+                <i class="fa-solid fa-clipboard-check"></i> Mark Sabaq
+              </button>
+              ${zoomBtn}
+            `;
+          }
         }
 
         return `
@@ -1637,6 +1715,95 @@
       } finally {
         btn.disabled = false;
         btn.innerHTML = '<i class="fa-solid fa-paper-plane"></i> Submit Request to Admin';
+      }
+    }
+
+    // ==========================================
+    // TEACHER RESCHEDULE / STATUS CHANGE REQUEST
+    // ==========================================
+
+    function openRescheduleRequestModal(scheduleId) {
+      const c = TODAY_CLASSES.find(x => String(x.id) === String(scheduleId));
+      if (!c) { alert("Class record not found. Please refresh."); return; }
+
+      document.getElementById('reschedScheduleId').value = scheduleId;
+      document.getElementById('reschedModalSubtitle').innerText =
+        `${c.students?.name || 'Student'} • ${c.start_time.slice(0,5)} - ${c.end_time.slice(0,5)}`;
+
+      const newStatusSel = document.getElementById('reschedNewStatus');
+      if (newStatusSel && c.log?.status) {
+        const opposite = c.log.status === 'Present' ? 'Absent' : 'Present';
+        newStatusSel.value = opposite;
+      }
+
+      document.getElementById('reschedNotes').value = '';
+      document.getElementById('reschedReasonSelect').selectedIndex = 0;
+
+      const modal = document.getElementById('modalRescheduleRequest');
+      if (modal) { modal.classList.remove('hidden'); modal.classList.add('flex'); }
+    }
+
+    function closeRescheduleRequestModal() {
+      const modal = document.getElementById('modalRescheduleRequest');
+      if (modal) { modal.classList.add('hidden'); modal.classList.remove('flex'); }
+    }
+
+    async function submitRescheduleRequest(e) {
+      e.preventDefault();
+      const scheduleId = document.getElementById('reschedScheduleId')?.value;
+      const newStatus  = document.getElementById('reschedNewStatus')?.value;
+      const reason     = document.getElementById('reschedReasonSelect')?.value;
+      const notes      = (document.getElementById('reschedNotes')?.value || '').trim();
+
+      if (!scheduleId) { alert("Schedule ID missing. Please refresh."); return; }
+
+      const c = TODAY_CLASSES.find(x => String(x.id) === String(scheduleId));
+      const studentId   = c?.student_id;
+      const studentName = c?.students?.name || 'Student';
+
+      const btn = document.getElementById('btnSubmitReschedReq');
+      btn.disabled = true;
+      btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Submitting...';
+
+      try {
+        const { data: st, error: fetchErr } = await db.from('students').select('*').eq('id', studentId).single();
+        if (fetchErr || !st) throw new Error("Student not found.");
+
+        let meta = {};
+        try { meta = JSON.parse(st.notes || '{}'); } catch(err2) { meta = { text: st.notes || '' }; }
+
+        const reqObj = {
+          id: 'RESCHED-' + Date.now(),
+          type: 'reschedule_request',
+          student_id: studentId,
+          student_name: studentName,
+          schedule_id: scheduleId,
+          teacher_id: CURRENT_TEACHER?.id || '',
+          teacher_name: CURRENT_TEACHER?.full_name || 'Teacher',
+          current_status: c?.log?.status || 'Unknown',
+          requested_status: newStatus,
+          reason: reason,
+          notes: notes,
+          status: 'pending',
+          requested_at: new Date().toISOString()
+        };
+
+        meta.reschedule_request = reqObj;
+
+        const { error: upErr } = await db.from('students').update({
+          notes: JSON.stringify(meta)
+        }).eq('id', studentId);
+
+        if (upErr) throw upErr;
+
+        alert(`✅ Reschedule request submitted!\n\nStudent: ${studentName}\nRequested Status: ${newStatus}\nReason: ${reason}\n\nAdmin will review and approve this change.`);
+        closeRescheduleRequestModal();
+        await loadTeacherPortalData();
+      } catch (err) {
+        alert("Error submitting reschedule request: " + err.message);
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fa-solid fa-paper-plane"></i> Send Request to Admin';
       }
     }
   </script>

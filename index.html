@@ -7643,11 +7643,19 @@ Web Portal: https://alhuda-lms.vercel.app`;
             }
           }
 
-          // Check pending teacher requests
+          // Check pending teacher requests (leave requests AND reschedule requests)
           if (meta && meta.leave_request && meta.leave_request.status === 'pending') {
             PENDING_TEACHER_REQUESTS.push({
               student: st,
-              request: meta.leave_request
+              request: meta.leave_request,
+              requestType: 'leave'
+            });
+          }
+          if (meta && meta.reschedule_request && meta.reschedule_request.status === 'pending') {
+            PENDING_TEACHER_REQUESTS.push({
+              student: st,
+              request: meta.reschedule_request,
+              requestType: 'reschedule'
             });
           }
         });
@@ -7779,15 +7787,64 @@ Web Portal: https://alhuda-lms.vercel.app`;
         container.innerHTML = PENDING_TEACHER_REQUESTS.map(item => {
           const st = item.student;
           const req = item.request;
+          const rType = item.requestType || 'leave';
           const requestedAt = req.requested_at ? new Date(req.requested_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'Recently';
 
+          const typeTag = rType === 'reschedule'
+            ? '<span class="px-2 py-0.5 rounded-full text-[10px] font-mono bg-orange-100 text-orange-800 font-bold border border-orange-300">🔄 Reschedule Request</span>'
+            : '<span class="px-2 py-0.5 rounded-full text-[10px] font-mono bg-amber-100 text-amber-800 font-bold border border-amber-300">📅 Leave Request</span>';
+
+          const detailsHtml = rType === 'reschedule' ? `
+            <div class="p-3 bg-orange-50/70 rounded-xl border border-orange-100 grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+              <div>
+                <span class="text-slate-500 font-bold block text-[11px]">Current Status (Locked):</span>
+                <span class="font-mono font-black text-rose-700">${req.current_status || 'Unknown'}</span>
+              </div>
+              <div>
+                <span class="text-slate-500 font-bold block text-[11px]">Requested Change To:</span>
+                <span class="font-mono font-black text-emerald-700">${req.requested_status || 'N/A'}</span>
+              </div>
+              <div>
+                <span class="text-slate-500 font-bold block text-[11px]">Reason:</span>
+                <span class="font-bold text-orange-950">${req.reason || 'Not specified'}</span>
+              </div>
+              ${req.notes ? `
+                <div class="sm:col-span-2 text-slate-600 italic bg-white p-2 rounded-lg border border-orange-200/60">
+                  &ldquo;${req.notes}&rdquo;
+                </div>
+              ` : ''}
+            </div>
+          ` : `
+            <div class="p-3 bg-amber-50/70 rounded-xl border border-amber-100 grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+              <div>
+                <span class="text-slate-500 font-bold block text-[11px]">Proposed Leave Period:</span>
+                <span class="font-mono font-black text-slate-800">${req.start_date || 'N/A'} &rarr; ${req.return_date || 'N/A'}</span>
+              </div>
+              <div>
+                <span class="text-slate-500 font-bold block text-[11px]">Reason / Stated Need:</span>
+                <span class="font-bold text-amber-950">${req.reason || 'Not specified'}</span>
+              </div>
+              ${req.notes ? `
+                <div class="sm:col-span-2 text-slate-600 italic bg-white p-2 rounded-lg border border-amber-200/60">
+                  &ldquo;${req.notes}&rdquo;
+                </div>
+              ` : ''}
+            </div>
+          `;
+
+          const approveLabel = rType === 'reschedule'
+            ? '<i class="fa-solid fa-check"></i> Approve & Update Status'
+            : '<i class="fa-solid fa-check"></i> Approve & Mark Leave';
+
+          const borderColor = rType === 'reschedule' ? 'border-orange-200' : 'border-amber-200';
+
           return `
-            <div class="p-4 bg-white rounded-2xl border border-amber-200 shadow-xs space-y-3">
+            <div class="p-4 bg-white rounded-2xl border ${borderColor} shadow-xs space-y-3">
               <div class="flex items-start justify-between gap-2 flex-wrap">
                 <div>
-                  <div class="flex items-center gap-2">
+                  <div class="flex items-center gap-2 flex-wrap">
                     <span class="font-black text-slate-900 text-sm">${st.name}</span>
-                    <span class="px-2 py-0.5 rounded-full text-[10px] font-mono bg-amber-100 text-amber-800 font-bold border border-amber-300">Pending Approval</span>
+                    ${typeTag}
                   </div>
                   <div class="text-xs text-slate-500 flex items-center gap-2 mt-0.5">
                     <span>Student ID: <strong class="font-mono text-slate-700">${st.id}</strong></span>
@@ -7800,28 +7857,14 @@ Web Portal: https://alhuda-lms.vercel.app`;
                 </div>
               </div>
 
-              <div class="p-3 bg-amber-50/70 rounded-xl border border-amber-100 grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
-                <div>
-                  <span class="text-slate-500 font-bold block text-[11px]">Proposed Leave Period:</span>
-                  <span class="font-mono font-black text-slate-800">${req.start_date || 'N/A'} &rarr; ${req.return_date || 'N/A'}</span>
-                </div>
-                <div>
-                  <span class="text-slate-500 font-bold block text-[11px]">Reason / Stated Need:</span>
-                  <span class="font-bold text-amber-950">${req.reason || 'Not specified'}</span>
-                </div>
-                ${req.notes ? `
-                  <div class="sm:col-span-2 text-slate-600 italic bg-white p-2 rounded-lg border border-amber-200/60">
-                    &ldquo;${req.notes}&rdquo;
-                  </div>
-                ` : ''}
-              </div>
+              ${detailsHtml}
 
               <div class="flex items-center justify-end gap-2 border-t pt-2.5">
-                <button onclick="handleDeclineTeacherRequest('${st.id}')" class="px-3.5 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-800 border border-rose-300 rounded-xl text-xs font-bold transition flex items-center gap-1">
+                <button onclick="handleDeclineTeacherRequest('${st.id}', '${rType}')" class="px-3.5 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-800 border border-rose-300 rounded-xl text-xs font-bold transition flex items-center gap-1">
                   <i class="fa-solid fa-xmark"></i> Decline
                 </button>
-                <button onclick="handleApproveTeacherRequest('${st.id}')" class="px-4 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black transition flex items-center gap-1.5 shadow-xs">
-                  <i class="fa-solid fa-check"></i> Approve & Mark Leave
+                <button onclick="handleApproveTeacherRequest('${st.id}', '${rType}')" class="px-4 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black transition flex items-center gap-1.5 shadow-xs">
+                  ${approveLabel}
                 </button>
               </div>
             </div>
@@ -7833,7 +7876,8 @@ Web Portal: https://alhuda-lms.vercel.app`;
       modal.classList.add('flex');
     }
 
-    async function handleApproveTeacherRequest(studentId) {
+    async function handleApproveTeacherRequest(studentId, requestType) {
+      const rType = requestType || 'leave';
       try {
         const { data: st, error } = await db.from('students').select('*').eq('id', studentId).single();
         if (error || !st) {
@@ -7843,32 +7887,61 @@ Web Portal: https://alhuda-lms.vercel.app`;
 
         let meta = {};
         try { meta = JSON.parse(st.notes || '{}'); } catch(e) { meta = { text: st.notes || '' }; }
-        const req = meta.leave_request || {};
 
-        const startDate = req.start_date || new Date().toISOString().slice(0, 10);
-        const returnDate = req.return_date || startDate;
-        const reason = req.reason || 'Approved Teacher Leave Request';
+        if (rType === 'reschedule') {
+          // RESCHEDULE APPROVAL: update the attendance_log status to the requested status
+          const req = meta.reschedule_request || {};
+          const scheduleId = req.schedule_id;
+          const newStatus  = req.requested_status || 'Present';
+          const todayDate  = new Date().toISOString().slice(0, 10);
 
-        meta.on_leave = true;
-        meta.leave_start_date = startDate;
-        meta.return_date = returnDate;
-        meta.leave_reason = reason;
-        meta.leave_marked_at = new Date().toISOString();
-        meta.leave_marked_by = CURRENT_ROLE;
-        if (meta.leave_request) {
-          meta.leave_request.status = 'approved';
-          meta.leave_request.approved_at = new Date().toISOString();
-          meta.leave_request.approved_by = CURRENT_ROLE;
+          if (scheduleId) {
+            const { error: logErr } = await db.from('attendance_logs').update({
+              status: newStatus,
+              lesson_notes: `[Admin Override] Status changed from ${req.current_status} to ${newStatus}. Reason: ${req.reason || 'Teacher request'}. Approved by ${CURRENT_ROLE} on ${todayDate}.`
+            }).eq('schedule_id', scheduleId).eq('date', todayDate);
+
+            if (logErr) console.warn("Could not update attendance log:", logErr.message);
+          }
+
+          // Mark request as approved in meta
+          if (meta.reschedule_request) {
+            meta.reschedule_request.status = 'approved';
+            meta.reschedule_request.approved_at = new Date().toISOString();
+            meta.reschedule_request.approved_by = CURRENT_ROLE;
+          }
+
+          await db.from('students').update({ notes: JSON.stringify(meta) }).eq('id', studentId);
+
+          alert(`✅ Reschedule approved for ${st.name}!\nAttendance log updated to: ${newStatus}`);
+        } else {
+          // LEAVE APPROVAL: mark student on leave
+          const req = meta.leave_request || {};
+          const startDate  = req.start_date  || new Date().toISOString().slice(0, 10);
+          const returnDate = req.return_date  || startDate;
+          const reason     = req.reason       || 'Approved Teacher Leave Request';
+
+          meta.on_leave = true;
+          meta.leave_start_date = startDate;
+          meta.return_date = returnDate;
+          meta.leave_reason = reason;
+          meta.leave_marked_at = new Date().toISOString();
+          meta.leave_marked_by = CURRENT_ROLE;
+          if (meta.leave_request) {
+            meta.leave_request.status = 'approved';
+            meta.leave_request.approved_at = new Date().toISOString();
+            meta.leave_request.approved_by = CURRENT_ROLE;
+          }
+
+          const { error: upErr } = await db.from('students').update({
+            status: 'Leave',
+            notes: JSON.stringify(meta)
+          }).eq('id', studentId);
+
+          if (upErr) throw upErr;
+          alert(`✅ Leave request approved for ${st.name}!\nReturn Date scheduled: ${returnDate}.\nTimetable slots are suspended until reactivation.`);
         }
 
-        const { error: upErr } = await db.from('students').update({
-          status: 'Leave',
-          notes: JSON.stringify(meta)
-        }).eq('id', studentId);
-
-        if (upErr) throw upErr;
-
-        alert(`✅ Leave request approved for ${st.name}!\nReturn Date scheduled: ${returnDate}.\nTimetable slots are suspended until reactivation.`);
         closeModal('modalAdminTeacherRequests');
         await loadDashboardData();
         await checkLeaveReturnAlertsAndRequests(false);
@@ -7880,8 +7953,9 @@ Web Portal: https://alhuda-lms.vercel.app`;
       }
     }
 
-    async function handleDeclineTeacherRequest(studentId) {
-      const reason = prompt("Enter reason for declining this request (will be saved in audit notes):", "Class schedule cannot be paused at this time");
+    async function handleDeclineTeacherRequest(studentId, requestType) {
+      const rType = requestType || 'leave';
+      const reason = prompt("Enter reason for declining this request (will be saved in audit notes):", "Request cannot be approved at this time");
       if (reason === null) return;
 
       try {
@@ -7891,7 +7965,12 @@ Web Portal: https://alhuda-lms.vercel.app`;
         let meta = {};
         try { meta = JSON.parse(st.notes || '{}'); } catch(e) { meta = { text: st.notes || '' }; }
 
-        if (meta.leave_request) {
+        if (rType === 'reschedule' && meta.reschedule_request) {
+          meta.reschedule_request.status = 'declined';
+          meta.reschedule_request.decline_reason = reason;
+          meta.reschedule_request.declined_at = new Date().toISOString();
+          meta.reschedule_request.declined_by = CURRENT_ROLE;
+        } else if (meta.leave_request) {
           meta.leave_request.status = 'declined';
           meta.leave_request.decline_reason = reason;
           meta.leave_request.declined_at = new Date().toISOString();
