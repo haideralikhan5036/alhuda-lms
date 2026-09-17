@@ -51,7 +51,10 @@
     /* Sidebar collapsed state */
     #mainAppSidebar.sidebar-collapsed { width: 52px !important; }
     #mainAppSidebar.sidebar-collapsed .sidebar-label { display: none !important; }
-    #mainContentArea.sidebar-collapsed { margin-left: 52px !important; }
+    #mainContentArea.sidebar-collapsed { margin-left: 52px !important; width: calc(100vw - 52px) !important; }
+    /* Prevent horizontal overflow caused by sidebar + content */
+    html, body { overflow-x: hidden; max-width: 100vw; }
+    #mainContentArea { width: calc(100vw - 240px); box-sizing: border-box; }
   </style>
 </head>
 <body class="text-slate-800 flex flex-col min-h-screen">
