@@ -6734,28 +6734,50 @@ ${slipData.bonus > 0 ? `➕ *اضافی بونس / الاؤنس:* +${slipData.bo
     async function loadFeeBillingLedger() {
       const tbody = document.getElementById('feeBillingTableBody');
       if (!tbody) return;
-      const { data: families } = await db.from('families').select('*, students(*)');
+      const { data: families } = await db.from('families').select('*, students(*)').order('created_at', { ascending: false });
 
-      if (!families || families.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="6" class="p-6 text-center text-slate-400">No families found.</td></tr>';
+      // Exclude trial families: status='Trial'/'Converted', id starting with 'TRL-', or notes with is_trial
+      const regularFamilies = (families || []).filter(f => {
+        if ((f.status || '').toLowerCase() === 'trial') return false;
+        if ((f.status || '').toLowerCase() === 'converted') return false;
+        if ((f.id || '').toUpperCase().startsWith('TRL-')) return false;
+        if (f.notes) {
+          try {
+            const p = JSON.parse(f.notes);
+            if (p.is_trial && !p.converted_from_trial) return false;
+          } catch(e) {}
+        }
+        return true;
+      });
+
+      if (!regularFamilies || regularFamilies.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="6" class="p-6 text-center text-slate-400">No regular billing families found.</td></tr>';
         return;
       }
 
-      tbody.innerHTML = families.map(f => {
-        const studentsList = (f.students || []).map(s => s.name).join(', ') || 'None';
+      tbody.innerHTML = regularFamilies.map(f => {
+        // Only include enrolled regular students (exclude any trial students)
+        const regStudents = (f.students || []).filter(s => {
+          if ((s.status || '').toLowerCase() === 'trial') return false;
+          if ((s.status || '').toLowerCase() === 'converted') return false;
+          if ((s.id || '').toUpperCase().startsWith('TRL-')) return false;
+          return true;
+        });
+
+        const studentsList = regStudents.map(s => s.name).join(', ') || 'None';
         const cleanPhone = (f.whatsapp || '').replace(/[^0-9]/g, '');
         const waMsg = `Assalam-o-Alaikum Respected ${f.parent_name},\nThis is your monthly fee statement from *Al-Huda Islamic Centre* for enrolled student(s): *${studentsList}*.\nFee Due: *${f.currency} ${f.monthly_fee}*.\nJazakAllahu Khairan!`;
         const waUrl = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(waMsg)}`;
 
         return `
-          <tr class="hover:bg-slate-50">
-            <td class="p-3 font-mono font-bold">${f.id}</td>
+          <tr class="hover:bg-slate-50 transition">
+            <td class="p-3 font-mono font-bold text-brandDark">${f.id}</td>
             <td class="p-3 font-bold text-slate-900">${f.parent_name}</td>
-            <td class="p-3 text-slate-600">${f.whatsapp}</td>
+            <td class="p-3 text-slate-600 font-mono">${f.whatsapp}</td>
             <td class="p-3 text-brandDark font-semibold">${studentsList}</td>
-            <td class="p-3 font-bold">${f.currency} ${f.monthly_fee}</td>
+            <td class="p-3 font-bold text-brandEmerald font-mono">${f.currency} ${f.monthly_fee}</td>
             <td class="p-3 text-right">
-              <a href="${waUrl}" target="_blank" class="px-3 py-1 bg-emerald-600 text-white rounded text-xs font-bold hover:bg-emerald-700 inline-flex items-center gap-1">
+              <a href="${waUrl}" target="_blank" class="px-3 py-1 bg-emerald-600 text-white rounded-lg text-xs font-bold hover:bg-emerald-700 inline-flex items-center gap-1 shadow-xs transition">
                 <i class="fa-brands fa-whatsapp"></i> WhatsApp Bill
               </a>
             </td>
