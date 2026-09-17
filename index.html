@@ -457,6 +457,9 @@
         </div>
       </div>
 
+      <!-- Trial Families Info Note (auto-shown if any trial entries exist) -->
+      <div id="trialFamiliesInfoNote" class="px-3 py-1.5 bg-purple-50 border border-purple-200 rounded-xl text-xs flex items-center gap-2 hidden"></div>
+
       <!-- SUMMARY COUNTERS & VIEW CONTROLS TOOLBAR -->
       <div class="bg-white p-3.5 rounded-2xl border border-slate-200 shadow-sm flex items-center justify-between flex-wrap gap-3">
         <!-- Metric Summary Badges -->
@@ -4048,14 +4051,45 @@
     async function loadFamiliesAndStudents() {
       const { data: families } = await db.from('families').select('*, students(*)').order('created_at', { ascending: false });
       
-      const regularFamilies = (families || []).filter(f => f.status !== 'Trial' && f.status !== 'Converted');
+      // Exclude Trial families: status='Trial' OR id starts with 'TRL-'
+      const regularFamilies = (families || []).filter(f => {
+        if ((f.status || '').toLowerCase() === 'trial') return false;
+        if ((f.status || '').toLowerCase() === 'converted') return false;
+        if ((f.id || '').toUpperCase().startsWith('TRL-')) return false;
+        return true;
+      });
       ALL_FAMILIES = regularFamilies;
 
+      // Also strip any Trial students from within each regular family
+      ALL_FAMILIES = ALL_FAMILIES.map(f => ({
+        ...f,
+        students: (f.students || []).filter(s => {
+          if ((s.status || '').toLowerCase() === 'trial') return false;
+          if ((s.id || '').toUpperCase().startsWith('TRL-')) return false;
+          return true;
+        })
+      }));
+
       const allStu = [];
-      regularFamilies.forEach(f => {
-        if (f.students) allStu.push(...f.students.filter(s => s.status !== 'Trial' && s.status !== 'Converted'));
+      ALL_FAMILIES.forEach(f => {
+        if (f.students) allStu.push(...f.students);
       });
       ALL_STUDENTS = allStu;
+
+      // Count trial families (for info badge in tab)
+      const trialFamCount = (families || []).filter(f =>
+        (f.status || '').toLowerCase() === 'trial' || (f.id || '').toUpperCase().startsWith('TRL-')
+      ).length;
+      const trialInfoEl = document.getElementById('trialFamiliesInfoNote');
+      if (trialInfoEl) {
+        if (trialFamCount > 0) {
+          trialInfoEl.innerHTML = `<i class="fa-solid fa-circle-info text-purple-500"></i> <span class="text-purple-800 font-bold">${trialFamCount} Trial Entr${trialFamCount === 1 ? 'y' : 'ies'} not shown here</span> — <button onclick="switchTab('tab-trials')" class="underline text-purple-700 font-extrabold hover:text-purple-900">View in Trial Classes tab →</button>`;
+          trialInfoEl.classList.remove('hidden');
+        } else {
+          trialInfoEl.innerHTML = '';
+          trialInfoEl.classList.add('hidden');
+        }
+      }
 
       const famSelect = document.getElementById('stuFamilyId');
       if (famSelect) {
