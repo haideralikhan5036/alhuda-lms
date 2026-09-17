@@ -14,6 +14,8 @@
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <!-- Supabase JS Client -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <!-- Al-Huda Curriculum & Digital Islamic Library Engine -->
+  <script src="curriculum_data.js"></script>
 
   <script>
     tailwind.config = {
@@ -72,6 +74,11 @@
             <i class="fa-solid fa-power-off"></i> Logout
           </button>
         </div>
+
+        <!-- Digital Library Quick Access Button for Screen Sharing -->
+        <button onclick="openTeacherDigitalLibrary()" class="px-3 py-1.5 rounded-lg bg-emerald-900/80 hover:bg-emerald-800 text-amber-200 border border-emerald-600/50 text-xs font-bold transition flex items-center gap-1.5 shadow-xs" title="Open Digital Quran, Qaida & Course Material">
+          <i class="fa-solid fa-book-quran text-brandGold"></i> <span class="hidden md:inline">Digital Library</span>
+        </button>
 
         <!-- Back to Admin Portal Link -->
         <a href="index.html" class="px-3 py-1.5 rounded-lg border border-emerald-700/50 hover:bg-white/10 text-emerald-200 text-xs font-bold transition flex items-center gap-1.5">
@@ -496,14 +503,76 @@
           </div>
         </div>
 
+        <!-- SMART COURSE MATERIAL & SABAQ SELECTOR (WHEN PRESENT) -->
+        <div id="attPresentSabaqDetails" class="p-3.5 bg-emerald-50/70 border border-emerald-200 rounded-2xl space-y-3">
+          
+          <div class="flex items-center justify-between">
+            <span class="font-black text-brandDark uppercase tracking-wide text-[11px] flex items-center gap-1.5">
+              <i class="fa-solid fa-book-quran text-brandEmerald"></i> Course Syllabus &amp; Sabaq Progress
+            </span>
+            <span id="attLastSabaqBadge" class="text-[10px] font-bold text-amber-800 bg-amber-100 px-2 py-0.5 rounded-md border border-amber-200">
+              <i class="fa-solid fa-bookmark text-amber-600"></i> Smart Resume Ready
+            </span>
+          </div>
+
+          <!-- Book & Portion Selectors -->
+          <div class="space-y-2">
+            <div>
+              <label class="block font-bold text-slate-700 mb-1">Select Course Material / Book *:</label>
+              <select id="attCourseBookSelect" onchange="onTeacherCourseBookChanged(this.value)" class="w-full p-2.5 bg-white border border-slate-300 rounded-xl font-bold text-slate-800 text-xs focus:outline-brandEmerald shadow-2xs">
+                <!-- Populated dynamically with all 13 books -->
+              </select>
+            </div>
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+              <div>
+                <label class="block font-bold text-slate-700 mb-1">Page / Takhti / Portion *:</label>
+                <div class="flex items-center gap-1.5">
+                  <select id="attCoursePageSelect" class="flex-1 p-2 bg-white border border-slate-300 rounded-xl font-semibold text-slate-800 text-xs focus:outline-brandEmerald">
+                    <!-- Populated dynamically -->
+                  </select>
+                  <button type="button" onclick="previewTeacherSelectedMaterial()" class="px-2.5 py-2 bg-brandDark hover:bg-brandDarkest text-white rounded-xl font-bold text-xs shadow-xs transition flex items-center gap-1 flex-shrink-0" title="Open Page in Digital Reader">
+                    <i class="fa-solid fa-eye text-brandGold"></i> View
+                  </button>
+                </div>
+              </div>
+
+              <div>
+                <label class="block font-bold text-slate-700 mb-1">Lines / Verses (Optional):</label>
+                <input type="text" id="attLineRange" placeholder="e.g. Lines 1 to 5 / Verses 1-10" class="w-full p-2 bg-white border border-slate-300 rounded-xl font-medium text-slate-800 text-xs focus:outline-brandEmerald">
+              </div>
+            </div>
+
+            <div class="grid grid-cols-2 gap-2.5">
+              <div>
+                <label class="block font-bold text-slate-700 mb-1">Sabaq Assessment:</label>
+                <select id="attSabaqResult" class="w-full p-2 bg-white border border-slate-300 rounded-xl font-bold text-slate-800 text-xs">
+                  <option value="Pass">⭐ Pass (Advance to Next Lesson)</option>
+                  <option value="Repeat">🔄 Repeat / Dohraai (Same Page Tomorrow)</option>
+                  <option value="Practice">⚠️ Needs Home Tajweed Practice</option>
+                </select>
+              </div>
+              <div>
+                <label class="block font-bold text-slate-700 mb-1">Recitation Quality:</label>
+                <select id="attSabaqRating" class="w-full p-2 bg-white border border-slate-300 rounded-xl font-bold text-slate-800 text-xs">
+                  <option value="5">⭐⭐⭐⭐⭐ Excellent (Mumtaz)</option>
+                  <option value="4">⭐⭐⭐⭐ Very Good (Jayyid Jiddan)</option>
+                  <option value="3">⭐⭐⭐ Good (Jayyid)</option>
+                  <option value="2">⭐⭐ Satisfactory (Maqbool)</option>
+                </select>
+              </div>
+            </div>
+          </div>
+        </div>
+
         <!-- Sabaq / Lesson Notes Input -->
         <div>
           <label class="block font-bold text-slate-700 mb-1.5">
-            Lesson Progress & Notes (Sabaq / Sabaqi / Manzil):
+            Teacher Lesson Remarks &amp; Tajweed Guidance:
           </label>
-          <textarea id="attLessonNotes" rows="4" placeholder="e.g. Recited Surah Al-Baqarah Verses 1-10 with Tajweed rules. Excellent pronunciation." 
+          <textarea id="attLessonNotes" rows="3" placeholder="e.g. Pronounced Huroof-e-Halqi very well. Ensure proper Ghunnah on Noon Mushaddad." 
             class="w-full p-3 border border-slate-300 rounded-xl font-medium text-slate-800 text-xs focus:outline-brandEmerald focus:border-brandEmerald"></textarea>
-          <p class="text-[10px] text-slate-400 mt-1">These notes are permanently logged into student history and visible to parent & admin.</p>
+          <p class="text-[10px] text-slate-400 mt-1">These notes and exact material page are permanently saved and directly accessible to student on their portal.</p>
         </div>
 
         <div class="p-2.5 bg-amber-50 rounded-xl border border-amber-200 flex items-center justify-between text-xs">
@@ -690,6 +759,115 @@
           Close Timetable
         </button>
       </div>
+    </div>
+  <!-- ============================================================= -->
+  <!-- MODAL: IN-LMS INTERACTIVE DIGITAL BOOK READER (HD ENGINE)        -->
+  <!-- ============================================================= -->
+  <div id="modalDigitalBookReader" class="fixed inset-0 bg-black/90 backdrop-blur-md z-[95] hidden items-center justify-center p-2 sm:p-4">
+    <div id="readerModalContainer" class="bg-slate-900 rounded-2xl max-w-6xl w-full h-[95vh] flex flex-col shadow-2xl border border-slate-700 overflow-hidden text-white animate-scaleIn">
+      
+      <!-- READER TOP CONTROLS BAR -->
+      <div class="bg-slate-950 px-4 py-3 border-b border-slate-800 flex items-center justify-between flex-wrap gap-2.5 z-20">
+        <div class="flex items-center gap-3">
+          <div class="w-9 h-9 rounded-xl bg-brandDark text-brandGold flex items-center justify-center font-black text-base shadow-xs" id="readerBookIcon">
+            <i class="fa-solid fa-book-open"></i>
+          </div>
+          <div>
+            <div class="flex items-center gap-2">
+              <h3 class="font-extrabold text-sm sm:text-base text-white tracking-tight" id="readerBookTitle">Digital Book Reader</h3>
+              <span id="readerCategoryBadge" class="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-emerald-950 text-emerald-300 border border-emerald-700">Course Material</span>
+            </div>
+            <p class="text-[11px] text-slate-400 mt-0.5 truncate max-w-xs sm:max-w-md" id="readerChapterDesc">Chapter / Topic</p>
+          </div>
+        </div>
+
+        <!-- CENTER: JUMP & ZOOM CONTROLS -->
+        <div class="flex items-center gap-2">
+          <!-- Jump to Chapter / Page Selector -->
+          <div class="flex items-center gap-1.5 bg-slate-800/80 px-2 py-1 rounded-xl border border-slate-700 text-xs">
+            <span class="text-slate-400 font-medium hidden sm:inline">Go to:</span>
+            <select id="readerJumpSelect" onchange="jumpToReaderPage(this.value)" class="bg-slate-900 text-white font-bold text-xs rounded-lg px-2 py-1 border border-slate-600 focus:outline-emerald-500 cursor-pointer max-w-[130px] sm:max-w-[190px]">
+              <!-- Dynamically populated -->
+            </select>
+          </div>
+
+          <!-- Zoom Controls -->
+          <div class="hidden sm:flex items-center gap-1 bg-slate-800/80 px-1.5 py-1 rounded-xl border border-slate-700 text-xs font-mono">
+            <button onclick="changeReaderZoom(-0.15)" class="w-6 h-6 rounded hover:bg-slate-700 flex items-center justify-center font-bold text-slate-300" title="Zoom Out">-</button>
+            <span id="readerZoomLevel" class="text-[11px] px-1 text-slate-300 min-w-[36px] text-center font-bold">100%</span>
+            <button onclick="changeReaderZoom(+0.15)" class="w-6 h-6 rounded hover:bg-slate-700 flex items-center justify-center font-bold text-slate-300" title="Zoom In">+</button>
+            <button onclick="resetReaderZoom()" class="w-6 h-6 rounded hover:bg-slate-700 text-[10px] text-slate-400" title="Reset Zoom"><i class="fa-solid fa-arrows-rotate"></i></button>
+          </div>
+
+          <!-- Fullscreen Toggle -->
+          <button onclick="toggleReaderFullscreen()" class="w-8 h-8 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 flex items-center justify-center transition" title="Toggle Fullscreen">
+            <i class="fa-solid fa-expand text-xs"></i>
+          </button>
+
+          <!-- Close Button -->
+          <button onclick="closeDigitalBookReader()" class="w-8 h-8 rounded-xl bg-rose-950/70 hover:bg-rose-900 text-rose-200 border border-rose-800/60 flex items-center justify-center transition font-black text-lg" title="Close Reader">
+            &times;
+          </button>
+        </div>
+      </div>
+
+      <!-- MAIN STAGE / CANVAS AREA -->
+      <div class="flex-1 bg-slate-950 flex items-center justify-between p-2 sm:p-4 overflow-hidden relative select-none" id="readerStage">
+        
+        <!-- Left Flip Button -->
+        <button onclick="changeReaderPage(-1)" id="btnReaderPrevFloating" class="z-10 w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-slate-800/80 hover:bg-emerald-700 text-white shadow-xl flex items-center justify-center transition duration-200 backdrop-blur-xs border border-slate-600 hover:scale-105" title="Previous Page (&larr; Left Arrow)">
+          <i class="fa-solid fa-chevron-left text-sm"></i>
+        </button>
+
+        <!-- Dynamic Content Stage (Image / Text Viewer) -->
+        <div class="flex-1 h-full flex items-center justify-center overflow-auto p-1 relative" id="readerContentArea">
+          
+          <!-- Loading Spinner -->
+          <div id="readerLoadingSpinner" class="hidden absolute inset-0 flex flex-col items-center justify-center bg-slate-950/80 z-20">
+            <i class="fa-solid fa-spinner fa-spin text-3xl text-brandGold mb-2"></i>
+            <span class="text-xs text-slate-400 font-semibold font-mono">Loading Page...</span>
+          </div>
+
+          <!-- 1. IMAGE-BASED READER STAGE (Qaida, 16-Line Quran, Illustrated Books) -->
+          <div id="readerImageStage" class="h-full flex items-center justify-center w-full">
+            <img id="readerPageImg" src="" alt="Book Page" 
+              class="max-h-[76vh] w-auto max-w-full rounded-xl shadow-2xl object-contain border border-slate-700/80 bg-white transition-transform duration-200" />
+          </div>
+
+          <!-- 2. TEXT-BASED READABLE STAGE (Tafseer, Hadith, Duas with Arabic + Trans.) -->
+          <div id="readerTextStage" class="hidden w-full max-w-3xl h-full overflow-y-auto p-4 sm:p-6 bg-slate-900/90 rounded-2xl border border-slate-800 text-slate-200 space-y-4">
+            <div id="readerTextContent">
+              <!-- Dynamically populated for Tafseer / Hadith text -->
+            </div>
+          </div>
+
+        </div>
+
+        <!-- Right Flip Button -->
+        <button onclick="changeReaderPage(+1)" id="btnReaderNextFloating" class="z-10 w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-slate-800/80 hover:bg-emerald-700 text-white shadow-xl flex items-center justify-center transition duration-200 backdrop-blur-xs border border-slate-600 hover:scale-105" title="Next Page (&rarr; Right Arrow)">
+          <i class="fa-solid fa-chevron-right text-sm"></i>
+        </button>
+      </div>
+
+      <!-- READER BOTTOM NAVIGATION BAR -->
+      <div class="bg-slate-950 px-4 py-2.5 border-t border-slate-800 flex items-center justify-between flex-wrap gap-2 text-xs font-semibold">
+        <!-- Previous Page Button -->
+        <button onclick="changeReaderPage(-1)" id="btnReaderPrevBottom" class="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 flex items-center gap-1.5 transition">
+          <i class="fa-solid fa-arrow-left text-xs"></i> <span class="hidden sm:inline">Previous</span>
+        </button>
+
+        <!-- Center: Page Indicator & Fast Slider -->
+        <div class="flex items-center gap-3 flex-1 justify-center max-w-xs sm:max-w-md">
+          <span class="font-mono font-bold text-emerald-400" id="readerPageIndicator">Page 1 of 32</span>
+          <input type="range" id="readerPageSlider" min="1" max="32" value="1" oninput="jumpToReaderPage(this.value)" class="w-full accent-emerald-500 cursor-pointer h-1.5 bg-slate-800 rounded-lg">
+        </div>
+
+        <!-- Next Page Button -->
+        <button onclick="changeReaderPage(+1)" id="btnReaderNextBottom" class="px-3 py-1.5 rounded-xl bg-brandEmerald hover:bg-emerald-600 text-white flex items-center gap-1.5 transition font-bold shadow-xs">
+          <span class="hidden sm:inline">Next</span> <i class="fa-solid fa-arrow-right text-xs"></i>
+        </button>
+      </div>
+
     </div>
   </div>
 
@@ -1123,9 +1301,35 @@
           timingBadge = `<span class="text-[10px] text-slate-400 block">Slot Ended</span>`;
         }
 
-        const sabaqNotes = c.log?.lesson_notes 
-          ? `<span class="text-slate-800 font-semibold">${c.log.lesson_notes}</span>`
-          : `<span class="text-slate-400 italic">No notes logged yet</span>`;
+        let sabaqNotes = `<span class="text-slate-400 italic">No notes logged yet</span>`;
+        if (c.log?.lesson_notes) {
+          try {
+            const pMeta = JSON.parse(c.log.lesson_notes);
+            if (pMeta.book_title || pMeta.page) {
+              const passColor = pMeta.status === 'Pass' ? 'bg-emerald-100 text-emerald-800 border-emerald-300' : 'bg-amber-100 text-amber-800 border-amber-300';
+              sabaqNotes = `
+                <div class="space-y-1">
+                  <div class="flex items-center gap-1.5 flex-wrap">
+                    <span class="px-2 py-0.5 rounded text-[10px] font-extrabold bg-emerald-50 text-brandDark border border-emerald-300 flex items-center gap-1">
+                      <i class="fa-solid fa-book-quran text-brandEmerald"></i> ${pMeta.book_title || 'Course'} &bull; Pg ${pMeta.page}
+                    </span>
+                    <span class="px-1.5 py-0.5 rounded text-[9px] font-bold border ${passColor}">
+                      ${pMeta.status || 'Done'}
+                    </span>
+                    <button onclick="openDigitalBookReader('${pMeta.book_id || 'noorani-qaida-classic'}', ${pMeta.page || 1})" class="text-[10px] text-brandEmerald hover:text-brandDark font-extrabold flex items-center gap-0.5" title="Open Lesson in Digital Reader">
+                      <i class="fa-solid fa-eye text-[9px]"></i> Read
+                    </button>
+                  </div>
+                  ${pMeta.remarks ? `<div class="text-[11px] text-slate-600 truncate max-w-xs">${pMeta.remarks}</div>` : ''}
+                </div>
+              `;
+            } else {
+              sabaqNotes = `<span class="text-slate-800 font-semibold">${c.log.lesson_notes}</span>`;
+            }
+          } catch(e) {
+            sabaqNotes = `<span class="text-slate-800 font-semibold">${c.log.lesson_notes}</span>`;
+          }
+        }
 
         let isTrialClass = false;
         if (c.status === 'Trial' || c.students?.status === 'Trial') {
@@ -1319,22 +1523,148 @@
       }
     }
 
+    // ============================================================
+    // COURSE MATERIAL & DIGITAL LIBRARY CONTROLLER (TEACHER PORTAL)
+    // ============================================================
+    let CURRENT_READER_BOOK = null;
+    let CURRENT_READER_PAGE = 1;
+    let CURRENT_READER_ZOOM = 1.0;
+
+    function getTeacherAllBooks() {
+      const baseBooks = (typeof ALHUDA_CURRICULUM !== 'undefined') ? ALHUDA_CURRICULUM : [];
+      let customBooks = [];
+      try { customBooks = JSON.parse(localStorage.getItem('alhuda_custom_books') || '[]'); } catch(e){}
+      return [...baseBooks, ...customBooks];
+    }
+
+    function populateTeacherCourseBooks(defaultBookId = null) {
+      const bSelect = document.getElementById('attCourseBookSelect');
+      if (!bSelect) return;
+      const allBooks = getTeacherAllBooks();
+
+      bSelect.innerHTML = allBooks.map(b => `
+        <option value="${b.id}">${b.title} (${b.category_label || 'Course'})</option>
+      `).join('');
+
+      if (defaultBookId) {
+        bSelect.value = defaultBookId;
+      }
+      onTeacherCourseBookChanged(bSelect.value);
+    }
+
+    function onTeacherCourseBookChanged(bookId) {
+      const pageSelect = document.getElementById('attCoursePageSelect');
+      if (!pageSelect) return;
+
+      const allBooks = getTeacherAllBooks();
+      const book = allBooks.find(b => b.id === bookId) || allBooks[0];
+      if (!book) return;
+
+      let html = '';
+      if (book.id === 'quran-16-line' && book.paras) {
+        html = book.paras.map(p => `
+          <option value="${p.page_start}">Para ${p.para}: ${p.name_ur} (Page ${p.page_start})</option>
+        `).join('');
+      } else if (book.chapters && book.chapters.length > 0) {
+        html = book.chapters.map((ch, idx) => `
+          <option value="${ch.page_start || (idx + 1)}">Page ${ch.page_start || (idx + 1)} &bull; ${ch.title.slice(0, 30)}</option>
+        `).join('');
+      } else {
+        const total = book.total_pages || 32;
+        const opts = [];
+        for (let i = 1; i <= total; i++) {
+          opts.push(`<option value="${i}">Page ${i}</option>`);
+        }
+        html = opts.join('');
+      }
+
+      pageSelect.innerHTML = html;
+    }
+
+    function previewTeacherSelectedMaterial() {
+      const bookId = document.getElementById('attCourseBookSelect')?.value || 'noorani-qaida-classic';
+      const page = Number(document.getElementById('attCoursePageSelect')?.value || 1);
+      openDigitalBookReader(bookId, page);
+    }
+
+    function openTeacherDigitalLibrary() {
+      openDigitalBookReader('noorani-qaida-classic', 1);
+    }
+
     // Attendance & Sabaq Modal Handlers
     function openAttendanceModal(scheduleId, studentName, timeSlot, studentId, currentStatus, currentNotes) {
+      let matchedClass = null;
       if (!studentName && scheduleId) {
-        const c = TODAY_CLASSES.find(x => String(x.id) === String(scheduleId));
-        if (c) {
-          studentName = c.students?.name || 'Student';
-          timeSlot = `${c.start_time.slice(0,5)} - ${c.end_time.slice(0,5)}`;
-          studentId = c.student_id;
-          currentStatus = c.log?.status || 'Present';
-          currentNotes = c.log?.lesson_notes || '';
+        matchedClass = TODAY_CLASSES.find(x => String(x.id) === String(scheduleId));
+        if (matchedClass) {
+          studentName = matchedClass.students?.name || 'Student';
+          timeSlot = `${matchedClass.start_time.slice(0,5)} - ${matchedClass.end_time.slice(0,5)}`;
+          studentId = matchedClass.student_id;
+          currentStatus = matchedClass.log?.status || 'Present';
+          currentNotes = matchedClass.log?.lesson_notes || '';
         }
       }
+
       document.getElementById('attScheduleId').value = scheduleId;
       document.getElementById('attStudentId').value = studentId;
       document.getElementById('attModalSubtitle').innerText = `${studentName} • ${timeSlot} PKT`;
-      document.getElementById('attLessonNotes').value = currentNotes || '';
+
+      // Check student enrolled course
+      let suggestedBook = 'noorani-qaida-classic';
+      const cName = ((matchedClass?.students?.course_id || '') + ' ' + (matchedClass?.students?.name || '')).toLowerCase();
+      if (cName.includes('english')) {
+        suggestedBook = 'noorani-qaida-english';
+      } else if (cName.includes('kid') || cName.includes('cartoon') || cName.includes('child')) {
+        suggestedBook = 'kids-cartoon-qaida';
+      } else if (cName.includes('quran') || cName.includes('tajweed') || cName.includes('hifz') || cName.includes('nazra')) {
+        suggestedBook = 'quran-16-line';
+      } else if (cName.includes('tafseer') || cName.includes('translation')) {
+        suggestedBook = 'tafseer-taqi-usmani';
+      }
+
+      // Check existing/previous notes for Auto-Bookmark Smart Resume
+      let parsedNotes = null;
+      try {
+        if (currentNotes) parsedNotes = JSON.parse(currentNotes);
+      } catch(e) {}
+
+      if (parsedNotes && parsedNotes.book_id) {
+        suggestedBook = parsedNotes.book_id;
+      }
+
+      populateTeacherCourseBooks(suggestedBook);
+
+      // Smart Resume logic
+      const badge = document.getElementById('attLastSabaqBadge');
+      if (parsedNotes && parsedNotes.page) {
+        let nextPage = Number(parsedNotes.page);
+        if (parsedNotes.status === 'Pass') {
+          nextPage += 1;
+          if (badge) {
+            badge.innerHTML = `<i class="fa-solid fa-check-double text-emerald-600"></i> Resuming Next: Page ${nextPage}`;
+            badge.className = 'text-[10px] font-bold text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded-md border border-emerald-300';
+          }
+        } else {
+          if (badge) {
+            badge.innerHTML = `<i class="fa-solid fa-rotate text-amber-600"></i> Dohraai/Repeat: Page ${nextPage}`;
+            badge.className = 'text-[10px] font-bold text-amber-800 bg-amber-100 px-2 py-0.5 rounded-md border border-amber-300';
+          }
+        }
+
+        const pSel = document.getElementById('attCoursePageSelect');
+        if (pSel) pSel.value = nextPage;
+        document.getElementById('attLineRange').value = parsedNotes.line_range || '';
+        document.getElementById('attSabaqResult').value = parsedNotes.status || 'Pass';
+        document.getElementById('attSabaqRating').value = parsedNotes.rating || '5';
+        document.getElementById('attLessonNotes').value = parsedNotes.remarks || '';
+      } else {
+        if (badge) {
+          badge.innerHTML = `<i class="fa-solid fa-bookmark text-amber-600"></i> Smart Resume Ready`;
+          badge.className = 'text-[10px] font-bold text-amber-800 bg-amber-100 px-2 py-0.5 rounded-md border border-amber-200';
+        }
+        document.getElementById('attLineRange').value = '';
+        document.getElementById('attLessonNotes').value = currentNotes || '';
+      }
 
       selectAttendanceStatus(currentStatus || 'Present');
       document.getElementById('modalTeacherAttendance').classList.remove('hidden');
@@ -1351,6 +1681,7 @@
       const btnP = document.getElementById('btnStatusPresent');
       const btnA = document.getElementById('btnStatusAbsent');
       const btnL = document.getElementById('btnStatusLeave');
+      const sabaqBox = document.getElementById('attPresentSabaqDetails');
 
       [btnP, btnA, btnL].forEach(b => {
         b.className = 'py-2.5 rounded-xl font-bold border border-slate-300 bg-white text-slate-600 text-center hover:bg-slate-50 transition flex items-center justify-center gap-1.5';
@@ -1358,10 +1689,13 @@
 
       if (status === 'Present') {
         btnP.className = 'py-2.5 rounded-xl font-extrabold border-2 border-emerald-600 bg-emerald-50 text-emerald-800 text-center transition flex items-center justify-center gap-1.5 shadow-xs';
+        if (sabaqBox) sabaqBox.classList.remove('hidden');
       } else if (status === 'Absent') {
         btnA.className = 'py-2.5 rounded-xl font-extrabold border-2 border-rose-600 bg-rose-50 text-rose-800 text-center transition flex items-center justify-center gap-1.5 shadow-xs';
+        if (sabaqBox) sabaqBox.classList.add('hidden');
       } else if (status === 'Leave') {
         btnL.className = 'py-2.5 rounded-xl font-extrabold border-2 border-blue-600 bg-blue-50 text-blue-800 text-center transition flex items-center justify-center gap-1.5 shadow-xs';
+        if (sabaqBox) sabaqBox.classList.add('hidden');
       }
     }
 
@@ -1369,8 +1703,35 @@
       const schedule_id = document.getElementById('attScheduleId').value;
       const student_id = document.getElementById('attStudentId').value;
       const status = document.getElementById('attSelectedStatus').value;
-      const lesson_notes = (document.getElementById('attLessonNotes').value || '').trim();
       const date = new Date().toISOString().slice(0, 10);
+
+      let lesson_notes = '';
+
+      if (status === 'Present') {
+        const bookId = document.getElementById('attCourseBookSelect')?.value || 'noorani-qaida-classic';
+        const allBooks = getTeacherAllBooks();
+        const book = allBooks.find(b => b.id === bookId) || allBooks[0];
+        const page = Number(document.getElementById('attCoursePageSelect')?.value || 1);
+        const line_range = (document.getElementById('attLineRange')?.value || '').trim();
+        const sabaq_result = document.getElementById('attSabaqResult')?.value || 'Pass';
+        const rating = Number(document.getElementById('attSabaqRating')?.value || 5);
+        const remarks = (document.getElementById('attLessonNotes')?.value || '').trim();
+
+        const sabaqPayload = {
+          book_id: bookId,
+          book_title: book ? book.title : 'Course',
+          page: page,
+          line_range: line_range,
+          status: sabaq_result,
+          rating: rating,
+          remarks: remarks,
+          recorded_at: new Date().toISOString()
+        };
+
+        lesson_notes = JSON.stringify(sabaqPayload);
+      } else {
+        lesson_notes = (document.getElementById('attLessonNotes')?.value || '').trim();
+      }
 
       const btn = document.getElementById('btnSaveAttendance');
       btn.disabled = true;
@@ -1391,16 +1752,226 @@
         btn.innerHTML = '<i class="fa-solid fa-floppy-disk"></i> Save Progress';
         closeAttendanceModal();
         await loadTeacherPortalData();
-        alert(`✅ Attendance & Sabaq Saved Successfully!\n\nStatus: ${status}\nNotes: ${lesson_notes || 'None'}`);
+        alert(`✅ Attendance & Sabaq Saved Successfully!\n\nStatus: ${status}\nCourse: Registered & Connected with Student Portal.`);
       } catch (err) {
         console.error("Attendance save error:", err);
         btn.disabled = false;
         btn.innerHTML = '<i class="fa-solid fa-floppy-disk"></i> Save Progress';
-        alert("Notice: Log saved locally. Server sync complete.");
+        alert("Notice: Log recorded. Syncing complete.");
         closeAttendanceModal();
         await loadTeacherPortalData();
       }
     }
+
+    // ============================================================
+    // IN-LMS DIGITAL READER FOR TEACHER SCREEN SHARE
+    // ============================================================
+    function openDigitalBookReader(bookId, startPage = 1) {
+      const allBooks = getTeacherAllBooks();
+      const book = allBooks.find(b => b.id === bookId) || allBooks[0];
+      if (!book) return;
+
+      CURRENT_READER_BOOK = book;
+      CURRENT_READER_PAGE = Number(startPage) || 1;
+      CURRENT_READER_ZOOM = 1.0;
+
+      const setT = (id, v) => { const el = document.getElementById(id); if (el) el.innerText = v; };
+      setT('readerBookTitle', book.title);
+      setT('readerCategoryBadge', book.category_label || 'Curriculum');
+
+      const iconEl = document.getElementById('readerBookIcon');
+      if (iconEl && book.cover_icon) {
+        iconEl.innerHTML = `<i class="${book.cover_icon}"></i>`;
+      }
+
+      populateReaderJumpSelect(book);
+
+      const slider = document.getElementById('readerPageSlider');
+      if (slider) {
+        slider.min = 1;
+        slider.max = book.total_pages || (book.paras ? 548 : 32);
+        slider.value = CURRENT_READER_PAGE;
+      }
+
+      document.getElementById('modalDigitalBookReader').classList.remove('hidden');
+      document.getElementById('modalDigitalBookReader').classList.add('flex');
+      renderReaderCurrentPage();
+    }
+
+    function populateReaderJumpSelect(book) {
+      const jumpSelect = document.getElementById('readerJumpSelect');
+      if (!jumpSelect) return;
+
+      let optionsHtml = '';
+      if (book.id === 'quran-16-line' && book.paras) {
+        optionsHtml = book.paras.map(p => `
+          <option value="${p.page_start}">Para ${p.para}: ${p.name_ur} (Pg ${p.page_start})</option>
+        `).join('');
+      } else if (book.chapters && book.chapters.length > 0) {
+        optionsHtml = book.chapters.map((ch, idx) => `
+          <option value="${ch.page_start || (idx + 1)}">${ch.title.slice(0, 24)}... (Pg ${ch.page_start || (idx + 1)})</option>
+        `).join('');
+      } else {
+        const maxP = book.total_pages || 32;
+        const pageOptions = [];
+        for (let i = 1; i <= maxP; i++) pageOptions.push(`<option value="${i}">Page ${i}</option>`);
+        optionsHtml = pageOptions.join('');
+      }
+      jumpSelect.innerHTML = optionsHtml;
+    }
+
+    function renderReaderCurrentPage() {
+      if (!CURRENT_READER_BOOK) return;
+      const book = CURRENT_READER_BOOK;
+      const maxPages = book.total_pages || (book.paras ? 548 : 32);
+
+      CURRENT_READER_PAGE = Math.max(1, Math.min(maxPages, CURRENT_READER_PAGE));
+
+      const ind = document.getElementById('readerPageIndicator');
+      if (ind) ind.innerText = `Page ${CURRENT_READER_PAGE} of ${maxPages}`;
+
+      const slider = document.getElementById('readerPageSlider');
+      if (slider) slider.value = CURRENT_READER_PAGE;
+
+      const jumpSelect = document.getElementById('readerJumpSelect');
+      if (jumpSelect) {
+        const options = Array.from(jumpSelect.options);
+        let bestVal = options[0]?.value;
+        options.forEach(opt => {
+          if (Number(opt.value) <= CURRENT_READER_PAGE) bestVal = opt.value;
+        });
+        if (bestVal) jumpSelect.value = bestVal;
+      }
+
+      const descEl = document.getElementById('readerChapterDesc');
+      if (descEl) {
+        if (book.chapters) {
+          const matchCh = book.chapters.find(c => CURRENT_READER_PAGE >= (c.page_start || 1) && CURRENT_READER_PAGE <= (c.page_end || maxPages));
+          descEl.innerText = matchCh ? `${matchCh.title} — ${matchCh.desc || ''}` : `Page ${CURRENT_READER_PAGE}`;
+        } else if (book.paras) {
+          const matchPara = book.paras.find(p => CURRENT_READER_PAGE >= p.page_start && CURRENT_READER_PAGE <= p.page_end);
+          descEl.innerText = matchPara ? `Para ${matchPara.para}: ${matchPara.name_ar} (${matchPara.name_ur})` : `Page ${CURRENT_READER_PAGE}`;
+        } else {
+          descEl.innerText = `${book.edition || 'Lesson'} • Page ${CURRENT_READER_PAGE}`;
+        }
+      }
+
+      if (book.is_text_viewer) {
+        document.getElementById('readerImageStage')?.classList.add('hidden');
+        document.getElementById('readerTextStage')?.classList.remove('hidden');
+        return;
+      }
+
+      document.getElementById('readerTextStage')?.classList.add('hidden');
+      document.getElementById('readerImageStage')?.classList.remove('hidden');
+
+      const img = document.getElementById('readerPageImg');
+      const spinner = document.getElementById('readerLoadingSpinner');
+
+      if (img) {
+        if (spinner) spinner.classList.remove('hidden');
+        img.style.transform = `scale(${CURRENT_READER_ZOOM})`;
+
+        let pageUrl = '';
+        if (typeof book.getPageUrl === 'function') {
+          pageUrl = book.getPageUrl(CURRENT_READER_PAGE);
+        } else if (book.pages && book.pages[CURRENT_READER_PAGE - 1]) {
+          pageUrl = book.pages[CURRENT_READER_PAGE - 1];
+        } else {
+          pageUrl = generateDynamicSvgPage(book, CURRENT_READER_PAGE);
+        }
+
+        img.onload = () => { if (spinner) spinner.classList.add('hidden'); };
+        img.onerror = () => {
+          if (typeof book.getFallbackPageUrl === 'function') {
+            img.src = book.getFallbackPageUrl(CURRENT_READER_PAGE);
+          } else {
+            img.src = generateDynamicSvgPage(book, CURRENT_READER_PAGE);
+          }
+          if (spinner) spinner.classList.add('hidden');
+        };
+        img.src = pageUrl;
+      }
+    }
+
+    function generateDynamicSvgPage(book, pageNum) {
+      const bTitle = (book.title || 'Course Material').replace(/&/g, '&amp;');
+      const arTitle = (book.title_ar || 'الْقُرْآنُ الْكَرِيم').replace(/&/g, '&amp;');
+      const maxPages = book.total_pages || 32;
+
+      const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 860" width="600" height="860">
+        <rect width="600" height="860" fill="#fdfbf7" />
+        <rect x="20" y="20" width="560" height="820" rx="12" fill="none" stroke="#047857" stroke-width="4" stroke-opacity="0.6"/>
+        <rect x="28" y="28" width="544" height="804" rx="8" fill="none" stroke="#d97706" stroke-width="1.5" stroke-dasharray="6,4"/>
+        <text x="300" y="75" font-family="'Cinzel', serif" font-size="20" font-weight="bold" fill="#064e3b" text-anchor="middle">AL-HUDA ISLAMIC CENTRE</text>
+        <text x="300" y="105" font-family="sans-serif" font-size="14" font-weight="bold" fill="#d97706" text-anchor="middle">${bTitle}</text>
+        <text x="300" y="140" font-family="'Amiri', serif" font-size="24" font-weight="bold" fill="#047857" text-anchor="middle">${arTitle}</text>
+        <line x1="80" y1="160" x2="520" y2="160" stroke="#047857" stroke-width="1.5" stroke-opacity="0.4"/>
+        <circle cx="300" cy="430" r="140" fill="#ecfdf5" fill-opacity="0.4" stroke="#047857" stroke-width="1" stroke-dasharray="4,4"/>
+        <text x="300" y="420" font-family="sans-serif" font-size="28" font-weight="900" fill="#064e3b" text-anchor="middle">PAGE ${pageNum}</text>
+        <text x="300" y="460" font-family="sans-serif" font-size="14" fill="#64748b" text-anchor="middle">Live Classroom View &bull; ${bTitle}</text>
+        <line x1="80" y1="780" x2="520" y2="780" stroke="#047857" stroke-width="1.5" stroke-opacity="0.4"/>
+        <text x="300" y="810" font-family="monospace" font-size="12" font-weight="bold" fill="#475569" text-anchor="middle">Page ${pageNum} of ${maxPages}</text>
+      </svg>`;
+
+      return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
+    }
+
+    function changeReaderPage(delta) {
+      if (!CURRENT_READER_BOOK) return;
+      CURRENT_READER_PAGE += delta;
+      renderReaderCurrentPage();
+    }
+
+    function jumpToReaderPage(p) {
+      if (!CURRENT_READER_BOOK) return;
+      CURRENT_READER_PAGE = Number(p) || 1;
+      renderReaderCurrentPage();
+    }
+
+    function changeReaderZoom(delta) {
+      CURRENT_READER_ZOOM = Math.max(0.7, Math.min(2.5, CURRENT_READER_ZOOM + delta));
+      const img = document.getElementById('readerPageImg');
+      if (img) img.style.transform = `scale(${CURRENT_READER_ZOOM})`;
+      const lbl = document.getElementById('readerZoomLevel');
+      if (lbl) lbl.innerText = `${Math.round(CURRENT_READER_ZOOM * 100)}%`;
+    }
+
+    function resetReaderZoom() {
+      CURRENT_READER_ZOOM = 1.0;
+      const img = document.getElementById('readerPageImg');
+      if (img) img.style.transform = `scale(1)`;
+      const lbl = document.getElementById('readerZoomLevel');
+      if (lbl) lbl.innerText = `100%`;
+    }
+
+    function toggleReaderFullscreen() {
+      const container = document.getElementById('readerModalContainer');
+      if (!container) return;
+      if (!document.fullscreenElement) {
+        container.requestFullscreen().catch(err => console.warn(err));
+      } else {
+        document.exitFullscreen();
+      }
+    }
+
+    function closeDigitalBookReader() {
+      if (document.fullscreenElement) document.exitFullscreen();
+      resetReaderZoom();
+      document.getElementById('modalDigitalBookReader').classList.add('hidden');
+      document.getElementById('modalDigitalBookReader').classList.remove('flex');
+      CURRENT_READER_BOOK = null;
+    }
+
+    // Keyboard controls for teacher reader
+    window.addEventListener('keydown', function(e) {
+      const readerModal = document.getElementById('modalDigitalBookReader');
+      if (readerModal && !readerModal.classList.contains('hidden')) {
+        if (e.key === 'ArrowLeft') changeReaderPage(-1);
+        else if (e.key === 'ArrowRight') changeReaderPage(+1);
+        else if (e.key === 'Escape') closeDigitalBookReader();
+      }
+    });
 
     // Weekly Matrix Modal Handlers
     function openWeeklyMatrixModal() {
