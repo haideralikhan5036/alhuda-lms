@@ -616,23 +616,27 @@
       const grid = document.getElementById('parentLibraryGrid');
       if (!modal || !grid) return;
 
-      if (window.CURRICULUM_DATA && window.CURRICULUM_DATA.books) {
-        grid.innerHTML = window.CURRICULUM_DATA.books.map(b => `
+      const booksList = (window.CURRICULUM_DATA && window.CURRICULUM_DATA.books) 
+        ? window.CURRICULUM_DATA.books 
+        : (window.ALHUDA_CURRICULUM || []);
+
+      if (booksList && booksList.length > 0) {
+        grid.innerHTML = booksList.map(b => `
           <div class="bg-white rounded-2xl border border-slate-200 p-4 hover:border-emerald-500 hover:shadow-md transition flex flex-col justify-between group">
             <div>
               <div class="flex items-center justify-between mb-2">
                 <span class="text-[10px] font-black uppercase px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 border border-slate-200">
-                  ${b.category}
+                  ${b.category_label || b.category}
                 </span>
                 <span class="text-[11px] font-bold text-emerald-700 font-mono">
-                  ${b.totalPages} Pages
+                  ${b.total_pages || b.totalPages} Pages
                 </span>
               </div>
               
               <h4 class="font-extrabold text-slate-900 text-sm mb-1 group-hover:text-brandEmerald transition">
                 ${b.title}
               </h4>
-              <div class="text-xs font-quran text-slate-500 mb-2">${b.urduTitle || ''}</div>
+              <div class="text-xs font-quran text-slate-500 mb-2">${b.urduTitle || b.title_ar || ''}</div>
               <p class="text-xs text-slate-600 line-clamp-2 leading-relaxed mb-4">
                 ${b.description || ''}
               </p>
@@ -657,23 +661,27 @@
     // INTERACTIVE DIGITAL BOOK READER ENGINE
     // ==========================================
     function openParentDigitalReader(bookId, pageNum = 1) {
-      if (!window.CURRICULUM_DATA) return;
-      const book = (window.CURRICULUM_DATA.books || []).find(b => b.id === bookId);
+      const booksList = (window.CURRICULUM_DATA && window.CURRICULUM_DATA.books) 
+        ? window.CURRICULUM_DATA.books 
+        : (window.ALHUDA_CURRICULUM || []);
+
+      const book = booksList.find(b => b.id === bookId);
       if (!book) {
         alert("Course book could not be loaded.");
         return;
       }
 
       ACTIVE_READER_BOOK = book;
-      ACTIVE_READER_PAGE = Math.max(1, Math.min(pageNum, book.totalPages || 32));
+      const maxPages = book.total_pages || book.totalPages || 32;
+      ACTIVE_READER_PAGE = Math.max(1, Math.min(Number(pageNum) || 1, maxPages));
       ACTIVE_READER_ZOOM = 1.0;
 
       // Populate Title & Badges
       const titleEl = document.getElementById('parentReaderBookTitle');
-      if (titleEl) titleEl.innerText = `${book.title} (${book.urduTitle || ''})`;
+      if (titleEl) titleEl.innerText = `${book.title} (${book.urduTitle || book.title_ar || ''})`;
 
       const catBadge = document.getElementById('parentReaderCategoryBadge');
-      if (catBadge) catBadge.innerText = book.category;
+      if (catBadge) catBadge.innerText = book.category_label || book.category;
 
       // Update Slider Max & Jumper
       const slider = document.getElementById('parentReaderPageSlider');
@@ -683,14 +691,14 @@
 
       if (slider) {
         slider.min = 1;
-        slider.max = book.totalPages;
+        slider.max = maxPages;
         slider.value = ACTIVE_READER_PAGE;
       }
       if (sliderMin) sliderMin.innerText = 'Pg 1';
-      if (sliderMax) sliderMax.innerText = `Pg ${book.totalPages}`;
+      if (sliderMax) sliderMax.innerText = `Pg ${maxPages}`;
 
       if (jumpSelect) {
-        jumpSelect.innerHTML = Array.from({ length: book.totalPages }, (_, i) => i + 1)
+        jumpSelect.innerHTML = Array.from({ length: maxPages }, (_, i) => i + 1)
           .map(p => `<option value="${p}">Page ${p}</option>`)
           .join('');
         jumpSelect.value = ACTIVE_READER_PAGE;
@@ -709,10 +717,11 @@
 
     function renderCurrentReaderPage() {
       if (!ACTIVE_READER_BOOK) return;
+      const maxPages = ACTIVE_READER_BOOK.total_pages || ACTIVE_READER_BOOK.totalPages || 32;
 
       const pageBadge = document.getElementById('parentReaderPageBadge');
       if (pageBadge) {
-        pageBadge.innerText = `Page ${ACTIVE_READER_PAGE} of ${ACTIVE_READER_BOOK.totalPages}`;
+        pageBadge.innerText = `Page ${ACTIVE_READER_PAGE} of ${maxPages}`;
       }
 
       const slider = document.getElementById('parentReaderPageSlider');
@@ -733,7 +742,14 @@
       `;
 
       // Resolve CDN Page URL
-      const pageUrl = window.CURRICULUM_DATA.getPageUrl(ACTIVE_READER_BOOK.id, ACTIVE_READER_PAGE);
+      let pageUrl = '';
+      if (typeof ACTIVE_READER_BOOK.getPageUrl === 'function') {
+        pageUrl = ACTIVE_READER_BOOK.getPageUrl(ACTIVE_READER_PAGE);
+      } else if (window.CURRICULUM_DATA && typeof window.CURRICULUM_DATA.getPageUrl === 'function') {
+        pageUrl = window.CURRICULUM_DATA.getPageUrl(ACTIVE_READER_BOOK.id, ACTIVE_READER_PAGE);
+      } else if (typeof generateDynamicSvgDataUri === 'function') {
+        pageUrl = generateDynamicSvgDataUri(ACTIVE_READER_BOOK, ACTIVE_READER_PAGE);
+      }
 
       const img = new Image();
       img.onload = () => {
@@ -744,9 +760,21 @@
       };
 
       img.onerror = () => {
-        // Crisp vector SVG Fallback if CDN is unavailable or offline
-        const svgCode = window.CURRICULUM_DATA.generateDynamicSvgPage(ACTIVE_READER_BOOK, ACTIVE_READER_PAGE);
-        display.innerHTML = svgCode;
+        img.onerror = null;
+        let fallback = '';
+        if (typeof ACTIVE_READER_BOOK.getFallbackPageUrl === 'function') {
+          fallback = ACTIVE_READER_BOOK.getFallbackPageUrl(ACTIVE_READER_PAGE);
+        } else if (typeof generateDynamicSvgDataUri === 'function') {
+          fallback = generateDynamicSvgDataUri(ACTIVE_READER_BOOK, ACTIVE_READER_PAGE);
+        }
+        if (fallback) {
+          const fallbackImg = new Image();
+          fallbackImg.className = 'max-w-full max-h-[80vh] object-contain rounded-xl shadow-lg border border-slate-200';
+          fallbackImg.alt = `${ACTIVE_READER_BOOK.title} - Page ${ACTIVE_READER_PAGE}`;
+          fallbackImg.src = fallback;
+          display.innerHTML = '';
+          display.appendChild(fallbackImg);
+        }
       };
 
       img.src = pageUrl;

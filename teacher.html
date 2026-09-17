@@ -1877,17 +1877,24 @@
           pageUrl = book.getPageUrl(CURRENT_READER_PAGE);
         } else if (book.pages && book.pages[CURRENT_READER_PAGE - 1]) {
           pageUrl = book.pages[CURRENT_READER_PAGE - 1];
+        } else if (typeof generateDynamicSvgDataUri === 'function') {
+          pageUrl = generateDynamicSvgDataUri(book, CURRENT_READER_PAGE);
         } else {
           pageUrl = generateDynamicSvgPage(book, CURRENT_READER_PAGE);
         }
 
         img.onload = () => { if (spinner) spinner.classList.add('hidden'); };
         img.onerror = () => {
+          img.onerror = null;
+          let fallback = '';
           if (typeof book.getFallbackPageUrl === 'function') {
-            img.src = book.getFallbackPageUrl(CURRENT_READER_PAGE);
+            fallback = book.getFallbackPageUrl(CURRENT_READER_PAGE);
+          } else if (typeof generateDynamicSvgDataUri === 'function') {
+            fallback = generateDynamicSvgDataUri(book, CURRENT_READER_PAGE);
           } else {
-            img.src = generateDynamicSvgPage(book, CURRENT_READER_PAGE);
+            fallback = generateDynamicSvgPage(book, CURRENT_READER_PAGE);
           }
+          img.src = fallback;
           if (spinner) spinner.classList.add('hidden');
         };
         img.src = pageUrl;
