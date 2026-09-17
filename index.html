@@ -140,8 +140,8 @@
         <span class="sidebar-label">Families &amp; Students</span>
       </button>
       <button onclick="switchTab('tab-teachers')" data-tab="tab-teachers" class="sidebar-nav-btn nav-tab role-admin w-full text-left px-3 py-2.5 rounded-lg text-sm font-bold flex items-center gap-3 text-slate-700 hover:bg-emerald-50 hover:text-brandDark transition">
-        <i class="fa-solid fa-chalkboard-user text-brandEmerald w-4 flex-shrink-0"></i>
-        <span class="sidebar-label">Teachers Directory</span>
+        <i class="fa-solid fa-id-card text-brandEmerald w-4 flex-shrink-0"></i>
+        <span class="sidebar-label">Employee Registration</span>
       </button>
       <button onclick="switchTab('tab-trials')" data-tab="tab-trials" class="sidebar-nav-btn nav-tab role-admin w-full text-left px-3 py-2.5 rounded-lg text-sm font-bold flex items-center gap-3 text-slate-700 hover:bg-purple-50 hover:text-purple-900 transition">
         <i class="fa-solid fa-graduation-cap text-purple-600 w-4 flex-shrink-0"></i>
@@ -579,22 +579,22 @@
       </div>
     </section>
 
-    <!-- 3. TEACHERS DIRECTORY TAB -->
+    <!-- 3. EMPLOYEE REGISTRATION TAB -->
     <section id="tab-teachers" class="tab-content hidden">
       <div class="flex justify-between items-center mb-5 flex-wrap gap-3">
         <div>
           <h2 class="text-xl font-extrabold text-brandDark flex items-center gap-2">
-            <i class="fa-solid fa-chalkboard-user text-brandEmerald"></i> Teachers Registry & 30-Min Master Timetables
+            <i class="fa-solid fa-id-card text-brandEmerald"></i> Employee Registration
           </h2>
-          <p class="text-xs text-slate-500">Profiles, Witness Contacts, Rates, and 2D Full-Week Schedule Matrix</p>
+          <p class="text-xs text-slate-500">Teaching Staff, Managers & Non-Teaching Staff — Profiles, Credentials & Schedule Matrix</p>
         </div>
-        <button onclick="prepareAddTeacherModal()" class="px-3.5 py-2 bg-brandDark text-white rounded-lg text-xs font-bold hover:bg-brandDarkest flex items-center gap-1.5 shadow">
-          <i class="fa-solid fa-plus"></i> + Add New Teacher
+        <button onclick="openEmployeeTypeChoice()" class="px-3.5 py-2 bg-brandDark text-white rounded-lg text-xs font-bold hover:bg-brandDarkest flex items-center gap-1.5 shadow">
+          <i class="fa-solid fa-user-plus"></i> + Add New Employee
         </button>
       </div>
 
       <div id="teachersGrid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-        <div class="col-span-full p-8 text-center text-slate-400">Loading registered teachers...</div>
+        <div class="col-span-full p-8 text-center text-slate-400">Loading registered employees...</div>
       </div>
     </section>
 
@@ -1269,7 +1269,7 @@
         <div class="flex justify-end gap-2 pt-2 border-t">
           <button onclick="closeModal('modalTeacherOptions')" class="px-4 py-2 border rounded-lg font-bold text-slate-600">Close</button>
           <button onclick="viewTeacherInDirectory()" class="px-4 py-2 bg-brandDark text-white rounded-lg font-bold hover:bg-brandDarkest shadow">
-            Open in Teachers Directory
+            Open in Employee Registry
           </button>
         </div>
       </div>
@@ -1579,6 +1579,182 @@
   </div>
 
   <!-- MODAL: ADD TEACHER -->
+  <!-- ============ MODAL: CHOOSE EMPLOYEE TYPE ============ -->
+  <div id="modalChooseEmployeeType" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 hidden items-center justify-center p-4">
+    <div class="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-slate-200">
+      <div class="flex justify-between items-center mb-5 border-b pb-3">
+        <div>
+          <h3 class="font-black text-base text-brandDark flex items-center gap-2">
+            <i class="fa-solid fa-user-plus text-brandEmerald"></i> Add New Employee
+          </h3>
+          <p class="text-xs text-slate-500 mt-0.5">Select the type of employee you are registering</p>
+        </div>
+        <button onclick="closeModal('modalChooseEmployeeType')" class="text-slate-400 hover:text-slate-600 text-xl font-bold">&times;</button>
+      </div>
+
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <!-- Teaching Staff Card -->
+        <button onclick="closeModal('modalChooseEmployeeType'); prepareAddTeacherModal();"
+          class="group p-5 rounded-2xl border-2 border-brandEmerald/40 hover:border-brandEmerald hover:bg-emerald-50/60 text-left transition-all duration-200 shadow-xs hover:shadow-md">
+          <div class="w-12 h-12 rounded-xl bg-emerald-100 text-brandDark flex items-center justify-center text-xl mb-3 group-hover:scale-105 transition">
+            <i class="fa-solid fa-chalkboard-user"></i>
+          </div>
+          <div class="font-black text-slate-900 text-sm mb-1">Teaching Staff</div>
+          <div class="text-xs text-slate-500 leading-relaxed">Quran instructors, Islamic studies teachers. Full schedule, salary & Zoom integration.</div>
+          <div class="mt-3 inline-flex items-center gap-1 text-xs font-bold text-brandEmerald">
+            Select <i class="fa-solid fa-arrow-right text-[10px]"></i>
+          </div>
+        </button>
+
+        <!-- Non-Teaching Staff Card -->
+        <button onclick="closeModal('modalChooseEmployeeType'); openNonTeachingStaffModal();"
+          class="group p-5 rounded-2xl border-2 border-indigo-300/50 hover:border-indigo-500 hover:bg-indigo-50/50 text-left transition-all duration-200 shadow-xs hover:shadow-md">
+          <div class="w-12 h-12 rounded-xl bg-indigo-100 text-indigo-800 flex items-center justify-center text-xl mb-3 group-hover:scale-105 transition">
+            <i class="fa-solid fa-id-badge"></i>
+          </div>
+          <div class="font-black text-slate-900 text-sm mb-1">Non-Teaching Staff</div>
+          <div class="text-xs text-slate-500 leading-relaxed">Managers, admin staff, office support. Designation-based registration with optional portal access.</div>
+          <div class="mt-3 inline-flex items-center gap-1 text-xs font-bold text-indigo-600">
+            Select <i class="fa-solid fa-arrow-right text-[10px]"></i>
+          </div>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ MODAL: ADD NON-TEACHING STAFF ============ -->
+  <div id="modalAddNonTeachingStaff" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 hidden items-center justify-center p-4">
+    <div class="bg-white rounded-2xl max-w-2xl w-full p-6 shadow-2xl border border-slate-200 max-h-[92vh] overflow-y-auto">
+      <div class="flex justify-between items-center mb-4 border-b pb-3">
+        <div>
+          <h3 class="font-bold text-base text-brandDark flex items-center gap-2">
+            <i class="fa-solid fa-id-badge text-indigo-600"></i> Register Non-Teaching Staff
+          </h3>
+          <p class="text-[11px] text-slate-500 mt-0.5">Select designation to load the appropriate registration form</p>
+        </div>
+        <button onclick="closeModal('modalAddNonTeachingStaff')" class="text-slate-400 hover:text-slate-600 text-xl font-bold">&times;</button>
+      </div>
+
+      <form onsubmit="submitNonTeachingStaff(event)" class="space-y-4 text-xs">
+        <input type="hidden" id="ntsGeneratedId" value="">
+
+        <!-- Designation Selector -->
+        <div class="bg-indigo-50 p-4 rounded-xl border border-indigo-200">
+          <label class="block font-black text-indigo-900 mb-2 text-[11px] uppercase tracking-wide">
+            <i class="fa-solid fa-briefcase text-indigo-600 mr-1"></i> Designation / Role *
+          </label>
+          <div class="grid grid-cols-2 gap-3">
+            <button type="button" onclick="selectNTSDesignation('Manager')" id="btnNTSManager"
+              class="py-3 rounded-xl border-2 border-indigo-400 bg-indigo-600 text-white font-extrabold flex flex-col items-center gap-1 transition">
+              <i class="fa-solid fa-user-tie text-base"></i>
+              <span class="text-xs">Manager</span>
+            </button>
+            <button type="button" onclick="selectNTSDesignation('Other')" id="btnNTSOther"
+              class="py-3 rounded-xl border-2 border-slate-300 bg-white text-slate-700 font-extrabold flex flex-col items-center gap-1 transition hover:border-slate-400">
+              <i class="fa-solid fa-person-digging text-base text-slate-500"></i>
+              <span class="text-xs">Other Staff</span>
+            </button>
+          </div>
+          <input type="hidden" id="ntsDesignation" value="Manager">
+          <div class="mt-2 text-[11px] text-indigo-700 font-semibold" id="ntsDesignationNote">
+            Manager: Secure registration with portal ID generation (MGR-XXXX)
+          </div>
+        </div>
+
+        <!-- COMMON FIELDS -->
+        <div class="bg-slate-50 p-3.5 rounded-xl border border-slate-200 space-y-3">
+          <div class="font-bold text-slate-700 uppercase tracking-wide text-[11px]">
+            Basic Information
+          </div>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label class="block font-bold mb-1">Full Name *:</label>
+              <input type="text" id="ntsFullName" required placeholder="Employee Full Name" oninput="previewNTSId()" class="w-full p-2.5 border rounded-lg font-semibold">
+            </div>
+            <div id="ntsRoleTitleWrap">
+              <label class="block font-bold mb-1">Role / Title *:</label>
+              <input type="text" id="ntsRoleTitle" placeholder="e.g. Office Manager, Peon, Driver" class="w-full p-2.5 border rounded-lg font-semibold">
+            </div>
+          </div>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label class="block font-bold mb-1">Phone / WhatsApp *:</label>
+              <input type="text" id="ntsPhone" required placeholder="+92XXXXXXXXXX" class="w-full p-2.5 border rounded-lg font-mono">
+            </div>
+            <div>
+              <label class="block font-bold mb-1">Date of Joining *:</label>
+              <input type="date" id="ntsJoiningDate" required class="w-full p-2.5 border rounded-lg font-mono">
+            </div>
+          </div>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label class="block font-bold mb-1">Monthly Salary (PKR):</label>
+              <input type="number" id="ntsSalary" placeholder="e.g. 25000" class="w-full p-2.5 border rounded-lg font-mono">
+            </div>
+            <div>
+              <label class="block font-bold mb-1">Gender:</label>
+              <select id="ntsGender" class="w-full p-2.5 border rounded-lg font-semibold">
+                <option value="Male">Male</option>
+                <option value="Female">Female</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <!-- MANAGER-ONLY EXTRA FIELDS -->
+        <div id="ntsManagerFields" class="bg-indigo-50/60 p-3.5 rounded-xl border border-indigo-200 space-y-3">
+          <div class="font-black text-indigo-900 uppercase tracking-wide text-[11px] flex items-center gap-1.5">
+            <i class="fa-solid fa-lock text-indigo-600"></i> Manager Secure Details
+          </div>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label class="block font-bold mb-1">CNIC / National ID *:</label>
+              <input type="text" id="ntsCNIC" placeholder="XXXXX-XXXXXXX-X" class="w-full p-2.5 border rounded-lg font-mono">
+            </div>
+            <div>
+              <label class="block font-bold mb-1">Email Address *:</label>
+              <input type="email" id="ntsEmail" placeholder="manager@example.com" class="w-full p-2.5 border rounded-lg">
+            </div>
+          </div>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label class="block font-bold mb-1">Emergency Contact Name:</label>
+              <input type="text" id="ntsEmergencyName" placeholder="Next of kin name" class="w-full p-2.5 border rounded-lg">
+            </div>
+            <div>
+              <label class="block font-bold mb-1">Emergency Contact Phone:</label>
+              <input type="text" id="ntsEmergencyPhone" placeholder="+92XXXXXXXXXX" class="w-full p-2.5 border rounded-lg font-mono">
+            </div>
+          </div>
+          <div>
+            <label class="block font-bold mb-1">Residential Address:</label>
+            <textarea id="ntsAddress" rows="2" placeholder="Full home address..." class="w-full p-2.5 border rounded-lg"></textarea>
+          </div>
+          <div class="p-2.5 bg-indigo-100 border border-indigo-300 rounded-xl text-[11px] text-indigo-900 flex items-start gap-2">
+            <i class="fa-solid fa-circle-info mt-0.5 text-indigo-600"></i>
+            <div>
+              <span class="font-black">Portal Access:</span> A Manager ID (<strong id="ntsIdPreview">MGR-???</strong>) and login credentials will be auto-generated. Portal visibility configuration is available later.
+            </div>
+          </div>
+        </div>
+
+        <!-- Notes -->
+        <div>
+          <label class="block font-bold mb-1">Additional Notes:</label>
+          <textarea id="ntsNotes" rows="2" placeholder="Any additional info, responsibilities, etc." class="w-full p-2.5 border rounded-lg text-xs"></textarea>
+        </div>
+
+        <!-- Footer Buttons -->
+        <div class="flex justify-end gap-3 border-t pt-3">
+          <button type="button" onclick="closeModal('modalAddNonTeachingStaff')" class="px-4 py-2 border rounded-xl font-bold text-slate-600 hover:bg-slate-100">Cancel</button>
+          <button type="submit" id="btnSaveNTS" class="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold rounded-xl flex items-center gap-1.5 shadow-sm transition">
+            <i class="fa-solid fa-floppy-disk"></i> Register Employee
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
   <div id="modalAddTeacher" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 hidden items-center justify-center p-4">
     <div class="bg-white rounded-2xl max-w-2xl w-full p-6 shadow-2xl border border-slate-200 max-h-[92vh] overflow-y-auto">
       <div class="flex justify-between items-center mb-4 border-b pb-3">
@@ -4637,6 +4813,155 @@
       }
     }
 
+    // ================================================
+    // EMPLOYEE REGISTRATION — TYPE CHOICE + NTS FORMS
+    // ================================================
+
+    function openEmployeeTypeChoice() {
+      openModal('modalChooseEmployeeType');
+    }
+
+    function openNonTeachingStaffModal() {
+      // Reset form
+      ['ntsFullName','ntsRoleTitle','ntsPhone','ntsSalary','ntsNotes',
+       'ntsCNIC','ntsEmail','ntsEmergencyName','ntsEmergencyPhone','ntsAddress'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.value = '';
+      });
+      document.getElementById('ntsGender').value = 'Male';
+      const today = new Date().toISOString().slice(0,10);
+      document.getElementById('ntsJoiningDate').value = today;
+      selectNTSDesignation('Manager'); // default
+      openModal('modalAddNonTeachingStaff');
+    }
+
+    function selectNTSDesignation(type) {
+      document.getElementById('ntsDesignation').value = type;
+      const btnM = document.getElementById('btnNTSManager');
+      const btnO = document.getElementById('btnNTSOther');
+      const mFields = document.getElementById('ntsManagerFields');
+      const note = document.getElementById('ntsDesignationNote');
+      const rtWrap = document.getElementById('ntsRoleTitleWrap');
+
+      if (type === 'Manager') {
+        btnM.className = 'py-3 rounded-xl border-2 border-indigo-400 bg-indigo-600 text-white font-extrabold flex flex-col items-center gap-1 transition';
+        btnO.className = 'py-3 rounded-xl border-2 border-slate-300 bg-white text-slate-700 font-extrabold flex flex-col items-center gap-1 transition hover:border-slate-400';
+        mFields.classList.remove('hidden');
+        note.textContent = 'Manager: Secure registration with portal ID generation (MGR-XXXX)';
+        // Role title label change
+        const lbl = rtWrap?.querySelector('label');
+        if (lbl) lbl.textContent = 'Role / Title (optional):';
+        document.getElementById('ntsRoleTitle').placeholder = 'e.g. Operations Manager, Finance Manager';
+      } else {
+        btnO.className = 'py-3 rounded-xl border-2 border-slate-400 bg-slate-700 text-white font-extrabold flex flex-col items-center gap-1 transition';
+        btnM.className = 'py-3 rounded-xl border-2 border-slate-300 bg-white text-slate-700 font-extrabold flex flex-col items-center gap-1 transition hover:border-slate-400';
+        mFields.classList.add('hidden');
+        note.textContent = 'Other Staff: Basic registration with STF-XXXX ID (e.g. Office Boy, Peon, Driver)';
+        const lbl = rtWrap?.querySelector('label');
+        if (lbl) lbl.textContent = 'Role / Title *:';
+        document.getElementById('ntsRoleTitle').placeholder = 'e.g. Office Boy, Peon, Driver, Cleaner';
+      }
+      previewNTSId();
+    }
+
+    function previewNTSId() {
+      const designation = document.getElementById('ntsDesignation')?.value || 'Manager';
+      const name = (document.getElementById('ntsFullName')?.value || '').trim();
+      const suffix = name.length > 0
+        ? name.replace(/[^a-zA-Z]/g, '').slice(0, 3).toUpperCase()
+        : String(Date.now()).slice(-3);
+      const prefix = designation === 'Manager' ? 'MGR' : 'STF';
+      const genId = `${prefix}-${suffix}${String(Date.now()).slice(-3)}`;
+      document.getElementById('ntsGeneratedId').value = genId;
+      const preview = document.getElementById('ntsIdPreview');
+      if (preview) preview.textContent = genId;
+    }
+
+    async function submitNonTeachingStaff(e) {
+      e.preventDefault();
+      const designation = document.getElementById('ntsDesignation')?.value;
+      const full_name   = document.getElementById('ntsFullName')?.value?.trim();
+      const role_title  = document.getElementById('ntsRoleTitle')?.value?.trim();
+      const phone       = document.getElementById('ntsPhone')?.value?.trim();
+      const joining_date = document.getElementById('ntsJoiningDate')?.value;
+      const salary      = Number(document.getElementById('ntsSalary')?.value || 0);
+      const gender      = document.getElementById('ntsGender')?.value;
+      const notes_text  = document.getElementById('ntsNotes')?.value?.trim();
+      const cnic        = document.getElementById('ntsCNIC')?.value?.trim();
+      const email       = document.getElementById('ntsEmail')?.value?.trim();
+      const emgName     = document.getElementById('ntsEmergencyName')?.value?.trim();
+      const emgPhone    = document.getElementById('ntsEmergencyPhone')?.value?.trim();
+      const address     = document.getElementById('ntsAddress')?.value?.trim();
+
+      if (!full_name || !phone || !joining_date) {
+        alert('Please fill in all required fields (Name, Phone, Joining Date).');
+        return;
+      }
+
+      // ID generation
+      previewNTSId();
+      const emp_id = document.getElementById('ntsGeneratedId')?.value;
+      const prefix = designation === 'Manager' ? 'MGR' : 'STF';
+      const username = `${prefix.toLowerCase()}.${full_name.toLowerCase().replace(/[^a-z]/g, '').slice(0, 8)}`;
+      const password = 'alhuda@' + String(Math.floor(Math.random() * 9000) + 1000);
+
+      // Build notes JSON
+      const notesObj = {
+        employee_type: designation === 'Manager' ? 'manager' : 'other_staff',
+        designation: designation,
+        role_title: role_title || designation,
+        emp_id,
+        joining_date,
+        salary,
+        username,
+        password,
+        cnic: cnic || null,
+        email: email || null,
+        emergency_name: emgName || null,
+        emergency_phone: emgPhone || null,
+        address: address || null,
+        extra_notes: notes_text || null,
+        registered_at: new Date().toISOString()
+      };
+
+      const btn = document.getElementById('btnSaveNTS');
+      btn.disabled = true;
+      btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Registering...';
+
+      try {
+        const { error } = await db.from('teachers').insert([{
+          id: emp_id,
+          full_name,
+          father_name: null,
+          phone,
+          gender,
+          qualification: role_title || designation,
+          working_shift: 'Office Hours',
+          rate_per_slot: salary,
+          status: 'Active',
+          joining_date,
+          witness_name: null,
+          witness_phone: null,
+          notes: JSON.stringify(notesObj)
+        }]);
+
+        if (error) throw error;
+
+        const msg = designation === 'Manager'
+          ? `✅ Manager Registered Successfully!\n\n👤 Name: ${full_name}\n🆔 Manager ID: ${emp_id}\n👤 Portal Username: ${username}\n🔑 Portal Password: ${password}\n\nManager can be given portal access when ready.`
+          : `✅ Staff Registered Successfully!\n\n👤 Name: ${full_name}\n🆔 Staff ID: ${emp_id}\n📋 Role: ${role_title || 'Other Staff'}`;
+
+        alert(msg);
+        closeModal('modalAddNonTeachingStaff');
+        await loadTeachers();
+      } catch (err) {
+        alert('Error registering employee: ' + err.message);
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fa-solid fa-floppy-disk"></i> Register Employee';
+      }
+    }
+
     function prepareAddTeacherModal() {
       const editIdInput = document.getElementById('editTeacherId');
       if (editIdInput) editIdInput.value = '';
@@ -4759,8 +5084,12 @@
 
     async function deleteTeacher(teacherId) {
       const teacher = ALL_TEACHERS.find(t => t.id === teacherId);
-      const tName = teacher ? teacher.full_name : 'this teacher';
-      if (!confirm(`Are you sure you want to delete teacher "${tName}"?\n\nThis will remove their profile and unassign their timetable schedule slots.`)) {
+      const tName = teacher ? teacher.full_name : 'this employee';
+      let meta = {};
+      try { meta = JSON.parse(teacher?.notes || '{}'); } catch(e){}
+      const roleLabel = meta.employee_type === 'manager' ? 'Manager' : (meta.employee_type === 'other_staff' ? 'Staff Member' : 'Teacher');
+
+      if (!confirm(`Are you sure you want to delete ${roleLabel} "${tName}"?\n\nThis will remove their profile and records.`)) {
         return;
       }
 
@@ -4773,9 +5102,9 @@
         localStorage.setItem('alhuda_teacher_accounts', JSON.stringify(accounts));
 
         await loadTeachers();
-        alert(`Teacher "${tName}" has been deleted successfully.`);
+        alert(`${roleLabel} "${tName}" has been deleted successfully.`);
       } catch (err) {
-        alert('Error deleting teacher: ' + err.message);
+        alert('Error deleting employee: ' + err.message);
       }
     }
 
@@ -4789,17 +5118,23 @@
       const countMap = {};
       (scheds || []).forEach(s => countMap[s.teacher_id] = (countMap[s.teacher_id] || 0) + 1);
 
+      // In student enrollment modal, only list actual teaching staff (exclude managers/non-teaching staff)
       const sTeacherSelect = document.getElementById('stuTeacherId');
       if (sTeacherSelect) {
-        sTeacherSelect.innerHTML = (teachers || []).map(t => `<option value="${t.id}">${t.full_name} (${t.rate_per_slot || 2200} PKR)</option>`).join('');
+        const teachingOnly = (teachers || []).filter(t => {
+          let m = {};
+          try { m = JSON.parse(t.notes || '{}'); } catch(e){}
+          return m.employee_type !== 'manager' && m.employee_type !== 'other_staff' && !String(t.id).startsWith('MGR-') && !String(t.id).startsWith('STF-');
+        });
+        sTeacherSelect.innerHTML = teachingOnly.map(t => `<option value="${t.id}">${t.full_name} (${t.rate_per_slot || 2200} PKR)</option>`).join('');
       }
 
       if (!teachers || teachers.length === 0) {
         container.innerHTML = `
           <div class="col-span-full p-10 text-center bg-white rounded-2xl border border-slate-200">
-            <i class="fa-solid fa-chalkboard-user text-4xl text-slate-300 mb-3"></i>
-            <h4 class="font-extrabold text-slate-700 text-base">No Teachers Registered Yet</h4>
-            <p class="text-xs text-slate-400 mt-1 mb-4">Click "+ Add New Teacher" above to register your Quran instructors.</p>
+            <i class="fa-solid fa-id-card text-4xl text-slate-300 mb-3"></i>
+            <h4 class="font-extrabold text-slate-700 text-base">No Employees Registered Yet</h4>
+            <p class="text-xs text-slate-400 mt-1 mb-4">Click "+ Add New Employee" above to register teaching and non-teaching staff.</p>
           </div>
         `;
         return;
@@ -4808,6 +5143,193 @@
       const accounts = getTeacherAccounts();
 
       container.innerHTML = teachers.map(t => {
+        let meta = {};
+        try { meta = JSON.parse(t.notes || '{}'); } catch(e){}
+        const isManager = meta.employee_type === 'manager' || String(t.id).startsWith('MGR-');
+        const isOtherStaff = meta.employee_type === 'other_staff' || String(t.id).startsWith('STF-');
+
+        // ==========================================
+        // CARD: MANAGER (NON-TEACHING)
+        // ==========================================
+        if (isManager) {
+          const cleanPhone = (t.phone || '').replace(/[^0-9]/g, '');
+          const mgrUsername = meta.username || `mgr.${t.full_name.toLowerCase().replace(/[^a-z]/g, '').slice(0, 8)}`;
+          const mgrPassword = meta.password || 'alhuda@mgr';
+          const waMsg = `السلام علیکم محترم ${t.full_name} صاحب!\nالھدیٰ اسلامک سینٹر - مینجر رجسٹریشن مکمل ہو گئی ہے۔\n\n🆔 *مینجر آئی ڈی:* ${t.id}\n👤 *یوزر نیم:* ${mgrUsername}\n🔑 *پاسورڈ:* ${mgrPassword}\n💼 *عہدہ:* ${meta.role_title || 'Manager'}\n\nمینجر پورٹل جلد ہی لائیو ہو جائے گا۔ جزاکم اللہ خیراً!`;
+          const waUrl = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(waMsg)}`;
+
+          return `
+            <div class="bg-white rounded-2xl border-2 border-indigo-200 shadow-sm hover:shadow-md transition p-5 flex flex-col justify-between">
+              <div>
+                <div class="flex justify-between items-start mb-3 border-b pb-3">
+                  <div class="flex items-center gap-3">
+                    <div class="w-12 h-12 rounded-xl bg-indigo-100 border border-indigo-300 text-indigo-800 flex items-center justify-center font-black text-base">
+                      ${t.full_name.slice(0, 2).toUpperCase()}
+                    </div>
+                    <div>
+                      <div class="flex items-center gap-1.5 flex-wrap">
+                        <h4 class="font-extrabold text-base text-slate-900 leading-tight">${t.full_name}</h4>
+                        <span class="px-1.5 py-0.5 rounded text-[9px] font-mono font-bold bg-indigo-50 text-indigo-800 border border-indigo-200">${t.id}</span>
+                      </div>
+                      <p class="text-[11px] text-indigo-700 font-semibold">${meta.role_title || 'Operations Manager'}</p>
+                    </div>
+                  </div>
+                  <div class="flex items-center gap-1">
+                    <span class="px-2 py-0.5 rounded text-[10px] font-extrabold bg-indigo-100 text-indigo-800 border border-indigo-200">
+                      🏢 Manager
+                    </span>
+                    <button onclick="deleteTeacher('${t.id}')" title="Delete Manager" class="text-slate-300 hover:text-rose-600 transition p-1 text-xs">
+                      <i class="fa-regular fa-trash-can"></i>
+                    </button>
+                  </div>
+                </div>
+
+                <!-- MANAGER DETAILS -->
+                <div class="grid grid-cols-2 gap-2 text-xs mb-3 bg-indigo-50/40 p-2.5 rounded-xl border border-indigo-100">
+                  <div>
+                    <span class="text-slate-400 text-[10px] block">Monthly Salary:</span>
+                    <strong class="text-indigo-900 font-bold text-xs">${meta.salary ? meta.salary + ' PKR' : (t.rate_per_slot ? t.rate_per_slot + ' PKR' : 'As Agreed')}</strong>
+                  </div>
+                  <div>
+                    <span class="text-slate-400 text-[10px] block">Joining Date:</span>
+                    <strong class="text-slate-800 font-mono text-[11px]">${meta.joining_date || t.joining_date || (t.created_at ? t.created_at.slice(0,10) : '--')}</strong>
+                  </div>
+                  <div>
+                    <span class="text-slate-400 text-[10px] block">Phone / WhatsApp:</span>
+                    <strong class="text-slate-800 font-mono">${t.phone}</strong>
+                  </div>
+                  <div>
+                    <span class="text-slate-400 text-[10px] block">CNIC / ID:</span>
+                    <strong class="text-slate-700 font-mono text-[11px]">${meta.cnic || '--'}</strong>
+                  </div>
+                  ${meta.email ? `
+                    <div class="col-span-2">
+                      <span class="text-slate-400 text-[10px] block">Email Address:</span>
+                      <strong class="text-slate-700 font-mono text-[11px]">${meta.email}</strong>
+                    </div>
+                  ` : ''}
+                  ${meta.emergency_name ? `
+                    <div class="col-span-2">
+                      <span class="text-slate-400 text-[10px] block">Emergency Contact:</span>
+                      <span class="text-slate-700 font-medium">${meta.emergency_name} (${meta.emergency_phone || '--'})</span>
+                    </div>
+                  ` : ''}
+                  ${meta.address ? `
+                    <div class="col-span-2">
+                      <span class="text-slate-400 text-[10px] block">Residential Address:</span>
+                      <span class="text-slate-600 text-[11px]">${meta.address}</span>
+                    </div>
+                  ` : ''}
+                </div>
+
+                <!-- PORTAL CREDENTIALS BOX -->
+                <div class="bg-gradient-to-r from-indigo-50 to-blue-50 p-2.5 rounded-xl border border-indigo-200 mb-3 space-y-1.5">
+                  <div class="flex justify-between items-center text-[10px] font-bold text-indigo-900 uppercase tracking-wide">
+                    <span class="flex items-center gap-1"><i class="fa-solid fa-key text-indigo-600"></i> Manager Portal Credentials</span>
+                    <button onclick="navigator.clipboard.writeText('Manager: ${t.full_name}\\nID: ${t.id}\\nUsername: ${mgrUsername}\\nPassword: ${mgrPassword}'); alert('Manager credentials copied!');" class="text-indigo-700 hover:text-indigo-900 font-bold" title="Copy Login Details">
+                      <i class="fa-regular fa-copy"></i> Copy
+                    </button>
+                  </div>
+                  <div class="grid grid-cols-2 gap-2 text-xs font-mono">
+                    <div class="bg-white px-2 py-1 rounded border border-indigo-100 truncate">
+                      <span class="text-[9px] text-slate-400 block">Username:</span>
+                      <strong class="text-indigo-950">${mgrUsername}</strong>
+                    </div>
+                    <div class="bg-white px-2 py-1 rounded border border-indigo-100 truncate">
+                      <span class="text-[9px] text-slate-400 block">Password:</span>
+                      <strong class="text-indigo-950">${mgrPassword}</strong>
+                    </div>
+                  </div>
+                  <a href="${waUrl}" target="_blank" class="w-full py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-bold text-[11px] flex items-center justify-center gap-1.5 shadow-xs transition mt-1">
+                    <i class="fa-brands fa-whatsapp"></i> Send Credentials to Manager WhatsApp
+                  </a>
+                </div>
+
+                <div class="p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-[11px] text-slate-500 flex items-center gap-1.5">
+                  <i class="fa-solid fa-shield-halved text-indigo-500"></i>
+                  <span>Security &amp; Manager permissions portal integration enabled.</span>
+                </div>
+              </div>
+
+              <div class="pt-3 border-t mt-3 flex items-center justify-between">
+                <span class="text-[11px] font-mono text-slate-400">Non-Teaching Staff</span>
+                <button onclick="deleteTeacher('${t.id}')" class="px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-lg font-bold text-xs transition flex items-center gap-1">
+                  <i class="fa-regular fa-trash-can"></i> Remove
+                </button>
+              </div>
+            </div>
+          `;
+        }
+
+        // ==========================================
+        // CARD: OTHER STAFF (NON-TEACHING)
+        // ==========================================
+        if (isOtherStaff) {
+          return `
+            <div class="bg-white rounded-2xl border-2 border-slate-200 shadow-sm hover:shadow-md transition p-5 flex flex-col justify-between">
+              <div>
+                <div class="flex justify-between items-start mb-3 border-b pb-3">
+                  <div class="flex items-center gap-3">
+                    <div class="w-12 h-12 rounded-xl bg-slate-100 border border-slate-300 text-slate-700 flex items-center justify-center font-black text-base">
+                      ${t.full_name.slice(0, 2).toUpperCase()}
+                    </div>
+                    <div>
+                      <div class="flex items-center gap-1.5 flex-wrap">
+                        <h4 class="font-extrabold text-base text-slate-900 leading-tight">${t.full_name}</h4>
+                        <span class="px-1.5 py-0.5 rounded text-[9px] font-mono font-bold bg-slate-100 text-slate-700 border border-slate-200">${t.id}</span>
+                      </div>
+                      <p class="text-[11px] text-slate-500 font-semibold">${meta.role_title || 'Non-Teaching Staff'}</p>
+                    </div>
+                  </div>
+                  <div class="flex items-center gap-1">
+                    <span class="px-2 py-0.5 rounded text-[10px] font-extrabold bg-slate-100 text-slate-700 border border-slate-200">
+                      🪪 Other Staff
+                    </span>
+                    <button onclick="deleteTeacher('${t.id}')" title="Delete Staff" class="text-slate-300 hover:text-rose-600 transition p-1 text-xs">
+                      <i class="fa-regular fa-trash-can"></i>
+                    </button>
+                  </div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-2 text-xs mb-3 bg-slate-50 p-2.5 rounded-xl border border-slate-100">
+                  <div>
+                    <span class="text-slate-400 text-[10px] block">Role / Designation:</span>
+                    <strong class="text-slate-800 font-bold text-xs">${meta.role_title || 'Support Staff'}</strong>
+                  </div>
+                  <div>
+                    <span class="text-slate-400 text-[10px] block">Monthly Salary:</span>
+                    <strong class="text-emerald-700 font-bold text-xs">${meta.salary ? meta.salary + ' PKR' : (t.rate_per_slot ? t.rate_per_slot + ' PKR' : 'As Agreed')}</strong>
+                  </div>
+                  <div>
+                    <span class="text-slate-400 text-[10px] block">Phone / WhatsApp:</span>
+                    <strong class="text-slate-800 font-mono">${t.phone}</strong>
+                  </div>
+                  <div>
+                    <span class="text-slate-400 text-[10px] block">Joining Date:</span>
+                    <strong class="text-slate-800 font-mono text-[11px]">${meta.joining_date || t.joining_date || (t.created_at ? t.created_at.slice(0,10) : '--')}</strong>
+                  </div>
+                  ${meta.extra_notes ? `
+                    <div class="col-span-2">
+                      <span class="text-slate-400 text-[10px] block">Notes:</span>
+                      <span class="text-slate-600 text-[11px]">${meta.extra_notes}</span>
+                    </div>
+                  ` : ''}
+                </div>
+              </div>
+
+              <div class="pt-3 border-t mt-3 flex items-center justify-between">
+                <span class="text-[11px] font-mono text-slate-400">Non-Teaching Staff</span>
+                <button onclick="deleteTeacher('${t.id}')" class="px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-lg font-bold text-xs transition flex items-center gap-1">
+                  <i class="fa-regular fa-trash-can"></i> Remove
+                </button>
+              </div>
+            </div>
+          `;
+        }
+
+        // ==========================================
+        // CARD: TEACHING STAFF (DEFAULT)
+        // ==========================================
         const bookedCount = countMap[t.id] || 0;
         const creds = getTeacherCreds(t);
         const acc = accounts[t.id] || {};
