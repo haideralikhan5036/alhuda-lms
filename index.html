@@ -170,6 +170,10 @@
         <i class="fa-solid fa-book-quran text-brandEmerald w-4 flex-shrink-0"></i>
         <span class="sidebar-label">Course Material &amp; Library</span>
       </button>
+      <button onclick="switchTab('tab-schedule-search')" data-tab="tab-schedule-search" class="sidebar-nav-btn nav-tab role-admin w-full text-left px-3 py-2.5 rounded-lg text-sm font-bold flex items-center gap-3 text-slate-700 hover:bg-cyan-50 hover:text-cyan-900 transition">
+        <i class="fa-solid fa-calendar-check text-cyan-600 w-4 flex-shrink-0"></i>
+        <span class="sidebar-label">Schedule Search / Slot Finder</span>
+      </button>
     </nav>
     <!-- Sidebar Footer: Active Counters -->
     <div class="p-2 border-t border-slate-100 space-y-1.5 sidebar-label">
@@ -216,6 +220,9 @@
           </button>
           <button onclick="prepareAddStudentModal()" class="px-3.5 py-2 bg-brandEmerald text-white rounded-lg text-xs font-bold hover:bg-emerald-700 flex items-center gap-1.5 shadow">
             <i class="fa-solid fa-graduation-cap"></i> + Enroll Student
+          </button>
+          <button onclick="switchTab('tab-schedule-search')" class="px-3.5 py-2 bg-cyan-700 text-white rounded-lg text-xs font-bold hover:bg-cyan-800 flex items-center gap-1.5 shadow" title="Search teacher free & busy slots">
+            <i class="fa-solid fa-calendar-check text-cyan-200"></i> Free Slot Finder
           </button>
           <button onclick="loadDashboardData()" class="px-3 py-2 bg-white border border-slate-300 rounded-lg text-xs font-bold text-slate-700 hover:bg-slate-50 flex items-center gap-1.5 shadow-sm">
             <i class="fa-solid fa-arrows-rotate"></i> Refresh
@@ -626,7 +633,10 @@
           </p>
         </div>
 
-        <div class="flex items-center gap-2.5">
+        <div class="flex items-center gap-2.5 flex-wrap">
+          <button onclick="switchTab('tab-schedule-search')" class="px-3.5 py-2 bg-cyan-50 hover:bg-cyan-100 text-cyan-800 border border-cyan-300 rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-xs">
+            <i class="fa-solid fa-calendar-check text-cyan-600"></i> Find Free Teacher Slot
+          </button>
           <button onclick="loadTrialClassesData()" class="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-xs">
             <i class="fa-solid fa-arrows-rotate"></i> Refresh
           </button>
@@ -1078,6 +1088,186 @@
       <!-- CURRICULUM BOOKS GRID -->
       <div id="curriculumGrid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
         <div class="col-span-full p-10 text-center text-slate-400">Loading course material...</div>
+      </div>
+    </section>
+
+    <!-- 8. TEACHER SCHEDULE SEARCH & AVAILABILITY FINDER TAB -->
+    <section id="tab-schedule-search" class="tab-content hidden space-y-5">
+      <!-- HEADER BAR -->
+      <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex flex-wrap justify-between items-center gap-4">
+        <div>
+          <div class="flex items-center gap-2">
+            <span class="w-10 h-10 rounded-xl bg-cyan-100 text-cyan-800 flex items-center justify-center text-lg font-bold shadow-xs">
+              <i class="fa-solid fa-calendar-check"></i>
+            </span>
+            <div>
+              <h2 class="text-xl font-extrabold text-slate-900 tracking-tight flex items-center gap-2">
+                Teacher Schedule Search &amp; Availability Finder
+                <span id="badgeSchedSearchActiveShift" class="px-2.5 py-0.5 rounded-full text-xs font-mono font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
+                  Live Slot Finder
+                </span>
+              </h2>
+              <p class="text-xs text-slate-500 mt-0.5">
+                Search which male and female teachers are free or busy between any hours (e.g. 12:00 PM to 06:00 PM) to easily assign new student admissions and demo classes.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div class="flex items-center gap-2.5 flex-wrap">
+          <button onclick="resetScheduleSearchFilters()" class="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-xs">
+            <i class="fa-solid fa-rotate-left"></i> Reset Filters
+          </button>
+          <button onclick="executeScheduleSearch()" class="px-4 py-2 bg-brandDark hover:bg-black text-white rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-xs">
+            <i class="fa-solid fa-magnifying-glass text-brandGold"></i> Search Availability
+          </button>
+        </div>
+      </div>
+
+      <!-- SEARCH FILTERS CARD -->
+      <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-4">
+        <!-- TOP ROW: DAY, TIME RANGE, GENDER, AVAILABILITY -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <!-- 1. Day Selector -->
+          <div>
+            <label class="block font-bold text-xs text-slate-700 mb-1.5 flex items-center gap-1.5">
+              <i class="fa-regular fa-calendar text-brandEmerald"></i> Select Day:
+            </label>
+            <select id="schedSearchDay" onchange="executeScheduleSearch()" class="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-xl font-bold text-xs text-slate-800 focus:bg-white focus:outline-emerald-500">
+              <option value="today">Today (Live Day)</option>
+              <option value="1">Monday (پیر)</option>
+              <option value="2">Tuesday (منگل)</option>
+              <option value="3">Wednesday (بدھ)</option>
+              <option value="4">Thursday (جمعرات)</option>
+              <option value="5">Friday (جمعہ)</option>
+              <option value="6">Saturday (ہفتہ)</option>
+              <option value="7">Sunday (اتوار)</option>
+              <option value="all">All Weekdays (Mon - Fri)</option>
+            </select>
+          </div>
+
+          <!-- 2. Time Range (From & To) -->
+          <div>
+            <label class="block font-bold text-xs text-slate-700 mb-1.5 flex items-center gap-1.5">
+              <i class="fa-regular fa-clock text-brandGold"></i> Time Range (PKT):
+            </label>
+            <div class="grid grid-cols-2 gap-2">
+              <div>
+                <span class="text-[10px] text-slate-400 font-semibold block">From:</span>
+                <select id="schedSearchTimeFrom" onchange="executeScheduleSearch()" class="w-full p-2 bg-slate-50 border border-slate-300 rounded-xl font-mono font-bold text-xs text-slate-800 focus:bg-white focus:outline-emerald-500">
+                  <!-- Populated dynamically (00:00 to 23:30), defaults to 12:00 -->
+                </select>
+              </div>
+              <div>
+                <span class="text-[10px] text-slate-400 font-semibold block">To:</span>
+                <select id="schedSearchTimeTo" onchange="executeScheduleSearch()" class="w-full p-2 bg-slate-50 border border-slate-300 rounded-xl font-mono font-bold text-xs text-slate-800 focus:bg-white focus:outline-emerald-500">
+                  <!-- Populated dynamically (00:00 to 23:30), defaults to 18:00 -->
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <!-- 3. Gender Filter (Male vs Female) -->
+          <div>
+            <label class="block font-bold text-xs text-slate-700 mb-1.5 flex items-center gap-1.5">
+              <i class="fa-solid fa-venus-mars text-indigo-600"></i> Teacher Gender:
+            </label>
+            <select id="schedSearchGender" onchange="executeScheduleSearch()" class="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-xl font-bold text-xs text-slate-800 focus:bg-white focus:outline-emerald-500">
+              <option value="all">All Teachers (Male &amp; Female)</option>
+              <option value="Male">Male Qaris Only (قاری صاحبان)</option>
+              <option value="Female">Female Teachers Only (معلمات)</option>
+            </select>
+          </div>
+
+          <!-- 4. Availability Status Filter (Free vs Busy) -->
+          <div>
+            <label class="block font-bold text-xs text-slate-700 mb-1.5 flex items-center gap-1.5">
+              <i class="fa-solid fa-filter text-emerald-600"></i> Availability Status:
+            </label>
+            <select id="schedSearchStatus" onchange="executeScheduleSearch()" class="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-xl font-bold text-xs text-slate-800 focus:bg-white focus:outline-emerald-500">
+              <option value="free_only">Free / Available Teachers Only (Has Free Slots)</option>
+              <option value="fully_free">100% Free in This Window (No Classes)</option>
+              <option value="busy_only">Busy Teachers Only (Has Booked Classes)</option>
+              <option value="all">All Teachers (Complete Overview)</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- QUICK PRESETS & TEXT SEARCH -->
+        <div class="pt-3 border-t border-slate-100 flex flex-wrap items-center justify-between gap-3 text-xs">
+          <!-- Presets -->
+          <div class="flex items-center gap-1.5 flex-wrap">
+            <span class="text-slate-400 font-bold mr-1">Quick Shifts:</span>
+            <button onclick="setScheduleSearchPreset('afternoon')" class="px-2.5 py-1 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 font-bold transition">
+              12:00 PM – 06:00 PM (Afternoon)
+            </button>
+            <button onclick="setScheduleSearchPreset('night')" class="px-2.5 py-1 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-800 border border-indigo-200 font-bold transition">
+              06:00 PM – 12:00 AM (Night)
+            </button>
+            <button onclick="setScheduleSearchPreset('morning')" class="px-2.5 py-1 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 font-bold transition">
+              08:00 AM – 02:00 PM (Morning)
+            </button>
+            <button onclick="setScheduleSearchPreset('full_day')" class="px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 font-bold transition">
+              Full 24 Hours
+            </button>
+          </div>
+
+          <!-- Teacher Name Filter -->
+          <div class="flex items-center gap-2 max-w-xs w-full sm:w-auto">
+            <div class="relative w-full">
+              <i class="fa-solid fa-magnifying-glass absolute left-3 top-2.5 text-slate-400 text-xs"></i>
+              <input type="text" id="schedSearchTeacherQuery" oninput="executeScheduleSearch()" placeholder="Filter by teacher name..." class="w-full pl-8 pr-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-emerald-500">
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- SUMMARY KPI METRICS -->
+      <div class="grid grid-cols-2 sm:grid-cols-4 gap-4" id="schedSearchKpiRow">
+        <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-3.5">
+          <div class="w-11 h-11 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center text-lg font-bold">
+            <i class="fa-solid fa-user-check"></i>
+          </div>
+          <div>
+            <span class="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">Available Teachers</span>
+            <span class="text-xl font-black text-emerald-700" id="kpiSchedAvailableTeachers">0</span>
+          </div>
+        </div>
+
+        <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-3.5">
+          <div class="w-11 h-11 rounded-xl bg-teal-50 text-teal-700 flex items-center justify-center text-lg font-bold">
+            <i class="fa-solid fa-clock-rotate-left"></i>
+          </div>
+          <div>
+            <span class="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">Total Free Slots</span>
+            <span class="text-xl font-black text-teal-700" id="kpiSchedTotalFreeSlots">0</span>
+          </div>
+        </div>
+
+        <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-3.5">
+          <div class="w-11 h-11 rounded-xl bg-amber-50 text-amber-700 flex items-center justify-center text-lg font-bold">
+            <i class="fa-solid fa-calendar-days"></i>
+          </div>
+          <div>
+            <span class="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">Booked Classes</span>
+            <span class="text-xl font-black text-amber-700" id="kpiSchedTotalBookedClasses">0</span>
+          </div>
+        </div>
+
+        <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-3.5">
+          <div class="w-11 h-11 rounded-xl bg-blue-50 text-blue-700 flex items-center justify-center text-lg font-bold">
+            <i class="fa-solid fa-chart-pie"></i>
+          </div>
+          <div>
+            <span class="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">Window Availability</span>
+            <span class="text-xl font-black text-blue-700" id="kpiSchedAvailabilityRate">0%</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- RESULTS CARDS & SCHEDULE VIEW -->
+      <div id="schedSearchResultsContainer" class="space-y-4">
+        <!-- Dynamically rendered teacher availability cards -->
       </div>
     </section>
 
@@ -3185,6 +3375,7 @@
       if (tabId === 'tab-trials') loadTrialClassesData();
       if (tabId === 'tab-leaves') loadLeaveManagementData();
       if (tabId === 'tab-curriculum') loadCurriculumLibrary();
+      if (tabId === 'tab-schedule-search') initScheduleSearch();
 
       // Close sidebar on mobile after navigation
       if (window.innerWidth < 1024) {
@@ -7012,6 +7203,9 @@
         await fetchTeacherSchedules();
         render2DMatrixTable();
         loadTeachers();
+        if (document.getElementById('tab-schedule-search') && !document.getElementById('tab-schedule-search').classList.contains('hidden')) {
+          executeScheduleSearch();
+        }
       }
     }
 
@@ -7021,6 +7215,9 @@
         await fetchTeacherSchedules();
         render2DMatrixTable();
         loadTeachers();
+        if (document.getElementById('tab-schedule-search') && !document.getElementById('tab-schedule-search').classList.contains('hidden')) {
+          executeScheduleSearch();
+        }
       }
     }
 
@@ -9822,6 +10019,412 @@ Web Portal: https://alhuda-lms.vercel.app`;
         btn.disabled = false;
         btn.innerHTML = '<i class="fa-solid fa-check"></i> Confirm Leave & Set Return';
       }
+    }
+
+    // ============================================================
+    // TEACHER SCHEDULE SEARCH & SLOT AVAILABILITY CONTROLLER
+    // ============================================================
+    let SCHED_SEARCH_INITIALIZED = false;
+
+    function populateScheduleSearchTimeDropdowns() {
+      const fromSel = document.getElementById('schedSearchTimeFrom');
+      const toSel = document.getElementById('schedSearchTimeTo');
+      if (!fromSel || !toSel) return;
+
+      const timeSlots = [];
+      for (let h = 0; h < 24; h++) {
+        for (let m of [0, 30]) {
+          const hStr = String(h).padStart(2, '0');
+          const mStr = String(m).padStart(2, '0');
+          const time24 = `${hStr}:${mStr}`;
+          
+          const period = h >= 12 ? 'PM' : 'AM';
+          const h12 = h % 12 === 0 ? 12 : h % 12;
+          const label = `${String(h12).padStart(2, '0')}:${mStr} ${period}`;
+          timeSlots.push({ time24, label });
+        }
+      }
+
+      fromSel.innerHTML = timeSlots.map(t => `<option value="${t.time24}">${t.label} (${t.time24})</option>`).join('');
+      toSel.innerHTML = timeSlots.map(t => `<option value="${t.time24}">${t.label} (${t.time24})</option>`).join('')
+        + `<option value="24:00">12:00 AM Midnight (24:00)</option>`;
+
+      // Default: 12:00 (12:00 PM) to 18:00 (06:00 PM)
+      fromSel.value = '12:00';
+      toSel.value = '18:00';
+    }
+
+    function initScheduleSearch() {
+      if (!SCHED_SEARCH_INITIALIZED) {
+        populateScheduleSearchTimeDropdowns();
+
+        // Auto-select today's day of week
+        const todayDayNum = new Date().getDay(); // 0 = Sun, 1 = Mon ...
+        const dayMap = [7, 1, 2, 3, 4, 5, 6];
+        const currentDay = dayMap[todayDayNum];
+        const daySelect = document.getElementById('schedSearchDay');
+        if (daySelect) {
+          daySelect.value = String(currentDay);
+        }
+
+        SCHED_SEARCH_INITIALIZED = true;
+      }
+      executeScheduleSearch();
+    }
+
+    function setScheduleSearchPreset(preset) {
+      const fromSel = document.getElementById('schedSearchTimeFrom');
+      const toSel = document.getElementById('schedSearchTimeTo');
+      if (!fromSel || !toSel) return;
+
+      if (preset === 'afternoon') {
+        fromSel.value = '12:00';
+        toSel.value = '18:00';
+      } else if (preset === 'night') {
+        fromSel.value = '18:00';
+        toSel.value = '24:00';
+      } else if (preset === 'morning') {
+        fromSel.value = '08:00';
+        toSel.value = '14:00';
+      } else if (preset === 'full_day') {
+        fromSel.value = '00:00';
+        toSel.value = '24:00';
+      }
+      executeScheduleSearch();
+    }
+
+    function resetScheduleSearchFilters() {
+      const dayMap = [7, 1, 2, 3, 4, 5, 6];
+      const currentDay = dayMap[new Date().getDay()];
+      const dSel = document.getElementById('schedSearchDay');
+      if (dSel) dSel.value = String(currentDay);
+      const fSel = document.getElementById('schedSearchTimeFrom');
+      if (fSel) fSel.value = '12:00';
+      const tSel = document.getElementById('schedSearchTimeTo');
+      if (tSel) tSel.value = '18:00';
+      const gSel = document.getElementById('schedSearchGender');
+      if (gSel) gSel.value = 'all';
+      const sSel = document.getElementById('schedSearchStatus');
+      if (sSel) sSel.value = 'free_only';
+      const qInp = document.getElementById('schedSearchTeacherQuery');
+      if (qInp) qInp.value = '';
+      executeScheduleSearch();
+    }
+
+    async function executeScheduleSearch() {
+      const container = document.getElementById('schedSearchResultsContainer');
+      if (!container) return;
+
+      container.innerHTML = `
+        <div class="bg-white p-12 rounded-2xl border border-slate-200 text-center shadow-xs">
+          <i class="fa-solid fa-spinner fa-spin text-3xl text-emerald-600 mb-3"></i>
+          <h4 class="font-extrabold text-slate-700 text-sm">Analyzing Teacher Schedules...</h4>
+          <p class="text-xs text-slate-400 mt-1">Cross-referencing shifts, booked classes, and free slots</p>
+        </div>
+      `;
+
+      // 1. Get filter inputs
+      let dayVal = document.getElementById('schedSearchDay')?.value || 'today';
+      if (dayVal === 'today') {
+        const dayMap = [7, 1, 2, 3, 4, 5, 6];
+        dayVal = String(dayMap[new Date().getDay()]);
+      }
+      const daysToEvaluate = (dayVal === 'all') ? [1, 2, 3, 4, 5] : [Number(dayVal)];
+
+      const timeFrom = document.getElementById('schedSearchTimeFrom')?.value || '12:00';
+      const timeTo = document.getElementById('schedSearchTimeTo')?.value || '18:00';
+      const genderFilter = document.getElementById('schedSearchGender')?.value || 'all';
+      const statusFilter = document.getElementById('schedSearchStatus')?.value || 'free_only';
+      const teacherQuery = (document.getElementById('schedSearchTeacherQuery')?.value || '').trim().toLowerCase();
+
+      // Convert times to minutes from midnight
+      const [fromH, fromM] = timeFrom.split(':').map(Number);
+      const fromMin = fromH * 60 + fromM;
+
+      let [toH, toM] = timeTo.split(':').map(Number);
+      const toMin = toH * 60 + (toM || 0);
+
+      if (toMin <= fromMin) {
+        container.innerHTML = `
+          <div class="p-8 bg-amber-50 rounded-2xl border border-amber-200 text-center text-amber-800">
+            <i class="fa-solid fa-triangle-exclamation text-3xl text-amber-500 mb-2"></i>
+            <h4 class="font-bold text-sm">Invalid Time Range</h4>
+            <p class="text-xs mt-1">"To Time" (${timeTo}) must be later than "From Time" (${timeFrom}).</p>
+          </div>
+        `;
+        return;
+      }
+
+      // 2. Fetch fresh teachers if needed
+      if (!ALL_TEACHERS || ALL_TEACHERS.length === 0) {
+        const { data: tData } = await db.from('teachers').select('*').order('created_at', { ascending: false });
+        ALL_TEACHERS = tData || [];
+      }
+
+      // Filter only Teaching Staff (exclude Managers and other non-teaching staff)
+      const teachingStaff = (ALL_TEACHERS || []).filter(t => {
+        let m = {};
+        try { m = JSON.parse(t.notes || '{}'); } catch(e){}
+        const isExcluded = m.employee_type === 'manager' || m.employee_type === 'other_staff' || String(t.id).startsWith('MGR-') || String(t.id).startsWith('STF-');
+        return !isExcluded && t.status !== 'Inactive' && t.status !== 'Terminated';
+      });
+
+      // Filter by Teacher Gender and Query
+      const matchedTeachers = teachingStaff.filter(t => {
+        let tGender = t.gender;
+        if (!tGender) {
+          const accs = getTeacherAccounts();
+          tGender = accs[t.id]?.gender || 'Male';
+        }
+        if (genderFilter !== 'all' && tGender !== genderFilter) return false;
+        if (teacherQuery && !(t.full_name || '').toLowerCase().includes(teacherQuery)) return false;
+        return true;
+      });
+
+      // 3. Fetch schedules for the target days
+      let schedulesQuery = db.from('class_schedules').select('*, students(name, course_id, status)');
+      if (daysToEvaluate.length === 1) {
+        schedulesQuery = schedulesQuery.eq('day_of_week', daysToEvaluate[0]);
+      } else {
+        schedulesQuery = schedulesQuery.in('day_of_week', daysToEvaluate);
+      }
+      const { data: scheds } = await schedulesQuery;
+      const allSchedules = scheds || [];
+
+      // 4. Generate 30-min evaluation slots in requested window
+      const evalSlots = [];
+      for (let m = fromMin; m < toMin; m += 30) {
+        const slotStartH = Math.floor(m / 60);
+        const slotStartM = m % 60;
+        const slotEndH = Math.floor((m + 30) / 60);
+        const slotEndM = (m + 30) % 60;
+
+        const startStr = `${String(slotStartH).padStart(2, '0')}:${String(slotStartM).padStart(2, '0')}`;
+        const endStr = `${String(slotEndH).padStart(2, '0')}:${String(slotEndM).padStart(2, '0')}`;
+        
+        const p1 = slotStartH >= 12 ? 'PM' : 'AM';
+        const h12_1 = slotStartH % 12 === 0 ? 12 : slotStartH % 12;
+        const label = `${h12_1}:${String(slotStartM).padStart(2, '0')} ${p1}`;
+
+        evalSlots.push({ startStr, endStr, label, startMin: m, endMin: m + 30 });
+      }
+
+      // 5. Evaluate each teacher's availability
+      const teacherReports = [];
+      let totalFreeSlotsAll = 0;
+      let totalBookedClassesAll = 0;
+
+      matchedTeachers.forEach(teacher => {
+        let tGender = teacher.gender;
+        if (!tGender) {
+          const accs = getTeacherAccounts();
+          tGender = accs[teacher.id]?.gender || 'Male';
+        }
+
+        const teacherScheds = allSchedules.filter(s => String(s.teacher_id) === String(teacher.id));
+        const shiftStr = teacher.working_shift || '';
+
+        // Check each slot in window
+        const slotResults = evalSlots.map(slot => {
+          const bookedSchedule = teacherScheds.find(s => {
+            const sStart = (s.start_time || '').slice(0, 5);
+            return sStart === slot.startStr;
+          });
+
+          const inShift = isSlotInTeacherShift(slot.startStr, shiftStr);
+
+          if (bookedSchedule) {
+            return {
+              ...slot,
+              status: 'booked',
+              schedule: bookedSchedule,
+              studentName: bookedSchedule.students?.name || 'Enrolled Student',
+              course: bookedSchedule.students?.course_id || 'Class',
+              inShift
+            };
+          } else {
+            return {
+              ...slot,
+              status: 'free',
+              inShift
+            };
+          }
+        });
+
+        const freeSlots = slotResults.filter(s => s.status === 'free');
+        const bookedSlots = slotResults.filter(s => s.status === 'booked');
+
+        totalFreeSlotsAll += freeSlots.length;
+        totalBookedClassesAll += bookedSlots.length;
+
+        teacherReports.push({
+          teacher,
+          gender: tGender,
+          shiftStr,
+          slotResults,
+          freeSlotsCount: freeSlots.length,
+          bookedSlotsCount: bookedSlots.length,
+          totalSlots: evalSlots.length
+        });
+      });
+
+      // 6. Apply statusFilter
+      let filteredReports = teacherReports;
+      if (statusFilter === 'free_only') {
+        filteredReports = teacherReports.filter(r => r.freeSlotsCount > 0);
+      } else if (statusFilter === 'fully_free') {
+        filteredReports = teacherReports.filter(r => r.bookedSlotsCount === 0);
+      } else if (statusFilter === 'busy_only') {
+        filteredReports = teacherReports.filter(r => r.bookedSlotsCount > 0);
+      }
+
+      // Sort: Teachers with most free slots first
+      filteredReports.sort((a, b) => b.freeSlotsCount - a.freeSlotsCount);
+
+      // 7. Update KPIs
+      const kpiAvail = document.getElementById('kpiSchedAvailableTeachers');
+      const kpiFree = document.getElementById('kpiSchedTotalFreeSlots');
+      const kpiBooked = document.getElementById('kpiSchedTotalBookedClasses');
+      const kpiRate = document.getElementById('kpiSchedAvailabilityRate');
+
+      if (kpiAvail) kpiAvail.innerText = filteredReports.filter(r => r.freeSlotsCount > 0).length;
+      if (kpiFree) kpiFree.innerText = totalFreeSlotsAll;
+      if (kpiBooked) kpiBooked.innerText = totalBookedClassesAll;
+      
+      const totalAllSlots = totalFreeSlotsAll + totalBookedClassesAll;
+      const freeRate = totalAllSlots > 0 ? Math.round((totalFreeSlotsAll / totalAllSlots) * 100) : 100;
+      if (kpiRate) kpiRate.innerText = `${freeRate}%`;
+
+      const shiftBadge = document.getElementById('badgeSchedSearchActiveShift');
+      if (shiftBadge) {
+        shiftBadge.innerText = `${evalSlots.length} Slots (${timeFrom} - ${timeTo})`;
+      }
+
+      // 8. Render Results View
+      if (filteredReports.length === 0) {
+        container.innerHTML = `
+          <div class="p-12 bg-white rounded-2xl border border-slate-200 text-center shadow-xs">
+            <div class="w-14 h-14 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center text-2xl mx-auto mb-3">
+              <i class="fa-solid fa-user-slash"></i>
+            </div>
+            <h4 class="font-black text-slate-800 text-base">No Matching Teachers Found</h4>
+            <p class="text-xs text-slate-400 mt-1 max-w-md mx-auto">
+              No teachers matched your current filter criteria (${genderFilter !== 'all' ? genderFilter : 'All Genders'}, ${timeFrom} to ${timeTo}). Try adjusting the time window or availability filter.
+            </p>
+            <button onclick="resetScheduleSearchFilters()" class="mt-4 px-4 py-2 bg-emerald-700 text-white rounded-xl text-xs font-bold hover:bg-emerald-800 transition">
+              <i class="fa-solid fa-rotate-left mr-1"></i> Reset All Filters
+            </button>
+          </div>
+        `;
+        return;
+      }
+
+      const activeDayName = daysToEvaluate.length === 1 ? DAY_NAMES[daysToEvaluate[0]] : 'Monday–Friday';
+      const targetDayId = daysToEvaluate[0];
+
+      container.innerHTML = filteredReports.map(report => {
+        const t = report.teacher;
+        const isMale = report.gender === 'Male';
+        const genderBadge = isMale 
+          ? `<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-200"><i class="fa-solid fa-mars mr-1"></i>Male Qari</span>`
+          : `<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-50 text-rose-700 border border-rose-200"><i class="fa-solid fa-venus mr-1"></i>Female Mu'allama</span>`;
+
+        const availBadge = report.freeSlotsCount === report.totalSlots
+          ? `<span class="px-2.5 py-1 rounded-xl text-xs font-black bg-emerald-100 text-emerald-800 border border-emerald-300 flex items-center gap-1"><i class="fa-solid fa-circle-check text-emerald-600"></i> 100% Free (${report.freeSlotsCount}/${report.totalSlots} Slots)</span>`
+          : (report.freeSlotsCount > 0
+              ? `<span class="px-2.5 py-1 rounded-xl text-xs font-black bg-teal-50 text-teal-800 border border-teal-300 flex items-center gap-1"><i class="fa-solid fa-clock text-teal-600"></i> ${report.freeSlotsCount} Free / ${report.bookedSlotsCount} Booked</span>`
+              : `<span class="px-2.5 py-1 rounded-xl text-xs font-black bg-rose-50 text-rose-800 border border-rose-200 flex items-center gap-1"><i class="fa-solid fa-ban text-rose-600"></i> Fully Booked (${report.bookedSlotsCount} Classes)</span>`);
+
+        return `
+          <div class="bg-white rounded-2xl border border-slate-200 p-5 shadow-xs hover:shadow-md transition">
+            <!-- TEACHER CARD HEADER -->
+            <div class="flex items-start justify-between flex-wrap gap-3 pb-4 border-b border-slate-100">
+              <div class="flex items-center gap-3.5">
+                <div class="w-12 h-12 rounded-2xl ${isMale ? 'bg-gradient-to-tr from-blue-700 to-indigo-900' : 'bg-gradient-to-tr from-rose-600 to-pink-800'} text-white flex items-center justify-center font-black text-lg shadow-sm flex-shrink-0">
+                  ${(t.full_name || 'T').charAt(0)}
+                </div>
+                <div>
+                  <div class="flex items-center gap-2 flex-wrap">
+                    <h3 class="font-extrabold text-base text-slate-900 tracking-tight">${t.full_name}</h3>
+                    ${genderBadge}
+                    <span class="text-xs text-slate-400 font-mono font-bold">(${t.id})</span>
+                  </div>
+                  <div class="flex items-center gap-3 mt-1 text-xs text-slate-500 flex-wrap">
+                    <span><i class="fa-solid fa-briefcase text-slate-400 mr-1"></i>Shift: <strong>${t.working_shift || 'Flexible Shift'}</strong></span>
+                    <span><i class="fa-solid fa-phone text-emerald-600 mr-1"></i>${t.phone || '--'}</span>
+                    <span><i class="fa-solid fa-money-bill-wave text-amber-600 mr-1"></i>Rate: <strong>${t.rate_per_slot || 2200} PKR</strong>/slot</span>
+                  </div>
+                </div>
+              </div>
+
+              <div class="flex items-center gap-2">
+                ${availBadge}
+                <button onclick="openScheduleMatrix('${t.id}')" class="px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition flex items-center gap-1" title="View Full 2D Weekly Matrix">
+                  <i class="fa-solid fa-table-cells text-slate-500"></i> Full Matrix
+                </button>
+              </div>
+            </div>
+
+            <!-- SLOTS VISUAL BREAKDOWN IN REQUESTED WINDOW -->
+            <div class="pt-4">
+              <div class="flex items-center justify-between mb-2 text-xs">
+                <span class="font-bold text-slate-600 flex items-center gap-1.5">
+                  <i class="fa-solid fa-calendar-day text-brandEmerald"></i>
+                  ${activeDayName} Availability (${timeFrom} to ${timeTo}):
+                </span>
+                <span class="text-[11px] text-slate-400">
+                  Click any <strong class="text-emerald-700">Free Slot</strong> to assign a student
+                </span>
+              </div>
+
+              <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2">
+                ${report.slotResults.map(slot => {
+                  if (slot.status === 'free') {
+                    return `
+                      <button onclick="quickAssignFromSearch('${t.id}', ${targetDayId}, '${slot.startStr}', '${slot.endStr}')"
+                        class="p-2.5 rounded-xl border border-emerald-300 bg-emerald-50/80 hover:bg-emerald-100 hover:border-emerald-500 text-left transition group shadow-2xs flex flex-col justify-between"
+                        title="Click to Assign Student to ${slot.startStr} - ${slot.endStr}">
+                        <div class="flex items-center justify-between">
+                          <span class="font-mono font-black text-xs text-emerald-950">${slot.label}</span>
+                          <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                        </div>
+                        <div class="mt-1 flex items-center justify-between text-[11px] font-extrabold text-emerald-700">
+                          <span>Free Slot</span>
+                          <i class="fa-solid fa-plus text-[10px] opacity-70 group-hover:scale-125 transition"></i>
+                        </div>
+                      </button>
+                    `;
+                  } else {
+                    return `
+                      <div class="p-2.5 rounded-xl border border-amber-200 bg-amber-50/70 text-left shadow-2xs flex flex-col justify-between"
+                        title="Booked: ${slot.studentName} (${slot.course})">
+                        <div class="flex items-center justify-between">
+                          <span class="font-mono font-bold text-xs text-slate-700">${slot.label}</span>
+                          <span class="px-1.5 py-0.2 rounded text-[8px] font-bold bg-amber-200 text-amber-900">BOOKED</span>
+                        </div>
+                        <div class="mt-1">
+                          <p class="text-[11px] font-bold text-slate-900 truncate" title="${slot.studentName}">${slot.studentName}</p>
+                          <p class="text-[9px] text-slate-500 truncate">${slot.course}</p>
+                        </div>
+                      </div>
+                    `;
+                  }
+                }).join('')}
+              </div>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    async function quickAssignFromSearch(teacherId, day, startTime, endTime) {
+      const teacher = (ALL_TEACHERS || []).find(t => String(t.id) === String(teacherId));
+      if (!teacher) {
+        alert("Teacher profile could not be found.");
+        return;
+      }
+      CURRENT_MATRIX_TEACHER = teacher;
+      await openSlotBookingModal(day, startTime, endTime);
     }
 
     function openModal(id) {
