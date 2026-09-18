@@ -63,14 +63,34 @@
     .font-mono, td.font-mono, span.font-mono, div.font-mono {
       font-family: 'JetBrains Mono', monospace !important;
       font-feature-settings: 'tnum' 1, 'zero' 1;
-      letter-spacing: -0.02em;
+      letter-spacing: -0.025em;
     }
 
-    /* Primary KPI Number Displays & Badges */
-    [id^="kpiDash"], [id^="payrollKpi"], [id^="kpiSched"], [id^="dashLive"], [id^="sidebarActive"], .num-display {
+    /* Primary KPI Number Displays & Badges (Sharp, Modern, Luxury Tabular) */
+    .font-num, [id^="kpiDash"], [id^="payrollKpi"], [id^="kpiSched"], [id^="dashLive"], [id^="sidebarActive"], .num-display {
       font-family: 'Outfit', 'Plus Jakarta Sans', sans-serif !important;
-      font-feature-settings: 'tnum' 1;
-      letter-spacing: -0.03em;
+      font-weight: 700 !important;
+      font-feature-settings: 'tnum' 1, 'ss01' 1 !important;
+      letter-spacing: -0.04em !important;
+    }
+
+    /* Custom Floating Dropdowns Animation */
+    .custom-select-trigger {
+      cursor: pointer;
+      user-select: none;
+    }
+    .custom-select-menu {
+      animation: customDropdownIn 0.16s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    @keyframes customDropdownIn {
+      from {
+        opacity: 0;
+        transform: translateY(-6px) scale(0.98);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+      }
     }
 
     /* ============================================================ */
@@ -1312,7 +1332,7 @@
           </div>
           <div>
             <span class="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">Available Teachers</span>
-            <span class="text-xl font-black text-emerald-700" id="kpiSchedAvailableTeachers">0</span>
+            <span class="text-2xl font-bold font-num text-emerald-700 tracking-tight" id="kpiSchedAvailableTeachers">0</span>
           </div>
         </div>
 
@@ -1322,7 +1342,7 @@
           </div>
           <div>
             <span class="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">Total Free Slots</span>
-            <span class="text-xl font-black text-teal-700" id="kpiSchedTotalFreeSlots">0</span>
+            <span class="text-2xl font-bold font-num text-teal-700 tracking-tight" id="kpiSchedTotalFreeSlots">0</span>
           </div>
         </div>
 
@@ -1332,7 +1352,7 @@
           </div>
           <div>
             <span class="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">Booked Classes</span>
-            <span class="text-xl font-black text-amber-700" id="kpiSchedTotalBookedClasses">0</span>
+            <span class="text-2xl font-bold font-num text-amber-700 tracking-tight" id="kpiSchedTotalBookedClasses">0</span>
           </div>
         </div>
 
@@ -1342,7 +1362,7 @@
           </div>
           <div>
             <span class="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">Window Availability</span>
-            <span class="text-xl font-black text-blue-700" id="kpiSchedAvailabilityRate">0%</span>
+            <span class="text-2xl font-bold font-num text-blue-700 tracking-tight" id="kpiSchedAvailabilityRate">0<span class="text-sm font-semibold opacity-70 ml-0.5">%</span></span>
           </div>
         </div>
       </div>
@@ -10139,6 +10159,114 @@ Web Portal: https://alhuda-lms.vercel.app`;
       toSel.value = '18:00';
     }
 
+    // ============================================================
+    // AESTHETIC CUSTOM FLOATING DROPDOWN COMPONENT ENGINE
+    // Replaces Windows/Chrome native square select popups with sleek floating menus!
+    // ============================================================
+    function initCustomSelect(selectId) {
+      const selectEl = document.getElementById(selectId);
+      if (!selectEl) return;
+
+      const parent = selectEl.parentElement;
+      if (!parent) return;
+
+      // Clean any previously generated custom wrapper
+      const existing = parent.querySelector(`.custom-select-wrapper[data-select="${selectId}"]`);
+      if (existing) existing.remove();
+
+      selectEl.classList.add('hidden'); // hide native clunky select
+
+      const wrapper = document.createElement('div');
+      wrapper.className = 'custom-select-wrapper relative w-full';
+      wrapper.setAttribute('data-select', selectId);
+
+      const trigger = document.createElement('button');
+      trigger.type = 'button';
+      trigger.className = 'custom-select-trigger w-full p-2.5 bg-white border border-slate-300 hover:border-emerald-600 rounded-xl font-bold text-xs text-slate-800 shadow-2xs transition flex items-center justify-between focus:outline-none focus:ring-2 focus:ring-emerald-500/20';
+
+      const labelSpan = document.createElement('span');
+      labelSpan.className = 'custom-select-label truncate text-left flex-1';
+
+      const chevron = document.createElement('i');
+      chevron.className = 'fa-solid fa-chevron-down text-emerald-600 text-[11px] transition-transform duration-200 ml-2 shrink-0';
+
+      trigger.appendChild(labelSpan);
+      trigger.appendChild(chevron);
+
+      const menu = document.createElement('div');
+      menu.className = 'custom-select-menu hidden absolute left-0 right-0 top-full mt-1.5 bg-white/98 backdrop-blur-md rounded-2xl border border-emerald-100 shadow-2xl z-50 p-1.5 space-y-0.5 max-h-64 overflow-y-auto custom-scrollbar';
+
+      function renderItems() {
+        menu.innerHTML = '';
+        const curVal = selectEl.value;
+        const activeOpt = selectEl.options[selectEl.selectedIndex] || selectEl.options[0];
+        labelSpan.innerText = activeOpt ? activeOpt.text : 'Select...';
+
+        Array.from(selectEl.options).forEach(opt => {
+          const item = document.createElement('div');
+          const isSelected = opt.value === curVal;
+          item.className = `custom-select-item px-3 py-2 rounded-xl text-xs transition cursor-pointer flex items-center justify-between ${
+            isSelected 
+              ? 'bg-emerald-100/90 text-emerald-950 font-bold border border-emerald-300/70 shadow-2xs' 
+              : 'font-semibold text-slate-700 hover:bg-emerald-50 hover:text-emerald-950'
+          }`;
+          item.innerHTML = `
+            <span class="truncate">${opt.text}</span>
+            ${isSelected ? '<i class="fa-solid fa-check text-emerald-600 text-xs shrink-0 ml-2"></i>' : ''}
+          `;
+          item.onclick = (e) => {
+            e.stopPropagation();
+            selectEl.value = opt.value;
+            selectEl.dispatchEvent(new Event('change', { bubbles: true }));
+            renderItems();
+            closeAllCustomSelects();
+          };
+          menu.appendChild(item);
+        });
+      }
+
+      renderItems();
+
+      trigger.onclick = (e) => {
+        e.stopPropagation();
+        const isOpen = !menu.classList.contains('hidden');
+        closeAllCustomSelects();
+        if (!isOpen) {
+          renderItems();
+          menu.classList.remove('hidden');
+          chevron.classList.add('rotate-180');
+          trigger.classList.add('border-emerald-600', 'ring-2', 'ring-emerald-500/20');
+        }
+      };
+
+      wrapper.appendChild(trigger);
+      wrapper.appendChild(menu);
+      parent.appendChild(wrapper);
+
+      selectEl.addEventListener('change', () => {
+        const activeOpt = selectEl.options[selectEl.selectedIndex];
+        if (activeOpt) labelSpan.innerText = activeOpt.text;
+      });
+    }
+
+    function refreshScheduleSearchCustomSelects() {
+      ['schedSearchDay', 'schedSearchTimeFrom', 'schedSearchTimeTo', 'schedSearchGender', 'schedSearchStatus'].forEach(id => {
+        initCustomSelect(id);
+      });
+    }
+
+    function closeAllCustomSelects() {
+      document.querySelectorAll('.custom-select-menu').forEach(m => m.classList.add('hidden'));
+      document.querySelectorAll('.custom-select-trigger').forEach(b => {
+        b.classList.remove('border-emerald-600', 'ring-2', 'ring-emerald-500/20');
+        const icon = b.querySelector('.fa-chevron-down');
+        if (icon) icon.classList.remove('rotate-180');
+      });
+    }
+
+    // Global outside click listener to close custom dropdowns
+    document.addEventListener('click', () => closeAllCustomSelects());
+
     function initScheduleSearch() {
       if (!SCHED_SEARCH_INITIALIZED) {
         populateScheduleSearchTimeDropdowns();
@@ -10154,6 +10282,7 @@ Web Portal: https://alhuda-lms.vercel.app`;
 
         SCHED_SEARCH_INITIALIZED = true;
       }
+      refreshScheduleSearchCustomSelects();
       executeScheduleSearch();
     }
 
@@ -10175,6 +10304,7 @@ Web Portal: https://alhuda-lms.vercel.app`;
         fromSel.value = '00:00';
         toSel.value = '24:00';
       }
+      refreshScheduleSearchCustomSelects();
       executeScheduleSearch();
     }
 
@@ -10193,6 +10323,7 @@ Web Portal: https://alhuda-lms.vercel.app`;
       if (sSel) sSel.value = 'free_only';
       const qInp = document.getElementById('schedSearchTeacherQuery');
       if (qInp) qInp.value = '';
+      refreshScheduleSearchCustomSelects();
       executeScheduleSearch();
     }
 
@@ -10378,7 +10509,7 @@ Web Portal: https://alhuda-lms.vercel.app`;
       
       const totalAllSlots = totalFreeSlotsAll + totalBookedClassesAll;
       const freeRate = totalAllSlots > 0 ? Math.round((totalFreeSlotsAll / totalAllSlots) * 100) : 100;
-      if (kpiRate) kpiRate.innerText = `${freeRate}%`;
+      if (kpiRate) kpiRate.innerHTML = `${freeRate}<span class="text-sm font-semibold opacity-70 ml-0.5">%</span>`;
 
       const shiftBadge = document.getElementById('badgeSchedSearchActiveShift');
       if (shiftBadge) {
