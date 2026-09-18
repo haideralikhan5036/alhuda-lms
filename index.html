@@ -4113,6 +4113,7 @@
           <div>
             <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Student / Family</span>
             <span id="matrixActionStudentName" class="text-xs font-extrabold text-slate-900">--</span>
+            <span id="matrixActionAdmissionInfo" class="text-[10px] text-emerald-700 font-bold block mt-0.5"><i class="fa-solid fa-calendar-check mr-1"></i>Admitted: --</span>
           </div>
           <div class="text-right">
             <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Current Status</span>
@@ -4125,21 +4126,35 @@
         <!-- ACTION OPTION BUTTONS -->
         <div class="space-y-2">
           
-          <!-- Option 1: Not Enrolled / Joined Later -->
+          <!-- Option 1: Admitted / Joined This Month (Auto-Excludes ALL Prior Months) -->
+          <button type="button" onclick="applyMatrixAction('set_admission_date')" class="w-full p-3 rounded-xl border-2 border-emerald-300 bg-emerald-50/50 hover:bg-emerald-100/70 text-left transition flex items-center justify-between group">
+            <div class="flex items-center gap-2.5">
+              <span class="w-8 h-8 rounded-lg bg-emerald-700 text-white flex items-center justify-center text-sm font-bold shadow-2xs">
+                <i class="fa-solid fa-calendar-plus"></i>
+              </span>
+              <div>
+                <strong class="text-xs text-emerald-900 block group-hover:text-emerald-950 font-black">Student Admitted / Joined This Month</strong>
+                <span class="text-[10px] text-emerald-700 block">Auto-marks all prior months as Not Enrolled ($0 fee &amp; ZERO arrears)!</span>
+              </div>
+            </div>
+            <i class="fa-solid fa-chevron-right text-emerald-600 text-xs"></i>
+          </button>
+
+          <!-- Option 2: Not Enrolled / Joined Later -->
           <button type="button" onclick="applyMatrixAction('not_enrolled')" class="w-full p-3 rounded-xl border border-slate-200 hover:border-slate-400 hover:bg-slate-50 text-left transition flex items-center justify-between group">
             <div class="flex items-center gap-2.5">
               <span class="w-8 h-8 rounded-lg bg-slate-100 text-slate-600 flex items-center justify-center text-sm font-bold">
                 <i class="fa-solid fa-user-clock"></i>
               </span>
               <div>
-                <strong class="text-xs text-slate-900 block group-hover:text-emerald-800">Mark as Not Enrolled / Joined Later</strong>
-                <span class="text-[10px] text-slate-400 block">Student admitted in a later month ($0 fee, no overdue arrears)</span>
+                <strong class="text-xs text-slate-900 block group-hover:text-slate-950">Mark as Not Enrolled / Joined Later</strong>
+                <span class="text-[10px] text-slate-400 block">Auto-excludes this &amp; all prior months ($0 fee, no arrears)</span>
               </div>
             </div>
             <i class="fa-solid fa-chevron-right text-slate-400 text-xs"></i>
           </button>
 
-          <!-- Option 2: Approved Leave (Fee Waived) -->
+          <!-- Option 3: Approved Leave (Fee Waived) -->
           <button type="button" onclick="applyMatrixAction('leave')" class="w-full p-3 rounded-xl border border-blue-200 hover:border-blue-400 hover:bg-blue-50/50 text-left transition flex items-center justify-between group">
             <div class="flex items-center gap-2.5">
               <span class="w-8 h-8 rounded-lg bg-blue-100 text-blue-700 flex items-center justify-center text-sm font-bold">
@@ -4153,21 +4168,21 @@
             <i class="fa-solid fa-chevron-right text-slate-400 text-xs"></i>
           </button>
 
-          <!-- Option 3: Reset to Default Due -->
+          <!-- Option 4: Reset to Default Due -->
           <button type="button" onclick="applyMatrixAction('clear')" class="w-full p-3 rounded-xl border border-rose-200 hover:border-rose-400 hover:bg-rose-50/50 text-left transition flex items-center justify-between group">
             <div class="flex items-center gap-2.5">
               <span class="w-8 h-8 rounded-lg bg-rose-100 text-rose-700 flex items-center justify-center text-sm font-bold">
                 <i class="fa-solid fa-rotate-left"></i>
               </span>
               <div>
-                <strong class="text-xs text-slate-900 block group-hover:text-rose-800">Reset to Default (Unpaid Due)</strong>
-                <span class="text-[10px] text-slate-400 block">Remove leave/not-enrolled override &amp; restore normal calculation</span>
+                <strong class="text-xs text-slate-900 block group-hover:text-rose-800">Reset to Default Calculation</strong>
+                <span class="text-[10px] text-slate-400 block">Remove manual overrides &amp; restore LMS automatic sync</span>
               </div>
             </div>
             <i class="fa-solid fa-chevron-right text-slate-400 text-xs"></i>
           </button>
 
-          <!-- Option 4: Collect Fee for This Month -->
+          <!-- Option 5: Collect Fee for This Month -->
           <button type="button" onclick="proceedToCollectFromMatrixModal()" class="w-full p-3 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-left transition flex items-center justify-between shadow-2xs">
             <div class="flex items-center gap-2.5">
               <span class="w-8 h-8 rounded-lg bg-white/20 text-white flex items-center justify-center text-sm font-bold">
@@ -9114,6 +9129,126 @@ Al-Huda Islamic Centre Management`;
       return { isLeave: false, reason: '' };
     }
 
+    // -------------------------------------------------------------
+    // ENROLLMENT & JOINING DATE DETECTION ENGINE
+    // Auto-detects student/family admission month from LMS data.
+    // Pre-admission months are automatically $0 expected fee & zero arrears!
+    // -------------------------------------------------------------
+    function getFamilyEnrollmentInfo(fam) {
+      if (!fam) return { year: 2026, monthIndex: 0, monthName: 'January', source: 'default' };
+      const fIdUpper = String(fam.id || '').toUpperCase();
+
+      // 1. Check manual enrollment override in local storage
+      const overrides = getStoredMatrixOverrides();
+      const admKey = `ADMISSION_${fIdUpper}`;
+      if (overrides[admKey] && overrides[admKey].year !== undefined && overrides[admKey].monthIndex !== undefined) {
+        const mi = parseInt(overrides[admKey].monthIndex, 10);
+        const yr = parseInt(overrides[admKey].year, 10);
+        return {
+          year: yr,
+          monthIndex: mi,
+          monthName: FEE_CONFIG.MONTHS[mi] || 'January',
+          source: 'manual_override'
+        };
+      }
+
+      // 2. Check if any student in the family has joining_date or created_at
+      let earliestDate = null;
+      const regStus = (fam.students || []).filter(s => (s.status || '').toLowerCase() !== 'trial');
+      const stusToCheck = regStus.length > 0 ? regStus : (fam.students || []);
+
+      stusToCheck.forEach(s => {
+        if (s.joining_date) {
+          const d = new Date(s.joining_date);
+          if (!isNaN(d.getTime())) {
+            if (!earliestDate || d < earliestDate) earliestDate = d;
+          }
+        } else if (s.created_at) {
+          const d = new Date(s.created_at);
+          if (!isNaN(d.getTime())) {
+            if (!earliestDate || d < earliestDate) earliestDate = d;
+          }
+        }
+      });
+
+      // 3. Check family created_at
+      if (!earliestDate && fam.created_at) {
+        const d = new Date(fam.created_at);
+        if (!isNaN(d.getTime())) earliestDate = d;
+      }
+
+      // 4. Check family notes for joined/admission date string
+      if (!earliestDate && fam.notes) {
+        const m = String(fam.notes).match(/joined:?\s*(\d{4})[-/](\d{1,2})/i) || String(fam.notes).match(/(\d{4})[-/](\d{1,2})/);
+        if (m) {
+          const y = parseInt(m[1], 10);
+          const mi = parseInt(m[2], 10) - 1;
+          if (y >= 2020 && mi >= 0 && mi <= 11) {
+            return {
+              year: y,
+              monthIndex: mi,
+              monthName: FEE_CONFIG.MONTHS[mi],
+              source: 'notes_detected'
+            };
+          }
+        }
+      }
+
+      // 5. Also check earliest recorded fee payment
+      const feeRecords = getStoredFeeRecords().filter(r => String(r.familyId).toUpperCase() === fIdUpper && parseFloat(r.amountPaid || 0) > 0);
+      if (feeRecords.length > 0) {
+        let earliestFeeScore = Infinity;
+        let earliestFeeMonthIdx = 0;
+        let earliestFeeYear = 2026;
+        feeRecords.forEach(r => {
+          const rY = parseInt(r.year, 10);
+          const rMIdx = FEE_CONFIG.MONTHS.findIndex(m => m.toLowerCase() === String(r.month).toLowerCase());
+          if (rY > 2020 && rMIdx !== -1) {
+            const sc = rY * 100 + rMIdx;
+            if (sc < earliestFeeScore) {
+              earliestFeeScore = sc;
+              earliestFeeMonthIdx = rMIdx;
+              earliestFeeYear = rY;
+            }
+          }
+        });
+        if (earliestFeeScore < Infinity) {
+          const feeDateObj = new Date(earliestFeeYear, earliestFeeMonthIdx, 1);
+          if (!earliestDate || feeDateObj < earliestDate) {
+            earliestDate = feeDateObj;
+          }
+        }
+      }
+
+      if (earliestDate) {
+        const y = earliestDate.getFullYear();
+        const mi = earliestDate.getMonth();
+        return {
+          year: y,
+          monthIndex: mi,
+          monthName: FEE_CONFIG.MONTHS[mi],
+          source: 'lms_detected'
+        };
+      }
+
+      return { year: 2026, monthIndex: 0, monthName: 'January', source: 'default' };
+    }
+
+    function isFamilyPreAdmission(fam, monthNameOrIdx, year) {
+      if (!fam) return false;
+      const enroll = getFamilyEnrollmentInfo(fam);
+      const mIdx = typeof monthNameOrIdx === 'number'
+        ? monthNameOrIdx
+        : FEE_CONFIG.MONTHS.findIndex(m => m.toLowerCase() === String(monthNameOrIdx).toLowerCase());
+
+      if (mIdx === -1) return false;
+      const yInt = parseInt(year, 10);
+
+      const targetScore = yInt * 100 + mIdx;
+      const enrollScore = enroll.year * 100 + enroll.monthIndex;
+      return targetScore < enrollScore;
+    }
+
     // ============================================================
     // 1. DASHBOARD ANALYTICS & MULTI-CURRENCY STATS
     // ============================================================
@@ -9132,6 +9267,7 @@ Al-Huda Islamic Centre Management`;
 
       const families = CACHED_FEE_FAMILIES || [];
       const records = getStoredFeeRecords();
+      const overrides = getStoredMatrixOverrides();
 
       // Total students
       let totalStudentsCount = 0;
@@ -9149,6 +9285,14 @@ Al-Huda Islamic Centre Management`;
       families.forEach(f => {
         const cur = (f.currency || 'USD').toUpperCase();
         if (!currencyRevenue[cur]) currencyRevenue[cur] = { expected: 0, received: 0 };
+
+        // If family was not admitted yet in selected month, expected tuition is 0
+        const fUpper = String(f.id).toUpperCase();
+        const mLower = selectedMonth.toLowerCase();
+        const isPreAdm = isFamilyPreAdmission(f, selectedMonth, selectedYear);
+        const isExplicitNotEnrolled = overrides[`${fUpper}_${mLower}_${selectedYear}`]?.status === 'not_enrolled';
+        if (isPreAdm || isExplicitNotEnrolled) return;
+
         currencyRevenue[cur].expected += parseFloat(f.monthly_fee || 0);
       });
 
@@ -9177,12 +9321,26 @@ Al-Huda Islamic Centre Management`;
       // Check leaves and pending families
       const pendingFamiliesList = [];
       let onLeaveCount = 0;
+      let activeEnrolledThisMonth = 0;
 
       families.forEach(fam => {
         const famUpper = String(fam.id).toUpperCase();
-        const leaveCheck = checkFamilyLeaveInMonth(fam.id, selectedMonth, selectedYear);
+        const mLower = selectedMonth.toLowerCase();
+        const overrideKey = `${famUpper}_${mLower}_${selectedYear}`;
+        const manualOverride = overrides[overrideKey];
 
-        if (leaveCheck.isLeave) {
+        // 1. Skip pre-admission or explicitly not-enrolled families
+        const isPreAdm = isFamilyPreAdmission(fam, selectedMonth, selectedYear);
+        const isExplicitNotEnrolled = manualOverride && manualOverride.status === 'not_enrolled';
+        if (isPreAdm || isExplicitNotEnrolled) {
+          return;
+        }
+
+        activeEnrolledThisMonth++;
+
+        // 2. Check approved leave
+        const leaveCheck = checkFamilyLeaveInMonth(fam.id, selectedMonth, selectedYear);
+        if (leaveCheck.isLeave || (manualOverride && manualOverride.status === 'leave')) {
           onLeaveCount++;
           return;
         }
@@ -9212,7 +9370,7 @@ Al-Huda Islamic Centre Management`;
 
       CACHED_PENDING_FEE_LIST = pendingFamiliesList;
 
-      const totalActive = families.length;
+      const totalActive = activeEnrolledThisMonth > 0 ? activeEnrolledThisMonth : families.length;
       const paidCount = Object.keys(paidMap).length;
       const pendingCount = pendingFamiliesList.length;
       const effectiveTotal = Math.max(1, totalActive - onLeaveCount);
@@ -9421,15 +9579,27 @@ Al-Huda Islamic Centre Management`;
       // Calculate previous arrears
       let totalPreviousArrears = 0;
       const unpaidDetails = [];
+      const overrides = getStoredMatrixOverrides();
+      const fIdUpper = String(famId).toUpperCase();
+      const enrollInfo = getFamilyEnrollmentInfo(fam);
 
       for (let m = 0; m < targetMonthIdx; m++) {
         const mName = FEE_CONFIG.MONTHS[m];
         const mKey = mName.toLowerCase();
+        const overrideKey = `${fIdUpper}_${mKey}_${targetYear}`;
+        const manualOverride = overrides[overrideKey];
 
-        // Check if student was on approved leave in that past month
+        // 1. Skip Pre-Admission Months (Joined in later month: ZERO expected fee & ZERO arrears)
+        const isPreAdm = isFamilyPreAdmission(fam, m, targetYear);
+        const isExplicitNotEnrolled = manualOverride && manualOverride.status === 'not_enrolled';
+        if (isPreAdm || isExplicitNotEnrolled) {
+          continue;
+        }
+
+        // 2. Check if student was on approved leave in that past month
         const leaveCheck = checkFamilyLeaveInMonth(famId, mName, targetYear);
-        if (leaveCheck.isLeave) {
-          unpaidDetails.push({ month: mName, isLeave: true, reason: leaveCheck.reason });
+        if (leaveCheck.isLeave || (manualOverride && manualOverride.status === 'leave')) {
+          unpaidDetails.push({ month: mName, isLeave: true, reason: leaveCheck.reason || manualOverride?.notes || 'Approved Leave' });
           continue;
         }
 
@@ -9441,7 +9611,7 @@ Al-Huda Islamic Centre Management`;
         }
       }
 
-      const finalPreviousBalance = Math.max(totalPreviousArrears, latestRemainingBalance);
+      const finalPreviousBalance = totalPreviousArrears;
       document.getElementById('feeFormPreviousBalance').value = finalPreviousBalance.toFixed(2);
 
       // Re-evaluate proration if active
@@ -9466,7 +9636,11 @@ Al-Huda Islamic Centre Management`;
         if (leavesPast.length > 0) {
           alertTitle.innerHTML = `<i class="fa-solid fa-circle-check text-emerald-600"></i> Prior Dues Cleared &amp; Leaves Waived`;
           const lStr = leavesPast.map(l => `${l.month} (${l.reason})`).join(', ');
-          alertDesc.innerHTML = `All previous months cleared. Prior leaves waived: <strong>${lStr}</strong>.`;
+          alertDesc.innerHTML = `All previous months cleared. Prior leaves waived: <strong>${lStr}</strong>. Pre-admission months excluded.`;
+          alertBox.classList.remove('hidden');
+        } else if (enrollInfo.monthIndex > 0) {
+          alertTitle.innerHTML = `<i class="fa-solid fa-circle-check text-emerald-600"></i> Prior Dues Cleared (Admitted: ${enrollInfo.monthName} ${enrollInfo.year})`;
+          alertDesc.innerHTML = `All pre-admission months before <strong>${enrollInfo.monthName} ${enrollInfo.year}</strong> are automatically excluded ($0 fee, 0 arrears). Zero overdue balance!`;
           alertBox.classList.remove('hidden');
         } else {
           alertBox.classList.add('hidden');
@@ -9952,25 +10126,15 @@ Al-Huda Islamic Centre Management`;
         const regStus = (fam.students || []).filter(s => (s.status || '').toLowerCase() !== 'trial');
         const stuNames = regStus.map(s => s.name).join(', ') || 'Enrolled Student';
 
+        const enrollInfo = getFamilyEnrollmentInfo(fam);
+
         const months = FEE_CONFIG.MONTHS.map((mName, mIdx) => {
           const mLower = mName.toLowerCase();
           const overrideKey = `${fIdUpper}_${mLower}_${targetYear}`;
           const manualOverride = overrides[overrideKey];
           const feeRec = famMonthMap[fIdUpper] ? famMonthMap[fIdUpper][mLower] : null;
 
-          // Check if student was on approved leave in this month
-          const leaveCheck = checkFamilyLeaveInMonth(fam.id, mName, targetYear);
-          const isFuture = (targetYear > currentRealYear || (targetYear === currentRealYear && mIdx > currentRealMonthIdx));
-
-          if (manualOverride && manualOverride.status === 'not_enrolled') {
-            return { month: mName, isNotEnrolled: true };
-          }
-          if (manualOverride && manualOverride.status === 'leave') {
-            return { month: mName, isLeave: true, note: manualOverride.notes || 'Approved Leave' };
-          }
-          if (leaveCheck.isLeave) {
-            return { month: mName, isLeave: true, note: leaveCheck.reason };
-          }
+          // 1. Payment recorded (always takes priority if money was paid)
           if (feeRec) {
             const isFull = (feeRec.remaining <= 0);
             return {
@@ -9982,6 +10146,34 @@ Al-Huda Islamic Centre Management`;
               paymentDate: feeRec.date || ''
             };
           }
+
+          // 2. Pre-Admission Check (Student joined in a later month: AUTOMATICALLY N/A!)
+          const isPreAdm = isFamilyPreAdmission(fam, mIdx, targetYear);
+          if (isPreAdm) {
+            return {
+              month: mName,
+              isNotEnrolled: true,
+              isPreAdmission: true,
+              reason: `Joined ${enrollInfo.monthName} ${enrollInfo.year}`
+            };
+          }
+
+          // 3. Manual override: not enrolled
+          if (manualOverride && manualOverride.status === 'not_enrolled') {
+            return { month: mName, isNotEnrolled: true, isPreAdmission: false, reason: 'Manual Override: Not Enrolled' };
+          }
+
+          // 4. Approved Leave (Fee Waived)
+          const leaveCheck = checkFamilyLeaveInMonth(fam.id, mName, targetYear);
+          if (manualOverride && manualOverride.status === 'leave') {
+            return { month: mName, isLeave: true, note: manualOverride.notes || 'Approved Leave' };
+          }
+          if (leaveCheck.isLeave) {
+            return { month: mName, isLeave: true, note: leaveCheck.reason };
+          }
+
+          // 5. Future vs Due
+          const isFuture = (targetYear > currentRealYear || (targetYear === currentRealYear && mIdx > currentRealMonthIdx));
           return { month: mName, isFuture, isDue: !isFuture };
         });
 
@@ -10025,7 +10217,7 @@ Al-Huda Islamic Centre Management`;
             cellContent = `<span class="text-blue-700 font-bold text-[10px] block"><i class="fa-solid fa-plane-departure mr-0.5"></i>Leave</span>`;
           } else if (m.isNotEnrolled) {
             cellBg = 'bg-slate-100';
-            cellContent = `<span class="text-slate-400 font-bold text-[10px] block">N/A</span>`;
+            cellContent = `<span class="text-slate-400 font-bold text-[10px] block" title="${m.reason || 'Not Enrolled / Pre-Admission'}">N/A</span>`;
           } else if (m.isPartial) {
             cellBg = 'bg-amber-50';
             cellContent = `
@@ -10084,12 +10276,14 @@ Al-Huda Islamic Centre Management`;
 
     // Matrix Quick Action Popover
     function openMatrixActionModal(famId, month) {
+      const fam = (CACHED_FEE_FAMILIES || []).find(f => String(f.id).toUpperCase() === String(famId).toUpperCase());
       const row = (CACHED_ANNUAL_FEE_MATRIX || []).find(r => String(r.familyId).toUpperCase() === String(famId).toUpperCase());
       if (!row) return;
 
       const m = (row.months || []).find(item => item.month.toLowerCase() === month.toLowerCase()) || {};
       const yrSelect = document.getElementById('feeMatrixYearSelect');
       const year = yrSelect ? parseInt(yrSelect.value, 10) : 2026;
+      const enrollInfo = getFamilyEnrollmentInfo(fam);
 
       let statusHtml = '<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-rose-100 text-rose-800">Due / Unpaid</span>';
       if (m.isPaid) {
@@ -10097,7 +10291,7 @@ Al-Huda Islamic Centre Management`;
       } else if (m.isLeave) {
         statusHtml = `<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-blue-100 text-blue-800">Approved Leave</span>`;
       } else if (m.isNotEnrolled) {
-        statusHtml = `<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-200 text-slate-700">Not Enrolled</span>`;
+        statusHtml = `<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-200 text-slate-700">Not Enrolled ${m.isPreAdmission ? '(Pre-Admission)' : ''}</span>`;
       } else if (m.isPartial) {
         statusHtml = `<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800">Partial (${row.currency} ${m.amountPaid || 0})</span>`;
       } else if (m.isFuture) {
@@ -10113,6 +10307,10 @@ Al-Huda Islamic Centre Management`;
 
       document.getElementById('matrixActionStudentName').innerText = row.studentsNames || row.parentName;
       document.getElementById('matrixActionSubtitle').innerText = `Family ID: ${row.familyId} • ${month} ${year}`;
+      const admInfoEl = document.getElementById('matrixActionAdmissionInfo');
+      if (admInfoEl) {
+        admInfoEl.innerHTML = `<i class="fa-solid fa-calendar-check mr-1"></i>Admitted: <strong>${enrollInfo.monthName} ${enrollInfo.year}</strong> ${enrollInfo.source === 'manual_override' ? '<span class="text-[9px] text-amber-700">(Custom)</span>' : '<span class="text-[9px] text-emerald-600">(LMS Date)</span>'}`;
+      }
       document.getElementById('matrixActionStatusBadge').innerHTML = statusHtml;
 
       openModal('modalMatrixAction');
@@ -10123,26 +10321,103 @@ Al-Huda Islamic Centre Management`;
       const { familyId, month, year } = CURRENT_MATRIX_ACTION_DATA;
       const fIdUpper = String(familyId).toUpperCase();
       const mLower = String(month).toLowerCase();
+      const mIdx = FEE_CONFIG.MONTHS.findIndex(m => m.toLowerCase() === mLower);
+      const targetYearInt = parseInt(year, 10);
 
       const overrides = getStoredMatrixOverrides();
       const overrideKey = `${fIdUpper}_${mLower}_${year}`;
+      const admKey = `ADMISSION_${fIdUpper}`;
 
-      if (actionType === 'clear') {
-        delete overrides[overrideKey];
-      } else {
+      if (actionType === 'set_admission_date') {
+        // Sets this family's admission month & year to this selected month
+        overrides[admKey] = {
+          year: targetYearInt,
+          monthIndex: mIdx,
+          monthName: month,
+          updatedAt: new Date().toISOString()
+        };
+
+        // Clean up individual month overrides before this month so enrollment engine auto-manages them as N/A
+        FEE_CONFIG.MONTHS.forEach((nm, idx) => {
+          if (idx < mIdx) {
+            delete overrides[`${fIdUpper}_${nm.toLowerCase()}_${targetYearInt}`];
+          }
+        });
+
+        saveStoredMatrixOverrides(overrides);
+        closeModal('modalMatrixAction');
+        loadMasterAnnualMatrix();
+        loadFeeDashboardStats();
+        showToastNotification(`Admission set to ${month} ${year}! All prior months are automatically N/A ($0 fee & 0 arrears).`);
+        return;
+      }
+
+      if (actionType === 'not_enrolled') {
+        // Mark this month as not enrolled. Also auto-exclude all prior months!
         overrides[overrideKey] = {
           familyId,
           month,
-          year,
-          status: actionType,
-          notes: actionType === 'not_enrolled' ? 'Not Enrolled (Joined Later)' : 'Approved Leave (Fee Waived)'
+          year: targetYearInt,
+          status: 'not_enrolled',
+          notes: 'Not Enrolled (Joined Later)'
+        };
+
+        // Set admission date to the next month if this was on/after current admission date
+        const famObj = (CACHED_FEE_FAMILIES || []).find(f => String(f.id).toUpperCase() === fIdUpper);
+        const currentEnroll = getFamilyEnrollmentInfo(famObj);
+        const currentEnrollScore = currentEnroll.year * 100 + currentEnroll.monthIndex;
+        const thisScore = targetYearInt * 100 + mIdx;
+        if (thisScore >= currentEnrollScore) {
+          const nextIdx = (mIdx + 1) % 12;
+          const nextYear = targetYearInt + Math.floor((mIdx + 1) / 12);
+          overrides[admKey] = {
+            year: nextYear,
+            monthIndex: nextIdx,
+            monthName: FEE_CONFIG.MONTHS[nextIdx],
+            updatedAt: new Date().toISOString()
+          };
+        }
+
+        // Auto-mark any months before this month as not_enrolled as well
+        FEE_CONFIG.MONTHS.forEach((nm, idx) => {
+          if (idx < mIdx) {
+            overrides[`${fIdUpper}_${nm.toLowerCase()}_${targetYearInt}`] = {
+              familyId,
+              month: nm,
+              year: targetYearInt,
+              status: 'not_enrolled',
+              notes: 'Not Enrolled (Prior to Admission)'
+            };
+          }
+        });
+
+        saveStoredMatrixOverrides(overrides);
+        closeModal('modalMatrixAction');
+        loadMasterAnnualMatrix();
+        loadFeeDashboardStats();
+        showToastNotification(`${month} and all prior months marked as Not Enrolled (N/A)! Arrears cleared.`);
+        return;
+      }
+
+      if (actionType === 'clear') {
+        delete overrides[overrideKey];
+        if (overrides[admKey] && overrides[admKey].year === targetYearInt && overrides[admKey].monthIndex === mIdx) {
+          delete overrides[admKey];
+        }
+      } else if (actionType === 'leave') {
+        overrides[overrideKey] = {
+          familyId,
+          month,
+          year: targetYearInt,
+          status: 'leave',
+          notes: 'Approved Leave (Fee Waived)'
         };
       }
 
       saveStoredMatrixOverrides(overrides);
       closeModal('modalMatrixAction');
 
-      // Optimistic instant re-render of matrix
+      // Optimistic instant re-render of matrix & stats
       loadMasterAnnualMatrix();
       loadFeeDashboardStats();
       showToastNotification(`Status updated for ${month} ${year}!`);
