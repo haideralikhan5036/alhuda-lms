@@ -23,6 +23,9 @@
   <!-- EmailJS SDK for Official Automated Email Dispatch -->
   <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@3/dist/email.min.js"></script>
 
+  <!-- html2pdf.js for 1-Click Client-Side Invoice PDF Generation -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+
   <!-- Al-Huda Curriculum & Digital Islamic Library Engine -->
   <script src="curriculum_data.js"></script>
 
@@ -1575,6 +1578,18 @@
               <div>
                 <label class="block text-xs font-bold text-slate-700 mb-1">Notes / Remarks for Invoice:</label>
                 <input type="text" id="feeFormNotes" placeholder="e.g. Partial payment made" class="w-full p-2.5 bg-white border border-slate-300 rounded-xl text-xs text-slate-800">
+              </div>
+
+              <!-- AUTOMATED OFFICIAL EMAIL NOTIFICATION TOGGLE -->
+              <div class="col-span-full bg-emerald-50/80 border border-emerald-300 p-3 rounded-2xl flex items-center justify-between flex-wrap gap-2.5 shadow-2xs">
+                <label class="flex items-center gap-2 cursor-pointer text-xs font-bold text-emerald-950 select-none">
+                  <input type="checkbox" id="feeToggleAutoSendEmail" checked class="w-4 h-4 rounded text-emerald-700 accent-emerald-700">
+                  <span><i class="fa-solid fa-paper-plane text-emerald-700 mr-1"></i> Auto-Send Official Invoice Email on Payment (والدین کو ای میل بھیجیں)</span>
+                </label>
+                <div class="text-[11px] text-emerald-800 flex items-center gap-1.5">
+                  <span>Sender / CC: <strong id="feeOfficialEmailDisplay" class="font-mono font-bold text-emerald-950">ceoislamiccentre@gmail.com</strong></span>
+                  <button type="button" onclick="promptChangeOfficialEmail()" class="px-2 py-0.5 bg-white border border-emerald-300 hover:bg-emerald-100 text-emerald-900 rounded-md text-[10px] font-extrabold transition">Change Email</button>
+                </div>
               </div>
             </div>
 
@@ -4031,29 +4046,34 @@
       <div class="p-5 sm:p-6 space-y-4 max-h-[80vh] overflow-y-auto" id="feeInvoicePrintArea">
         <div class="border-2 border-emerald-800 rounded-2xl p-5 bg-white space-y-4 shadow-xs">
           
-          <!-- INVOICE HEADER -->
-          <div class="border-b-2 border-emerald-800 pb-4 flex justify-between items-start flex-wrap gap-3">
-            <div>
-              <h2 class="text-xl font-black text-emerald-900 tracking-tight font-serif">AL-HUDA ISLAMIC CENTRE</h2>
-              <p class="text-xs text-slate-600 font-medium">Online Quran &amp; Islamic Studies Academy</p>
-              <p class="text-[11px] text-slate-400">Official Parent Tuition Fee Billing Statement</p>
+          <!-- INVOICE HEADER WITH OFFICIAL ACADEMY LOGO -->
+          <div class="border-b-2 border-emerald-800 pb-4 flex justify-between items-center flex-wrap gap-3">
+            <div class="flex items-center gap-3.5">
+              <img id="feeInvLogoImg" src="alhuda_logo.jpg" alt="Al-Huda Islamic Centre" class="w-14 h-14 sm:w-16 sm:h-16 object-cover rounded-xl shadow-xs border border-emerald-700/30 bg-black shrink-0">
+              <div>
+                <h2 class="text-xl sm:text-2xl font-black text-emerald-900 tracking-tight font-serif">AL-HUDA ISLAMIC CENTRE</h2>
+                <p class="text-xs text-slate-600 font-medium">Online Quran &amp; Islamic Studies Academy</p>
+                <p class="text-[11px] text-slate-400 font-mono">Official Tuition Fee Billing Statement</p>
+              </div>
             </div>
             <div class="text-right">
               <div id="feeInvStatusStamp" class="inline-block px-3 py-1 rounded-md text-[11px] font-black border-2 border-emerald-600 bg-emerald-50 text-emerald-800 tracking-wider">
                 PAID IN FULL
               </div>
               <div class="text-xs text-slate-500 mt-1">
-                Receipt #: <strong id="feeInvReceiptNo" class="text-emerald-900 font-mono">AH-REC-OFFICIAL</strong>
+                Receipt #: <strong id="feeInvReceiptNo" class="text-emerald-900 font-mono font-bold">AH-REC-OFFICIAL</strong>
               </div>
             </div>
           </div>
 
           <!-- FAMILY DETAILS GRID -->
-          <div class="grid grid-cols-2 gap-2 bg-slate-50 p-3 rounded-xl border border-slate-200 text-xs">
-            <div><span class="text-slate-500 font-bold">Parent / Guardian:</span> <strong id="feeInvParentName" class="text-slate-900">--</strong></div>
-            <div><span class="text-slate-500 font-bold">Family Account ID:</span> <strong id="feeInvFamilyId" class="text-emerald-900 font-mono">--</strong></div>
-            <div><span class="text-slate-500 font-bold">Student(s) Enrolled:</span> <strong id="feeInvStudentsNames" class="text-slate-900">--</strong></div>
-            <div><span class="text-slate-500 font-bold">Issue Date:</span> <strong id="feeInvIssueDate" class="text-slate-800 font-mono">--</strong></div>
+          <div class="grid grid-cols-2 sm:grid-cols-3 gap-2.5 bg-slate-50 p-3 rounded-xl border border-slate-200 text-xs">
+            <div><span class="text-slate-500 font-bold block">Parent / Guardian:</span> <strong id="feeInvParentName" class="text-slate-900 block truncate">--</strong></div>
+            <div><span class="text-slate-500 font-bold block">Family Account ID:</span> <strong id="feeInvFamilyId" class="text-emerald-900 font-mono block">--</strong></div>
+            <div><span class="text-slate-500 font-bold block">Student(s) Enrolled:</span> <strong id="feeInvStudentsNames" class="text-slate-900 block truncate">--</strong></div>
+            <div><span class="text-slate-500 font-bold block">Issue Date:</span> <strong id="feeInvIssueDate" class="text-slate-800 font-mono block">--</strong></div>
+            <div><span class="text-slate-500 font-bold block">Parent Email:</span> <strong id="feeInvParentEmail" class="text-slate-800 font-mono block truncate">--</strong></div>
+            <div><span class="text-slate-500 font-bold block">WhatsApp / Phone:</span> <strong id="feeInvWhatsAppNo" class="text-slate-800 font-mono block">--</strong></div>
           </div>
 
           <!-- ITEMIZED CHARGES TABLE -->
@@ -4131,6 +4151,12 @@
 
       <!-- MODAL FOOTER BUTTONS -->
       <div class="p-4 bg-slate-50 border-t border-slate-200 flex justify-end items-center gap-2.5 flex-wrap">
+        <button id="feeInvBtnDownloadPdf" onclick="downloadFeeInvoicePDF()" class="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-2xs">
+          <i class="fa-solid fa-file-pdf"></i> Download PDF
+        </button>
+        <button id="feeInvBtnSendEmail" onclick="sendFeeInvoiceEmailModal()" class="px-4 py-2 bg-sky-600 hover:bg-sky-700 text-white rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-2xs">
+          <i class="fa-solid fa-envelope"></i> Send Email
+        </button>
         <button onclick="printFeeInvoiceReceipt()" class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-2xs">
           <i class="fa-solid fa-print"></i> Print Receipt
         </button>
@@ -9130,6 +9156,8 @@ Al-Huda Islamic Centre Management`;
         if (formMSel) formMSel.value = curMonthName;
         if (formYSel) formYSel.value = String(curYear);
 
+        updateOfficialEmailUI();
+
         // Load overview stats by default
         await loadFeeDashboardStats();
 
@@ -10079,6 +10107,12 @@ Al-Huda Islamic Centre Management`;
       // Open Official Printable Receipt Modal
       openFeeInvoiceModal(paymentRecord);
 
+      // Auto-send official invoice email to parent & academy if toggle is checked
+      const autoSendEmail = document.getElementById('feeToggleAutoSendEmail')?.checked;
+      if (autoSendEmail && (paymentRecord.email || paymentRecord.parentEmail)) {
+        sendFeeInvoiceEmailModal(paymentRecord, true);
+      }
+
       // Refresh Overview, Defaulters and Matrix
       await loadFeeDashboardStats();
       resetFeeForm();
@@ -10086,7 +10120,7 @@ Al-Huda Islamic Centre Management`;
     }
 
     // ============================================================
-    // 3. OFFICIAL INVOICE RECEIPT MODAL
+    // 3. OFFICIAL INVOICE RECEIPT MODAL & ACTIONS
     // ============================================================
     function openFeeInvoiceModal(r) {
       CURRENT_FEE_MODAL_RECEIPT = r;
@@ -10097,6 +10131,12 @@ Al-Huda Islamic Centre Management`;
       document.getElementById('feeInvStudentsNames').innerText = r.studentsNames || '--';
       document.getElementById('feeInvIssueDate').innerText = r.date || new Date().toISOString().slice(0, 10);
       document.getElementById('feeInvPeriod').innerText = `${r.month} ${r.year}`;
+
+      const emailEl = document.getElementById('feeInvParentEmail');
+      if (emailEl) emailEl.innerText = r.email || r.parentEmail || '--';
+
+      const phoneEl = document.getElementById('feeInvWhatsAppNo');
+      if (phoneEl) phoneEl.innerText = r.whatsapp || '--';
 
       const cur = r.currency || 'USD';
       document.getElementById('feeInvCurrentDue').innerText = `${cur} ${parseFloat(r.monthlyFee || 0).toFixed(2)}`;
@@ -10182,10 +10222,264 @@ Al-Huda Islamic Centre Management`;
       openModal('modalFeeInvoice');
     }
 
+    // 1-Click Client-Side High-Res PDF Download
+    async function downloadFeeInvoicePDF() {
+      const r = CURRENT_FEE_MODAL_RECEIPT;
+      if (!r) {
+        alert("No active invoice receipt selected.");
+        return;
+      }
+
+      const element = document.getElementById('feeInvoicePrintArea');
+      if (!element) return;
+
+      const btn = document.getElementById('feeInvBtnDownloadPdf');
+      const originalText = btn ? btn.innerHTML : '';
+      if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-1"></i> Generating PDF...';
+      }
+
+      try {
+        const cleanParent = (r.parentName || 'Family').replace(/[^a-zA-Z0-9_-]/g, '_');
+        const filename = `AlHuda-Invoice-${r.receiptNo || 'AH-REC'}-${cleanParent}.pdf`;
+
+        const opt = {
+          margin: [6, 6, 6, 6],
+          filename: filename,
+          image: { type: 'jpeg', quality: 0.98 },
+          html2canvas: { scale: 2, useCORS: true, letterRendering: true, logging: false },
+          jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
+        };
+
+        if (typeof html2pdf !== 'undefined') {
+          await html2pdf().set(opt).from(element).save();
+          showToastNotification("✅ Official Invoice PDF downloaded successfully!");
+        } else {
+          printFeeInvoiceReceipt();
+        }
+      } catch (err) {
+        console.error("PDF generation failed:", err);
+        showToastNotification("Opening print preview for PDF saving...");
+        printFeeInvoiceReceipt();
+      } finally {
+        if (btn) {
+          btn.disabled = false;
+          btn.innerHTML = originalText;
+        }
+      }
+    }
+
+    // Clean Isolated Printing & Trigger Email Integration
     function printFeeInvoiceReceipt() {
       const area = document.getElementById('feeInvoicePrintArea');
       if (!area) return;
-      window.print();
+
+      const r = CURRENT_FEE_MODAL_RECEIPT;
+      // Also trigger auto email dispatch if parent email is available
+      if (r && (r.email || r.parentEmail)) {
+        sendFeeInvoiceEmailModal(r, true);
+      }
+
+      // Create pristine isolated print iframe
+      let printFrame = document.getElementById('feeInvoicePrintFrame');
+      if (!printFrame) {
+        printFrame = document.createElement('iframe');
+        printFrame.id = 'feeInvoicePrintFrame';
+        printFrame.style.position = 'fixed';
+        printFrame.style.right = '0';
+        printFrame.style.bottom = '0';
+        printFrame.style.width = '0';
+        printFrame.style.height = '0';
+        printFrame.style.border = '0';
+        document.body.appendChild(printFrame);
+      }
+
+      const frameDoc = printFrame.contentWindow.document;
+      frameDoc.open();
+      frameDoc.write(`<!DOCTYPE html>
+<html>
+<head>
+  <title>Al-Huda Fee Invoice - ${r ? r.receiptNo : ''}</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css">
+  <style>
+    @page { size: A4; margin: 8mm; }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #ffffff; color: #0f172a; }
+  </style>
+</head>
+<body class="p-4 bg-white">
+  ${area.innerHTML}
+</body>
+</html>`);
+      frameDoc.close();
+
+      setTimeout(() => {
+        try {
+          printFrame.contentWindow.focus();
+          printFrame.contentWindow.print();
+        } catch (printErr) {
+          window.print();
+        }
+      }, 500);
+    }
+
+    // Official Academy Email Configuration Helpers
+    function getOfficialAcademyEmail() {
+      return localStorage.getItem('alhuda_fee_official_email') || 'ceoislamiccentre@gmail.com';
+    }
+
+    function promptChangeOfficialEmail() {
+      const current = getOfficialAcademyEmail();
+      const entered = prompt("Enter Official Academy Email Address (used for invoice sender & CC):", current);
+      if (entered !== null && entered.trim() !== '') {
+        const clean = entered.trim().toLowerCase();
+        localStorage.setItem('alhuda_fee_official_email', clean);
+        updateOfficialEmailUI();
+        showToastNotification(`Official Academy Email updated to: ${clean}`);
+      }
+    }
+
+    function updateOfficialEmailUI() {
+      const email = getOfficialAcademyEmail();
+      const el = document.getElementById('feeOfficialEmailDisplay');
+      if (el) el.innerText = email;
+    }
+
+    // Official Invoice Email Dispatcher (Manual & Auto-Send)
+    async function sendFeeInvoiceEmailModal(record, isSilent = false) {
+      const r = record || CURRENT_FEE_MODAL_RECEIPT;
+      if (!r) {
+        showToastNotification("No active invoice loaded to email.");
+        return;
+      }
+
+      const famEmail = r.email || r.parentEmail || '';
+      let targetEmail = famEmail;
+
+      if (!targetEmail) {
+        const fam = CACHED_FEE_FAMILIES.find(f => f.familyId === r.familyId || f.id === r.familyId);
+        if (fam && fam.email) targetEmail = fam.email;
+      }
+
+      if (!targetEmail && !isSilent) {
+        const promptEmail = prompt(`Please enter parent email address for ${r.parentName} (${r.familyId}):`, "");
+        if (promptEmail && promptEmail.includes('@')) {
+          targetEmail = promptEmail.trim();
+          r.email = targetEmail;
+          const emailEl = document.getElementById('feeInvParentEmail');
+          if (emailEl) emailEl.innerText = targetEmail;
+        }
+      }
+
+      if (!targetEmail || !targetEmail.includes('@')) {
+        if (!isSilent) {
+          alert(`No valid parent email address found for ${r.parentName}. Please specify parent email.`);
+        }
+        return;
+      }
+
+      const offEmail = getOfficialAcademyEmail();
+      const cur = r.currency || 'USD';
+      const rNo = r.receiptNo || 'AH-REC-OFFICIAL';
+      const monthlyFee = parseFloat(r.monthlyFee || 0).toFixed(2);
+      const prevBal = parseFloat(r.previousBalance || 0).toFixed(2);
+      const credAmt = parseFloat(r.creditDeducted || 0).toFixed(2);
+      const totalPayable = parseFloat(r.totalPayable || 0).toFixed(2);
+      const amountPaid = parseFloat(r.amountPaid || 0).toFixed(2);
+      const discount = parseFloat(r.discount || 0).toFixed(2);
+      const remaining = parseFloat(r.remainingBalance || 0).toFixed(2);
+      const excessAmt = parseFloat(r.excessPaid || 0).toFixed(2);
+
+      const subject = `Official Tuition Fee Receipt [${rNo}] - ${r.parentName} (${r.month} ${r.year}) - Al-Huda Islamic Centre`;
+
+      let proratedNotice = '';
+      if (r.isAdvancePayment && r.advanceMonthsCount > 1) {
+        proratedNotice = ` (${r.advanceMonthsCount} Months Advance)`;
+      } else if (r.isProrated) {
+        proratedNotice = ` (Mid-Month Admission: ${r.activeDays || 'N/A'} Days Active)`;
+      }
+
+      let prevBalRow = '';
+      if (parseFloat(prevBal) > 0) {
+        prevBalRow = `<tr style="background:#fffbeb;"><td style="padding:10px 12px; border:1px solid #e2e8f0; font-weight:bold; color:#b45309;">Previous Overdue Arrears:</td><td style="padding:10px 12px; border:1px solid #e2e8f0; text-align:right; font-weight:bold; color:#b45309;">${cur} ${prevBal}</td></tr>`;
+      }
+
+      let creditRow = '';
+      if (parseFloat(credAmt) > 0) {
+        creditRow = `<tr style="background:#ecfdf5;"><td style="padding:10px 12px; border:1px solid #e2e8f0; font-weight:bold; color:#047857;">Less: Advance Credit (Pre-Paid):</td><td style="padding:10px 12px; border:1px solid #e2e8f0; text-align:right; font-weight:bold; color:#047857;">- ${cur} ${credAmt}</td></tr>`;
+      }
+
+      let discountRow = '';
+      if (parseFloat(discount) > 0) {
+        discountRow = `<tr><td style="padding:10px 12px; border:1px solid #e2e8f0; font-style:italic; color:#64748b;">Fee Discount / Concession:</td><td style="padding:10px 12px; border:1px solid #e2e8f0; text-align:right; color:#dc2626;">- ${cur} ${discount}</td></tr>`;
+      }
+
+      let carryNotice = '';
+      if (parseFloat(remaining) > 0) {
+        carryNotice = `<div style="background:#fffbeb; border:2px dashed #d97706; border-radius:8px; padding:14px; margin-top:16px;">
+          <strong style="color:#92400e; font-size:14px;">Notice: Outstanding Remaining Balance: ${cur} ${remaining}</strong>
+          <p style="color:#78350f; font-size:12px; margin:4px 0 0 0;">This balance has been carried forward and will be automatically added to your next billing statement.</p>
+        </div>`;
+      } else if (parseFloat(excessAmt) > 0) {
+        carryNotice = `<div style="background:#ecfdf5; border:2px dashed #059669; border-radius:8px; padding:14px; margin-top:16px;">
+          <strong style="color:#065f46; font-size:14px;">Advance Credit Carried Forward: + ${cur} ${excessAmt}</strong>
+          <p style="color:#047857; font-size:12px; margin:4px 0 0 0;">Alhamdulillah! Extra payment has been credited to your account and will be automatically deducted from your next invoice.</p>
+        </div>`;
+      }
+
+      const plainText = `Assalam-o-Alaikum Respected ${r.parentName},\n\n` +
+        `AL-HUDA ISLAMIC CENTRE - OFFICIAL TUITION FEE RECEIPT\n` +
+        `Receipt No: ${rNo}\n` +
+        `Date: ${r.date}\n` +
+        `Family Account ID: ${r.familyId}\n` +
+        `Student(s): ${r.studentsNames}\n` +
+        `Billing Period: ${r.month} ${r.year}\n` +
+        `Tuition Fee: ${cur} ${monthlyFee}${proratedNotice}\n` +
+        (parseFloat(prevBal) > 0 ? `Previous Overdue Arrears: ${cur} ${prevBal}\n` : '') +
+        (parseFloat(credAmt) > 0 ? `Advance Credit Deducted: - ${cur} ${credAmt}\n` : '') +
+        `Net Total Payable: ${cur} ${totalPayable}\n` +
+        (parseFloat(discount) > 0 ? `Discount: - ${cur} ${discount}\n` : '') +
+        `Amount Received: ${cur} ${amountPaid} (${r.paymentMethod || 'Online'})\n` +
+        `Remaining Balance: ${cur} ${remaining}\n` +
+        (parseFloat(excessAmt) > 0 ? `Advance Credit Carried Forward: + ${cur} ${excessAmt}\n` : '') +
+        `\nJazakAllahu Khairan!\nAl-Huda Islamic Centre Accounts\nOfficial Email: ${offEmail}`;
+
+      const btn = document.getElementById('feeInvBtnSendEmail');
+      const origHtml = btn ? btn.innerHTML : '';
+      if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-1"></i> Sending...';
+      }
+
+      // Try background dispatch via EmailJS if configured
+      try {
+        if (typeof emailjs !== 'undefined' && window.EMAILJS_PUBLIC_KEY) {
+          await emailjs.send(window.EMAILJS_SERVICE_ID, window.EMAILJS_TEMPLATE_ID, {
+            to_email: targetEmail,
+            cc_email: offEmail,
+            subject: subject,
+            message: plainText,
+            from_name: `Al-Huda Islamic Centre (${offEmail})`
+          });
+        }
+      } catch (eJsErr) {
+        console.warn("Background email dispatch notice:", eJsErr);
+      }
+
+      if (btn) {
+        btn.disabled = false;
+        btn.innerHTML = origHtml;
+      }
+
+      if (!isSilent) {
+        // Open Gmail compose with complete pre-filled details
+        const gmailUrl = `https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(targetEmail)}&cc=${encodeURIComponent(offEmail)}&su=${encodeURIComponent(subject)}&body=${encodeURIComponent(plainText)}`;
+        window.open(gmailUrl, '_blank');
+        showToastNotification(`Official Invoice Email prepared for ${targetEmail}`);
+      } else {
+        showToastNotification(`Official Invoice Email dispatched to ${targetEmail} (CC: ${offEmail})`);
+      }
     }
 
     // ============================================================
