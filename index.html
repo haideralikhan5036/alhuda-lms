@@ -437,6 +437,53 @@
 
       </div>
 
+      <!-- EXECUTIVE DASHBOARD: MONTHLY FEE COLLECTION & ARREARS WIDGET -->
+      <div class="mb-5 bg-gradient-to-r from-emerald-950 via-brandDark to-slate-900 p-4 sm:p-5 rounded-2xl border border-emerald-700/40 shadow-sm text-white flex flex-wrap justify-between items-center gap-4">
+        <div class="flex items-center gap-3.5">
+          <span class="w-12 h-12 rounded-2xl bg-amber-500/20 text-amber-300 border border-amber-400/30 flex items-center justify-center text-xl font-bold shadow-xs">
+            <i class="fa-solid fa-file-invoice-dollar"></i>
+          </span>
+          <div>
+            <div class="flex items-center gap-2 flex-wrap">
+              <h3 class="text-sm sm:text-base font-extrabold text-white tracking-tight">
+                Tuition Fee Collection &amp; Annual Matrix
+              </h3>
+              <span id="dashFeeWidgetPeriodBadge" class="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-amber-400/20 text-amber-200 border border-amber-400/40">
+                September 2026
+              </span>
+            </div>
+            <p class="text-xs text-emerald-200/80 mt-0.5">
+              Smart Arrears, Mid-Month Proration, Advance Payments, Leaves Sync &amp; 1-Click WhatsApp Receipts
+            </p>
+          </div>
+        </div>
+
+        <div class="flex items-center gap-3.5 flex-wrap">
+          <!-- Metrics -->
+          <div class="flex items-center gap-3 bg-white/10 px-3.5 py-2 rounded-xl border border-white/10 text-xs">
+            <div>
+              <span class="text-[10px] font-bold text-emerald-200 block uppercase">Paid Families</span>
+              <strong id="dashFeeWidgetPaidCount" class="text-sm font-black font-num text-white">0</strong>
+            </div>
+            <div class="h-6 w-px bg-white/20"></div>
+            <div>
+              <span class="text-[10px] font-bold text-rose-300 block uppercase">Pending Due</span>
+              <strong id="dashFeeWidgetPendingCount" class="text-sm font-black font-num text-rose-300">0</strong>
+            </div>
+            <div class="h-6 w-px bg-white/20"></div>
+            <div>
+              <span class="text-[10px] font-bold text-blue-200 block uppercase">On Leave</span>
+              <strong id="dashFeeWidgetLeaveCount" class="text-sm font-black font-num text-blue-200">0</strong>
+            </div>
+          </div>
+
+          <!-- Direct Jump Button -->
+          <button onclick="switchTab('tab-invoices')" class="px-4 py-2.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black rounded-xl text-xs flex items-center gap-2 shadow-md transition">
+            <i class="fa-solid fa-arrow-right"></i> Open Fee Management
+          </button>
+        </div>
+      </div>
+
       <!-- 1. CLASSES LIST / TIMETABLE SECTION (Expands above graphs when any KPI card is selected) -->
       <div id="dashClassesSection" class="hidden mb-6 bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden transition-all duration-300">
         
@@ -5245,10 +5292,56 @@
       }
     }
 
+    function updateExecutiveDashboardFeeWidget() {
+      try {
+        const now = new Date();
+        const curMonthName = (typeof FEE_CONFIG !== 'undefined' && FEE_CONFIG.MONTHS) ? (FEE_CONFIG.MONTHS[now.getMonth()] || "September") : "September";
+        const curYear = now.getFullYear();
+
+        const badge = document.getElementById('dashFeeWidgetPeriodBadge');
+        if (badge) badge.innerText = `${curMonthName} ${curYear}`;
+
+        const records = typeof getStoredFeeRecords === 'function' ? getStoredFeeRecords() : [];
+        const families = (typeof CACHED_FEE_FAMILIES !== 'undefined' && CACHED_FEE_FAMILIES) ? CACHED_FEE_FAMILIES : [];
+
+        let paidCount = 0;
+        let onLeaveCount = 0;
+
+        const paidMap = {};
+        records.forEach(r => {
+          if (String(r.month).toLowerCase() === curMonthName.toLowerCase() && parseInt(r.year, 10) === curYear) {
+            if (parseFloat(r.remainingBalance || 0) <= 0) {
+              paidMap[String(r.familyId).toUpperCase()] = true;
+            }
+          }
+        });
+        paidCount = Object.keys(paidMap).length;
+
+        families.forEach(fam => {
+          if (typeof checkFamilyLeaveInMonth === 'function') {
+            const lCheck = checkFamilyLeaveInMonth(fam.id, curMonthName, curYear);
+            if (lCheck.isLeave) onLeaveCount++;
+          }
+        });
+
+        const pendingCount = Math.max(0, families.length - paidCount - onLeaveCount);
+
+        const elPaid = document.getElementById('dashFeeWidgetPaidCount');
+        if (elPaid) elPaid.innerText = paidCount;
+        const elPending = document.getElementById('dashFeeWidgetPendingCount');
+        if (elPending) elPending.innerText = pendingCount;
+        const elLeave = document.getElementById('dashFeeWidgetLeaveCount');
+        if (elLeave) elLeave.innerText = onLeaveCount;
+      } catch (e) {
+        console.warn("Could not update dashboard fee widget:", e);
+      }
+    }
+
     async function loadDashboardData() {
       initDashboardCharts();
       updateDashboardAnalytics();
       updateLiveActiveMetrics();
+      updateExecutiveDashboardFeeWidget();
 
       const now = new Date();
       const currentDay = now.getDay() === 0 ? 7 : now.getDay();
