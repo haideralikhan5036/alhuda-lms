@@ -5,8 +5,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, viewport-fit=cover">
   <title>Al-Huda Islamic Centre - Complete Cloud LMS</title>
   
-  <!-- Modern Fonts & Icons -->
-  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700;800&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  <!-- Modern Fonts & Icons (Plus Jakarta Sans, JetBrains Mono, Outfit for Luxury Numbers, Cinzel) -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700;800&family=JetBrains+Mono:wght@400;500;600;700;800&family=Outfit:wght@500;600;700;800;900&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   
   <!-- Tailwind CSS via CDN -->
@@ -38,7 +40,9 @@
           },
           fontFamily: {
             cinzel: ['Cinzel', 'serif'],
-            sans: ['Plus Jakarta Sans', 'sans-serif']
+            sans: ['"Plus Jakarta Sans"', 'sans-serif'],
+            mono: ['"JetBrains Mono"', 'monospace'],
+            num: ['"Outfit"', '"JetBrains Mono"', 'sans-serif']
           }
         }
       }
@@ -46,7 +50,85 @@
   </script>
 
   <style>
-    body { font-family: 'Plus Jakarta Sans', sans-serif; background-color: #f8fafc; }
+    body {
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      background-color: #f8fafc;
+      font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11', 'tnum';
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* ============================================================ */
+    /* NUMBERS AESTHETICS (JetBrains Mono & Outfit Modern Figures)  */
+    /* ============================================================ */
+    .font-mono, td.font-mono, span.font-mono, div.font-mono {
+      font-family: 'JetBrains Mono', monospace !important;
+      font-feature-settings: 'tnum' 1, 'zero' 1;
+      letter-spacing: -0.02em;
+    }
+
+    /* Primary KPI Number Displays & Badges */
+    [id^="kpiDash"], [id^="payrollKpi"], [id^="kpiSched"], [id^="dashLive"], [id^="sidebarActive"], .num-display {
+      font-family: 'Outfit', 'Plus Jakarta Sans', sans-serif !important;
+      font-feature-settings: 'tnum' 1;
+      letter-spacing: -0.03em;
+    }
+
+    /* ============================================================ */
+    /* AESTHETIC GLOBAL DROPDOWN (SELECT) STYLING                   */
+    /* ============================================================ */
+    select {
+      appearance: none !important;
+      -webkit-appearance: none !important;
+      -moz-appearance: none !important;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%23059669' stroke-width='2.5'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E") !important;
+      background-position: right 0.75rem center !important;
+      background-repeat: no-repeat !important;
+      background-size: 1.05rem 1.05rem !important;
+      padding-right: 2.35rem !important;
+      border: 1.5px solid #cbd5e1 !important;
+      border-radius: 0.75rem !important;
+      font-weight: 600 !important;
+      color: #0f172a !important;
+      background-color: #ffffff !important;
+      transition: all 0.18s cubic-bezier(0.4, 0, 0.2, 1) !important;
+      box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.04) !important;
+      cursor: pointer;
+    }
+
+    select:hover {
+      border-color: #059669 !important;
+      background-color: #f8fafc !important;
+    }
+
+    select:focus {
+      outline: none !important;
+      border-color: #059669 !important;
+      box-shadow: 0 0 0 3px rgba(5, 150, 105, 0.18) !important;
+      background-color: #ffffff !important;
+    }
+
+    /* Dark Mode Reader / Modal Selects */
+    .bg-slate-900 select, .bg-slate-950 select, #modalDigitalBookReader select {
+      background-color: #0f172a !important;
+      border-color: #334155 !important;
+      color: #f8fafc !important;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%2334d399' stroke-width='2.5'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E") !important;
+    }
+    .bg-slate-900 select:hover, .bg-slate-950 select:hover, #modalDigitalBookReader select:hover {
+      border-color: #059669 !important;
+    }
+    .bg-slate-900 select:focus, .bg-slate-950 select:focus, #modalDigitalBookReader select:focus {
+      border-color: #34d399 !important;
+      box-shadow: 0 0 0 3px rgba(52, 211, 153, 0.25) !important;
+    }
+
+    select option {
+      padding: 8px 12px !important;
+      font-weight: 500 !important;
+      color: #0f172a !important;
+      background-color: #ffffff !important;
+    }
+
     .slot-vacant { background-color: #f0fdf4; border: 1.5px dashed #86efac; color: #166534; cursor: pointer; }
     .slot-vacant:hover { background-color: #dcfce7; border-color: #22c55e; }
     .slot-booked { background-color: #eff6ff; border: 1.5px solid #93c5fd; color: #1e40af; }
@@ -1135,13 +1217,13 @@
             </label>
             <select id="schedSearchDay" onchange="executeScheduleSearch()" class="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-xl font-bold text-xs text-slate-800 focus:bg-white focus:outline-emerald-500">
               <option value="today">Today (Live Day)</option>
-              <option value="1">Monday (پیر)</option>
-              <option value="2">Tuesday (منگل)</option>
-              <option value="3">Wednesday (بدھ)</option>
-              <option value="4">Thursday (جمعرات)</option>
-              <option value="5">Friday (جمعہ)</option>
-              <option value="6">Saturday (ہفتہ)</option>
-              <option value="7">Sunday (اتوار)</option>
+              <option value="1">Monday</option>
+              <option value="2">Tuesday</option>
+              <option value="3">Wednesday</option>
+              <option value="4">Thursday</option>
+              <option value="5">Friday</option>
+              <option value="6">Saturday</option>
+              <option value="7">Sunday</option>
               <option value="all">All Weekdays (Mon - Fri)</option>
             </select>
           </div>
@@ -1174,8 +1256,8 @@
             </label>
             <select id="schedSearchGender" onchange="executeScheduleSearch()" class="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-xl font-bold text-xs text-slate-800 focus:bg-white focus:outline-emerald-500">
               <option value="all">All Teachers (Male &amp; Female)</option>
-              <option value="Male">Male Qaris Only (قاری صاحبان)</option>
-              <option value="Female">Female Teachers Only (معلمات)</option>
+              <option value="Male">Male Teachers Only</option>
+              <option value="Female">Female Teachers Only</option>
             </select>
           </div>
 
@@ -3198,8 +3280,8 @@
 
         <div class="grid grid-cols-2 gap-3">
           <div>
-            <label class="block font-bold mb-1 text-slate-700">Arabic / Urdu Title:</label>
-            <input type="text" id="cbTitleAr" placeholder="e.g. قواعد التجويد المصور" class="w-full p-2.5 border rounded-xl font-semibold">
+            <label class="block font-bold mb-1 text-slate-700">Arabic Title (Optional):</label>
+            <input type="text" id="cbTitleAr" placeholder="e.g. Kitab At-Tajweed" class="w-full p-2.5 border rounded-xl font-semibold">
           </div>
           <div>
             <label class="block font-bold mb-1 text-slate-700">Category *:</label>
@@ -3603,24 +3685,28 @@
       if (!jumpSelect) return;
 
       let optionsHtml = '';
+      const maxP = book.total_pages || book.totalPages || 32;
 
-      if (book.id === 'quran-16-line' && book.paras) {
+      if (book.paras && book.paras.length > 0) {
         // Quran by 30 Paras
-        optionsHtml = book.paras.map(p => `
-          <option value="${p.page_start}">Para ${p.para}: ${p.name_ur} (Pg ${p.page_start})</option>
-        `).join('');
+        optionsHtml = book.paras.map(p =>
+          `<option value="${p.page_start}">Para ${p.para} (Page ${p.page_start})</option>`
+        ).join('');
       } else if (book.chapters && book.chapters.length > 0) {
-        // Book with structured chapters/takhtis
-        optionsHtml = book.chapters.map((ch, idx) => `
-          <option value="${ch.page_start || (idx + 1)}">${ch.title.slice(0, 24)}... (Pg ${ch.page_start || (idx + 1)})</option>
-        `).join('');
-      } else {
-        // Sequential page list
-        const maxP = book.total_pages || 32;
-        const pageOptions = [];
-        for (let i = 1; i <= maxP; i++) {
-          pageOptions.push(`<option value="${i}">Page ${i}</option>`);
+        optionsHtml = book.chapters.map((ch, idx) =>
+          `<option value="${ch.page_start || (idx + 1)}">${(ch.title || '').slice(0, 28)} (Page ${ch.page_start || (idx + 1)})</option>`
+        ).join('');
+      } else if (maxP > 50) {
+        const chunkSize = 10;
+        const chunks = [];
+        for (let i = 1; i <= maxP; i += chunkSize) {
+          const end = Math.min(i + chunkSize - 1, maxP);
+          chunks.push(`<option value="${i}">Pages ${i}–${end}</option>`);
         }
+        optionsHtml = chunks.join('');
+      } else {
+        const pageOptions = [];
+        for (let i = 1; i <= maxP; i++) pageOptions.push(`<option value="${i}">Page ${i}</option>`);
         optionsHtml = pageOptions.join('');
       }
 
@@ -6269,8 +6355,7 @@
         if (isManager) {
           const cleanPhone = (t.phone || '').replace(/[^0-9]/g, '');
           const mgrUsername = meta.username || `mgr.${t.full_name.toLowerCase().replace(/[^a-z]/g, '').slice(0, 8)}`;
-          const mgrPassword = meta.password || 'alhuda@mgr';
-          const waMsg = `السلام علیکم محترم ${t.full_name} صاحب!\nالھدیٰ اسلامک سینٹر - مینجر رجسٹریشن مکمل ہو گئی ہے۔\n\n🆔 *مینجر آئی ڈی:* ${t.id}\n👤 *یوزر نیم:* ${mgrUsername}\n🔑 *پاسورڈ:* ${mgrPassword}\n💼 *عہدہ:* ${meta.role_title || 'Manager'}\n\nمینجر پورٹل جلد ہی لائیو ہو جائے گا۔ جزاکم اللہ خیراً!`;
+          const waMsg = `Assalamu Alaikum Respected ${t.full_name},\nAl-Huda Islamic Centre - Manager Registration Successful.\n\n🆔 *Manager ID:* ${t.id}\n👤 *Username:* ${mgrUsername}\n🔑 *Password:* ${mgrPassword}\n💼 *Designation:* ${meta.role_title || 'Manager'}\n\nYour management portal credentials have been generated. Jazakum Allahu Khairan!`;
           const waUrl = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(waMsg)}`;
 
           return `
@@ -6450,7 +6535,7 @@
         const acc = accounts[t.id] || {};
         const cleanPhone = (t.phone || '').replace(/[^0-9]/g, '');
         const directPortalUrl = `${window.location.origin}/teacher.html?t=${creds.username}`;
-        const waMsg = `السلام علیکم محترم ${t.full_name} صاحب!\nالھدیٰ اسلامک سینٹر کے ٹیچر پورٹل میں خوش آمدید۔\n\n🌐 *آپ کا پرسنلائزڈ پورٹل لنک:*\n${directPortalUrl}\n\n👤 *یوزر نیم:* ${creds.username}\n🔑 *پاسورڈ:* ${creds.password || '12345678'}\n🕒 *شفٹ:* ${t.working_shift || '10 Hours Shift'}\n💰 *ریٹ:* ${t.rate_per_slot || 2200} PKR\n\nبراہ کرم اوپر دیے گئے لنک کو کھول کر اپنا ہفتہ وار شیڈول اور کلاسز چیک فرمائیں۔\nجزاکم اللہ خیراً!`;
+        const waMsg = `Assalamu Alaikum Respected ${t.full_name},\nWelcome to the Al-Huda Islamic Centre Teacher Operations Portal.\n\n🌐 *Your Personal Portal Link:*\n${directPortalUrl}\n\n👤 *Username:* ${creds.username}\n🔑 *Password:* ${creds.password || '12345678'}\n🕒 *Assigned Shift:* ${t.working_shift || '10 Hours Shift'}\n💰 *Slot Rate:* ${t.rate_per_slot || 2200} PKR\n\nPlease tap the link above to view your timetable, student schedules, and attendance logs.\nJazakum Allahu Khairan!`;
         const waUrl = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(waMsg)}`;
 
         // Seniority increment text
@@ -7823,24 +7908,24 @@
       }
 
       const msg = 
-`السلام علیکم ورحمۃ اللہ محترم *${slipData.teacher_name}* صاحب!
-الھدیٰ اسلامک سینٹر - ماہانہ تدریسی معاوضہ (Salary Statement) برائے *${slipData.month}*
+`Assalamu Alaikum Respected *${slipData.teacher_name}*,
+Al-Huda Islamic Centre - Official Monthly Salary Statement for *${slipData.month}*
 
-👨‍🏫 *استاد کا نام:* ${slipData.teacher_name}
-🗓️ *تاریخ شمولیت:* ${slipData.joining_date}
-⭐ *سالانہ انکریمنٹ:* ${slipData.seniority_increment > 0 ? '+' + slipData.seniority_increment + ' PKR / طالب علم' : 'بنیادی سطح'}
+Teacher Name: ${slipData.teacher_name}
+Joining Date: ${slipData.joining_date}
+Seniority Increment: ${slipData.seniority_increment > 0 ? '+' + slipData.seniority_increment + ' PKR / student' : 'Standard Base Rate'}
 
-📋 *زیرِ تدریس طلباء و کورسز کی تفصیل:*
+Assigned Students & Course Breakdown:
 ${studentLines}
 
 ──────────────────
-💵 *بنیادی تدریسی رقم:* ${slipData.base_subtotal.toLocaleString()} PKR
-${slipData.bonus > 0 ? `➕ *اضافی بونس / الاؤنس:* +${slipData.bonus.toLocaleString()} PKR\n` : ''}${slipData.deduction > 0 ? `➖ *کٹوتی / ایڈوانس:* -${slipData.deduction.toLocaleString()} PKR\n` : ''}${slipData.remarks ? `📝 *وضاحت:* ${slipData.remarks}\n` : ''}💰 *کل قابلِ ادائیگی سیلری:* *${slipData.net_payable.toLocaleString()} PKR*
-📌 *حالت:* ${slipData.status === 'Paid' ? '✅ ادائیگی مکمل ہو چکی ہے (Paid)' : '⏳ ٹرانسفر پراسیس میں ہے (Pending)'}
+Base Teaching Amount: ${slipData.base_subtotal.toLocaleString()} PKR
+${slipData.bonus > 0 ? `Bonus / Allowances: +${slipData.bonus.toLocaleString()} PKR\n` : ''}${slipData.deduction > 0 ? `Deductions / Advances: -${slipData.deduction.toLocaleString()} PKR\n` : ''}${slipData.remarks ? `Remarks: ${slipData.remarks}\n` : ''}Total Net Payable Salary: ${slipData.net_payable.toLocaleString()} PKR
+Payment Status: ${slipData.status === 'Paid' ? 'Paid (Disbursed)' : 'Processing (Pending)'}
 ──────────────────
 
-جزاکم اللہ خیراً و احسن الجزاء فی الدارین!
-*الھدیٰ اسلامک سینٹر مینجمنٹ*`;
+Jazakum Allahu Khairan!
+Al-Huda Islamic Centre Management`;
 
       const url = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(msg)}`;
       window.open(url, '_blank');
@@ -10326,8 +10411,8 @@ Web Portal: https://alhuda-lms.vercel.app`;
         const t = report.teacher;
         const isMale = report.gender === 'Male';
         const genderBadge = isMale 
-          ? `<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-200"><i class="fa-solid fa-mars mr-1"></i>Male Qari</span>`
-          : `<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-50 text-rose-700 border border-rose-200"><i class="fa-solid fa-venus mr-1"></i>Female Mu'allama</span>`;
+          ? `<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-200"><i class="fa-solid fa-mars mr-1"></i>Male Teacher</span>`
+          : `<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-50 text-rose-700 border border-rose-200"><i class="fa-solid fa-venus mr-1"></i>Female Teacher</span>`;
 
         const availBadge = report.freeSlotsCount === report.totalSlots
           ? `<span class="px-2.5 py-1 rounded-xl text-xs font-black bg-emerald-100 text-emerald-800 border border-emerald-300 flex items-center gap-1"><i class="fa-solid fa-circle-check text-emerald-600"></i> 100% Free (${report.freeSlotsCount}/${report.totalSlots} Slots)</span>`

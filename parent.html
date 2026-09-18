@@ -5,10 +5,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Parent & Student Portal - Al-Huda & BQI LMS</title>
   
-  <!-- Google Fonts & Font Awesome -->
+  <!-- Google Fonts & Font Awesome (Plus Jakarta Sans, JetBrains Mono, Outfit, Amiri) -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Amiri:wght@700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Amiri:wght@700&family=JetBrains+Mono:wght@400;500;600;700;800&family=Outfit:wght@500;600;700;800;900&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   
   <!-- Tailwind CSS -->
@@ -19,6 +19,8 @@
         extend: {
           fontFamily: {
             sans: ['"Plus Jakarta Sans"', 'sans-serif'],
+            mono: ['"JetBrains Mono"', 'monospace'],
+            num: ['"Outfit"', '"JetBrains Mono"', 'sans-serif'],
             quran: ['"Amiri"', 'serif']
           },
           colors: {
@@ -38,6 +40,40 @@
   <script src="curriculum_data.js"></script>
 
   <style>
+    body {
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11', 'tnum';
+      -webkit-font-smoothing: antialiased;
+    }
+
+    .font-mono, td.font-mono, span.font-mono {
+      font-family: 'JetBrains Mono', monospace !important;
+      font-feature-settings: 'tnum' 1, 'zero' 1;
+      letter-spacing: -0.02em;
+    }
+
+    /* Aesthetic Dropdowns */
+    select {
+      appearance: none !important;
+      -webkit-appearance: none !important;
+      -moz-appearance: none !important;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%23047857' stroke-width='2.5'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E") !important;
+      background-position: right 0.75rem center !important;
+      background-repeat: no-repeat !important;
+      background-size: 1.05rem 1.05rem !important;
+      padding-right: 2.35rem !important;
+      border: 1.5px solid #cbd5e1 !important;
+      border-radius: 0.75rem !important;
+      font-weight: 600 !important;
+      color: #0f172a !important;
+      background-color: #ffffff !important;
+      transition: all 0.18s cubic-bezier(0.4, 0, 0.2, 1) !important;
+      box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.04) !important;
+      cursor: pointer;
+    }
+    select:hover { border-color: #047857 !important; }
+    select:focus { outline: none !important; border-color: #047857 !important; box-shadow: 0 0 0 3px rgba(4, 120, 87, 0.18) !important; }
+
     .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
     .custom-scrollbar::-webkit-scrollbar-track { background: #f1f5f9; }
     .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
@@ -111,7 +147,7 @@
         
         <div class="flex flex-wrap items-center gap-3">
           <button onclick="openLatestSabaqReader()" id="btnOpenLatestSabaq" class="px-5 py-2.5 rounded-xl bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-500 hover:to-amber-600 text-slate-950 font-black text-xs sm:text-sm shadow-md transition flex items-center gap-2">
-            <i class="fa-solid fa-book-open"></i> 📖 Open Today's Sabaq (آج کا سبق)
+            <i class="fa-solid fa-book-open"></i> Open Today's Lesson
           </button>
 
           <button onclick="openParentLibraryModal()" class="px-4 py-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-white font-bold text-xs sm:text-sm border border-white/20 transition flex items-center gap-2">
@@ -176,7 +212,7 @@
       <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-4">
         <div>
           <h2 class="text-lg font-black text-slate-900 flex items-center gap-2">
-            <i class="fa-solid fa-clipboard-list text-brandEmerald"></i> Recent Lesson Progress Logs (سبق اور حاضری ریکارڈ)
+            <i class="fa-solid fa-clipboard-list text-brandEmerald"></i> Recent Lesson Progress Logs
           </h2>
           <p class="text-xs text-slate-500 mt-0.5">
             Real-time daily lessons logged by your assigned teacher with direct book links.
@@ -576,7 +612,7 @@
                 <div class="flex items-center justify-start md:justify-end">
                   <button onclick="openParentDigitalReader('${bookId}', ${pageNum})" class="w-full sm:w-auto px-5 py-3 rounded-xl bg-gradient-to-r from-brandDark to-brandDarkest hover:from-brandDarkest hover:to-slate-950 text-white font-black text-xs shadow-md transition flex items-center justify-center gap-2 group">
                     <i class="fa-solid fa-book-open-reader text-brandGold group-hover:scale-110 transition"></i>
-                    <span>📖 Open Lesson (سبق پڑھیں)</span>
+                    <span>Open Lesson</span>
                   </button>
                 </div>
               </div>
@@ -698,9 +734,26 @@
       if (sliderMax) sliderMax.innerText = `Pg ${maxPages}`;
 
       if (jumpSelect) {
-        jumpSelect.innerHTML = Array.from({ length: maxPages }, (_, i) => i + 1)
-          .map(p => `<option value="${p}">Page ${p}</option>`)
-          .join('');
+        if (ACTIVE_READER_BOOK.paras && ACTIVE_READER_BOOK.paras.length > 0) {
+          jumpSelect.innerHTML = ACTIVE_READER_BOOK.paras.map(p =>
+            `<option value="${p.page_start}">Para ${p.para} (Page ${p.page_start})</option>`
+          ).join('');
+        } else if (ACTIVE_READER_BOOK.chapters && ACTIVE_READER_BOOK.chapters.length > 0) {
+          jumpSelect.innerHTML = ACTIVE_READER_BOOK.chapters.map((ch, idx) =>
+            `<option value="${ch.page_start || (idx + 1)}">${(ch.title || '').slice(0, 24)} (Page ${ch.page_start || (idx + 1)})</option>`
+          ).join('');
+        } else if (maxPages > 50) {
+          const chunks = [];
+          for (let i = 1; i <= maxPages; i += 10) {
+            const end = Math.min(i + 9, maxPages);
+            chunks.push(`<option value="${i}">Pages ${i}–${end}</option>`);
+          }
+          jumpSelect.innerHTML = chunks.join('');
+        } else {
+          jumpSelect.innerHTML = Array.from({ length: maxPages }, (_, i) => i + 1)
+            .map(p => `<option value="${p}">Page ${p}</option>`)
+            .join('');
+        }
         jumpSelect.value = ACTIVE_READER_PAGE;
       }
 

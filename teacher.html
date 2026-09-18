@@ -7,11 +7,12 @@
   <!-- Tailwind CSS CDN -->
   <script src="https://cdn.tailwindcss.com"></script>
   <!-- Font Awesome 6 Icons -->
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-  <!-- Google Font: Plus Jakarta Sans -->
+  <!-- Modern Fonts & Icons (Plus Jakarta Sans, JetBrains Mono, Outfit) -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700;800&family=Outfit:wght@500;600;700;800;900&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  
   <!-- Supabase JS Client -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <!-- Al-Huda Curriculum & Digital Islamic Library Engine -->
@@ -23,6 +24,8 @@
         extend: {
           fontFamily: {
             sans: ['"Plus Jakarta Sans"', 'sans-serif'],
+            mono: ['"JetBrains Mono"', 'monospace'],
+            num: ['"Outfit"', '"JetBrains Mono"', 'sans-serif']
           },
           colors: {
             brandDark: '#064e3b',
@@ -34,6 +37,75 @@
       }
     }
   </script>
+
+  <style>
+    body {
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11', 'tnum';
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* Numbers Styling */
+    .font-mono, td.font-mono, span.font-mono, div.font-mono {
+      font-family: 'JetBrains Mono', monospace !important;
+      font-feature-settings: 'tnum' 1, 'zero' 1;
+      letter-spacing: -0.02em;
+    }
+
+    /* Aesthetic Dropdowns across Teacher Portal */
+    select {
+      appearance: none !important;
+      -webkit-appearance: none !important;
+      -moz-appearance: none !important;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%23059669' stroke-width='2.5'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E") !important;
+      background-position: right 0.75rem center !important;
+      background-repeat: no-repeat !important;
+      background-size: 1.05rem 1.05rem !important;
+      padding-right: 2.35rem !important;
+      border: 1.5px solid #cbd5e1 !important;
+      border-radius: 0.75rem !important;
+      font-weight: 600 !important;
+      color: #0f172a !important;
+      background-color: #ffffff !important;
+      transition: all 0.18s cubic-bezier(0.4, 0, 0.2, 1) !important;
+      box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.04) !important;
+      cursor: pointer;
+    }
+
+    select:hover {
+      border-color: #059669 !important;
+      background-color: #f8fafc !important;
+    }
+
+    select:focus {
+      outline: none !important;
+      border-color: #059669 !important;
+      box-shadow: 0 0 0 3px rgba(5, 150, 105, 0.18) !important;
+      background-color: #ffffff !important;
+    }
+
+    /* Dark Mode Reader / Modal Selects */
+    .bg-slate-900 select, .bg-slate-950 select, #modalDigitalBookReader select {
+      background-color: #0f172a !important;
+      border-color: #334155 !important;
+      color: #f8fafc !important;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%2334d399' stroke-width='2.5'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E") !important;
+    }
+    .bg-slate-900 select:hover, .bg-slate-950 select:hover, #modalDigitalBookReader select:hover {
+      border-color: #059669 !important;
+    }
+    .bg-slate-900 select:focus, .bg-slate-950 select:focus, #modalDigitalBookReader select:focus {
+      border-color: #34d399 !important;
+      box-shadow: 0 0 0 3px rgba(52, 211, 153, 0.25) !important;
+    }
+
+    select option {
+      padding: 8px 12px !important;
+      font-weight: 500 !important;
+      color: #0f172a !important;
+      background-color: #ffffff !important;
+    }
+  </style>
 </head>
 <body class="bg-slate-50 text-slate-800 font-sans min-h-screen flex flex-col antialiased">
 
@@ -760,6 +832,7 @@
         </button>
       </div>
     </div>
+  </div>
   <!-- ============================================================= -->
   <!-- MODAL: IN-LMS INTERACTIVE DIGITAL BOOK READER (HD ENGINE)        -->
   <!-- ============================================================= -->
@@ -1616,7 +1689,7 @@
       let html = '';
       if (book.id === 'quran-16-line' && book.paras) {
         html = book.paras.map(p => `
-          <option value="${p.page_start}">Para ${p.para}: ${p.name_ur} (Page ${p.page_start})</option>
+          <option value="${p.page_start}">Para ${p.para} (Page ${p.page_start})</option>
         `).join('');
       } else if (book.chapters && book.chapters.length > 0) {
         html = book.chapters.map((ch, idx) => `
@@ -1943,7 +2016,7 @@
       if (book.paras && book.paras.length > 0) {
         // ✅ Quran (30 Paras = 30 options, not 604!) — massive performance win
         optionsHtml = book.paras.map(p =>
-          `<option value="${p.page_start}">Para ${p.para}: ${p.name_ur} (Pg ${p.page_start})</option>`
+          `<option value="${p.page_start}">Para ${p.para} (Page ${p.page_start})</option>`
         ).join('');
       } else if (book.chapters && book.chapters.length > 0) {
         optionsHtml = book.chapters.map((ch, idx) =>
