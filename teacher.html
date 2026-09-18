@@ -871,8 +871,61 @@
     </div>
   </div>
 
+
+  <!-- ================================================================= -->
+  <!-- MODAL: DIGITAL LIBRARY BOOK PICKER (Teacher Course Material Grid)  -->
+  <!-- Opens when teacher clicks "Digital Library" nav button             -->
+  <!-- ================================================================= -->
+  <div id="modalTeacherLibraryPicker" class="fixed inset-0 bg-black/85 backdrop-blur-md z-[94] hidden items-center justify-center p-2 sm:p-4">
+    <div class="bg-slate-900 rounded-2xl w-full max-w-5xl max-h-[92vh] flex flex-col shadow-2xl border border-slate-700 overflow-hidden text-white">
+      
+      <!-- Header -->
+      <div class="bg-slate-950 px-5 py-4 border-b border-slate-800 flex items-center justify-between flex-shrink-0">
+        <div class="flex items-center gap-3">
+          <div class="w-10 h-10 rounded-xl bg-brandDark flex items-center justify-center text-brandGold text-lg shadow-xs">
+            <i class="fa-solid fa-book-quran"></i>
+          </div>
+          <div>
+            <h3 class="font-extrabold text-base text-white tracking-tight">Al-Huda Digital Islamic Library</h3>
+            <p class="text-[11px] text-emerald-300 mt-0.5">Select a book to open in the classroom reader</p>
+          </div>
+        </div>
+        <button onclick="closeTeacherLibraryPicker()" class="w-9 h-9 rounded-xl bg-rose-950/70 hover:bg-rose-900 text-rose-200 border border-rose-800/60 flex items-center justify-center font-black text-lg transition" title="Close">&times;</button>
+      </div>
+
+      <!-- Category Filter Tabs -->
+      <div class="bg-slate-900/80 px-5 py-3 border-b border-slate-800 flex items-center gap-2 flex-wrap flex-shrink-0">
+        <span class="text-[11px] text-slate-400 font-semibold mr-1">Filter:</span>
+        <button onclick="filterTeacherLibrary('all')" id="libFilterAll" class="lib-filter-btn px-3 py-1 rounded-full text-xs font-bold bg-emerald-800 text-white border border-emerald-600 transition">All Books</button>
+        <button onclick="filterTeacherLibrary('qaida')" id="libFilterQaida" class="lib-filter-btn px-3 py-1 rounded-full text-xs font-bold bg-slate-800 text-slate-300 border border-slate-700 hover:bg-slate-700 transition">Qaida & Primers</button>
+        <button onclick="filterTeacherLibrary('quran')" id="libFilterQuran" class="lib-filter-btn px-3 py-1 rounded-full text-xs font-bold bg-slate-800 text-slate-300 border border-slate-700 hover:bg-slate-700 transition">Holy Quran</button>
+        <button onclick="filterTeacherLibrary('tafseer')" id="libFilterTafseer" class="lib-filter-btn px-3 py-1 rounded-full text-xs font-bold bg-slate-800 text-slate-300 border border-slate-700 hover:bg-slate-700 transition">Tafseer & Trans.</button>
+        <button onclick="filterTeacherLibrary('hadith')" id="libFilterHadith" class="lib-filter-btn px-3 py-1 rounded-full text-xs font-bold bg-slate-800 text-slate-300 border border-slate-700 hover:bg-slate-700 transition">Hadith</button>
+        <button onclick="filterTeacherLibrary('essentials')" id="libFilterEssentials" class="lib-filter-btn px-3 py-1 rounded-full text-xs font-bold bg-slate-800 text-slate-300 border border-slate-700 hover:bg-slate-700 transition">Essentials</button>
+      </div>
+
+      <!-- Books Grid -->
+      <div class="flex-1 overflow-y-auto p-4 sm:p-5">
+        <div id="teacherLibraryGrid" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+          <!-- Populated by JS -->
+        </div>
+        <div id="teacherLibraryEmpty" class="hidden py-16 text-center">
+          <i class="fa-solid fa-book-open text-4xl text-slate-600 mb-3"></i>
+          <p class="text-slate-500 text-sm font-semibold">No books in this category</p>
+        </div>
+      </div>
+
+      <!-- Footer -->
+      <div class="bg-slate-950 px-5 py-3 border-t border-slate-800 flex items-center justify-between text-xs text-slate-500 flex-shrink-0">
+        <span><i class="fa-solid fa-circle-info text-emerald-600 mr-1"></i>Click any book to open it in the Classroom Reader</span>
+        <span class="text-emerald-400 font-mono font-bold" id="libBookCountLabel"></span>
+      </div>
+    </div>
+  </div>
+
   <!-- ================= FOOTER ================= -->
   <footer class="bg-white border-t border-slate-200 py-4 text-center text-xs text-slate-500 mt-auto">
+
     <p>Al-Huda Islamic Centre LMS &copy; 2026. All rights reserved. Teacher Privacy Shield Active.</p>
   </footer>
 
@@ -1588,7 +1641,89 @@
     }
 
     function openTeacherDigitalLibrary() {
-      openDigitalBookReader('noorani-qaida-classic', 1);
+      // Show the library picker modal (book grid) first, then reader opens on selection
+      const allBooks = getTeacherAllBooks();
+      renderTeacherLibraryGrid(allBooks);
+      document.getElementById('modalTeacherLibraryPicker').classList.remove('hidden');
+      document.getElementById('modalTeacherLibraryPicker').classList.add('flex');
+    }
+
+    function closeTeacherLibraryPicker() {
+      document.getElementById('modalTeacherLibraryPicker').classList.add('hidden');
+      document.getElementById('modalTeacherLibraryPicker').classList.remove('flex');
+    }
+
+    let CURRENT_LIB_FILTER = 'all';
+
+    function filterTeacherLibrary(category) {
+      CURRENT_LIB_FILTER = category;
+
+      // Update active tab styling
+      const tabs = { all: 'libFilterAll', qaida: 'libFilterQaida', quran: 'libFilterQuran', tafseer: 'libFilterTafseer', hadith: 'libFilterHadith', essentials: 'libFilterEssentials' };
+      Object.values(tabs).forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.className = 'lib-filter-btn px-3 py-1 rounded-full text-xs font-bold bg-slate-800 text-slate-300 border border-slate-700 hover:bg-slate-700 transition';
+      });
+      const activeEl = document.getElementById(tabs[category]);
+      if (activeEl) activeEl.className = 'lib-filter-btn px-3 py-1 rounded-full text-xs font-bold bg-emerald-800 text-white border border-emerald-600 transition';
+
+      const allBooks = getTeacherAllBooks();
+      const filtered = category === 'all' ? allBooks : allBooks.filter(b => b.category === category);
+      renderTeacherLibraryGrid(filtered);
+    }
+
+    function renderTeacherLibraryGrid(books) {
+      const grid = document.getElementById('teacherLibraryGrid');
+      const empty = document.getElementById('teacherLibraryEmpty');
+      const countEl = document.getElementById('libBookCountLabel');
+
+      if (!grid) return;
+
+      if (!books || books.length === 0) {
+        grid.innerHTML = '';
+        if (empty) empty.classList.remove('hidden');
+        if (countEl) countEl.textContent = '0 Books';
+        return;
+      }
+
+      if (empty) empty.classList.add('hidden');
+      if (countEl) countEl.textContent = `${books.length} Book${books.length !== 1 ? 's' : ''}`;
+
+      const categoryColors = {
+        qaida:      'from-emerald-700 to-teal-900',
+        quran:      'from-[#022c22] via-[#064e3b] to-[#047857]',
+        tafseer:    'from-amber-700 via-orange-800 to-amber-950',
+        hadith:     'from-cyan-800 via-sky-900 to-slate-950',
+        essentials: 'from-blue-800 via-teal-800 to-slate-950',
+      };
+
+      grid.innerHTML = books.map(b => {
+        const gradFrom = categoryColors[b.category] || 'from-slate-700 to-slate-900';
+        const icon = b.cover_icon || 'fa-solid fa-book';
+        const pgInfo = b.total_pages ? `${b.total_pages} pages` : (b.total_pages ? `${b.total_pages} hadith` : 'Course Material');
+        const badge = b.category_label || b.categoryLabel || 'Material';
+        return `
+          <button onclick="closeTeacherLibraryPicker(); openDigitalBookReader('${b.id}', 1);"
+            class="bg-slate-800 hover:bg-slate-750 border border-slate-700 hover:border-emerald-600 rounded-2xl p-0 overflow-hidden text-left transition group focus:outline-none focus:ring-2 focus:ring-emerald-500 shadow-md hover:shadow-emerald-900/30">
+            <!-- Book Cover Gradient -->
+            <div class="bg-gradient-to-br ${gradFrom} h-28 flex flex-col items-center justify-center px-3 relative">
+              <div class="w-12 h-12 rounded-xl bg-white/15 flex items-center justify-center text-2xl text-white mb-1">
+                <i class="${icon}"></i>
+              </div>
+              <span class="text-[9px] font-bold uppercase tracking-widest text-white/70 bg-black/20 px-2 py-0.5 rounded-full">${badge}</span>
+            </div>
+            <!-- Book Info -->
+            <div class="p-3">
+              <h4 class="font-bold text-xs text-white leading-tight line-clamp-2 mb-1 group-hover:text-emerald-300 transition">${b.title}</h4>
+              ${b.author ? `<p class="text-[10px] text-slate-400 truncate mb-1">${b.author}</p>` : ''}
+              <div class="flex items-center justify-between mt-1">
+                <span class="text-[10px] text-emerald-400 font-mono">${pgInfo}</span>
+                <i class="fa-solid fa-arrow-right text-[10px] text-slate-500 group-hover:text-emerald-400 transition"></i>
+              </div>
+            </div>
+          </button>
+        `;
+      }).join('');
     }
 
     // Attendance & Sabaq Modal Handlers
@@ -1803,22 +1938,35 @@
       if (!jumpSelect) return;
 
       let optionsHtml = '';
-      if (book.id === 'quran-16-line' && book.paras) {
-        optionsHtml = book.paras.map(p => `
-          <option value="${p.page_start}">Para ${p.para}: ${p.name_ur} (Pg ${p.page_start})</option>
-        `).join('');
+      const maxP = book.total_pages || book.totalPages || 32;
+
+      if (book.paras && book.paras.length > 0) {
+        // ✅ Quran (30 Paras = 30 options, not 604!) — massive performance win
+        optionsHtml = book.paras.map(p =>
+          `<option value="${p.page_start}">Para ${p.para}: ${p.name_ur} (Pg ${p.page_start})</option>`
+        ).join('');
       } else if (book.chapters && book.chapters.length > 0) {
-        optionsHtml = book.chapters.map((ch, idx) => `
-          <option value="${ch.page_start || (idx + 1)}">${ch.title.slice(0, 24)}... (Pg ${ch.page_start || (idx + 1)})</option>
-        `).join('');
+        optionsHtml = book.chapters.map((ch, idx) =>
+          `<option value="${ch.page_start || (idx + 1)}">${(ch.title || '').slice(0, 28)} (Pg ${ch.page_start || (idx + 1)})</option>`
+        ).join('');
+      } else if (maxP > 50) {
+        // Large books without chapters: group into chunks of 10 for performance
+        const chunkSize = 10;
+        const chunks = [];
+        for (let i = 1; i <= maxP; i += chunkSize) {
+          const end = Math.min(i + chunkSize - 1, maxP);
+          chunks.push(`<option value="${i}">Pages ${i}–${end}</option>`);
+        }
+        optionsHtml = chunks.join('');
       } else {
-        const maxP = book.total_pages || 32;
+        // Small books: page-by-page
         const pageOptions = [];
         for (let i = 1; i <= maxP; i++) pageOptions.push(`<option value="${i}">Page ${i}</option>`);
         optionsHtml = pageOptions.join('');
       }
       jumpSelect.innerHTML = optionsHtml;
     }
+
 
     function renderReaderCurrentPage() {
       if (!CURRENT_READER_BOOK) return;
@@ -1872,6 +2020,11 @@
         if (spinner) spinner.classList.remove('hidden');
         img.style.transform = `scale(${CURRENT_READER_ZOOM})`;
 
+        // Cancel any in-progress previous load to prevent race conditions
+        img.onload = null;
+        img.onerror = null;
+        img.src = '';
+
         let pageUrl = '';
         if (typeof book.getPageUrl === 'function') {
           pageUrl = book.getPageUrl(CURRENT_READER_PAGE);
@@ -1883,7 +2036,15 @@
           pageUrl = generateDynamicSvgPage(book, CURRENT_READER_PAGE);
         }
 
-        img.onload = () => { if (spinner) spinner.classList.add('hidden'); };
+        img.onload = () => {
+          if (spinner) spinner.classList.add('hidden');
+          // Preload next & previous pages for instant flip
+          if (typeof book.getPageUrl === 'function') {
+            const maxP = book.total_pages || book.totalPages || 32;
+            if (CURRENT_READER_PAGE < maxP) { new Image().src = book.getPageUrl(CURRENT_READER_PAGE + 1); }
+            if (CURRENT_READER_PAGE > 1) { new Image().src = book.getPageUrl(CURRENT_READER_PAGE - 1); }
+          }
+        };
         img.onerror = () => {
           img.onerror = null;
           let fallback = '';

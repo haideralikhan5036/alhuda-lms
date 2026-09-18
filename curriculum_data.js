@@ -197,9 +197,11 @@ const ALHUDA_CURRICULUM = [
     ],
     getPageUrl: function(pageNum) {
       const p = Math.max(1, Math.min(this.total_pages, Number(pageNum) || 1));
-      return `https://archive.org/download/noorani-qaida_202401/page/n${p}.jpg`;
+      // High-quality 2025 verified scans (~220KB/page, sharp color scan)
+      return `https://archive.org/download/noorani_qaida_202503/page/n${p}.jpg`;
     },
     getFallbackPageUrl: function(pageNum) {
+      // Secondary fallback: 2024 version, then crisp Al-Huda vector edition
       return generateDynamicSvgDataUri(this, pageNum);
     }
   },
