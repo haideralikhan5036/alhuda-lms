@@ -1482,6 +1482,28 @@
               </div>
             </div>
 
+            <!-- AVAILABLE ADVANCE CREDIT (SURPLUS FROM PAST MONTHS) -->
+            <div id="feeAdvanceCreditAlertBox" class="hidden p-3.5 bg-emerald-50 border-2 border-emerald-300 rounded-2xl flex items-center justify-between gap-3 shadow-2xs">
+              <div class="flex items-center gap-2.5">
+                <div class="w-9 h-9 rounded-xl bg-emerald-700 text-white flex items-center justify-center text-sm font-bold shadow-2xs shrink-0">
+                  <i class="fa-solid fa-wallet"></i>
+                </div>
+                <div>
+                  <span class="text-[10px] font-black uppercase tracking-wider text-emerald-800 block">Available Advance Credit (فالتو جمع شدہ رقم / پیشگی بیلنس)</span>
+                  <span class="text-xs font-extrabold text-emerald-950">
+                    Previous overpayment available: <strong id="feeAdvanceCreditAvailableAmt" class="text-emerald-700 font-mono text-sm">--</strong>
+                  </span>
+                  <span class="text-[10px] text-emerald-700 block">Automatically deducted from this month's total bill.</span>
+                </div>
+              </div>
+              <div class="flex items-center gap-2">
+                <label class="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-emerald-300 rounded-xl cursor-pointer text-xs font-bold text-emerald-900 shadow-2xs hover:bg-emerald-100/50 transition">
+                  <input type="checkbox" id="feeToggleApplyAdvanceCredit" onchange="recalcFeeTotalLive()" checked class="w-4 h-4 rounded text-emerald-700 accent-emerald-700">
+                  <span>Auto-Deduct Credit</span>
+                </label>
+              </div>
+            </div>
+
             <!-- FINANCIAL ITEMIZATION FIELDS -->
             <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5 pt-2">
               
@@ -1495,8 +1517,13 @@
                 <input type="number" step="any" id="feeFormPreviousBalance" value="0.00" oninput="recalcFeeTotalLive()" class="w-full p-2.5 bg-amber-50 border border-amber-200 rounded-xl text-xs font-bold font-num text-amber-900">
               </div>
 
+              <div id="feeFormCreditDeductedCol" class="hidden">
+                <label class="block text-xs font-bold text-emerald-800 mb-1">Advance Credit Deducted (-):</label>
+                <input type="number" step="any" id="feeFormCreditDeducted" readonly value="0.00" class="w-full p-2.5 bg-emerald-100/80 border border-emerald-300 rounded-xl text-xs font-extrabold font-num text-emerald-900">
+              </div>
+
               <div>
-                <label class="block text-xs font-extrabold text-emerald-800 mb-1">Gross Total Payable:</label>
+                <label class="block text-xs font-extrabold text-emerald-800 mb-1">Net Total Payable:</label>
                 <input type="number" step="any" id="feeFormTotalPayable" readonly placeholder="0.00" class="w-full p-2.5 bg-emerald-50 border border-emerald-300 rounded-xl text-sm font-black font-num text-emerald-950">
               </div>
 
@@ -1516,6 +1543,16 @@
               <div>
                 <label class="block text-xs font-extrabold text-rose-800 mb-1">Remaining Balance (Carry-forward):</label>
                 <input type="number" step="any" id="feeFormRemainingBalance" readonly value="0.00" class="w-full p-2.5 bg-rose-50 border border-rose-200 rounded-xl text-sm font-black font-num text-rose-900">
+              </div>
+
+              <!-- LIVE SURPLUS / OVERPAYMENT NOTICE (WHEN PARENT PAYS EXTRA) -->
+              <div id="feeOverpaymentNoticeBox" class="hidden col-span-full p-3 bg-cyan-50 border border-cyan-300 rounded-xl flex items-center justify-between text-xs text-cyan-950 shadow-2xs">
+                <div class="flex items-center gap-2 font-bold">
+                  <i class="fa-solid fa-circle-plus text-cyan-700 text-sm"></i>
+                  <span>Extra / Advance Payment Detected: <strong id="feeOverpaymentNoticeAmt" class="font-mono text-sm text-cyan-900 font-black">--</strong></span>
+                  <span class="text-[11px] font-normal text-cyan-800">(Yeh raqam aglay mahinay kay bill say khud-ba-khud deduct hogi)</span>
+                </div>
+                <span class="px-2.5 py-1 rounded-lg text-[10px] font-black bg-cyan-700 text-white uppercase tracking-wider">Credited to Next Month</span>
               </div>
 
               <div>
@@ -4040,8 +4077,13 @@
                   <td class="p-2.5 text-amber-800">Prior Dues</td>
                   <td class="p-2.5 text-right font-mono font-bold text-amber-900" id="feeInvPrevBalanceAmt">--</td>
                 </tr>
+                <tr id="feeInvAdvanceCreditDeductedRow" class="hidden bg-emerald-50/80 text-emerald-900">
+                  <td class="p-2.5 font-bold"><i class="fa-solid fa-wallet text-emerald-700 mr-1"></i> Less: Advance Credit (Pre-Paid from Previous Month)</td>
+                  <td class="p-2.5 text-emerald-800">Credit Adjusted</td>
+                  <td class="p-2.5 text-right font-mono font-bold text-emerald-800" id="feeInvAdvanceCreditDeductedAmt">--</td>
+                </tr>
                 <tr class="bg-slate-50 font-extrabold text-slate-900">
-                  <td colspan="2" class="p-2.5">Gross Total Payable:</td>
+                  <td colspan="2" class="p-2.5">Net Total Payable:</td>
                   <td class="p-2.5 text-right font-mono" id="feeInvGrossTotal">--</td>
                 </tr>
                 <tr id="feeInvDiscountRow" class="hidden text-rose-700">
@@ -4064,6 +4106,17 @@
             </div>
             <p class="text-[11px] text-amber-800">
               This remaining balance has been carried forward and will be automatically added to your next billing statement.
+            </p>
+          </div>
+
+          <!-- ADVANCE SURPLUS CREDIT BOX (WHEN OVERPAID) -->
+          <div id="feeInvAdvanceCreditCarriedBox" class="hidden p-3.5 bg-emerald-50 border-2 border-dashed border-emerald-400 rounded-xl space-y-1">
+            <div class="flex items-center gap-2 font-black text-xs text-emerald-900">
+              <i class="fa-solid fa-circle-check text-emerald-600"></i>
+              <span>Advance Credit Carried Forward: <strong id="feeInvAdvanceCreditCarriedAmt" class="text-emerald-950 font-mono">--</strong></span>
+            </div>
+            <p class="text-[11px] text-emerald-800">
+              Alhamdulillah! Extra payment has been credited to your family account and will be automatically deducted from your next tuition fee invoice.
             </p>
           </div>
 
@@ -9547,6 +9600,46 @@ Al-Huda Islamic Centre Management`;
       triggerFeeBalanceRecalc();
     }
 
+    // -------------------------------------------------------------
+    // ADVANCE CREDIT & OVERPAYMENT ENGINE
+    // Tracks extra / advance payments (surplus) from parents.
+    // When a parent pays extra, it automatically carries forward as an
+    // Advance Credit to deduct from the following month's billing.
+    // -------------------------------------------------------------
+    function getFamilyAvailableAdvanceCredit(familyId, upToMonthName, upToYear) {
+      if (!familyId) return 0;
+      const fIdUpper = String(familyId).toUpperCase();
+      const records = getStoredFeeRecords().filter(r => String(r.familyId).toUpperCase() === fIdUpper);
+      const overrides = getStoredMatrixOverrides();
+
+      const upToMIdx = upToMonthName 
+        ? FEE_CONFIG.MONTHS.findIndex(m => m.toLowerCase() === String(upToMonthName).toLowerCase())
+        : 11;
+      const upToYearInt = parseInt(upToYear || 2026, 10);
+      const upToScore = upToYearInt * 100 + upToMIdx;
+
+      let netCredit = 0;
+
+      // 1. Check past payment records before this billing period
+      records.forEach(r => {
+        const rY = parseInt(r.year, 10);
+        const rMIdx = FEE_CONFIG.MONTHS.findIndex(m => m.toLowerCase() === String(r.month).toLowerCase());
+        const rScore = rY * 100 + rMIdx;
+
+        if (rScore < upToScore) {
+          const excess = parseFloat(r.excessPaid || 0);
+          const used = parseFloat(r.creditDeducted || 0);
+          netCredit += (excess - used);
+        }
+      });
+
+      // 2. Check manual credit override if any
+      const manCredit = parseFloat(overrides[`CREDIT_${fIdUpper}`] || 0);
+      netCredit += manCredit;
+
+      return Math.max(0, netCredit);
+    }
+
     function triggerFeeBalanceRecalc() {
       const famId = document.getElementById('feeFormFamilyId').value;
       const targetMonth = document.getElementById('feeFormMonth').value;
@@ -9623,6 +9716,33 @@ Al-Huda Islamic Centre Management`;
         document.getElementById('feeFormMonthlyFee').value = monthlyFee.toFixed(2);
       }
 
+      // Check for available advance credit (extra paid in past months)
+      const availableCredit = getFamilyAvailableAdvanceCredit(famId, targetMonth, targetYear);
+      const creditBox = document.getElementById('feeAdvanceCreditAlertBox');
+      const creditAmtEl = document.getElementById('feeAdvanceCreditAvailableAmt');
+      const creditDeductedCol = document.getElementById('feeFormCreditDeductedCol');
+      const creditDeductedInput = document.getElementById('feeFormCreditDeducted');
+      const applyCreditToggle = document.getElementById('feeToggleApplyAdvanceCredit');
+
+      let creditToApply = 0;
+      if (availableCredit > 0) {
+        if (creditBox) creditBox.classList.remove('hidden');
+        if (creditAmtEl) creditAmtEl.innerText = `${fam.currency || 'USD'} ${availableCredit.toFixed(2)}`;
+        
+        if (applyCreditToggle && applyCreditToggle.checked) {
+          creditToApply = Math.min(availableCredit, monthlyFee + finalPreviousBalance);
+          if (creditDeductedCol) creditDeductedCol.classList.remove('hidden');
+          if (creditDeductedInput) creditDeductedInput.value = creditToApply.toFixed(2);
+        } else {
+          if (creditDeductedCol) creditDeductedCol.classList.add('hidden');
+          if (creditDeductedInput) creditDeductedInput.value = '0.00';
+        }
+      } else {
+        if (creditBox) creditBox.classList.add('hidden');
+        if (creditDeductedCol) creditDeductedCol.classList.add('hidden');
+        if (creditDeductedInput) creditDeductedInput.value = '0.00';
+      }
+
       recalcFeeTotalLive();
 
       // Show/hide arrears alert banner
@@ -9651,7 +9771,26 @@ Al-Huda Islamic Centre Management`;
     function recalcFeeTotalLive() {
       const curFee = parseFloat(document.getElementById('feeFormMonthlyFee')?.value || 0);
       const prevBal = parseFloat(document.getElementById('feeFormPreviousBalance')?.value || 0);
-      const totalPayable = prevBal + curFee;
+      
+      const famId = document.getElementById('feeFormFamilyId')?.value;
+      const targetMonth = document.getElementById('feeFormMonth')?.value;
+      const targetYear = parseInt(document.getElementById('feeFormYear')?.value || 2026, 10);
+      const availableCredit = getFamilyAvailableAdvanceCredit(famId, targetMonth, targetYear);
+      const applyCreditToggle = document.getElementById('feeToggleApplyAdvanceCredit');
+      const creditDeductedCol = document.getElementById('feeFormCreditDeductedCol');
+      const creditDeductedInput = document.getElementById('feeFormCreditDeducted');
+
+      let creditToApply = 0;
+      if (availableCredit > 0 && applyCreditToggle && applyCreditToggle.checked) {
+        creditToApply = Math.min(availableCredit, curFee + prevBal);
+        if (creditDeductedCol) creditDeductedCol.classList.remove('hidden');
+        if (creditDeductedInput) creditDeductedInput.value = creditToApply.toFixed(2);
+      } else {
+        if (creditDeductedCol) creditDeductedCol.classList.add('hidden');
+        if (creditDeductedInput) creditDeductedInput.value = '0.00';
+      }
+
+      const totalPayable = Math.max(0, (prevBal + curFee) - creditToApply);
       
       const totalField = document.getElementById('feeFormTotalPayable');
       if (totalField) totalField.value = totalPayable.toFixed(2);
@@ -9667,21 +9806,43 @@ Al-Huda Islamic Centre Management`;
       const totalPayable = parseFloat(document.getElementById('feeFormTotalPayable')?.value || 0);
       const amountPaid = parseFloat(document.getElementById('feeFormAmountPaid')?.value || 0);
       const discount = parseFloat(document.getElementById('feeFormDiscount')?.value || 0);
+      const cur = document.getElementById('feeFormCurrency')?.value || 'USD';
 
-      let remaining = totalPayable - (amountPaid + discount);
-      if (remaining < 0) remaining = 0;
-      const remField = document.getElementById('feeFormRemainingBalance');
-      if (remField) remField.value = remaining.toFixed(2);
+      const overpayBox = document.getElementById('feeOverpaymentNoticeBox');
+      const overpayAmt = document.getElementById('feeOverpaymentNoticeAmt');
+
+      const netDue = Math.max(0, totalPayable - discount);
+
+      if (amountPaid > netDue) {
+        const excess = amountPaid - netDue;
+        const remField = document.getElementById('feeFormRemainingBalance');
+        if (remField) remField.value = '0.00';
+
+        if (overpayBox && overpayAmt) {
+          overpayAmt.innerText = `${cur} ${excess.toFixed(2)}`;
+          overpayBox.classList.remove('hidden');
+        }
+      } else {
+        const remaining = Math.max(0, netDue - amountPaid);
+        const remField = document.getElementById('feeFormRemainingBalance');
+        if (remField) remField.value = remaining.toFixed(2);
+
+        if (overpayBox) overpayBox.classList.add('hidden');
+      }
     }
 
     function resetFeeForm() {
       const form = document.getElementById('feeCollectionForm');
       if (form) form.reset();
       document.getElementById('feeArrearsAlertBox')?.classList.add('hidden');
+      document.getElementById('feeAdvanceCreditAlertBox')?.classList.add('hidden');
+      document.getElementById('feeFormCreditDeductedCol')?.classList.add('hidden');
+      document.getElementById('feeOverpaymentNoticeBox')?.classList.add('hidden');
       document.getElementById('feeProrateBox')?.classList.add('hidden');
       document.getElementById('feeAdvanceBox')?.classList.add('hidden');
       document.getElementById('feeFamilySearchInput').value = '';
       document.getElementById('feeFormPreviousBalance').value = '0.00';
+      document.getElementById('feeFormCreditDeducted').value = '0.00';
       document.getElementById('feeFormTotalPayable').value = '0.00';
       document.getElementById('feeFormRemainingBalance').value = '0.00';
       const amtInput = document.getElementById('feeFormAmountPaid');
@@ -9841,6 +10002,10 @@ Al-Huda Islamic Centre Management`;
       const amountPaid = parseFloat(document.getElementById('feeFormAmountPaid').value || 0);
       const discount = parseFloat(document.getElementById('feeFormDiscount').value || 0);
       const remaining = parseFloat(document.getElementById('feeFormRemainingBalance').value || 0);
+      const creditDeducted = parseFloat(document.getElementById('feeFormCreditDeducted')?.value || 0);
+
+      const netDue = Math.max(0, totalPayable - discount);
+      const excessPaid = amountPaid > netDue ? (amountPaid - netDue) : 0;
 
       const isProrated = document.getElementById('feeToggleProrated')?.checked || false;
       const isAdvance = document.getElementById('feeToggleAdvance')?.checked || false;
@@ -9859,15 +10024,17 @@ Al-Huda Islamic Centre Management`;
         year: parseInt(document.getElementById('feeFormYear').value, 10),
         monthlyFee: parseFloat(document.getElementById('feeFormMonthlyFee').value || 0),
         previousBalance: parseFloat(document.getElementById('feeFormPreviousBalance').value || 0),
+        creditDeducted,
         totalPayable,
         amountPaid,
         discount,
         remainingBalance: remaining,
+        excessPaid,
         currency: document.getElementById('feeFormCurrency').value,
         paymentMethod: document.getElementById('feeFormPaymentMethod').value,
         transactionId: document.getElementById('feeFormTxnId').value || 'N/A',
         notes: document.getElementById('feeFormNotes').value || '',
-        status: remaining > 0 ? 'Partial (Balance Remaining)' : 'Paid in Full',
+        status: remaining > 0 ? 'Partial (Balance Remaining)' : (excessPaid > 0 ? 'Paid in Full (Advance Credit)' : 'Paid in Full'),
         isProrated,
         activeDays: isProrated ? parseInt(document.getElementById('feeProrateActiveDays').value, 10) : 0,
         joiningDate: isProrated ? document.getElementById('feeProrateStartDate').value : '',
@@ -9890,9 +10057,11 @@ Al-Huda Islamic Centre Management`;
             year: curY,
             monthlyFee: singleFee,
             previousBalance: i === 0 ? paymentRecord.previousBalance : 0,
+            creditDeducted: i === 0 ? paymentRecord.creditDeducted : 0,
             totalPayable: i === 0 ? paymentRecord.totalPayable : singleFee,
             amountPaid: i === 0 ? paymentRecord.amountPaid : singleFee,
             remainingBalance: i === 0 ? paymentRecord.remainingBalance : 0,
+            excessPaid: i === 0 ? paymentRecord.excessPaid : 0,
             status: i === 0 ? paymentRecord.status : 'Paid in Advance'
           });
         }
@@ -9950,6 +10119,17 @@ Al-Huda Islamic Centre Management`;
         prevRow.classList.add('hidden');
       }
 
+      const credRow = document.getElementById('feeInvAdvanceCreditDeductedRow');
+      const credAmt = parseFloat(r.creditDeducted || 0);
+      if (credRow) {
+        if (credAmt > 0) {
+          credRow.classList.remove('hidden');
+          document.getElementById('feeInvAdvanceCreditDeductedAmt').innerText = `- ${cur} ${credAmt.toFixed(2)}`;
+        } else {
+          credRow.classList.add('hidden');
+        }
+      }
+
       document.getElementById('feeInvGrossTotal').innerText = `${cur} ${parseFloat(r.totalPayable || 0).toFixed(2)}`;
       document.getElementById('feeInvTotalPaid').innerText = `${cur} ${parseFloat(r.amountPaid || 0).toFixed(2)}`;
       document.getElementById('feeInvPaymentMethod').innerText = r.paymentMethod || 'Online';
@@ -9978,9 +10158,24 @@ Al-Huda Islamic Centre Management`;
         stamp.innerText = "PAID IN FULL (ALL DUES CLEARED)";
       }
 
+      const excessBox = document.getElementById('feeInvAdvanceCreditCarriedBox');
+      const excessAmt = parseFloat(r.excessPaid || 0);
+      if (excessBox) {
+        if (excessAmt > 0) {
+          excessBox.classList.remove('hidden');
+          document.getElementById('feeInvAdvanceCreditCarriedAmt').innerText = `+ ${cur} ${excessAmt.toFixed(2)}`;
+        } else {
+          excessBox.classList.add('hidden');
+        }
+      }
+
       // Format WhatsApp Message link
       const cleanPhone = (r.whatsapp || '').replace(/[^0-9]/g, '');
-      const waMsg = `Assalam-o-Alaikum Respected ${r.parentName},\n\n*OFFICIAL TUITION FEE RECEIPT - AL-HUDA ISLAMIC CENTRE*\n--------------------------------------\nReceipt No: *${r.receiptNo}*\nDate: *${r.date}*\nStudent(s): *${r.studentsNames}*\nBilling Period: *${r.month} ${r.year}*\nTotal Due: *${cur} ${parseFloat(r.totalPayable || 0).toFixed(2)}*\nAmount Paid: *${cur} ${parseFloat(r.amountPaid || 0).toFixed(2)}*\nRemaining Balance: *${cur} ${remaining.toFixed(2)}*\nStatus: *${r.status}*\n--------------------------------------\nJazakAllahu Khairan!\n*Al-Huda Islamic Centre Accounts*`;
+      let creditMsg = '';
+      if (credAmt > 0) creditMsg += `Advance Credit Deducted: *- ${cur} ${credAmt.toFixed(2)}*\n`;
+      if (excessAmt > 0) creditMsg += `Next Month Advance Credit: *+ ${cur} ${excessAmt.toFixed(2)}*\n`;
+
+      const waMsg = `Assalam-o-Alaikum Respected ${r.parentName},\n\n*OFFICIAL TUITION FEE RECEIPT - AL-HUDA ISLAMIC CENTRE*\n--------------------------------------\nReceipt No: *${r.receiptNo}*\nDate: *${r.date}*\nStudent(s): *${r.studentsNames}*\nBilling Period: *${r.month} ${r.year}*\nTotal Due: *${cur} ${parseFloat(r.totalPayable || 0).toFixed(2)}*\n${creditMsg}Amount Paid: *${cur} ${parseFloat(r.amountPaid || 0).toFixed(2)}*\nRemaining Balance: *${cur} ${remaining.toFixed(2)}*\nStatus: *${r.status}*\n--------------------------------------\nJazakAllahu Khairan!\n*Al-Huda Islamic Centre Accounts*`;
       const waBtn = document.getElementById('feeInvWhatsAppBtn');
       if (waBtn) waBtn.href = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(waMsg)}`;
 
@@ -10452,7 +10647,8 @@ Al-Huda Islamic Centre Management`;
       
       const regStus = (fam.students || []).filter(s => (s.status || '').toLowerCase() !== 'trial');
       document.getElementById('ledgerStudentsNames').innerText = regStus.map(s => s.name).join(', ') || 'Enrolled Student';
-      document.getElementById('ledgerContactInfo').innerText = `${fam.country || 'International'} • WhatsApp: ${fam.whatsapp || '--'}`;
+      const availCredit = getFamilyAvailableAdvanceCredit(famId);
+      document.getElementById('ledgerContactInfo').innerHTML = `${fam.country || 'International'} • WhatsApp: ${fam.whatsapp || '--'} • <span class="text-emerald-700 font-bold bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200"><i class="fa-solid fa-wallet mr-1"></i>Advance Credit: ${fam.currency || 'USD'} ${availCredit.toFixed(2)}</span>`;
       document.getElementById('ledgerMonthlyFee').innerText = `${fam.currency || 'USD'} ${parseFloat(fam.monthly_fee || 0).toFixed(2)}`;
 
       // Render 12 months status cards
@@ -10500,7 +10696,11 @@ Al-Huda Islamic Centre Management`;
               <td class="p-2.5 font-medium text-slate-800">${r.month} ${r.year}</td>
               <td class="p-2.5 font-bold font-mono text-emerald-700">${r.currency} ${parseFloat(r.amountPaid || 0).toFixed(2)}</td>
               <td class="p-2.5 font-mono text-rose-700">${r.currency} ${parseFloat(r.remainingBalance || 0).toFixed(2)}</td>
-              <td class="p-2.5"><span class="px-1.5 py-0.5 rounded text-[9px] font-bold ${r.remainingBalance > 0 ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-800'}">${r.status}</span></td>
+              <td class="p-2.5">
+                <span class="px-1.5 py-0.5 rounded text-[9px] font-bold ${r.remainingBalance > 0 ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-800'}">${r.status}</span>
+                ${parseFloat(r.excessPaid || 0) > 0 ? `<span class="block text-[8px] font-bold text-cyan-700 mt-0.5">+${r.currency} ${parseFloat(r.excessPaid).toFixed(0)} Credit</span>` : ''}
+                ${parseFloat(r.creditDeducted || 0) > 0 ? `<span class="block text-[8px] font-bold text-purple-700 mt-0.5">-${r.currency} ${parseFloat(r.creditDeducted).toFixed(0)} Used</span>` : ''}
+              </td>
               <td class="p-2.5 text-slate-500">${r.paymentMethod || 'Online'}</td>
               <td class="p-2.5 text-right">
                 <button onclick="openFeeInvoiceModal(${JSON.stringify(r).replace(/"/g, '&quot;')})" class="px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-[10px] font-bold">
