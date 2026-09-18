@@ -266,7 +266,10 @@
       </button>
       <button onclick="switchTab('tab-invoices')" data-tab="tab-invoices" class="sidebar-nav-btn nav-tab role-owner w-full text-left px-3 py-2.5 rounded-lg text-sm font-bold flex items-center gap-3 text-slate-700 hover:bg-emerald-50 hover:text-brandDark transition">
         <i class="fa-solid fa-file-invoice-dollar text-brandGold w-4 flex-shrink-0"></i>
-        <span class="sidebar-label">Fee Billing &amp; WhatsApp</span>
+        <span class="sidebar-label flex items-center justify-between flex-1">
+          <span>Fee Management &amp; Matrix</span>
+          <span id="navFeePendingBadge" class="hidden px-1.5 rounded-full text-[10px] font-mono bg-rose-100 text-rose-800 font-extrabold border border-rose-200">0</span>
+        </span>
       </button>
       <button onclick="switchTab('tab-curriculum')" data-tab="tab-curriculum" class="sidebar-nav-btn nav-tab w-full text-left px-3 py-2.5 rounded-lg text-sm font-bold flex items-center gap-3 text-slate-700 hover:bg-emerald-50 hover:text-brandDark transition">
         <i class="fa-solid fa-book-quran text-brandEmerald w-4 flex-shrink-0"></i>
@@ -325,6 +328,9 @@
           </button>
           <button onclick="switchTab('tab-schedule-search')" class="px-3.5 py-2 bg-cyan-700 text-white rounded-lg text-xs font-bold hover:bg-cyan-800 flex items-center gap-1.5 shadow" title="Search teacher free & busy slots">
             <i class="fa-solid fa-calendar-check text-cyan-200"></i> Free Slot Finder
+          </button>
+          <button onclick="switchTab('tab-invoices')" class="px-3.5 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 shadow" title="Open Fee Management & 12-Month Matrix">
+            <i class="fa-solid fa-file-invoice-dollar text-amber-200"></i> Fee Management
           </button>
           <button onclick="loadDashboardData()" class="px-3 py-2 bg-white border border-slate-300 rounded-lg text-xs font-bold text-slate-700 hover:bg-slate-50 flex items-center gap-1.5 shadow-sm">
             <i class="fa-solid fa-arrows-rotate"></i> Refresh
@@ -1088,39 +1094,615 @@
       </div>
     </section>
 
-    <!-- 6. FEE BILLING & WHATSAPP RECEIPTS (OWNER ONLY) -->
-    <section id="tab-invoices" class="tab-content hidden">
-      <div class="flex justify-between items-center mb-5 flex-wrap gap-3">
-        <div>
-          <h2 class="text-xl font-extrabold text-brandDark flex items-center gap-2">
-            <i class="fa-solid fa-file-invoice-dollar text-brandGold"></i> Family Fee Ledger & 1-Click WhatsApp Invoicing
-          </h2>
-          <p class="text-xs text-slate-500">Combined billing per family with arrears carry-forward and instant parent notifications</p>
+    <!-- 6. NATIVE FEE MANAGEMENT & MASTER ANNUAL MATRIX ENGINE (OWNER & ADMIN) -->
+    <section id="tab-invoices" class="tab-content hidden space-y-5">
+      
+      <!-- TOP HEADER BAR -->
+      <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex flex-wrap justify-between items-center gap-4">
+        <div class="flex items-center gap-3">
+          <span class="w-12 h-12 rounded-2xl bg-amber-500/10 text-amber-600 border border-amber-500/20 flex items-center justify-center text-xl font-bold shadow-xs">
+            <i class="fa-solid fa-file-invoice-dollar"></i>
+          </span>
+          <div>
+            <h2 class="text-xl font-extrabold text-slate-900 tracking-tight flex items-center gap-2">
+              Fee Management &amp; Master Annual Matrix
+              <span id="badgeFeeHeaderMonth" class="px-2.5 py-0.5 rounded-full text-xs font-mono font-bold bg-amber-100 text-amber-900 border border-amber-300">
+                Academic 2026
+              </span>
+            </h2>
+            <p class="text-xs text-slate-500 mt-0.5">
+              Multi-Currency Billing, Smart Arrears, Mid-Month Proration, Advance Payments, Leaves Sync &amp; 1-Click WhatsApp Receipts.
+            </p>
+          </div>
         </div>
-        <button onclick="loadFeeBillingLedger()" class="px-3.5 py-2 bg-white border border-slate-300 rounded-lg text-xs font-bold text-slate-700 hover:bg-slate-50 flex items-center gap-1.5 shadow-sm">
-          <i class="fa-solid fa-arrows-rotate"></i> Refresh Ledger
+
+        <div class="flex items-center gap-2.5 flex-wrap">
+          <button onclick="switchFeeSubTab('fee-subtab-collect')" class="px-4 py-2 bg-emerald-700 hover:bg-emerald-800 text-white rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-sm">
+            <i class="fa-solid fa-cash-register"></i> Collect Fee (1-Click)
+          </button>
+          <button onclick="refreshCurrentFeeView()" class="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-xs">
+            <i class="fa-solid fa-arrows-rotate"></i> Refresh
+          </button>
+        </div>
+      </div>
+
+      <!-- SUB-NAVIGATION PILLS -->
+      <div class="flex items-center gap-2 bg-white p-2 rounded-2xl border border-slate-200 shadow-xs overflow-x-auto">
+        <button id="btnFeeSubTab-overview" onclick="switchFeeSubTab('fee-subtab-overview')" class="fee-subtab-btn active px-3.5 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 bg-emerald-800 text-white shadow-xs">
+          <i class="fa-solid fa-chart-pie"></i>
+          <span>Dashboard &amp; Currencies</span>
+        </button>
+        <button id="btnFeeSubTab-collect" onclick="switchFeeSubTab('fee-subtab-collect')" class="fee-subtab-btn px-3.5 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 text-slate-600 hover:bg-slate-100">
+          <i class="fa-solid fa-cash-register"></i>
+          <span>Collect Fee (1-Click)</span>
+        </button>
+        <button id="btnFeeSubTab-pending" onclick="switchFeeSubTab('fee-subtab-pending')" class="fee-subtab-btn px-3.5 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 text-slate-600 hover:bg-slate-100">
+          <i class="fa-solid fa-clock-rotate-left text-rose-600"></i>
+          <span>Pending Defaulters</span>
+          <span id="feeSubBadgePending" class="px-1.5 py-0.2 rounded-full text-[10px] font-mono bg-rose-100 text-rose-800 font-bold border border-rose-300">0</span>
+        </button>
+        <button id="btnFeeSubTab-matrix" onclick="switchFeeSubTab('fee-subtab-matrix')" class="fee-subtab-btn px-3.5 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 text-slate-600 hover:bg-slate-100">
+          <i class="fa-solid fa-table-cells text-cyan-600"></i>
+          <span>12-Month Annual Matrix</span>
+        </button>
+        <button id="btnFeeSubTab-receipts" onclick="switchFeeSubTab('fee-subtab-receipts')" class="fee-subtab-btn px-3.5 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 text-slate-600 hover:bg-slate-100">
+          <i class="fa-solid fa-receipt text-indigo-600"></i>
+          <span>Receipts &amp; History</span>
         </button>
       </div>
 
-      <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-        <div class="overflow-x-auto">
-          <table class="w-full text-left text-xs border-collapse">
-            <thead class="bg-slate-50 text-slate-600 font-bold border-b border-slate-200 uppercase">
-              <tr>
-                <th class="p-3">Family ID</th>
-                <th class="p-3">Parent Name</th>
-                <th class="p-3">WhatsApp Number</th>
-                <th class="p-3">Enrolled Students</th>
-                <th class="p-3">Monthly Agreed Fee</th>
-                <th class="p-3 text-right">1-Click Actions</th>
-              </tr>
-            </thead>
-            <tbody id="feeBillingTableBody" class="divide-y divide-slate-100">
-              <tr><td colspan="6" class="p-6 text-center text-slate-400">Loading families fee ledger...</td></tr>
-            </tbody>
-          </table>
+      <!-- ============================================================ -->
+      <!-- SUB-VIEW 1: OVERVIEW & MULTI-CURRENCY DASHBOARD -->
+      <!-- ============================================================ -->
+      <div id="feeSubView-overview" class="fee-subview-panel space-y-5">
+        
+        <!-- MONTH & YEAR SELECTOR TOOLBAR -->
+        <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs flex justify-between items-center flex-wrap gap-3">
+          <div class="flex items-center gap-2.5 flex-wrap">
+            <label class="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+              <i class="fa-solid fa-calendar-check text-brandEmerald"></i> Analyze Period:
+            </label>
+            <select id="feeDashMonthSelect" onchange="loadFeeDashboardStats()" class="p-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500">
+              <option value="January">January</option>
+              <option value="February">February</option>
+              <option value="March">March</option>
+              <option value="April">April</option>
+              <option value="May">May</option>
+              <option value="June">June</option>
+              <option value="July">July</option>
+              <option value="August">August</option>
+              <option value="September" selected>September</option>
+              <option value="October">October</option>
+              <option value="November">November</option>
+              <option value="December">December</option>
+            </select>
+            <select id="feeDashYearSelect" onchange="loadFeeDashboardStats()" class="p-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500">
+              <option value="2025">2025</option>
+              <option value="2026" selected>2026</option>
+              <option value="2027">2027</option>
+            </select>
+            <span id="feeDashActivePeriodBadge" class="px-2.5 py-1 rounded-xl text-xs font-bold bg-emerald-50 text-emerald-800 border border-emerald-200">
+              September 2026
+            </span>
+          </div>
+          <button onclick="switchFeeSubTab('fee-subtab-collect')" class="px-3 py-1.5 bg-emerald-700 text-white rounded-xl text-xs font-bold hover:bg-emerald-800 transition flex items-center gap-1">
+            <i class="fa-solid fa-plus"></i> Collect Fee Now
+          </button>
+        </div>
+
+        <!-- KPI METRICS GRID -->
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-3.5">
+          <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs flex items-center gap-3.5">
+            <div class="w-11 h-11 rounded-xl bg-slate-100 text-slate-700 flex items-center justify-center font-bold text-lg">
+              <i class="fa-solid fa-house-user"></i>
+            </div>
+            <div>
+              <span class="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">Active Families</span>
+              <span id="kpiFeeTotalFamilies" class="text-2xl font-bold font-num text-slate-900 tracking-tight">0</span>
+              <span class="text-[10px] text-slate-500 block"><strong id="kpiFeeTotalStudents">0</strong> Enrolled Students</span>
+            </div>
+          </div>
+
+          <div class="bg-white p-4 rounded-2xl border border-emerald-200 shadow-xs flex items-center gap-3.5">
+            <div class="w-11 h-11 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold text-lg">
+              <i class="fa-solid fa-circle-check"></i>
+            </div>
+            <div>
+              <span class="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">Paid Families</span>
+              <span id="kpiFeePaidCount" class="text-2xl font-bold font-num text-emerald-700 tracking-tight">0</span>
+              <span class="text-[10px] text-emerald-700 font-bold block"><span id="kpiFeePaidPercent">0%</span> of active (<span id="kpiFeePaidRatio">0/0</span>)</span>
+            </div>
+          </div>
+
+          <div class="bg-white p-4 rounded-2xl border border-rose-200 shadow-xs flex items-center gap-3.5">
+            <div class="w-11 h-11 rounded-xl bg-rose-100 text-rose-700 flex items-center justify-center font-bold text-lg">
+              <i class="fa-solid fa-circle-exclamation"></i>
+            </div>
+            <div>
+              <span class="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">Pending Defaulters</span>
+              <span id="kpiFeePendingCount" class="text-2xl font-bold font-num text-rose-700 tracking-tight">0</span>
+              <span class="text-[10px] text-rose-700 font-bold block"><span id="kpiFeePendingPercent">0%</span> require fee</span>
+            </div>
+          </div>
+
+          <div class="bg-white p-4 rounded-2xl border border-blue-200 shadow-xs flex items-center gap-3.5">
+            <div class="w-11 h-11 rounded-xl bg-blue-100 text-blue-700 flex items-center justify-center font-bold text-lg">
+              <i class="fa-solid fa-umbrella-beach"></i>
+            </div>
+            <div>
+              <span class="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">On Leave (Waived)</span>
+              <span id="kpiFeeLeaveCount" class="text-2xl font-bold font-num text-blue-700 tracking-tight">0</span>
+              <span class="text-[10px] text-blue-600 font-semibold block">Fee waived by Leave Engine</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- COLLECTION PROGRESS BAR CARD -->
+        <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs">
+          <div class="flex justify-between items-center mb-2">
+            <span class="text-xs font-bold text-slate-700 flex items-center gap-2">
+              <i class="fa-solid fa-chart-line text-brandEmerald"></i>
+              Collection Progress for <span id="feeProgressMonthLabel" class="text-emerald-700 font-bold">September 2026</span>
+            </span>
+            <span id="kpiFeeProgressPercent" class="text-xs font-extrabold font-num text-emerald-800">0% Collected</span>
+          </div>
+          <div class="w-full h-3 bg-slate-100 rounded-full overflow-hidden flex">
+            <div id="feeProgressBarPaid" class="h-full bg-emerald-600 transition-all duration-500" style="width: 0%;"></div>
+            <div id="feeProgressBarPending" class="h-full bg-rose-400 transition-all duration-500" style="width: 0%;"></div>
+          </div>
+        </div>
+
+        <!-- MULTI-CURRENCY REVENUE GRID -->
+        <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs space-y-4">
+          <div class="flex justify-between items-center flex-wrap gap-2">
+            <div>
+              <h3 class="font-extrabold text-slate-900 text-sm flex items-center gap-2">
+                <i class="fa-solid fa-coins text-amber-600"></i> International Currency Revenue Breakdown
+              </h3>
+              <p class="text-xs text-slate-500">Real-time revenue tracking across global student currencies</p>
+            </div>
+            <span class="text-xs text-slate-400 font-semibold">USD, GBP, CAD, PKR, EUR, AUD, AED, NZD</span>
+          </div>
+          <div id="feeCurrencyGridContainer" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+            <!-- Dynamically populated currency cards -->
+          </div>
         </div>
       </div>
+
+      <!-- ============================================================ -->
+      <!-- SUB-VIEW 2: COLLECT FEE (1-CLICK & SMART ARREARS) -->
+      <!-- ============================================================ -->
+      <div id="feeSubView-collect" class="fee-subview-panel hidden space-y-5">
+        <div class="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs space-y-5">
+          
+          <div class="flex justify-between items-center border-b border-slate-100 pb-4 flex-wrap gap-2">
+            <div>
+              <h3 class="text-base font-extrabold text-slate-900 flex items-center gap-2">
+                <i class="fa-solid fa-cash-register text-emerald-700"></i> Collect Tuition Fee &amp; Generate Smart Invoice
+              </h3>
+              <p class="text-xs text-slate-500 mt-0.5">
+                Automatically detects prior unpaid arrears, calculates carry-forward, and updates 12-Month Matrix.
+              </p>
+            </div>
+            <span class="text-xs font-bold text-emerald-700 bg-emerald-50 px-3 py-1 rounded-full border border-emerald-200">
+              <i class="fa-solid fa-wand-magic-sparkles mr-1"></i> Arrears &amp; Leave Sync Active
+            </span>
+          </div>
+
+          <!-- SEARCH FAMILY AUTOCOMPLETE -->
+          <div class="relative w-full">
+            <label class="block text-xs font-bold text-slate-700 mb-1.5">
+              <i class="fa-solid fa-magnifying-glass text-emerald-700 mr-1"></i> Search Family (Type Student Name, Parent Name, or Family ID):
+            </label>
+            <input type="text" id="feeFamilySearchInput" autocomplete="off" oninput="handleFeeFamilySearch(this.value)" placeholder="Type student name (e.g. Zaid), Parent name, or ID..." class="w-full p-3 rounded-xl border border-slate-300 text-xs font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-600 shadow-2xs">
+            <div id="feeSearchResultsDropdown" class="hidden absolute left-0 right-0 top-full mt-1 bg-white rounded-xl border border-emerald-200 shadow-2xl z-50 max-h-60 overflow-y-auto divide-y divide-slate-100">
+              <!-- Autocomplete items dynamically rendered here -->
+            </div>
+          </div>
+
+          <!-- SMART ARREARS NOTIFICATION BANNER -->
+          <div id="feeArrearsAlertBox" class="hidden p-4 rounded-xl border border-amber-300 bg-amber-50/80 text-amber-950 space-y-1">
+            <div class="flex items-center gap-2 font-black text-xs text-amber-900">
+              <i class="fa-solid fa-triangle-exclamation text-amber-600"></i>
+              <span id="feeArrearsAlertTitle">Outstanding Arrears Notice</span>
+            </div>
+            <p id="feeArrearsAlertDesc" class="text-xs text-amber-900 font-medium">
+              Checking previous balance...
+            </p>
+          </div>
+
+          <!-- COLLECTION FORM -->
+          <form id="feeCollectionForm" onsubmit="handleFeePaymentSubmit(event)" class="space-y-4">
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5">
+              
+              <div>
+                <label class="block text-xs font-bold text-slate-600 mb-1">Family Account ID:</label>
+                <input type="text" id="feeFormFamilyId" readonly required placeholder="Select family above" class="w-full p-2.5 bg-slate-100 border border-slate-200 rounded-xl text-xs font-mono font-bold text-slate-700">
+              </div>
+
+              <div>
+                <label class="block text-xs font-bold text-slate-600 mb-1">Parent / Guardian Name:</label>
+                <input type="text" id="feeFormParentName" readonly required placeholder="Parent Name" class="w-full p-2.5 bg-slate-100 border border-slate-200 rounded-xl text-xs font-bold text-slate-700">
+              </div>
+
+              <div>
+                <label class="block text-xs font-bold text-slate-600 mb-1">Student(s) Enrolled:</label>
+                <input type="text" id="feeFormStudentsNames" readonly required placeholder="Children Names" class="w-full p-2.5 bg-slate-100 border border-slate-200 rounded-xl text-xs font-bold text-slate-700">
+              </div>
+
+              <div>
+                <label class="block text-xs font-bold text-slate-600 mb-1">Country &amp; WhatsApp:</label>
+                <div class="flex gap-2">
+                  <input type="text" id="feeFormCountry" readonly placeholder="Country" class="w-1/3 p-2.5 bg-slate-100 border border-slate-200 rounded-xl text-xs font-bold text-slate-700">
+                  <input type="text" id="feeFormWhatsApp" readonly placeholder="WhatsApp" class="w-2/3 p-2.5 bg-slate-100 border border-slate-200 rounded-xl text-xs font-bold text-slate-700">
+                </div>
+              </div>
+
+              <div>
+                <label class="block text-xs font-bold text-slate-600 mb-1">Parent Email (Optional):</label>
+                <input type="email" id="feeFormParentEmail" placeholder="parent@example.com" class="w-full p-2.5 bg-white border border-slate-300 rounded-xl text-xs text-slate-800">
+              </div>
+
+              <div>
+                <label class="block text-xs font-bold text-slate-600 mb-1">Billing Period (Month &amp; Year):</label>
+                <div class="flex gap-2">
+                  <select id="feeFormMonth" required onchange="triggerFeeBalanceRecalc()" class="w-2/3 p-2.5 bg-white border border-slate-300 rounded-xl text-xs font-bold text-slate-800">
+                    <option value="January">January</option>
+                    <option value="February">February</option>
+                    <option value="March">March</option>
+                    <option value="April">April</option>
+                    <option value="May">May</option>
+                    <option value="June">June</option>
+                    <option value="July">July</option>
+                    <option value="August">August</option>
+                    <option value="September" selected>September</option>
+                    <option value="October">October</option>
+                    <option value="November">November</option>
+                    <option value="December">December</option>
+                  </select>
+                  <select id="feeFormYear" required onchange="triggerFeeBalanceRecalc()" class="w-1/3 p-2.5 bg-white border border-slate-300 rounded-xl text-xs font-bold text-slate-800">
+                    <option value="2025">2025</option>
+                    <option value="2026" selected>2026</option>
+                    <option value="2027">2027</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            <!-- MID-MONTH ADMISSION / PRORATION TOGGLE -->
+            <div class="p-3.5 bg-emerald-50/70 border border-emerald-200 rounded-2xl space-y-2">
+              <label class="flex items-center gap-2 text-xs font-extrabold text-emerald-950 cursor-pointer">
+                <input type="checkbox" id="feeToggleProrated" onchange="handleProrateFeeToggle()" class="w-4 h-4 rounded text-emerald-600">
+                <span><i class="fa-solid fa-calendar-days text-emerald-700"></i> Mid-Month Admission / Prorate Days (e.g. Student started on the 8th)</span>
+              </label>
+
+              <div id="feeProrateBox" class="hidden pt-3 border-t border-emerald-200 grid grid-cols-1 sm:grid-cols-4 gap-3 items-end">
+                <div>
+                  <label class="block text-[11px] font-bold text-emerald-900 mb-1">Joining / Start Date:</label>
+                  <input type="date" id="feeProrateStartDate" onchange="calcProratedFeeFromDate()" class="w-full p-2 bg-white border border-emerald-300 rounded-xl text-xs font-bold text-slate-800">
+                </div>
+                <div>
+                  <label class="block text-[11px] font-bold text-emerald-900 mb-1">Active Days in Month:</label>
+                  <input type="number" id="feeProrateActiveDays" min="1" max="31" value="22" oninput="calcProratedFeeFromDays()" class="w-full p-2 bg-white border border-emerald-300 rounded-xl text-xs font-extrabold text-slate-900">
+                </div>
+                <div>
+                  <label class="block text-[11px] font-bold text-emerald-900 mb-1">Days in Billing Month:</label>
+                  <input type="number" id="feeProrateTotalDays" readonly value="30" class="w-full p-2 bg-emerald-100/70 border border-emerald-200 rounded-xl text-xs font-bold text-slate-700">
+                </div>
+                <div>
+                  <label class="block text-[11px] font-bold text-emerald-900 mb-1">Prorated Fee Amount:</label>
+                  <div class="flex gap-2">
+                    <input type="text" id="feeProrateCalcAmount" readonly value="0.00" class="w-full p-2 bg-emerald-100 border border-emerald-300 rounded-xl text-xs font-extrabold text-emerald-950 font-num">
+                    <button type="button" onclick="applyProratedFeeToForm()" class="px-3 py-2 bg-emerald-700 hover:bg-emerald-800 text-white rounded-xl text-xs font-bold transition shrink-0">
+                      Apply
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- MULTI-MONTH ADVANCE PAYMENT TOGGLE -->
+            <div class="p-3.5 bg-blue-50/70 border border-blue-200 rounded-2xl space-y-2">
+              <label class="flex items-center gap-2 text-xs font-extrabold text-blue-950 cursor-pointer">
+                <input type="checkbox" id="feeToggleAdvance" onchange="handleAdvanceFeeToggle()" class="w-4 h-4 rounded text-blue-600">
+                <span><i class="fa-solid fa-calendar-plus text-blue-700"></i> Multi-Month Advance Payment (e.g. Quarterly, 3 Months, Half-Yearly)</span>
+              </label>
+
+              <div id="feeAdvanceBox" class="hidden pt-3 border-t border-blue-200 space-y-3">
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 items-end">
+                  <div>
+                    <label class="block text-[11px] font-bold text-blue-900 mb-1">Advance Period (Months to Pre-Pay):</label>
+                    <select id="feeSelectAdvanceMonths" onchange="calcAdvancePaymentFee()" class="w-full p-2 bg-white border border-blue-300 rounded-xl text-xs font-bold text-slate-800">
+                      <option value="2">2 Months (Bi-Monthly)</option>
+                      <option value="3" selected>3 Months (Quarterly)</option>
+                      <option value="4">4 Months</option>
+                      <option value="5">5 Months</option>
+                      <option value="6">6 Months (Half-Yearly)</option>
+                      <option value="12">12 Months (Full Annual Year)</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label class="block text-[11px] font-bold text-blue-900 mb-1">Total Advance Fee:</label>
+                    <div class="flex gap-2">
+                      <input type="text" id="feeAdvanceCalcAmount" readonly value="0.00" class="w-full p-2 bg-blue-100 border border-blue-300 rounded-xl text-xs font-extrabold text-blue-950 font-num">
+                      <button type="button" onclick="applyAdvancePaymentFeeToForm()" class="px-3 py-2 bg-blue-700 hover:bg-blue-800 text-white rounded-xl text-xs font-bold transition shrink-0">
+                        Apply
+                      </button>
+                    </div>
+                  </div>
+                </div>
+                <div id="feeAdvanceMonthsBadges" class="flex gap-1.5 flex-wrap"></div>
+              </div>
+            </div>
+
+            <!-- FINANCIAL ITEMIZATION FIELDS -->
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5 pt-2">
+              
+              <div>
+                <label class="block text-xs font-bold text-slate-700 mb-1">Current Agreed Tuition Fee:</label>
+                <input type="number" step="any" id="feeFormMonthlyFee" placeholder="0.00" oninput="recalcFeeTotalLive()" class="w-full p-2.5 bg-white border border-slate-300 rounded-xl text-xs font-bold font-num text-slate-900">
+              </div>
+
+              <div>
+                <label class="block text-xs font-bold text-amber-800 mb-1">Previous Overdue Arrears:</label>
+                <input type="number" step="any" id="feeFormPreviousBalance" value="0.00" oninput="recalcFeeTotalLive()" class="w-full p-2.5 bg-amber-50 border border-amber-200 rounded-xl text-xs font-bold font-num text-amber-900">
+              </div>
+
+              <div>
+                <label class="block text-xs font-extrabold text-emerald-800 mb-1">Gross Total Payable:</label>
+                <input type="number" step="any" id="feeFormTotalPayable" readonly placeholder="0.00" class="w-full p-2.5 bg-emerald-50 border border-emerald-300 rounded-xl text-sm font-black font-num text-emerald-950">
+              </div>
+
+              <div>
+                <label class="block text-xs font-extrabold text-emerald-700 mb-1">Amount Received (Paid Now) *:</label>
+                <div class="flex gap-2">
+                  <input type="number" step="any" id="feeFormAmountPaid" required placeholder="0.00" oninput="this.dataset.manualEdited = 'true'; calculateFeeRemainingLive();" class="w-full p-2.5 bg-white border-2 border-emerald-600 rounded-xl text-sm font-black font-num text-slate-900">
+                  <input type="text" id="feeFormCurrency" readonly value="USD" class="w-20 p-2.5 bg-slate-100 border border-slate-300 rounded-xl text-xs font-bold text-center text-slate-800">
+                </div>
+              </div>
+
+              <div>
+                <label class="block text-xs font-bold text-slate-700 mb-1">Fee Concession / Discount:</label>
+                <input type="number" step="any" id="feeFormDiscount" value="0.00" oninput="calculateFeeRemainingLive()" class="w-full p-2.5 bg-white border border-slate-300 rounded-xl text-xs font-bold font-num text-slate-900">
+              </div>
+
+              <div>
+                <label class="block text-xs font-extrabold text-rose-800 mb-1">Remaining Balance (Carry-forward):</label>
+                <input type="number" step="any" id="feeFormRemainingBalance" readonly value="0.00" class="w-full p-2.5 bg-rose-50 border border-rose-200 rounded-xl text-sm font-black font-num text-rose-900">
+              </div>
+
+              <div>
+                <label class="block text-xs font-bold text-slate-700 mb-1">Payment Method:</label>
+                <select id="feeFormPaymentMethod" class="w-full p-2.5 bg-white border border-slate-300 rounded-xl text-xs font-bold text-slate-800">
+                  <option value="Online / Bank Transfer">Online / Bank Transfer</option>
+                  <option value="Zelle">Zelle (USA)</option>
+                  <option value="PayPal">PayPal</option>
+                  <option value="Stripe">Stripe / Card</option>
+                  <option value="Wise">Wise (TransferWise)</option>
+                  <option value="Cash / Other">Cash / Other</option>
+                </select>
+              </div>
+
+              <div>
+                <label class="block text-xs font-bold text-slate-700 mb-1">Transaction ID / Ref (Optional):</label>
+                <input type="text" id="feeFormTxnId" placeholder="e.g. TXN-12345" class="w-full p-2.5 bg-white border border-slate-300 rounded-xl text-xs text-slate-800">
+              </div>
+
+              <div>
+                <label class="block text-xs font-bold text-slate-700 mb-1">Notes / Remarks for Invoice:</label>
+                <input type="text" id="feeFormNotes" placeholder="e.g. Partial payment made" class="w-full p-2.5 bg-white border border-slate-300 rounded-xl text-xs text-slate-800">
+              </div>
+            </div>
+
+            <!-- SUBMIT BUTTONS -->
+            <div class="flex justify-end items-center gap-3 pt-4 border-t border-slate-100 flex-wrap">
+              <button type="button" onclick="resetFeeForm()" class="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition flex items-center gap-1.5">
+                <i class="fa-solid fa-rotate-left"></i> Reset Form
+              </button>
+              <button type="submit" id="btnSubmitFeePayment" class="px-6 py-2.5 bg-emerald-700 hover:bg-emerald-800 text-white rounded-xl text-xs font-black transition flex items-center gap-2 shadow-sm">
+                <i class="fa-solid fa-file-invoice"></i> Save Payment &amp; Generate Official Invoice
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+
+      <!-- ============================================================ -->
+      <!-- SUB-VIEW 3: PENDING DEFAULTERS TRACKER -->
+      <!-- ============================================================ -->
+      <div id="feeSubView-pending" class="fee-subview-panel hidden space-y-5">
+        <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs space-y-4">
+          
+          <div class="flex justify-between items-center flex-wrap gap-3">
+            <div>
+              <h3 class="text-base font-extrabold text-slate-900 flex items-center gap-2">
+                <i class="fa-solid fa-clock-rotate-left text-rose-600"></i> Pending Fee Defaulters Tracker
+              </h3>
+              <p class="text-xs text-slate-500">Track and remind family accounts with overdue or unpaid tuition fees</p>
+            </div>
+
+            <div class="flex items-center gap-2">
+              <select id="feePendingMonthFilter" onchange="loadPendingDefaultersList()" class="p-2 bg-white border border-slate-300 rounded-xl text-xs font-bold text-slate-800">
+                <option value="January">January</option>
+                <option value="February">February</option>
+                <option value="March">March</option>
+                <option value="April">April</option>
+                <option value="May">May</option>
+                <option value="June">June</option>
+                <option value="July">July</option>
+                <option value="August">August</option>
+                <option value="September" selected>September</option>
+                <option value="October">October</option>
+                <option value="November">November</option>
+                <option value="December">December</option>
+              </select>
+              <select id="feePendingYearFilter" onchange="loadPendingDefaultersList()" class="p-2 bg-white border border-slate-300 rounded-xl text-xs font-bold text-slate-800">
+                <option value="2025">2025</option>
+                <option value="2026" selected>2026</option>
+                <option value="2027">2027</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- PENDING SUMMARY BANNER -->
+          <div class="p-4 bg-amber-50/80 border border-amber-300 rounded-xl flex justify-between items-center flex-wrap gap-3">
+            <div class="text-xs text-amber-950 font-medium">
+              <i class="fa-solid fa-circle-exclamation text-amber-600 mr-1.5"></i>
+              Listing family accounts with pending tuition fees for <strong id="feePendingPeriodLabel" class="underline font-bold">September 2026</strong>.
+            </div>
+            <span id="feePendingTotalBadge" class="px-2.5 py-1 rounded-full text-xs font-extrabold bg-amber-200 text-amber-900 border border-amber-400">
+              0 Families Pending
+            </span>
+          </div>
+
+          <!-- SEARCH INPUT -->
+          <div>
+            <input type="text" id="feePendingSearchInput" oninput="filterPendingDefaultersSearchLive()" placeholder="Search by student, parent name, or WhatsApp in this month's pending list..." class="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800">
+          </div>
+
+          <!-- DEFAULTERS TABLE -->
+          <div class="overflow-x-auto rounded-xl border border-slate-200">
+            <table class="w-full text-left text-xs border-collapse">
+              <thead class="bg-slate-50 text-slate-600 font-extrabold border-b border-slate-200 uppercase tracking-wider text-[11px]">
+                <tr>
+                  <th class="p-3">Family ID</th>
+                  <th class="p-3">Parent Name</th>
+                  <th class="p-3">Student(s) Enrolled</th>
+                  <th class="p-3">Country</th>
+                  <th class="p-3">Pending Due Amount</th>
+                  <th class="p-3">Status</th>
+                  <th class="p-3 text-right">1-Click Actions</th>
+                </tr>
+              </thead>
+              <tbody id="feePendingTableBody" class="divide-y divide-slate-100">
+                <tr><td colspan="7" class="p-8 text-center text-slate-400">Loading pending defaulters...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- ============================================================ -->
+      <!-- SUB-VIEW 4: MASTER ANNUAL FEE MATRIX (12-MONTH VIEW) -->
+      <!-- ============================================================ -->
+      <div id="feeSubView-matrix" class="fee-subview-panel hidden space-y-5">
+        <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs space-y-4">
+          
+          <div class="flex justify-between items-center flex-wrap gap-3">
+            <div>
+              <h3 class="text-base font-extrabold text-slate-900 flex items-center gap-2">
+                <i class="fa-solid fa-table-cells text-cyan-700"></i> Master Annual Fee Matrix (12-Month Bird's-Eye View)
+              </h3>
+              <p class="text-xs text-slate-500">Track 12-month payment status &amp; exact submission dates for all enrolled students at a glance</p>
+            </div>
+
+            <div class="flex items-center gap-2">
+              <label class="text-xs font-bold text-slate-600">Academic Year:</label>
+              <select id="feeMatrixYearSelect" onchange="loadMasterAnnualMatrix()" class="p-2 bg-white border border-slate-300 rounded-xl text-xs font-bold text-slate-800">
+                <option value="2025">2025</option>
+                <option value="2026" selected>2026</option>
+                <option value="2027">2027</option>
+              </select>
+              <button onclick="loadMasterAnnualMatrix()" class="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition flex items-center gap-1 shadow-xs">
+                <i class="fa-solid fa-arrows-rotate"></i> Refresh
+              </button>
+            </div>
+          </div>
+
+          <!-- STATUS LEGEND & SEARCH BAR -->
+          <div class="flex justify-between items-center flex-wrap gap-3 pt-2">
+            <div class="flex-1 min-w-[240px]">
+              <input type="text" id="feeMatrixSearchInput" oninput="filterAnnualFeeMatrixLive()" placeholder="Search by student, parent name, or family ID in annual matrix..." class="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800">
+            </div>
+            
+            <div class="flex items-center gap-2.5 flex-wrap text-xs font-bold">
+              <span class="flex items-center gap-1.5"><span class="w-3 h-3 rounded bg-emerald-500 inline-block"></span> Paid</span>
+              <span class="flex items-center gap-1.5"><span class="w-3 h-3 rounded bg-teal-500 inline-block"></span> Advance</span>
+              <span class="flex items-center gap-1.5"><span class="w-3 h-3 rounded bg-blue-500 inline-block"></span> Leave</span>
+              <span class="flex items-center gap-1.5"><span class="w-3 h-3 rounded bg-amber-500 inline-block"></span> Partial</span>
+              <span class="flex items-center gap-1.5"><span class="w-3 h-3 rounded bg-rose-500 inline-block"></span> Due</span>
+              <span class="flex items-center gap-1.5"><span class="w-3 h-3 rounded bg-slate-400 inline-block"></span> Not Enrolled</span>
+            </div>
+          </div>
+
+          <!-- ANNUAL MATRIX SCROLLABLE TABLE -->
+          <div class="overflow-x-auto max-h-[620px] rounded-xl border border-slate-200 shadow-2xs">
+            <table class="w-full text-xs text-center border-collapse">
+              <thead class="bg-slate-100 text-slate-700 font-extrabold uppercase tracking-wider text-[11px] sticky top-0 z-10">
+                <tr>
+                  <th class="p-3 text-left min-w-[90px] bg-slate-100">Family ID</th>
+                  <th class="p-3 text-left min-w-[170px] bg-slate-100">Student(s) / Parent</th>
+                  <th class="p-2 min-w-[70px]">Jan</th>
+                  <th class="p-2 min-w-[70px]">Feb</th>
+                  <th class="p-2 min-w-[70px]">Mar</th>
+                  <th class="p-2 min-w-[70px]">Apr</th>
+                  <th class="p-2 min-w-[70px]">May</th>
+                  <th class="p-2 min-w-[70px]">Jun</th>
+                  <th class="p-2 min-w-[70px]">Jul</th>
+                  <th class="p-2 min-w-[70px]">Aug</th>
+                  <th class="p-2 min-w-[70px]">Sep</th>
+                  <th class="p-2 min-w-[70px]">Oct</th>
+                  <th class="p-2 min-w-[70px]">Nov</th>
+                  <th class="p-2 min-w-[70px]">Dec</th>
+                  <th class="p-2 min-w-[80px] bg-slate-100">Action</th>
+                </tr>
+              </thead>
+              <tbody id="feeMatrixTableBody" class="divide-y divide-slate-100">
+                <tr><td colspan="15" class="p-8 text-center text-slate-400">Loading Master Annual Fee Matrix...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- ============================================================ -->
+      <!-- SUB-VIEW 5: RECEIPTS LEDGER & HISTORY -->
+      <!-- ============================================================ -->
+      <div id="feeSubView-receipts" class="fee-subview-panel hidden space-y-5">
+        <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs space-y-4">
+          
+          <div class="flex justify-between items-center flex-wrap gap-3">
+            <div>
+              <h3 class="text-base font-extrabold text-slate-900 flex items-center gap-2">
+                <i class="fa-solid fa-receipt text-indigo-700"></i> Payment Receipts &amp; Ledger History
+              </h3>
+              <p class="text-xs text-slate-500">All historical tuition payments with printable vouchers &amp; transaction refs</p>
+            </div>
+
+            <button onclick="loadFeeReceiptsHistory()" class="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition flex items-center gap-1 shadow-xs">
+              <i class="fa-solid fa-arrows-rotate"></i> Refresh History
+            </button>
+          </div>
+
+          <div>
+            <input type="text" id="feeReceiptsSearchInput" oninput="filterFeeReceiptsHistoryLive()" placeholder="Search by Receipt No, Family ID, or Parent Name..." class="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800">
+          </div>
+
+          <div class="overflow-x-auto rounded-xl border border-slate-200">
+            <table class="w-full text-left text-xs border-collapse">
+              <thead class="bg-slate-50 text-slate-600 font-extrabold border-b border-slate-200 uppercase tracking-wider text-[11px]">
+                <tr>
+                  <th class="p-3">Receipt No</th>
+                  <th class="p-3">Date</th>
+                  <th class="p-3">Family ID</th>
+                  <th class="p-3">Parent Name</th>
+                  <th class="p-3">Student(s)</th>
+                  <th class="p-3">Billing Period</th>
+                  <th class="p-3">Total Due</th>
+                  <th class="p-3">Amount Paid</th>
+                  <th class="p-3">Remaining</th>
+                  <th class="p-3">Status</th>
+                  <th class="p-3 text-right">Invoice &amp; Actions</th>
+                </tr>
+              </thead>
+              <tbody id="feeReceiptsTableBody" class="divide-y divide-slate-100">
+                <tr><td colspan="11" class="p-8 text-center text-slate-400">Loading receipt history...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
     </section>
 
     <!-- 7. COURSE MATERIAL & DIGITAL LIBRARY TAB -->
@@ -3346,6 +3928,314 @@
           </button>
         </div>
       </form>
+    </div>
+  </div>
+
+  <!-- ============================================================ -->
+  <!-- MODAL 1: OFFICIAL PRINTABLE TUITION FEE INVOICE RECEIPT -->
+  <!-- ============================================================ -->
+  <div id="modalFeeInvoice" class="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 hidden items-center justify-center p-3 sm:p-4 overflow-y-auto">
+    <div class="bg-white rounded-2xl max-w-2xl w-full border border-slate-200 shadow-2xl overflow-hidden my-6">
+      
+      <div class="p-4 sm:p-5 bg-slate-50 border-b border-slate-200 flex justify-between items-center">
+        <h3 class="font-extrabold text-slate-900 text-sm flex items-center gap-2">
+          <i class="fa-solid fa-file-invoice-dollar text-emerald-700"></i> Official Tuition Fee Receipt Voucher
+        </h3>
+        <button onclick="closeModal('modalFeeInvoice')" class="text-slate-400 hover:text-slate-700 text-2xl font-bold leading-none">&times;</button>
+      </div>
+
+      <div class="p-5 sm:p-6 space-y-4 max-h-[80vh] overflow-y-auto" id="feeInvoicePrintArea">
+        <div class="border-2 border-emerald-800 rounded-2xl p-5 bg-white space-y-4 shadow-xs">
+          
+          <!-- INVOICE HEADER -->
+          <div class="border-b-2 border-emerald-800 pb-4 flex justify-between items-start flex-wrap gap-3">
+            <div>
+              <h2 class="text-xl font-black text-emerald-900 tracking-tight font-serif">AL-HUDA ISLAMIC CENTRE</h2>
+              <p class="text-xs text-slate-600 font-medium">Online Quran &amp; Islamic Studies Academy</p>
+              <p class="text-[11px] text-slate-400">Official Parent Tuition Fee Billing Statement</p>
+            </div>
+            <div class="text-right">
+              <div id="feeInvStatusStamp" class="inline-block px-3 py-1 rounded-md text-[11px] font-black border-2 border-emerald-600 bg-emerald-50 text-emerald-800 tracking-wider">
+                PAID IN FULL
+              </div>
+              <div class="text-xs text-slate-500 mt-1">
+                Receipt #: <strong id="feeInvReceiptNo" class="text-emerald-900 font-mono">AH-REC-OFFICIAL</strong>
+              </div>
+            </div>
+          </div>
+
+          <!-- FAMILY DETAILS GRID -->
+          <div class="grid grid-cols-2 gap-2 bg-slate-50 p-3 rounded-xl border border-slate-200 text-xs">
+            <div><span class="text-slate-500 font-bold">Parent / Guardian:</span> <strong id="feeInvParentName" class="text-slate-900">--</strong></div>
+            <div><span class="text-slate-500 font-bold">Family Account ID:</span> <strong id="feeInvFamilyId" class="text-emerald-900 font-mono">--</strong></div>
+            <div><span class="text-slate-500 font-bold">Student(s) Enrolled:</span> <strong id="feeInvStudentsNames" class="text-slate-900">--</strong></div>
+            <div><span class="text-slate-500 font-bold">Issue Date:</span> <strong id="feeInvIssueDate" class="text-slate-800 font-mono">--</strong></div>
+          </div>
+
+          <!-- ITEMIZED CHARGES TABLE -->
+          <div class="rounded-xl border border-slate-200 overflow-hidden text-xs">
+            <table class="w-full text-left border-collapse">
+              <thead class="bg-emerald-900 text-white font-bold text-[11px]">
+                <tr>
+                  <th class="p-2.5">Particulars / Description</th>
+                  <th class="p-2.5">Billing Period</th>
+                  <th class="p-2.5 text-right">Amount</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-slate-100">
+                <tr>
+                  <td class="p-2.5 font-bold text-slate-800" id="feeInvDescription">Current Month Tuition Fee</td>
+                  <td class="p-2.5 text-slate-600" id="feeInvPeriod">--</td>
+                  <td class="p-2.5 text-right font-mono font-bold text-slate-900" id="feeInvCurrentDue">--</td>
+                </tr>
+                <tr id="feeInvPrevBalanceRow" class="hidden bg-amber-50/70">
+                  <td class="p-2.5 text-amber-900 font-bold">Previous Overdue Arrears (Past Months)</td>
+                  <td class="p-2.5 text-amber-800">Prior Dues</td>
+                  <td class="p-2.5 text-right font-mono font-bold text-amber-900" id="feeInvPrevBalanceAmt">--</td>
+                </tr>
+                <tr class="bg-slate-50 font-extrabold text-slate-900">
+                  <td colspan="2" class="p-2.5">Gross Total Payable:</td>
+                  <td class="p-2.5 text-right font-mono" id="feeInvGrossTotal">--</td>
+                </tr>
+                <tr id="feeInvDiscountRow" class="hidden text-rose-700">
+                  <td colspan="2" class="p-2.5 italic">Fee Concession / Discount:</td>
+                  <td class="p-2.5 text-right font-mono font-bold" id="feeInvDiscountAmt">--</td>
+                </tr>
+                <tr class="bg-emerald-100/90 font-black text-emerald-950 text-sm">
+                  <td colspan="2" class="p-3">Amount Received (Paid via <span id="feeInvPaymentMethod">Online</span>):</td>
+                  <td class="p-3 text-right font-mono text-emerald-950 font-bold" id="feeInvTotalPaid">--</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <!-- REMAINING BALANCE CARRY-FORWARD BOX -->
+          <div id="feeInvCarryForwardBox" class="hidden p-3.5 bg-amber-50 border-2 border-dashed border-amber-400 rounded-xl space-y-1">
+            <div class="flex items-center gap-2 font-black text-xs text-amber-900">
+              <i class="fa-solid fa-triangle-exclamation text-amber-600"></i>
+              <span>Notice: Outstanding Remaining Balance: <strong id="feeInvCarryForwardAmt" class="text-amber-950">--</strong></span>
+            </div>
+            <p class="text-[11px] text-amber-800">
+              This remaining balance has been carried forward and will be automatically added to your next billing statement.
+            </p>
+          </div>
+
+          <!-- PRAYER / FOOTER NOTE -->
+          <div class="text-center pt-3 border-t border-dashed border-slate-200 text-[11px] text-slate-500 space-y-1">
+            <p class="font-bold text-slate-700">JazakAllahu Khairan! Thank you for partnering with Al-Huda Islamic Centre.</p>
+            <p class="italic text-[10px]">"May Allah (SWT) bless your children with wisdom, piety, and the highest status in both worlds."</p>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- MODAL FOOTER BUTTONS -->
+      <div class="p-4 bg-slate-50 border-t border-slate-200 flex justify-end items-center gap-2.5 flex-wrap">
+        <button onclick="printFeeInvoiceReceipt()" class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-2xs">
+          <i class="fa-solid fa-print"></i> Print Receipt
+        </button>
+        <a id="feeInvWhatsAppBtn" href="#" target="_blank" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-2xs">
+          <i class="fa-brands fa-whatsapp"></i> Send via WhatsApp
+        </a>
+        <button onclick="closeModal('modalFeeInvoice')" class="px-5 py-2 bg-slate-800 hover:bg-black text-white rounded-xl text-xs font-bold transition shadow-2xs">
+          Done
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================================================ -->
+  <!-- MODAL 2: ANNUAL MATRIX QUICK ACTION (1-CLICK STATUS OVERRIDE) -->
+  <!-- ============================================================ -->
+  <div id="modalMatrixAction" class="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 hidden items-center justify-center p-3 sm:p-4">
+    <div class="bg-white rounded-2xl max-w-md w-full border border-slate-200 shadow-2xl overflow-hidden">
+      
+      <div class="p-4 bg-slate-800 text-white flex justify-between items-center">
+        <div>
+          <h3 class="font-extrabold text-sm flex items-center gap-2 text-white">
+            <i class="fa-solid fa-calendar-check text-cyan-300"></i> Matrix Month Quick Action
+          </h3>
+          <p id="matrixActionSubtitle" class="text-[11px] text-slate-300 mt-0.5">Family ID: -- • Month: --</p>
+        </div>
+        <button onclick="closeModal('modalMatrixAction')" class="text-slate-400 hover:text-white text-2xl font-bold leading-none">&times;</button>
+      </div>
+
+      <div class="p-5 space-y-4">
+        <!-- Student Info & Current Status Banner -->
+        <div class="bg-slate-50 p-3 rounded-xl border border-slate-200 flex justify-between items-center">
+          <div>
+            <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Student / Family</span>
+            <span id="matrixActionStudentName" class="text-xs font-extrabold text-slate-900">--</span>
+          </div>
+          <div class="text-right">
+            <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Current Status</span>
+            <span id="matrixActionStatusBadge" class="mt-0.5 inline-block">--</span>
+          </div>
+        </div>
+
+        <p class="text-xs font-bold text-slate-700">Select an action to apply for this month:</p>
+
+        <!-- ACTION OPTION BUTTONS -->
+        <div class="space-y-2">
+          
+          <!-- Option 1: Not Enrolled / Joined Later -->
+          <button type="button" onclick="applyMatrixAction('not_enrolled')" class="w-full p-3 rounded-xl border border-slate-200 hover:border-slate-400 hover:bg-slate-50 text-left transition flex items-center justify-between group">
+            <div class="flex items-center gap-2.5">
+              <span class="w-8 h-8 rounded-lg bg-slate-100 text-slate-600 flex items-center justify-center text-sm font-bold">
+                <i class="fa-solid fa-user-clock"></i>
+              </span>
+              <div>
+                <strong class="text-xs text-slate-900 block group-hover:text-emerald-800">Mark as Not Enrolled / Joined Later</strong>
+                <span class="text-[10px] text-slate-400 block">Student admitted in a later month ($0 fee, no overdue arrears)</span>
+              </div>
+            </div>
+            <i class="fa-solid fa-chevron-right text-slate-400 text-xs"></i>
+          </button>
+
+          <!-- Option 2: Approved Leave (Fee Waived) -->
+          <button type="button" onclick="applyMatrixAction('leave')" class="w-full p-3 rounded-xl border border-blue-200 hover:border-blue-400 hover:bg-blue-50/50 text-left transition flex items-center justify-between group">
+            <div class="flex items-center gap-2.5">
+              <span class="w-8 h-8 rounded-lg bg-blue-100 text-blue-700 flex items-center justify-center text-sm font-bold">
+                <i class="fa-solid fa-plane-departure"></i>
+              </span>
+              <div>
+                <strong class="text-xs text-slate-900 block group-hover:text-blue-800">Mark as Approved Leave (Fee Waived)</strong>
+                <span class="text-[10px] text-slate-400 block">Official leave of absence (fee waived, no penalty)</span>
+              </div>
+            </div>
+            <i class="fa-solid fa-chevron-right text-slate-400 text-xs"></i>
+          </button>
+
+          <!-- Option 3: Reset to Default Due -->
+          <button type="button" onclick="applyMatrixAction('clear')" class="w-full p-3 rounded-xl border border-rose-200 hover:border-rose-400 hover:bg-rose-50/50 text-left transition flex items-center justify-between group">
+            <div class="flex items-center gap-2.5">
+              <span class="w-8 h-8 rounded-lg bg-rose-100 text-rose-700 flex items-center justify-center text-sm font-bold">
+                <i class="fa-solid fa-rotate-left"></i>
+              </span>
+              <div>
+                <strong class="text-xs text-slate-900 block group-hover:text-rose-800">Reset to Default (Unpaid Due)</strong>
+                <span class="text-[10px] text-slate-400 block">Remove leave/not-enrolled override &amp; restore normal calculation</span>
+              </div>
+            </div>
+            <i class="fa-solid fa-chevron-right text-slate-400 text-xs"></i>
+          </button>
+
+          <!-- Option 4: Collect Fee for This Month -->
+          <button type="button" onclick="proceedToCollectFromMatrixModal()" class="w-full p-3 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-left transition flex items-center justify-between shadow-2xs">
+            <div class="flex items-center gap-2.5">
+              <span class="w-8 h-8 rounded-lg bg-white/20 text-white flex items-center justify-center text-sm font-bold">
+                <i class="fa-solid fa-cash-register"></i>
+              </span>
+              <div>
+                <strong class="text-xs text-white block">Collect Fee for this Month</strong>
+                <span class="text-[10px] text-emerald-200 block">Open fee collection form with this month pre-selected</span>
+              </div>
+            </div>
+            <i class="fa-solid fa-arrow-right text-white text-xs"></i>
+          </button>
+        </div>
+
+      </div>
+
+      <div class="p-3 bg-slate-50 border-t border-slate-100 flex justify-end">
+        <button type="button" onclick="closeModal('modalMatrixAction')" class="px-4 py-2 border rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100">
+          Cancel
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================================================ -->
+  <!-- MODAL 3: STUDENT & FAMILY 12-MONTH ANNUAL LEDGER TIMELINE -->
+  <!-- ============================================================ -->
+  <div id="modalFamilyAnnualLedger" class="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 hidden items-center justify-center p-3 sm:p-4 overflow-y-auto">
+    <div class="bg-white rounded-2xl max-w-4xl w-full border border-slate-200 shadow-2xl overflow-hidden my-6">
+      
+      <div class="p-4 sm:p-5 bg-gradient-to-r from-brandDark to-emerald-900 text-white flex justify-between items-center">
+        <div>
+          <h3 class="font-extrabold text-base flex items-center gap-2 text-white">
+            <i class="fa-solid fa-scroll text-brandGold"></i> Student &amp; Family Annual Fee Ledger
+          </h3>
+          <p id="familyLedgerSubtitle" class="text-xs text-emerald-200 mt-0.5">Family ID: -- • Parent: --</p>
+        </div>
+        <button onclick="closeModal('modalFamilyAnnualLedger')" class="text-white/60 hover:text-white text-2xl font-bold leading-none">&times;</button>
+      </div>
+
+      <div class="p-5 sm:p-6 space-y-5 max-h-[80vh] overflow-y-auto">
+        
+        <!-- Top Family Summary Card -->
+        <div class="bg-slate-50 p-4 rounded-2xl border border-slate-200 flex justify-between items-center flex-wrap gap-4">
+          <div>
+            <div id="ledgerParentName" class="text-sm font-black text-slate-900">--</div>
+            <div class="text-xs text-slate-500 mt-0.5">
+              Enrolled: <strong id="ledgerStudentsNames" class="text-emerald-800">--</strong>
+            </div>
+            <div id="ledgerContactInfo" class="text-xs text-slate-500 mt-0.5">--</div>
+          </div>
+
+          <div class="flex items-center gap-4">
+            <div class="text-right">
+              <span class="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">Agreed Fee</span>
+              <span id="ledgerMonthlyFee" class="text-base font-black font-num text-emerald-800">--</span>
+            </div>
+            <div>
+              <label class="text-[11px] font-bold text-slate-500 block mb-1">Year:</label>
+              <select id="ledgerYearSelect" onchange="reloadFamilyLedgerData()" class="p-2 bg-white border border-slate-300 rounded-xl text-xs font-bold text-slate-800">
+                <option value="2025">2025</option>
+                <option value="2026" selected>2026</option>
+                <option value="2027">2027</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <!-- 12-Month Calendar Grid -->
+        <div>
+          <h4 class="text-xs font-extrabold text-slate-900 mb-2.5 flex items-center gap-2">
+            <i class="fa-solid fa-calendar-days text-emerald-700"></i> 12-Month Payment Status &amp; Submission Dates
+          </h4>
+          <div id="ledgerMonthsGrid" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2.5">
+            <!-- Dynamically populated 12 month cards -->
+          </div>
+        </div>
+
+        <!-- Itemized Receipts History Table -->
+        <div>
+          <h4 class="text-xs font-extrabold text-slate-900 mb-2.5 flex items-center gap-2">
+            <i class="fa-solid fa-clock-rotate-left text-emerald-700"></i> Historical Payment Receipts Log
+          </h4>
+          <div class="overflow-x-auto max-h-56 rounded-xl border border-slate-200">
+            <table class="w-full text-left text-xs border-collapse">
+              <thead class="bg-slate-50 text-slate-600 font-extrabold uppercase tracking-wider text-[11px] sticky top-0">
+                <tr>
+                  <th class="p-2.5">Receipt #</th>
+                  <th class="p-2.5">Date</th>
+                  <th class="p-2.5">Billing Period</th>
+                  <th class="p-2.5">Amount Paid</th>
+                  <th class="p-2.5">Remaining</th>
+                  <th class="p-2.5">Status</th>
+                  <th class="p-2.5">Method</th>
+                  <th class="p-2.5 text-right">Receipt</th>
+                </tr>
+              </thead>
+              <tbody id="ledgerTransactionsTableBody" class="divide-y divide-slate-100">
+                <tr><td colspan="8" class="p-4 text-center text-slate-400">Loading receipts...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- MODAL FOOTER -->
+      <div class="p-4 bg-slate-50 border-t border-slate-200 flex justify-end items-center gap-2.5">
+        <button onclick="closeModal('modalFamilyAnnualLedger')" class="px-4 py-2 border rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100">
+          Close
+        </button>
+        <button onclick="ledgerCollectFeeNow()" class="px-5 py-2 bg-emerald-700 hover:bg-emerald-800 text-white rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-2xs">
+          <i class="fa-solid fa-cash-register"></i> Collect Fee for this Family
+        </button>
+      </div>
     </div>
   </div>
 
@@ -7957,59 +8847,1382 @@ Al-Huda Islamic Centre Management`;
       window.print();
     }
 
-    async function loadFeeBillingLedger() {
-      const tbody = document.getElementById('feeBillingTableBody');
-      if (!tbody) return;
-      const { data: families } = await db.from('families').select('*, students(*)').order('created_at', { ascending: false });
+    // ============================================================
+    // NATIVE AL-HUDA FEE MANAGEMENT & MASTER ANNUAL MATRIX ENGINE
+    // 100% Native LMS Execution • Zero Google Sheets Dependence
+    // ============================================================
 
-      // Exclude trial families: status='Trial'/'Converted', id starting with 'TRL-', or notes with is_trial
-      const regularFamilies = (families || []).filter(f => {
-        if ((f.status || '').toLowerCase() === 'trial') return false;
-        if ((f.status || '').toLowerCase() === 'converted') return false;
-        if ((f.id || '').toUpperCase().startsWith('TRL-')) return false;
-        if (f.notes) {
-          try {
-            const p = JSON.parse(f.notes);
-            if (p.is_trial && !p.converted_from_trial) return false;
-          } catch(e) {}
-        }
-        return true;
+    const FEE_CONFIG = {
+      CURRENCIES: ["USD", "GBP", "CAD", "EUR", "AUD", "PKR", "AED", "NZD"],
+      MONTHS: [
+        "January", "February", "March", "April", "May", "June",
+        "July", "August", "September", "October", "November", "December"
+      ],
+      RECEIPT_PREFIX: "AH-REC-"
+    };
+
+    let CACHED_FEE_FAMILIES = [];
+    let CACHED_PENDING_FEE_LIST = [];
+    let CACHED_ANNUAL_FEE_MATRIX = [];
+    let CURRENT_FEE_MODAL_RECEIPT = null;
+    let CURRENT_MATRIX_ACTION_DATA = null;
+    let CURRENT_LEDGER_FAMILY_ID = null;
+
+    // Persistent storage helpers
+    function getStoredFeeRecords() {
+      try {
+        return JSON.parse(localStorage.getItem('alhuda_fee_records') || '[]');
+      } catch (e) {
+        return [];
+      }
+    }
+
+    function saveStoredFeeRecords(records) {
+      try {
+        localStorage.setItem('alhuda_fee_records', JSON.stringify(records));
+      } catch (e) {
+        console.error("Error saving fee records:", e);
+      }
+    }
+
+    function getStoredMatrixOverrides() {
+      try {
+        return JSON.parse(localStorage.getItem('alhuda_fee_matrix_overrides') || '{}');
+      } catch (e) {
+        return {};
+      }
+    }
+
+    function saveStoredMatrixOverrides(overrides) {
+      try {
+        localStorage.setItem('alhuda_fee_matrix_overrides', JSON.stringify(overrides));
+      } catch (e) {
+        console.error("Error saving matrix overrides:", e);
+      }
+    }
+
+    // Sub-tab switcher inside Fee Management
+    function switchFeeSubTab(subTabId) {
+      document.querySelectorAll('.fee-subtab-btn').forEach(btn => {
+        btn.classList.remove('bg-emerald-800', 'text-white', 'shadow-xs', 'active');
+        btn.classList.add('text-slate-600', 'hover:bg-slate-100');
       });
 
-      if (!regularFamilies || regularFamilies.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="6" class="p-6 text-center text-slate-400">No regular billing families found.</td></tr>';
-        return;
+      const activeBtn = document.getElementById(subTabId.replace('fee-subview-', 'btnFeeSubTab-').replace('fee-subtab-', 'btnFeeSubTab-'));
+      if (activeBtn) {
+        activeBtn.classList.remove('text-slate-600', 'hover:bg-slate-100');
+        activeBtn.classList.add('bg-emerald-800', 'text-white', 'shadow-xs', 'active');
       }
 
-      tbody.innerHTML = regularFamilies.map(f => {
-        // Only include enrolled regular students (exclude any trial students)
-        const regStudents = (f.students || []).filter(s => {
-          if ((s.status || '').toLowerCase() === 'trial') return false;
-          if ((s.status || '').toLowerCase() === 'converted') return false;
-          if ((s.id || '').toUpperCase().startsWith('TRL-')) return false;
+      document.querySelectorAll('.fee-subview-panel').forEach(panel => panel.classList.add('hidden'));
+      const targetView = document.getElementById(subTabId.replace('fee-subtab-', 'feeSubView-'));
+      if (targetView) targetView.classList.remove('hidden');
+
+      if (subTabId === 'fee-subtab-overview') loadFeeDashboardStats();
+      if (subTabId === 'fee-subtab-pending') loadPendingDefaultersList();
+      if (subTabId === 'fee-subtab-matrix') loadMasterAnnualMatrix();
+      if (subTabId === 'fee-subtab-receipts') loadFeeReceiptsHistory();
+    }
+
+    function refreshCurrentFeeView() {
+      const activeBtn = document.querySelector('.fee-subtab-btn.active');
+      const id = activeBtn ? activeBtn.id.replace('btnFeeSubTab-', 'fee-subtab-') : 'fee-subtab-overview';
+      switchFeeSubTab(id);
+    }
+
+    // Main entrypoint when switching to tab-invoices
+    async function loadFeeBillingLedger() {
+      try {
+        // 1. Fetch fresh regular families from Supabase
+        const { data: families } = await db.from('families').select('*, students(*)').order('created_at', { ascending: false });
+
+        CACHED_FEE_FAMILIES = (families || []).filter(f => {
+          if ((f.status || '').toLowerCase() === 'trial') return false;
+          if ((f.status || '').toLowerCase() === 'converted') return false;
+          if ((f.id || '').toUpperCase().startsWith('TRL-')) return false;
+          if (f.notes) {
+            try {
+              const p = JSON.parse(f.notes);
+              if (p.is_trial && !p.converted_from_trial) return false;
+            } catch(e) {}
+          }
           return true;
         });
 
-        const studentsList = regStudents.map(s => s.name).join(', ') || 'None';
-        const cleanPhone = (f.whatsapp || '').replace(/[^0-9]/g, '');
-        const waMsg = `Assalam-o-Alaikum Respected ${f.parent_name},\nThis is your monthly fee statement from *Al-Huda Islamic Centre* for enrolled student(s): *${studentsList}*.\nFee Due: *${f.currency} ${f.monthly_fee}*.\nJazakAllahu Khairan!`;
+        // Ensure Leave Tracker data is ready for leave-fee synchronization
+        if (!ALL_LEAVE_RECORDS || ALL_LEAVE_RECORDS.length === 0) {
+          try { await loadLeaveManagementData(); } catch(e){}
+        }
+
+        // Set default month/year in dropdowns if not already set
+        const now = new Date();
+        const curMonthName = FEE_CONFIG.MONTHS[now.getMonth()] || "September";
+        const curYear = now.getFullYear();
+
+        const mSel = document.getElementById('feeDashMonthSelect');
+        const ySel = document.getElementById('feeDashYearSelect');
+        if (mSel && !mSel.value) mSel.value = curMonthName;
+        if (ySel && !ySel.value) ySel.value = String(curYear);
+
+        const formMSel = document.getElementById('feeFormMonth');
+        const formYSel = document.getElementById('feeFormYear');
+        if (formMSel) formMSel.value = curMonthName;
+        if (formYSel) formYSel.value = String(curYear);
+
+        // Load overview stats by default
+        await loadFeeDashboardStats();
+
+      } catch (err) {
+        console.error("Error initializing Fee Management Engine:", err);
+      }
+    }
+
+    // Check if family has approved leave in target month & year (Unified with LMS Leave Tracker)
+    function checkFamilyLeaveInMonth(familyId, monthName, year) {
+      const famUpper = String(familyId || '').toUpperCase();
+      const mLower = String(monthName || '').toLowerCase();
+      const yInt = parseInt(year, 10);
+
+      // 1. Check local matrix overrides
+      const overrides = getStoredMatrixOverrides();
+      const overrideKey = `${famUpper}_${mLower}_${yInt}`;
+      if (overrides[overrideKey] && overrides[overrideKey].status === 'leave') {
+        return { isLeave: true, reason: overrides[overrideKey].notes || 'Approved Leave (Fee Waived)' };
+      }
+
+      // 2. Check LMS Leave Records from tab-leaves
+      if (ALL_LEAVE_RECORDS && ALL_LEAVE_RECORDS.length > 0) {
+        const mIdx = FEE_CONFIG.MONTHS.findIndex(m => m.toLowerCase() === mLower);
+        const match = ALL_LEAVE_RECORDS.find(rec => {
+          const st = rec.student;
+          if (!st || String(st.family_id).toUpperCase() !== famUpper) return false;
+          if (!rec.isOnLeave) return false;
+
+          const sDate = rec.meta?.leave_start_date;
+          const rDate = rec.meta?.return_date;
+          if (sDate) {
+            const sY = parseInt(sDate.substring(0, 4), 10);
+            const sM = parseInt(sDate.substring(5, 7), 10) - 1;
+            if (sY === yInt && sM === mIdx) return true;
+          }
+          if (rDate) {
+            const rY = parseInt(rDate.substring(0, 4), 10);
+            const rM = parseInt(rDate.substring(5, 7), 10) - 1;
+            if (rY === yInt && rM === mIdx) return true;
+          }
+          return false;
+        });
+
+        if (match) {
+          return { isLeave: true, reason: match.meta?.leave_reason || 'Approved Leave (Fee Waived)' };
+        }
+      }
+
+      return { isLeave: false, reason: '' };
+    }
+
+    // ============================================================
+    // 1. DASHBOARD ANALYTICS & MULTI-CURRENCY STATS
+    // ============================================================
+    async function loadFeeDashboardStats() {
+      const mSel = document.getElementById('feeDashMonthSelect');
+      const ySel = document.getElementById('feeDashYearSelect');
+      const selectedMonth = mSel ? mSel.value : 'September';
+      const selectedYear = ySel ? parseInt(ySel.value, 10) : 2026;
+
+      const badgePeriod = document.getElementById('feeDashActivePeriodBadge');
+      if (badgePeriod) badgePeriod.innerText = `${selectedMonth} ${selectedYear}`;
+      const headerBadge = document.getElementById('badgeFeeHeaderMonth');
+      if (headerBadge) headerBadge.innerText = `${selectedMonth} ${selectedYear}`;
+      const progLabel = document.getElementById('feeProgressMonthLabel');
+      if (progLabel) progLabel.innerText = `${selectedMonth} ${selectedYear}`;
+
+      const families = CACHED_FEE_FAMILIES || [];
+      const records = getStoredFeeRecords();
+
+      // Total students
+      let totalStudentsCount = 0;
+      families.forEach(f => {
+        const regStus = (f.students || []).filter(s => (s.status || '').toLowerCase() !== 'trial');
+        totalStudentsCount += (regStus.length > 0 ? regStus.length : 1);
+      });
+
+      // Currency breakdown map
+      const currencyRevenue = {};
+      FEE_CONFIG.CURRENCIES.forEach(cur => {
+        currencyRevenue[cur] = { expected: 0, received: 0 };
+      });
+
+      families.forEach(f => {
+        const cur = (f.currency || 'USD').toUpperCase();
+        if (!currencyRevenue[cur]) currencyRevenue[cur] = { expected: 0, received: 0 };
+        currencyRevenue[cur].expected += parseFloat(f.monthly_fee || 0);
+      });
+
+      // Track paid vs pending for selected month & year
+      const paidMap = {};
+      const partialMap = {};
+
+      records.forEach(r => {
+        if (String(r.month).toLowerCase() === selectedMonth.toLowerCase() && parseInt(r.year, 10) === selectedYear) {
+          const famIdUpper = String(r.familyId).toUpperCase();
+          const rPaid = parseFloat(r.amountPaid || 0);
+          const rRem = parseFloat(r.remainingBalance || 0);
+          const rCur = (r.currency || 'USD').toUpperCase();
+
+          if (!currencyRevenue[rCur]) currencyRevenue[rCur] = { expected: 0, received: 0 };
+          currencyRevenue[rCur].received += rPaid;
+
+          if (rRem <= 0) {
+            paidMap[famIdUpper] = true;
+          } else {
+            partialMap[famIdUpper] = rRem;
+          }
+        }
+      });
+
+      // Check leaves and pending families
+      const pendingFamiliesList = [];
+      let onLeaveCount = 0;
+
+      families.forEach(fam => {
+        const famUpper = String(fam.id).toUpperCase();
+        const leaveCheck = checkFamilyLeaveInMonth(fam.id, selectedMonth, selectedYear);
+
+        if (leaveCheck.isLeave) {
+          onLeaveCount++;
+          return;
+        }
+
+        if (!paidMap[famUpper]) {
+          const hasPartial = partialMap[famUpper] !== undefined;
+          const dueAmt = hasPartial ? partialMap[famUpper] : parseFloat(fam.monthly_fee || 0);
+          
+          const regStus = (fam.students || []).filter(s => (s.status || '').toLowerCase() !== 'trial');
+          const stuNames = regStus.map(s => s.name).join(', ') || 'Enrolled Student';
+
+          pendingFamiliesList.push({
+            family: fam,
+            familyId: fam.id,
+            parentName: fam.parent_name,
+            studentsNames: stuNames,
+            country: fam.country || 'International',
+            whatsapp: fam.whatsapp || '',
+            email: fam.email || '',
+            currency: fam.currency || 'USD',
+            dueAmount: dueAmt,
+            isPartial: hasPartial,
+            status: hasPartial ? 'Partial (Balance Pending)' : 'Pending'
+          });
+        }
+      });
+
+      CACHED_PENDING_FEE_LIST = pendingFamiliesList;
+
+      const totalActive = families.length;
+      const paidCount = Object.keys(paidMap).length;
+      const pendingCount = pendingFamiliesList.length;
+      const effectiveTotal = Math.max(1, totalActive - onLeaveCount);
+      const pctPaid = Math.min(100, Math.round((paidCount / effectiveTotal) * 100));
+
+      // Update KPI Counter DOM Elements
+      const kpiFamilies = document.getElementById('kpiFeeTotalFamilies');
+      if (kpiFamilies) kpiFamilies.innerText = totalActive;
+      const kpiStudents = document.getElementById('kpiFeeTotalStudents');
+      if (kpiStudents) kpiStudents.innerText = totalStudentsCount;
+      const kpiPaid = document.getElementById('kpiFeePaidCount');
+      if (kpiPaid) kpiPaid.innerText = paidCount;
+      const kpiPending = document.getElementById('kpiFeePendingCount');
+      if (kpiPending) kpiPending.innerText = pendingCount;
+      const kpiLeave = document.getElementById('kpiFeeLeaveCount');
+      if (kpiLeave) kpiLeave.innerText = onLeaveCount;
+
+      const kpiPaidPct = document.getElementById('kpiFeePaidPercent');
+      if (kpiPaidPct) kpiPaidPct.innerText = `${pctPaid}%`;
+      const kpiPaidRatio = document.getElementById('kpiFeePaidRatio');
+      if (kpiPaidRatio) kpiPaidRatio.innerText = `${paidCount}/${effectiveTotal}`;
+      const kpiPendingPct = document.getElementById('kpiFeePendingPercent');
+      if (kpiPendingPct) kpiPendingPct.innerText = `${100 - pctPaid}%`;
+
+      const kpiProgressText = document.getElementById('kpiFeeProgressPercent');
+      if (kpiProgressText) kpiProgressText.innerText = `${pctPaid}% Collected`;
+      const pBarPaid = document.getElementById('feeProgressBarPaid');
+      if (pBarPaid) pBarPaid.style.width = `${pctPaid}%`;
+      const pBarPending = document.getElementById('feeProgressBarPending');
+      if (pBarPending) pBarPending.style.width = `${100 - pctPaid}%`;
+
+      // Update badges
+      const subBadge = document.getElementById('feeSubBadgePending');
+      if (subBadge) subBadge.innerText = pendingCount;
+      const navBadge = document.getElementById('navFeePendingBadge');
+      if (navBadge) {
+        navBadge.innerText = pendingCount;
+        if (pendingCount > 0) navBadge.classList.remove('hidden');
+        else navBadge.classList.add('hidden');
+      }
+
+      // Render currency breakdown cards
+      renderFeeCurrencyGrid(currencyRevenue);
+    }
+
+    function renderFeeCurrencyGrid(currencyRevenue) {
+      const container = document.getElementById('feeCurrencyGridContainer');
+      if (!container) return;
+      container.innerHTML = '';
+
+      let hasData = false;
+      for (const cur of FEE_CONFIG.CURRENCIES) {
+        const data = currencyRevenue[cur] || { expected: 0, received: 0 };
+        if (data.expected === 0 && data.received === 0) continue;
+        hasData = true;
+
+        const pct = data.expected > 0 ? Math.min(100, Math.round((data.received / data.expected) * 100)) : 0;
+
+        const card = document.createElement('div');
+        card.className = 'p-3.5 bg-slate-50 border border-slate-200 rounded-xl space-y-2';
+        card.innerHTML = `
+          <div class="flex justify-between items-center text-xs font-bold">
+            <span class="text-brandDark font-black font-mono text-sm">${cur}</span>
+            <span class="text-emerald-700 font-bold font-num">${pct}% Paid</span>
+          </div>
+          <div class="flex justify-between text-[11px] text-slate-500">
+            <span>Expected:</span>
+            <strong class="text-slate-800 font-num">${cur} ${data.expected.toLocaleString()}</strong>
+          </div>
+          <div class="flex justify-between text-[11px] text-slate-500">
+            <span>Received:</span>
+            <strong class="text-emerald-700 font-num font-bold">${cur} ${data.received.toLocaleString()}</strong>
+          </div>
+          <div class="w-full h-2 bg-slate-200 rounded-full overflow-hidden">
+            <div class="h-full bg-emerald-600 transition-all duration-300" style="width: ${pct}%;"></div>
+          </div>
+        `;
+        container.appendChild(card);
+      }
+
+      if (!hasData) {
+        container.innerHTML = `<div class="col-span-4 p-4 text-center text-xs text-slate-400 font-medium">No currency billing expected yet. Add family fee rates to see real-time breakdown.</div>`;
+      }
+    }
+
+    // ============================================================
+    // 2. COLLECT FEE, AUTO-SEARCH & SMART ARREARS ENGINE
+    // ============================================================
+    function handleFeeFamilySearch(query) {
+      const dropdown = document.getElementById('feeSearchResultsDropdown');
+      if (!dropdown) return;
+      const q = (query || '').trim().toLowerCase();
+
+      if (!q || q.length < 1) {
+        dropdown.classList.add('hidden');
+        return;
+      }
+
+      const families = CACHED_FEE_FAMILIES || [];
+      const matches = families.filter(f => {
+        const fId = String(f.id || '').toLowerCase();
+        const pName = String(f.parent_name || '').toLowerCase();
+        const regStus = (f.students || []).map(s => String(s.name || '').toLowerCase()).join(' ');
+        return fId.includes(q) || pName.includes(q) || regStus.includes(q);
+      });
+
+      dropdown.innerHTML = '';
+      if (matches.length === 0) {
+        dropdown.innerHTML = '<div class="p-3 text-xs text-slate-400 text-center">No matching family found.</div>';
+        dropdown.classList.remove('hidden');
+        return;
+      }
+
+      matches.slice(0, 8).forEach(fam => {
+        const regStus = (fam.students || []).filter(s => (s.status || '').toLowerCase() !== 'trial');
+        const stuNames = regStus.map(s => s.name).join(', ') || 'Enrolled Student';
+
+        const item = document.createElement('div');
+        item.className = 'p-3 hover:bg-emerald-50 cursor-pointer transition flex justify-between items-center';
+        item.innerHTML = `
+          <div>
+            <strong class="text-xs text-slate-900 block">${fam.parent_name} <span class="font-mono text-slate-400 font-bold">(${fam.id})</span></strong>
+            <span class="text-[11px] text-emerald-800 font-medium block"><i class="fa-solid fa-graduation-cap text-emerald-600 mr-1"></i>${stuNames}</span>
+          </div>
+          <div class="text-right">
+            <span class="text-xs font-bold font-mono text-emerald-700">${fam.currency || 'USD'} ${fam.monthly_fee || 0}</span>
+            <span class="text-[10px] text-slate-400 block">${fam.country || 'International'}</span>
+          </div>
+        `;
+        item.onclick = () => {
+          selectFeeFamily(fam.id);
+          dropdown.classList.add('hidden');
+          const searchInput = document.getElementById('feeFamilySearchInput');
+          if (searchInput) searchInput.value = '';
+        };
+        dropdown.appendChild(item);
+      });
+
+      dropdown.classList.remove('hidden');
+    }
+
+    function selectFeeFamily(familyId) {
+      const fam = (CACHED_FEE_FAMILIES || []).find(f => String(f.id).toUpperCase() === String(familyId).toUpperCase());
+      if (!fam) return;
+
+      switchFeeSubTab('fee-subtab-collect');
+
+      const regStus = (fam.students || []).filter(s => (s.status || '').toLowerCase() !== 'trial');
+      const stuNames = regStus.map(s => s.name).join(', ') || 'Enrolled Student';
+
+      document.getElementById('feeFormFamilyId').value = fam.id;
+      document.getElementById('feeFormParentName').value = fam.parent_name || '';
+      document.getElementById('feeFormStudentsNames').value = stuNames;
+      document.getElementById('feeFormCountry').value = fam.country || '';
+      document.getElementById('feeFormWhatsApp').value = fam.whatsapp || '';
+      document.getElementById('feeFormParentEmail').value = fam.email || '';
+
+      const fee = parseFloat(fam.monthly_fee || 0);
+      document.getElementById('feeFormMonthlyFee').value = fee.toFixed(2);
+      document.getElementById('feeFormCurrency').value = (fam.currency || 'USD').toUpperCase();
+
+      // Reset proration and advance toggles
+      const progToggle = document.getElementById('feeToggleProrated');
+      if (progToggle) progToggle.checked = false;
+      const pBox = document.getElementById('feeProrateBox');
+      if (pBox) pBox.classList.add('hidden');
+
+      const advToggle = document.getElementById('feeToggleAdvance');
+      if (advToggle) advToggle.checked = false;
+      const aBox = document.getElementById('feeAdvanceBox');
+      if (aBox) aBox.classList.add('hidden');
+
+      // Trigger Smart Arrears check
+      triggerFeeBalanceRecalc();
+    }
+
+    function triggerFeeBalanceRecalc() {
+      const famId = document.getElementById('feeFormFamilyId').value;
+      const targetMonth = document.getElementById('feeFormMonth').value;
+      const targetYear = parseInt(document.getElementById('feeFormYear').value, 10);
+      if (!famId) return;
+
+      const alertBox = document.getElementById('feeArrearsAlertBox');
+      const alertTitle = document.getElementById('feeArrearsAlertTitle');
+      const alertDesc = document.getElementById('feeArrearsAlertDesc');
+
+      const fam = (CACHED_FEE_FAMILIES || []).find(f => String(f.id).toUpperCase() === String(famId).toUpperCase());
+      if (!fam) return;
+
+      const monthlyFee = parseFloat(fam.monthly_fee || 0);
+      const records = getStoredFeeRecords().filter(r => String(r.familyId).toUpperCase() === String(famId).toUpperCase());
+
+      // Target month index
+      const targetMonthIdx = FEE_CONFIG.MONTHS.findIndex(m => m.toLowerCase() === targetMonth.toLowerCase());
+      const paidByMonth = {};
+      let latestRemainingBalance = 0;
+
+      records.forEach(r => {
+        if (parseInt(r.year, 10) === targetYear) {
+          const k = String(r.month).toLowerCase();
+          paidByMonth[k] = (paidByMonth[k] || 0) + parseFloat(r.amountPaid || 0);
+          latestRemainingBalance = parseFloat(r.remainingBalance || 0);
+        }
+      });
+
+      // Calculate previous arrears
+      let totalPreviousArrears = 0;
+      const unpaidDetails = [];
+
+      for (let m = 0; m < targetMonthIdx; m++) {
+        const mName = FEE_CONFIG.MONTHS[m];
+        const mKey = mName.toLowerCase();
+
+        // Check if student was on approved leave in that past month
+        const leaveCheck = checkFamilyLeaveInMonth(famId, mName, targetYear);
+        if (leaveCheck.isLeave) {
+          unpaidDetails.push({ month: mName, isLeave: true, reason: leaveCheck.reason });
+          continue;
+        }
+
+        const amtPaid = paidByMonth[mKey] || 0;
+        if (amtPaid < monthlyFee) {
+          const shortfall = monthlyFee - amtPaid;
+          totalPreviousArrears += shortfall;
+          unpaidDetails.push({ month: mName, isLeave: false, shortfall });
+        }
+      }
+
+      const finalPreviousBalance = Math.max(totalPreviousArrears, latestRemainingBalance);
+      document.getElementById('feeFormPreviousBalance').value = finalPreviousBalance.toFixed(2);
+
+      // Re-evaluate proration if active
+      if (document.getElementById('feeToggleProrated')?.checked) {
+        calcProratedFeeFromDays();
+      } else if (document.getElementById('feeToggleAdvance')?.checked) {
+        calcAdvancePaymentFee();
+      } else {
+        document.getElementById('feeFormMonthlyFee').value = monthlyFee.toFixed(2);
+      }
+
+      recalcFeeTotalLive();
+
+      // Show/hide arrears alert banner
+      if (finalPreviousBalance > 0) {
+        alertTitle.innerHTML = `<i class="fa-solid fa-triangle-exclamation"></i> Outstanding Arrears: ${fam.currency || 'USD'} ${finalPreviousBalance.toFixed(2)}`;
+        const unpaidStr = unpaidDetails.filter(u => !u.isLeave).map(u => `${u.month} (${fam.currency} ${u.shortfall.toFixed(2)})`).join(', ');
+        alertDesc.innerHTML = `Unpaid balance detected from past months: <strong>${unpaidStr || 'Prior balance'}</strong>. This has been added to Total Payable below.`;
+        alertBox.classList.remove('hidden');
+      } else {
+        const leavesPast = unpaidDetails.filter(u => u.isLeave);
+        if (leavesPast.length > 0) {
+          alertTitle.innerHTML = `<i class="fa-solid fa-circle-check text-emerald-600"></i> Prior Dues Cleared &amp; Leaves Waived`;
+          const lStr = leavesPast.map(l => `${l.month} (${l.reason})`).join(', ');
+          alertDesc.innerHTML = `All previous months cleared. Prior leaves waived: <strong>${lStr}</strong>.`;
+          alertBox.classList.remove('hidden');
+        } else {
+          alertBox.classList.add('hidden');
+        }
+      }
+    }
+
+    function recalcFeeTotalLive() {
+      const curFee = parseFloat(document.getElementById('feeFormMonthlyFee')?.value || 0);
+      const prevBal = parseFloat(document.getElementById('feeFormPreviousBalance')?.value || 0);
+      const totalPayable = prevBal + curFee;
+      
+      const totalField = document.getElementById('feeFormTotalPayable');
+      if (totalField) totalField.value = totalPayable.toFixed(2);
+
+      const amtPaidInput = document.getElementById('feeFormAmountPaid');
+      if (amtPaidInput && amtPaidInput.dataset.manualEdited !== 'true') {
+        amtPaidInput.value = totalPayable.toFixed(2);
+      }
+      calculateFeeRemainingLive();
+    }
+
+    function calculateFeeRemainingLive() {
+      const totalPayable = parseFloat(document.getElementById('feeFormTotalPayable')?.value || 0);
+      const amountPaid = parseFloat(document.getElementById('feeFormAmountPaid')?.value || 0);
+      const discount = parseFloat(document.getElementById('feeFormDiscount')?.value || 0);
+
+      let remaining = totalPayable - (amountPaid + discount);
+      if (remaining < 0) remaining = 0;
+      const remField = document.getElementById('feeFormRemainingBalance');
+      if (remField) remField.value = remaining.toFixed(2);
+    }
+
+    function resetFeeForm() {
+      const form = document.getElementById('feeCollectionForm');
+      if (form) form.reset();
+      document.getElementById('feeArrearsAlertBox')?.classList.add('hidden');
+      document.getElementById('feeProrateBox')?.classList.add('hidden');
+      document.getElementById('feeAdvanceBox')?.classList.add('hidden');
+      document.getElementById('feeFamilySearchInput').value = '';
+      document.getElementById('feeFormPreviousBalance').value = '0.00';
+      document.getElementById('feeFormTotalPayable').value = '0.00';
+      document.getElementById('feeFormRemainingBalance').value = '0.00';
+      const amtInput = document.getElementById('feeFormAmountPaid');
+      if (amtInput) {
+        amtInput.value = '';
+        delete amtInput.dataset.manualEdited;
+      }
+    }
+
+    // Proration Toggle & Calculator
+    function handleProrateFeeToggle() {
+      const isChecked = document.getElementById('feeToggleProrated').checked;
+      const box = document.getElementById('feeProrateBox');
+      if (!box) return;
+
+      if (isChecked) {
+        box.classList.remove('hidden');
+        // Uncheck advance toggle if active
+        const advToggle = document.getElementById('feeToggleAdvance');
+        if (advToggle) {
+          advToggle.checked = false;
+          document.getElementById('feeAdvanceBox')?.classList.add('hidden');
+        }
+
+        const m = document.getElementById('feeFormMonth').value;
+        const y = parseInt(document.getElementById('feeFormYear').value, 10);
+        const mIdx = FEE_CONFIG.MONTHS.findIndex(item => item.toLowerCase() === m.toLowerCase());
+        const totalDays = new Date(y, mIdx + 1, 0).getDate();
+        document.getElementById('feeProrateTotalDays').value = totalDays;
+
+        const mNum = ("0" + (mIdx + 1)).slice(-2);
+        document.getElementById('feeProrateStartDate').value = `${y}-${mNum}-08`;
+        document.getElementById('feeProrateActiveDays').value = 22;
+        calcProratedFeeFromDays();
+      } else {
+        box.classList.add('hidden');
+        triggerFeeBalanceRecalc();
+      }
+    }
+
+    function calcProratedFeeFromDate() {
+      const dateStr = document.getElementById('feeProrateStartDate').value;
+      if (!dateStr) return;
+      const d = new Date(dateStr);
+      const day = d.getDate();
+      const m = document.getElementById('feeFormMonth').value;
+      const y = parseInt(document.getElementById('feeFormYear').value, 10);
+      const mIdx = FEE_CONFIG.MONTHS.findIndex(item => item.toLowerCase() === m.toLowerCase());
+      const totalDays = new Date(y, mIdx + 1, 0).getDate();
+      document.getElementById('feeProrateTotalDays').value = totalDays;
+
+      let activeDays = totalDays - day + 1;
+      if (activeDays < 1) activeDays = 1;
+      document.getElementById('feeProrateActiveDays').value = activeDays;
+      calcProratedFeeFromDays();
+    }
+
+    function calcProratedFeeFromDays() {
+      const activeDays = parseInt(document.getElementById('feeProrateActiveDays')?.value, 10) || 0;
+      const totalDays = parseInt(document.getElementById('feeProrateTotalDays')?.value, 10) || 30;
+
+      const famId = document.getElementById('feeFormFamilyId').value;
+      const fam = (CACHED_FEE_FAMILIES || []).find(f => String(f.id).toUpperCase() === String(famId).toUpperCase());
+      const standardFee = parseFloat(fam?.monthly_fee || 0);
+
+      const prorated = totalDays > 0 ? Math.round((standardFee / totalDays) * activeDays) : standardFee;
+      const calcField = document.getElementById('feeProrateCalcAmount');
+      if (calcField) calcField.value = prorated.toFixed(2);
+    }
+
+    function applyProratedFeeToForm() {
+      const prorated = parseFloat(document.getElementById('feeProrateCalcAmount')?.value || 0);
+      if (prorated <= 0) return;
+      document.getElementById('feeFormMonthlyFee').value = prorated.toFixed(2);
+      recalcFeeTotalLive();
+      showToastNotification(`Prorated fee of ${prorated.toFixed(2)} applied for ${document.getElementById('feeProrateActiveDays').value} active days!`);
+    }
+
+    // Advance Payment Toggle & Calculator
+    function handleAdvanceFeeToggle() {
+      const isChecked = document.getElementById('feeToggleAdvance').checked;
+      const box = document.getElementById('feeAdvanceBox');
+      if (!box) return;
+
+      if (isChecked) {
+        box.classList.remove('hidden');
+        // Uncheck prorate toggle if active
+        const progToggle = document.getElementById('feeToggleProrated');
+        if (progToggle) {
+          progToggle.checked = false;
+          document.getElementById('feeProrateBox')?.classList.add('hidden');
+        }
+        calcAdvancePaymentFee();
+      } else {
+        box.classList.add('hidden');
+        triggerFeeBalanceRecalc();
+      }
+    }
+
+    function calcAdvancePaymentFee() {
+      const count = parseInt(document.getElementById('feeSelectAdvanceMonths')?.value, 10) || 1;
+      const startMonth = document.getElementById('feeFormMonth').value;
+      const startYear = parseInt(document.getElementById('feeFormYear').value, 10);
+
+      const famId = document.getElementById('feeFormFamilyId').value;
+      const fam = (CACHED_FEE_FAMILIES || []).find(f => String(f.id).toUpperCase() === String(famId).toUpperCase());
+      const standardFee = parseFloat(fam?.monthly_fee || 0);
+
+      const totalAdvance = standardFee * count;
+      const calcField = document.getElementById('feeAdvanceCalcAmount');
+      if (calcField) calcField.value = totalAdvance.toFixed(2);
+
+      const mIdx = FEE_CONFIG.MONTHS.findIndex(m => m.toLowerCase() === startMonth.toLowerCase());
+      const badgesContainer = document.getElementById('feeAdvanceMonthsBadges');
+      if (badgesContainer) {
+        badgesContainer.innerHTML = '';
+        for (let i = 0; i < count; i++) {
+          const curIdx = (mIdx + i) % 12;
+          const curY = startYear + Math.floor((mIdx + i) / 12);
+          const badge = document.createElement('span');
+          badge.className = 'px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-100 text-blue-800 border border-blue-200';
+          badge.innerHTML = `<i class="fa-solid fa-check mr-1"></i>${FEE_CONFIG.MONTHS[curIdx]} ${curY}`;
+          badgesContainer.appendChild(badge);
+        }
+      }
+    }
+
+    function applyAdvancePaymentFeeToForm() {
+      const advanceAmt = parseFloat(document.getElementById('feeAdvanceCalcAmount')?.value || 0);
+      if (advanceAmt <= 0) return;
+      document.getElementById('feeFormMonthlyFee').value = advanceAmt.toFixed(2);
+      recalcFeeTotalLive();
+      showToastNotification(`Advance payment fee of ${advanceAmt.toFixed(2)} applied!`);
+    }
+
+    // Submit Payment & Save Record
+    async function handleFeePaymentSubmit(e) {
+      e.preventDefault();
+      const famId = document.getElementById('feeFormFamilyId').value;
+      if (!famId) {
+        alert("Please search and select a family account first.");
+        return;
+      }
+
+      const btn = document.getElementById('btnSubmitFeePayment');
+      if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-1"></i> Saving Payment...';
+      }
+
+      const todayStr = new Date().toISOString().slice(0, 10);
+      const curYear = document.getElementById('feeFormYear').value;
+      const records = getStoredFeeRecords();
+      const receiptNo = `${FEE_CONFIG.RECEIPT_PREFIX}${curYear}-${String(records.length + 1).padStart(4, '0')}`;
+
+      const totalPayable = parseFloat(document.getElementById('feeFormTotalPayable').value || 0);
+      const amountPaid = parseFloat(document.getElementById('feeFormAmountPaid').value || 0);
+      const discount = parseFloat(document.getElementById('feeFormDiscount').value || 0);
+      const remaining = parseFloat(document.getElementById('feeFormRemainingBalance').value || 0);
+
+      const isProrated = document.getElementById('feeToggleProrated')?.checked || false;
+      const isAdvance = document.getElementById('feeToggleAdvance')?.checked || false;
+      const advanceCount = isAdvance ? parseInt(document.getElementById('feeSelectAdvanceMonths').value, 10) : 1;
+
+      const paymentRecord = {
+        receiptNo,
+        date: todayStr,
+        familyId: famId,
+        parentName: document.getElementById('feeFormParentName').value,
+        studentsNames: document.getElementById('feeFormStudentsNames').value,
+        country: document.getElementById('feeFormCountry').value,
+        whatsapp: document.getElementById('feeFormWhatsApp').value,
+        email: document.getElementById('feeFormParentEmail').value,
+        month: document.getElementById('feeFormMonth').value,
+        year: parseInt(document.getElementById('feeFormYear').value, 10),
+        monthlyFee: parseFloat(document.getElementById('feeFormMonthlyFee').value || 0),
+        previousBalance: parseFloat(document.getElementById('feeFormPreviousBalance').value || 0),
+        totalPayable,
+        amountPaid,
+        discount,
+        remainingBalance: remaining,
+        currency: document.getElementById('feeFormCurrency').value,
+        paymentMethod: document.getElementById('feeFormPaymentMethod').value,
+        transactionId: document.getElementById('feeFormTxnId').value || 'N/A',
+        notes: document.getElementById('feeFormNotes').value || '',
+        status: remaining > 0 ? 'Partial (Balance Remaining)' : 'Paid in Full',
+        isProrated,
+        activeDays: isProrated ? parseInt(document.getElementById('feeProrateActiveDays').value, 10) : 0,
+        joiningDate: isProrated ? document.getElementById('feeProrateStartDate').value : '',
+        isAdvancePayment: isAdvance,
+        advanceMonthsCount: advanceCount
+      };
+
+      // Handle multi-month advance sequence records in storage
+      if (isAdvance && advanceCount > 1) {
+        const mIdx = FEE_CONFIG.MONTHS.findIndex(m => m.toLowerCase() === paymentRecord.month.toLowerCase());
+        const singleFee = paymentRecord.monthlyFee / advanceCount;
+
+        for (let i = 0; i < advanceCount; i++) {
+          const curIdx = (mIdx + i) % 12;
+          const curY = paymentRecord.year + Math.floor((mIdx + i) / 12);
+          records.unshift({
+            ...paymentRecord,
+            receiptNo: `${receiptNo}-${i + 1}`,
+            month: FEE_CONFIG.MONTHS[curIdx],
+            year: curY,
+            monthlyFee: singleFee,
+            previousBalance: i === 0 ? paymentRecord.previousBalance : 0,
+            totalPayable: i === 0 ? paymentRecord.totalPayable : singleFee,
+            amountPaid: i === 0 ? paymentRecord.amountPaid : singleFee,
+            remainingBalance: i === 0 ? paymentRecord.remainingBalance : 0,
+            status: i === 0 ? paymentRecord.status : 'Paid in Advance'
+          });
+        }
+      } else {
+        records.unshift(paymentRecord);
+      }
+
+      saveStoredFeeRecords(records);
+
+      if (btn) {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fa-solid fa-file-invoice"></i> Save Payment &amp; Generate Official Invoice';
+      }
+
+      // Open Official Printable Receipt Modal
+      openFeeInvoiceModal(paymentRecord);
+
+      // Refresh Overview, Defaulters and Matrix
+      await loadFeeDashboardStats();
+      resetFeeForm();
+      showToastNotification("Fee payment recorded successfully!");
+    }
+
+    // ============================================================
+    // 3. OFFICIAL INVOICE RECEIPT MODAL
+    // ============================================================
+    function openFeeInvoiceModal(r) {
+      CURRENT_FEE_MODAL_RECEIPT = r;
+
+      document.getElementById('feeInvReceiptNo').innerText = r.receiptNo || 'AH-REC-OFFICIAL';
+      document.getElementById('feeInvParentName').innerText = r.parentName || '--';
+      document.getElementById('feeInvFamilyId').innerText = r.familyId || '--';
+      document.getElementById('feeInvStudentsNames').innerText = r.studentsNames || '--';
+      document.getElementById('feeInvIssueDate').innerText = r.date || new Date().toISOString().slice(0, 10);
+      document.getElementById('feeInvPeriod').innerText = `${r.month} ${r.year}`;
+
+      const cur = r.currency || 'USD';
+      document.getElementById('feeInvCurrentDue').innerText = `${cur} ${parseFloat(r.monthlyFee || 0).toFixed(2)}`;
+
+      const descEl = document.getElementById('feeInvDescription');
+      if (r.isAdvancePayment && r.advanceMonthsCount > 1) {
+        descEl.innerHTML = `Advance Tuition Fee (${r.advanceMonthsCount} Months Pre-Paid)`;
+      } else if (r.isProrated) {
+        descEl.innerHTML = `Tuition Fee (Mid-Month Admission: ${r.activeDays} Days Active)`;
+      } else {
+        descEl.innerText = 'Current Month Tuition Fee';
+      }
+
+      const prevRow = document.getElementById('feeInvPrevBalanceRow');
+      const prevBal = parseFloat(r.previousBalance || 0);
+      if (prevBal > 0) {
+        prevRow.classList.remove('hidden');
+        document.getElementById('feeInvPrevBalanceAmt').innerText = `${cur} ${prevBal.toFixed(2)}`;
+      } else {
+        prevRow.classList.add('hidden');
+      }
+
+      document.getElementById('feeInvGrossTotal').innerText = `${cur} ${parseFloat(r.totalPayable || 0).toFixed(2)}`;
+      document.getElementById('feeInvTotalPaid').innerText = `${cur} ${parseFloat(r.amountPaid || 0).toFixed(2)}`;
+      document.getElementById('feeInvPaymentMethod').innerText = r.paymentMethod || 'Online';
+
+      const discRow = document.getElementById('feeInvDiscountRow');
+      const discount = parseFloat(r.discount || 0);
+      if (discount > 0) {
+        discRow.classList.remove('hidden');
+        document.getElementById('feeInvDiscountAmt').innerText = `- ${cur} ${discount.toFixed(2)}`;
+      } else {
+        discRow.classList.add('hidden');
+      }
+
+      const remaining = parseFloat(r.remainingBalance || 0);
+      const carryBox = document.getElementById('feeInvCarryForwardBox');
+      const stamp = document.getElementById('feeInvStatusStamp');
+
+      if (remaining > 0) {
+        carryBox.classList.remove('hidden');
+        document.getElementById('feeInvCarryForwardAmt').innerText = `${cur} ${remaining.toFixed(2)}`;
+        stamp.className = "inline-block px-3 py-1 rounded-md text-[11px] font-black border-2 border-amber-600 bg-amber-50 text-amber-800 tracking-wider";
+        stamp.innerText = "PARTIAL PAYMENT (BALANCE PENDING)";
+      } else {
+        carryBox.classList.add('hidden');
+        stamp.className = "inline-block px-3 py-1 rounded-md text-[11px] font-black border-2 border-emerald-600 bg-emerald-50 text-emerald-800 tracking-wider";
+        stamp.innerText = "PAID IN FULL (ALL DUES CLEARED)";
+      }
+
+      // Format WhatsApp Message link
+      const cleanPhone = (r.whatsapp || '').replace(/[^0-9]/g, '');
+      const waMsg = `Assalam-o-Alaikum Respected ${r.parentName},\n\n*OFFICIAL TUITION FEE RECEIPT - AL-HUDA ISLAMIC CENTRE*\n--------------------------------------\nReceipt No: *${r.receiptNo}*\nDate: *${r.date}*\nStudent(s): *${r.studentsNames}*\nBilling Period: *${r.month} ${r.year}*\nTotal Due: *${cur} ${parseFloat(r.totalPayable || 0).toFixed(2)}*\nAmount Paid: *${cur} ${parseFloat(r.amountPaid || 0).toFixed(2)}*\nRemaining Balance: *${cur} ${remaining.toFixed(2)}*\nStatus: *${r.status}*\n--------------------------------------\nJazakAllahu Khairan!\n*Al-Huda Islamic Centre Accounts*`;
+      const waBtn = document.getElementById('feeInvWhatsAppBtn');
+      if (waBtn) waBtn.href = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(waMsg)}`;
+
+      openModal('modalFeeInvoice');
+    }
+
+    function printFeeInvoiceReceipt() {
+      const area = document.getElementById('feeInvoicePrintArea');
+      if (!area) return;
+      window.print();
+    }
+
+    // ============================================================
+    // 4. PENDING DEFAULTERS LIST
+    // ============================================================
+    function loadPendingDefaultersList() {
+      const mSel = document.getElementById('feePendingMonthFilter');
+      const ySel = document.getElementById('feePendingYearFilter');
+      const targetMonth = mSel ? mSel.value : 'September';
+      const targetYear = ySel ? parseInt(ySel.value, 10) : 2026;
+
+      const pLabel = document.getElementById('feePendingPeriodLabel');
+      if (pLabel) pLabel.innerText = `${targetMonth} ${targetYear}`;
+
+      const tbody = document.getElementById('feePendingTableBody');
+      if (!tbody) return;
+
+      const list = CACHED_PENDING_FEE_LIST || [];
+      const badge = document.getElementById('feePendingTotalBadge');
+      if (badge) badge.innerText = `${list.length} Families Pending`;
+
+      renderPendingDefaultersRows(list);
+    }
+
+    function renderPendingDefaultersRows(list) {
+      const tbody = document.getElementById('feePendingTableBody');
+      if (!tbody) return;
+
+      if (!list || list.length === 0) {
+        tbody.innerHTML = `
+          <tr>
+            <td colspan="7" class="p-8 text-center text-emerald-800 font-bold">
+              <i class="fa-solid fa-circle-check text-2xl text-emerald-600 block mb-1"></i>
+              SubhanAllah! Zero pending fees found for this month. All family dues are cleared!
+            </td>
+          </tr>
+        `;
+        return;
+      }
+
+      tbody.innerHTML = list.map(item => {
+        const cleanPhone = (item.whatsapp || '').replace(/[^0-9]/g, '');
+        const waMsg = `Assalam-o-Alaikum Respected ${item.parentName},\nThis is a polite reminder from *Al-Huda Islamic Centre* regarding tuition fee for enrolled student(s): *${item.studentsNames}*.\nPending Due: *${item.currency} ${item.dueAmount.toFixed(2)}*.\nKindly arrange payment at your earliest convenience.\nJazakAllahu Khairan!`;
         const waUrl = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(waMsg)}`;
 
         return `
           <tr class="hover:bg-slate-50 transition">
-            <td class="p-3 font-mono font-bold text-brandDark">${f.id}</td>
-            <td class="p-3 font-bold text-slate-900">${f.parent_name}</td>
-            <td class="p-3 text-slate-600 font-mono">${f.whatsapp}</td>
-            <td class="p-3 text-brandDark font-semibold">${studentsList}</td>
-            <td class="p-3 font-bold text-brandEmerald font-mono">${f.currency} ${f.monthly_fee}</td>
-            <td class="p-3 text-right">
-              <a href="${waUrl}" target="_blank" class="px-3 py-1 bg-emerald-600 text-white rounded-lg text-xs font-bold hover:bg-emerald-700 inline-flex items-center gap-1 shadow-xs transition">
-                <i class="fa-brands fa-whatsapp"></i> WhatsApp Bill
+            <td class="p-3 font-mono font-bold text-slate-700">${item.familyId}</td>
+            <td class="p-3 font-bold text-slate-900">${item.parentName}</td>
+            <td class="p-3 font-medium text-emerald-900">${item.studentsNames}</td>
+            <td class="p-3 text-slate-500">${item.country}</td>
+            <td class="p-3 font-bold font-mono text-rose-700 text-sm">${item.currency} ${item.dueAmount.toFixed(2)}</td>
+            <td class="p-3">
+              <span class="px-2 py-0.5 rounded-full text-[10px] font-bold ${item.isPartial ? 'bg-amber-100 text-amber-800 border border-amber-300' : 'bg-rose-100 text-rose-800 border border-rose-300'}">
+                ${item.status}
+              </span>
+            </td>
+            <td class="p-3 text-right space-x-1.5">
+              <button onclick="selectFeeFamily('${item.familyId}')" class="px-2.5 py-1 bg-emerald-700 text-white rounded-lg text-xs font-bold hover:bg-emerald-800 transition">
+                <i class="fa-solid fa-cash-register mr-1"></i>Collect
+              </button>
+              <a href="${waUrl}" target="_blank" class="px-2.5 py-1 bg-emerald-600 text-white rounded-lg text-xs font-bold hover:bg-emerald-700 inline-flex items-center gap-1 transition">
+                <i class="fa-brands fa-whatsapp"></i>Remind
               </a>
             </td>
           </tr>
         `;
       }).join('');
+    }
+
+    function filterPendingDefaultersSearchLive() {
+      const q = (document.getElementById('feePendingSearchInput')?.value || '').trim().toLowerCase();
+      const list = CACHED_PENDING_FEE_LIST || [];
+
+      if (!q) {
+        renderPendingDefaultersRows(list);
+        return;
+      }
+
+      const filtered = list.filter(item => {
+        return String(item.familyId).toLowerCase().includes(q) ||
+               String(item.parentName).toLowerCase().includes(q) ||
+               String(item.studentsNames).toLowerCase().includes(q) ||
+               String(item.whatsapp).includes(q);
+      });
+
+      renderPendingDefaultersRows(filtered);
+    }
+
+    // ============================================================
+    // 5. MASTER ANNUAL FEE MATRIX (12-MONTH VIEW)
+    // ============================================================
+    function loadMasterAnnualMatrix() {
+      const ySel = document.getElementById('feeMatrixYearSelect');
+      const targetYear = ySel ? parseInt(ySel.value, 10) : 2026;
+      const tbody = document.getElementById('feeMatrixTableBody');
+      if (!tbody) return;
+
+      const families = CACHED_FEE_FAMILIES || [];
+      const records = getStoredFeeRecords();
+      const overrides = getStoredMatrixOverrides();
+
+      const now = new Date();
+      const currentRealYear = now.getFullYear();
+      const currentRealMonthIdx = now.getMonth();
+
+      // Build payment lookups: { [famId]: { [monthLower]: { paid, remaining, date, isAdvance } } }
+      const famMonthMap = {};
+      records.forEach(r => {
+        if (parseInt(r.year, 10) === targetYear) {
+          const fIdUpper = String(r.familyId).toUpperCase();
+          const mLower = String(r.month).toLowerCase();
+          const isAdv = String(r.status).toLowerCase().includes('advance');
+
+          if (!famMonthMap[fIdUpper]) famMonthMap[fIdUpper] = {};
+          if (!famMonthMap[fIdUpper][mLower]) {
+            famMonthMap[fIdUpper][mLower] = {
+              paid: parseFloat(r.amountPaid || 0),
+              remaining: parseFloat(r.remainingBalance || 0),
+              date: r.date || '',
+              isAdvance: isAdv
+            };
+          } else {
+            famMonthMap[fIdUpper][mLower].paid += parseFloat(r.amountPaid || 0);
+            famMonthMap[fIdUpper][mLower].remaining = parseFloat(r.remainingBalance || 0);
+            if (isAdv) famMonthMap[fIdUpper][mLower].isAdvance = true;
+          }
+        }
+      });
+
+      const matrixRows = families.map(fam => {
+        const fIdUpper = String(fam.id).toUpperCase();
+        const regStus = (fam.students || []).filter(s => (s.status || '').toLowerCase() !== 'trial');
+        const stuNames = regStus.map(s => s.name).join(', ') || 'Enrolled Student';
+
+        const months = FEE_CONFIG.MONTHS.map((mName, mIdx) => {
+          const mLower = mName.toLowerCase();
+          const overrideKey = `${fIdUpper}_${mLower}_${targetYear}`;
+          const manualOverride = overrides[overrideKey];
+          const feeRec = famMonthMap[fIdUpper] ? famMonthMap[fIdUpper][mLower] : null;
+
+          // Check if student was on approved leave in this month
+          const leaveCheck = checkFamilyLeaveInMonth(fam.id, mName, targetYear);
+          const isFuture = (targetYear > currentRealYear || (targetYear === currentRealYear && mIdx > currentRealMonthIdx));
+
+          if (manualOverride && manualOverride.status === 'not_enrolled') {
+            return { month: mName, isNotEnrolled: true };
+          }
+          if (manualOverride && manualOverride.status === 'leave') {
+            return { month: mName, isLeave: true, note: manualOverride.notes || 'Approved Leave' };
+          }
+          if (leaveCheck.isLeave) {
+            return { month: mName, isLeave: true, note: leaveCheck.reason };
+          }
+          if (feeRec) {
+            const isFull = (feeRec.remaining <= 0);
+            return {
+              month: mName,
+              isPaid: isFull,
+              isPartial: !isFull,
+              isAdvance: !!feeRec.isAdvance,
+              amountPaid: feeRec.paid,
+              paymentDate: feeRec.date || ''
+            };
+          }
+          return { month: mName, isFuture, isDue: !isFuture };
+        });
+
+        return {
+          familyId: fam.id,
+          parentName: fam.parent_name || 'Guardian',
+          studentsNames: stuNames,
+          monthlyFee: parseFloat(fam.monthly_fee || 0),
+          currency: fam.currency || 'USD',
+          months
+        };
+      });
+
+      CACHED_ANNUAL_FEE_MATRIX = matrixRows;
+      renderAnnualFeeMatrix(matrixRows);
+    }
+
+    function renderAnnualFeeMatrix(rows) {
+      const tbody = document.getElementById('feeMatrixTableBody');
+      if (!tbody) return;
+
+      if (!rows || rows.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="15" class="p-8 text-center text-slate-400">No enrolled families found.</td></tr>`;
+        return;
+      }
+
+      tbody.innerHTML = rows.map(r => {
+        const monthsHtml = r.months.map(m => {
+          let cellBg = 'bg-white';
+          let cellContent = '';
+
+          if (m.isPaid) {
+            cellBg = 'bg-emerald-50';
+            cellContent = `
+              <span class="text-emerald-800 font-extrabold text-[10px] block"><i class="fa-solid fa-check mr-0.5"></i>Paid</span>
+              <span class="text-emerald-700 font-bold font-mono text-[9px] block">${r.currency} ${m.amountPaid.toFixed(0)}</span>
+              ${m.isAdvance ? '<span class="text-[8px] font-black text-teal-700 block uppercase">ADV</span>' : ''}
+            `;
+          } else if (m.isLeave) {
+            cellBg = 'bg-blue-50';
+            cellContent = `<span class="text-blue-700 font-bold text-[10px] block"><i class="fa-solid fa-plane-departure mr-0.5"></i>Leave</span>`;
+          } else if (m.isNotEnrolled) {
+            cellBg = 'bg-slate-100';
+            cellContent = `<span class="text-slate-400 font-bold text-[10px] block">N/A</span>`;
+          } else if (m.isPartial) {
+            cellBg = 'bg-amber-50';
+            cellContent = `
+              <span class="text-amber-800 font-bold text-[10px] block">Part</span>
+              <span class="text-amber-700 font-mono text-[9px] block">${r.currency} ${m.amountPaid.toFixed(0)}</span>
+            `;
+          } else if (m.isFuture) {
+            cellContent = `<span class="text-slate-300 text-[10px]">--</span>`;
+          } else {
+            cellBg = 'bg-rose-50';
+            cellContent = `<span class="text-rose-700 font-extrabold text-[10px] block"><i class="fa-solid fa-xmark mr-0.5"></i>Due</span>`;
+          }
+
+          return `
+            <td onclick="openMatrixActionModal('${r.familyId}', '${m.month}')" class="${cellBg} p-1.5 border border-slate-200 cursor-pointer hover:ring-2 hover:ring-emerald-500/50 transition" title="Click to override status or collect fee">
+              ${cellContent}
+            </td>
+          `;
+        }).join('');
+
+        return `
+          <tr class="hover:bg-slate-50 transition">
+            <td class="p-2.5 text-left font-mono font-bold text-slate-800">${r.familyId}</td>
+            <td class="p-2.5 text-left">
+              <strong class="text-slate-900 font-bold block">${r.studentsNames}</strong>
+              <span class="text-[10px] text-slate-400">${r.parentName} (${r.currency} ${r.monthlyFee.toFixed(0)}/m)</span>
+            </td>
+            ${monthsHtml}
+            <td class="p-2 text-center">
+              <button onclick="openFamilyAnnualLedgerModal('${r.familyId}')" class="px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-[10px] font-bold transition" title="View Full 12-Month Ledger">
+                Ledger
+              </button>
+            </td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    function filterAnnualFeeMatrixLive() {
+      const q = (document.getElementById('feeMatrixSearchInput')?.value || '').trim().toLowerCase();
+      const rows = CACHED_ANNUAL_FEE_MATRIX || [];
+
+      if (!q) {
+        renderAnnualFeeMatrix(rows);
+        return;
+      }
+
+      const filtered = rows.filter(r => {
+        return String(r.familyId).toLowerCase().includes(q) ||
+               String(r.parentName).toLowerCase().includes(q) ||
+               String(r.studentsNames).toLowerCase().includes(q);
+      });
+
+      renderAnnualFeeMatrix(filtered);
+    }
+
+    // Matrix Quick Action Popover
+    function openMatrixActionModal(famId, month) {
+      const row = (CACHED_ANNUAL_FEE_MATRIX || []).find(r => String(r.familyId).toUpperCase() === String(famId).toUpperCase());
+      if (!row) return;
+
+      const m = (row.months || []).find(item => item.month.toLowerCase() === month.toLowerCase()) || {};
+      const yrSelect = document.getElementById('feeMatrixYearSelect');
+      const year = yrSelect ? parseInt(yrSelect.value, 10) : 2026;
+
+      let statusHtml = '<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-rose-100 text-rose-800">Due / Unpaid</span>';
+      if (m.isPaid) {
+        statusHtml = `<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-800">Paid (${row.currency} ${m.amountPaid || 0})</span>`;
+      } else if (m.isLeave) {
+        statusHtml = `<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-blue-100 text-blue-800">Approved Leave</span>`;
+      } else if (m.isNotEnrolled) {
+        statusHtml = `<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-200 text-slate-700">Not Enrolled</span>`;
+      } else if (m.isPartial) {
+        statusHtml = `<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800">Partial (${row.currency} ${m.amountPaid || 0})</span>`;
+      } else if (m.isFuture) {
+        statusHtml = `<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-600">Upcoming Month</span>`;
+      }
+
+      CURRENT_MATRIX_ACTION_DATA = {
+        familyId: row.familyId,
+        month,
+        year,
+        studentName: row.studentsNames || row.parentName
+      };
+
+      document.getElementById('matrixActionStudentName').innerText = row.studentsNames || row.parentName;
+      document.getElementById('matrixActionSubtitle').innerText = `Family ID: ${row.familyId} • ${month} ${year}`;
+      document.getElementById('matrixActionStatusBadge').innerHTML = statusHtml;
+
+      openModal('modalMatrixAction');
+    }
+
+    function applyMatrixAction(actionType) {
+      if (!CURRENT_MATRIX_ACTION_DATA) return;
+      const { familyId, month, year } = CURRENT_MATRIX_ACTION_DATA;
+      const fIdUpper = String(familyId).toUpperCase();
+      const mLower = String(month).toLowerCase();
+
+      const overrides = getStoredMatrixOverrides();
+      const overrideKey = `${fIdUpper}_${mLower}_${year}`;
+
+      if (actionType === 'clear') {
+        delete overrides[overrideKey];
+      } else {
+        overrides[overrideKey] = {
+          familyId,
+          month,
+          year,
+          status: actionType,
+          notes: actionType === 'not_enrolled' ? 'Not Enrolled (Joined Later)' : 'Approved Leave (Fee Waived)'
+        };
+      }
+
+      saveStoredMatrixOverrides(overrides);
+      closeModal('modalMatrixAction');
+
+      // Optimistic instant re-render of matrix
+      loadMasterAnnualMatrix();
+      loadFeeDashboardStats();
+      showToastNotification(`Status updated for ${month} ${year}!`);
+    }
+
+    function proceedToCollectFromMatrixModal() {
+      if (!CURRENT_MATRIX_ACTION_DATA) return;
+      const { familyId, month, year } = CURRENT_MATRIX_ACTION_DATA;
+      closeModal('modalMatrixAction');
+      selectFeeFamily(familyId);
+
+      const mSelect = document.getElementById('feeFormMonth');
+      if (mSelect) mSelect.value = month;
+      const ySelect = document.getElementById('feeFormYear');
+      if (ySelect) ySelect.value = String(year);
+      triggerFeeBalanceRecalc();
+    }
+
+    // ============================================================
+    // 6. FAMILY ANNUAL LEDGER MODAL
+    // ============================================================
+    function openFamilyAnnualLedgerModal(famId) {
+      CURRENT_LEDGER_FAMILY_ID = famId;
+      const fam = (CACHED_FEE_FAMILIES || []).find(f => String(f.id).toUpperCase() === String(famId).toUpperCase());
+      if (!fam) return;
+
+      const ySel = document.getElementById('ledgerYearSelect');
+      const year = ySel ? parseInt(ySel.value, 10) : 2026;
+
+      document.getElementById('familyLedgerSubtitle').innerText = `Family ID: ${fam.id} • Parent: ${fam.parent_name}`;
+      document.getElementById('ledgerParentName').innerText = fam.parent_name || 'Parent / Guardian';
+      
+      const regStus = (fam.students || []).filter(s => (s.status || '').toLowerCase() !== 'trial');
+      document.getElementById('ledgerStudentsNames').innerText = regStus.map(s => s.name).join(', ') || 'Enrolled Student';
+      document.getElementById('ledgerContactInfo').innerText = `${fam.country || 'International'} • WhatsApp: ${fam.whatsapp || '--'}`;
+      document.getElementById('ledgerMonthlyFee').innerText = `${fam.currency || 'USD'} ${parseFloat(fam.monthly_fee || 0).toFixed(2)}`;
+
+      // Render 12 months status cards
+      const matrixRow = (CACHED_ANNUAL_FEE_MATRIX || []).find(r => String(r.familyId).toUpperCase() === String(famId).toUpperCase());
+      const grid = document.getElementById('ledgerMonthsGrid');
+      if (grid) {
+        grid.innerHTML = '';
+        const monthsList = matrixRow ? matrixRow.months : FEE_CONFIG.MONTHS.map(m => ({ month: m, isFuture: true }));
+        
+        monthsList.forEach(m => {
+          const card = document.createElement('div');
+          card.className = 'p-3 bg-white border border-slate-200 rounded-xl space-y-1 shadow-2xs';
+
+          let statusBadge = '<span class="text-rose-700 font-bold text-[10px]"><i class="fa-solid fa-xmark mr-0.5"></i>Due</span>';
+          if (m.isPaid) statusBadge = '<span class="text-emerald-700 font-bold text-[10px]"><i class="fa-solid fa-check mr-0.5"></i>Paid</span>';
+          else if (m.isLeave) statusBadge = '<span class="text-blue-700 font-bold text-[10px]"><i class="fa-solid fa-plane-departure mr-0.5"></i>Leave</span>';
+          else if (m.isNotEnrolled) statusBadge = '<span class="text-slate-400 font-bold text-[10px]">N/A</span>';
+          else if (m.isPartial) statusBadge = '<span class="text-amber-700 font-bold text-[10px]">Partial</span>';
+          else if (m.isFuture) statusBadge = '<span class="text-slate-300 text-[10px]">Upcoming</span>';
+
+          card.innerHTML = `
+            <div class="flex justify-between items-center text-xs font-extrabold border-b border-slate-100 pb-1">
+              <span class="text-slate-800">${m.month}</span>
+              ${statusBadge}
+            </div>
+            <div class="text-[10px] text-slate-500 pt-0.5">
+              ${m.isPaid ? `Paid: <strong class="text-emerald-700">${fam.currency} ${m.amountPaid || 0}</strong>` : (m.isLeave ? 'Approved Leave' : (m.isNotEnrolled ? 'Not Enrolled' : 'Tuition Due'))}
+            </div>
+          `;
+          grid.appendChild(card);
+        });
+      }
+
+      // Render Transaction History
+      const records = getStoredFeeRecords().filter(r => String(r.familyId).toUpperCase() === String(famId).toUpperCase());
+      const tbody = document.getElementById('ledgerTransactionsTableBody');
+      if (tbody) {
+        if (records.length === 0) {
+          tbody.innerHTML = `<tr><td colspan="8" class="p-4 text-center text-slate-400 text-xs">No receipts recorded yet for this family.</td></tr>`;
+        } else {
+          tbody.innerHTML = records.map(r => `
+            <tr class="hover:bg-slate-50 transition">
+              <td class="p-2.5 font-mono font-bold text-slate-800">${r.receiptNo}</td>
+              <td class="p-2.5 text-slate-500 font-mono">${r.date}</td>
+              <td class="p-2.5 font-medium text-slate-800">${r.month} ${r.year}</td>
+              <td class="p-2.5 font-bold font-mono text-emerald-700">${r.currency} ${parseFloat(r.amountPaid || 0).toFixed(2)}</td>
+              <td class="p-2.5 font-mono text-rose-700">${r.currency} ${parseFloat(r.remainingBalance || 0).toFixed(2)}</td>
+              <td class="p-2.5"><span class="px-1.5 py-0.5 rounded text-[9px] font-bold ${r.remainingBalance > 0 ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-800'}">${r.status}</span></td>
+              <td class="p-2.5 text-slate-500">${r.paymentMethod || 'Online'}</td>
+              <td class="p-2.5 text-right">
+                <button onclick="openFeeInvoiceModal(${JSON.stringify(r).replace(/"/g, '&quot;')})" class="px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-[10px] font-bold">
+                  Receipt
+                </button>
+              </td>
+            </tr>
+          `).join('');
+        }
+      }
+
+      openModal('modalFamilyAnnualLedger');
+    }
+
+    function reloadFamilyLedgerData() {
+      if (CURRENT_LEDGER_FAMILY_ID) {
+        openFamilyAnnualLedgerModal(CURRENT_LEDGER_FAMILY_ID);
+      }
+    }
+
+    function ledgerCollectFeeNow() {
+      if (!CURRENT_LEDGER_FAMILY_ID) return;
+      closeModal('modalFamilyAnnualLedger');
+      selectFeeFamily(CURRENT_LEDGER_FAMILY_ID);
+    }
+
+    // ============================================================
+    // 7. RECEIPTS LEDGER & HISTORY
+    // ============================================================
+    function loadFeeReceiptsHistory() {
+      const records = getStoredFeeRecords();
+      renderFeeReceiptsHistoryRows(records);
+    }
+
+    function renderFeeReceiptsHistoryRows(records) {
+      const tbody = document.getElementById('feeReceiptsTableBody');
+      if (!tbody) return;
+
+      if (!records || records.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="11" class="p-8 text-center text-slate-400">No payment receipts recorded yet.</td></tr>`;
+        return;
+      }
+
+      tbody.innerHTML = records.map(r => `
+        <tr class="hover:bg-slate-50 transition">
+          <td class="p-3 font-mono font-bold text-slate-800">${r.receiptNo}</td>
+          <td class="p-3 text-slate-500 font-mono">${r.date}</td>
+          <td class="p-3 font-mono font-bold text-emerald-900">${r.familyId}</td>
+          <td class="p-3 font-bold text-slate-900">${r.parentName}</td>
+          <td class="p-3 text-emerald-900 font-medium">${r.studentsNames}</td>
+          <td class="p-3 font-medium text-slate-700">${r.month} ${r.year}</td>
+          <td class="p-3 font-mono text-slate-600">${r.currency} ${parseFloat(r.totalPayable || 0).toFixed(2)}</td>
+          <td class="p-3 font-mono font-bold text-emerald-700">${r.currency} ${parseFloat(r.amountPaid || 0).toFixed(2)}</td>
+          <td class="p-3 font-mono font-bold text-rose-700">${r.currency} ${parseFloat(r.remainingBalance || 0).toFixed(2)}</td>
+          <td class="p-3"><span class="px-2 py-0.5 rounded-full text-[10px] font-bold ${r.remainingBalance > 0 ? 'bg-amber-100 text-amber-800 border border-amber-200' : 'bg-emerald-100 text-emerald-800 border border-emerald-200'}">${r.status}</span></td>
+          <td class="p-3 text-right">
+            <button onclick="openFeeInvoiceModal(${JSON.stringify(r).replace(/"/g, '&quot;')})" class="px-3 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition flex items-center gap-1 inline-flex">
+              <i class="fa-solid fa-receipt text-slate-500"></i> Voucher
+            </button>
+          </td>
+        </tr>
+      `).join('');
+    }
+
+    function filterFeeReceiptsHistoryLive() {
+      const q = (document.getElementById('feeReceiptsSearchInput')?.value || '').trim().toLowerCase();
+      const records = getStoredFeeRecords();
+
+      if (!q) {
+        renderFeeReceiptsHistoryRows(records);
+        return;
+      }
+
+      const filtered = records.filter(r => {
+        return String(r.receiptNo).toLowerCase().includes(q) ||
+               String(r.familyId).toLowerCase().includes(q) ||
+               String(r.parentName).toLowerCase().includes(q) ||
+               String(r.studentsNames).toLowerCase().includes(q);
+      });
+
+      renderFeeReceiptsHistoryRows(filtered);
+    }
+
+    // Generic Toast notification helper for fee engine
+    function showToastNotification(message) {
+      if (typeof showAttendanceToast === 'function') {
+        showAttendanceToast(message);
+      } else {
+        alert(message);
+      }
     }
 
     async function loadCourses() {
