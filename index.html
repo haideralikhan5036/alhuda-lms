@@ -156,89 +156,159 @@
     .slot-vacant:hover { background-color: #dcfce7; border-color: #22c55e; }
     .slot-booked { background-color: #eff6ff; border: 1.5px solid #93c5fd; color: #1e40af; }
     .matrix-table th, .matrix-table td { border: 1px solid #e2e8f0; }
-    /* Sidebar collapsed state */
-    #mainAppSidebar.sidebar-collapsed { width: 52px !important; }
-    #mainAppSidebar.sidebar-collapsed .sidebar-label { display: none !important; }
-    #mainContentArea.sidebar-collapsed { margin-left: 52px !important; width: calc(100vw - 52px) !important; }
-    /* Prevent horizontal overflow caused by sidebar + content */
-    html, body { overflow-x: hidden; max-width: 100vw; }
-    #mainContentArea { width: calc(100vw - 240px); box-sizing: border-box; }
+
+    /* Responsive Mobile & Desktop Layout Engine */
+    html, body {
+      overflow-x: hidden;
+      max-width: 100vw;
+      width: 100%;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    /* Mobile screens (< 1024px) */
+    @media (max-width: 1023px) {
+      #mainAppSidebar {
+        position: fixed !important;
+        top: 0 !important;
+        bottom: 0 !important;
+        left: -285px !important;
+        width: 285px !important;
+        height: 100vh !important;
+        z-index: 60 !important;
+        box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.35) !important;
+        transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+      }
+      #mainAppSidebar.sidebar-mobile-open {
+        transform: translateX(285px) !important;
+      }
+      #mainContentArea {
+        margin-left: 0 !important;
+        width: 100% !important;
+        max-width: 100vw !important;
+        padding-left: 0.75rem !important;
+        padding-right: 0.75rem !important;
+        padding-top: 1rem !important;
+        box-sizing: border-box !important;
+      }
+    }
+
+    /* Desktop screens (>= 1024px) */
+    @media (min-width: 1024px) {
+      #mainAppSidebar {
+        position: fixed !important;
+        top: 68px !important;
+        left: 0 !important;
+        width: 240px !important;
+        height: calc(100vh - 68px) !important;
+        z-index: 40 !important;
+        transform: none !important;
+        transition: width 0.3s ease-in-out !important;
+      }
+      #mainContentArea {
+        margin-left: 240px !important;
+        width: calc(100vw - 240px) !important;
+        box-sizing: border-box !important;
+      }
+      #mainAppSidebar.sidebar-collapsed {
+        width: 52px !important;
+      }
+      #mainAppSidebar.sidebar-collapsed .sidebar-label {
+        display: none !important;
+      }
+      #mainContentArea.sidebar-collapsed {
+        margin-left: 52px !important;
+        width: calc(100vw - 52px) !important;
+      }
+    }
+
+    /* Mobile Utility Classes */
+    .no-scrollbar::-webkit-scrollbar { display: none; }
+    .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+    .touch-scroll { -webkit-overflow-scrolling: touch; scroll-behavior: smooth; }
   </style>
 </head>
 <body class="text-slate-800 flex flex-col min-h-screen">
 
   <!-- TOP HEADER -->
-  <header class="bg-gradient-to-r from-[#022c22] via-[#064e3b] to-[#047857] text-white py-3 px-4 sm:px-8 border-b-4 border-[#d97706] sticky top-0 z-50 shadow-md">
-    <div class="max-w-7xl mx-auto flex flex-wrap justify-between items-center gap-3">
-      <div class="flex items-center gap-3">
-        <div class="w-11 h-11 rounded-full border-2 border-brandGold bg-black flex items-center justify-center text-brandGold font-cinzel font-bold text-lg shadow">
+  <header class="bg-gradient-to-r from-[#022c22] via-[#064e3b] to-[#047857] text-white py-2 sm:py-2.5 px-3 sm:px-6 border-b-4 border-[#d97706] sticky top-0 z-50 shadow-md">
+    <div class="max-w-7xl mx-auto flex justify-between items-center gap-2">
+      <div class="flex items-center gap-2 sm:gap-3 min-w-0">
+        <!-- Sidebar Toggle Button (Mobile & Desktop) -->
+        <button onclick="toggleSidebar()" class="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition shrink-0 active:scale-95 shadow-2xs" title="Toggle Navigation Sidebar">
+          <i class="fa-solid fa-bars text-sm sm:text-base"></i>
+        </button>
+        <div class="w-9 h-9 sm:w-11 sm:h-11 rounded-full border-2 border-brandGold bg-black flex items-center justify-center text-brandGold font-cinzel font-bold text-sm sm:text-lg shadow shrink-0">
           AH
         </div>
-        <div>
-          <h1 class="font-cinzel text-lg sm:text-xl font-bold tracking-wide">AL-HUDA ISLAMIC CENTRE</h1>
-          <p class="text-xs text-emerald-200 font-medium">Online Quran & Islamic Studies Academy</p>
+        <div class="min-w-0">
+          <h1 class="font-cinzel text-sm sm:text-lg md:text-xl font-bold tracking-wide truncate leading-tight">AL-HUDA ISLAMIC CENTRE</h1>
+          <p class="text-[10px] sm:text-xs text-emerald-200 font-medium truncate leading-tight">Online Quran &amp; Islamic Studies Academy</p>
         </div>
       </div>
 
-      <!-- ROLE SWITCHER & CLOCK -->
-      <div class="flex items-center gap-3">
-        <!-- Sidebar Toggle Button in Header -->
-        <button onclick="toggleSidebar()" class="w-9 h-9 rounded-lg bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition flex-shrink-0" title="Toggle Navigation Sidebar">
-          <i class="fa-solid fa-bars text-sm"></i>
-        </button>
+      <!-- ROLE SWITCHER & CONTROLS -->
+      <div class="flex items-center gap-1.5 sm:gap-2.5 shrink-0">
         <!-- Logged-in Teacher Session Badge -->
-        <div id="teacherSessionPill" class="hidden items-center gap-2 bg-emerald-950/80 border border-emerald-400/50 px-3 py-1 rounded-full text-xs font-semibold text-emerald-200 shadow-sm">
-          <span><i class="fa-solid fa-chalkboard-user text-emerald-400"></i> <span id="teacherActiveName">Teacher</span></span>
+        <div id="teacherSessionPill" class="hidden items-center gap-1.5 bg-emerald-950/80 border border-emerald-400/50 px-2.5 py-1 rounded-full text-xs font-semibold text-emerald-200 shadow-sm">
+          <span><i class="fa-solid fa-chalkboard-user text-emerald-400 text-xs"></i> <span id="teacherActiveName">Teacher</span></span>
           <button onclick="logoutTeacherPortal()" class="text-amber-300 hover:text-amber-100 font-bold ml-1 text-[11px] underline" title="Exit Teacher Portal">Logout</button>
         </div>
 
-        <div class="bg-black/30 border border-brandGold/40 px-3 py-1.5 rounded-full text-xs font-semibold text-amber-200 flex items-center gap-2">
-          <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-          <span>Role:</span>
-          <select id="userRoleSelect" onchange="switchUserRole(this.value)" class="bg-transparent text-white font-bold cursor-pointer focus:outline-none">
-            <option value="owner" class="text-slate-900 font-bold">👑 Owner (Super Admin)</option>
-            <option value="manager" class="text-slate-900 font-bold">💼 Manager (Operations)</option>
-            <option value="teacher" class="text-slate-900 font-bold">👨‍🏫 Teacher Portal</option>
-            <option value="student" class="text-slate-900 font-bold">🎓 Student / Parent Portal</option>
+        <div class="bg-black/40 border border-brandGold/40 px-2 sm:px-3 py-1 sm:py-1.5 rounded-full text-[11px] sm:text-xs font-semibold text-amber-200 flex items-center gap-1.5 shadow-2xs">
+          <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shrink-0"></span>
+          <select id="userRoleSelect" onchange="switchUserRole(this.value)" class="bg-transparent text-white font-bold cursor-pointer focus:outline-none text-[11px] sm:text-xs">
+            <option value="owner" class="text-slate-900 font-bold">👑 Owner</option>
+            <option value="manager" class="text-slate-900 font-bold">💼 Manager</option>
+            <option value="teacher" class="text-slate-900 font-bold">👨‍🏫 Teacher</option>
+            <option value="student" class="text-slate-900 font-bold">🎓 Student/Parent</option>
           </select>
         </div>
 
         <!-- Teacher Requests Notification Button -->
-        <button onclick="openAdminTeacherRequestsModal()" class="px-3 py-1.5 rounded-full bg-amber-500/20 hover:bg-amber-500/30 border border-amber-400/50 text-amber-200 text-xs font-bold transition flex items-center gap-1.5 shadow-xs" title="Review Pending Teacher Requests">
-          <i class="fa-solid fa-bell text-amber-300"></i>
-          <span class="hidden sm:inline">Requests</span>
+        <button onclick="openAdminTeacherRequestsModal()" class="w-8 h-8 sm:w-auto sm:px-3 sm:py-1.5 rounded-full bg-amber-500/20 hover:bg-amber-500/30 border border-amber-400/50 text-amber-200 text-xs font-bold transition flex items-center justify-center gap-1.5 shadow-xs shrink-0" title="Review Pending Teacher Requests">
+          <i class="fa-solid fa-bell text-amber-300 text-xs"></i>
+          <span class="hidden md:inline">Requests</span>
           <span id="badgePendingTeacherRequests" class="hidden px-1.5 py-0.2 rounded-full text-[10px] font-mono bg-rose-600 text-white font-black animate-pulse">0</span>
         </button>
 
         <!-- Scheduled Return Overdue Alert Button -->
-        <button id="btnReturnAlertsBell" onclick="openReturnAlertsModal()" class="hidden px-3 py-1.5 rounded-full bg-rose-900/60 hover:bg-rose-900 border border-rose-500/50 text-rose-200 text-xs font-bold transition items-center gap-1.5 shadow-xs animate-bounce" title="Students with Overdue / Scheduled Return from Leave">
-          <i class="fa-solid fa-calendar-check text-amber-300"></i>
-          <span class="hidden sm:inline">Returns Due</span>
+        <button id="btnReturnAlertsBell" onclick="openReturnAlertsModal()" class="hidden w-8 h-8 sm:w-auto sm:px-3 sm:py-1.5 rounded-full bg-rose-900/60 hover:bg-rose-900 border border-rose-500/50 text-rose-200 text-xs font-bold transition items-center justify-center gap-1.5 shadow-xs shrink-0 animate-bounce" title="Students with Overdue Return">
+          <i class="fa-solid fa-calendar-check text-amber-300 text-xs"></i>
+          <span class="hidden md:inline">Returns Due</span>
           <span id="badgeReturnAlertsCount" class="px-1.5 py-0.2 rounded-full text-[10px] font-mono bg-rose-600 text-white font-black">0</span>
         </button>
 
-        <a href="teacher.html" target="_blank" class="px-3 py-1.5 rounded-full bg-emerald-800/60 hover:bg-emerald-700 text-emerald-200 border border-emerald-500/40 text-xs font-bold transition flex items-center gap-1.5 shadow-xs" title="Open Dedicated Teacher Operations Portal">
-          <i class="fa-solid fa-chalkboard-user text-brandGold"></i> <span class="hidden md:inline">Teacher Portal</span>
+        <a href="teacher.html" target="_blank" class="hidden sm:flex px-2.5 py-1.5 rounded-full bg-emerald-800/60 hover:bg-emerald-700 text-emerald-200 border border-emerald-500/40 text-xs font-bold transition items-center gap-1.5 shadow-xs shrink-0" title="Open Dedicated Teacher Operations Portal">
+          <i class="fa-solid fa-chalkboard-user text-brandGold text-xs"></i> <span class="hidden lg:inline">Teacher Portal</span>
         </a>
-        <div id="liveClock" class="hidden sm:block text-xs font-mono text-emerald-100 bg-white/10 px-2.5 py-1 rounded-md">--:--:--</div>
       </div>
     </div>
   </header>
 
   <!-- SIDEBAR BACKDROP (Mobile overlay) -->
-  <div id="sidebarBackdrop" onclick="toggleSidebar()" class="hidden fixed inset-0 bg-black/40 z-30 lg:hidden"></div>
+  <div id="sidebarBackdrop" onclick="toggleSidebar()" class="hidden fixed inset-0 bg-black/60 backdrop-blur-sm z-50 lg:hidden transition-opacity"></div>
 
-  <!-- COLLAPSIBLE LEFT SIDEBAR -->
-  <aside id="mainAppSidebar" class="fixed top-[68px] left-0 h-[calc(100vh-68px)] z-40 bg-white border-r border-slate-200 shadow-xl flex flex-col transition-all duration-300 ease-in-out overflow-hidden" style="width:240px">
+  <!-- COLLAPSIBLE LEFT SIDEBAR (Mobile Off-Canvas Drawer / Desktop Collapsible) -->
+  <aside id="mainAppSidebar" class="bg-white border-r border-slate-200 shadow-xl flex flex-col overflow-hidden">
     <!-- Sidebar Header / Toggle -->
-    <div class="flex items-center justify-between px-3 py-3 border-b border-slate-100 bg-brandDark">
-      <span class="text-white font-black text-xs tracking-widest uppercase sidebar-label">Navigation</span>
-      <button onclick="toggleSidebar()" class="w-7 h-7 rounded-md bg-white/20 hover:bg-white/30 text-white flex items-center justify-center transition" title="Collapse Sidebar">
-        <i class="fa-solid fa-bars-staggered text-xs"></i>
-      </button>
+    <div class="flex items-center justify-between px-3.5 py-3.5 border-b border-slate-100 bg-brandDark">
+      <div class="flex items-center gap-2">
+        <div class="w-7 h-7 rounded-full border border-brandGold bg-black flex items-center justify-center text-brandGold font-cinzel font-bold text-xs shrink-0">AH</div>
+        <span class="text-white font-black text-xs tracking-widest uppercase sidebar-label">Navigation</span>
+      </div>
+      <div class="flex items-center gap-1">
+        <!-- Desktop Collapse Toggle -->
+        <button onclick="toggleSidebar()" class="hidden lg:flex w-7 h-7 rounded-md bg-white/20 hover:bg-white/30 text-white items-center justify-center transition" title="Collapse Sidebar">
+          <i class="fa-solid fa-bars-staggered text-xs"></i>
+        </button>
+        <!-- Mobile Close Drawer Button -->
+        <button onclick="toggleSidebar()" class="lg:hidden w-7 h-7 rounded-md bg-white/20 hover:bg-white/30 text-white flex items-center justify-center transition" title="Close Navigation Drawer">
+          <i class="fa-solid fa-xmark text-sm"></i>
+        </button>
+      </div>
     </div>
     <!-- Nav Items -->
-    <nav class="flex flex-col gap-1 p-2 flex-1 overflow-y-auto">
+    <nav class="flex flex-col gap-1 p-2 flex-1 overflow-y-auto touch-scroll">
       <button onclick="switchTab('tab-dashboard')" data-tab="tab-dashboard" class="sidebar-nav-btn nav-tab active w-full text-left px-3 py-2.5 rounded-lg text-sm font-bold flex items-center gap-3 bg-brandDark text-white transition">
         <i class="fa-solid fa-gauge-high text-brandGold w-4 flex-shrink-0"></i>
         <span class="sidebar-label">Main Dashboard</span>
@@ -296,9 +366,8 @@
     </div>
   </aside>
 
-
-  <!-- MAIN WRAPPER (offset right of sidebar) -->
-  <main id="mainContentArea" class="w-full px-4 sm:px-6 py-6 flex-grow transition-all duration-300 ease-in-out" style="margin-left:240px">
+  <!-- MAIN WRAPPER (Fluid on mobile, offset on desktop) -->
+  <main id="mainContentArea" class="w-full flex-grow transition-all duration-300 ease-in-out">
 
     <!-- 1. MAIN EXECUTIVE DASHBOARD TAB -->
     <section id="tab-dashboard" class="tab-content block">
@@ -520,8 +589,8 @@
         </div>
 
         <!-- Classes Table -->
-        <div class="overflow-x-auto">
-          <table class="w-full text-left text-xs border-collapse">
+        <div class="overflow-x-auto touch-scroll">
+          <table class="w-full text-left text-xs border-collapse min-w-[720px]">
             <thead class="bg-slate-100 text-slate-700 font-bold border-b border-slate-200 uppercase tracking-wider text-[11px]">
               <tr>
                 <th class="p-3">Time Slot</th>
@@ -665,14 +734,14 @@
             <input type="text" id="famUnifiedSearch" oninput="handleFamUnifiedSearch(this.value)" placeholder="Search family, student or ID..." class="pl-8 pr-3 py-1.5 bg-slate-50 border border-slate-300 rounded-lg text-xs font-semibold focus:outline-brandEmerald w-48 sm:w-56 shadow-2xs">
           </div>
 
-          <div class="inline-flex rounded-xl bg-slate-100 p-1 border border-slate-200 text-xs font-bold">
-            <button id="btnViewFamCards" onclick="switchFamiliesViewMode('cards')" class="px-3 py-1.5 rounded-lg bg-white text-slate-900 shadow-2xs flex items-center gap-1.5 transition">
+          <div class="inline-flex rounded-xl bg-slate-100 p-1 border border-slate-200 text-xs font-bold overflow-x-auto touch-scroll max-w-full no-scrollbar shrink-0">
+            <button id="btnViewFamCards" onclick="switchFamiliesViewMode('cards')" class="px-3 py-1.5 rounded-lg bg-white text-slate-900 shadow-2xs flex items-center gap-1.5 transition whitespace-nowrap">
               <i class="fa-solid fa-grip text-brandEmerald"></i> Families Cards
             </button>
-            <button id="btnViewFamTable" onclick="switchFamiliesViewMode('famTable')" class="px-3 py-1.5 rounded-lg text-slate-600 hover:text-slate-900 flex items-center gap-1.5 transition">
+            <button id="btnViewFamTable" onclick="switchFamiliesViewMode('famTable')" class="px-3 py-1.5 rounded-lg text-slate-600 hover:text-slate-900 flex items-center gap-1.5 transition whitespace-nowrap">
               <i class="fa-solid fa-table-list text-brandDark"></i> Families Master Table
             </button>
-            <button id="btnViewStudentsList" onclick="switchFamiliesViewMode('studentsList')" class="px-3 py-1.5 rounded-lg text-slate-600 hover:text-slate-900 flex items-center gap-1.5 transition">
+            <button id="btnViewStudentsList" onclick="switchFamiliesViewMode('studentsList')" class="px-3 py-1.5 rounded-lg text-slate-600 hover:text-slate-900 flex items-center gap-1.5 transition whitespace-nowrap">
               <i class="fa-solid fa-user-graduate text-teal-700"></i> All Enrolled Students
             </button>
           </div>
@@ -695,8 +764,8 @@
           </div>
           <span id="badgeFamTableCount" class="px-2.5 py-0.5 rounded-full text-xs font-mono font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">0 Families</span>
         </div>
-        <div class="overflow-x-auto">
-          <table class="w-full text-left text-xs border-collapse">
+        <div class="overflow-x-auto touch-scroll">
+          <table class="w-full text-left text-xs border-collapse min-w-[760px]">
             <thead class="bg-slate-100 text-slate-700 font-bold border-b border-slate-200 uppercase tracking-wider text-[11px]">
               <tr>
                 <th class="p-3 w-12 text-center">#</th>
@@ -728,8 +797,8 @@
           </div>
           <span id="badgeStudentsListCount" class="px-2.5 py-0.5 rounded-full text-xs font-mono font-bold bg-teal-100 text-teal-800 border border-teal-200">0 Students</span>
         </div>
-        <div class="overflow-x-auto">
-          <table class="w-full text-left text-xs border-collapse">
+        <div class="overflow-x-auto touch-scroll">
+          <table class="w-full text-left text-xs border-collapse min-w-[760px]">
             <thead class="bg-slate-100 text-slate-700 font-bold border-b border-slate-200 uppercase tracking-wider text-[11px]">
               <tr>
                 <th class="p-3 w-12 text-center">#</th>
@@ -921,8 +990,8 @@
       </div>
 
       <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-        <div class="overflow-x-auto">
-          <table class="w-full text-left text-xs border-collapse">
+        <div class="overflow-x-auto touch-scroll">
+          <table class="w-full text-left text-xs border-collapse min-w-[650px]">
             <thead class="bg-slate-50 text-slate-600 font-bold border-b border-slate-200 uppercase">
               <tr>
                 <th class="p-3">Time Slot</th>
@@ -1019,8 +1088,8 @@
           </div>
           <span class="text-[11px] text-slate-500 italic">Click "View & Edit Slip" to adjust bonuses, deductions, or student rates</span>
         </div>
-        <div class="overflow-x-auto">
-          <table class="w-full text-left text-xs border-collapse">
+        <div class="overflow-x-auto touch-scroll">
+          <table class="w-full text-left text-xs border-collapse min-w-[760px]">
             <thead class="bg-slate-100 text-slate-700 font-bold border-b border-slate-200 uppercase tracking-wide text-[11px]">
               <tr>
                 <th class="p-3.5">Teacher & Seniority</th>
@@ -1121,8 +1190,8 @@
           </div>
         </div>
 
-        <div class="overflow-x-auto">
-          <table class="w-full text-left text-xs border-collapse">
+        <div class="overflow-x-auto touch-scroll">
+          <table class="w-full text-left text-xs border-collapse min-w-[760px]">
             <thead class="bg-slate-100/80 text-slate-700 font-extrabold uppercase tracking-wider border-b border-slate-200 text-[11px]">
               <tr>
                 <th class="p-3.5">Student / Family</th>
@@ -1176,26 +1245,26 @@
         </div>
       </div>
 
-      <!-- SUB-NAVIGATION PILLS -->
-      <div class="flex items-center gap-2 bg-white p-2 rounded-2xl border border-slate-200 shadow-xs overflow-x-auto">
-        <button id="btnFeeSubTab-overview" onclick="switchFeeSubTab('fee-subtab-overview')" class="fee-subtab-btn active px-3.5 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 bg-emerald-800 text-white shadow-xs">
+      <!-- SUB-NAVIGATION PILLS (Touch-scrollable on Mobile) -->
+      <div class="flex items-center gap-1.5 sm:gap-2 bg-white p-1.5 sm:p-2 rounded-2xl border border-slate-200 shadow-xs overflow-x-auto touch-scroll no-scrollbar">
+        <button id="btnFeeSubTab-overview" onclick="switchFeeSubTab('fee-subtab-overview')" class="fee-subtab-btn active px-3 sm:px-3.5 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 bg-emerald-800 text-white shadow-xs shrink-0 whitespace-nowrap">
           <i class="fa-solid fa-chart-pie"></i>
-          <span>Dashboard &amp; Currencies</span>
+          <span>Dashboard</span>
         </button>
-        <button id="btnFeeSubTab-collect" onclick="switchFeeSubTab('fee-subtab-collect')" class="fee-subtab-btn px-3.5 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 text-slate-600 hover:bg-slate-100">
+        <button id="btnFeeSubTab-collect" onclick="switchFeeSubTab('fee-subtab-collect')" class="fee-subtab-btn px-3 sm:px-3.5 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 text-slate-600 hover:bg-slate-100 shrink-0 whitespace-nowrap">
           <i class="fa-solid fa-cash-register"></i>
-          <span>Collect Fee (1-Click)</span>
+          <span>Collect Fee</span>
         </button>
-        <button id="btnFeeSubTab-pending" onclick="switchFeeSubTab('fee-subtab-pending')" class="fee-subtab-btn px-3.5 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 text-slate-600 hover:bg-slate-100">
+        <button id="btnFeeSubTab-pending" onclick="switchFeeSubTab('fee-subtab-pending')" class="fee-subtab-btn px-3 sm:px-3.5 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 text-slate-600 hover:bg-slate-100 shrink-0 whitespace-nowrap">
           <i class="fa-solid fa-clock-rotate-left text-rose-600"></i>
-          <span>Pending Defaulters</span>
+          <span>Defaulters</span>
           <span id="feeSubBadgePending" class="px-1.5 py-0.2 rounded-full text-[10px] font-mono bg-rose-100 text-rose-800 font-bold border border-rose-300">0</span>
         </button>
-        <button id="btnFeeSubTab-matrix" onclick="switchFeeSubTab('fee-subtab-matrix')" class="fee-subtab-btn px-3.5 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 text-slate-600 hover:bg-slate-100">
+        <button id="btnFeeSubTab-matrix" onclick="switchFeeSubTab('fee-subtab-matrix')" class="fee-subtab-btn px-3 sm:px-3.5 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 text-slate-600 hover:bg-slate-100 shrink-0 whitespace-nowrap">
           <i class="fa-solid fa-table-cells text-cyan-600"></i>
-          <span>12-Month Annual Matrix</span>
+          <span>12-Month Matrix</span>
         </button>
-        <button id="btnFeeSubTab-receipts" onclick="switchFeeSubTab('fee-subtab-receipts')" class="fee-subtab-btn px-3.5 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 text-slate-600 hover:bg-slate-100">
+        <button id="btnFeeSubTab-receipts" onclick="switchFeeSubTab('fee-subtab-receipts')" class="fee-subtab-btn px-3 sm:px-3.5 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 text-slate-600 hover:bg-slate-100 shrink-0 whitespace-nowrap">
           <i class="fa-solid fa-receipt text-indigo-600"></i>
           <span>Receipts &amp; History</span>
         </button>
@@ -1660,8 +1729,8 @@
           </div>
 
           <!-- DEFAULTERS TABLE -->
-          <div class="overflow-x-auto rounded-xl border border-slate-200">
-            <table class="w-full text-left text-xs border-collapse">
+          <div class="overflow-x-auto touch-scroll rounded-xl border border-slate-200">
+            <table class="w-full text-left text-xs border-collapse min-w-[750px]">
               <thead class="bg-slate-50 text-slate-600 font-extrabold border-b border-slate-200 uppercase tracking-wider text-[11px]">
                 <tr>
                   <th class="p-3">Family ID</th>
@@ -1724,25 +1793,25 @@
             </div>
           </div>
 
-          <!-- ANNUAL MATRIX SCROLLABLE TABLE -->
-          <div class="overflow-x-auto max-h-[620px] rounded-xl border border-slate-200 shadow-2xs">
-            <table class="w-full text-xs text-center border-collapse">
-              <thead class="bg-slate-100 text-slate-700 font-extrabold uppercase tracking-wider text-[11px] sticky top-0 z-10">
+          <!-- ANNUAL MATRIX SCROLLABLE TABLE (Touch-scrollable with Sticky Anchors) -->
+          <div class="overflow-x-auto max-h-[620px] rounded-2xl border border-slate-200 shadow-2xs touch-scroll">
+            <table class="w-full text-xs text-center border-collapse min-w-[950px]">
+              <thead class="bg-slate-100 text-slate-700 font-extrabold uppercase tracking-wider text-[11px] sticky top-0 z-30 shadow-xs">
                 <tr>
-                  <th class="p-3 text-left min-w-[90px] bg-slate-100">Family ID</th>
-                  <th class="p-3 text-left min-w-[170px] bg-slate-100">Student(s) / Parent</th>
-                  <th class="p-2 min-w-[70px]">Jan</th>
-                  <th class="p-2 min-w-[70px]">Feb</th>
-                  <th class="p-2 min-w-[70px]">Mar</th>
-                  <th class="p-2 min-w-[70px]">Apr</th>
-                  <th class="p-2 min-w-[70px]">May</th>
-                  <th class="p-2 min-w-[70px]">Jun</th>
-                  <th class="p-2 min-w-[70px]">Jul</th>
-                  <th class="p-2 min-w-[70px]">Aug</th>
-                  <th class="p-2 min-w-[70px]">Sep</th>
-                  <th class="p-2 min-w-[70px]">Oct</th>
-                  <th class="p-2 min-w-[70px]">Nov</th>
-                  <th class="p-2 min-w-[70px]">Dec</th>
+                  <th class="p-3 text-left min-w-[90px] bg-slate-100 sticky left-0 z-30 shadow-[2px_0_5px_rgba(0,0,0,0.06)]">Family ID</th>
+                  <th class="p-3 text-left min-w-[170px] bg-slate-100 sticky left-[90px] z-30 shadow-[2px_0_5px_rgba(0,0,0,0.06)]">Student(s) / Parent</th>
+                  <th class="p-2 min-w-[65px]">Jan</th>
+                  <th class="p-2 min-w-[65px]">Feb</th>
+                  <th class="p-2 min-w-[65px]">Mar</th>
+                  <th class="p-2 min-w-[65px]">Apr</th>
+                  <th class="p-2 min-w-[65px]">May</th>
+                  <th class="p-2 min-w-[65px]">Jun</th>
+                  <th class="p-2 min-w-[65px]">Jul</th>
+                  <th class="p-2 min-w-[65px]">Aug</th>
+                  <th class="p-2 min-w-[65px]">Sep</th>
+                  <th class="p-2 min-w-[65px]">Oct</th>
+                  <th class="p-2 min-w-[65px]">Nov</th>
+                  <th class="p-2 min-w-[65px]">Dec</th>
                   <th class="p-2 min-w-[80px] bg-slate-100">Action</th>
                 </tr>
               </thead>
@@ -1777,8 +1846,8 @@
             <input type="text" id="feeReceiptsSearchInput" oninput="filterFeeReceiptsHistoryLive()" placeholder="Search by Receipt No, Family ID, or Parent Name..." class="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800">
           </div>
 
-          <div class="overflow-x-auto rounded-xl border border-slate-200">
-            <table class="w-full text-left text-xs border-collapse">
+          <div class="overflow-x-auto touch-scroll rounded-xl border border-slate-200">
+            <table class="w-full text-left text-xs border-collapse min-w-[850px]">
               <thead class="bg-slate-50 text-slate-600 font-extrabold border-b border-slate-200 uppercase tracking-wider text-[11px]">
                 <tr>
                   <th class="p-3">Receipt No</th>
@@ -2378,9 +2447,9 @@
   </div>
 
   <!-- MODAL: REGISTER FAMILY -->
-  <div id="modalAddFamily" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 hidden items-center justify-center p-4">
-    <div class="bg-white rounded-2xl max-w-xl w-full p-6 shadow-2xl border border-slate-200 max-h-[92vh] overflow-y-auto">
-      <div class="flex justify-between items-center mb-4 border-b pb-3">
+  <div id="modalAddFamily" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 hidden items-center justify-center p-2 sm:p-4 overflow-y-auto">
+    <div class="bg-white rounded-2xl max-w-xl w-full p-4 sm:p-6 shadow-2xl border border-slate-200 my-auto max-h-[94vh] overflow-y-auto touch-scroll">
+      <div class="flex justify-between items-center mb-3 sm:mb-4 border-b pb-3">
         <div>
           <div class="flex items-center gap-2">
             <h3 class="font-bold text-base text-brandDark flex items-center gap-2">
@@ -2467,7 +2536,7 @@
         </div>
 
         <!-- 3. PARENT LMS PORTAL LOGIN CREDENTIALS SETUP -->
-        <div class="bg-gradient-to-br from-emerald-50 to-amber-50 p-4 rounded-xl border-2 border-brandEmerald/40 space-y-3">
+        <div class="bg-gradient-to-br from-emerald-50 to-amber-50 p-3.5 sm:p-4 rounded-xl border-2 border-brandEmerald/40 space-y-3">
           <div class="flex justify-between items-center">
             <div class="font-extrabold text-brandDark text-xs flex items-center gap-1.5">
               <i class="fa-solid fa-key text-brandGold"></i> 3. Parent / Student Portal LMS Login Credentials
@@ -2493,9 +2562,9 @@
           </div>
         </div>
 
-        <div class="flex justify-end gap-2.5 pt-3 border-t">
-          <button type="button" onclick="closeModal('modalAddFamily')" class="px-4 py-2 border rounded-lg font-bold text-slate-600">Cancel</button>
-          <button type="submit" id="btnSaveFamily" class="px-6 py-2 bg-brandDark text-white rounded-lg font-bold hover:bg-brandDarkest shadow-md flex items-center gap-1.5">
+        <div class="flex flex-col-reverse sm:flex-row justify-end gap-2 sm:gap-2.5 pt-3 border-t">
+          <button type="button" onclick="closeModal('modalAddFamily')" class="w-full sm:w-auto px-4 py-2.5 border rounded-xl font-bold text-slate-600 text-center">Cancel</button>
+          <button type="submit" id="btnSaveFamily" class="w-full sm:w-auto px-6 py-2.5 bg-brandDark text-white rounded-xl font-bold hover:bg-brandDarkest shadow-md flex items-center justify-center gap-1.5">
             <i class="fa-solid fa-house-user"></i> Save Family & Generate LMS Account
           </button>
         </div>
@@ -2504,9 +2573,9 @@
   </div>
 
   <!-- MODAL: ENROLL SIBLING STUDENT -->
-  <div id="modalAddStudent" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 hidden items-center justify-center p-4">
-    <div class="bg-white rounded-2xl max-w-xl w-full p-6 shadow-2xl border border-slate-200 max-h-[92vh] overflow-y-auto">
-      <div class="flex justify-between items-center mb-4 border-b pb-3">
+  <div id="modalAddStudent" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 hidden items-center justify-center p-2 sm:p-4 overflow-y-auto">
+    <div class="bg-white rounded-2xl max-w-xl w-full p-4 sm:p-6 shadow-2xl border border-slate-200 my-auto max-h-[94vh] overflow-y-auto touch-scroll">
+      <div class="flex justify-between items-center mb-3 sm:mb-4 border-b pb-3">
         <div>
           <div class="flex items-center gap-2">
             <h3 class="font-bold text-base text-brandDark flex items-center gap-2">
@@ -2618,9 +2687,9 @@
           </div>
         </div>
 
-        <div class="flex justify-end gap-2.5 pt-3 border-t">
-          <button type="button" onclick="closeModal('modalAddStudent')" class="px-4 py-2 border rounded-lg font-bold text-slate-600">Cancel</button>
-          <button type="submit" id="btnSaveStudent" class="px-6 py-2 bg-brandEmerald text-white rounded-lg font-bold hover:bg-emerald-700 shadow-md flex items-center gap-1.5">
+        <div class="flex flex-col-reverse sm:flex-row justify-end gap-2 sm:gap-2.5 pt-3 border-t">
+          <button type="button" onclick="closeModal('modalAddStudent')" class="w-full sm:w-auto px-4 py-2.5 border rounded-xl font-bold text-slate-600 text-center">Cancel</button>
+          <button type="submit" id="btnSaveStudent" class="w-full sm:w-auto px-6 py-2.5 bg-brandEmerald text-white rounded-xl font-bold hover:bg-emerald-700 shadow-md flex items-center justify-center gap-1.5">
             <i class="fa-solid fa-user-graduate"></i> Enroll Student
           </button>
         </div>
@@ -2805,9 +2874,9 @@
     </div>
   </div>
 
-  <div id="modalAddTeacher" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 hidden items-center justify-center p-4">
-    <div class="bg-white rounded-2xl max-w-2xl w-full p-6 shadow-2xl border border-slate-200 max-h-[92vh] overflow-y-auto">
-      <div class="flex justify-between items-center mb-4 border-b pb-3">
+  <div id="modalAddTeacher" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 hidden items-center justify-center p-2 sm:p-4 overflow-y-auto">
+    <div class="bg-white rounded-2xl max-w-2xl w-full p-4 sm:p-6 shadow-2xl border border-slate-200 my-auto max-h-[94vh] overflow-y-auto touch-scroll">
+      <div class="flex justify-between items-center mb-3 sm:mb-4 border-b pb-3 shrink-0">
         <div>
           <div class="flex items-center gap-2">
             <h3 id="modalTeacherTitle" class="font-bold text-base text-brandDark flex items-center gap-2">
@@ -3022,9 +3091,9 @@
           </div>
         </div>
 
-        <div class="flex justify-end gap-2.5 pt-3 border-t">
-          <button type="button" onclick="closeModal('modalAddTeacher')" class="px-4 py-2 border rounded-lg font-bold text-slate-600">Cancel</button>
-          <button type="submit" id="btnSaveTeacher" class="px-6 py-2.5 bg-brandDark text-white rounded-lg font-bold hover:bg-brandDarkest shadow-md flex items-center gap-1.5 transition">
+        <div class="flex flex-col-reverse sm:flex-row justify-end gap-2 sm:gap-2.5 pt-3 border-t">
+          <button type="button" onclick="closeModal('modalAddTeacher')" class="w-full sm:w-auto px-4 py-2.5 border rounded-xl font-bold text-slate-600 text-center">Cancel</button>
+          <button type="submit" id="btnSaveTeacher" class="w-full sm:w-auto px-6 py-2.5 bg-brandDark text-white rounded-xl font-bold hover:bg-brandDarkest shadow-md flex items-center justify-center gap-1.5 transition">
             <i class="fa-solid fa-user-plus"></i> <span id="btnSaveTeacherText">Save Teacher & Generate LMS Account</span>
           </button>
         </div>
@@ -3033,133 +3102,136 @@
   </div>
 
   <!-- MODAL: EDITABLE ITEMIZED SALARY SLIP (VOUCHER) -->
-  <div id="modalSalarySlip" class="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 hidden items-center justify-center p-4">
-    <div class="bg-white rounded-2xl max-w-3xl w-full p-6 max-h-[92vh] overflow-y-auto shadow-2xl border border-slate-200">
+  <div id="modalSalarySlip" class="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 hidden items-center justify-center p-2 sm:p-4 overflow-y-auto">
+    <div class="bg-white rounded-2xl max-w-3xl w-full p-4 sm:p-6 my-auto max-h-[94vh] flex flex-col shadow-2xl border border-slate-200">
       
       <!-- Voucher Header -->
-      <div class="flex justify-between items-start border-b pb-4 mb-4">
-        <div class="flex items-center gap-3">
-          <div class="w-12 h-12 rounded-2xl bg-gradient-to-br from-amber-400 to-amber-600 text-brandDarkest flex items-center justify-center font-black text-xl shadow-md">
+      <div class="flex justify-between items-start border-b pb-3 sm:pb-4 mb-3 sm:mb-4 shrink-0">
+        <div class="flex items-center gap-2.5 sm:gap-3">
+          <div class="w-10 h-10 sm:w-12 sm:h-12 rounded-2xl bg-gradient-to-br from-amber-400 to-amber-600 text-brandDarkest flex items-center justify-center font-black text-lg sm:text-xl shadow-md shrink-0">
             <i class="fa-solid fa-receipt"></i>
           </div>
           <div>
-            <div class="flex items-center gap-2">
-              <h3 class="font-black text-lg text-slate-900">Al-Huda Islamic Centre</h3>
+            <div class="flex items-center gap-2 flex-wrap">
+              <h3 class="font-black text-base sm:text-lg text-slate-900">Al-Huda Islamic Centre</h3>
               <span class="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-amber-100 text-amber-900 border border-amber-300">Monthly Salary Voucher</span>
             </div>
-            <p class="text-xs text-slate-500" id="slipMonthSubtitle">Official Teacher Compensation & Course Payroll Statement</p>
+            <p class="text-[11px] sm:text-xs text-slate-500" id="slipMonthSubtitle">Official Teacher Compensation & Course Payroll Statement</p>
           </div>
         </div>
-        <button onclick="closeModal('modalSalarySlip')" class="text-slate-400 hover:text-slate-600 text-2xl font-bold">&times;</button>
+        <button onclick="closeModal('modalSalarySlip')" class="text-slate-400 hover:text-slate-600 text-2xl font-bold leading-none">&times;</button>
       </div>
 
       <input type="hidden" id="slipTeacherId">
 
-      <!-- Teacher Meta Card -->
-      <div class="bg-slate-50 p-4 rounded-xl border border-slate-200 grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs mb-4">
-        <div>
-          <span class="text-slate-400 text-[10px] block">Instructor Name:</span>
-          <strong id="slipTeacherName" class="text-slate-900 text-sm font-extrabold">--</strong>
-        </div>
-        <div>
-          <span class="text-slate-400 text-[10px] block">Teacher ID:</span>
-          <strong id="slipTeacherCode" class="text-brandDark font-mono font-bold">--</strong>
-        </div>
-        <div>
-          <span class="text-slate-400 text-[10px] block">Joining Date:</span>
-          <span id="slipJoiningDate" class="text-slate-700 font-semibold">--</span>
-        </div>
-        <div>
-          <span class="text-slate-400 text-[10px] block">Seniority Increment:</span>
-          <span id="slipIncrementTierBadge" class="text-emerald-800 font-bold bg-emerald-100 px-2 py-0.5 rounded-full text-[11px] inline-block">--</span>
-        </div>
-      </div>
-
-      <!-- Itemized Students & Course Rate Table -->
-      <div class="space-y-2 mb-4">
-        <div class="flex justify-between items-center">
-          <h4 class="font-extrabold text-xs text-slate-800 uppercase tracking-wide flex items-center gap-1.5">
-            <i class="fa-solid fa-graduation-cap text-brandEmerald"></i> Enrolled Students & Course Rates Breakdown
-          </h4>
-          <span class="text-[11px] text-amber-700 font-bold bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
-            <i class="fa-solid fa-pen"></i> Rates Below Are 100% Editable
-          </span>
-        </div>
-
-        <div class="border border-slate-200 rounded-xl overflow-hidden shadow-xs">
-          <table class="w-full text-left text-xs">
-            <thead class="bg-slate-100 text-slate-700 font-bold border-b border-slate-200 text-[11px] uppercase tracking-wide">
-              <tr>
-                <th class="p-2.5">#</th>
-                <th class="p-2.5">Student Name</th>
-                <th class="p-2.5">Course Enrolled</th>
-                <th class="p-2.5">Schedule</th>
-                <th class="p-2.5">Course Base + Inc</th>
-                <th class="p-2.5 text-right">Agreed Rate (PKR)</th>
-              </tr>
-            </thead>
-            <tbody id="slipStudentsTableBody" class="divide-y divide-slate-100 font-medium">
-              <!-- Populated dynamically with editable inputs -->
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      <!-- Adjustments & Final Settlement Card -->
-      <div class="bg-gradient-to-br from-amber-50 to-emerald-50/60 p-4 rounded-xl border border-amber-300/60 space-y-3 mb-4">
-        <div class="font-extrabold text-brandDark text-xs uppercase tracking-wide flex items-center gap-1.5">
-          <i class="fa-solid fa-sliders text-amber-600"></i> Payroll Adjustments (Bonus / Deductions)
-        </div>
-
-        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+      <!-- Scrollable Voucher Body -->
+      <div class="space-y-4 overflow-y-auto touch-scroll flex-1 pr-1">
+        <!-- Teacher Meta Card -->
+        <div class="bg-slate-50 p-3 sm:p-4 rounded-xl border border-slate-200 grid grid-cols-2 sm:grid-cols-4 gap-2.5 sm:gap-3 text-xs">
           <div>
-            <label class="block font-bold mb-1 text-slate-700">Base Teaching Subtotal (PKR):</label>
-            <input type="number" id="slipBaseSubtotal" readonly class="w-full p-2 bg-slate-100 border border-slate-300 rounded-lg font-mono font-black text-slate-800">
+            <span class="text-slate-400 text-[10px] block">Instructor Name:</span>
+            <strong id="slipTeacherName" class="text-slate-900 text-xs sm:text-sm font-extrabold block truncate">--</strong>
           </div>
           <div>
-            <label class="block font-bold mb-1 text-emerald-800"><i class="fa-solid fa-plus text-emerald-600"></i> Additional Bonus (PKR):</label>
-            <input type="number" id="slipBonus" oninput="recalculateSlipNetTotal()" placeholder="0" class="w-full p-2 bg-white border border-emerald-400 rounded-lg font-mono font-bold text-emerald-800 focus:outline-emerald-600">
+            <span class="text-slate-400 text-[10px] block">Teacher ID:</span>
+            <strong id="slipTeacherCode" class="text-brandDark font-mono font-bold block">--</strong>
           </div>
           <div>
-            <label class="block font-bold mb-1 text-rose-800"><i class="fa-solid fa-minus text-rose-600"></i> Deductions / Advance (PKR):</label>
-            <input type="number" id="slipDeduction" oninput="recalculateSlipNetTotal()" placeholder="0" class="w-full p-2 bg-white border border-rose-400 rounded-lg font-mono font-bold text-rose-800 focus:outline-rose-600">
+            <span class="text-slate-400 text-[10px] block">Joining Date:</span>
+            <span id="slipJoiningDate" class="text-slate-700 font-semibold block">--</span>
+          </div>
+          <div>
+            <span class="text-slate-400 text-[10px] block">Seniority Increment:</span>
+            <span id="slipIncrementTierBadge" class="text-emerald-800 font-bold bg-emerald-100 px-2 py-0.5 rounded-full text-[10px] sm:text-[11px] inline-block">--</span>
           </div>
         </div>
 
-        <div>
-          <label class="block font-bold mb-1 text-slate-700 text-xs">Adjustment Remarks / Notes:</label>
-          <input type="text" id="slipRemarks" placeholder="e.g. Performance bonus for extra weekend classes or advance adjustment" class="w-full p-2 bg-white border border-slate-300 rounded-lg text-xs">
+        <!-- Itemized Students & Course Rate Table -->
+        <div class="space-y-2">
+          <div class="flex justify-between items-center flex-wrap gap-2">
+            <h4 class="font-extrabold text-xs text-slate-800 uppercase tracking-wide flex items-center gap-1.5">
+              <i class="fa-solid fa-graduation-cap text-brandEmerald"></i> Enrolled Students & Course Rates Breakdown
+            </h4>
+            <span class="text-[10px] sm:text-[11px] text-amber-700 font-bold bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
+              <i class="fa-solid fa-pen"></i> Rates Below Are 100% Editable
+            </span>
+          </div>
+
+          <div class="border border-slate-200 rounded-xl overflow-x-auto touch-scroll shadow-xs">
+            <table class="w-full text-left text-xs min-w-[540px]">
+              <thead class="bg-slate-100 text-slate-700 font-bold border-b border-slate-200 text-[11px] uppercase tracking-wide">
+                <tr>
+                  <th class="p-2.5">#</th>
+                  <th class="p-2.5">Student Name</th>
+                  <th class="p-2.5">Course Enrolled</th>
+                  <th class="p-2.5">Schedule</th>
+                  <th class="p-2.5">Course Base + Inc</th>
+                  <th class="p-2.5 text-right">Agreed Rate (PKR)</th>
+                </tr>
+              </thead>
+              <tbody id="slipStudentsTableBody" class="divide-y divide-slate-100 font-medium">
+                <!-- Populated dynamically with editable inputs -->
+              </tbody>
+            </table>
+          </div>
         </div>
 
-        <!-- Net Payable Display -->
-        <div class="flex justify-between items-center bg-white p-3.5 rounded-xl border-2 border-brandDark shadow-xs">
-          <div>
-            <span class="text-[11px] font-bold text-slate-500 uppercase block">Total Net Payable Salary</span>
-            <span class="text-xs text-slate-400 font-semibold" id="slipTotalStudentsCount">For 0 Assigned Students</span>
+        <!-- Adjustments & Final Settlement Card -->
+        <div class="bg-gradient-to-br from-amber-50 to-emerald-50/60 p-3.5 sm:p-4 rounded-xl border border-amber-300/60 space-y-3">
+          <div class="font-extrabold text-brandDark text-xs uppercase tracking-wide flex items-center gap-1.5">
+            <i class="fa-solid fa-sliders text-amber-600"></i> Payroll Adjustments (Bonus / Deductions)
           </div>
-          <div class="text-right">
-            <span class="text-2xl font-black text-brandDark font-mono" id="slipNetPayable">0 PKR</span>
+
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+            <div>
+              <label class="block font-bold mb-1 text-slate-700">Base Teaching Subtotal (PKR):</label>
+              <input type="number" id="slipBaseSubtotal" readonly class="w-full p-2 bg-slate-100 border border-slate-300 rounded-lg font-mono font-black text-slate-800">
+            </div>
+            <div>
+              <label class="block font-bold mb-1 text-emerald-800"><i class="fa-solid fa-plus text-emerald-600"></i> Additional Bonus (PKR):</label>
+              <input type="number" id="slipBonus" oninput="recalculateSlipNetTotal()" placeholder="0" class="w-full p-2 bg-white border border-emerald-400 rounded-lg font-mono font-bold text-emerald-800 focus:outline-emerald-600">
+            </div>
+            <div>
+              <label class="block font-bold mb-1 text-rose-800"><i class="fa-solid fa-minus text-rose-600"></i> Deductions / Advance (PKR):</label>
+              <input type="number" id="slipDeduction" oninput="recalculateSlipNetTotal()" placeholder="0" class="w-full p-2 bg-white border border-rose-400 rounded-lg font-mono font-bold text-rose-800 focus:outline-rose-600">
+            </div>
+          </div>
+
+          <div>
+            <label class="block font-bold mb-1 text-slate-700 text-xs">Adjustment Remarks / Notes:</label>
+            <input type="text" id="slipRemarks" placeholder="e.g. Performance bonus for extra weekend classes or advance adjustment" class="w-full p-2 bg-white border border-slate-300 rounded-lg text-xs">
+          </div>
+
+          <!-- Net Payable Display -->
+          <div class="flex justify-between items-center bg-white p-3 sm:p-3.5 rounded-xl border-2 border-brandDark shadow-xs">
+            <div>
+              <span class="text-[10px] sm:text-[11px] font-bold text-slate-500 uppercase block">Total Net Payable Salary</span>
+              <span class="text-xs text-slate-400 font-semibold" id="slipTotalStudentsCount">For 0 Assigned Students</span>
+            </div>
+            <div class="text-right">
+              <span class="text-xl sm:text-2xl font-black text-brandDark font-mono" id="slipNetPayable">0 PKR</span>
+            </div>
           </div>
         </div>
       </div>
 
       <!-- Action Buttons -->
-      <div class="flex flex-wrap items-center justify-between gap-2.5 pt-3 border-t">
+      <div class="flex flex-col-reverse sm:flex-row items-stretch sm:items-center justify-between gap-2.5 pt-3 border-t shrink-0">
         <div class="flex items-center gap-2">
-          <button type="button" onclick="toggleSalaryPaidStatus()" id="btnSlipMarkPaid" class="px-4 py-2 rounded-xl text-xs font-bold border transition flex items-center gap-1.5 bg-slate-100 text-slate-700 hover:bg-emerald-50 hover:text-emerald-800">
+          <button type="button" onclick="toggleSalaryPaidStatus()" id="btnSlipMarkPaid" class="flex-1 sm:flex-none px-3.5 sm:px-4 py-2 rounded-xl text-xs font-bold border transition flex items-center justify-center gap-1.5 bg-slate-100 text-slate-700 hover:bg-emerald-50 hover:text-emerald-800">
             <i class="fa-solid fa-circle-check"></i> <span id="btnSlipMarkPaidText">Mark as Paid</span>
           </button>
-          <button type="button" onclick="printSalarySlip()" class="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition flex items-center gap-1">
+          <button type="button" onclick="printSalarySlip()" class="flex-1 sm:flex-none px-3 sm:px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1">
             <i class="fa-solid fa-print"></i> Print Voucher
           </button>
         </div>
 
-        <div class="flex items-center gap-2">
-          <button type="button" onclick="closeModal('modalSalarySlip')" class="px-4 py-2 border rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100">Close</button>
-          <button type="button" onclick="saveSalarySlipRecord()" class="px-4 py-2 bg-slate-800 hover:bg-black text-white rounded-xl text-xs font-bold shadow transition flex items-center gap-1.5">
+        <div class="flex items-center gap-2 flex-wrap">
+          <button type="button" onclick="closeModal('modalSalarySlip')" class="flex-1 sm:flex-none px-3.5 sm:px-4 py-2 border rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100 text-center">Close</button>
+          <button type="button" onclick="saveSalarySlipRecord()" class="flex-1 sm:flex-none px-3.5 sm:px-4 py-2 bg-slate-800 hover:bg-black text-white rounded-xl text-xs font-bold shadow transition flex items-center justify-center gap-1.5">
             <i class="fa-solid fa-floppy-disk"></i> Save Slip
           </button>
-          <button type="button" onclick="sendSalarySlipWhatsApp()" class="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black shadow-md transition flex items-center gap-1.5">
+          <button type="button" onclick="sendSalarySlipWhatsApp()" class="w-full sm:w-auto px-4 sm:px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black shadow-md transition flex items-center justify-center gap-1.5">
             <i class="fa-brands fa-whatsapp text-base"></i> Send WhatsApp Slip
           </button>
         </div>
@@ -3169,27 +3241,27 @@
   </div>
 
   <!-- MODAL: ADD TRIAL CLASS (3-DAY FREE TRIAL REGISTRATION) -->
-  <div id="modalAddTrialClass" class="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 hidden items-center justify-center p-4">
-    <div class="bg-white rounded-2xl max-w-2xl w-full p-6 max-h-[92vh] overflow-y-auto shadow-2xl border border-slate-200">
+  <div id="modalAddTrialClass" class="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 hidden items-center justify-center p-2 sm:p-4 overflow-y-auto">
+    <div class="bg-white rounded-2xl max-w-2xl w-full p-4 sm:p-6 my-auto max-h-[94vh] overflow-y-auto touch-scroll shadow-2xl border border-slate-200">
       
       <!-- Modal Header -->
-      <div class="flex justify-between items-center mb-4 border-b pb-3">
+      <div class="flex justify-between items-center mb-3 sm:mb-4 border-b pb-3">
         <div class="flex items-center gap-3">
-          <div class="w-10 h-10 rounded-xl bg-purple-100 text-purple-800 flex items-center justify-center font-bold text-lg shadow-xs">
+          <div class="w-10 h-10 rounded-xl bg-purple-100 text-purple-800 flex items-center justify-center font-bold text-lg shadow-xs shrink-0">
             <i class="fa-solid fa-graduation-cap"></i>
           </div>
           <div>
-            <h3 class="font-extrabold text-base text-slate-900">Register 3-Day Free Trial Class</h3>
-            <p class="text-xs text-slate-500">Auto-schedules 3 consecutive evaluation sessions in Teacher's timetable</p>
+            <h3 class="font-extrabold text-sm sm:text-base text-slate-900">Register 3-Day Free Trial Class</h3>
+            <p class="text-[11px] sm:text-xs text-slate-500">Auto-schedules 3 consecutive evaluation sessions in Teacher's timetable</p>
           </div>
         </div>
-        <button onclick="closeModal('modalAddTrialClass')" class="text-slate-400 hover:text-slate-600 text-xl font-bold">&times;</button>
+        <button onclick="closeModal('modalAddTrialClass')" class="text-slate-400 hover:text-slate-600 text-2xl font-bold leading-none">&times;</button>
       </div>
 
       <form onsubmit="handleSaveTrialClass(event)" class="space-y-4 text-xs">
         
         <!-- 1. PARENT & LOCATION DETAILS -->
-        <div class="bg-purple-50/60 p-4 rounded-xl border border-purple-200 space-y-3">
+        <div class="bg-purple-50/60 p-3.5 sm:p-4 rounded-xl border border-purple-200 space-y-3">
           <div class="font-extrabold text-purple-900 text-xs flex items-center gap-1.5 uppercase tracking-wide">
             <i class="fa-solid fa-user-group text-purple-600"></i> 1. Parent & Location Information
           </div>
@@ -3207,7 +3279,7 @@
 
           <!-- Parent / Student Email for Official Al-Huda Notifications -->
           <div>
-            <div class="flex justify-between items-center mb-1">
+            <div class="flex justify-between items-center mb-1 flex-wrap gap-1">
               <label class="block font-bold text-slate-700">Parent / Student Email Address:</label>
               <span class="text-[10px] text-purple-700 font-bold bg-purple-100 px-2 py-0.5 rounded-full"><i class="fa-solid fa-envelope"></i> ceoislamiccentre@gmail.com</span>
             </div>
@@ -3252,72 +3324,95 @@
         </div>
 
         <!-- 2. STUDENT PROFILE DETAILS -->
-        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-3">
+        <div class="bg-slate-50 p-3.5 sm:p-4 rounded-xl border border-slate-200 space-y-3">
           <div class="font-extrabold text-slate-800 text-xs flex items-center gap-1.5 uppercase tracking-wide">
             <i class="fa-solid fa-child-reaching text-brandEmerald"></i> 2. Student Profile Details
           </div>
 
           <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div class="sm:col-span-1">
-              <label class="block font-bold mb-1 text-slate-700">Student Name *:</label>
-              <input type="text" id="trialStudentName" required placeholder="e.g. Ibrahim Farhan" class="w-full p-2.5 bg-white border border-slate-300 rounded-lg font-bold text-slate-800 focus:outline-brandEmerald">
+              <label class="block font-bold mb-1 text-slate-700">Student Full Name *:</label>
+              <input type="text" id="trialStudentName" required placeholder="Child / Student Name" class="w-full p-2.5 bg-white border border-slate-300 rounded-lg font-bold text-slate-800">
             </div>
             <div>
-              <label class="block font-bold mb-1 text-slate-700">Student Age *:</label>
-              <input type="number" id="trialStudentAge" required value="8" min="4" max="70" class="w-full p-2.5 bg-white border border-slate-300 rounded-lg font-bold text-slate-800">
+              <label class="block font-bold mb-1 text-slate-700">Age:</label>
+              <input type="number" id="trialStudentAge" value="8" min="3" max="80" class="w-full p-2.5 bg-white border border-slate-300 rounded-lg font-bold text-slate-800">
             </div>
             <div>
-              <label class="block font-bold mb-1 text-slate-700">Gender *:</label>
+              <label class="block font-bold mb-1 text-slate-700">Gender:</label>
               <select id="trialStudentGender" class="w-full p-2.5 bg-white border border-slate-300 rounded-lg font-bold text-slate-800">
-                <option value="Male">Male (Boy)</option>
-                <option value="Female">Female (Girl)</option>
+                <option value="Male">Male</option>
+                <option value="Female">Female</option>
               </select>
             </div>
           </div>
 
-          <div>
-            <label class="block font-bold mb-1 text-slate-700">Course for Evaluation *:</label>
-            <select id="trialCourse" class="w-full p-2.5 bg-white border border-slate-300 rounded-lg font-bold text-slate-800 focus:outline-brandEmerald">
-              <option value="Noorani Qaida & Basic Arabic">📖 Noorani Qaida & Arabic Pronunciation</option>
-              <option value="Nazra Quran with Tajweed">🕌 Nazra Quran with Tajweed Rules</option>
-              <option value="Quran Memorization (Hifz-ul-Quran)">⭐ Quran Memorization (Hifz-ul-Quran)</option>
-              <option value="Islamic Studies & Daily Duas">🤲 Islamic Studies & Daily Masnoon Duas</option>
-              <option value="Advanced Tajweed & Tarteel">✨ Advanced Tajweed & Tarteel</option>
-            </select>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label class="block font-bold mb-1 text-slate-700">Preferred Course *:</label>
+              <select id="trialCourse" class="w-full p-2.5 bg-white border border-purple-300 rounded-lg font-bold text-purple-900">
+                <option value="Noorani Qaida & Basic Arabic">📖 Noorani Qaida & Basic Arabic</option>
+                <option value="Nazra Quran with Tajweed">🕌 Nazra Quran with Tajweed Rules</option>
+                <option value="Quran Memorization (Hifz-ul-Quran)">⭐ Quran Memorization (Hifz-ul-Quran)</option>
+                <option value="Islamic Studies & Daily Duas">🤲 Islamic Studies & Daily Masnoon Duas</option>
+                <option value="Advanced Tajweed & Tarteel">✨ Advanced Tajweed & Tarteel</option>
+              </select>
+            </div>
+            <div>
+              <label class="block font-bold mb-1 text-slate-700">Preferred Teacher Gender:</label>
+              <select id="trialTeacherGenderPref" class="w-full p-2.5 bg-white border border-slate-300 rounded-lg font-bold text-slate-800">
+                <option value="Any">No Preference (Any Qualified Instructor)</option>
+                <option value="Male">Male Qari / Ustad</option>
+                <option value="Female">Female Qariah / Alimah</option>
+              </select>
+            </div>
           </div>
         </div>
 
-        <!-- 3. ASSIGNED TEACHER & 3-DAY TIMETABLE SLOTS -->
-        <div class="bg-gradient-to-br from-purple-50 to-indigo-50 p-4 rounded-xl border border-purple-200 space-y-3">
-          <div class="flex justify-between items-center">
-            <div class="font-extrabold text-purple-900 text-xs flex items-center gap-1.5 uppercase tracking-wide">
-              <i class="fa-solid fa-chalkboard-user text-purple-700"></i> 3. Assigned Teacher & 3-Day Timetable
-            </div>
-            <span class="text-[10px] bg-purple-700 text-white px-2 py-0.5 rounded-full font-bold">3 Consecutive Days</span>
+        <!-- 3. ASSIGNED INSTRUCTOR & 3-DAY SCHEDULE -->
+        <div class="bg-purple-50/60 p-3.5 sm:p-4 rounded-xl border border-purple-200 space-y-3">
+          <div class="font-extrabold text-purple-900 text-xs flex items-center gap-1.5 uppercase tracking-wide">
+            <i class="fa-solid fa-calendar-days text-purple-600"></i> 3. Teacher Assignment &amp; Timetable Slot
           </div>
 
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
-              <label class="block font-bold mb-1 text-slate-700">Select Quran Instructor *:</label>
-              <select id="trialTeacherSelect" required class="w-full p-2.5 bg-white border border-purple-300 rounded-lg font-bold text-slate-800 focus:outline-purple-600">
-                <!-- Populated dynamically -->
+              <label class="block font-bold mb-1 text-slate-700">Assigned Quran Instructor *:</label>
+              <select id="trialTeacherSelect" required onchange="handleTrialTeacherSelection(this.value)" class="w-full p-2.5 bg-white border border-purple-300 rounded-lg font-bold text-purple-950">
+                <!-- Dynamically populated -->
               </select>
             </div>
             <div>
               <label class="block font-bold mb-1 text-slate-700">Trial Start Date (Day 1) *:</label>
-              <input type="date" id="trialStartDate" required class="w-full p-2.5 bg-white border border-purple-300 rounded-lg font-bold text-slate-800">
+              <input type="date" id="trialStartDate" required onchange="calculateTrial3Days(this.value)" class="w-full p-2.5 bg-white border border-purple-300 rounded-lg font-bold text-slate-800">
+            </div>
+          </div>
+
+          <!-- 3-Day Evaluation Sequence Banner -->
+          <div id="trial3DaysTimeline" class="p-3 bg-white rounded-xl border border-purple-200 grid grid-cols-3 gap-2 text-center text-xs">
+            <div class="p-2 rounded-lg bg-purple-100 text-purple-900">
+              <span class="text-[10px] font-black uppercase block">Day 1 (Intro)</span>
+              <strong id="trialDay1Badge" class="block mt-0.5">Select Date</strong>
+            </div>
+            <div class="p-2 rounded-lg bg-purple-100 text-purple-900">
+              <span class="text-[10px] font-black uppercase block">Day 2 (Eval)</span>
+              <strong id="trialDay2Badge" class="block mt-0.5">--</strong>
+            </div>
+            <div class="p-2 rounded-lg bg-purple-100 text-purple-900">
+              <span class="text-[10px] font-black uppercase block">Day 3 (Wrap)</span>
+              <strong id="trialDay3Badge" class="block mt-0.5">--</strong>
             </div>
           </div>
 
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
-              <label class="block font-bold mb-1 text-slate-700">Teacher Time Slot (Pakistan PKT) *:</label>
-              <select id="trialPktSlot" required class="w-full p-2.5 bg-white border border-purple-300 rounded-lg font-mono font-bold text-brandDark focus:outline-purple-600">
-                <!-- Populated with 48 half-hour slots -->
+              <label class="block font-bold mb-1 text-slate-700">Class Time Slot (Pakistan Time - PKT) *:</label>
+              <select id="trialPktSlot" required class="w-full p-2.5 bg-white border border-purple-300 rounded-lg font-mono font-bold text-slate-800">
+                <!-- Dynamically populated with 30-min slots -->
               </select>
             </div>
             <div>
-              <label class="block font-bold mb-1 text-slate-700">Student Local Time Slot (e.g. 6:00 PM UK):</label>
+              <label class="block font-bold mb-1 text-slate-700">Student Local Time Description (for Parent):</label>
               <input type="text" id="trialStudentTime" placeholder="e.g. 06:00 PM - 06:30 PM (UK Time)" class="w-full p-2.5 bg-white border border-purple-300 rounded-lg font-bold text-slate-800">
             </div>
           </div>
@@ -3346,9 +3441,9 @@
           </div>
         </div>
 
-        <div class="flex justify-end gap-2.5 pt-3 border-t">
-          <button type="button" onclick="closeModal('modalAddTrialClass')" class="px-4 py-2 border rounded-xl font-bold text-slate-600 hover:bg-slate-100">Cancel</button>
-          <button type="submit" id="btnSaveTrial" class="px-6 py-2.5 bg-gradient-to-r from-purple-700 to-indigo-800 text-white rounded-xl font-extrabold hover:shadow-lg shadow-md flex items-center gap-1.5 transition">
+        <div class="flex flex-col-reverse sm:flex-row justify-end gap-2 sm:gap-2.5 pt-3 border-t">
+          <button type="button" onclick="closeModal('modalAddTrialClass')" class="w-full sm:w-auto px-4 py-2.5 border rounded-xl font-bold text-slate-600 hover:bg-slate-100 text-center">Cancel</button>
+          <button type="submit" id="btnSaveTrial" class="w-full sm:w-auto px-6 py-2.5 bg-gradient-to-r from-purple-700 to-indigo-800 text-white rounded-xl font-extrabold hover:shadow-lg shadow-md flex items-center justify-center gap-1.5 transition">
             <i class="fa-solid fa-check"></i> Book 3-Day Free Trial
           </button>
         </div>
@@ -3357,91 +3452,88 @@
   </div>
 
   <!-- MODAL: CONVERT TRIAL TO REGULAR STUDENT (ZERO RE-TYPING) -->
-  <div id="modalConvertTrialToRegular" class="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 hidden items-center justify-center p-4">
-    <div class="bg-white rounded-2xl max-w-xl w-full p-6 max-h-[92vh] overflow-y-auto shadow-2xl border border-slate-200">
+  <div id="modalConvertTrialToRegular" class="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 hidden items-center justify-center p-2 sm:p-4 overflow-y-auto">
+    <div class="bg-white rounded-2xl max-w-xl w-full p-4 sm:p-6 my-auto max-h-[94vh] overflow-y-auto touch-scroll shadow-2xl border border-slate-200">
       
       <!-- Modal Header -->
-      <div class="flex justify-between items-center mb-4 border-b pb-3">
+      <div class="flex justify-between items-center mb-3 sm:mb-4 border-b pb-3">
         <div class="flex items-center gap-3">
-          <div class="w-10 h-10 rounded-xl bg-emerald-100 text-brandEmerald flex items-center justify-center font-bold text-lg shadow-xs">
+          <div class="w-10 h-10 rounded-xl bg-emerald-100 text-brandEmerald flex items-center justify-center font-bold text-lg shadow-xs shrink-0">
             <i class="fa-solid fa-user-check"></i>
           </div>
           <div>
-            <h3 class="font-extrabold text-base text-slate-900">Convert Trial to Regular Student</h3>
-            <p class="text-xs text-slate-500">All trial details are pre-filled. Enter fee to complete enrollment.</p>
+            <h3 class="font-extrabold text-sm sm:text-base text-slate-900">Convert Trial to Regular Student</h3>
+            <p class="text-[11px] sm:text-xs text-slate-500">All trial details are pre-filled. Enter fee to complete enrollment.</p>
           </div>
         </div>
-        <button onclick="closeModal('modalConvertTrialToRegular')" class="text-slate-400 hover:text-slate-600 text-xl font-bold">&times;</button>
+        <button onclick="closeModal('modalConvertTrialToRegular')" class="text-slate-400 hover:text-slate-600 text-2xl font-bold leading-none">&times;</button>
       </div>
 
       <form onsubmit="handleConvertTrialSubmit(event)" class="space-y-4 text-xs">
         <input type="hidden" id="convTrialId">
 
         <!-- PRE-FILLED TRIAL SUMMARY CARD -->
-        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-2">
+        <div class="bg-slate-50 p-3.5 sm:p-4 rounded-xl border border-slate-200 space-y-2">
           <div class="flex justify-between items-center text-[10px] font-extrabold uppercase tracking-wide text-slate-500">
             <span>Pre-Loaded Student & Family Details</span>
             <span class="text-emerald-700 font-bold bg-emerald-100 px-2 py-0.5 rounded-full">Zero Re-typing</span>
           </div>
 
-          <div class="grid grid-cols-2 gap-3 text-xs">
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5 sm:gap-3 text-xs">
             <div>
               <span class="text-slate-400 text-[10px] block">Student Name:</span>
-              <strong id="convSummaryStudent" class="text-slate-900 font-extrabold text-sm">--</strong>
+              <strong id="convSummaryStudent" class="text-slate-900 font-bold text-sm block truncate">--</strong>
             </div>
             <div>
               <span class="text-slate-400 text-[10px] block">Parent / Guardian:</span>
-              <strong id="convSummaryParent" class="text-slate-900 font-bold">--</strong>
+              <strong id="convSummaryParent" class="text-slate-900 font-bold block truncate">--</strong>
             </div>
             <div>
-              <span class="text-slate-400 text-[10px] block">WhatsApp Contact:</span>
-              <strong id="convSummaryPhone" class="text-slate-900 font-mono">--</strong>
+              <span class="text-slate-400 text-[10px] block">Country &amp; Timezone:</span>
+              <span id="convSummaryLocation" class="text-slate-700 font-semibold block">--</span>
             </div>
             <div>
-              <span class="text-slate-400 text-[10px] block">Country & Timezone:</span>
-              <strong id="convSummaryLocation" class="text-slate-900">--</strong>
+              <span class="text-slate-400 text-[10px] block">WhatsApp:</span>
+              <span id="convSummaryPhone" class="font-mono text-slate-700 block">--</span>
             </div>
             <div>
-              <span class="text-slate-400 text-[10px] block">Selected Course:</span>
-              <span id="convSummaryCourse" class="text-brandEmerald font-bold bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200 text-[11px] inline-block">--</span>
+              <span class="text-slate-400 text-[10px] block">Assigned Teacher:</span>
+              <strong id="convSummaryTeacher" class="text-brandEmerald font-bold block truncate">--</strong>
             </div>
             <div>
-              <span class="text-slate-400 text-[10px] block">Assigned Quran Instructor:</span>
-              <strong id="convSummaryTeacher" class="text-brandDark font-bold">--</strong>
+              <span class="text-slate-400 text-[10px] block">Enrolled Course:</span>
+              <span id="convSummaryCourse" class="text-slate-700 font-semibold block truncate">--</span>
             </div>
           </div>
         </div>
 
-        <!-- NEW INPUTS: AGREED MONTHLY FEE & SCHEDULE PREFERENCES -->
-        <div class="bg-gradient-to-br from-emerald-50 to-amber-50/60 p-4 rounded-xl border-2 border-brandEmerald/40 space-y-3">
+        <!-- REGULAR BILLING & ENROLLMENT FORM -->
+        <div class="bg-emerald-50/60 p-3.5 sm:p-4 rounded-xl border-2 border-brandEmerald/40 space-y-3">
           <div class="font-extrabold text-brandDark text-xs flex items-center gap-1.5 uppercase tracking-wide">
-            <i class="fa-solid fa-file-invoice-dollar text-brandGold"></i> Agreed Monthly Tuition & Regular Schedule
+            <i class="fa-solid fa-coins text-brandGold"></i> Agreed Monthly Tuition Fee & Billing Date
           </div>
 
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
-              <label class="block font-bold mb-1 text-slate-800">Agreed Monthly Fee *:</label>
-              <input type="number" id="convMonthlyFee" required placeholder="e.g. 10000 or 50" class="w-full p-2.5 bg-white border border-emerald-400 rounded-lg font-black text-sm text-brandDark focus:outline-brandEmerald">
+              <label class="block font-bold mb-1 text-slate-800">Agreed Monthly Tuition Fee *:</label>
+              <div class="flex gap-2">
+                <input type="number" id="convMonthlyFee" required placeholder="e.g. 100" class="w-2/3 p-2.5 bg-white border border-emerald-400 rounded-lg font-bold text-sm text-brandDark">
+                <select id="convCurrency" class="w-1/3 p-2.5 bg-white border border-emerald-400 rounded-lg font-bold text-slate-800">
+                  <option value="USD">$ USD</option>
+                  <option value="GBP">£ GBP</option>
+                  <option value="CAD">$ CAD</option>
+                  <option value="AUD">$ AUD</option>
+                  <option value="EUR">€ EUR</option>
+                  <option value="AED">AED</option>
+                  <option value="SAR">SAR</option>
+                  <option value="PKR">PKR</option>
+                </select>
+              </div>
             </div>
-            <div>
-              <label class="block font-bold mb-1 text-slate-800">Billing Currency *:</label>
-              <select id="convCurrency" class="w-full p-2.5 bg-white border border-emerald-400 rounded-lg font-bold text-slate-800">
-                <option value="PKR">PKR (Pakistani Rupee)</option>
-                <option value="USD">USD (US Dollar)</option>
-                <option value="GBP">GBP (British Pound)</option>
-                <option value="CAD">CAD (Canadian Dollar)</option>
-                <option value="EUR">EUR (Euro)</option>
-                <option value="AUD">AUD (Australian Dollar)</option>
-                <option value="AED">AED (UAE Dirham)</option>
-                <option value="SAR">SAR (Saudi Riyal)</option>
-              </select>
-            </div>
-          </div>
 
-          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
-              <label class="block font-bold mb-1 text-slate-800">Monthly Billing Due Day:</label>
-              <select id="convBillingDay" class="w-full p-2.5 bg-white border border-slate-300 rounded-lg font-bold text-slate-800">
+              <label class="block font-bold mb-1 text-slate-800">Monthly Billing Date *:</label>
+              <select id="convBillingDay" class="w-full p-2.5 bg-white border border-emerald-400 rounded-lg font-bold text-slate-800">
                 <option value="1">1st of every month</option>
                 <option value="5">5th of every month</option>
                 <option value="10">10th of every month</option>
@@ -3450,21 +3542,22 @@
                 <option value="25">25th of every month</option>
               </select>
             </div>
-            <div>
-              <label class="block font-bold mb-1 text-slate-800">Regular Days / Week Preference:</label>
-              <select id="convDaysPerWeek" class="w-full p-2.5 bg-white border border-slate-300 rounded-lg font-bold text-slate-800">
-                <option value="5 Days (Mon - Fri)">5 Days a Week (Monday - Friday)</option>
-                <option value="4 Days (Mon - Thu)">4 Days a Week (Monday - Thursday)</option>
-                <option value="3 Days (Mon, Wed, Fri)">3 Days a Week (Monday, Wednesday, Friday)</option>
-                <option value="2 Days (Sat - Sun)">Weekend Classes (Saturday & Sunday)</option>
-                <option value="6 Days (Mon - Sat)">6 Days a Week (Monday - Saturday)</option>
-              </select>
-            </div>
+          </div>
+
+          <div>
+            <label class="block font-bold mb-1 text-slate-800">Regular Days / Week Preference:</label>
+            <select id="convDaysPerWeek" class="w-full p-2.5 bg-white border border-emerald-400 rounded-lg font-bold text-slate-800">
+              <option value="5 Days (Mon - Fri)">5 Days a Week (Monday - Friday)</option>
+              <option value="4 Days (Mon - Thu)">4 Days a Week (Monday - Thursday)</option>
+              <option value="3 Days (Mon, Wed, Fri)">3 Days a Week (Monday, Wednesday, Friday)</option>
+              <option value="2 Days (Sat - Sun)">Weekend Classes (Saturday & Sunday)</option>
+              <option value="6 Days (Mon - Sat)">6 Days a Week (Monday - Saturday)</option>
+            </select>
           </div>
 
           <div>
             <label class="block font-bold mb-1 text-slate-800">Official Regular Enrollment Date:</label>
-            <input type="date" id="convJoiningDate" class="w-full p-2.5 bg-white border border-slate-300 rounded-lg font-bold text-slate-800">
+            <input type="date" id="convJoiningDate" class="w-full p-2.5 bg-white border border-emerald-400 rounded-lg font-bold text-slate-800">
           </div>
 
           <!-- Official Contact & Zoom Link Confirmation -->
@@ -3473,14 +3566,14 @@
               <label class="block font-bold mb-1 text-slate-800">Parent / Student Email Address:</label>
               <div class="relative">
                 <i class="fa-solid fa-envelope absolute left-3 top-3 text-emerald-600"></i>
-                <input type="email" id="convStudentEmail" placeholder="parent.email@gmail.com" class="w-full pl-8 pr-3 py-2 bg-white border border-emerald-400 rounded-lg font-mono text-xs font-bold text-slate-800 focus:outline-brandEmerald">
+                <input type="email" id="convStudentEmail" placeholder="parent.email@gmail.com" class="w-full pl-8 pr-3 py-2 bg-white border border-emerald-400 rounded-lg font-mono text-xs font-bold text-slate-800">
               </div>
             </div>
             <div>
               <label class="block font-bold mb-1 text-slate-800">Permanent Classroom Link (Zoom / Meet):</label>
               <div class="relative">
                 <i class="fa-solid fa-video absolute left-3 top-3 text-emerald-600"></i>
-                <input type="url" id="convMeetingLink" placeholder="https://us04web.zoom.us/j/..." class="w-full pl-8 pr-3 py-2 bg-white border border-emerald-400 rounded-lg font-mono text-xs font-bold text-slate-800 focus:outline-brandEmerald">
+                <input type="url" id="convMeetingLink" placeholder="https://us04web.zoom.us/j/..." class="w-full pl-8 pr-3 py-2 bg-white border border-emerald-400 rounded-lg font-mono text-xs font-bold text-slate-800">
               </div>
             </div>
           </div>
@@ -3488,7 +3581,7 @@
           <!-- Official Email Automation Option -->
           <div class="p-3 bg-white/90 rounded-xl border border-emerald-300 shadow-xs space-y-1.5">
             <label class="flex items-start gap-2.5 cursor-pointer select-none">
-              <input type="checkbox" id="convSendWelcomeEmail" checked class="mt-0.5 w-4 h-4 text-brandEmerald rounded border-slate-300 focus:ring-emerald-500">
+              <input type="checkbox" id="convSendWelcomeEmail" checked class="mt-0.5 w-4 h-4 text-brandEmerald rounded border-slate-300">
               <div class="text-xs">
                 <span class="font-extrabold text-brandDark block flex items-center gap-1.5">
                   <i class="fa-solid fa-paper-plane text-brandEmerald"></i> Auto-Send Official Regular Registration Confirmation Email
@@ -3501,9 +3594,9 @@
           </div>
         </div>
 
-        <div class="flex justify-end gap-2.5 pt-3 border-t">
-          <button type="button" onclick="closeModal('modalConvertTrialToRegular')" class="px-4 py-2 border rounded-xl font-bold text-slate-600 hover:bg-slate-100">Cancel</button>
-          <button type="submit" id="btnConfirmConvert" class="px-6 py-2.5 bg-brandDark text-white rounded-xl font-extrabold hover:bg-brandDarkest shadow-md flex items-center gap-1.5 transition">
+        <div class="flex flex-col-reverse sm:flex-row justify-end gap-2 sm:gap-2.5 pt-3 border-t">
+          <button type="button" onclick="closeModal('modalConvertTrialToRegular')" class="w-full sm:w-auto px-4 py-2.5 border rounded-xl font-bold text-slate-600 hover:bg-slate-100 text-center">Cancel</button>
+          <button type="submit" id="btnConfirmConvert" class="w-full sm:w-auto px-6 py-2.5 bg-brandDark text-white rounded-xl font-extrabold hover:bg-brandDarkest shadow-md flex items-center justify-center gap-1.5 transition">
             <i class="fa-solid fa-circle-check text-brandGold"></i> Confirm & Enroll as Regular Student
           </button>
         </div>
@@ -3716,19 +3809,19 @@
   </div>
 
   <!-- MODAL: MARK STUDENT ON EXTENDED LEAVE -->
-  <div id="modalMarkLeave" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 hidden items-center justify-center p-4">
-    <div class="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-slate-200 space-y-4 animate-scaleIn">
-      <div class="flex justify-between items-center border-b pb-3">
+  <div id="modalMarkLeave" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 hidden items-center justify-center p-2 sm:p-4 overflow-y-auto">
+    <div class="bg-white rounded-2xl max-w-lg w-full p-4 sm:p-6 shadow-2xl border border-slate-200 my-auto max-h-[94vh] overflow-y-auto touch-scroll space-y-4 animate-scaleIn">
+      <div class="flex justify-between items-center border-b pb-3 shrink-0">
         <div class="flex items-center gap-2">
-          <div class="w-9 h-9 rounded-xl bg-blue-100 text-blue-700 flex items-center justify-center font-black">
+          <div class="w-9 h-9 rounded-xl bg-blue-100 text-blue-700 flex items-center justify-center font-black shrink-0">
             <i class="fa-solid fa-plane-departure text-base"></i>
           </div>
           <div>
-            <h3 class="font-black text-base text-slate-900" id="modalMarkLeaveTitle">Mark Student on Leave</h3>
-            <p class="text-xs text-slate-500">Configure return date & pause schedule slots</p>
+            <h3 class="font-black text-sm sm:text-base text-slate-900" id="modalMarkLeaveTitle">Mark Student on Leave</h3>
+            <p class="text-[11px] sm:text-xs text-slate-500">Configure return date & pause schedule slots</p>
           </div>
         </div>
-        <button onclick="closeModal('modalMarkLeave')" class="text-slate-400 hover:text-slate-600 text-xl font-bold">&times;</button>
+        <button onclick="closeModal('modalMarkLeave')" class="text-slate-400 hover:text-slate-600 text-2xl font-bold leading-none">&times;</button>
       </div>
 
       <form onsubmit="handleSaveStudentLeave(event)" class="space-y-3.5 text-xs">
@@ -3739,7 +3832,7 @@
           </select>
         </div>
 
-        <div class="grid grid-cols-2 gap-3">
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div>
             <label class="block font-bold text-slate-700 mb-1">Leave Start Date *:</label>
             <input type="date" id="leaveStartDate" required class="w-full p-2 border rounded-xl font-mono text-slate-800">
@@ -3773,9 +3866,9 @@
           </p>
         </div>
 
-        <div class="flex justify-end gap-2 border-t pt-3">
-          <button type="button" onclick="closeModal('modalMarkLeave')" class="px-4 py-2 border rounded-xl font-bold text-slate-600 hover:bg-slate-100">Cancel</button>
-          <button type="submit" id="btnSubmitStudentLeave" class="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white font-black rounded-xl flex items-center gap-1.5 shadow-sm transition">
+        <div class="flex flex-col-reverse sm:flex-row justify-end gap-2 sm:gap-2.5 border-t pt-3">
+          <button type="button" onclick="closeModal('modalMarkLeave')" class="w-full sm:w-auto px-4 py-2.5 border rounded-xl font-bold text-slate-600 hover:bg-slate-100 text-center">Cancel</button>
+          <button type="submit" id="btnSubmitStudentLeave" class="w-full sm:w-auto px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-black rounded-xl flex items-center justify-center gap-1.5 shadow-sm transition">
             <i class="fa-solid fa-check"></i> Confirm Leave & Set Return
           </button>
         </div>
@@ -4033,41 +4126,41 @@
   <!-- ============================================================ -->
   <!-- MODAL 1: OFFICIAL PRINTABLE TUITION FEE INVOICE RECEIPT -->
   <!-- ============================================================ -->
-  <div id="modalFeeInvoice" class="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 hidden items-center justify-center p-3 sm:p-4 overflow-y-auto">
-    <div class="bg-white rounded-2xl max-w-2xl w-full border border-slate-200 shadow-2xl overflow-hidden my-6">
+  <div id="modalFeeInvoice" class="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 hidden items-center justify-center p-2 sm:p-4 overflow-y-auto">
+    <div class="bg-white rounded-2xl max-w-2xl w-full border border-slate-200 shadow-2xl overflow-hidden my-auto max-h-[94vh] flex flex-col">
       
-      <div class="p-4 sm:p-5 bg-slate-50 border-b border-slate-200 flex justify-between items-center">
+      <div class="p-3.5 sm:p-5 bg-slate-50 border-b border-slate-200 flex justify-between items-center shrink-0">
         <h3 class="font-extrabold text-slate-900 text-sm flex items-center gap-2">
           <i class="fa-solid fa-file-invoice-dollar text-emerald-700"></i> Official Tuition Fee Receipt Voucher
         </h3>
         <button onclick="closeModal('modalFeeInvoice')" class="text-slate-400 hover:text-slate-700 text-2xl font-bold leading-none">&times;</button>
       </div>
 
-      <div class="p-5 sm:p-6 space-y-4 max-h-[80vh] overflow-y-auto" id="feeInvoicePrintArea">
-        <div class="border-2 border-emerald-800 rounded-2xl p-5 bg-white space-y-4 shadow-xs">
+      <div class="p-3 sm:p-6 space-y-4 flex-1 overflow-y-auto touch-scroll" id="feeInvoicePrintArea">
+        <div class="border-2 border-emerald-800 rounded-xl sm:rounded-2xl p-3.5 sm:p-5 bg-white space-y-3.5 sm:space-y-4 shadow-xs">
           
           <!-- INVOICE HEADER WITH OFFICIAL ACADEMY LOGO -->
-          <div class="border-b-2 border-emerald-800 pb-4 flex justify-between items-center flex-wrap gap-3">
-            <div class="flex items-center gap-3.5">
-              <img id="feeInvLogoImg" src="alhuda_logo.jpg" alt="Al-Huda Islamic Centre" class="w-14 h-14 sm:w-16 sm:h-16 object-cover rounded-xl shadow-xs border border-emerald-700/30 bg-black shrink-0">
+          <div class="border-b-2 border-emerald-800 pb-3 sm:pb-4 flex justify-between items-start sm:items-center flex-col sm:flex-row gap-2.5 sm:gap-3">
+            <div class="flex items-center gap-2.5 sm:gap-3.5">
+              <img id="feeInvLogoImg" src="alhuda_logo.jpg" alt="Al-Huda Islamic Centre" class="w-12 h-12 sm:w-16 sm:h-16 object-cover rounded-xl shadow-xs border border-emerald-700/30 bg-black shrink-0">
               <div>
-                <h2 class="text-xl sm:text-2xl font-black text-emerald-900 tracking-tight font-serif">AL-HUDA ISLAMIC CENTRE</h2>
-                <p class="text-xs text-slate-600 font-medium">Online Quran &amp; Islamic Studies Academy</p>
-                <p class="text-[11px] text-slate-400 font-mono">Official Tuition Fee Billing Statement</p>
+                <h2 class="text-base sm:text-2xl font-black text-emerald-900 tracking-tight font-serif">AL-HUDA ISLAMIC CENTRE</h2>
+                <p class="text-[11px] sm:text-xs text-slate-600 font-medium">Online Quran &amp; Islamic Studies Academy</p>
+                <p class="text-[10px] sm:text-[11px] text-slate-400 font-mono">Official Tuition Fee Billing Statement</p>
               </div>
             </div>
-            <div class="text-right">
-              <div id="feeInvStatusStamp" class="inline-block px-3 py-1 rounded-md text-[11px] font-black border-2 border-emerald-600 bg-emerald-50 text-emerald-800 tracking-wider">
+            <div class="text-left sm:text-right flex sm:flex-col items-center sm:items-end justify-between w-full sm:w-auto pt-1 sm:pt-0 border-t border-emerald-100 sm:border-t-0">
+              <div id="feeInvStatusStamp" class="inline-block px-2.5 py-0.5 sm:px-3 sm:py-1 rounded-md text-[10px] sm:text-[11px] font-black border-2 border-emerald-600 bg-emerald-50 text-emerald-800 tracking-wider">
                 PAID IN FULL
               </div>
-              <div class="text-xs text-slate-500 mt-1">
+              <div class="text-[11px] sm:text-xs text-slate-500 mt-0.5 sm:mt-1">
                 Receipt #: <strong id="feeInvReceiptNo" class="text-emerald-900 font-mono font-bold">AH-REC-OFFICIAL</strong>
               </div>
             </div>
           </div>
 
           <!-- FAMILY DETAILS GRID -->
-          <div class="grid grid-cols-2 sm:grid-cols-3 gap-2.5 bg-slate-50 p-3 rounded-xl border border-slate-200 text-xs">
+          <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2 sm:gap-2.5 bg-slate-50 p-2.5 sm:p-3 rounded-xl border border-slate-200 text-xs">
             <div><span class="text-slate-500 font-bold block">Parent / Guardian:</span> <strong id="feeInvParentName" class="text-slate-900 block truncate">--</strong></div>
             <div><span class="text-slate-500 font-bold block">Family Account ID:</span> <strong id="feeInvFamilyId" class="text-emerald-900 font-mono block">--</strong></div>
             <div><span class="text-slate-500 font-bold block">Student(s) Enrolled:</span> <strong id="feeInvStudentsNames" class="text-slate-900 block truncate">--</strong></div>
@@ -4077,8 +4170,8 @@
           </div>
 
           <!-- ITEMIZED CHARGES TABLE -->
-          <div class="rounded-xl border border-slate-200 overflow-hidden text-xs">
-            <table class="w-full text-left border-collapse">
+          <div class="rounded-xl border border-slate-200 overflow-x-auto touch-scroll text-xs">
+            <table class="w-full text-left border-collapse min-w-[280px]">
               <thead class="bg-emerald-900 text-white font-bold text-[11px]">
                 <tr>
                   <th class="p-2.5">Particulars / Description</th>
@@ -4150,20 +4243,20 @@
       </div>
 
       <!-- MODAL FOOTER BUTTONS -->
-      <div class="p-4 bg-slate-50 border-t border-slate-200 flex justify-end items-center gap-2.5 flex-wrap">
-        <button id="feeInvBtnDownloadPdf" onclick="downloadFeeInvoicePDF()" class="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-2xs">
+      <div class="p-2.5 sm:p-4 bg-slate-50 border-t border-slate-200 grid grid-cols-2 sm:flex sm:justify-end items-center gap-2 shrink-0">
+        <button id="feeInvBtnDownloadPdf" onclick="downloadFeeInvoicePDF()" class="px-3 py-2 sm:px-4 sm:py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 shadow-2xs">
           <i class="fa-solid fa-file-pdf"></i> Download PDF
         </button>
-        <button id="feeInvBtnSendEmail" onclick="sendFeeInvoiceEmailModal()" class="px-4 py-2 bg-sky-600 hover:bg-sky-700 text-white rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-2xs">
+        <button id="feeInvBtnSendEmail" onclick="sendFeeInvoiceEmailModal()" class="px-3 py-2 sm:px-4 sm:py-2 bg-sky-600 hover:bg-sky-700 text-white rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 shadow-2xs">
           <i class="fa-solid fa-envelope"></i> Send Email
         </button>
-        <button onclick="printFeeInvoiceReceipt()" class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-2xs">
+        <button onclick="printFeeInvoiceReceipt()" class="px-3 py-2 sm:px-4 sm:py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 shadow-2xs">
           <i class="fa-solid fa-print"></i> Print Receipt
         </button>
-        <a id="feeInvWhatsAppBtn" href="#" target="_blank" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-2xs">
-          <i class="fa-brands fa-whatsapp"></i> Send via WhatsApp
+        <a id="feeInvWhatsAppBtn" href="#" target="_blank" class="px-3 py-2 sm:px-4 sm:py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 shadow-2xs">
+          <i class="fa-brands fa-whatsapp"></i> WhatsApp
         </a>
-        <button onclick="closeModal('modalFeeInvoice')" class="px-5 py-2 bg-slate-800 hover:bg-black text-white rounded-xl text-xs font-bold transition shadow-2xs">
+        <button onclick="closeModal('modalFeeInvoice')" class="col-span-2 sm:col-span-1 px-4 py-2 sm:px-5 sm:py-2 bg-slate-800 hover:bg-black text-white rounded-xl text-xs font-bold transition shadow-2xs text-center">
           Done
         </button>
       </div>
@@ -4289,23 +4382,23 @@
   <!-- ============================================================ -->
   <!-- MODAL 3: STUDENT & FAMILY 12-MONTH ANNUAL LEDGER TIMELINE -->
   <!-- ============================================================ -->
-  <div id="modalFamilyAnnualLedger" class="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 hidden items-center justify-center p-3 sm:p-4 overflow-y-auto">
-    <div class="bg-white rounded-2xl max-w-4xl w-full border border-slate-200 shadow-2xl overflow-hidden my-6">
+  <div id="modalFamilyAnnualLedger" class="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 hidden items-center justify-center p-2 sm:p-4 overflow-y-auto">
+    <div class="bg-white rounded-2xl max-w-4xl w-full border border-slate-200 shadow-2xl overflow-hidden my-auto max-h-[94vh] flex flex-col">
       
-      <div class="p-4 sm:p-5 bg-gradient-to-r from-brandDark to-emerald-900 text-white flex justify-between items-center">
+      <div class="p-3.5 sm:p-5 bg-gradient-to-r from-brandDark to-emerald-900 text-white flex justify-between items-center shrink-0">
         <div>
-          <h3 class="font-extrabold text-base flex items-center gap-2 text-white">
+          <h3 class="font-extrabold text-sm sm:text-base flex items-center gap-2 text-white">
             <i class="fa-solid fa-scroll text-brandGold"></i> Student &amp; Family Annual Fee Ledger
           </h3>
-          <p id="familyLedgerSubtitle" class="text-xs text-emerald-200 mt-0.5">Family ID: -- • Parent: --</p>
+          <p id="familyLedgerSubtitle" class="text-[11px] sm:text-xs text-emerald-200 mt-0.5">Family ID: -- • Parent: --</p>
         </div>
         <button onclick="closeModal('modalFamilyAnnualLedger')" class="text-white/60 hover:text-white text-2xl font-bold leading-none">&times;</button>
       </div>
 
-      <div class="p-5 sm:p-6 space-y-5 max-h-[80vh] overflow-y-auto">
+      <div class="p-3.5 sm:p-6 space-y-4 sm:space-y-5 flex-1 overflow-y-auto touch-scroll">
         
         <!-- Top Family Summary Card -->
-        <div class="bg-slate-50 p-4 rounded-2xl border border-slate-200 flex justify-between items-center flex-wrap gap-4">
+        <div class="bg-slate-50 p-3 sm:p-4 rounded-xl sm:rounded-2xl border border-slate-200 flex justify-between items-start sm:items-center flex-col sm:flex-row gap-3 sm:gap-4">
           <div>
             <div id="ledgerParentName" class="text-sm font-black text-slate-900">--</div>
             <div class="text-xs text-slate-500 mt-0.5">
@@ -4314,14 +4407,14 @@
             <div id="ledgerContactInfo" class="text-xs text-slate-500 mt-0.5">--</div>
           </div>
 
-          <div class="flex items-center gap-4">
-            <div class="text-right">
-              <span class="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">Agreed Fee</span>
-              <span id="ledgerMonthlyFee" class="text-base font-black font-num text-emerald-800">--</span>
+          <div class="flex items-center justify-between w-full sm:w-auto gap-4 pt-2 sm:pt-0 border-t border-slate-200 sm:border-t-0">
+            <div class="text-left sm:text-right">
+              <span class="text-[10px] sm:text-[11px] font-bold text-slate-400 uppercase tracking-wider block">Agreed Fee</span>
+              <span id="ledgerMonthlyFee" class="text-sm sm:text-base font-black font-num text-emerald-800">--</span>
             </div>
             <div>
-              <label class="text-[11px] font-bold text-slate-500 block mb-1">Year:</label>
-              <select id="ledgerYearSelect" onchange="reloadFamilyLedgerData()" class="p-2 bg-white border border-slate-300 rounded-xl text-xs font-bold text-slate-800">
+              <label class="text-[10px] sm:text-[11px] font-bold text-slate-500 block mb-1">Year:</label>
+              <select id="ledgerYearSelect" onchange="reloadFamilyLedgerData()" class="p-1.5 sm:p-2 bg-white border border-slate-300 rounded-xl text-xs font-bold text-slate-800">
                 <option value="2025">2025</option>
                 <option value="2026" selected>2026</option>
                 <option value="2027">2027</option>
@@ -4332,21 +4425,21 @@
 
         <!-- 12-Month Calendar Grid -->
         <div>
-          <h4 class="text-xs font-extrabold text-slate-900 mb-2.5 flex items-center gap-2">
+          <h4 class="text-xs font-extrabold text-slate-900 mb-2 sm:mb-2.5 flex items-center gap-2">
             <i class="fa-solid fa-calendar-days text-emerald-700"></i> 12-Month Payment Status &amp; Submission Dates
           </h4>
-          <div id="ledgerMonthsGrid" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2.5">
+          <div id="ledgerMonthsGrid" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2 sm:gap-2.5">
             <!-- Dynamically populated 12 month cards -->
           </div>
         </div>
 
         <!-- Itemized Receipts History Table -->
         <div>
-          <h4 class="text-xs font-extrabold text-slate-900 mb-2.5 flex items-center gap-2">
+          <h4 class="text-xs font-extrabold text-slate-900 mb-2 sm:mb-2.5 flex items-center gap-2">
             <i class="fa-solid fa-clock-rotate-left text-emerald-700"></i> Historical Payment Receipts Log
           </h4>
-          <div class="overflow-x-auto max-h-56 rounded-xl border border-slate-200">
-            <table class="w-full text-left text-xs border-collapse">
+          <div class="overflow-x-auto touch-scroll max-h-56 rounded-xl border border-slate-200">
+            <table class="w-full text-left text-xs border-collapse min-w-[650px]">
               <thead class="bg-slate-50 text-slate-600 font-extrabold uppercase tracking-wider text-[11px] sticky top-0">
                 <tr>
                   <th class="p-2.5">Receipt #</th>
@@ -4369,11 +4462,11 @@
       </div>
 
       <!-- MODAL FOOTER -->
-      <div class="p-4 bg-slate-50 border-t border-slate-200 flex justify-end items-center gap-2.5">
-        <button onclick="closeModal('modalFamilyAnnualLedger')" class="px-4 py-2 border rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100">
+      <div class="p-3 sm:p-4 bg-slate-50 border-t border-slate-200 flex flex-col-reverse sm:flex-row justify-end items-stretch sm:items-center gap-2 sm:gap-2.5 shrink-0">
+        <button onclick="closeModal('modalFamilyAnnualLedger')" class="px-4 py-2 border rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100 text-center">
           Close
         </button>
-        <button onclick="ledgerCollectFeeNow()" class="px-5 py-2 bg-emerald-700 hover:bg-emerald-800 text-white rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-2xs">
+        <button onclick="ledgerCollectFeeNow()" class="px-5 py-2 bg-emerald-700 hover:bg-emerald-800 text-white rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 shadow-2xs">
           <i class="fa-solid fa-cash-register"></i> Collect Fee for this Family
         </button>
       </div>
@@ -4444,35 +4537,63 @@
       const sidebar = document.getElementById('mainAppSidebar');
       const content = document.getElementById('mainContentArea');
       const backdrop = document.getElementById('sidebarBackdrop');
-      const isCollapsed = sidebar.classList.contains('sidebar-collapsed');
-      if (isCollapsed) {
-        // Expand
-        sidebar.classList.remove('sidebar-collapsed');
-        content?.classList.remove('sidebar-collapsed');
-        // Show backdrop on mobile
-        if (window.innerWidth < 1024 && backdrop) backdrop.classList.remove('hidden');
-        localStorage.setItem('alhuda_sidebar_collapsed', 'false');
+
+      if (window.innerWidth < 1024) {
+        // Mobile off-canvas drawer mode
+        const isOpen = sidebar.classList.contains('sidebar-mobile-open');
+        if (isOpen) {
+          sidebar.classList.remove('sidebar-mobile-open');
+          if (backdrop) backdrop.classList.add('hidden');
+        } else {
+          sidebar.classList.add('sidebar-mobile-open');
+          if (backdrop) backdrop.classList.remove('hidden');
+        }
       } else {
-        // Collapse
-        sidebar.classList.add('sidebar-collapsed');
-        content?.classList.add('sidebar-collapsed');
-        if (backdrop) backdrop.classList.add('hidden');
-        localStorage.setItem('alhuda_sidebar_collapsed', 'true');
+        // Desktop collapse mode
+        const isCollapsed = sidebar.classList.contains('sidebar-collapsed');
+        if (isCollapsed) {
+          sidebar.classList.remove('sidebar-collapsed');
+          content?.classList.remove('sidebar-collapsed');
+          localStorage.setItem('alhuda_sidebar_collapsed', 'false');
+        } else {
+          sidebar.classList.add('sidebar-collapsed');
+          content?.classList.add('sidebar-collapsed');
+          localStorage.setItem('alhuda_sidebar_collapsed', 'true');
+        }
       }
     }
 
-    // Restore sidebar state from localStorage
+    // Restore sidebar state from localStorage (desktop only)
     (function() {
-      const saved = localStorage.getItem('alhuda_sidebar_collapsed');
-      if (saved === 'true') {
-        const sidebar = document.getElementById('mainAppSidebar');
-        const content = document.getElementById('mainContentArea');
-        if (sidebar) sidebar.classList.add('sidebar-collapsed');
-        if (content) content.classList.add('sidebar-collapsed');
+      if (window.innerWidth >= 1024) {
+        const saved = localStorage.getItem('alhuda_sidebar_collapsed');
+        if (saved === 'true') {
+          const sidebar = document.getElementById('mainAppSidebar');
+          const content = document.getElementById('mainContentArea');
+          if (sidebar) sidebar.classList.add('sidebar-collapsed');
+          if (content) content.classList.add('sidebar-collapsed');
+        }
       }
     })();
 
+    window.addEventListener('resize', () => {
+      if (window.innerWidth >= 1024) {
+        const sidebar = document.getElementById('mainAppSidebar');
+        const backdrop = document.getElementById('sidebarBackdrop');
+        if (sidebar) sidebar.classList.remove('sidebar-mobile-open');
+        if (backdrop) backdrop.classList.add('hidden');
+      }
+    });
+
     function switchTab(tabId) {
+      // Auto-close mobile drawer when user navigates on small screens
+      if (window.innerWidth < 1024) {
+        const sidebar = document.getElementById('mainAppSidebar');
+        const backdrop = document.getElementById('sidebarBackdrop');
+        if (sidebar) sidebar.classList.remove('sidebar-mobile-open');
+        if (backdrop) backdrop.classList.add('hidden');
+      }
+
       // Reset all sidebar nav buttons
       document.querySelectorAll('.sidebar-nav-btn').forEach(btn => {
         btn.classList.remove('active', 'bg-brandDark', 'text-white', 'shadow');
@@ -10729,14 +10850,14 @@ Al-Huda Islamic Centre Management`;
 
         return `
           <tr class="hover:bg-slate-50 transition">
-            <td class="p-2.5 text-left font-mono font-bold text-slate-800">${r.familyId}</td>
-            <td class="p-2.5 text-left">
-              <strong class="text-slate-900 font-bold block">${r.studentsNames}</strong>
-              <span class="text-[10px] text-slate-400">${r.parentName} (${r.currency} ${r.monthlyFee.toFixed(0)}/m)</span>
+            <td class="p-2.5 text-left font-mono font-bold text-slate-800 bg-white sticky left-0 z-20 shadow-[2px_0_5px_rgba(0,0,0,0.06)]">${r.familyId}</td>
+            <td class="p-2.5 text-left bg-white sticky left-[90px] z-20 shadow-[2px_0_5px_rgba(0,0,0,0.06)]">
+              <strong class="text-slate-900 font-bold block truncate max-w-[130px] sm:max-w-none">${r.studentsNames}</strong>
+              <span class="text-[10px] text-slate-400 block truncate max-w-[130px] sm:max-w-none">${r.parentName} (${r.currency} ${r.monthlyFee.toFixed(0)}/m)</span>
             </td>
             ${monthsHtml}
-            <td class="p-2 text-center">
-              <button onclick="openFamilyAnnualLedgerModal('${r.familyId}')" class="px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-[10px] font-bold transition" title="View Full 12-Month Ledger">
+            <td class="p-2 text-center bg-slate-50/50">
+              <button onclick="openFamilyAnnualLedgerModal('${r.familyId}')" class="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-[10px] font-bold transition shadow-2xs" title="View Full 12-Month Ledger">
                 Ledger
               </button>
             </td>
