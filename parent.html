@@ -46,6 +46,19 @@
       -webkit-font-smoothing: antialiased;
     }
 
+    /* Mobile Touch & Scroll Utilities */
+    .touch-scroll {
+      -webkit-overflow-scrolling: touch;
+      overscroll-behavior-x: contain;
+    }
+    .no-scrollbar::-webkit-scrollbar {
+      display: none;
+    }
+    .no-scrollbar {
+      -ms-overflow-style: none;
+      scrollbar-width: none;
+    }
+
     .font-mono, td.font-mono, span.font-mono {
       font-family: 'JetBrains Mono', monospace !important;
       font-feature-settings: 'tnum' 1, 'zero' 1;
@@ -110,9 +123,9 @@
           </button>
 
           <!-- User Badge -->
-          <div class="px-3 py-1 rounded-lg bg-white/10 text-emerald-100 text-xs font-semibold flex items-center gap-2 border border-white/10">
+          <div class="px-2.5 sm:px-3 py-1 rounded-lg bg-white/10 text-emerald-100 text-xs font-semibold flex items-center gap-1.5 sm:gap-2 border border-white/10">
             <i class="fa-solid fa-user-graduate text-brandGold"></i>
-            <span id="parentUserBadge">Student Account</span>
+            <span id="parentUserBadge" class="max-w-[85px] sm:max-w-none truncate">Student Account</span>
           </div>
 
           <!-- Logout Button -->
@@ -239,11 +252,11 @@
   </main>
 
   <!-- ================= MODAL: COURSE MATERIAL LIBRARY (13 BOOKS EXPLORER) ================= -->
-  <div id="modalParentLibrary" class="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-xs flex items-center justify-center p-4 hidden">
-    <div class="bg-white rounded-3xl max-w-5xl w-full max-h-[90vh] flex flex-col shadow-2xl border border-slate-200 overflow-hidden">
+  <div id="modalParentLibrary" class="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-xs flex items-center justify-center p-2 sm:p-4 overflow-y-auto hidden">
+    <div class="bg-white rounded-3xl max-w-5xl w-full max-h-[92vh] flex flex-col shadow-2xl border border-slate-200 overflow-hidden my-auto">
       
       <!-- Modal Header -->
-      <div class="p-5 bg-gradient-to-r from-brandDarkest to-brandDark text-white flex items-center justify-between">
+      <div class="p-4 sm:p-5 bg-gradient-to-r from-brandDarkest to-brandDark text-white flex items-center justify-between shrink-0">
         <div class="flex items-center gap-3">
           <div class="w-9 h-9 rounded-xl bg-amber-400/20 text-amber-300 flex items-center justify-center font-bold text-lg border border-amber-400/30">
             <i class="fa-solid fa-book-quran"></i>
@@ -260,15 +273,15 @@
       </div>
 
       <!-- Library Grid -->
-      <div class="p-6 overflow-y-auto custom-scrollbar flex-1">
-        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4" id="parentLibraryGrid">
+      <div class="p-4 sm:p-6 overflow-y-auto touch-scroll custom-scrollbar flex-1">
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4" id="parentLibraryGrid">
           <!-- Rendered dynamically from curriculum_data.js -->
         </div>
       </div>
 
       <!-- Modal Footer -->
-      <div class="p-4 bg-slate-50 border-t border-slate-200 flex justify-end">
-        <button onclick="closeParentLibraryModal()" class="px-5 py-2 rounded-xl bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold text-xs transition">
+      <div class="p-3 sm:p-4 bg-slate-50 border-t border-slate-200 flex justify-end shrink-0">
+        <button onclick="closeParentLibraryModal()" class="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold text-xs transition text-center">
           Close Library
         </button>
       </div>
@@ -280,34 +293,35 @@
   <div id="modalParentBookReader" class="fixed inset-0 z-50 bg-slate-950/85 backdrop-blur-md flex flex-col hidden select-none">
     
     <!-- Reader Top Toolbar -->
-    <div class="h-16 bg-slate-900/95 border-b border-slate-800 text-white px-4 sm:px-6 flex items-center justify-between flex-shrink-0 z-10 shadow-lg">
-      <div class="flex items-center gap-3 min-w-0">
-        <button onclick="closeParentBookReader()" class="p-2 rounded-xl hover:bg-slate-800 text-slate-300 hover:text-white transition" title="Back to Portal">
+    <div class="h-16 bg-slate-900/95 border-b border-slate-800 text-white px-3 sm:px-6 flex items-center justify-between flex-shrink-0 z-10 shadow-lg">
+      <div class="flex items-center gap-2.5 sm:gap-3 min-w-0">
+        <button onclick="closeParentBookReader()" class="p-2 rounded-xl hover:bg-slate-800 text-slate-300 hover:text-white transition flex-shrink-0" title="Back to Portal">
           <i class="fa-solid fa-arrow-left text-lg"></i>
         </button>
         
         <div class="min-w-0">
-          <h2 id="parentReaderBookTitle" class="font-extrabold text-sm sm:text-base text-amber-200 truncate">Book Title</h2>
-          <div class="flex items-center gap-2 text-[11px] text-slate-400">
-            <span id="parentReaderCategoryBadge" class="bg-emerald-950 text-emerald-400 px-2 py-0.2 rounded border border-emerald-800/60 font-medium">Category</span>
-            <span id="parentReaderPageBadge" class="font-mono font-bold text-slate-300">Page 1 of 32</span>
+          <h2 id="parentReaderBookTitle" class="font-extrabold text-xs sm:text-base text-amber-200 truncate max-w-[130px] sm:max-w-xs md:max-w-md">Book Title</h2>
+          <div class="flex items-center gap-2 text-[10px] sm:text-[11px] text-slate-400">
+            <span id="parentReaderCategoryBadge" class="bg-emerald-950 text-emerald-400 px-1.5 sm:px-2 py-0.2 rounded border border-emerald-800/60 font-medium truncate max-w-[80px] sm:max-w-none">Category</span>
+            <span id="parentReaderPageBadge" class="font-mono font-bold text-slate-300 whitespace-nowrap">Page 1 of 32</span>
           </div>
         </div>
       </div>
 
       <!-- Center / Right Controls: Zoom & Fullscreen -->
-      <div class="flex items-center gap-1.5 sm:gap-2">
-        <button onclick="parentReaderZoomOut()" class="p-2 w-9 h-9 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 transition flex items-center justify-center text-xs" title="Zoom Out">
-          <i class="fa-solid fa-magnifying-glass-minus"></i>
-        </button>
-        <button onclick="parentReaderResetZoom()" class="px-2 h-9 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 transition text-[11px] font-bold font-mono" id="parentReaderZoomLevel">
-          100%
-        </button>
-        <button onclick="parentReaderZoomIn()" class="p-2 w-9 h-9 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 transition flex items-center justify-center text-xs" title="Zoom In">
-          <i class="fa-solid fa-magnifying-glass-plus"></i>
-        </button>
-        
-        <div class="h-6 w-px bg-slate-700 mx-1 hidden sm:block"></div>
+      <div class="flex items-center gap-1.5 sm:gap-2 flex-shrink-0">
+        <div class="hidden sm:flex items-center gap-1.5">
+          <button onclick="parentReaderZoomOut()" class="p-2 w-9 h-9 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 transition flex items-center justify-center text-xs" title="Zoom Out">
+            <i class="fa-solid fa-magnifying-glass-minus"></i>
+          </button>
+          <button onclick="parentReaderResetZoom()" class="px-2 h-9 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 transition text-[11px] font-bold font-mono" id="parentReaderZoomLevel">
+            100%
+          </button>
+          <button onclick="parentReaderZoomIn()" class="p-2 w-9 h-9 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 transition flex items-center justify-center text-xs" title="Zoom In">
+            <i class="fa-solid fa-magnifying-glass-plus"></i>
+          </button>
+          <div class="h-6 w-px bg-slate-700 mx-1"></div>
+        </div>
 
         <button onclick="toggleParentReaderFullscreen()" class="p-2 w-9 h-9 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 transition flex items-center justify-center text-xs" title="Fullscreen">
           <i class="fa-solid fa-expand"></i>
@@ -322,8 +336,8 @@
     <div class="flex-1 bg-slate-950 relative overflow-auto flex items-center justify-center p-2 sm:p-6 custom-scrollbar" id="parentReaderCanvasContainer">
       
       <!-- Left Page Turn Arrow (Next in RTL Arabic/Urdu) -->
-      <button onclick="parentReaderTurnRight()" class="absolute left-3 top-1/2 -translate-y-1/2 z-20 w-11 h-11 rounded-full bg-slate-900/80 hover:bg-brandEmerald text-white flex items-center justify-center shadow-xl border border-slate-700 transition" title="Next Page (Arabic RTL: Turn Left)">
-        <i class="fa-solid fa-chevron-left text-lg"></i>
+      <button onclick="parentReaderTurnRight()" class="absolute left-2 sm:left-3 top-1/2 -translate-y-1/2 z-20 w-9 h-9 sm:w-11 sm:h-11 rounded-full bg-slate-900/80 hover:bg-brandEmerald text-white flex items-center justify-center shadow-xl border border-slate-700 transition" title="Next Page (Arabic RTL: Turn Left)">
+        <i class="fa-solid fa-chevron-left text-sm sm:text-lg"></i>
       </button>
 
       <!-- Center Page Frame -->
@@ -335,20 +349,23 @@
       </div>
 
       <!-- Right Page Turn Arrow (Previous in RTL Arabic/Urdu) -->
-      <button onclick="parentReaderTurnLeft()" class="absolute right-3 top-1/2 -translate-y-1/2 z-20 w-11 h-11 rounded-full bg-slate-900/80 hover:bg-brandEmerald text-white flex items-center justify-center shadow-xl border border-slate-700 transition" title="Previous Page (Arabic RTL: Turn Right)">
-        <i class="fa-solid fa-chevron-right text-lg"></i>
+      <button onclick="parentReaderTurnLeft()" class="absolute right-2 sm:right-3 top-1/2 -translate-y-1/2 z-20 w-9 h-9 sm:w-11 sm:h-11 rounded-full bg-slate-900/80 hover:bg-brandEmerald text-white flex items-center justify-center shadow-xl border border-slate-700 transition" title="Previous Page (Arabic RTL: Turn Right)">
+        <i class="fa-solid fa-chevron-right text-sm sm:text-lg"></i>
       </button>
     </div>
 
     <!-- Reader Bottom Controls & Slider Bar -->
-    <div class="h-20 bg-slate-900/95 border-t border-slate-800 text-white px-4 sm:px-8 flex flex-col justify-center flex-shrink-0 z-10 space-y-1 shadow-2xl">
+    <div class="h-20 bg-slate-900/95 border-t border-slate-800 text-white px-3 sm:px-8 flex flex-col justify-center flex-shrink-0 z-10 space-y-1 shadow-2xl">
       <div class="flex items-center justify-between text-xs text-slate-400">
-        <span class="flex items-center gap-1.5">
+        <span class="hidden sm:flex items-center gap-1.5">
           <i class="fa-solid fa-keyboard text-brandGold"></i> Use Left &amp; Right Arrow keys to flip pages
         </span>
+        <span class="sm:hidden text-[10px] text-slate-400">
+          Swipe or tap arrows to flip
+        </span>
         <div class="flex items-center gap-2 font-mono">
-          <span>Jump to:</span>
-          <select id="parentReaderJumpSelect" onchange="parentReaderJumpToPage(parseInt(this.value))" class="bg-slate-800 text-amber-200 border border-slate-700 rounded-lg px-2 py-1 text-xs font-bold focus:outline-none focus:border-brandEmerald">
+          <span class="text-[10px] sm:text-xs">Jump:</span>
+          <select id="parentReaderJumpSelect" onchange="parentReaderJumpToPage(parseInt(this.value))" class="bg-slate-800 text-amber-200 border border-slate-700 rounded-lg px-2 py-1 text-[11px] sm:text-xs font-bold focus:outline-none focus:border-brandEmerald max-w-[120px] sm:max-w-none">
             <!-- Populated dynamically -->
           </select>
         </div>
