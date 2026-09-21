@@ -4,6 +4,17 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Parent & Student Portal - Al-Huda & BQI LMS</title>
+
+  <!-- Progressive Web App (PWA) Manifest & Icons -->
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#064e3b">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Al-Huda LMS">
+  <link rel="apple-touch-icon" href="apple-touch-icon.png">
+  <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
+  <link rel="icon" type="image/png" sizes="64x64" href="favicon.png">
   
   <!-- Google Fonts & Font Awesome (Plus Jakarta Sans, JetBrains Mono, Outfit, Amiri) -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -932,6 +943,15 @@
         } else if (e.key === 'Escape') {
           closeParentBookReader();
         }
+      });
+    }
+
+    // PWA Service Worker Registration
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('sw.js', { scope: '/' })
+          .then(reg => console.log('[PWA Parent] Service Worker registered:', reg.scope))
+          .catch(err => console.warn('[PWA Parent] Service Worker registration failed:', err));
       });
     }
   </script>

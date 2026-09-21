@@ -1,0 +1,55 @@
+{
+  "name": "Al-Huda Islamic Centre LMS",
+  "short_name": "Al-Huda LMS",
+  "description": "Official Learning Management System - Al-Huda Islamic Centre",
+  "start_url": "/index.html",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#064e3b",
+  "theme_color": "#064e3b",
+  "categories": ["education", "productivity"],
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/apple-touch-icon.png",
+      "sizes": "180x180",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/favicon.png",
+      "sizes": "64x64",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Admin Dashboard",
+      "url": "/index.html",
+      "description": "Open Al-Huda Admin Dashboard"
+    },
+    {
+      "name": "Teacher Portal",
+      "url": "/teacher.html",
+      "description": "Open Teacher Operations Portal"
+    },
+    {
+      "name": "Parent Portal",
+      "url": "/parent.html",
+      "description": "Open Student & Parent Learning Portal"
+    }
+  ]
+}

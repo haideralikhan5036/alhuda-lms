@@ -5,6 +5,17 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, viewport-fit=cover">
   <title>Al-Huda Islamic Centre - Complete Cloud LMS</title>
   
+  <!-- Progressive Web App (PWA) Manifest & Icons -->
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#064e3b">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Al-Huda LMS">
+  <link rel="apple-touch-icon" href="apple-touch-icon.png">
+  <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
+  <link rel="icon" type="image/png" sizes="64x64" href="favicon.png">
+  
   <!-- Modern Fonts & Icons (Plus Jakarta Sans, JetBrains Mono, Outfit for Luxury Numbers, Cinzel) -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -278,6 +289,12 @@
           <span id="badgeReturnAlertsCount" class="px-1.5 py-0.2 rounded-full text-[10px] font-mono bg-rose-600 text-white font-black">0</span>
         </button>
 
+        <!-- PWA Install App Button (Desktop & Mobile) -->
+        <button id="btnPwaInstallHeader" onclick="triggerPwaInstall()" class="flex px-2.5 sm:px-3 py-1.5 rounded-full bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-slate-950 font-extrabold text-[11px] sm:text-xs border border-amber-300 shadow transition items-center gap-1.5 shrink-0 cursor-pointer" title="Install Official Al-Huda LMS App on PC / Mobile">
+          <i class="fa-solid fa-arrow-down-to-bracket text-xs"></i>
+          <span>Install App</span>
+        </button>
+
         <a href="teacher.html" target="_blank" class="hidden sm:flex px-2.5 py-1.5 rounded-full bg-emerald-800/60 hover:bg-emerald-700 text-emerald-200 border border-emerald-500/40 text-xs font-bold transition items-center gap-1.5 shadow-xs shrink-0" title="Open Dedicated Teacher Operations Portal">
           <i class="fa-solid fa-chalkboard-user text-brandGold text-xs"></i> <span class="hidden lg:inline">Teacher Portal</span>
         </a>
@@ -362,6 +379,20 @@
       <div class="flex items-center gap-2 px-2 py-1.5 rounded-lg bg-teal-50 border border-teal-200 text-xs font-bold text-teal-900">
         <i class="fa-solid fa-user-graduate text-teal-600"></i>
         <span>Students: <span id="sidebarActiveStudents" class="font-mono font-black">0</span></span>
+      </div>
+
+      <!-- PWA Install Mobile/Desktop Card -->
+      <div id="pwaInstallDrawerCard" class="p-2.5 rounded-xl bg-gradient-to-br from-emerald-950 via-slate-900 to-emerald-900 border border-emerald-500/40 text-white text-xs shadow-md">
+        <div class="flex items-center gap-2 mb-1">
+          <div class="w-6 h-6 rounded-full bg-amber-500 flex items-center justify-center text-slate-950 font-bold text-xs shrink-0">
+            <i class="fa-solid fa-mobile-screen"></i>
+          </div>
+          <span class="font-bold text-amber-300 text-xs">Install LMS App</span>
+        </div>
+        <p class="text-[10px] text-slate-300 mb-2 leading-tight">Install Al-Huda LMS with official crest icon on your Home Screen or Desktop.</p>
+        <button onclick="triggerPwaInstall()" class="w-full py-1.5 px-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-slate-950 font-black rounded-lg text-xs transition flex items-center justify-center gap-1.5 shadow">
+          <i class="fa-solid fa-arrow-down-to-bracket text-xs"></i> Install App Now
+        </button>
       </div>
     </div>
   </aside>
@@ -1236,6 +1267,10 @@
         </div>
 
         <div class="flex items-center gap-2.5 flex-wrap">
+          <div id="feeCloudSyncBadge" onclick="manualFeeCloudSync()" class="cursor-pointer px-2.5 py-2 bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 rounded-xl text-xs font-bold text-emerald-800 transition flex items-center gap-1.5 shadow-xs shrink-0" title="Live Cross-Device Cloud Sync. Click to instantly re-sync.">
+            <i id="feeCloudSyncIcon" class="fa-solid fa-cloud-check text-emerald-600"></i>
+            <span id="feeCloudSyncText">Cloud Synced</span>
+          </div>
           <button onclick="switchFeeSubTab('fee-subtab-collect')" class="px-4 py-2 bg-emerald-700 hover:bg-emerald-800 text-white rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-sm">
             <i class="fa-solid fa-cash-register"></i> Collect Fee (1-Click)
           </button>
@@ -9176,16 +9211,265 @@ Al-Huda Islamic Centre Management`;
     let CURRENT_MATRIX_ACTION_DATA = null;
     let CURRENT_LEDGER_FAMILY_ID = null;
 
-    // Persistent storage helpers
-    function getStoredFeeRecords() {
+    // ============================================================
+    // REAL-TIME CLOUD FEE SYNC ENGINE (Supabase + Local Fallback)
+    // Cross-device synchronization for Desktop PC & Mobile Phone
+    // ============================================================
+    let CLOUD_FEE_RECORDS_CACHE = null;
+    let CLOUD_MATRIX_OVERRIDES_CACHE = null;
+    let LAST_CLOUD_FEE_SYNC_TIME = null;
+
+    function parseFamilyNotesData(notesRaw) {
+      if (!notesRaw) return { fee_history: [], matrix_overrides: {} };
+      if (typeof notesRaw === 'object') {
+        return {
+          ...notesRaw,
+          fee_history: Array.isArray(notesRaw.fee_history) ? notesRaw.fee_history : [],
+          matrix_overrides: (notesRaw.matrix_overrides && typeof notesRaw.matrix_overrides === 'object') ? notesRaw.matrix_overrides : {}
+        };
+      }
+      if (typeof notesRaw === 'string') {
+        try {
+          const parsed = JSON.parse(notesRaw);
+          if (parsed && typeof parsed === 'object') {
+            return {
+              ...parsed,
+              fee_history: Array.isArray(parsed.fee_history) ? parsed.fee_history : [],
+              matrix_overrides: (parsed.matrix_overrides && typeof parsed.matrix_overrides === 'object') ? parsed.matrix_overrides : {}
+            };
+          }
+        } catch (e) {
+          return {
+            custom_notes: notesRaw,
+            fee_history: [],
+            matrix_overrides: {}
+          };
+        }
+      }
+      return { fee_history: [], matrix_overrides: {} };
+    }
+
+    function updateCloudSyncIndicator(status) {
+      const icon = document.getElementById('feeCloudSyncIcon');
+      const text = document.getElementById('feeCloudSyncText');
+      const badge = document.getElementById('feeCloudSyncBadge');
+      if (!badge) return;
+      if (status === 'syncing') {
+        if (icon) icon.className = "fa-solid fa-arrows-rotate fa-spin text-amber-600";
+        if (text) text.innerText = "Syncing...";
+      } else if (status === 'synced') {
+        if (icon) icon.className = "fa-solid fa-cloud-check text-emerald-600";
+        if (text) text.innerText = "Cloud Synced";
+      } else if (status === 'offline') {
+        if (icon) icon.className = "fa-solid fa-cloud text-slate-400";
+        if (text) text.innerText = "Offline Cache";
+      }
+    }
+
+    async function ingestFeeDataFromFamilies(families) {
       try {
-        return JSON.parse(localStorage.getItem('alhuda_fee_records') || '[]');
+        const cloudRecordsMap = new Map();
+        const cloudOverrides = {};
+
+        // 1. Read existing local storage records (for backwards-compatible auto-migration from PC)
+        const localRecords = (() => {
+          try { return JSON.parse(localStorage.getItem('alhuda_fee_records') || '[]'); } catch(e) { return []; }
+        })();
+        const localOverrides = (() => {
+          try { return JSON.parse(localStorage.getItem('alhuda_fee_matrix_overrides') || '{}'); } catch(e) { return {}; }
+        })();
+
+        const familiesToMigrate = new Set();
+
+        (families || []).forEach(f => {
+          if (!f || !f.id) return;
+          const notesObj = parseFamilyNotesData(f.notes);
+
+          // Ingest cloud fee receipts
+          if (Array.isArray(notesObj.fee_history)) {
+            notesObj.fee_history.forEach(r => {
+              if (r && r.receiptNo) {
+                cloudRecordsMap.set(r.receiptNo, r);
+              }
+            });
+          }
+
+          // Ingest cloud matrix overrides
+          if (notesObj.matrix_overrides && typeof notesObj.matrix_overrides === 'object') {
+            Object.assign(cloudOverrides, notesObj.matrix_overrides);
+          }
+
+          // Check if local device has receipts for this family that aren't yet in the cloud!
+          const fIdUpper = String(f.id).toUpperCase();
+          const unmigratedLocal = localRecords.filter(r => String(r.familyId).toUpperCase() === fIdUpper && !cloudRecordsMap.has(r.receiptNo));
+          if (unmigratedLocal.length > 0) {
+            unmigratedLocal.forEach(r => cloudRecordsMap.set(r.receiptNo, r));
+            familiesToMigrate.add(f.id);
+          }
+
+          // Check if local device has matrix overrides not yet in cloud
+          Object.keys(localOverrides).forEach(k => {
+            if (k.toUpperCase().startsWith(fIdUpper + '_') || k.toUpperCase() === `ADM_${fIdUpper}`) {
+              if (!(k in cloudOverrides)) {
+                cloudOverrides[k] = localOverrides[k];
+                familiesToMigrate.add(f.id);
+              }
+            }
+          });
+        });
+
+        // Sort all records descending by date / receipt
+        const combinedRecords = Array.from(cloudRecordsMap.values()).sort((a, b) => {
+          const da = new Date(a.date || a.created_at || 0).getTime();
+          const db_ = new Date(b.date || b.created_at || 0).getTime();
+          return db_ - da;
+        });
+
+        CLOUD_FEE_RECORDS_CACHE = combinedRecords;
+        CLOUD_MATRIX_OVERRIDES_CACHE = cloudOverrides;
+        LAST_CLOUD_FEE_SYNC_TIME = new Date();
+
+        // Also mirror to localStorage for instant offline fallback
+        try {
+          localStorage.setItem('alhuda_fee_records', JSON.stringify(combinedRecords));
+          localStorage.setItem('alhuda_fee_matrix_overrides', JSON.stringify(cloudOverrides));
+        } catch(e) {}
+
+        updateCloudSyncIndicator('synced');
+
+        // Asynchronously migrate any un-synced families to Supabase
+        if (familiesToMigrate.size > 0) {
+          console.log(`[Cloud Fee Sync] Auto-migrating ${familiesToMigrate.size} families to Supabase...`);
+          familiesToMigrate.forEach(async (famId) => {
+            try {
+              const famRecords = combinedRecords.filter(r => String(r.familyId).toUpperCase() === String(famId).toUpperCase());
+              await syncPaymentRecordsBatchToCloud(famId, famRecords);
+              await syncMatrixOverridesToCloud(famId, cloudOverrides);
+            } catch (e) {
+              console.warn("[Cloud Migration] Error uploading family:", famId, e);
+            }
+          });
+        }
+      } catch (err) {
+        console.error("[Cloud Fee Sync] Ingestion error:", err);
+      }
+    }
+
+    async function syncPaymentRecordsBatchToCloud(familyId, newRecords) {
+      try {
+        const fId = String(familyId).trim();
+        if (!fId || !newRecords || newRecords.length === 0) return;
+
+        updateCloudSyncIndicator('syncing');
+
+        // Fetch latest family notes from Supabase
+        const { data: fam, error } = await db.from('families').select('id, notes').eq('id', fId).maybeSingle();
+        if (error) {
+          console.warn("[Cloud Fee Sync] Error fetching family:", error);
+          return;
+        }
+
+        const notesObj = parseFamilyNotesData(fam?.notes);
+        if (!Array.isArray(notesObj.fee_history)) {
+          notesObj.fee_history = [];
+        }
+
+        // Prepend new records (avoiding duplicates by receiptNo)
+        newRecords.forEach(nr => {
+          const existsIdx = notesObj.fee_history.findIndex(r => r.receiptNo === nr.receiptNo);
+          if (existsIdx >= 0) {
+            notesObj.fee_history[existsIdx] = nr;
+          } else {
+            notesObj.fee_history.unshift(nr);
+          }
+        });
+
+        const { error: upErr } = await db.from('families').update({
+          notes: JSON.stringify(notesObj)
+        }).eq('id', fId);
+
+        if (upErr) {
+          console.error("[Cloud Fee Sync] Supabase update error:", upErr);
+        } else {
+          console.log(`[Cloud Fee Sync] Successfully synced ${newRecords.length} fee records for ${fId} to Supabase`);
+          updateCloudSyncIndicator('synced');
+        }
+      } catch (e) {
+        console.error("[Cloud Fee Sync] Fatal sync exception:", e);
+      }
+    }
+
+    async function syncMatrixOverridesToCloud(familyId, overrides) {
+      try {
+        const fId = String(familyId).trim();
+        if (!fId) return;
+        const fIdUpper = fId.toUpperCase();
+
+        updateCloudSyncIndicator('syncing');
+
+        const { data: fam, error } = await db.from('families').select('id, notes').eq('id', fId).maybeSingle();
+        if (error) {
+          console.warn("[Cloud Matrix Sync] Error fetching family:", error);
+          return;
+        }
+
+        const notesObj = parseFamilyNotesData(fam?.notes);
+        if (!notesObj.matrix_overrides || typeof notesObj.matrix_overrides !== 'object') {
+          notesObj.matrix_overrides = {};
+        }
+
+        // Apply overrides for this family
+        Object.keys(overrides || {}).forEach(k => {
+          if (k.toUpperCase().startsWith(fIdUpper + '_') || k.toUpperCase() === `ADM_${fIdUpper}`) {
+            notesObj.matrix_overrides[k] = overrides[k];
+          }
+        });
+
+        // Remove deleted overrides for this family
+        Object.keys(notesObj.matrix_overrides).forEach(k => {
+          if ((k.toUpperCase().startsWith(fIdUpper + '_') || k.toUpperCase() === `ADM_${fIdUpper}`) && !(k in overrides)) {
+            delete notesObj.matrix_overrides[k];
+          }
+        });
+
+        const { error: upErr } = await db.from('families').update({
+          notes: JSON.stringify(notesObj)
+        }).eq('id', fId);
+
+        if (upErr) {
+          console.error("[Cloud Matrix Sync] Supabase update error:", upErr);
+        } else {
+          console.log(`[Cloud Matrix Sync] Synced matrix overrides for ${fId} to Supabase`);
+          updateCloudSyncIndicator('synced');
+        }
+      } catch (e) {
+        console.error("[Cloud Matrix Sync] Fatal sync exception:", e);
+      }
+    }
+
+    async function manualFeeCloudSync() {
+      updateCloudSyncIndicator('syncing');
+      showToastNotification("Syncing latest fee records with cloud...");
+      await loadFeeBillingLedger();
+      showToastNotification("Fee records 100% synchronized across all devices!");
+    }
+
+    // Persistent storage helpers (Hybrid Cloud Cache + Local Fallback)
+    function getStoredFeeRecords() {
+      if (CLOUD_FEE_RECORDS_CACHE !== null && Array.isArray(CLOUD_FEE_RECORDS_CACHE)) {
+        return CLOUD_FEE_RECORDS_CACHE;
+      }
+      try {
+        const local = JSON.parse(localStorage.getItem('alhuda_fee_records') || '[]');
+        CLOUD_FEE_RECORDS_CACHE = local;
+        return local;
       } catch (e) {
         return [];
       }
     }
 
     function saveStoredFeeRecords(records) {
+      CLOUD_FEE_RECORDS_CACHE = records;
       try {
         localStorage.setItem('alhuda_fee_records', JSON.stringify(records));
       } catch (e) {
@@ -9194,14 +9478,20 @@ Al-Huda Islamic Centre Management`;
     }
 
     function getStoredMatrixOverrides() {
+      if (CLOUD_MATRIX_OVERRIDES_CACHE !== null && typeof CLOUD_MATRIX_OVERRIDES_CACHE === 'object') {
+        return CLOUD_MATRIX_OVERRIDES_CACHE;
+      }
       try {
-        return JSON.parse(localStorage.getItem('alhuda_fee_matrix_overrides') || '{}');
+        const local = JSON.parse(localStorage.getItem('alhuda_fee_matrix_overrides') || '{}');
+        CLOUD_MATRIX_OVERRIDES_CACHE = local;
+        return local;
       } catch (e) {
         return {};
       }
     }
 
     function saveStoredMatrixOverrides(overrides) {
+      CLOUD_MATRIX_OVERRIDES_CACHE = overrides;
       try {
         localStorage.setItem('alhuda_fee_matrix_overrides', JSON.stringify(overrides));
       } catch (e) {
@@ -9241,8 +9531,13 @@ Al-Huda Islamic Centre Management`;
     // Main entrypoint when switching to tab-invoices
     async function loadFeeBillingLedger() {
       try {
+        updateCloudSyncIndicator('syncing');
+
         // 1. Fetch fresh regular families from Supabase
         const { data: families } = await db.from('families').select('*, students(*)').order('created_at', { ascending: false });
+
+        // 2. Ingest cloud fee history and matrix overrides from Supabase into cache
+        await ingestFeeDataFromFamilies(families);
 
         CACHED_FEE_FAMILIES = (families || []).filter(f => {
           if ((f.status || '').toLowerCase() === 'trial') return false;
@@ -9381,7 +9676,14 @@ Al-Huda Islamic Centre Management`;
 
       // 4. Check family notes for joined/admission date string
       if (!earliestDate && fam.notes) {
-        const m = String(fam.notes).match(/joined:?\s*(\d{4})[-/](\d{1,2})/i) || String(fam.notes).match(/(\d{4})[-/](\d{1,2})/);
+        let noteStr = fam.notes;
+        if (typeof fam.notes === 'string') {
+          try {
+            const p = JSON.parse(fam.notes);
+            noteStr = p.admission_date || p.joined_date || p.custom_notes || (typeof p === 'string' ? p : '');
+          } catch(e) {}
+        }
+        const m = String(noteStr).match(/joined:?\s*(\d{4})[-/](\d{1,2})/i) || String(noteStr).match(/(\d{4})[-/](\d{1,2})/);
         if (m) {
           const y = parseInt(m[1], 10);
           const mi = parseInt(m[2], 10) - 1;
@@ -10192,6 +10494,7 @@ Al-Huda Islamic Centre Management`;
       };
 
       // Handle multi-month advance sequence records in storage
+      const addedBatch = [];
       if (isAdvance && advanceCount > 1) {
         const mIdx = FEE_CONFIG.MONTHS.findIndex(m => m.toLowerCase() === paymentRecord.month.toLowerCase());
         const singleFee = paymentRecord.monthlyFee / advanceCount;
@@ -10199,7 +10502,7 @@ Al-Huda Islamic Centre Management`;
         for (let i = 0; i < advanceCount; i++) {
           const curIdx = (mIdx + i) % 12;
           const curY = paymentRecord.year + Math.floor((mIdx + i) / 12);
-          records.unshift({
+          const advRec = {
             ...paymentRecord,
             receiptNo: `${receiptNo}-${i + 1}`,
             month: FEE_CONFIG.MONTHS[curIdx],
@@ -10212,13 +10515,19 @@ Al-Huda Islamic Centre Management`;
             remainingBalance: i === 0 ? paymentRecord.remainingBalance : 0,
             excessPaid: i === 0 ? paymentRecord.excessPaid : 0,
             status: i === 0 ? paymentRecord.status : 'Paid in Advance'
-          });
+          };
+          records.unshift(advRec);
+          addedBatch.push(advRec);
         }
       } else {
         records.unshift(paymentRecord);
+        addedBatch.push(paymentRecord);
       }
 
       saveStoredFeeRecords(records);
+
+      // Asynchronously sync payment records to Supabase Cloud for cross-device visibility
+      syncPaymentRecordsBatchToCloud(paymentRecord.familyId, addedBatch);
 
       if (btn) {
         btn.disabled = false;
@@ -10955,6 +11264,7 @@ Al-Huda Islamic Centre Management`;
         });
 
         saveStoredMatrixOverrides(overrides);
+        syncMatrixOverridesToCloud(familyId, overrides);
         closeModal('modalMatrixAction');
         loadMasterAnnualMatrix();
         loadFeeDashboardStats();
@@ -11002,6 +11312,7 @@ Al-Huda Islamic Centre Management`;
         });
 
         saveStoredMatrixOverrides(overrides);
+        syncMatrixOverridesToCloud(familyId, overrides);
         closeModal('modalMatrixAction');
         loadMasterAnnualMatrix();
         loadFeeDashboardStats();
@@ -11025,6 +11336,7 @@ Al-Huda Islamic Centre Management`;
       }
 
       saveStoredMatrixOverrides(overrides);
+      syncMatrixOverridesToCloud(familyId, overrides);
       closeModal('modalMatrixAction');
 
       // Optimistic instant re-render of matrix & stats
@@ -13852,6 +14164,69 @@ Web Portal: https://alhuda-lms.vercel.app`;
         m.classList.add('hidden');
         m.classList.remove('flex');
       }
+    }
+
+    // ============================================================
+    // PROGRESSIVE WEB APP (PWA) SERVICE WORKER & INSTALL LOGIC
+    // ============================================================
+    let deferredPwaPrompt = null;
+
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('sw.js', { scope: '/' })
+          .then(reg => console.log('[PWA] Service Worker registered with scope:', reg.scope))
+          .catch(err => console.warn('[PWA] Service Worker registration failed:', err));
+      });
+    }
+
+    window.addEventListener('beforeinstallprompt', (e) => {
+      e.preventDefault();
+      deferredPwaPrompt = e;
+      console.log('[PWA] beforeinstallprompt captured');
+    });
+
+    window.addEventListener('appinstalled', () => {
+      deferredPwaPrompt = null;
+      showToastNotification("Al-Huda LMS App installed successfully!");
+    });
+
+    function triggerPwaInstall() {
+      if (deferredPwaPrompt) {
+        deferredPwaPrompt.prompt();
+        deferredPwaPrompt.userChoice.then((choice) => {
+          if (choice.outcome === 'accepted') {
+            console.log('[PWA] User accepted installation prompt');
+          } else {
+            console.log('[PWA] User declined installation prompt');
+          }
+          deferredPwaPrompt = null;
+        });
+      } else {
+        const isIos = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+        if (isIos) {
+          alert("To install Al-Huda LMS on iPhone / iPad:\n\n1. Tap the Share icon (square with arrow) in Safari.\n2. Scroll down and tap 'Add to Home Screen'.\n3. Tap 'Add' to place the official Al-Huda icon on your phone.");
+        } else {
+          alert("To install Al-Huda LMS as an App:\n\n1. Tap the 3 dots (⋮) in your Chrome browser menu.\n2. Select 'Install app' or 'Add to Home screen'.\n\nOnce installed, you can launch Al-Huda LMS directly from your desktop or home screen!");
+        }
+      }
+    }
+
+    // Real-time Supabase Subscription for Cross-Device Updates
+    try {
+      if (typeof db !== 'undefined' && db && db.channel) {
+        db.channel('cloud-fee-live-sync')
+          .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'families' }, async (payload) => {
+            if (payload && payload.new && payload.new.notes) {
+              console.log('[Realtime Sync] Family update received from cloud:', payload.new.id);
+              if (!document.activeElement || (document.activeElement.tagName !== 'INPUT' && document.activeElement.tagName !== 'SELECT')) {
+                await loadFeeBillingLedger();
+              }
+            }
+          })
+          .subscribe();
+      }
+    } catch(e) {
+      console.warn("[Realtime Sync] Subscription notice:", e);
     }
   </script>
 </body>
