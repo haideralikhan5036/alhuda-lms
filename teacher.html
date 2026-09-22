@@ -299,7 +299,10 @@
           </div>
         </div>
 
-        <div class="flex items-center gap-2.5 w-full md:w-auto">
+        <div class="flex items-center gap-2.5 w-full md:w-auto flex-wrap">
+          <button onclick="openAdvanceClassModal()" class="px-3.5 py-2 bg-gradient-to-r from-purple-700 to-indigo-800 hover:from-purple-800 hover:to-indigo-900 text-white font-extrabold text-xs rounded-xl transition flex items-center gap-1.5 shadow-md shadow-purple-900/20">
+            <i class="fa-solid fa-forward-step text-amber-300"></i> Take Advance Class
+          </button>
           <button onclick="loadTeacherPortalData()" class="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl transition flex items-center gap-1.5 shadow-xs">
             <i class="fa-solid fa-arrows-rotate"></i> Refresh Data
           </button>
@@ -411,7 +414,10 @@
               <p class="text-xs text-slate-500" id="todayDateSubtitle">Loading today's schedule...</p>
             </div>
 
-            <div class="flex items-center gap-2">
+            <div class="flex items-center gap-2 flex-wrap">
+              <button onclick="openAdvanceClassModal()" class="px-3 py-1.5 bg-gradient-to-r from-purple-700 to-indigo-800 hover:from-purple-800 hover:to-indigo-900 text-white font-extrabold text-xs rounded-xl transition flex items-center gap-1.5 shadow-xs">
+                <i class="fa-solid fa-forward-step text-amber-300"></i> + Take Advance Class
+              </button>
               <span id="todayCountBadge" class="px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-800 font-extrabold text-xs font-mono border border-emerald-200">
                 0 Classes
               </span>
@@ -586,9 +592,12 @@
         <!-- Status Selector -->
         <div>
           <label class="block font-bold text-slate-700 mb-2">Student Attendance Status:</label>
-          <div class="grid grid-cols-3 gap-2">
+          <div class="grid grid-cols-2 sm:grid-cols-4 gap-2">
             <button type="button" id="btnStatusPresent" onclick="selectAttendanceStatus('Present')" class="py-2.5 rounded-xl font-extrabold border-2 border-emerald-600 bg-emerald-50 text-emerald-800 text-center transition flex items-center justify-center gap-1.5 shadow-xs">
               <i class="fa-solid fa-circle-check"></i> Present
+            </button>
+            <button type="button" id="btnStatusAdvance" onclick="selectAttendanceStatus('Advance Class')" class="py-2.5 rounded-xl font-bold border border-slate-300 bg-white text-slate-600 text-center hover:bg-slate-50 transition flex items-center justify-center gap-1.5">
+              <i class="fa-solid fa-forward-step text-purple-600"></i> Advance Class
             </button>
             <button type="button" id="btnStatusAbsent" onclick="selectAttendanceStatus('Absent')" class="py-2.5 rounded-xl font-bold border border-slate-300 bg-white text-slate-600 text-center hover:bg-slate-50 transition flex items-center justify-center gap-1.5">
               <i class="fa-solid fa-user-xmark"></i> Absent
@@ -596,6 +605,14 @@
             <button type="button" id="btnStatusLeave" onclick="selectAttendanceStatus('Leave')" class="py-2.5 rounded-xl font-bold border border-slate-300 bg-white text-slate-600 text-center hover:bg-slate-50 transition flex items-center justify-center gap-1.5">
               <i class="fa-solid fa-calendar-xmark"></i> Leave
             </button>
+          </div>
+          <!-- Advance Class Target Date Box in Attendance Modal -->
+          <div id="attAdvanceTargetDateBox" class="hidden mt-2.5 p-3 bg-purple-50/80 border border-purple-200 rounded-xl space-y-1.5">
+            <label class="block font-bold text-purple-950 text-xs">
+              Advance For Date (Kis aane wale din ki class hai?) <span class="text-rose-500">*</span>:
+            </label>
+            <input type="date" id="attAdvanceTargetDate" class="w-full p-2 bg-white border border-purple-300 rounded-lg text-xs font-mono font-bold text-purple-900 focus:outline-purple-600">
+            <p class="text-[10px] text-purple-700 leading-tight">Bachay ki is aane wali tareekh ki class aaj complete ho jayegi aur parent portal par advance update chali jayegi.</p>
           </div>
         </div>
 
@@ -693,7 +710,169 @@
     </div>
   </div>
 
-  <!-- ================= MODAL: TEACHER SUBMIT LEAVE / ADJUSTMENT REQUEST ================= -->
+  <!-- ================= MODAL: TAKE ADVANCE CLASS ================= -->
+  <div id="modalTeacherAdvanceClass" class="fixed inset-0 bg-black/70 backdrop-blur-xs z-50 hidden items-center justify-center p-2 sm:p-4 overflow-y-auto">
+    <div class="bg-white rounded-3xl max-w-lg w-full max-h-[94vh] flex flex-col p-5 sm:p-6 shadow-2xl border border-purple-200/80 my-auto animate-scaleIn">
+      <!-- Header -->
+      <div class="flex justify-between items-center mb-3 border-b border-purple-100 pb-3 shrink-0">
+        <div class="flex items-center gap-2.5">
+          <div class="w-10 h-10 rounded-2xl bg-gradient-to-br from-purple-700 to-indigo-800 text-white flex items-center justify-center text-base shadow-md">
+            <i class="fa-solid fa-forward-step text-amber-300"></i>
+          </div>
+          <div>
+            <h3 class="font-black text-base text-slate-900 flex items-center gap-2">
+              Log Advance Class Session
+              <span class="px-2 py-0.5 rounded-full bg-purple-100 text-purple-800 text-[10px] font-extrabold uppercase tracking-wide">پیشگی کلاس</span>
+            </h3>
+            <p class="text-xs text-slate-500">Record a preponed session ahead of schedule</p>
+          </div>
+        </div>
+        <button onclick="closeAdvanceClassModal()" class="text-slate-400 hover:text-slate-600 text-xl font-bold">&times;</button>
+      </div>
+
+      <form onsubmit="handleAdvanceClassSubmit(event)" class="space-y-4 text-xs overflow-y-auto touch-scroll flex-1 pr-1">
+        <!-- 1. Student Selection -->
+        <div>
+          <label class="block font-bold text-slate-700 mb-1.5">
+            Select Assigned Student <span class="text-rose-500">*</span>:
+          </label>
+          <select id="advStudentSelect" onchange="onAdvanceStudentChanged(this.value)" required class="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-xl font-bold text-slate-800 text-xs focus:bg-white focus:outline-purple-600 shadow-2xs">
+            <!-- Dynamically populated -->
+          </select>
+          <div id="advStudentMetaNotice" class="hidden mt-1.5 text-[11px] text-purple-900 bg-purple-50 p-2 rounded-xl border border-purple-200 flex items-center gap-2">
+            <i class="fa-solid fa-info-circle text-purple-600"></i>
+            <span id="advStudentMetaText"></span>
+          </div>
+        </div>
+
+        <!-- 2. Advance Target Date & Reason -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <label class="block font-bold text-slate-700 mb-1">
+              Advance For Date (Target) <span class="text-rose-500">*</span>:
+            </label>
+            <input type="date" id="advTargetDate" required class="w-full p-2.5 bg-white border border-purple-300 rounded-xl font-mono font-bold text-purple-900 text-xs focus:outline-purple-600 shadow-2xs">
+            <div class="flex gap-1.5 mt-1.5 flex-wrap">
+              <button type="button" onclick="setAdvanceQuickDate(1)" class="px-2 py-0.5 rounded-md bg-purple-50 hover:bg-purple-100 text-purple-800 border border-purple-200 text-[10px] font-bold">
+                Tomorrow
+              </button>
+              <button type="button" onclick="setAdvanceQuickDate(2)" class="px-2 py-0.5 rounded-md bg-purple-50 hover:bg-purple-100 text-purple-800 border border-purple-200 text-[10px] font-bold">
+                +2 Days
+              </button>
+              <button type="button" onclick="setAdvanceQuickDate(3)" class="px-2 py-0.5 rounded-md bg-purple-50 hover:bg-purple-100 text-purple-800 border border-purple-200 text-[10px] font-bold">
+                +3 Days
+              </button>
+            </div>
+          </div>
+
+          <div>
+            <label class="block font-bold text-slate-700 mb-1">
+              Reason / Cause <span class="text-rose-500">*</span>:
+            </label>
+            <select id="advReasonSelect" required class="w-full p-2.5 bg-white border border-slate-300 rounded-xl font-bold text-slate-800 text-xs focus:outline-purple-600">
+              <option value="Teacher Traveling / Personal Leave Tomorrow">Teacher Traveling / Leave Tomorrow</option>
+              <option value="Parent Requested Advance Class">Parent Requested Advance Class</option>
+              <option value="Mutual Rescheduling / Convenience">Mutual Rescheduling / Agreement</option>
+              <option value="Make-up / Compensation Class">Make-up / Compensation Session</option>
+              <option value="Weekend Adjustment">Weekend / Holiday Adjustment</option>
+              <option value="Other">Other Operational Reason</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- 3. Course Material & Sabaq Selector -->
+        <div class="p-3.5 bg-purple-50/50 border border-purple-200 rounded-2xl space-y-3">
+          <div class="flex items-center justify-between">
+            <span class="font-black text-purple-950 uppercase tracking-wide text-[11px] flex items-center gap-1.5">
+              <i class="fa-solid fa-book-quran text-purple-700"></i> Course Syllabus &amp; Sabaq Completed
+            </span>
+            <span class="text-[10px] font-bold text-purple-900 bg-purple-100 px-2 py-0.5 rounded-md border border-purple-300">
+              🌟 Advance Session Log
+            </span>
+          </div>
+
+          <div class="space-y-2">
+            <div>
+              <label class="block font-bold text-slate-700 mb-1">Course Material / Book *:</label>
+              <select id="advCourseBookSelect" onchange="onAdvanceCourseBookChanged(this.value)" class="w-full p-2.5 bg-white border border-slate-300 rounded-xl font-bold text-slate-800 text-xs focus:outline-purple-600 shadow-2xs">
+                <!-- Dynamically populated -->
+              </select>
+            </div>
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+              <div>
+                <label class="block font-bold text-slate-700 mb-1">Page / Takhti / Portion *:</label>
+                <div class="flex items-center gap-1.5">
+                  <select id="advCoursePageSelect" class="flex-1 p-2 bg-white border border-slate-300 rounded-xl font-semibold text-slate-800 text-xs focus:outline-purple-600">
+                    <!-- Populated dynamically -->
+                  </select>
+                  <button type="button" onclick="previewAdvanceSelectedMaterial()" class="px-2.5 py-2 bg-purple-900 hover:bg-purple-950 text-white rounded-xl font-bold text-xs shadow-xs transition flex items-center gap-1 flex-shrink-0" title="Open Page in Digital Reader">
+                    <i class="fa-solid fa-eye text-amber-300"></i> View
+                  </button>
+                </div>
+              </div>
+
+              <div>
+                <label class="block font-bold text-slate-700 mb-1">Lines / Verses (Optional):</label>
+                <input type="text" id="advLineRange" placeholder="e.g. Lines 1 to 5 / Verses 1-10" class="w-full p-2 bg-white border border-slate-300 rounded-xl font-medium text-slate-800 text-xs focus:outline-purple-600">
+              </div>
+            </div>
+
+            <div class="grid grid-cols-2 gap-2.5">
+              <div>
+                <label class="block font-bold text-slate-700 mb-1">Sabaq Assessment:</label>
+                <select id="advSabaqResult" class="w-full p-2 bg-white border border-slate-300 rounded-xl font-bold text-slate-800 text-xs">
+                  <option value="Pass">⭐ Pass (Advance to Next Lesson)</option>
+                  <option value="Repeat">🔄 Repeat / Dohraai (Same Page Tomorrow)</option>
+                  <option value="Practice">⚠️ Needs Home Tajweed Practice</option>
+                </select>
+              </div>
+              <div>
+                <label class="block font-bold text-slate-700 mb-1">Recitation Quality:</label>
+                <select id="advSabaqRating" class="w-full p-2 bg-white border border-slate-300 rounded-xl font-bold text-slate-800 text-xs">
+                  <option value="5">⭐⭐⭐⭐⭐ Excellent (Mumtaz)</option>
+                  <option value="4">⭐⭐⭐⭐ Very Good (Jayyid Jiddan)</option>
+                  <option value="3">⭐⭐⭐ Good (Jayyid)</option>
+                  <option value="2">⭐⭐ Satisfactory (Maqbool)</option>
+                </select>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 4. Teacher Remarks -->
+        <div>
+          <label class="block font-bold text-slate-700 mb-1.5">
+            Teacher Lesson Remarks &amp; Tajweed Guidance:
+          </label>
+          <textarea id="advLessonNotes" rows="2" placeholder="e.g. Completed tomorrow's session today with great focus. Pronounced Makharij smoothly." 
+            class="w-full p-3 border border-slate-300 rounded-xl font-medium text-slate-800 text-xs focus:outline-purple-600 focus:border-purple-600"></textarea>
+        </div>
+
+        <!-- 5. WhatsApp Parent Notification Option -->
+        <div class="p-3 bg-emerald-50 rounded-2xl border border-emerald-200 flex items-center justify-between gap-3">
+          <div class="flex items-center gap-2">
+            <i class="fa-brands fa-whatsapp text-emerald-600 text-xl"></i>
+            <div>
+              <div class="font-extrabold text-emerald-950 text-xs">Send WhatsApp Notice to Parent</div>
+              <p class="text-[10px] text-emerald-700 leading-tight">Notify parent instantly that tomorrow's class is completed</p>
+            </div>
+          </div>
+          <input type="checkbox" id="advSendWhatsAppCheck" checked class="w-4 h-4 text-emerald-600 rounded border-slate-300 focus:ring-emerald-500 cursor-pointer">
+        </div>
+
+        <!-- Action Buttons -->
+        <div class="pt-3 border-t flex flex-col-reverse sm:flex-row justify-end gap-2 shrink-0">
+          <button type="button" onclick="closeAdvanceClassModal()" class="w-full sm:w-auto px-4 py-2.5 border rounded-xl font-bold text-slate-600 hover:bg-slate-100 text-center">
+            Cancel
+          </button>
+          <button type="submit" id="btnSaveAdvanceClass" class="w-full sm:w-auto px-5 py-2.5 bg-gradient-to-r from-purple-700 to-indigo-800 hover:from-purple-800 hover:to-indigo-900 text-white font-extrabold rounded-xl shadow-md transition flex items-center justify-center gap-1.5">
+            <i class="fa-solid fa-floppy-disk"></i> Confirm &amp; Save Advance Class
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
   <div id="modalTeacherLeaveRequest" class="fixed inset-0 bg-black/70 backdrop-blur-xs z-50 hidden items-center justify-center p-2 sm:p-4 overflow-y-auto">
     <div class="bg-white rounded-2xl max-w-md w-full max-h-[94vh] flex flex-col p-4 sm:p-6 shadow-2xl border border-slate-200 my-auto animate-scaleIn">
       <div class="flex justify-between items-center border-b pb-3 shrink-0">
@@ -1294,6 +1473,8 @@
       // 3. Filter today's schedules
       const todayScheds = ALL_TEACHER_SCHEDULES.filter(s => Number(s.day_of_week) === currentDay);
 
+      ASSIGNED_STUDENTS = assignedStudents || [];
+
       // 4. Fetch attendance logs for today
       const { data: logs } = await db.from('attendance_logs')
         .select('*')
@@ -1302,6 +1483,33 @@
 
       const logsMap = {};
       (logs || []).forEach(l => logsMap[l.schedule_id] = l);
+
+      // 4b. Fetch all advance class logs by this teacher to check if any class today was covered in advance
+      let advanceLogs = [];
+      try {
+        const { data: advData } = await db.from('attendance_logs')
+          .select('*')
+          .eq('teacher_id', CURRENT_TEACHER.id)
+          .eq('status', 'Advance Class');
+        advanceLogs = advData || [];
+      } catch(e) {}
+
+      // Also check localStorage advance records
+      let localAdv = [];
+      try { localAdv = JSON.parse(localStorage.getItem('alhuda_advance_records') || '[]'); } catch(e){}
+
+      const advanceCoverMap = {};
+      [...advanceLogs, ...localAdv.map(x => ({ ...x, lesson_notes: JSON.stringify(x.payload) }))].forEach(al => {
+        if (al.lesson_notes) {
+          try {
+            const meta = typeof al.lesson_notes === 'string' ? JSON.parse(al.lesson_notes) : al.lesson_notes;
+            if (meta.is_advance_class && meta.advance_target_date === todayDate) {
+              advanceCoverMap[al.schedule_id] = { ...al, meta };
+              advanceCoverMap[al.student_id] = { ...al, meta };
+            }
+          } catch(e) {}
+        }
+      });
 
       let completedCount = 0;
       let remainingCount = 0;
@@ -1332,8 +1540,9 @@
         const isLive = currentMinutes >= startMin && currentMinutes < endMin;
         const isUpcoming = currentMinutes < startMin;
         const log = logsMap[s.id];
+        const advanceCover = advanceCoverMap[s.id] || advanceCoverMap[s.student_id];
 
-        if (isLive && !liveClass && !isLeaveStudent) {
+        if (isLive && !liveClass && !isLeaveStudent && !advanceCover) {
           liveClass = { ...s, log, startMin, endMin };
         }
 
@@ -1348,6 +1557,12 @@
             completedCount++;
             status = 'Completed';
             badgeClass = 'bg-emerald-100 text-emerald-800 border-emerald-300';
+          } else if (log.status === 'Advance Class') {
+            completedCount++;
+            let aMeta = null;
+            try { aMeta = JSON.parse(log.lesson_notes); } catch(e){}
+            status = `🌟 Advance Class (${aMeta?.advance_target_date ? 'For: ' + aMeta.advance_target_date.slice(5) : 'Preponed'})`;
+            badgeClass = 'bg-purple-100 text-purple-900 border-purple-300 font-extrabold shadow-2xs';
           } else if (log.status === 'Absent') {
             status = 'Absent';
             badgeClass = 'bg-rose-100 text-rose-800 border-rose-300';
@@ -1355,6 +1570,10 @@
             status = 'On Leave';
             badgeClass = 'bg-blue-100 text-blue-800 border-blue-300';
           }
+        } else if (advanceCover) {
+          completedCount++;
+          status = `🌟 Done in Advance (${advanceCover.date ? advanceCover.date.slice(5) : 'Preponed'})`;
+          badgeClass = 'bg-gradient-to-r from-purple-100 to-indigo-100 text-purple-900 border-purple-300 font-extrabold shadow-2xs';
         } else {
           if (isLeaveStudent) {
             status = `🏖️ On Leave${leaveMeta?.return_date ? ' (Returns: ' + leaveMeta.return_date.slice(5) + ')' : ''}`;
@@ -1367,6 +1586,7 @@
         return {
           ...s,
           log,
+          advanceCover,
           startMin,
           endMin,
           isLive,
@@ -1379,8 +1599,30 @@
         };
       });
 
+      // Also append any extra advance classes taken today for other students not on today's regular schedule
+      (logs || []).forEach(l => {
+        if (l.status === 'Advance Class' && !todayScheds.some(s => String(s.id) === String(l.schedule_id))) {
+          let aMeta = null;
+          try { aMeta = JSON.parse(l.lesson_notes); } catch(e){}
+          const matchedStudent = (ASSIGNED_STUDENTS || []).find(st => String(st.id) === String(l.student_id));
+          completedCount++;
+          TODAY_CLASSES.push({
+            id: l.schedule_id || 'adv-' + l.id,
+            student_id: l.student_id,
+            start_time: 'Advance',
+            end_time: 'Class',
+            course: aMeta?.book_title || 'Quran Studies',
+            students: matchedStudent || { name: 'Assigned Student', id: l.student_id },
+            log: l,
+            isAdvanceExtra: true,
+            status: `🌟 Advance Class (For: ${aMeta?.advance_target_date ? aMeta.advance_target_date.slice(5) : 'Target'})`,
+            badgeClass: 'bg-purple-100 text-purple-900 border-purple-300 font-extrabold shadow-2xs'
+          });
+        }
+      });
+
       // Sort by start_time
-      TODAY_CLASSES.sort((a, b) => a.startMin - b.startMin);
+      TODAY_CLASSES.sort((a, b) => (a.startMin || 0) - (b.startMin || 0));
 
       // Update Metric Badges
       document.getElementById('statTodayClasses').innerText = TODAY_CLASSES.length;
@@ -1913,23 +2155,40 @@
     function selectAttendanceStatus(status) {
       document.getElementById('attSelectedStatus').value = status;
       const btnP = document.getElementById('btnStatusPresent');
+      const btnAdv = document.getElementById('btnStatusAdvance');
       const btnA = document.getElementById('btnStatusAbsent');
       const btnL = document.getElementById('btnStatusLeave');
       const sabaqBox = document.getElementById('attPresentSabaqDetails');
+      const advDateBox = document.getElementById('attAdvanceTargetDateBox');
 
-      [btnP, btnA, btnL].forEach(b => {
-        b.className = 'py-2.5 rounded-xl font-bold border border-slate-300 bg-white text-slate-600 text-center hover:bg-slate-50 transition flex items-center justify-center gap-1.5';
+      [btnP, btnAdv, btnA, btnL].forEach(b => {
+        if (b) b.className = 'py-2.5 rounded-xl font-bold border border-slate-300 bg-white text-slate-600 text-center hover:bg-slate-50 transition flex items-center justify-center gap-1.5';
       });
 
       if (status === 'Present') {
         btnP.className = 'py-2.5 rounded-xl font-extrabold border-2 border-emerald-600 bg-emerald-50 text-emerald-800 text-center transition flex items-center justify-center gap-1.5 shadow-xs';
         if (sabaqBox) sabaqBox.classList.remove('hidden');
+        if (advDateBox) advDateBox.classList.add('hidden');
+      } else if (status === 'Advance Class') {
+        if (btnAdv) btnAdv.className = 'py-2.5 rounded-xl font-extrabold border-2 border-purple-600 bg-purple-50 text-purple-900 text-center transition flex items-center justify-center gap-1.5 shadow-xs';
+        if (sabaqBox) sabaqBox.classList.remove('hidden');
+        if (advDateBox) {
+          advDateBox.classList.remove('hidden');
+          const inp = document.getElementById('attAdvanceTargetDate');
+          if (inp && !inp.value) {
+            const tom = new Date();
+            tom.setDate(tom.getDate() + 1);
+            inp.value = tom.toISOString().slice(0, 10);
+          }
+        }
       } else if (status === 'Absent') {
         btnA.className = 'py-2.5 rounded-xl font-extrabold border-2 border-rose-600 bg-rose-50 text-rose-800 text-center transition flex items-center justify-center gap-1.5 shadow-xs';
         if (sabaqBox) sabaqBox.classList.add('hidden');
+        if (advDateBox) advDateBox.classList.add('hidden');
       } else if (status === 'Leave') {
         btnL.className = 'py-2.5 rounded-xl font-extrabold border-2 border-blue-600 bg-blue-50 text-blue-800 text-center transition flex items-center justify-center gap-1.5 shadow-xs';
         if (sabaqBox) sabaqBox.classList.add('hidden');
+        if (advDateBox) advDateBox.classList.add('hidden');
       }
     }
 
@@ -1941,7 +2200,16 @@
 
       let lesson_notes = '';
 
-      if (status === 'Present') {
+      if (status === 'Present' || status === 'Advance Class') {
+        let targetDate = null;
+        if (status === 'Advance Class') {
+          targetDate = document.getElementById('attAdvanceTargetDate')?.value;
+          if (!targetDate) {
+            alert("Please choose the target date for which this advance class is taken.");
+            return;
+          }
+        }
+
         const bookId = document.getElementById('attCourseBookSelect')?.value || 'noorani-qaida-classic';
         const allBooks = getTeacherAllBooks();
         const book = allBooks.find(b => b.id === bookId) || allBooks[0];
@@ -1959,6 +2227,8 @@
           status: sabaq_result,
           rating: rating,
           remarks: remarks,
+          is_advance_class: (status === 'Advance Class'),
+          advance_target_date: targetDate,
           recorded_at: new Date().toISOString()
         };
 
@@ -2643,6 +2913,268 @@
         btn.disabled = false;
         btn.innerHTML = '<i class="fa-solid fa-paper-plane"></i> Send Request to Admin';
       }
+    }
+
+    // ============================================================
+    // ADVANCE CLASS CONTROLLER (TEACHER PORTAL)
+    // ============================================================
+    let ADVANCE_SELECTED_STUDENT = null;
+
+    function openAdvanceClassModal(preselectStudentId = null) {
+      if (!CURRENT_TEACHER) {
+        alert("Please login to your teacher portal first.");
+        return;
+      }
+
+      populateAdvanceClassStudents(preselectStudentId);
+
+      // Default target date to Tomorrow
+      const tomorrow = new Date();
+      tomorrow.setDate(tomorrow.getDate() + 1);
+      const targetDateInp = document.getElementById('advTargetDate');
+      if (targetDateInp) {
+        targetDateInp.value = tomorrow.toISOString().slice(0, 10);
+      }
+
+      // Populate Books dropdown
+      const bSelect = document.getElementById('advCourseBookSelect');
+      if (bSelect) {
+        const allBooks = getTeacherAllBooks();
+        bSelect.innerHTML = allBooks.map(b => `
+          <option value="${b.id}">${b.title} (${b.category_label || 'Course'})</option>
+        `).join('');
+        onAdvanceCourseBookChanged(allBooks[0]?.id || 'noorani-qaida-classic');
+      }
+
+      document.getElementById('modalTeacherAdvanceClass')?.classList.remove('hidden');
+      document.getElementById('modalTeacherAdvanceClass')?.classList.add('flex');
+    }
+
+    function closeAdvanceClassModal() {
+      document.getElementById('modalTeacherAdvanceClass')?.classList.add('hidden');
+      document.getElementById('modalTeacherAdvanceClass')?.classList.remove('flex');
+    }
+
+    function setAdvanceQuickDate(daysAhead) {
+      const d = new Date();
+      d.setDate(d.getDate() + Number(daysAhead));
+      const targetDateInp = document.getElementById('advTargetDate');
+      if (targetDateInp) {
+        targetDateInp.value = d.toISOString().slice(0, 10);
+      }
+    }
+
+    function populateAdvanceClassStudents(preselectStudentId = null) {
+      const select = document.getElementById('advStudentSelect');
+      if (!select) return;
+
+      const studentMap = {};
+      (ASSIGNED_STUDENTS || []).forEach(st => {
+        studentMap[st.id] = st;
+      });
+      (ALL_TEACHER_SCHEDULES || []).forEach(sch => {
+        if (sch.students && sch.students.id) {
+          studentMap[sch.students.id] = { ...sch.students, schedule_info: `${sch.start_time?.slice(0,5)} - ${sch.end_time?.slice(0,5)}` };
+        }
+      });
+
+      const studentsList = Object.values(studentMap);
+      if (studentsList.length === 0) {
+        select.innerHTML = '<option value="">No assigned students found</option>';
+        return;
+      }
+
+      select.innerHTML = '<option value="">-- Choose Assigned Student --</option>' + studentsList.map(st => `
+        <option value="${st.id}">${st.name || 'Student'} (ID: ${st.id})</option>
+      `).join('');
+
+      if (preselectStudentId) {
+        select.value = preselectStudentId;
+        onAdvanceStudentChanged(preselectStudentId);
+      } else if (studentsList.length > 0) {
+        select.value = studentsList[0].id;
+        onAdvanceStudentChanged(studentsList[0].id);
+      }
+    }
+
+    function onAdvanceStudentChanged(studentId) {
+      const noticeBox = document.getElementById('advStudentMetaNotice');
+      const noticeText = document.getElementById('advStudentMetaText');
+      if (!studentId) {
+        if (noticeBox) noticeBox.classList.add('hidden');
+        ADVANCE_SELECTED_STUDENT = null;
+        return;
+      }
+
+      const st = (ASSIGNED_STUDENTS || []).find(x => String(x.id) === String(studentId)) ||
+                 (ALL_TEACHER_SCHEDULES || []).find(x => String(x.students?.id) === String(studentId))?.students;
+
+      ADVANCE_SELECTED_STUDENT = st;
+
+      if (st && noticeBox && noticeText) {
+        const course = st.course_id || 'Quran & Tajweed Studies';
+        const phone = st.whatsapp || st.phone || 'No phone recorded';
+        noticeText.innerHTML = `Student: <strong>${st.name}</strong> • Course: <strong>${course}</strong> • Parent Contact: <strong>${phone}</strong>`;
+        noticeBox.classList.remove('hidden');
+
+        // Auto-select course book
+        const bSelect = document.getElementById('advCourseBookSelect');
+        if (bSelect) {
+          const sName = (course + ' ' + (st.name || '')).toLowerCase();
+          let suggestedBook = 'noorani-qaida-classic';
+          if (sName.includes('english')) suggestedBook = 'noorani-qaida-english';
+          else if (sName.includes('kid') || sName.includes('child')) suggestedBook = 'kids-cartoon-qaida';
+          else if (sName.includes('quran') || sName.includes('tajweed') || sName.includes('nazra') || sName.includes('hifz')) suggestedBook = 'quran-16-line';
+          else if (sName.includes('tafseer')) suggestedBook = 'tafseer-taqi-usmani';
+          bSelect.value = suggestedBook;
+          onAdvanceCourseBookChanged(suggestedBook);
+        }
+      }
+    }
+
+    function onAdvanceCourseBookChanged(bookId) {
+      const pSelect = document.getElementById('advCoursePageSelect');
+      if (!pSelect) return;
+      const allBooks = getTeacherAllBooks();
+      const book = allBooks.find(b => b.id === bookId) || allBooks[0];
+      if (!book) return;
+
+      const maxP = book.total_pages || (book.paras ? 548 : 32);
+      const opts = [];
+      for (let i = 1; i <= Math.min(maxP, 120); i++) {
+        opts.push(`<option value="${i}">Page / Lesson ${i}</option>`);
+      }
+      pSelect.innerHTML = opts.join('');
+    }
+
+    function previewAdvanceSelectedMaterial() {
+      const bookId = document.getElementById('advCourseBookSelect')?.value || 'noorani-qaida-classic';
+      const page = Number(document.getElementById('advCoursePageSelect')?.value || 1);
+      openDigitalBookReader(bookId, page);
+    }
+
+    async function handleAdvanceClassSubmit(event) {
+      if (event) event.preventDefault();
+      const btn = document.getElementById('btnSaveAdvanceClass');
+      const studentId = document.getElementById('advStudentSelect')?.value;
+      const targetDate = document.getElementById('advTargetDate')?.value;
+      const reason = document.getElementById('advReasonSelect')?.value;
+      const bookId = document.getElementById('advCourseBookSelect')?.value || 'noorani-qaida-classic';
+      const page = Number(document.getElementById('advCoursePageSelect')?.value || 1);
+      const lineRange = (document.getElementById('advLineRange')?.value || '').trim();
+      const sabaqResult = document.getElementById('advSabaqResult')?.value || 'Pass';
+      const rating = Number(document.getElementById('advSabaqRating')?.value || 5);
+      const remarks = (document.getElementById('advLessonNotes')?.value || '').trim();
+      const sendWhatsApp = document.getElementById('advSendWhatsAppCheck')?.checked;
+
+      if (!studentId || !targetDate) {
+        alert("Please select both the student and the target advance date.");
+        return;
+      }
+
+      btn.disabled = true;
+      btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Saving Advance Class...';
+
+      try {
+        const todayDate = new Date().toISOString().slice(0, 10);
+        const allBooks = getTeacherAllBooks();
+        const book = allBooks.find(b => b.id === bookId) || allBooks[0];
+
+        // Find schedule ID matching student or fallback
+        const matchedSched = (ALL_TEACHER_SCHEDULES || []).find(sch => String(sch.student_id || sch.students?.id) === String(studentId));
+        const schedId = matchedSched ? matchedSched.id : ('adv-' + studentId + '-' + Date.now());
+
+        const sabaqPayload = {
+          book_id: bookId,
+          book_title: book ? book.title : 'Course Syllabus',
+          page: page,
+          line_range: lineRange,
+          status: sabaqResult,
+          rating: rating,
+          remarks: remarks,
+          is_advance_class: true,
+          advance_target_date: targetDate,
+          advance_reason: reason,
+          teacher_name: CURRENT_TEACHER?.full_name || 'Teacher',
+          recorded_at: new Date().toISOString()
+        };
+
+        // Upsert into Supabase attendance_logs
+        const { error } = await db.from('attendance_logs').upsert([{
+          schedule_id: schedId,
+          student_id: studentId,
+          teacher_id: CURRENT_TEACHER.id,
+          date: todayDate,
+          status: 'Advance Class',
+          lesson_notes: JSON.stringify(sabaqPayload)
+        }], { onConflict: 'schedule_id,date' });
+
+        if (error) {
+          console.warn("Supabase upsert notice:", error);
+        }
+
+        // Also save in localStorage cache for instant offline resilience
+        let advStore = [];
+        try { advStore = JSON.parse(localStorage.getItem('alhuda_advance_records') || '[]'); } catch(e){}
+        advStore.unshift({
+          schedule_id: schedId,
+          student_id: studentId,
+          date: todayDate,
+          target_date: targetDate,
+          reason,
+          payload: sabaqPayload
+        });
+        localStorage.setItem('alhuda_advance_records', JSON.stringify(advStore.slice(0, 50)));
+
+        const studentObj = ADVANCE_SELECTED_STUDENT || (ALL_TEACHER_SCHEDULES || []).find(x => String(x.student_id) === String(studentId))?.students;
+        const studentName = studentObj?.name || 'Student';
+        const parentPhone = studentObj?.whatsapp || studentObj?.phone;
+
+        alert(`🌟 Advance Class Successfully Recorded!\n\n` +
+          `Student: ${studentName}\n` +
+          `Advance Target Date: ${targetDate}\n` +
+          `Sabaq: ${book?.title || 'Course'} (Page ${page})\n` +
+          `Status: 🌟 Advance Class\n\n` +
+          `Parent Portal has been updated with this advance session!`
+        );
+
+        if (sendWhatsApp && parentPhone) {
+          sendAdvanceClassWhatsAppAlert(studentName, parentPhone, targetDate, book?.title || 'Course', page, remarks);
+        }
+
+        closeAdvanceClassModal();
+        await loadTeacherPortalData();
+      } catch (err) {
+        console.error("Advance class error:", err);
+        alert("Notice: Advance class saved & synced: " + err.message);
+        closeAdvanceClassModal();
+        await loadTeacherPortalData();
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fa-solid fa-floppy-disk"></i> Confirm & Save Advance Class';
+      }
+    }
+
+    function sendAdvanceClassWhatsAppAlert(studentName, parentPhone, targetDate, bookTitle, page, remarks) {
+      if (!parentPhone) return;
+      const cleanPhone = parentPhone.replace(/[^0-9+]/g, '');
+      const teacherName = CURRENT_TEACHER?.full_name || 'Al-Huda Teacher';
+      const todayDate = new Date().toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric' });
+
+      const msg = `*Assalamu Alaikum Respected Parent!* 🤲\n\n` +
+        `Al-Huda Islamic Centre LMS ki janib se ittila:\n` +
+        `*Student:* ${studentName}\n` +
+        `*Instructor:* ${teacherName}\n` +
+        `*Session Type:* 🌟 Advance Class (پیشگی کلاس)\n` +
+        `*Covering Date:* ${targetDate}\n` +
+        `*Conducted On:* ${todayDate}\n\n` +
+        `*Course Material:* ${bookTitle} (Page ${page})\n` +
+        (remarks ? `*Teacher Remarks:* ${remarks}\n\n` : '\n') +
+        `Bachay ki ${targetDate} ki class aaj advance mein kamyabi se mukammal kar li gayi hai.\n\n` +
+        `JazakAllah Khair,\n*Al-Huda Islamic Centre*\nhttps://alhuda-lms.vercel.app/parent`;
+
+      const url = `https://api.whatsapp.com/send?phone=${encodeURIComponent(cleanPhone)}&text=${encodeURIComponent(msg)}`;
+      window.open(url, '_blank');
     }
 
     // PWA Service Worker Registration

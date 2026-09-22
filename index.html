@@ -2239,10 +2239,14 @@
 
         <div>
           <label class="block font-bold mb-1.5 text-slate-700">Attendance Status *:</label>
-          <div class="grid grid-cols-3 gap-2">
+          <div class="grid grid-cols-2 sm:grid-cols-4 gap-2">
             <button type="button" onclick="selectDashAttStatus('Present')" id="btnAttPresent" class="py-2.5 rounded-xl border font-bold flex flex-col items-center gap-1 hover:bg-emerald-50 border-emerald-500 bg-emerald-50 text-emerald-800">
               <i class="fa-solid fa-circle-check text-emerald-600 text-base"></i>
               <span>Present</span>
+            </button>
+            <button type="button" onclick="selectDashAttStatus('Advance Class')" id="btnAttAdvance" class="py-2.5 rounded-xl border border-slate-300 font-bold flex flex-col items-center gap-1 hover:bg-purple-50 text-slate-700">
+              <i class="fa-solid fa-forward-step text-purple-600 text-base"></i>
+              <span>Advance</span>
             </button>
             <button type="button" onclick="selectDashAttStatus('Absent')" id="btnAttAbsent" class="py-2.5 rounded-xl border border-slate-300 font-bold flex flex-col items-center gap-1 hover:bg-rose-50 text-slate-700">
               <i class="fa-solid fa-user-xmark text-rose-600 text-base"></i>
@@ -5781,6 +5785,25 @@
       const logsMap = {};
       (logs || []).forEach(l => logsMap[l.schedule_id] = l);
 
+      // Check for any advance classes pre-covering today
+      let advCoverMap = {};
+      try {
+        const { data: allAdv } = await db.from('attendance_logs')
+          .select('*')
+          .eq('status', 'Advance Class');
+        if (allAdv && allAdv.length > 0) {
+          allAdv.forEach(al => {
+            try {
+              const meta = JSON.parse(al.lesson_notes);
+              if (meta && meta.advance_target_date === todayDate) {
+                advCoverMap[al.schedule_id] = { log: al, meta };
+                if (al.student_id) advCoverMap['student_' + al.student_id] = { log: al, meta };
+              }
+            } catch(e){}
+          });
+        }
+      } catch(e){}
+
       let currentMinutes = now.getHours() * 60 + now.getMinutes();
 
       let totalToday = 0;
@@ -5834,6 +5857,16 @@
             status = 'Completed';
             filterCategory = 'completed';
             badgeClass = 'bg-emerald-100 text-emerald-800 border-emerald-300';
+          } else if (log.status === 'Advance Class') {
+            completedCount++;
+            let advTarget = '';
+            try {
+              const parsed = JSON.parse(log.lesson_notes);
+              if (parsed?.advance_target_date) advTarget = ` (For: ${parsed.advance_target_date})`;
+            } catch(e) {}
+            status = `🌟 Advance Class${advTarget}`;
+            filterCategory = 'completed';
+            badgeClass = 'bg-purple-100 text-purple-900 border-purple-300 font-bold';
           } else if (log.status === 'Absent') {
             absentCount++;
             status = 'Absent';
@@ -5845,6 +5878,12 @@
             filterCategory = 'leave';
             badgeClass = 'bg-blue-100 text-blue-800 border-blue-300';
           }
+        } else if (advCoverMap[s.id] || advCoverMap['student_' + s.student_id]) {
+          completedCount++;
+          const cov = advCoverMap[s.id] || advCoverMap['student_' + s.student_id];
+          status = `🌟 Pre-Covered (${cov.log.date})`;
+          filterCategory = 'completed';
+          badgeClass = 'bg-purple-100 text-purple-900 border-purple-300 font-bold';
         } else {
           if (isLeaveStudent) {
             leaveCount++;
@@ -6117,6 +6156,8 @@
           rowClass = 'border-l-4 border-amber-500 bg-amber-50/80 hover:bg-amber-100/70 transition font-medium text-amber-950';
         } else if (c.isLive || c.filterCategory === 'live') {
           rowClass = 'border-l-4 border-emerald-500 bg-emerald-50/80 hover:bg-emerald-100/70 transition font-semibold text-emerald-950';
+        } else if (c.status?.includes('Advance') || c.status?.includes('Pre-Covered')) {
+          rowClass = 'border-l-4 border-purple-500 bg-purple-50/60 hover:bg-purple-100/70 transition font-medium text-purple-950';
         } else if (c.filterCategory === 'completed' || c.status === 'Completed') {
           rowClass = 'border-l-4 border-teal-500 bg-teal-50/50 hover:bg-teal-100/60 transition text-teal-950';
         } else if (c.filterCategory === 'leave' || c.status === 'Leave' || c.status?.includes('Leave')) {
@@ -6215,12 +6256,16 @@
     function selectDashAttStatus(status) {
       document.getElementById('dashAttSelectedStatus').value = status;
       const btnP = document.getElementById('btnAttPresent');
+      const btnAdv = document.getElementById('btnAttAdvance');
       const btnA = document.getElementById('btnAttAbsent');
       const btnL = document.getElementById('btnAttLeave');
 
       if (btnP) btnP.className = 'py-2.5 rounded-xl border font-bold flex flex-col items-center gap-1 ' + 
         (status === 'Present' ? 'border-emerald-500 bg-emerald-50 text-emerald-800' : 'border-slate-300 text-slate-700 hover:bg-emerald-50');
       
+      if (btnAdv) btnAdv.className = 'py-2.5 rounded-xl border font-bold flex flex-col items-center gap-1 ' + 
+        (status === 'Advance Class' ? 'border-purple-500 bg-purple-50 text-purple-800' : 'border-slate-300 text-slate-700 hover:bg-purple-50');
+
       if (btnA) btnA.className = 'py-2.5 rounded-xl border font-bold flex flex-col items-center gap-1 ' + 
         (status === 'Absent' ? 'border-rose-500 bg-rose-50 text-rose-800' : 'border-slate-300 text-slate-700 hover:bg-rose-50');
 
@@ -8760,8 +8805,9 @@
             <td class="p-3 font-bold text-slate-900">${s.students?.name || 'Student'}</td>
             <td class="p-3 text-brandDark">${s.teachers?.full_name || 'Teacher'}</td>
             <td class="p-3">
-              <div class="flex gap-1">
+              <div class="flex gap-1 flex-wrap">
                 <button onclick="saveAttendance('${s.id}', '${s.student_id}', '${s.teacher_id}', 'Present')" class="px-2.5 py-1 rounded text-xs font-bold ${status === 'Present' ? 'bg-emerald-600 text-white' : 'bg-slate-100 text-slate-700 hover:bg-emerald-100'}">Present</button>
+                <button onclick="saveAttendance('${s.id}', '${s.student_id}', '${s.teacher_id}', 'Advance Class')" class="px-2.5 py-1 rounded text-xs font-bold ${status === 'Advance Class' ? 'bg-purple-600 text-white shadow-xs' : 'bg-purple-50 text-purple-700 hover:bg-purple-100'}">Advance</button>
                 <button onclick="saveAttendance('${s.id}', '${s.student_id}', '${s.teacher_id}', 'Absent')" class="px-2.5 py-1 rounded text-xs font-bold ${status === 'Absent' ? 'bg-red-600 text-white' : 'bg-slate-100 text-slate-700 hover:bg-red-100'}">Absent</button>
                 <button onclick="saveAttendance('${s.id}', '${s.student_id}', '${s.teacher_id}', 'Leave')" class="px-2.5 py-1 rounded text-xs font-bold ${status === 'Leave' ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-700 hover:bg-blue-100'}">Leave</button>
               </div>
