@@ -243,17 +243,27 @@
   <!-- TOP HEADER -->
   <header class="bg-gradient-to-r from-[#022c22] via-[#064e3b] to-[#047857] text-white py-2 sm:py-2.5 px-3 sm:px-6 border-b-4 border-[#d97706] sticky top-0 z-50 shadow-md">
     <div class="max-w-7xl mx-auto flex justify-between items-center gap-2">
-      <div class="flex items-center gap-2 sm:gap-3 min-w-0">
+      <div class="flex items-center gap-1.5 sm:gap-2.5 min-w-0">
         <!-- Sidebar Toggle Button (Mobile & Desktop) -->
         <button onclick="toggleSidebar()" class="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition shrink-0 active:scale-95 shadow-2xs" title="Toggle Navigation Sidebar">
           <i class="fa-solid fa-bars text-sm sm:text-base"></i>
         </button>
-        <div class="w-9 h-9 sm:w-11 sm:h-11 rounded-full border-2 border-brandGold bg-black flex items-center justify-center text-brandGold font-cinzel font-bold text-sm sm:text-lg shadow shrink-0">
-          AH
-        </div>
-        <div class="min-w-0">
-          <h1 class="font-cinzel text-sm sm:text-lg md:text-xl font-bold tracking-wide truncate leading-tight">AL-HUDA ISLAMIC CENTRE</h1>
-          <p class="text-[10px] sm:text-xs text-emerald-200 font-medium truncate leading-tight">Online Quran &amp; Islamic Studies Academy</p>
+
+        <!-- SMART IN-APP BACK BUTTON -->
+        <button id="btnAppBack" onclick="navigateAppBack()" class="hidden w-9 h-9 sm:w-auto sm:px-3 sm:py-2 rounded-xl bg-amber-500/25 hover:bg-amber-500/40 border border-amber-400/60 text-amber-200 hover:text-white text-xs font-bold transition items-center gap-1.5 shrink-0 shadow-sm cursor-pointer active:scale-95" title="Go Back to Previous Feature">
+          <i class="fa-solid fa-arrow-left text-sm"></i>
+          <span class="hidden sm:inline font-sans text-xs">Back</span>
+          <span id="lblBackTarget" class="hidden lg:inline text-[10px] text-amber-300 font-semibold max-w-[120px] truncate"></span>
+        </button>
+
+        <div onclick="switchTab('tab-dashboard')" class="cursor-pointer flex items-center gap-2 sm:gap-2.5 min-w-0" title="Return to Dashboard">
+          <div class="w-9 h-9 sm:w-11 sm:h-11 rounded-full border-2 border-brandGold bg-black flex items-center justify-center text-brandGold font-cinzel font-bold text-sm sm:text-lg shadow shrink-0">
+            AH
+          </div>
+          <div class="min-w-0">
+            <h1 class="font-cinzel text-sm sm:text-lg md:text-xl font-bold tracking-wide truncate leading-tight">AL-HUDA ISLAMIC CENTRE</h1>
+            <p class="text-[10px] sm:text-xs text-emerald-200 font-medium truncate leading-tight">Online Quran &amp; Islamic Studies Academy</p>
+          </div>
         </div>
       </div>
 
@@ -4564,6 +4574,7 @@
       loadCourses();
       loadFeeBillingLedger();
       loadTrialClassesData();
+      if (typeof updateBackBtnVisibility === 'function') updateBackBtnVisibility();
 
       setInterval(loadDashboardData, 30000);
     };
@@ -4620,7 +4631,186 @@
       }
     });
 
+    // ============================================================
+    // SMART IN-APP NAVIGATION HISTORY & BACK BUTTON ENGINE
+    // ============================================================
+    const NAV_FEATURE_LABELS = {
+      'tab-dashboard': 'Dashboard',
+      'tab-families': 'Families & Students',
+      'tab-teachers': 'Teachers & Staff',
+      'tab-trials': 'Trial Classes',
+      'tab-attendance': 'Live Attendance',
+      'tab-salaries': 'Payroll & Salaries',
+      'tab-leaves': 'Leaves & Exceptions',
+      'tab-invoices': 'Fee Management',
+      'tab-curriculum': 'Islamic Curriculum',
+      'tab-schedule-search': 'Schedule Search',
+      'fee-subtab-overview': 'Fee Overview',
+      'fee-subtab-collect': 'Collect Fee',
+      'fee-subtab-pending': 'Defaulters',
+      'fee-subtab-matrix': 'Annual Matrix',
+      'fee-subtab-receipts': 'Receipts'
+    };
+
+    const appNavHistory = [];
+    let currentNavState = {
+      tabId: 'tab-dashboard',
+      subTabId: null,
+      label: 'Dashboard'
+    };
+    let isNavigatingHistory = false;
+
+    function updateBackBtnVisibility() {
+      const btn = document.getElementById('btnAppBack');
+      const lbl = document.getElementById('lblBackTarget');
+      if (!btn) return;
+
+      const openModals = Array.from(document.querySelectorAll('[id^="modal"]:not(.hidden), [id*="Modal"]:not(.hidden)'));
+      const visibleModal = openModals.reverse().find(m => {
+        const style = window.getComputedStyle(m);
+        return style.display !== 'none' && style.visibility !== 'hidden';
+      });
+
+      const hasHistory = appNavHistory.length > 0 || currentNavState.tabId !== 'tab-dashboard' || !!visibleModal;
+
+      if (hasHistory) {
+        btn.classList.remove('hidden');
+        btn.classList.add('flex');
+
+        let prevLabel = 'Dashboard';
+        if (visibleModal) {
+          prevLabel = 'Close';
+        } else if (appNavHistory.length > 0) {
+          const prev = appNavHistory[appNavHistory.length - 1];
+          prevLabel = prev.label || (NAV_FEATURE_LABELS[prev.subTabId] || NAV_FEATURE_LABELS[prev.tabId] || 'Previous');
+        } else if (currentNavState.tabId !== 'tab-dashboard') {
+          prevLabel = 'Dashboard';
+        }
+
+        if (lbl) lbl.textContent = `(${prevLabel})`;
+        btn.setAttribute('title', visibleModal ? 'Close current dialog' : `Go back to ${prevLabel}`);
+      } else {
+        btn.classList.add('hidden');
+        btn.classList.remove('flex');
+      }
+    }
+
+    function recordNavigation(targetTabId, targetSubTabId = null) {
+      if (isNavigatingHistory) return;
+
+      const effectiveSubTab = (targetTabId === 'tab-invoices' && !targetSubTabId) ? 'fee-subtab-overview' : targetSubTabId;
+
+      const isSameTab = currentNavState.tabId === targetTabId;
+      const isSameSubTab = currentNavState.subTabId === effectiveSubTab;
+      if (isSameTab && isSameSubTab) return;
+
+      // Push current state to navigation stack before switching
+      appNavHistory.push({
+        tabId: currentNavState.tabId,
+        subTabId: currentNavState.subTabId,
+        label: currentNavState.label || NAV_FEATURE_LABELS[currentNavState.subTabId] || NAV_FEATURE_LABELS[currentNavState.tabId] || 'Dashboard'
+      });
+
+      if (appNavHistory.length > 50) {
+        appNavHistory.shift();
+      }
+
+      const newLabel = effectiveSubTab ? (NAV_FEATURE_LABELS[effectiveSubTab] || effectiveSubTab) : (NAV_FEATURE_LABELS[targetTabId] || targetTabId);
+      currentNavState = {
+        tabId: targetTabId,
+        subTabId: effectiveSubTab,
+        label: newLabel
+      };
+
+      try {
+        window.history.pushState({ ...currentNavState, depth: appNavHistory.length }, '', window.location.pathname);
+      } catch (e) {}
+
+      updateBackBtnVisibility();
+    }
+
+    function navigateAppBack() {
+      // 1. Check if any active modal or drawer is open; close it first
+      const openModals = Array.from(document.querySelectorAll('[id^="modal"]:not(.hidden), [id*="Modal"]:not(.hidden)'));
+      const visibleModal = openModals.reverse().find(m => {
+        const style = window.getComputedStyle(m);
+        return style.display !== 'none' && style.visibility !== 'hidden';
+      });
+
+      if (visibleModal) {
+        if (typeof closeModal === 'function') {
+          closeModal(visibleModal.id);
+        } else {
+          visibleModal.classList.add('hidden');
+          visibleModal.classList.remove('flex');
+        }
+        updateBackBtnVisibility();
+        return;
+      }
+
+      // Check if mobile sidebar drawer is open
+      const mobileSidebar = document.getElementById('mainAppSidebar');
+      if (mobileSidebar && mobileSidebar.classList.contains('sidebar-mobile-open')) {
+        mobileSidebar.classList.remove('sidebar-mobile-open');
+        document.getElementById('sidebarBackdrop')?.classList.add('hidden');
+        return;
+      }
+
+      // 2. Pop and restore from history stack
+      if (appNavHistory.length > 0) {
+        isNavigatingHistory = true;
+        const prevState = appNavHistory.pop();
+
+        if (prevState.tabId) {
+          switchTab(prevState.tabId);
+        }
+
+        if (prevState.subTabId && prevState.tabId === 'tab-invoices') {
+          if (typeof switchFeeSubTab === 'function') {
+            switchFeeSubTab(prevState.subTabId);
+          }
+        }
+
+        currentNavState = {
+          tabId: prevState.tabId || 'tab-dashboard',
+          subTabId: prevState.subTabId || null,
+          label: prevState.label || NAV_FEATURE_LABELS[prevState.subTabId] || NAV_FEATURE_LABELS[prevState.tabId] || 'Dashboard'
+        };
+
+        isNavigatingHistory = false;
+        updateBackBtnVisibility();
+      } else if (currentNavState.tabId !== 'tab-dashboard') {
+        // Fallback to Dashboard
+        isNavigatingHistory = true;
+        switchTab('tab-dashboard');
+        currentNavState = { tabId: 'tab-dashboard', subTabId: null, label: 'Dashboard' };
+        isNavigatingHistory = false;
+        updateBackBtnVisibility();
+      }
+    }
+
+    // Hardware / Browser Back button and gesture listener
+    window.addEventListener('popstate', (e) => {
+      if (appNavHistory.length > 0 || currentNavState.tabId !== 'tab-dashboard') {
+        navigateAppBack();
+      }
+    });
+
+    // Keyboard shortcut Alt + Left Arrow for desktop back
+    window.addEventListener('keydown', (e) => {
+      if (e.altKey && e.key === 'ArrowLeft') {
+        e.preventDefault();
+        navigateAppBack();
+      }
+    });
+
     function switchTab(tabId) {
+      const targetId = (tabId === 'tab-live-monitor') ? 'tab-dashboard' : tabId;
+
+      if (!isNavigatingHistory) {
+        recordNavigation(targetId, null);
+      }
+
       // Auto-close mobile drawer when user navigates on small screens
       if (window.innerWidth < 1024) {
         const sidebar = document.getElementById('mainAppSidebar');
@@ -9501,6 +9691,10 @@ Al-Huda Islamic Centre Management`;
 
     // Sub-tab switcher inside Fee Management
     function switchFeeSubTab(subTabId) {
+      if (!isNavigatingHistory && typeof recordNavigation === 'function') {
+        recordNavigation('tab-invoices', subTabId);
+      }
+
       document.querySelectorAll('.fee-subtab-btn').forEach(btn => {
         btn.classList.remove('bg-emerald-800', 'text-white', 'shadow-xs', 'active');
         btn.classList.add('text-slate-600', 'hover:bg-slate-100');
@@ -14156,6 +14350,7 @@ Web Portal: https://alhuda-lms.vercel.app`;
       if (m) {
         m.classList.remove('hidden');
         m.classList.add('flex');
+        if (typeof updateBackBtnVisibility === 'function') updateBackBtnVisibility();
       }
     }
     function closeModal(id) {
@@ -14163,6 +14358,7 @@ Web Portal: https://alhuda-lms.vercel.app`;
       if (m) {
         m.classList.add('hidden');
         m.classList.remove('flex');
+        if (typeof updateBackBtnVisibility === 'function') updateBackBtnVisibility();
       }
     }
 
