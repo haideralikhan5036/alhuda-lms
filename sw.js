@@ -1,14 +1,13 @@
 // ============================================================
 // Al-Huda Islamic Centre LMS - Progressive Web App Service Worker
-// Version: 1.0.1
+// Version: 1.0.2
 // ============================================================
 
-const CACHE_NAME = 'alhuda-lms-pwa-v1';
+const CACHE_NAME = 'alhuda-lms-pwa-v2';
 const CORE_ASSETS = [
   '/',
-  '/index.html',
-  '/teacher.html',
-  '/parent.html',
+  '/teacher',
+  '/parent',
   '/curriculum_data.js',
   '/manifest.json',
   '/icon-192.png',
@@ -37,6 +36,7 @@ self.addEventListener('activate', (event) => {
       return Promise.all(
         keyList.map((key) => {
           if (key !== CACHE_NAME) {
+            console.log('[PWA] Deleting old cache:', key);
             return caches.delete(key);
           }
         })
@@ -83,7 +83,7 @@ self.addEventListener('fetch', (event) => {
             return cachedResponse;
           }
           if (event.request.headers.get('accept')?.includes('text/html')) {
-            return caches.match('/index.html');
+            return caches.match('/');
           }
         });
       })

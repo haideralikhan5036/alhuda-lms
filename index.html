@@ -299,12 +299,6 @@
           <span id="badgeReturnAlertsCount" class="px-1.5 py-0.2 rounded-full text-[10px] font-mono bg-rose-600 text-white font-black">0</span>
         </button>
 
-        <!-- PWA Install App Button (Desktop & Mobile) -->
-        <button id="btnPwaInstallHeader" onclick="triggerPwaInstall()" class="flex px-2.5 sm:px-3 py-1.5 rounded-full bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-slate-950 font-extrabold text-[11px] sm:text-xs border border-amber-300 shadow transition items-center gap-1.5 shrink-0 cursor-pointer" title="Install Official Al-Huda LMS App on PC / Mobile">
-          <i class="fa-solid fa-arrow-down-to-bracket text-xs"></i>
-          <span>Install App</span>
-        </button>
-
         <a href="teacher.html" target="_blank" class="hidden sm:flex px-2.5 py-1.5 rounded-full bg-emerald-800/60 hover:bg-emerald-700 text-emerald-200 border border-emerald-500/40 text-xs font-bold transition items-center gap-1.5 shadow-xs shrink-0" title="Open Dedicated Teacher Operations Portal">
           <i class="fa-solid fa-chalkboard-user text-brandGold text-xs"></i> <span class="hidden lg:inline">Teacher Portal</span>
         </a>
@@ -389,20 +383,6 @@
       <div class="flex items-center gap-2 px-2 py-1.5 rounded-lg bg-teal-50 border border-teal-200 text-xs font-bold text-teal-900">
         <i class="fa-solid fa-user-graduate text-teal-600"></i>
         <span>Students: <span id="sidebarActiveStudents" class="font-mono font-black">0</span></span>
-      </div>
-
-      <!-- PWA Install Mobile/Desktop Card -->
-      <div id="pwaInstallDrawerCard" class="p-2.5 rounded-xl bg-gradient-to-br from-emerald-950 via-slate-900 to-emerald-900 border border-emerald-500/40 text-white text-xs shadow-md">
-        <div class="flex items-center gap-2 mb-1">
-          <div class="w-6 h-6 rounded-full bg-amber-500 flex items-center justify-center text-slate-950 font-bold text-xs shrink-0">
-            <i class="fa-solid fa-mobile-screen"></i>
-          </div>
-          <span class="font-bold text-amber-300 text-xs">Install LMS App</span>
-        </div>
-        <p class="text-[10px] text-slate-300 mb-2 leading-tight">Install Al-Huda LMS with official crest icon on your Home Screen or Desktop.</p>
-        <button onclick="triggerPwaInstall()" class="w-full py-1.5 px-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-slate-950 font-black rounded-lg text-xs transition flex items-center justify-center gap-1.5 shadow">
-          <i class="fa-solid fa-arrow-down-to-bracket text-xs"></i> Install App Now
-        </button>
       </div>
     </div>
   </aside>
@@ -14362,48 +14342,17 @@ Web Portal: https://alhuda-lms.vercel.app`;
     }
 
     // ============================================================
-    // PROGRESSIVE WEB APP (PWA) SERVICE WORKER & INSTALL LOGIC
+    // PROGRESSIVE WEB APP (PWA) SERVICE WORKER (Native Chrome PWA)
     // ============================================================
-    let deferredPwaPrompt = null;
-
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('sw.js', { scope: '/' })
-          .then(reg => console.log('[PWA] Service Worker registered with scope:', reg.scope))
+        navigator.serviceWorker.register('/sw.js', { scope: '/' })
+          .then(reg => {
+            console.log('[PWA] Service Worker registered with scope:', reg.scope);
+            reg.update();
+          })
           .catch(err => console.warn('[PWA] Service Worker registration failed:', err));
       });
-    }
-
-    window.addEventListener('beforeinstallprompt', (e) => {
-      e.preventDefault();
-      deferredPwaPrompt = e;
-      console.log('[PWA] beforeinstallprompt captured');
-    });
-
-    window.addEventListener('appinstalled', () => {
-      deferredPwaPrompt = null;
-      showToastNotification("Al-Huda LMS App installed successfully!");
-    });
-
-    function triggerPwaInstall() {
-      if (deferredPwaPrompt) {
-        deferredPwaPrompt.prompt();
-        deferredPwaPrompt.userChoice.then((choice) => {
-          if (choice.outcome === 'accepted') {
-            console.log('[PWA] User accepted installation prompt');
-          } else {
-            console.log('[PWA] User declined installation prompt');
-          }
-          deferredPwaPrompt = null;
-        });
-      } else {
-        const isIos = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
-        if (isIos) {
-          alert("To install Al-Huda LMS on iPhone / iPad:\n\n1. Tap the Share icon (square with arrow) in Safari.\n2. Scroll down and tap 'Add to Home Screen'.\n3. Tap 'Add' to place the official Al-Huda icon on your phone.");
-        } else {
-          alert("To install Al-Huda LMS as an App:\n\n1. Tap the 3 dots (⋮) in your Chrome browser menu.\n2. Select 'Install app' or 'Add to Home screen'.\n\nOnce installed, you can launch Al-Huda LMS directly from your desktop or home screen!");
-        }
-      }
     }
 
     // Real-time Supabase Subscription for Cross-Device Updates
