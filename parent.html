@@ -139,6 +139,11 @@
             <span id="parentUserBadge" class="max-w-[85px] sm:max-w-none truncate">Student Account</span>
           </div>
 
+          <!-- Back to Main LMS -->
+          <a href="/" class="px-3 py-1.5 rounded-lg border border-emerald-700/50 hover:bg-white/10 text-emerald-200 text-xs font-bold transition flex items-center gap-1.5" title="Return to Main LMS Portal">
+            <i class="fa-solid fa-arrow-left"></i> <span class="hidden sm:inline">Main LMS</span>
+          </a>
+
           <!-- Logout Button -->
           <button onclick="handleParentLogout()" class="px-3 py-1.5 rounded-lg bg-rose-600/20 hover:bg-rose-600 text-rose-200 hover:text-white border border-rose-500/30 text-xs font-bold transition flex items-center gap-1.5" title="Logout">
             <i class="fa-solid fa-right-from-bracket"></i>
@@ -763,6 +768,21 @@
     // ==========================================
     // COURSE MATERIAL LIBRARY MODAL LOGIC
     // ==========================================
+    let isProgrammaticModalBack = false;
+
+    function pushParentModalHistory(modalId) {
+      try {
+        window.history.pushState({ type: 'modal', modalId: modalId }, '', window.location.pathname);
+      } catch (e) {}
+    }
+
+    function popParentModalHistory(modalId) {
+      if (window.history.state && window.history.state.type === 'modal' && (!modalId || window.history.state.modalId === modalId)) {
+        isProgrammaticModalBack = true;
+        window.history.back();
+      }
+    }
+
     function openParentLibraryModal() {
       const modal = document.getElementById('modalParentLibrary');
       const grid = document.getElementById('parentLibraryGrid');
@@ -794,7 +814,7 @@
               </p>
             </div>
 
-            <button onclick="closeParentLibraryModal(); openParentDigitalReader('${b.id}', 1)" class="w-full py-2 rounded-xl bg-slate-100 hover:bg-brandDark hover:text-white text-slate-800 font-bold text-xs transition flex items-center justify-center gap-1.5 shadow-2xs">
+            <button onclick="closeParentLibraryModal(false); openParentDigitalReader('${b.id}', 1)" class="w-full py-2 rounded-xl bg-slate-100 hover:bg-brandDark hover:text-white text-slate-800 font-bold text-xs transition flex items-center justify-center gap-1.5 shadow-2xs">
               <i class="fa-solid fa-book-open text-brandGold"></i> Read Book
             </button>
           </div>
@@ -802,11 +822,13 @@
       }
 
       modal.classList.remove('hidden');
+      pushParentModalHistory('modalParentLibrary');
     }
 
-    function closeParentLibraryModal() {
+    function closeParentLibraryModal(popHistory = true) {
       const modal = document.getElementById('modalParentLibrary');
       if (modal) modal.classList.add('hidden');
+      if (popHistory) popParentModalHistory('modalParentLibrary');
     }
 
     // ==========================================
@@ -876,12 +898,16 @@
       renderCurrentReaderPage();
 
       const modal = document.getElementById('modalParentBookReader');
-      if (modal) modal.classList.remove('hidden');
+      if (modal) {
+        modal.classList.remove('hidden');
+        pushParentModalHistory('modalParentBookReader');
+      }
     }
 
-    function closeParentBookReader() {
+    function closeParentBookReader(popHistory = true) {
       const modal = document.getElementById('modalParentBookReader');
       if (modal) modal.classList.add('hidden');
+      if (popHistory) popParentModalHistory('modalParentBookReader');
     }
 
     function renderCurrentReaderPage() {
@@ -1016,9 +1042,22 @@
       }
     }
 
-    // Keyboard Arrow Controls
+    // Keyboard & Device Back Navigation for Parent Portal
     function initKeyboardNavigation() {
       window.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+          const reader = document.getElementById('modalParentBookReader');
+          if (reader && !reader.classList.contains('hidden')) {
+            closeParentBookReader();
+            return;
+          }
+          const lib = document.getElementById('modalParentLibrary');
+          if (lib && !lib.classList.contains('hidden')) {
+            closeParentLibraryModal();
+            return;
+          }
+        }
+
         const modal = document.getElementById('modalParentBookReader');
         if (!modal || modal.classList.contains('hidden')) return;
 
@@ -1028,11 +1067,27 @@
         } else if (e.key === 'ArrowLeft') {
           // RTL next page
           parentReaderTurnRight();
-        } else if (e.key === 'Escape') {
-          closeParentBookReader();
         }
       });
     }
+
+    // Hardware / Browser Back button listener for Parent Portal
+    window.addEventListener('popstate', (e) => {
+      if (isProgrammaticModalBack) {
+        isProgrammaticModalBack = false;
+        return;
+      }
+      const reader = document.getElementById('modalParentBookReader');
+      if (reader && !reader.classList.contains('hidden')) {
+        reader.classList.add('hidden');
+        return;
+      }
+      const lib = document.getElementById('modalParentLibrary');
+      if (lib && !lib.classList.contains('hidden')) {
+        lib.classList.add('hidden');
+        return;
+      }
+    });
 
     // PWA Service Worker Registration
     if ('serviceWorker' in navigator) {

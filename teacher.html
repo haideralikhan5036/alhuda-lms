@@ -177,7 +177,7 @@
         </button>
 
         <!-- Back to Admin Portal Link -->
-        <a href="index.html" class="px-3 py-1.5 rounded-lg border border-emerald-700/50 hover:bg-white/10 text-emerald-200 text-xs font-bold transition flex items-center gap-1.5">
+        <a href="/" class="px-3 py-1.5 rounded-lg border border-emerald-700/50 hover:bg-white/10 text-emerald-200 text-xs font-bold transition flex items-center gap-1.5">
           <i class="fa-solid fa-arrow-left"></i> <span class="hidden sm:inline">Admin LMS</span>
         </a>
       </div>
@@ -1981,17 +1981,35 @@
       openDigitalBookReader(bookId, page);
     }
 
+    // Modal History Navigation Helpers for Teacher Portal
+    let isProgrammaticModalBack = false;
+
+    function pushTeacherModalHistory(modalId) {
+      try {
+        window.history.pushState({ type: 'modal', modalId: modalId }, '', window.location.pathname);
+      } catch (e) {}
+    }
+
+    function popTeacherModalHistory(modalId) {
+      if (window.history.state && window.history.state.type === 'modal' && (!modalId || window.history.state.modalId === modalId)) {
+        isProgrammaticModalBack = true;
+        window.history.back();
+      }
+    }
+
     function openTeacherDigitalLibrary() {
       // Show the library picker modal (book grid) first, then reader opens on selection
       const allBooks = getTeacherAllBooks();
       renderTeacherLibraryGrid(allBooks);
       document.getElementById('modalTeacherLibraryPicker').classList.remove('hidden');
       document.getElementById('modalTeacherLibraryPicker').classList.add('flex');
+      pushTeacherModalHistory('modalTeacherLibraryPicker');
     }
 
-    function closeTeacherLibraryPicker() {
+    function closeTeacherLibraryPicker(popHistory = true) {
       document.getElementById('modalTeacherLibraryPicker').classList.add('hidden');
       document.getElementById('modalTeacherLibraryPicker').classList.remove('flex');
+      if (popHistory) popTeacherModalHistory('modalTeacherLibraryPicker');
     }
 
     let CURRENT_LIB_FILTER = 'all';
@@ -2044,7 +2062,7 @@
         const pgInfo = b.total_pages ? `${b.total_pages} pages` : (b.total_pages ? `${b.total_pages} hadith` : 'Course Material');
         const badge = b.category_label || b.categoryLabel || 'Material';
         return `
-          <button onclick="closeTeacherLibraryPicker(); openDigitalBookReader('${b.id}', 1);"
+          <button onclick="closeTeacherLibraryPicker(false); openDigitalBookReader('${b.id}', 1);"
             class="bg-slate-800 hover:bg-slate-750 border border-slate-700 hover:border-emerald-600 rounded-2xl p-0 overflow-hidden text-left transition group focus:outline-none focus:ring-2 focus:ring-emerald-500 shadow-md hover:shadow-emerald-900/30">
             <!-- Book Cover Gradient -->
             <div class="bg-gradient-to-br ${gradFrom} h-28 flex flex-col items-center justify-center px-3 relative">
@@ -2145,11 +2163,13 @@
       selectAttendanceStatus(currentStatus || 'Present');
       document.getElementById('modalTeacherAttendance').classList.remove('hidden');
       document.getElementById('modalTeacherAttendance').classList.add('flex');
+      pushTeacherModalHistory('modalTeacherAttendance');
     }
 
-    function closeAttendanceModal() {
+    function closeAttendanceModal(popHistory = true) {
       document.getElementById('modalTeacherAttendance').classList.add('hidden');
       document.getElementById('modalTeacherAttendance').classList.remove('flex');
+      if (popHistory) popTeacherModalHistory('modalTeacherAttendance');
     }
 
     function selectAttendanceStatus(status) {
@@ -2299,6 +2319,7 @@
 
       document.getElementById('modalDigitalBookReader').classList.remove('hidden');
       document.getElementById('modalDigitalBookReader').classList.add('flex');
+      pushTeacherModalHistory('modalDigitalBookReader');
       renderReaderCurrentPage();
     }
 
@@ -2492,12 +2513,13 @@
       }
     }
 
-    function closeDigitalBookReader() {
-      if (document.fullscreenElement) document.exitFullscreen();
+    function closeDigitalBookReader(popHistory = true) {
+      if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
       resetReaderZoom();
       document.getElementById('modalDigitalBookReader').classList.add('hidden');
       document.getElementById('modalDigitalBookReader').classList.remove('flex');
       CURRENT_READER_BOOK = null;
+      if (popHistory) popTeacherModalHistory('modalDigitalBookReader');
     }
 
     // Keyboard controls for teacher reader
@@ -2545,12 +2567,16 @@
 
       modal.classList.remove('hidden');
       modal.classList.add('flex');
+      pushTeacherModalHistory('modalWeeklyMatrix');
     }
 
-    function closeWeeklyMatrixModal() {
+    function closeWeeklyMatrixModal(popHistory = true) {
       const modal = document.getElementById('modalWeeklyMatrix');
-      modal.classList.add('hidden');
-      modal.classList.remove('flex');
+      if (modal) {
+        modal.classList.add('hidden');
+        modal.classList.remove('flex');
+      }
+      if (popHistory) popTeacherModalHistory('modalWeeklyMatrix');
     }
 
     // ================= TEACHER TRIAL CLASSES & RETENTION LOGIC =================
@@ -2746,15 +2772,17 @@
       if (modal) {
         modal.classList.remove('hidden');
         modal.classList.add('flex');
+        pushTeacherModalHistory('modalTeacherLeaveRequest');
       }
     }
 
-    function closeTeacherLeaveRequestModal() {
+    function closeTeacherLeaveRequestModal(popHistory = true) {
       const modal = document.getElementById('modalTeacherLeaveRequest');
       if (modal) {
         modal.classList.add('hidden');
         modal.classList.remove('flex');
       }
+      if (popHistory) popTeacherModalHistory('modalTeacherLeaveRequest');
     }
 
     function triggerLeaveRequestFromAttendanceModal() {
@@ -2762,7 +2790,7 @@
       const studentId = document.getElementById('attStudentId')?.value;
       const subTitle = document.getElementById('attModalSubtitle')?.innerText || '';
       const studentName = subTitle.split('•')[0].trim();
-      closeAttendanceModal();
+      closeAttendanceModal(false);
       openTeacherLeaveRequestModal(studentId, scheduleId, studentName);
     }
 
@@ -2848,12 +2876,20 @@
       document.getElementById('reschedReasonSelect').selectedIndex = 0;
 
       const modal = document.getElementById('modalRescheduleRequest');
-      if (modal) { modal.classList.remove('hidden'); modal.classList.add('flex'); }
+      if (modal) {
+        modal.classList.remove('hidden');
+        modal.classList.add('flex');
+        pushTeacherModalHistory('modalRescheduleRequest');
+      }
     }
 
-    function closeRescheduleRequestModal() {
+    function closeRescheduleRequestModal(popHistory = true) {
       const modal = document.getElementById('modalRescheduleRequest');
-      if (modal) { modal.classList.add('hidden'); modal.classList.remove('flex'); }
+      if (modal) {
+        modal.classList.add('hidden');
+        modal.classList.remove('flex');
+      }
+      if (popHistory) popTeacherModalHistory('modalRescheduleRequest');
     }
 
     async function submitRescheduleRequest(e) {
@@ -2948,11 +2984,13 @@
 
       document.getElementById('modalTeacherAdvanceClass')?.classList.remove('hidden');
       document.getElementById('modalTeacherAdvanceClass')?.classList.add('flex');
+      pushTeacherModalHistory('modalTeacherAdvanceClass');
     }
 
-    function closeAdvanceClassModal() {
+    function closeAdvanceClassModal(popHistory = true) {
       document.getElementById('modalTeacherAdvanceClass')?.classList.add('hidden');
       document.getElementById('modalTeacherAdvanceClass')?.classList.remove('flex');
+      if (popHistory) popTeacherModalHistory('modalTeacherAdvanceClass');
     }
 
     function setAdvanceQuickDate(daysAhead) {
@@ -3176,6 +3214,42 @@
       const url = `https://api.whatsapp.com/send?phone=${encodeURIComponent(cleanPhone)}&text=${encodeURIComponent(msg)}`;
       window.open(url, '_blank');
     }
+
+    // Global Modal & Device Back Navigation for Teacher Portal
+    window.addEventListener('popstate', (e) => {
+      if (isProgrammaticModalBack) {
+        isProgrammaticModalBack = false;
+        return;
+      }
+      const openModals = Array.from(document.querySelectorAll('div.fixed[id^="modal"]:not(.hidden)'));
+      const activeModal = openModals.reverse().find(m => window.getComputedStyle(m).display !== 'none');
+      if (activeModal) {
+        activeModal.classList.add('hidden');
+        activeModal.classList.remove('flex');
+        if (activeModal.id === 'modalDigitalBookReader') {
+          if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+          resetReaderZoom();
+          CURRENT_READER_BOOK = null;
+        }
+      }
+    });
+
+    window.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        const openModals = Array.from(document.querySelectorAll('div.fixed[id^="modal"]:not(.hidden)'));
+        const activeModal = openModals.reverse().find(m => window.getComputedStyle(m).display !== 'none');
+        if (activeModal) {
+          activeModal.classList.add('hidden');
+          activeModal.classList.remove('flex');
+          if (activeModal.id === 'modalDigitalBookReader') {
+            if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+            resetReaderZoom();
+            CURRENT_READER_BOOK = null;
+          }
+          popTeacherModalHistory(activeModal.id);
+        }
+      }
+    });
 
     // PWA Service Worker Registration
     if ('serviceWorker' in navigator) {
