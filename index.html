@@ -34,7 +34,9 @@
   <!-- EmailJS SDK for Official Automated Email Dispatch -->
   <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@3/dist/email.min.js"></script>
 
-  <!-- html2pdf.js for 1-Click Client-Side Invoice PDF Generation -->
+  <!-- High-Res Client-Side Invoice PDF Generation Libraries (html2canvas, jsPDF, html2pdf) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 
   <!-- Al-Huda Curriculum & Digital Islamic Library Engine -->
@@ -4166,7 +4168,7 @@
       </div>
 
       <div class="p-3 sm:p-6 space-y-4 flex-1 overflow-y-auto touch-scroll" id="feeInvoicePrintArea">
-        <div class="border-2 border-emerald-800 rounded-xl sm:rounded-2xl p-3.5 sm:p-5 bg-white space-y-3.5 sm:space-y-4 shadow-xs">
+        <div id="feeInvoiceReceiptCard" class="border-2 border-emerald-800 rounded-xl sm:rounded-2xl p-3.5 sm:p-5 bg-white space-y-3.5 sm:space-y-4 shadow-xs">
           
           <!-- INVOICE HEADER WITH OFFICIAL ACADEMY LOGO -->
           <div class="border-b-2 border-emerald-800 pb-3 sm:pb-4 flex justify-between items-start sm:items-center flex-col sm:flex-row gap-2.5 sm:gap-3">
@@ -10871,7 +10873,7 @@ Al-Huda Islamic Centre Management`;
       openModal('modalFeeInvoice');
     }
 
-    // 1-Click Client-Side High-Res PDF Download
+    // 1-Click Client-Side High-Res PDF Download (Direct html2canvas + jsPDF with multi-engine fallback)
     async function downloadFeeInvoicePDF() {
       const r = CURRENT_FEE_MODAL_RECEIPT;
       if (!r) {
@@ -10879,8 +10881,8 @@ Al-Huda Islamic Centre Management`;
         return;
       }
 
-      const element = document.getElementById('feeInvoicePrintArea');
-      if (!element) return;
+      const sourceCard = document.getElementById('feeInvoiceReceiptCard') || document.querySelector('#feeInvoicePrintArea > div') || document.getElementById('feeInvoicePrintArea');
+      if (!sourceCard) return;
 
       const btn = document.getElementById('feeInvBtnDownloadPdf');
       const originalText = btn ? btn.innerHTML : '';
@@ -10889,29 +10891,152 @@ Al-Huda Islamic Centre Management`;
         btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-1"></i> Generating PDF...';
       }
 
+      // Keep track of temporary sandbox DOM element
+      let sandbox = null;
+
       try {
         const cleanParent = (r.parentName || 'Family').replace(/[^a-zA-Z0-9_-]/g, '_');
         const filename = `AlHuda-Invoice-${r.receiptNo || 'AH-REC'}-${cleanParent}.pdf`;
 
-        const opt = {
-          margin: [6, 6, 6, 6],
-          filename: filename,
-          image: { type: 'jpeg', quality: 0.98 },
-          html2canvas: { scale: 2, useCORS: true, letterRendering: true, logging: false },
-          jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
-        };
+        // Reset scroll position on invoice scroll area
+        const scrollArea = document.getElementById('feeInvoicePrintArea');
+        if (scrollArea) scrollArea.scrollTop = 0;
 
-        if (typeof html2pdf !== 'undefined') {
-          await html2pdf().set(opt).from(element).save();
+        // Build clean dedicated A4 sandbox container (794px width at 96 DPI = 210mm A4 width)
+        sandbox = document.createElement('div');
+        sandbox.id = 'cleanInvoicePdfSandbox';
+        sandbox.style.position = 'fixed';
+        sandbox.style.top = '0';
+        sandbox.style.left = '0';
+        sandbox.style.width = '794px';
+        sandbox.style.minHeight = '1050px';
+        sandbox.style.backgroundColor = '#ffffff';
+        sandbox.style.zIndex = '-100'; // Rendered in DOM tree behind view, 100% visible to html2canvas
+        sandbox.style.overflow = 'visible';
+        sandbox.style.boxSizing = 'border-box';
+        sandbox.style.padding = '16px';
+
+        // Deep clone the invoice card
+        const cardClone = sourceCard.cloneNode(true);
+        cardClone.style.width = '100%';
+        cardClone.style.maxWidth = '100%';
+        cardClone.style.margin = '0';
+        cardClone.style.boxShadow = 'none';
+        cardClone.style.backgroundColor = '#ffffff';
+
+        // Ensure logo image is rendered and complete
+        const cloneLogo = cardClone.querySelector('#feeInvLogoImg') || cardClone.querySelector('img');
+        const origLogo = sourceCard.querySelector('#feeInvLogoImg') || sourceCard.querySelector('img');
+        if (cloneLogo && origLogo) {
+          cloneLogo.crossOrigin = 'anonymous';
+          if (origLogo.complete && origLogo.naturalWidth > 0) {
+            cloneLogo.src = origLogo.src;
+          }
+        }
+
+        sandbox.appendChild(cardClone);
+        document.body.appendChild(sandbox);
+
+        // Give browser 120ms to compute layout and geometry
+        await new Promise(resolve => setTimeout(resolve, 120));
+
+        let pdfGenerated = false;
+
+        // METHOD 1: Direct html2canvas + jsPDF (Single-Page Fit, Zero Blank Page Bug)
+        const hasHtml2Canvas = typeof html2canvas !== 'undefined';
+        const hasJsPDF = typeof window.jspdf !== 'undefined' && window.jspdf.jsPDF;
+
+        if (hasHtml2Canvas && hasJsPDF) {
+          try {
+            const canvas = await html2canvas(cardClone, {
+              scale: 2, // 2x resolution for crisp high-density print
+              useCORS: true,
+              allowTaint: true,
+              scrollY: 0,
+              scrollX: 0,
+              backgroundColor: '#ffffff',
+              logging: false,
+              windowWidth: 794
+            });
+
+            if (canvas && canvas.width > 0 && canvas.height > 0) {
+              const imgData = canvas.toDataURL('image/jpeg', 0.98);
+              const { jsPDF } = window.jspdf;
+              const pdf = new jsPDF({
+                orientation: 'portrait',
+                unit: 'mm',
+                format: 'a4',
+                compress: true
+              });
+
+              const pageWidth = pdf.internal.pageSize.getWidth(); // 210mm
+              const pageHeight = pdf.internal.pageSize.getHeight(); // 297mm
+              const margin = 8; // 8mm margins
+              const maxContentWidth = pageWidth - (margin * 2); // 194mm
+              const maxContentHeight = pageHeight - (margin * 2); // 281mm
+
+              let renderWidth = maxContentWidth;
+              let renderHeight = (canvas.height * renderWidth) / canvas.width;
+
+              // Scale down proportionally if content exceeds 1 printable A4 page
+              if (renderHeight > maxContentHeight) {
+                const ratio = maxContentHeight / renderHeight;
+                renderHeight = maxContentHeight;
+                renderWidth = renderWidth * ratio;
+              }
+
+              // Center horizontally
+              const xPos = margin + ((maxContentWidth - renderWidth) / 2);
+              const yPos = margin;
+
+              pdf.addImage(imgData, 'JPEG', xPos, yPos, renderWidth, renderHeight, undefined, 'FAST');
+              pdf.save(filename);
+              pdfGenerated = true;
+              showToastNotification("✅ Official Invoice PDF downloaded successfully!");
+            }
+          } catch (canvasErr) {
+            console.warn("[Invoice PDF] html2canvas+jsPDF direct render notice:", canvasErr);
+          }
+        }
+
+        // METHOD 2: html2pdf fallback (with explicit scrollY: 0 & avoid-all pagebreak)
+        if (!pdfGenerated && typeof html2pdf !== 'undefined') {
+          const opt = {
+            margin: [8, 8, 8, 8],
+            filename: filename,
+            image: { type: 'jpeg', quality: 0.98 },
+            html2canvas: {
+              scale: 2,
+              useCORS: true,
+              allowTaint: true,
+              scrollY: 0,
+              scrollX: 0,
+              backgroundColor: '#ffffff',
+              logging: false,
+              windowWidth: 794
+            },
+            jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
+            pagebreak: { mode: ['avoid-all', 'css', 'legacy'] }
+          };
+
+          await html2pdf().set(opt).from(cardClone).save();
+          pdfGenerated = true;
           showToastNotification("✅ Official Invoice PDF downloaded successfully!");
-        } else {
+        }
+
+        // METHOD 3: Fallback to pristine print preview if canvas libraries fail
+        if (!pdfGenerated) {
           printFeeInvoiceReceipt();
         }
+
       } catch (err) {
-        console.error("PDF generation failed:", err);
+        console.error("[Invoice PDF] Generation failed:", err);
         showToastNotification("Opening print preview for PDF saving...");
         printFeeInvoiceReceipt();
       } finally {
+        if (sandbox && sandbox.parentNode) {
+          sandbox.parentNode.removeChild(sandbox);
+        }
         if (btn) {
           btn.disabled = false;
           btn.innerHTML = originalText;
@@ -10921,8 +11046,8 @@ Al-Huda Islamic Centre Management`;
 
     // Clean Isolated Printing & Trigger Email Integration
     function printFeeInvoiceReceipt() {
-      const area = document.getElementById('feeInvoicePrintArea');
-      if (!area) return;
+      const card = document.getElementById('feeInvoiceReceiptCard') || document.querySelector('#feeInvoicePrintArea > div') || document.getElementById('feeInvoicePrintArea');
+      if (!card) return;
 
       const r = CURRENT_FEE_MODAL_RECEIPT;
       // Also trigger auto email dispatch if parent email is available
@@ -10949,16 +11074,18 @@ Al-Huda Islamic Centre Management`;
       frameDoc.write(`<!DOCTYPE html>
 <html>
 <head>
-  <title>Al-Huda Fee Invoice - ${r ? r.receiptNo : ''}</title>
+  <title>Al-Huda Fee Invoice - ${r ? (r.receiptNo || 'Receipt') : ''}</title>
+  <meta charset="UTF-8">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css">
+  <script src="https://cdn.tailwindcss.com"><\/script>
   <style>
-    @page { size: A4; margin: 8mm; }
-    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #ffffff; color: #0f172a; }
+    @page { size: A4 portrait; margin: 8mm; }
+    body { font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif; background: #ffffff; color: #0f172a; margin: 0; padding: 12px; }
+    table { width: 100% !important; border-collapse: collapse !important; }
   </style>
 </head>
-<body class="p-4 bg-white">
-  ${area.innerHTML}
+<body class="p-2 bg-white">
+  ${card.outerHTML}
 </body>
 </html>`);
       frameDoc.close();
@@ -10970,7 +11097,7 @@ Al-Huda Islamic Centre Management`;
         } catch (printErr) {
           window.print();
         }
-      }, 500);
+      }, 600);
     }
 
     // Official Academy Email Configuration Helpers
