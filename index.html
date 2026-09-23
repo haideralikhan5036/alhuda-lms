@@ -364,6 +364,10 @@
           <span id="badgeReturnAlertsCount" class="px-1.5 py-0.2 rounded-full text-[10px] font-mono bg-rose-600 text-white font-black">0</span>
         </button>
 
+        <a href="manager.html" target="_blank" class="hidden sm:flex px-2.5 py-1.5 rounded-full bg-indigo-900/60 hover:bg-indigo-800 text-indigo-200 border border-indigo-500/40 text-xs font-bold transition items-center gap-1.5 shadow-xs shrink-0" title="Open Dedicated Manager Operations Portal">
+          <i class="fa-solid fa-user-tie text-brandGold text-xs"></i> <span class="hidden lg:inline">Manager Portal</span>
+        </a>
+
         <a href="teacher.html" target="_blank" class="hidden sm:flex px-2.5 py-1.5 rounded-full bg-emerald-800/60 hover:bg-emerald-700 text-emerald-200 border border-emerald-500/40 text-xs font-bold transition items-center gap-1.5 shadow-xs shrink-0" title="Open Dedicated Teacher Operations Portal">
           <i class="fa-solid fa-chalkboard-user text-brandGold text-xs"></i> <span class="hidden lg:inline">Teacher Portal</span>
         </a>
@@ -2878,7 +2882,7 @@
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label class="block font-bold mb-1">Full Name *:</label>
-              <input type="text" id="ntsFullName" required placeholder="Employee Full Name" oninput="previewNTSId()" class="w-full p-2.5 border rounded-lg font-semibold">
+              <input type="text" id="ntsFullName" required placeholder="Employee Full Name" oninput="handleNTSNameInput(this.value)" class="w-full p-2.5 border rounded-lg font-semibold">
             </div>
             <div id="ntsRoleTitleWrap">
               <label class="block font-bold mb-1">Role / Title *:</label>
@@ -2910,18 +2914,49 @@
           </div>
         </div>
 
+        <!-- 4. MANAGER PORTAL LOGIN CREDENTIALS SETUP (AUTO-GENERATED & EDITABLE) -->
+        <div id="ntsManagerCredentialsBox" class="bg-gradient-to-br from-indigo-50 to-blue-50 p-4 rounded-xl border-2 border-indigo-400/50 space-y-3">
+          <div class="flex justify-between items-center">
+            <div class="font-extrabold text-indigo-950 text-xs flex items-center gap-1.5">
+              <i class="fa-solid fa-key text-indigo-600"></i> 4. Manager Portal Login Credentials (LMS Account)
+            </div>
+            <span class="text-[10px] bg-indigo-600 text-white px-2 py-0.5 rounded-full font-bold">Auto-Linked</span>
+          </div>
+          <p class="text-[11px] text-slate-600">Manager will use these credentials to log in on their dedicated Manager Portal link.</p>
+
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div>
+              <label class="block font-bold mb-1 text-slate-700">Manager Portal ID:</label>
+              <input type="text" id="ntsPortalId" readonly class="w-full p-2.5 bg-white border border-indigo-300 rounded-lg font-mono font-extrabold text-indigo-900">
+            </div>
+            <div>
+              <label class="block font-bold mb-1 text-slate-700">Login Username *:</label>
+              <input type="text" id="ntsUsername" placeholder="e.g. gulfam" oninput="this.dataset.manualEdited='true'" class="w-full p-2.5 bg-white border border-slate-300 rounded-lg font-mono font-bold text-slate-800">
+            </div>
+            <div>
+              <label class="block font-bold mb-1 text-slate-700">Login Password *:</label>
+              <div class="relative">
+                <input type="text" id="ntsPassword" value="12345678" class="w-full p-2.5 bg-white border border-slate-300 rounded-lg font-mono font-bold text-slate-800 pr-8">
+                <button type="button" onclick="generateRandomManagerPass()" class="absolute right-2 top-2.5 text-slate-400 hover:text-indigo-900 font-bold" title="Reset Standard Password (12345678)">
+                  <i class="fa-solid fa-arrows-rotate"></i>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
         <!-- MANAGER-ONLY EXTRA FIELDS -->
         <div id="ntsManagerFields" class="bg-indigo-50/60 p-3.5 rounded-xl border border-indigo-200 space-y-3">
           <div class="font-black text-indigo-900 uppercase tracking-wide text-[11px] flex items-center gap-1.5">
-            <i class="fa-solid fa-lock text-indigo-600"></i> Manager Secure Details
+            <i class="fa-solid fa-shield-halved text-indigo-600"></i> Manager Additional Information
           </div>
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
-              <label class="block font-bold mb-1">CNIC / National ID *:</label>
+              <label class="block font-bold mb-1">CNIC / National ID:</label>
               <input type="text" id="ntsCNIC" placeholder="XXXXX-XXXXXXX-X" class="w-full p-2.5 border rounded-lg font-mono">
             </div>
             <div>
-              <label class="block font-bold mb-1">Email Address *:</label>
+              <label class="block font-bold mb-1">Email Address:</label>
               <input type="email" id="ntsEmail" placeholder="manager@example.com" class="w-full p-2.5 border rounded-lg">
             </div>
           </div>
@@ -2938,12 +2973,6 @@
           <div>
             <label class="block font-bold mb-1">Residential Address:</label>
             <textarea id="ntsAddress" rows="2" placeholder="Full home address..." class="w-full p-2.5 border rounded-lg"></textarea>
-          </div>
-          <div class="p-2.5 bg-indigo-100 border border-indigo-300 rounded-xl text-[11px] text-indigo-900 flex items-start gap-2">
-            <i class="fa-solid fa-circle-info mt-0.5 text-indigo-600"></i>
-            <div>
-              <span class="font-black">Portal Access:</span> A Manager ID (<strong id="ntsIdPreview">MGR-???</strong>) and login credentials will be auto-generated. Portal visibility configuration is available later.
-            </div>
           </div>
         </div>
 
@@ -3007,8 +3036,11 @@
       </div>
 
       <div class="space-y-2">
-        <a id="succMgrLaunchBtn" href="#" target="_blank" class="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold text-xs rounded-xl shadow-md transition flex items-center justify-center gap-2">
-          <i class="fa-solid fa-arrow-up-right-from-square"></i> Launch Manager Portal Directly
+        <a id="succMgrWhatsAppBtn" href="#" target="_blank" class="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs rounded-xl shadow-md transition flex items-center justify-center gap-2">
+          <i class="fa-brands fa-whatsapp text-sm"></i> Send Login Credentials to Manager WhatsApp
+        </a>
+        <a id="succMgrLaunchBtn" href="#" target="_blank" class="w-full py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl shadow-xs transition flex items-center justify-center gap-2">
+          <i class="fa-solid fa-arrow-up-right-from-square"></i> Open Manager Portal Directly
         </a>
         <div class="flex gap-2">
           <button type="button" onclick="copyManagerCredentialsFromModal()" class="flex-1 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl transition flex items-center justify-center gap-1.5">
@@ -8771,6 +8803,12 @@
         const el = document.getElementById(id);
         if (el) el.value = '';
       });
+      const uInput = document.getElementById('ntsUsername');
+      if (uInput) {
+        uInput.value = '';
+        delete uInput.dataset.manualEdited;
+      }
+      generateRandomManagerPass();
       document.getElementById('ntsGender').value = 'Male';
       const today = new Date().toISOString().slice(0,10);
       document.getElementById('ntsJoiningDate').value = today;
@@ -8783,14 +8821,16 @@
       const btnM = document.getElementById('btnNTSManager');
       const btnO = document.getElementById('btnNTSOther');
       const mFields = document.getElementById('ntsManagerFields');
+      const mCredsBox = document.getElementById('ntsManagerCredentialsBox');
       const note = document.getElementById('ntsDesignationNote');
       const rtWrap = document.getElementById('ntsRoleTitleWrap');
 
       if (type === 'Manager') {
         btnM.className = 'py-3 rounded-xl border-2 border-indigo-400 bg-indigo-600 text-white font-extrabold flex flex-col items-center gap-1 transition';
         btnO.className = 'py-3 rounded-xl border-2 border-slate-300 bg-white text-slate-700 font-extrabold flex flex-col items-center gap-1 transition hover:border-slate-400';
-        mFields.classList.remove('hidden');
-        note.textContent = 'Manager: Secure registration with portal ID generation (MGR-XXXX)';
+        if (mFields) mFields.classList.remove('hidden');
+        if (mCredsBox) mCredsBox.classList.remove('hidden');
+        note.textContent = 'Manager: Dedicated portal ID (MGR-XXX) & login credentials automatically provisioned.';
         // Role title label change
         const lbl = rtWrap?.querySelector('label');
         if (lbl) lbl.textContent = 'Role / Title (optional):';
@@ -8798,8 +8838,9 @@
       } else {
         btnO.className = 'py-3 rounded-xl border-2 border-slate-400 bg-slate-700 text-white font-extrabold flex flex-col items-center gap-1 transition';
         btnM.className = 'py-3 rounded-xl border-2 border-slate-300 bg-white text-slate-700 font-extrabold flex flex-col items-center gap-1 transition hover:border-slate-400';
-        mFields.classList.add('hidden');
-        note.textContent = 'Other Staff: Basic registration with STF-XXXX ID (e.g. Office Boy, Peon, Driver)';
+        if (mFields) mFields.classList.add('hidden');
+        if (mCredsBox) mCredsBox.classList.add('hidden');
+        note.textContent = 'Other Staff: Basic registration with STF-XXX ID (e.g. Office Boy, Peon, Driver)';
         const lbl = rtWrap?.querySelector('label');
         if (lbl) lbl.textContent = 'Role / Title *:';
         document.getElementById('ntsRoleTitle').placeholder = 'e.g. Office Boy, Peon, Driver, Cleaner';
@@ -8807,16 +8848,47 @@
       previewNTSId();
     }
 
+    function getNextManagerId() {
+      const existingNums = [];
+      (ALL_TEACHERS || []).forEach(t => {
+        let meta = {};
+        try { meta = JSON.parse(t.notes || '{}'); } catch(e){}
+        const idStr = String(t.id || '');
+        const metaId = String(meta.emp_id || '');
+        const m1 = idStr.match(/MGR-(\d+)/i);
+        if (m1) existingNums.push(parseInt(m1[1], 10));
+        const m2 = metaId.match(/MGR-(\d+)/i);
+        if (m2) existingNums.push(parseInt(m2[1], 10));
+      });
+      let nextNum = 1;
+      if (existingNums.length > 0) {
+        nextNum = Math.max(...existingNums) + 1;
+      }
+      return `MGR-${String(nextNum).padStart(3, '0')}`;
+    }
+
+    function getNextStaffId() {
+      const existingNums = [];
+      (ALL_TEACHERS || []).forEach(t => {
+        let meta = {};
+        try { meta = JSON.parse(t.notes || '{}'); } catch(e){}
+        const idStr = String(t.id || '');
+        const metaId = String(meta.emp_id || '');
+        const m1 = idStr.match(/STF-(\d+)/i);
+        if (m1) existingNums.push(parseInt(m1[1], 10));
+        const m2 = metaId.match(/STF-(\d+)/i);
+        if (m2) existingNums.push(parseInt(m2[1], 10));
+      });
+      let nextNum = 1;
+      if (existingNums.length > 0) {
+        nextNum = Math.max(...existingNums) + 1;
+      }
+      return `STF-${String(nextNum).padStart(3, '0')}`;
+    }
+
     function previewNTSId() {
       const designation = document.getElementById('ntsDesignation')?.value || 'Manager';
-      const prefix = designation === 'Manager' ? 'MGR' : 'STF';
-
-      // Clean sequential ID generation e.g. MGR-101, MGR-102
-      const existing = (ALL_TEACHERS || []).filter(t => {
-        return String(t.id).startsWith(prefix + '-') || (t.notes && t.notes.includes(designation === 'Manager' ? 'manager' : 'other_staff'));
-      });
-      const seq = 101 + existing.length;
-      const genId = `${prefix}-${seq}`;
+      const genId = designation === 'Manager' ? getNextManagerId() : getNextStaffId();
 
       const genInput = document.getElementById('ntsGeneratedId');
       if (genInput) genInput.value = genId;
@@ -8824,7 +8896,26 @@
       if (preview) preview.textContent = genId;
       const badge = document.getElementById('ntsGeneratedIdBadge');
       if (badge) badge.textContent = genId;
+      const portalId = document.getElementById('ntsPortalId');
+      if (portalId) portalId.value = genId;
       return genId;
+    }
+
+    function handleNTSNameInput(fullName) {
+      previewNTSId();
+      if (document.getElementById('ntsDesignation')?.value === 'Manager') {
+        const firstWord = (fullName || '').trim().split(/\s+/)[0] || '';
+        const clean = firstWord.toLowerCase().replace(/[^a-z0-9]/g, '');
+        const uInput = document.getElementById('ntsUsername');
+        if (uInput && (!uInput.dataset.manualEdited || !uInput.value)) {
+          uInput.value = clean || 'manager';
+        }
+      }
+    }
+
+    function generateRandomManagerPass() {
+      const pInput = document.getElementById('ntsPassword');
+      if (pInput) pInput.value = '12345678';
     }
 
     async function submitNonTeachingStaff(e) {
@@ -8848,11 +8939,20 @@
         return;
       }
 
-      // Sequential ID generation
-      const emp_id = previewNTSId();
+      // Read or generate sequential ID and credentials
+      const emp_id = (designation === 'Manager' ? document.getElementById('ntsPortalId')?.value : '') || previewNTSId();
       const prefix = designation === 'Manager' ? 'MGR' : 'STF';
-      const username = `${prefix.toLowerCase()}.${full_name.toLowerCase().replace(/[^a-z]/g, '').slice(0, 8)}`;
-      const password = 'alhuda@' + String(Math.floor(Math.random() * 9000) + 1000);
+
+      let username = document.getElementById('ntsUsername')?.value?.trim();
+      if (!username) {
+        const firstWord = (full_name || '').trim().split(/\s+/)[0] || '';
+        username = firstWord.toLowerCase().replace(/[^a-z0-9]/g, '') || `${prefix.toLowerCase()}.user`;
+      }
+
+      let password = document.getElementById('ntsPassword')?.value?.trim();
+      if (!password) {
+        password = '12345678';
+      }
 
       // Build notes JSON
       const notesObj = {
@@ -8916,6 +9016,14 @@
           if (urlEl) urlEl.value = portalUrl;
           const launchBtn = document.getElementById('succMgrLaunchBtn');
           if (launchBtn) launchBtn.href = portalUrl;
+
+          // WhatsApp dispatch link
+          const cleanPhone = (phone || '').replace(/[^0-9]/g, '');
+          const waMsg = `Assalamu Alaikum Respected ${full_name},\nWelcome to Al-Huda Islamic Centre Management Operations.\n\n🌐 *Your Dedicated Manager Portal Link:*\n${portalUrl}\n\n🆔 *Manager ID:* ${emp_id}\n👤 *Login Username:* ${username}\n🔑 *Login Password:* ${password}\n💼 *Role / Title:* ${role_title || 'Operations Manager'}\n\nPlease click your portal link to access all management tools, rosters, timetables, and system follow-ups.\nJazakum Allahu Khairan!`;
+          const waUrl = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(waMsg)}`;
+          const waBtn = document.getElementById('succMgrWhatsAppBtn');
+          if (waBtn) waBtn.href = waUrl;
+
           openModal('modalManagerRegisteredSuccess');
         } else {
           alert(`✅ Staff Registered Successfully!\n\n👤 Name: ${full_name}\n🆔 Staff ID: ${emp_id}\n📋 Role: ${role_title || 'Other Staff'}`);
@@ -8934,9 +9042,9 @@
       const user = document.getElementById('succMgrUser')?.innerText || '';
       const pass = document.getElementById('succMgrPass')?.innerText || '';
       const url = document.getElementById('succMgrPortalUrl')?.value || '';
-      const text = `Al-Huda Islamic Centre — Manager Portal Access Details\n\n👤 Name: ${name}\n🆔 Manager ID: ${id}\n🌐 Portal Link: ${url}\n👤 Username: ${user}\n🔑 Password: ${pass}\n\nPlease keep your credentials confidential.`;
+      const text = `Al-Huda Islamic Centre — Manager Portal Access Details\n\n👤 Manager: ${name}\n🆔 Manager ID: ${id}\n🌐 Portal Link: ${url}\n👤 Username: ${user}\n🔑 Password: ${pass}\n\nPlease keep your credentials confidential.`;
       navigator.clipboard.writeText(text).then(() => {
-        alert('✅ Manager Portal Link & Credentials copied to clipboard!');
+        alert('✅ Manager Portal Link & Credentials copied to clipboard!\n\n' + text);
       }).catch(() => {
         alert(text);
       });
@@ -9134,7 +9242,9 @@
         if (isManager) {
           const cleanPhone = (t.phone || '').replace(/[^0-9]/g, '');
           const mgrUsername = meta.username || `mgr.${t.full_name.toLowerCase().replace(/[^a-z]/g, '').slice(0, 8)}`;
-          const waMsg = `Assalamu Alaikum Respected ${t.full_name},\nAl-Huda Islamic Centre - Manager Registration Successful.\n\n🆔 *Manager ID:* ${t.id}\n👤 *Username:* ${mgrUsername}\n🔑 *Password:* ${mgrPassword}\n💼 *Designation:* ${meta.role_title || 'Manager'}\n\nYour management portal credentials have been generated. Jazakum Allahu Khairan!`;
+          const mgrPassword = meta.password || '12345678';
+          const directPortalUrl = `${window.location.origin}/manager.html?m=${t.id}`;
+          const waMsg = `Assalamu Alaikum Respected ${t.full_name},\nWelcome to Al-Huda Islamic Centre Management Operations.\n\n🌐 *Your Dedicated Manager Portal Link:*\n${directPortalUrl}\n\n🆔 *Manager ID:* ${t.id}\n👤 *Login Username:* ${mgrUsername}\n🔑 *Login Password:* ${mgrPassword}\n💼 *Role / Title:* ${meta.role_title || 'Operations Manager'}\n\nPlease click your portal link to access all management tools, rosters, timetables, and system follow-ups.\nJazakum Allahu Khairan!`;
           const waUrl = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(waMsg)}`;
 
           return `
@@ -9204,8 +9314,8 @@
                 <!-- PORTAL CREDENTIALS BOX -->
                 <div class="bg-gradient-to-r from-indigo-50 to-blue-50 p-2.5 rounded-xl border border-indigo-200 mb-3 space-y-1.5">
                   <div class="flex justify-between items-center text-[10px] font-bold text-indigo-900 uppercase tracking-wide">
-                    <span class="flex items-center gap-1"><i class="fa-solid fa-key text-indigo-600"></i> Manager Portal Credentials</span>
-                    <button onclick="navigator.clipboard.writeText('Manager: ${t.full_name}\\nID: ${t.id}\\nUsername: ${mgrUsername}\\nPassword: ${mgrPassword}'); alert('Manager credentials copied!');" class="text-indigo-700 hover:text-indigo-900 font-bold" title="Copy Login Details">
+                    <span class="flex items-center gap-1"><i class="fa-solid fa-key text-indigo-600"></i> LMS Login Credentials</span>
+                    <button onclick="copyManagerCredentials('${t.id}', '${mgrUsername}', '${mgrPassword}', '${t.full_name}', '${directPortalUrl}')" class="text-indigo-700 hover:text-indigo-900 font-bold" title="Copy Login Details">
                       <i class="fa-regular fa-copy"></i> Copy
                     </button>
                   </div>
@@ -9219,8 +9329,8 @@
                       <strong class="text-indigo-950">${mgrPassword}</strong>
                     </div>
                   </div>
-                  <a href="${waUrl}" target="_blank" class="w-full py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-bold text-[11px] flex items-center justify-center gap-1.5 shadow-xs transition mt-1">
-                    <i class="fa-brands fa-whatsapp"></i> Send Credentials to Manager WhatsApp
+                  <a href="${waUrl}" target="_blank" class="w-full py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-bold text-[11px] flex items-center justify-center gap-1.5 shadow-xs transition mt-1">
+                    <i class="fa-brands fa-whatsapp"></i> Send Login Credentials to Manager WhatsApp
                   </a>
                 </div>
 
@@ -9231,7 +9341,7 @@
               </div>
 
               <div class="pt-3 border-t mt-3 flex items-center justify-between gap-2 flex-wrap">
-                <a href="manager.html?m=${t.id}" target="_blank" class="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold rounded-xl text-xs shadow-xs transition flex items-center gap-1.5">
+                <a href="${directPortalUrl}" target="_blank" class="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold rounded-xl text-xs shadow-xs transition flex items-center gap-1.5">
                   <i class="fa-solid fa-arrow-up-right-from-square"></i> Open Manager Portal
                 </a>
                 <button onclick="deleteTeacher('${t.id}')" class="px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-lg font-bold text-xs transition flex items-center gap-1">
@@ -9484,6 +9594,13 @@
     function copyTeacherCredentials(user, pass, teacherName) {
       const url = `${window.location.origin}/teacher.html?t=${user}`;
       const txt = `Al-Huda Islamic Centre LMS - Teacher Portal\nTeacher: ${teacherName}\nDirect Link: ${url}\nUsername: ${user}\nPassword: ${pass}`;
+      navigator.clipboard.writeText(txt);
+      alert(`Copied to clipboard!\n\n${txt}`);
+    }
+
+    function copyManagerCredentials(id, user, pass, managerName, portalUrl) {
+      const url = portalUrl || `${window.location.origin}/manager.html?m=${id}`;
+      const txt = `Al-Huda Islamic Centre LMS — Manager Portal\nManager: ${managerName}\nManager ID: ${id}\nDirect Link: ${url}\nUsername: ${user}\nPassword: ${pass}`;
       navigator.clipboard.writeText(txt);
       alert(`Copied to clipboard!\n\n${txt}`);
     }
