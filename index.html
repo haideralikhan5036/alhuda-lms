@@ -85,35 +85,35 @@
     }
     #kpiBox-all {
       border: 1px solid #cbd5e1 !important;
-      border-left: 6px solid #334155 !important;
+      border-left: 4.5px solid #334155 !important;
     }
     #kpiBox-live {
       border: 1px solid #a7f3d0 !important;
-      border-left: 6px solid #059669 !important;
+      border-left: 4.5px solid #059669 !important;
     }
     #kpiBox-completed {
       border: 1px solid #99f6e4 !important;
-      border-left: 6px solid #0d9488 !important;
+      border-left: 4.5px solid #0d9488 !important;
     }
     #kpiBox-remaining {
       border: 1px solid #fde68a !important;
-      border-left: 6px solid #f59e0b !important;
+      border-left: 4.5px solid #f59e0b !important;
     }
     #kpiBox-absent {
       border: 1px solid #fecdd3 !important;
-      border-left: 6px solid #e11d48 !important;
+      border-left: 4.5px solid #e11d48 !important;
     }
     #kpiBox-leave {
       border: 1px solid #bfdbfe !important;
-      border-left: 6px solid #3b82f6 !important;
+      border-left: 4.5px solid #3b82f6 !important;
     }
     #kpiBox-trial {
       border: 1px solid #e9d5ff !important;
-      border-left: 6px solid #9333ea !important;
+      border-left: 4.5px solid #9333ea !important;
     }
     #kpiBox-teachers {
       border: 1px solid #a5f3fc !important;
-      border-left: 6px solid #0891b2 !important;
+      border-left: 4.5px solid #0891b2 !important;
     }
     .kpi-dash-card [id^="kpiDash"] {
       color: #0f172a !important;
@@ -306,12 +306,10 @@
         </button>
 
         <div onclick="switchTab('tab-dashboard')" class="cursor-pointer flex items-center gap-2 sm:gap-2.5 min-w-0" title="Return to Dashboard">
-          <div class="w-9 h-9 sm:w-11 sm:h-11 rounded-full border-2 border-brandGold bg-black flex items-center justify-center text-brandGold font-cinzel font-bold text-sm sm:text-lg shadow shrink-0">
-            AH
-          </div>
+          <img src="alhuda_logo.jpg" alt="Al-Huda Logo" class="w-9 h-9 sm:w-10 sm:h-10 rounded-full border-2 border-brandGold object-cover shadow-sm bg-black shrink-0">
           <div class="min-w-0">
-            <h1 class="font-cinzel text-sm sm:text-lg md:text-xl font-bold tracking-wide truncate leading-tight">AL-HUDA ISLAMIC CENTRE</h1>
-            <p class="text-[10px] sm:text-xs text-emerald-200 font-medium truncate leading-tight">Online Quran &amp; Islamic Studies Academy</p>
+            <h1 class="font-cinzel text-sm sm:text-base md:text-lg font-bold tracking-wide truncate leading-tight">AL-HUDA ISLAMIC CENTRE</h1>
+            <p class="text-[10px] sm:text-[11px] text-emerald-200 font-medium truncate leading-tight">Online Quran &amp; Islamic Studies Academy</p>
           </div>
         </div>
       </div>
@@ -333,6 +331,11 @@
             <option value="student" class="text-slate-900 font-bold">🎓 Student/Parent</option>
           </select>
         </div>
+
+        <!-- Quick Course Material Link on Header -->
+        <button onclick="switchTab('tab-curriculum')" class="hidden md:flex px-2.5 py-1.5 rounded-full bg-emerald-800/60 hover:bg-emerald-700 text-emerald-200 border border-emerald-500/40 text-xs font-bold transition items-center gap-1.5 shadow-2xs shrink-0" title="Course Material & Digital Islamic Library">
+          <i class="fa-solid fa-book-quran text-brandGold text-xs"></i> <span class="hidden xl:inline">Course Material</span>
+        </button>
 
         <!-- Teacher Requests Notification Button -->
         <button onclick="openAdminTeacherRequestsModal()" class="w-8 h-8 sm:w-auto sm:px-3 sm:py-1.5 rounded-full bg-amber-500/20 hover:bg-amber-500/30 border border-amber-400/50 text-amber-200 text-xs font-bold transition flex items-center justify-center gap-1.5 shadow-xs shrink-0" title="Review Pending Teacher Requests">
@@ -363,7 +366,7 @@
     <!-- Sidebar Header / Toggle -->
     <div class="flex items-center justify-between px-3.5 py-3.5 border-b border-slate-100 bg-brandDark">
       <div class="flex items-center gap-2">
-        <div class="w-7 h-7 rounded-full border border-brandGold bg-black flex items-center justify-center text-brandGold font-cinzel font-bold text-xs shrink-0">AH</div>
+        <img src="alhuda_logo.jpg" alt="Al-Huda Logo" class="w-7 h-7 rounded-full border border-brandGold object-cover bg-black shrink-0">
         <span class="text-white font-black text-xs tracking-widest uppercase sidebar-label">Navigation</span>
       </div>
       <div class="flex items-center gap-1">
@@ -383,17 +386,24 @@
         <i class="fa-solid fa-gauge-high text-brandGold w-4 flex-shrink-0"></i>
         <span class="sidebar-label">Main Dashboard</span>
       </button>
+      <button onclick="switchTab('tab-curriculum')" data-tab="tab-curriculum" class="sidebar-nav-btn nav-tab w-full text-left px-3 py-2.5 rounded-lg text-sm font-bold flex items-center gap-3 text-slate-700 hover:bg-emerald-50 hover:text-brandDark transition">
+        <i class="fa-solid fa-book-quran text-brandEmerald w-4 flex-shrink-0"></i>
+        <span class="sidebar-label flex items-center justify-between flex-1">
+          <span>Course Material &amp; Library</span>
+          <span class="px-1.5 py-0.2 rounded-full text-[9px] font-extrabold bg-emerald-100 text-brandEmerald border border-emerald-200">Syllabus</span>
+        </span>
+      </button>
       <button onclick="switchTab('tab-families')" data-tab="tab-families" class="sidebar-nav-btn nav-tab role-admin w-full text-left px-3 py-2.5 rounded-lg text-sm font-bold flex items-center gap-3 text-slate-700 hover:bg-emerald-50 hover:text-brandDark transition">
         <i class="fa-solid fa-users text-brandEmerald w-4 flex-shrink-0"></i>
         <span class="sidebar-label">Families &amp; Students</span>
       </button>
+      <button onclick="switchTab('tab-trials')" data-tab="tab-trials" class="sidebar-nav-btn nav-tab role-admin w-full text-left px-3 py-2.5 rounded-lg text-sm font-bold flex items-center gap-3 text-slate-700 hover:bg-purple-50 hover:text-purple-900 transition">
+        <i class="fa-solid fa-graduation-cap text-purple-600 text-xs w-4 flex-shrink-0"></i>
+        <span class="sidebar-label">Trial Classes</span>
+      </button>
       <button onclick="switchTab('tab-teachers')" data-tab="tab-teachers" class="sidebar-nav-btn nav-tab role-admin w-full text-left px-3 py-2.5 rounded-lg text-sm font-bold flex items-center gap-3 text-slate-700 hover:bg-emerald-50 hover:text-brandDark transition">
         <i class="fa-solid fa-id-card text-brandEmerald w-4 flex-shrink-0"></i>
         <span class="sidebar-label">Employee Registration</span>
-      </button>
-      <button onclick="switchTab('tab-trials')" data-tab="tab-trials" class="sidebar-nav-btn nav-tab role-admin w-full text-left px-3 py-2.5 rounded-lg text-sm font-bold flex items-center gap-3 text-slate-700 hover:bg-purple-50 hover:text-purple-900 transition">
-        <i class="fa-solid fa-graduation-cap text-purple-600 w-4 flex-shrink-0"></i>
-        <span class="sidebar-label">Trial Classes</span>
       </button>
       <button onclick="switchTab('tab-attendance')" data-tab="tab-attendance" class="sidebar-nav-btn nav-tab w-full text-left px-3 py-2.5 rounded-lg text-sm font-bold flex items-center gap-3 text-slate-700 hover:bg-emerald-50 hover:text-brandDark transition">
         <i class="fa-solid fa-clipboard-check text-brandEmerald w-4 flex-shrink-0"></i>
@@ -413,10 +423,6 @@
           <span>Fee Management &amp; Matrix</span>
           <span id="navFeePendingBadge" class="hidden px-1.5 rounded-full text-[10px] font-mono bg-rose-100 text-rose-800 font-extrabold border border-rose-200">0</span>
         </span>
-      </button>
-      <button onclick="switchTab('tab-curriculum')" data-tab="tab-curriculum" class="sidebar-nav-btn nav-tab w-full text-left px-3 py-2.5 rounded-lg text-sm font-bold flex items-center gap-3 text-slate-700 hover:bg-emerald-50 hover:text-brandDark transition">
-        <i class="fa-solid fa-book-quran text-brandEmerald w-4 flex-shrink-0"></i>
-        <span class="sidebar-label">Course Material &amp; Library</span>
       </button>
       <button onclick="switchTab('tab-schedule-search')" data-tab="tab-schedule-search" class="sidebar-nav-btn nav-tab role-admin w-full text-left px-3 py-2.5 rounded-lg text-sm font-bold flex items-center gap-3 text-slate-700 hover:bg-cyan-50 hover:text-cyan-900 transition">
         <i class="fa-solid fa-calendar-check text-cyan-600 w-4 flex-shrink-0"></i>
@@ -443,201 +449,172 @@
     <section id="tab-dashboard" class="tab-content block">
       
       <!-- EXECUTIVE HEADER & ACTIONS -->
-      <div class="flex justify-between items-center mb-4 flex-wrap gap-3">
+      <div class="flex justify-between items-center mb-3.5 flex-wrap gap-2.5">
         <div>
           <div class="flex items-center gap-2">
-            <h2 class="text-xl sm:text-2xl font-black text-brandDark tracking-tight flex items-center gap-2">
+            <h2 class="text-lg sm:text-xl font-black text-brandDark tracking-tight flex items-center gap-2">
               <i class="fa-solid fa-gauge-high text-brandEmerald"></i> Executive Operations Dashboard
             </h2>
           </div>
-          <p class="text-xs text-slate-500 font-medium mt-0.5">Al-Huda Islamic Centre &bull; Real-time Timetable Execution & Monthly Performance</p>
+          <p class="text-[11px] sm:text-xs text-slate-500 font-medium mt-0.5">Al-Huda Islamic Centre &bull; Real-time Timetable Execution &amp; Monthly Performance</p>
         </div>
         <div class="flex items-center gap-2 flex-wrap">
-          <div class="text-xs font-bold text-slate-700 bg-white px-3 py-2 rounded-lg border border-slate-200 shadow-sm flex items-center gap-1.5">
+          <div class="text-xs font-bold text-slate-700 bg-white px-2.5 py-1.5 rounded-lg border border-slate-200 shadow-2xs flex items-center gap-1.5">
             <i class="fa-regular fa-calendar-days text-brandEmerald"></i> <span id="dashTodayDateLabel">Today</span>
           </div>
-          <div class="text-xs font-bold text-emerald-800 bg-emerald-50 px-3 py-2 rounded-lg border border-emerald-200 shadow-sm flex items-center gap-1.5" title="Active registered families">
-            <i class="fa-solid fa-house-circle-check text-brandEmerald"></i> Active Families: <span id="dashLiveActiveFamilies" class="font-mono font-black text-emerald-900 bg-white px-1.5 py-0.5 rounded border border-emerald-300">0</span>
+          <div class="text-xs font-bold text-emerald-800 bg-emerald-50 px-2.5 py-1.5 rounded-lg border border-emerald-200 shadow-2xs flex items-center gap-1.5" title="Active registered families">
+            <i class="fa-solid fa-house-circle-check text-brandEmerald"></i> Families: <span id="dashLiveActiveFamilies" class="font-mono font-black text-emerald-900 bg-white px-1.5 py-0.2 rounded border border-emerald-300">0</span>
           </div>
-          <div class="text-xs font-bold text-teal-800 bg-teal-50 px-3 py-2 rounded-lg border border-teal-200 shadow-sm flex items-center gap-1.5" title="Active regular students">
-            <i class="fa-solid fa-user-graduate text-teal-600"></i> Active Students: <span id="dashLiveActiveStudents" class="font-mono font-black text-teal-900 bg-white px-1.5 py-0.5 rounded border border-teal-300">0</span>
+          <div class="text-xs font-bold text-teal-800 bg-teal-50 px-2.5 py-1.5 rounded-lg border border-teal-200 shadow-2xs flex items-center gap-1.5" title="Active regular students">
+            <i class="fa-solid fa-user-graduate text-teal-600"></i> Students: <span id="dashLiveActiveStudents" class="font-mono font-black text-teal-900 bg-white px-1.5 py-0.2 rounded border border-teal-300">0</span>
           </div>
-          <button onclick="prepareAddFamilyModal()" class="px-3.5 py-2 bg-brandDark text-white rounded-lg text-xs font-bold hover:bg-brandDarkest flex items-center gap-1.5 shadow">
+          <button onclick="prepareAddFamilyModal()" class="px-3 py-1.5 bg-brandDark text-white rounded-lg text-xs font-bold hover:bg-brandDarkest flex items-center gap-1.5 shadow-xs transition">
             <i class="fa-solid fa-house-user"></i> + Add Family
           </button>
-          <button onclick="prepareAddStudentModal()" class="px-3.5 py-2 bg-brandEmerald text-white rounded-lg text-xs font-bold hover:bg-emerald-700 flex items-center gap-1.5 shadow">
-            <i class="fa-solid fa-graduation-cap"></i> + Enroll Student
-          </button>
-          <button onclick="switchTab('tab-schedule-search')" class="px-3.5 py-2 bg-cyan-700 text-white rounded-lg text-xs font-bold hover:bg-cyan-800 flex items-center gap-1.5 shadow" title="Search teacher free & busy slots">
+          <button onclick="switchTab('tab-schedule-search')" class="px-3 py-1.5 bg-cyan-800 text-white rounded-lg text-xs font-bold hover:bg-cyan-900 flex items-center gap-1.5 shadow-xs transition" title="Search teacher free & busy slots">
             <i class="fa-solid fa-calendar-check text-cyan-200"></i> Free Slot Finder
           </button>
-          <button onclick="switchTab('tab-invoices')" class="px-3.5 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 shadow" title="Open Fee Management & 12-Month Matrix">
-            <i class="fa-solid fa-file-invoice-dollar text-amber-200"></i> Fee Management
-          </button>
-          <button onclick="loadDashboardData()" class="px-3 py-2 bg-white border border-slate-300 rounded-lg text-xs font-bold text-slate-700 hover:bg-slate-50 flex items-center gap-1.5 shadow-sm">
+          <button onclick="loadDashboardData()" class="px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg text-xs font-bold text-slate-700 hover:bg-slate-50 flex items-center gap-1.5 shadow-2xs transition">
             <i class="fa-solid fa-arrows-rotate"></i> Refresh
           </button>
         </div>
       </div>
 
-      <!-- TOP ROW: 8 OPERATIONAL KPI STAT BOXES (Centered & Prominent) -->
-      <div class="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-2.5 mb-5">
+      <!-- TOP ROW: 8 OPERATIONAL KPI STAT BOXES (Sleek, Compact & Executive) -->
+      <div class="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-2 mb-3.5">
         
         <!-- 1. Total Classes Today -->
-        <div onclick="filterDashboardClasses('all')" id="kpiBox-all" style="background-color: #ffffff !important; border: 1px solid #cbd5e1 !important; border-left: 6px solid #334155 !important;" class="kpi-dash-card cursor-pointer bg-white p-3 rounded-xl shadow-xs hover:shadow-md hover:scale-[1.02] transition-all">
-          <div class="flex items-center justify-between text-slate-500 mb-1">
-            <span class="text-[10px] font-black uppercase tracking-wider text-slate-600">Total Today</span>
-            <span class="w-6 h-6 rounded-lg bg-slate-100 text-slate-600 flex items-center justify-center text-xs">
+        <div onclick="filterDashboardClasses('all')" id="kpiBox-all" style="background-color: #ffffff !important; border: 1px solid #cbd5e1 !important; border-left: 4.5px solid #334155 !important;" class="kpi-dash-card cursor-pointer bg-white p-2 sm:p-2.5 rounded-xl shadow-2xs hover:shadow-sm hover:scale-[1.01] transition-all">
+          <div class="flex items-center justify-between text-slate-500 mb-0.5">
+            <span class="text-[9.5px] font-black uppercase tracking-wider text-slate-600">Total Today</span>
+            <span class="w-5 h-5 rounded-md bg-slate-100 text-slate-600 flex items-center justify-center text-[10px]">
               <i class="fa-solid fa-calendar-day"></i>
             </span>
           </div>
-          <div class="text-2xl font-black text-slate-900 tracking-tight" style="color: #0f172a !important;" id="kpiDashTotal">0</div>
-          <div class="text-[10px] text-slate-600 font-semibold mt-0.5">All Scheduled</div>
-          <div class="text-[9px] text-slate-400">12:00 AM - 12:00 AM</div>
+          <div class="text-xl sm:text-2xl font-black text-slate-900 tracking-tight" style="color: #0f172a !important;" id="kpiDashTotal">0</div>
+          <div class="text-[9.5px] text-slate-500 font-semibold mt-0.5 truncate">All Scheduled</div>
         </div>
 
         <!-- 2. Current Live Classes (Current Slot) -->
-        <div onclick="filterDashboardClasses('live')" id="kpiBox-live" style="background-color: #ffffff !important; border: 1px solid #a7f3d0 !important; border-left: 6px solid #059669 !important;" class="kpi-dash-card cursor-pointer bg-white p-3 rounded-xl shadow-xs hover:shadow-md hover:scale-[1.02] transition-all">
-          <div class="flex items-center justify-between text-slate-500 mb-1">
-            <span class="text-[10px] font-black uppercase tracking-wider text-emerald-700 flex items-center gap-1.5">
-              <span class="w-2 h-2 rounded-full bg-emerald-500 animate-ping"></span> Live Now
+        <div onclick="filterDashboardClasses('live')" id="kpiBox-live" style="background-color: #ffffff !important; border: 1px solid #a7f3d0 !important; border-left: 4.5px solid #059669 !important;" class="kpi-dash-card cursor-pointer bg-white p-2 sm:p-2.5 rounded-xl shadow-2xs hover:shadow-sm hover:scale-[1.01] transition-all">
+          <div class="flex items-center justify-between text-slate-500 mb-0.5">
+            <span class="text-[9.5px] font-black uppercase tracking-wider text-emerald-700 flex items-center gap-1">
+              <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping"></span> Live Now
             </span>
-            <span class="w-6 h-6 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center text-xs">
+            <span class="w-5 h-5 rounded-md bg-emerald-50 text-emerald-600 flex items-center justify-center text-[10px]">
               <i class="fa-solid fa-tower-broadcast"></i>
             </span>
           </div>
-          <div class="flex items-baseline gap-1.5">
-            <span class="text-2xl font-black text-slate-900 tracking-tight" style="color: #0f172a !important;" id="kpiDashLive">0</span>
-            <span id="kpiDashWaitingBadge" class="hidden px-1.5 py-0.5 rounded-md bg-amber-100 text-amber-900 border border-amber-300 text-[10px] font-extrabold animate-pulse">0 Waiting</span>
+          <div class="flex items-baseline gap-1">
+            <span class="text-xl sm:text-2xl font-black text-slate-900 tracking-tight" style="color: #0f172a !important;" id="kpiDashLive">0</span>
+            <span id="kpiDashWaitingBadge" class="hidden px-1 py-0.2 rounded bg-amber-100 text-amber-900 border border-amber-300 text-[9px] font-extrabold animate-pulse">0 Wait</span>
           </div>
-          <div class="text-[10px] text-emerald-700 font-semibold mt-0.5">Active Classes</div>
-          <div class="text-[9px] text-slate-400">Current Time Slot</div>
+          <div class="text-[9.5px] text-emerald-700 font-semibold mt-0.5 truncate">Active Slots</div>
         </div>
 
         <!-- 3. Completed Classes (since 12:00 AM) -->
-        <div onclick="filterDashboardClasses('completed')" id="kpiBox-completed" style="background-color: #ffffff !important; border: 1px solid #99f6e4 !important; border-left: 6px solid #0d9488 !important;" class="kpi-dash-card cursor-pointer bg-white p-3 rounded-xl shadow-xs hover:shadow-md hover:scale-[1.02] transition-all">
-          <div class="flex items-center justify-between text-slate-500 mb-1">
-            <span class="text-[10px] font-black uppercase tracking-wider text-teal-700">Completed</span>
-            <span class="w-6 h-6 rounded-lg bg-teal-50 text-teal-600 flex items-center justify-center text-xs">
+        <div onclick="filterDashboardClasses('completed')" id="kpiBox-completed" style="background-color: #ffffff !important; border: 1px solid #99f6e4 !important; border-left: 4.5px solid #0d9488 !important;" class="kpi-dash-card cursor-pointer bg-white p-2 sm:p-2.5 rounded-xl shadow-2xs hover:shadow-sm hover:scale-[1.01] transition-all">
+          <div class="flex items-center justify-between text-slate-500 mb-0.5">
+            <span class="text-[9.5px] font-black uppercase tracking-wider text-teal-700">Completed</span>
+            <span class="w-5 h-5 rounded-md bg-teal-50 text-teal-600 flex items-center justify-center text-[10px]">
               <i class="fa-solid fa-circle-check"></i>
             </span>
           </div>
-          <div class="text-2xl font-black text-slate-900 tracking-tight" style="color: #0f172a !important;" id="kpiDashCompleted">0</div>
-          <div class="text-[10px] text-teal-700 font-semibold mt-0.5">Present &amp; Done</div>
-          <div class="text-[9px] text-slate-400">Since 12:00 AM</div>
+          <div class="text-xl sm:text-2xl font-black text-slate-900 tracking-tight" style="color: #0f172a !important;" id="kpiDashCompleted">0</div>
+          <div class="text-[9.5px] text-teal-700 font-semibold mt-0.5 truncate">Present &amp; Done</div>
         </div>
 
         <!-- 4. Remaining Classes (till 12:00 AM midnight) -->
-        <div onclick="filterDashboardClasses('remaining')" id="kpiBox-remaining" style="background-color: #ffffff !important; border: 1px solid #fde68a !important; border-left: 6px solid #f59e0b !important;" class="kpi-dash-card cursor-pointer bg-white p-3 rounded-xl shadow-xs hover:shadow-md hover:scale-[1.02] transition-all">
-          <div class="flex items-center justify-between text-slate-500 mb-1">
-            <span class="text-[10px] font-black uppercase tracking-wider text-amber-700">Remaining</span>
-            <span class="w-6 h-6 rounded-lg bg-amber-50 text-amber-600 flex items-center justify-center text-xs">
+        <div onclick="filterDashboardClasses('remaining')" id="kpiBox-remaining" style="background-color: #ffffff !important; border: 1px solid #fde68a !important; border-left: 4.5px solid #f59e0b !important;" class="kpi-dash-card cursor-pointer bg-white p-2 sm:p-2.5 rounded-xl shadow-2xs hover:shadow-sm hover:scale-[1.01] transition-all">
+          <div class="flex items-center justify-between text-slate-500 mb-0.5">
+            <span class="text-[9.5px] font-black uppercase tracking-wider text-amber-700">Remaining</span>
+            <span class="w-5 h-5 rounded-md bg-amber-50 text-amber-600 flex items-center justify-center text-[10px]">
               <i class="fa-solid fa-hourglass-half"></i>
             </span>
           </div>
-          <div class="text-2xl font-black text-slate-900 tracking-tight" style="color: #0f172a !important;" id="kpiDashRemaining">0</div>
-          <div class="text-[10px] text-amber-700 font-semibold mt-0.5">Pending Slots</div>
-          <div class="text-[9px] text-slate-400">Till 12:00 AM</div>
+          <div class="text-xl sm:text-2xl font-black text-slate-900 tracking-tight" style="color: #0f172a !important;" id="kpiDashRemaining">0</div>
+          <div class="text-[9.5px] text-amber-700 font-semibold mt-0.5 truncate">Pending Slots</div>
         </div>
 
         <!-- 5. Absences Today -->
-        <div onclick="filterDashboardClasses('absent')" id="kpiBox-absent" style="background-color: #ffffff !important; border: 1px solid #fecdd3 !important; border-left: 6px solid #e11d48 !important;" class="kpi-dash-card cursor-pointer bg-white p-3 rounded-xl shadow-xs hover:shadow-md hover:scale-[1.02] transition-all">
-          <div class="flex items-center justify-between text-slate-500 mb-1">
-            <span class="text-[10px] font-black uppercase tracking-wider text-rose-600">Absences</span>
-            <span class="w-6 h-6 rounded-lg bg-rose-50 text-rose-600 flex items-center justify-center text-xs">
+        <div onclick="filterDashboardClasses('absent')" id="kpiBox-absent" style="background-color: #ffffff !important; border: 1px solid #fecdd3 !important; border-left: 4.5px solid #e11d48 !important;" class="kpi-dash-card cursor-pointer bg-white p-2 sm:p-2.5 rounded-xl shadow-2xs hover:shadow-sm hover:scale-[1.01] transition-all">
+          <div class="flex items-center justify-between text-slate-500 mb-0.5">
+            <span class="text-[9.5px] font-black uppercase tracking-wider text-rose-600">Absences</span>
+            <span class="w-5 h-5 rounded-md bg-rose-50 text-rose-600 flex items-center justify-center text-[10px]">
               <i class="fa-solid fa-user-xmark"></i>
             </span>
           </div>
-          <div class="text-2xl font-black text-slate-900 tracking-tight" style="color: #0f172a !important;" id="kpiDashAbsent">0</div>
-          <div class="text-[10px] text-rose-700 font-semibold mt-0.5">Missed Sessions</div>
-          <div class="text-[9px] text-slate-400">Marked Absent</div>
+          <div class="text-xl sm:text-2xl font-black text-slate-900 tracking-tight" style="color: #0f172a !important;" id="kpiDashAbsent">0</div>
+          <div class="text-[9.5px] text-rose-700 font-semibold mt-0.5 truncate">Missed Sessions</div>
         </div>
 
         <!-- 6. Student Leaves Today -->
-        <div onclick="filterDashboardClasses('leave')" id="kpiBox-leave" style="background-color: #ffffff !important; border: 1px solid #bfdbfe !important; border-left: 6px solid #3b82f6 !important;" class="kpi-dash-card cursor-pointer bg-white p-3 rounded-xl shadow-xs hover:shadow-md hover:scale-[1.02] transition-all">
-          <div class="flex items-center justify-between text-slate-500 mb-1">
-            <span class="text-[10px] font-black uppercase tracking-wider text-blue-600">Leaves</span>
-            <span class="w-6 h-6 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center text-xs">
+        <div onclick="filterDashboardClasses('leave')" id="kpiBox-leave" style="background-color: #ffffff !important; border: 1px solid #bfdbfe !important; border-left: 4.5px solid #3b82f6 !important;" class="kpi-dash-card cursor-pointer bg-white p-2 sm:p-2.5 rounded-xl shadow-2xs hover:shadow-sm hover:scale-[1.01] transition-all">
+          <div class="flex items-center justify-between text-slate-500 mb-0.5">
+            <span class="text-[9.5px] font-black uppercase tracking-wider text-blue-600">Leaves</span>
+            <span class="w-5 h-5 rounded-md bg-blue-50 text-blue-600 flex items-center justify-center text-[10px]">
               <i class="fa-solid fa-calendar-xmark"></i>
             </span>
           </div>
-          <div class="text-2xl font-black text-slate-900 tracking-tight" style="color: #0f172a !important;" id="kpiDashLeave">0</div>
-          <div class="text-[10px] text-blue-700 font-semibold mt-0.5">Student Leaves</div>
-          <div class="text-[9px] text-slate-400">Realtime &amp; Advance</div>
+          <div class="text-xl sm:text-2xl font-black text-slate-900 tracking-tight" style="color: #0f172a !important;" id="kpiDashLeave">0</div>
+          <div class="text-[9.5px] text-blue-700 font-semibold mt-0.5 truncate">Student Leaves</div>
         </div>
 
         <!-- 7. Trial Classes Today -->
-        <div onclick="filterDashboardClasses('trial')" id="kpiBox-trial" style="background-color: #ffffff !important; border: 1px solid #e9d5ff !important; border-left: 6px solid #9333ea !important;" class="kpi-dash-card cursor-pointer bg-white p-3 rounded-xl shadow-xs hover:shadow-md hover:scale-[1.02] transition-all">
-          <div class="flex items-center justify-between text-slate-500 mb-1">
-            <span class="text-[10px] font-black uppercase tracking-wider text-purple-700">Trials</span>
-            <span class="w-6 h-6 rounded-lg bg-purple-50 text-purple-600 flex items-center justify-center text-xs">
+        <div onclick="filterDashboardClasses('trial')" id="kpiBox-trial" style="background-color: #ffffff !important; border: 1px solid #e9d5ff !important; border-left: 4.5px solid #9333ea !important;" class="kpi-dash-card cursor-pointer bg-white p-2 sm:p-2.5 rounded-xl shadow-2xs hover:shadow-sm hover:scale-[1.01] transition-all">
+          <div class="flex items-center justify-between text-slate-500 mb-0.5">
+            <span class="text-[9.5px] font-black uppercase tracking-wider text-purple-700">Trials</span>
+            <span class="w-5 h-5 rounded-md bg-purple-50 text-purple-600 flex items-center justify-center text-[10px]">
               <i class="fa-solid fa-graduation-cap"></i>
             </span>
           </div>
-          <div class="text-2xl font-black text-slate-900 tracking-tight" style="color: #0f172a !important;" id="kpiDashTrial">0</div>
-          <div class="text-[10px] text-purple-700 font-semibold mt-0.5">Trial Sessions</div>
-          <div class="text-[9px] text-slate-400">Trial Enquiries</div>
+          <div class="text-xl sm:text-2xl font-black text-slate-900 tracking-tight" style="color: #0f172a !important;" id="kpiDashTrial">0</div>
+          <div class="text-[9.5px] text-purple-700 font-semibold mt-0.5 truncate">Trial Sessions</div>
         </div>
 
         <!-- 8. Active Teaching Staff -->
-        <div onclick="switchTab('tab-teachers')" id="kpiBox-teachers" style="background-color: #ffffff !important; border: 1px solid #a5f3fc !important; border-left: 6px solid #0891b2 !important;" class="kpi-dash-card cursor-pointer bg-white p-3 rounded-xl shadow-xs hover:shadow-md hover:scale-[1.02] transition-all">
-          <div class="flex items-center justify-between text-slate-500 mb-1">
-            <span class="text-[10px] font-black uppercase tracking-wider text-cyan-700">Teachers</span>
-            <span class="w-6 h-6 rounded-lg bg-cyan-50 text-cyan-600 flex items-center justify-center text-xs">
+        <div onclick="switchTab('tab-teachers')" id="kpiBox-teachers" style="background-color: #ffffff !important; border: 1px solid #a5f3fc !important; border-left: 4.5px solid #0891b2 !important;" class="kpi-dash-card cursor-pointer bg-white p-2 sm:p-2.5 rounded-xl shadow-2xs hover:shadow-sm hover:scale-[1.01] transition-all">
+          <div class="flex items-center justify-between text-slate-500 mb-0.5">
+            <span class="text-[9.5px] font-black uppercase tracking-wider text-cyan-700">Teachers</span>
+            <span class="w-5 h-5 rounded-md bg-cyan-50 text-cyan-600 flex items-center justify-center text-[10px]">
               <i class="fa-solid fa-chalkboard-user"></i>
             </span>
           </div>
-          <div class="text-2xl font-black text-slate-900 tracking-tight" style="color: #0f172a !important;" id="kpiDashTeachers">0</div>
-          <div class="text-[10px] text-cyan-700 font-semibold mt-0.5">Active Staff</div>
-          <div class="text-[9px] text-slate-400">Assigned Roster</div>
+          <div class="text-xl sm:text-2xl font-black text-slate-900 tracking-tight" style="color: #0f172a !important;" id="kpiDashTeachers">0</div>
+          <div class="text-[9.5px] text-cyan-700 font-semibold mt-0.5 truncate">Active Staff</div>
         </div>
-
 
       </div>
 
-      <!-- EXECUTIVE DASHBOARD: MONTHLY FEE COLLECTION & ARREARS WIDGET -->
-      <div class="mb-5 bg-gradient-to-r from-emerald-950 via-brandDark to-slate-900 p-4 sm:p-5 rounded-2xl border border-emerald-700/40 shadow-sm text-white flex flex-wrap justify-between items-center gap-4">
-        <div class="flex items-center gap-3.5">
-          <span class="w-12 h-12 rounded-2xl bg-amber-500/20 text-amber-300 border border-amber-400/30 flex items-center justify-center text-xl font-bold shadow-xs">
+      <!-- COMPACT EXECUTIVE FEE BAR (Sleek, Space-Saving & Decluttered) -->
+      <div class="mb-4 bg-slate-900/95 hover:bg-slate-900 text-white px-3.5 py-2 rounded-xl border border-slate-800 shadow-2xs flex items-center justify-between flex-wrap gap-2.5 text-xs transition">
+        <div class="flex items-center gap-2.5">
+          <span class="w-6 h-6 rounded-lg bg-amber-500/20 text-amber-300 border border-amber-400/30 flex items-center justify-center text-xs">
             <i class="fa-solid fa-file-invoice-dollar"></i>
           </span>
-          <div>
-            <div class="flex items-center gap-2 flex-wrap">
-              <h3 class="text-sm sm:text-base font-extrabold text-white tracking-tight">
-                Tuition Fee Collection &amp; Annual Matrix
-              </h3>
-              <span id="dashFeeWidgetPeriodBadge" class="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-amber-400/20 text-amber-200 border border-amber-400/40">
-                September 2026
-              </span>
-            </div>
-            <p class="text-xs text-emerald-200/80 mt-0.5">
-              Smart Arrears, Mid-Month Proration, Advance Payments, Leaves Sync &amp; 1-Click WhatsApp Receipts
-            </p>
+          <div class="flex items-center gap-2">
+            <span class="font-extrabold text-slate-200 text-xs">Tuition Fee Overview</span>
+            <span id="dashFeeWidgetPeriodBadge" class="px-2 py-0.2 rounded-full text-[9px] font-mono font-bold bg-amber-400/20 text-amber-200 border border-amber-400/40">
+              September 2026
+            </span>
           </div>
         </div>
 
-        <div class="flex items-center gap-3.5 flex-wrap">
-          <!-- Metrics -->
-          <div class="flex items-center gap-3 bg-white/10 px-3.5 py-2 rounded-xl border border-white/10 text-xs">
-            <div>
-              <span class="text-[10px] font-bold text-emerald-200 block uppercase">Paid Families</span>
-              <strong id="dashFeeWidgetPaidCount" class="text-sm font-black font-num text-white">0</strong>
-            </div>
-            <div class="h-6 w-px bg-white/20"></div>
-            <div>
-              <span class="text-[10px] font-bold text-rose-300 block uppercase">Pending Due</span>
-              <strong id="dashFeeWidgetPendingCount" class="text-sm font-black font-num text-rose-300">0</strong>
-            </div>
-            <div class="h-6 w-px bg-white/20"></div>
-            <div>
-              <span class="text-[10px] font-bold text-blue-200 block uppercase">On Leave</span>
-              <strong id="dashFeeWidgetLeaveCount" class="text-sm font-black font-num text-blue-200">0</strong>
-            </div>
+        <div class="flex items-center gap-3 font-semibold text-[11px] flex-wrap">
+          <div class="flex items-center gap-1.5 bg-white/5 px-2.5 py-1 rounded-lg border border-white/10">
+            <span class="text-slate-400">Paid Families:</span>
+            <strong id="dashFeeWidgetPaidCount" class="font-mono font-black text-emerald-400">0</strong>
           </div>
-
-          <!-- Direct Jump Button -->
-          <button onclick="switchTab('tab-invoices')" class="px-4 py-2.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black rounded-xl text-xs flex items-center gap-2 shadow-md transition">
-            <i class="fa-solid fa-arrow-right"></i> Open Fee Management
+          <div class="flex items-center gap-1.5 bg-white/5 px-2.5 py-1 rounded-lg border border-white/10">
+            <span class="text-slate-400">Pending Due:</span>
+            <strong id="dashFeeWidgetPendingCount" class="font-mono font-black text-rose-400">0</strong>
+          </div>
+          <div class="flex items-center gap-1.5 bg-white/5 px-2.5 py-1 rounded-lg border border-white/10">
+            <span class="text-slate-400">On Leave:</span>
+            <strong id="dashFeeWidgetLeaveCount" class="font-mono font-black text-blue-400">0</strong>
+          </div>
+          <button onclick="switchTab('tab-invoices')" class="px-2.5 py-1 bg-amber-500/20 hover:bg-amber-500 text-amber-300 hover:text-slate-950 font-bold rounded-lg text-[11px] border border-amber-400/40 transition flex items-center gap-1" title="Open Fee Management">
+            Manage Fee <i class="fa-solid fa-arrow-right text-[9px]"></i>
           </button>
         </div>
       </div>
