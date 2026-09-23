@@ -1,9 +1,9 @@
 // ============================================================
 // Al-Huda Islamic Centre LMS - Progressive Web App Service Worker
-// Version: 1.0.2
+// Version: 1.0.3
 // ============================================================
 
-const CACHE_NAME = 'alhuda-lms-pwa-v2';
+const CACHE_NAME = 'alhuda-lms-pwa-v3';
 const CORE_ASSETS = [
   '/',
   '/teacher',
