@@ -14668,6 +14668,16 @@ Web Portal: https://alhuda-lms.vercel.app`;
     // PROGRESSIVE WEB APP (PWA) SERVICE WORKER (Native Chrome PWA)
     // ============================================================
     if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.addEventListener('controllerchange', () => {
+        console.log('[PWA] Controller changed, auto-reloading to fresh version...');
+        window.location.reload();
+      });
+      navigator.serviceWorker.addEventListener('message', (event) => {
+        if (event.data && event.data.type === 'RELOAD_PAGE') {
+          console.log('[PWA] Update message received, auto-reloading...');
+          window.location.reload();
+        }
+      });
       window.addEventListener('load', () => {
         navigator.serviceWorker.register('/sw.js', { scope: '/' })
           .then(reg => {

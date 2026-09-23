@@ -3,7 +3,7 @@
 // Version: 1.0.4 - Zero-Stale HTML Cache Policy
 // ============================================================
 
-const CACHE_NAME = 'alhuda-lms-pwa-v4';
+const CACHE_NAME = 'alhuda-lms-pwa-v5';
 const STATIC_ASSETS = [
   '/manifest.json',
   '/icon-192.png',
@@ -39,6 +39,12 @@ self.addEventListener('activate', (event) => {
       );
     }).then(() => {
       return self.clients.claim();
+    }).then(() => {
+      return self.clients.matchAll({ type: 'window' }).then((clients) => {
+        clients.forEach((client) => {
+          client.postMessage({ type: 'RELOAD_PAGE' });
+        });
+      });
     })
   );
 });
