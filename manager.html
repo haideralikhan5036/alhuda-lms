@@ -468,12 +468,20 @@
         // Filter Managers from employees
         LIVE_MANAGERS = (LIVE_TEACHERS || []).filter(t => {
           let meta = {};
-          try { meta = JSON.parse(t.notes || t.witness_name || '{}'); } catch(e){}
-          return String(t.id).startsWith('MGR-') || meta.employee_type === 'manager' || t.qualification === 'Operations Manager' || t.working_shift === 'Manager';
+          try {
+            if (t.address && t.address.startsWith('{')) meta = JSON.parse(t.address);
+            else if (t.notes && t.notes.startsWith('{')) meta = JSON.parse(t.notes);
+            else if (t.witness_name && t.witness_name.startsWith('{')) meta = JSON.parse(t.witness_name);
+          } catch(e){}
+          return String(t.id).startsWith('MGR-') || meta.employee_type === 'manager' || t.qualification === 'Operations Manager' || t.working_shift === 'Manager' || String(t.witness_name || '').startsWith('MGR-');
         }).map(t => {
           let meta = {};
-          try { meta = JSON.parse(t.notes || t.witness_name || '{}'); } catch(e){}
-          const displayId = meta.emp_id || meta.teacher_id || (String(t.id).startsWith('MGR-') ? t.id : 'MGR-101');
+          try {
+            if (t.address && t.address.startsWith('{')) meta = JSON.parse(t.address);
+            else if (t.notes && t.notes.startsWith('{')) meta = JSON.parse(t.notes);
+            else if (t.witness_name && t.witness_name.startsWith('{')) meta = JSON.parse(t.witness_name);
+          } catch(e){}
+          const displayId = meta.emp_id || meta.teacher_id || (String(t.witness_name || '').startsWith('MGR-') ? t.witness_name : null) || (String(t.id).startsWith('MGR-') ? t.id : 'MGR-101');
           return {
             ...t,
             display_id: displayId,

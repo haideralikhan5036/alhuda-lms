@@ -8979,15 +8979,15 @@
 
       try {
         const { data, error } = await db.from('teachers').insert([{
-          full_name,
-          father_name: emgName || null,
-          phone,
-          alt_phone: emgPhone || null,
-          address: address || null,
-          witness_name: JSON.stringify(notesObj),
-          witness_phone: cnic || null,
+          full_name: (full_name || '').slice(0, 150),
+          father_name: (emgName || '').slice(0, 150) || null,
+          phone: (phone || '').slice(0, 50),
+          alt_phone: (emgPhone || '').slice(0, 50) || null,
+          address: JSON.stringify(notesObj),
+          witness_name: (emp_id || (designation === 'Manager' ? 'MGR-001' : 'STF-001')).slice(0, 100),
+          witness_phone: (cnic || '').slice(0, 50) || null,
           rate_per_slot: salary,
-          working_shift: designation === 'Manager' ? 'Manager' : (role_title || 'Other Staff'),
+          working_shift: (designation === 'Manager' ? 'Manager' : (role_title || 'Other Staff')).slice(0, 100),
           status: 'Active'
         }]).select();
 
@@ -9229,9 +9229,13 @@
       if (sTeacherSelect) {
         const teachingOnly = (teachers || []).filter(t => {
           let m = {};
-          try { m = JSON.parse(t.notes || t.witness_name || '{}'); } catch(e){}
+          try {
+            if (t.address && t.address.startsWith('{')) m = JSON.parse(t.address);
+            else if (t.witness_name && t.witness_name.startsWith('{')) m = JSON.parse(t.witness_name);
+            else if (t.notes && t.notes.startsWith('{')) m = JSON.parse(t.notes);
+          } catch(e){}
           const acc = accounts[t.id] || {};
-          return m.employee_type !== 'manager' && m.employee_type !== 'other_staff' && acc.employee_type !== 'manager' && acc.employee_type !== 'other_staff' && t.working_shift !== 'Manager' && !String(t.id).startsWith('MGR-') && !String(t.id).startsWith('STF-') && !String(m.emp_id || '').startsWith('MGR-') && !String(acc.teacher_id || '').startsWith('MGR-');
+          return m.employee_type !== 'manager' && m.employee_type !== 'other_staff' && acc.employee_type !== 'manager' && acc.employee_type !== 'other_staff' && t.working_shift !== 'Manager' && !String(t.id).startsWith('MGR-') && !String(t.id).startsWith('STF-') && !String(m.emp_id || '').startsWith('MGR-') && !String(acc.teacher_id || '').startsWith('MGR-') && !String(t.witness_name || '').startsWith('MGR-') && !String(t.witness_name || '').startsWith('STF-');
         });
         sTeacherSelect.innerHTML = teachingOnly.map(t => `<option value="${t.id}">${t.full_name} (${t.rate_per_slot || 2200} PKR)</option>`).join('');
       }
@@ -9249,18 +9253,25 @@
 
       container.innerHTML = teachers.map(t => {
         let meta = {};
-        try { meta = JSON.parse(t.notes || t.witness_name || '{}'); } catch(e){}
+        try {
+          if (t.address && t.address.startsWith('{')) meta = JSON.parse(t.address);
+          else if (t.witness_name && t.witness_name.startsWith('{')) meta = JSON.parse(t.witness_name);
+          else if (t.notes && t.notes.startsWith('{')) meta = JSON.parse(t.notes);
+        } catch(e){}
         const acc = accounts[t.id] || {};
         if (!meta.employee_type && acc.employee_type) meta = { ...meta, ...acc };
+        if (!meta.emp_id && (String(t.witness_name || '').startsWith('MGR-') || String(t.witness_name || '').startsWith('STF-'))) {
+          meta.emp_id = t.witness_name;
+        }
 
-        const isManager = meta.employee_type === 'manager' || t.working_shift === 'Manager' || String(t.id).startsWith('MGR-') || String(meta.emp_id || '').startsWith('MGR-') || String(acc.teacher_id || '').startsWith('MGR-');
-        const isOtherStaff = meta.employee_type === 'other_staff' || (t.working_shift && t.working_shift.toLowerCase().includes('staff')) || String(t.id).startsWith('STF-') || String(meta.emp_id || '').startsWith('STF-') || String(acc.teacher_id || '').startsWith('STF-');
+        const isManager = meta.employee_type === 'manager' || t.working_shift === 'Manager' || String(t.id).startsWith('MGR-') || String(meta.emp_id || '').startsWith('MGR-') || String(acc.teacher_id || '').startsWith('MGR-') || String(t.witness_name || '').startsWith('MGR-');
+        const isOtherStaff = meta.employee_type === 'other_staff' || (t.working_shift && t.working_shift.toLowerCase().includes('staff')) || String(t.id).startsWith('STF-') || String(meta.emp_id || '').startsWith('STF-') || String(acc.teacher_id || '').startsWith('STF-') || String(t.witness_name || '').startsWith('STF-');
 
         // ==========================================
         // CARD: MANAGER (NON-TEACHING)
         // ==========================================
         if (isManager) {
-          const displayId = meta.emp_id || acc.teacher_id || (String(t.id).startsWith('MGR-') ? t.id : 'MGR-001');
+          const displayId = meta.emp_id || (String(t.witness_name || '').startsWith('MGR-') ? t.witness_name : null) || acc.teacher_id || (String(t.id).startsWith('MGR-') ? t.id : 'MGR-001');
           const cleanPhone = (t.phone || '').replace(/[^0-9]/g, '');
           const mgrUsername = meta.username || acc.username || `mgr.${t.full_name.toLowerCase().replace(/[^a-z]/g, '').slice(0, 8)}`;
           const mgrPassword = meta.password || acc.password || '12345678';
@@ -9377,7 +9388,7 @@
         // CARD: OTHER STAFF (NON-TEACHING)
         // ==========================================
         if (isOtherStaff) {
-          const displayId = meta.emp_id || acc.teacher_id || (String(t.id).startsWith('STF-') ? t.id : 'STF-001');
+          const displayId = meta.emp_id || (String(t.witness_name || '').startsWith('STF-') ? t.witness_name : null) || acc.teacher_id || (String(t.id).startsWith('STF-') ? t.id : 'STF-001');
           return `
             <div class="bg-white rounded-2xl border-2 border-slate-200 shadow-sm hover:shadow-md transition p-5 flex flex-col justify-between">
               <div>
