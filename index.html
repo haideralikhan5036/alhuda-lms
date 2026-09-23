@@ -9445,7 +9445,6 @@
         // ==========================================
         const bookedCount = countMap[t.id] || 0;
         const creds = getTeacherCreds(t);
-        const acc = accounts[t.id] || {};
         const cleanPhone = (t.phone || '').replace(/[^0-9]/g, '');
         const directPortalUrl = `${window.location.origin}/teacher.html?t=${creds.username}`;
         const waMsg = `Assalamu Alaikum Respected ${t.full_name},\nWelcome to the Al-Huda Islamic Centre Teacher Operations Portal.\n\n🌐 *Your Personal Portal Link:*\n${directPortalUrl}\n\n👤 *Username:* ${creds.username}\n🔑 *Password:* ${creds.password || '12345678'}\n🕒 *Assigned Shift:* ${t.working_shift || '10 Hours Shift'}\n💰 *Slot Rate:* ${t.rate_per_slot || 2200} PKR\n\nPlease tap the link above to view your timetable, student schedules, and attendance logs.\nJazakum Allahu Khairan!`;
