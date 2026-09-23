@@ -8978,23 +8978,39 @@
       btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Registering...';
 
       try {
-        const { error } = await db.from('teachers').insert([{
-          id: emp_id,
+        const { data, error } = await db.from('teachers').insert([{
           full_name,
-          father_name: null,
+          father_name: emgName || null,
           phone,
-          gender,
-          qualification: role_title || designation,
-          working_shift: 'Office Hours',
+          alt_phone: emgPhone || null,
+          address: address || null,
+          witness_name: JSON.stringify(notesObj),
+          witness_phone: cnic || null,
           rate_per_slot: salary,
-          status: 'Active',
-          joining_date,
-          witness_name: null,
-          witness_phone: null,
-          notes: JSON.stringify(notesObj)
-        }]);
+          working_shift: designation === 'Manager' ? 'Manager' : (role_title || 'Other Staff'),
+          status: 'Active'
+        }]).select();
 
         if (error) throw error;
+
+        const insertedId = (data && data[0]) ? data[0].id : ('local_' + Date.now());
+
+        saveTeacherAccount(insertedId, {
+          employee_type: designation === 'Manager' ? 'manager' : 'other_staff',
+          teacher_id: emp_id,
+          emp_id: emp_id,
+          username: username,
+          password: password,
+          role_title: role_title || designation,
+          designation: designation,
+          cnic: cnic || '',
+          email: email || '',
+          emergency_name: emgName || '',
+          emergency_phone: emgPhone || '',
+          joining_date: joining_date,
+          salary: salary,
+          gender: gender
+        });
 
         closeModal('modalAddNonTeachingStaff');
         await loadTeachers();
@@ -9206,13 +9222,16 @@
       const countMap = {};
       (scheds || []).forEach(s => countMap[s.teacher_id] = (countMap[s.teacher_id] || 0) + 1);
 
+      const accounts = getTeacherAccounts();
+
       // In student enrollment modal, only list actual teaching staff (exclude managers/non-teaching staff)
       const sTeacherSelect = document.getElementById('stuTeacherId');
       if (sTeacherSelect) {
         const teachingOnly = (teachers || []).filter(t => {
           let m = {};
-          try { m = JSON.parse(t.notes || '{}'); } catch(e){}
-          return m.employee_type !== 'manager' && m.employee_type !== 'other_staff' && !String(t.id).startsWith('MGR-') && !String(t.id).startsWith('STF-');
+          try { m = JSON.parse(t.notes || t.witness_name || '{}'); } catch(e){}
+          const acc = accounts[t.id] || {};
+          return m.employee_type !== 'manager' && m.employee_type !== 'other_staff' && acc.employee_type !== 'manager' && acc.employee_type !== 'other_staff' && t.working_shift !== 'Manager' && !String(t.id).startsWith('MGR-') && !String(t.id).startsWith('STF-') && !String(m.emp_id || '').startsWith('MGR-') && !String(acc.teacher_id || '').startsWith('MGR-');
         });
         sTeacherSelect.innerHTML = teachingOnly.map(t => `<option value="${t.id}">${t.full_name} (${t.rate_per_slot || 2200} PKR)</option>`).join('');
       }
@@ -9228,23 +9247,25 @@
         return;
       }
 
-      const accounts = getTeacherAccounts();
-
       container.innerHTML = teachers.map(t => {
         let meta = {};
-        try { meta = JSON.parse(t.notes || '{}'); } catch(e){}
-        const isManager = meta.employee_type === 'manager' || String(t.id).startsWith('MGR-');
-        const isOtherStaff = meta.employee_type === 'other_staff' || String(t.id).startsWith('STF-');
+        try { meta = JSON.parse(t.notes || t.witness_name || '{}'); } catch(e){}
+        const acc = accounts[t.id] || {};
+        if (!meta.employee_type && acc.employee_type) meta = { ...meta, ...acc };
+
+        const isManager = meta.employee_type === 'manager' || t.working_shift === 'Manager' || String(t.id).startsWith('MGR-') || String(meta.emp_id || '').startsWith('MGR-') || String(acc.teacher_id || '').startsWith('MGR-');
+        const isOtherStaff = meta.employee_type === 'other_staff' || (t.working_shift && t.working_shift.toLowerCase().includes('staff')) || String(t.id).startsWith('STF-') || String(meta.emp_id || '').startsWith('STF-') || String(acc.teacher_id || '').startsWith('STF-');
 
         // ==========================================
         // CARD: MANAGER (NON-TEACHING)
         // ==========================================
         if (isManager) {
+          const displayId = meta.emp_id || acc.teacher_id || (String(t.id).startsWith('MGR-') ? t.id : 'MGR-001');
           const cleanPhone = (t.phone || '').replace(/[^0-9]/g, '');
-          const mgrUsername = meta.username || `mgr.${t.full_name.toLowerCase().replace(/[^a-z]/g, '').slice(0, 8)}`;
-          const mgrPassword = meta.password || '12345678';
-          const directPortalUrl = `${window.location.origin}/manager.html?m=${t.id}`;
-          const waMsg = `Assalamu Alaikum Respected ${t.full_name},\nWelcome to Al-Huda Islamic Centre Management Operations.\n\n🌐 *Your Dedicated Manager Portal Link:*\n${directPortalUrl}\n\n🆔 *Manager ID:* ${t.id}\n👤 *Login Username:* ${mgrUsername}\n🔑 *Login Password:* ${mgrPassword}\n💼 *Role / Title:* ${meta.role_title || 'Operations Manager'}\n\nPlease click your portal link to access all management tools, rosters, timetables, and system follow-ups.\nJazakum Allahu Khairan!`;
+          const mgrUsername = meta.username || acc.username || `mgr.${t.full_name.toLowerCase().replace(/[^a-z]/g, '').slice(0, 8)}`;
+          const mgrPassword = meta.password || acc.password || '12345678';
+          const directPortalUrl = `${window.location.origin}/manager.html?m=${displayId}`;
+          const waMsg = `Assalamu Alaikum Respected ${t.full_name},\nWelcome to Al-Huda Islamic Centre Management Operations.\n\n🌐 *Your Dedicated Manager Portal Link:*\n${directPortalUrl}\n\n🆔 *Manager ID:* ${displayId}\n👤 *Login Username:* ${mgrUsername}\n🔑 *Login Password:* ${mgrPassword}\n💼 *Role / Title:* ${meta.role_title || 'Operations Manager'}\n\nPlease click your portal link to access all management tools, rosters, timetables, and system follow-ups.\nJazakum Allahu Khairan!`;
           const waUrl = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(waMsg)}`;
 
           return `
@@ -9258,7 +9279,7 @@
                     <div>
                       <div class="flex items-center gap-1.5 flex-wrap">
                         <h4 class="font-extrabold text-base text-slate-900 leading-tight">${t.full_name}</h4>
-                        <span class="px-1.5 py-0.5 rounded text-[9px] font-mono font-bold bg-indigo-50 text-indigo-800 border border-indigo-200">${t.id}</span>
+                        <span class="px-1.5 py-0.5 rounded text-[9px] font-mono font-bold bg-indigo-50 text-indigo-800 border border-indigo-200">${displayId}</span>
                       </div>
                       <p class="text-[11px] text-indigo-700 font-semibold">${meta.role_title || 'Operations Manager'}</p>
                     </div>
@@ -9356,6 +9377,7 @@
         // CARD: OTHER STAFF (NON-TEACHING)
         // ==========================================
         if (isOtherStaff) {
+          const displayId = meta.emp_id || acc.teacher_id || (String(t.id).startsWith('STF-') ? t.id : 'STF-001');
           return `
             <div class="bg-white rounded-2xl border-2 border-slate-200 shadow-sm hover:shadow-md transition p-5 flex flex-col justify-between">
               <div>
@@ -9367,7 +9389,7 @@
                     <div>
                       <div class="flex items-center gap-1.5 flex-wrap">
                         <h4 class="font-extrabold text-base text-slate-900 leading-tight">${t.full_name}</h4>
-                        <span class="px-1.5 py-0.5 rounded text-[9px] font-mono font-bold bg-slate-100 text-slate-700 border border-slate-200">${t.id}</span>
+                        <span class="px-1.5 py-0.5 rounded text-[9px] font-mono font-bold bg-slate-100 text-slate-700 border border-slate-200">${displayId}</span>
                       </div>
                       <p class="text-[11px] text-slate-500 font-semibold">${meta.role_title || 'Non-Teaching Staff'}</p>
                     </div>

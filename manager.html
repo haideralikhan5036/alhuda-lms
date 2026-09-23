@@ -468,13 +468,22 @@
         // Filter Managers from employees
         LIVE_MANAGERS = (LIVE_TEACHERS || []).filter(t => {
           let meta = {};
-          try { meta = JSON.parse(t.notes || '{}'); } catch(e){}
-          return String(t.id).startsWith('MGR-') || meta.employee_type === 'manager' || t.qualification === 'Operations Manager';
+          try { meta = JSON.parse(t.notes || t.witness_name || '{}'); } catch(e){}
+          return String(t.id).startsWith('MGR-') || meta.employee_type === 'manager' || t.qualification === 'Operations Manager' || t.working_shift === 'Manager';
+        }).map(t => {
+          let meta = {};
+          try { meta = JSON.parse(t.notes || t.witness_name || '{}'); } catch(e){}
+          const displayId = meta.emp_id || meta.teacher_id || (String(t.id).startsWith('MGR-') ? t.id : 'MGR-101');
+          return {
+            ...t,
+            display_id: displayId,
+            meta: meta
+          };
         });
 
         if (LIVE_MANAGERS.length === 0) {
           LIVE_MANAGERS = [
-            { id: "MGR-101", full_name: "Muhammad Tariq", phone: "+92 300 9988776", email: "tariq.manager@alhuda.org", working_shift: "Office Hours", qualification: "Operations Manager" }
+            { id: "MGR-101", display_id: "MGR-101", full_name: "Muhammad Tariq", phone: "+92 300 9988776", email: "tariq.manager@alhuda.org", working_shift: "Office Hours", qualification: "Operations Manager" }
           ];
         }
 
@@ -504,11 +513,16 @@
       const paramM = (urlParams.get('m') || urlParams.get('id') || urlParams.get('name') || '').trim().toLowerCase();
 
       select.innerHTML = LIVE_MANAGERS.map(m => {
-        return `<option value="${m.id}" class="text-slate-800">${m.full_name} (${m.id})</option>`;
+        const idBadge = m.display_id || m.id;
+        return `<option value="${m.id}" class="text-slate-800">${m.full_name} (${idBadge})</option>`;
       }).join('');
 
       if (paramM) {
-        const found = LIVE_MANAGERS.find(m => m.id.toLowerCase() === paramM || m.full_name.toLowerCase().includes(paramM));
+        const found = LIVE_MANAGERS.find(m => 
+          m.id.toLowerCase() === paramM || 
+          (m.display_id && m.display_id.toLowerCase() === paramM) || 
+          m.full_name.toLowerCase().includes(paramM)
+        );
         if (found) ACTIVE_MANAGER = found;
       }
 
@@ -534,9 +548,9 @@
     function updateActiveManagerDisplay() {
       if (!ACTIVE_MANAGER) return;
       const badge = document.getElementById('headerManagerIdBadge');
-      if (badge) badge.innerText = ACTIVE_MANAGER.id;
+      if (badge) badge.innerText = ACTIVE_MANAGER.display_id || ACTIVE_MANAGER.id;
       const nameSidebar = document.getElementById('sidebarManagerName');
-      if (nameSidebar) nameSidebar.innerText = `${ACTIVE_MANAGER.full_name} (${ACTIVE_MANAGER.id})`;
+      if (nameSidebar) nameSidebar.innerText = `${ACTIVE_MANAGER.full_name} (${ACTIVE_MANAGER.display_id || ACTIVE_MANAGER.id})`;
     }
 
     function updateSidebarBadges() {
