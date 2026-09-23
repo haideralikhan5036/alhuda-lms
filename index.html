@@ -205,6 +205,19 @@
       box-shadow: 0 0 0 3px rgba(52, 211, 153, 0.25) !important;
     }
 
+    /* Teaching Studio Tool Styles */
+    .teaching-tool-btn.active {
+      background-color: #047857 !important;
+      color: #ffffff !important;
+      box-shadow: 0 0 10px rgba(16, 185, 129, 0.4) !important;
+    }
+    .teaching-color-btn.active {
+      border-width: 2.5px !important;
+      border-color: #ffffff !important;
+      transform: scale(1.18) !important;
+      box-shadow: 0 0 8px rgba(255, 255, 255, 0.7) !important;
+    }
+
     select option {
       padding: 8px 12px !important;
       font-weight: 500 !important;
@@ -4063,8 +4076,101 @@
       </div>
 
       <!-- MAIN STAGE / CANVAS AREA -->
-      <div class="flex-1 bg-slate-950 flex items-center justify-between p-2 sm:p-4 overflow-hidden relative select-none" id="readerStage">
+      <div class="flex-1 bg-slate-950 flex items-center justify-between p-2 sm:p-4 overflow-hidden relative select-none gap-2 sm:gap-3" id="readerStage">
         
+        <!-- TEACHING STUDIO: DIGITAL WHITEBOARD & ANNOTATION SIDEBAR -->
+        <aside id="readerTeachingToolbar" class="z-30 flex flex-col gap-1 p-2 bg-slate-900/95 border border-slate-700/80 rounded-2xl shadow-2xl backdrop-blur-md max-h-[82vh] overflow-y-auto select-none w-[52px] sm:w-[58px] items-center shrink-0">
+          
+          <!-- Mode Toggle: Pointer vs Laser -->
+          <button type="button" onclick="setTeachingTool('pointer')" id="toolBtn_pointer" class="teaching-tool-btn active w-9 h-9 sm:w-10 sm:h-10 rounded-xl flex items-center justify-center text-slate-300 hover:text-white hover:bg-slate-800 transition" title="Pointer / Select Mode (V)">
+            <i class="fa-solid fa-arrow-pointer text-sm"></i>
+          </button>
+          <button type="button" onclick="setTeachingTool('laser')" id="toolBtn_laser" class="teaching-tool-btn w-9 h-9 sm:w-10 sm:h-10 rounded-xl flex items-center justify-center text-amber-400 hover:bg-slate-800 transition" title="Laser Spotlight Pointer (L)">
+            <i class="fa-solid fa-crosshairs text-base"></i>
+          </button>
+
+          <div class="w-6 h-[1px] bg-slate-700/70 my-0.5"></div>
+
+          <!-- Freehand Pen & Highlighter -->
+          <button type="button" onclick="setTeachingTool('pen')" id="toolBtn_pen" class="teaching-tool-btn w-9 h-9 sm:w-10 sm:h-10 rounded-xl flex items-center justify-center text-slate-300 hover:text-white hover:bg-slate-800 transition" title="Freehand Pen (P)">
+            <i class="fa-solid fa-pencil text-sm"></i>
+          </button>
+          <button type="button" onclick="setTeachingTool('highlighter')" id="toolBtn_highlighter" class="teaching-tool-btn w-9 h-9 sm:w-10 sm:h-10 rounded-xl flex items-center justify-center text-amber-300 hover:bg-slate-800 transition" title="Translucent Text Highlighter (H)">
+            <i class="fa-solid fa-highlighter text-sm"></i>
+          </button>
+
+          <div class="w-6 h-[1px] bg-slate-700/70 my-0.5"></div>
+
+          <!-- Shapes: Circle, Box, Arrow, Star, Tick, Cross -->
+          <button type="button" onclick="setTeachingTool('circle')" id="toolBtn_circle" class="teaching-tool-btn w-9 h-9 sm:w-10 sm:h-10 rounded-xl flex items-center justify-center text-slate-300 hover:text-white hover:bg-slate-800 transition" title="Circle Letter / Harkat (C)">
+            <i class="fa-regular fa-circle text-sm"></i>
+          </button>
+          <button type="button" onclick="setTeachingTool('box')" id="toolBtn_box" class="teaching-tool-btn w-9 h-9 sm:w-10 sm:h-10 rounded-xl flex items-center justify-center text-slate-300 hover:text-white hover:bg-slate-800 transition" title="Box Word / Ayah (B)">
+            <i class="fa-regular fa-square text-sm"></i>
+          </button>
+          <button type="button" onclick="setTeachingTool('arrow')" id="toolBtn_arrow" class="teaching-tool-btn w-9 h-9 sm:w-10 sm:h-10 rounded-xl flex items-center justify-center text-slate-300 hover:text-white hover:bg-slate-800 transition" title="Pointer Arrow (A)">
+            <i class="fa-solid fa-arrow-left-long text-sm"></i>
+          </button>
+          <button type="button" onclick="setTeachingTool('star')" id="toolBtn_star" class="teaching-tool-btn w-9 h-9 sm:w-10 sm:h-10 rounded-xl flex items-center justify-center text-amber-400 hover:bg-slate-800 transition" title="Reward Star ⭐ (S)">
+            <i class="fa-solid fa-star text-sm"></i>
+          </button>
+          <button type="button" onclick="setTeachingTool('tick')" id="toolBtn_tick" class="teaching-tool-btn w-9 h-9 sm:w-10 sm:h-10 rounded-xl flex items-center justify-center text-emerald-400 hover:bg-slate-800 transition" title="Correct Recitation Tick ✔️">
+            <i class="fa-solid fa-check text-sm"></i>
+          </button>
+          <button type="button" onclick="setTeachingTool('cross')" id="toolBtn_cross" class="teaching-tool-btn w-9 h-9 sm:w-10 sm:h-10 rounded-xl flex items-center justify-center text-rose-400 hover:bg-slate-800 transition" title="Correction Cross ❌">
+            <i class="fa-solid fa-xmark text-sm"></i>
+          </button>
+
+          <div class="w-6 h-[1px] bg-slate-700/70 my-0.5"></div>
+
+          <!-- Color Swatches -->
+          <div class="flex flex-col gap-1 items-center py-0.5">
+            <button type="button" onclick="setTeachingColor('#ef4444')" id="colorBtn_red" class="teaching-color-btn active w-5 h-5 rounded-full bg-red-500 border border-white hover:scale-115 transition shadow-xs" title="Red (Mistake / Focus)"></button>
+            <button type="button" onclick="setTeachingColor('#10b981')" id="colorBtn_green" class="teaching-color-btn w-5 h-5 rounded-full bg-emerald-500 border border-slate-600 hover:scale-115 transition shadow-xs" title="Green (Correct / Tajweed)"></button>
+            <button type="button" onclick="setTeachingColor('#f59e0b')" id="colorBtn_gold" class="teaching-color-btn w-5 h-5 rounded-full bg-amber-500 border border-slate-600 hover:scale-115 transition shadow-xs" title="Gold / Yellow"></button>
+            <button type="button" onclick="setTeachingColor('#0ea5e9')" id="colorBtn_blue" class="teaching-color-btn w-5 h-5 rounded-full bg-sky-500 border border-slate-600 hover:scale-115 transition shadow-xs" title="Sky Blue"></button>
+            <button type="button" onclick="setTeachingColor('#a855f7')" id="colorBtn_purple" class="teaching-color-btn w-5 h-5 rounded-full bg-purple-500 border border-slate-600 hover:scale-115 transition shadow-xs" title="Purple"></button>
+            
+            <!-- Custom Color Picker -->
+            <label class="w-5 h-5 rounded-full overflow-hidden cursor-pointer border border-slate-500 hover:scale-115 transition shadow-xs relative mt-0.5" title="Custom Color Palette">
+              <input type="color" id="teachingCustomColorPicker" value="#ef4444" onchange="setTeachingColor(this.value)" class="absolute -top-2 -left-2 w-9 h-9 cursor-pointer opacity-0">
+              <div class="w-full h-full bg-gradient-to-tr from-rose-500 via-amber-400 via-emerald-400 to-indigo-500"></div>
+            </label>
+          </div>
+
+          <div class="w-6 h-[1px] bg-slate-700/70 my-0.5"></div>
+
+          <!-- Stroke Size Selector -->
+          <div class="flex items-center gap-1.5 py-0.5">
+            <button type="button" onclick="setTeachingWidth(2)" id="widthBtn_2" class="w-4 h-4 rounded-full flex items-center justify-center text-slate-400 hover:text-white" title="Thin Line (2px)">
+              <div class="w-1 h-1 rounded-full bg-current"></div>
+            </button>
+            <button type="button" onclick="setTeachingWidth(4)" id="widthBtn_4" class="w-4 h-4 rounded-full flex items-center justify-center text-white" title="Medium Line (4px)">
+              <div class="w-2 h-2 rounded-full bg-current"></div>
+            </button>
+            <button type="button" onclick="setTeachingWidth(8)" id="widthBtn_8" class="w-4 h-4 rounded-full flex items-center justify-center text-slate-400 hover:text-white" title="Bold Line (8px)">
+              <div class="w-3 h-3 rounded-full bg-current"></div>
+            </button>
+          </div>
+
+          <div class="w-6 h-[1px] bg-slate-700/70 my-0.5"></div>
+
+          <!-- Actions: Eraser, Undo, Clear, Snapshot -->
+          <button type="button" onclick="setTeachingTool('eraser')" id="toolBtn_eraser" class="teaching-tool-btn w-9 h-9 sm:w-10 sm:h-10 rounded-xl flex items-center justify-center text-slate-300 hover:text-white hover:bg-slate-800 transition" title="Eraser (E)">
+            <i class="fa-solid fa-eraser text-sm"></i>
+          </button>
+          <button type="button" onclick="undoTeachingAnnotation()" class="w-9 h-9 sm:w-10 sm:h-10 rounded-xl flex items-center justify-center text-slate-300 hover:text-white hover:bg-slate-800 transition" title="Undo (Ctrl+Z)">
+            <i class="fa-solid fa-rotate-left text-sm"></i>
+          </button>
+          <button type="button" onclick="clearCurrentPageAnnotations()" class="w-9 h-9 sm:w-10 sm:h-10 rounded-xl flex items-center justify-center text-rose-400 hover:bg-rose-950/60 transition" title="Clear Page Marks">
+            <i class="fa-solid fa-trash-can text-sm"></i>
+          </button>
+          <button type="button" onclick="downloadAnnotatedLessonSnapshot()" class="w-9 h-9 sm:w-10 sm:h-10 rounded-xl flex items-center justify-center text-amber-300 hover:bg-slate-800 transition" title="Download Snapshot for Parents (PNG)">
+            <i class="fa-solid fa-camera text-sm"></i>
+          </button>
+
+        </aside>
+
         <!-- Left Flip Button -->
         <button onclick="changeReaderPage(-1)" id="btnReaderPrevFloating" class="z-10 w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-slate-800/80 hover:bg-emerald-700 text-white shadow-xl flex items-center justify-center transition duration-200 backdrop-blur-xs border border-slate-600 hover:scale-105" title="Previous Page (&larr; Left Arrow)">
           <i class="fa-solid fa-chevron-left text-sm"></i>
@@ -4080,9 +4186,19 @@
           </div>
 
           <!-- 1. IMAGE-BASED READER STAGE (Qaida, 16-Line Quran, Illustrated Books) -->
-          <div id="readerImageStage" class="h-full flex items-center justify-center w-full">
-            <img id="readerPageImg" src="" alt="Book Page" 
-              class="max-h-[76vh] w-auto max-w-full rounded-xl shadow-2xl object-contain border border-slate-700/80 bg-white transition-transform duration-200" />
+          <div id="readerImageStage" class="h-full flex items-center justify-center w-full overflow-hidden">
+            <div id="readerCanvasWrapper" class="relative inline-block max-h-[76vh] max-w-full">
+              <img id="readerPageImg" src="" alt="Book Page" 
+                class="max-h-[76vh] w-auto max-w-full rounded-xl shadow-2xl object-contain border border-slate-700/80 bg-white block transition-transform duration-200 select-none pointer-events-none" />
+              
+              <!-- INTERACTIVE DRAWING / ANNOTATION CANVAS -->
+              <canvas id="readerAnnotationCanvas" class="absolute inset-0 w-full h-full rounded-xl cursor-default z-10 touch-none"></canvas>
+
+              <!-- LASER SPOTLIGHT POINTER HALO -->
+              <div id="readerLaserHalo" class="pointer-events-none absolute -translate-x-1/2 -translate-y-1/2 rounded-full hidden z-20 w-9 h-9 border-2 border-amber-400 bg-amber-400/20 shadow-[0_0_20px_rgba(251,191,36,0.95)] animate-pulse">
+                <div class="w-2 h-2 rounded-full bg-amber-300 absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 shadow-xs"></div>
+              </div>
+            </div>
           </div>
 
           <!-- 2. TEXT-BASED READABLE STAGE (Tafseer, Hadith, Duas with Arabic + Trans.) -->
@@ -5408,6 +5524,7 @@
 
         img.onload = function() {
           if (spinner) spinner.classList.add('hidden');
+          setTimeout(initOrResizeAnnotationCanvas, 60);
         };
 
         img.onerror = function() {
@@ -5422,6 +5539,7 @@
           }
           img.src = fallback;
           if (spinner) spinner.classList.add('hidden');
+          setTimeout(initOrResizeAnnotationCanvas, 60);
         };
 
         img.src = pageUrl;
@@ -5549,6 +5667,7 @@
       if (img) img.style.transform = `scale(${CURRENT_READER_ZOOM})`;
       const lbl = document.getElementById('readerZoomLevel');
       if (lbl) lbl.innerText = `${Math.round(CURRENT_READER_ZOOM * 100)}%`;
+      setTimeout(initOrResizeAnnotationCanvas, 60);
     }
 
     function resetReaderZoom() {
@@ -5557,6 +5676,7 @@
       if (img) img.style.transform = `scale(1)`;
       const lbl = document.getElementById('readerZoomLevel');
       if (lbl) lbl.innerText = `100%`;
+      setTimeout(initOrResizeAnnotationCanvas, 60);
     }
 
     function toggleReaderFullscreen() {
@@ -5569,6 +5689,7 @@
       } else {
         document.exitFullscreen();
       }
+      setTimeout(initOrResizeAnnotationCanvas, 200);
     }
 
     function closeDigitalBookReader() {
@@ -5578,7 +5699,509 @@
       resetReaderZoom();
       closeModal('modalDigitalBookReader');
       CURRENT_READER_BOOK = null;
+      // USER CORE REQUIREMENT: Reset all session annotations so the next student gets a completely fresh page!
+      resetAllTeachingAnnotations();
     }
+
+    // ============================================================
+    // IN-LMS INTERACTIVE TEACHING WHITEBOARD & ANNOTATION STUDIO
+    // ============================================================
+    let TEACHING_TOOL = 'pointer'; // 'pointer', 'laser', 'pen', 'highlighter', 'circle', 'box', 'arrow', 'star', 'tick', 'cross', 'eraser'
+    let TEACHING_COLOR = '#ef4444';
+    let TEACHING_WIDTH = 4;
+    let TEACHING_IS_DRAWING = false;
+    let TEACHING_START_PT = null;
+    let TEACHING_CURRENT_STROKE = null;
+    let TEACHING_PAGE_MARKS = {}; // Session-only in-memory storage: { [pageKey]: [strokes...] }
+    let TEACHING_CANVAS_INITIALIZED = false;
+
+    function setTeachingTool(tool) {
+      TEACHING_TOOL = tool;
+      document.querySelectorAll('.teaching-tool-btn').forEach(btn => btn.classList.remove('active', 'bg-brandDark', 'bg-emerald-700', 'text-white'));
+      const activeBtn = document.getElementById('toolBtn_' + tool);
+      if (activeBtn) activeBtn.classList.add('active');
+
+      const canvas = document.getElementById('readerAnnotationCanvas');
+      const halo = document.getElementById('readerLaserHalo');
+      if (canvas) {
+        if (tool === 'pointer') {
+          canvas.style.cursor = 'default';
+          canvas.style.pointerEvents = 'none';
+        } else if (tool === 'laser') {
+          canvas.style.cursor = 'none';
+          canvas.style.pointerEvents = 'auto';
+        } else if (tool === 'eraser') {
+          canvas.style.cursor = 'cell';
+          canvas.style.pointerEvents = 'auto';
+        } else {
+          canvas.style.cursor = 'crosshair';
+          canvas.style.pointerEvents = 'auto';
+        }
+      }
+      if (halo && tool !== 'laser') {
+        halo.classList.add('hidden');
+      }
+    }
+
+    function setTeachingColor(color) {
+      TEACHING_COLOR = color;
+      document.querySelectorAll('.teaching-color-btn').forEach(btn => btn.classList.remove('active'));
+      const colMap = {
+        '#ef4444': 'colorBtn_red',
+        '#10b981': 'colorBtn_green',
+        '#f59e0b': 'colorBtn_gold',
+        '#0ea5e9': 'colorBtn_blue',
+        '#a855f7': 'colorBtn_purple'
+      };
+      if (colMap[color]) {
+        document.getElementById(colMap[color])?.classList.add('active');
+      }
+      const halo = document.getElementById('readerLaserHalo');
+      if (halo) halo.style.borderColor = color;
+    }
+
+    function setTeachingWidth(w) {
+      TEACHING_WIDTH = Number(w) || 4;
+      [2, 4, 8].forEach(sz => {
+        const btn = document.getElementById('widthBtn_' + sz);
+        if (btn) {
+          if (sz === TEACHING_WIDTH) {
+            btn.classList.add('text-white');
+            btn.classList.remove('text-slate-400');
+          } else {
+            btn.classList.remove('text-white');
+            btn.classList.add('text-slate-400');
+          }
+        }
+      });
+    }
+
+    function initOrResizeAnnotationCanvas() {
+      const img = document.getElementById('readerPageImg');
+      const canvas = document.getElementById('readerAnnotationCanvas');
+      if (!img || !canvas) return;
+
+      const w = img.clientWidth;
+      const h = img.clientHeight;
+      if (w === 0 || h === 0) return;
+
+      const dpr = window.devicePixelRatio || 1;
+      canvas.width = Math.round(w * dpr);
+      canvas.height = Math.round(h * dpr);
+      canvas.style.width = w + 'px';
+      canvas.style.height = h + 'px';
+
+      if (!TEACHING_CANVAS_INITIALIZED) {
+        bindAnnotationPointerEvents();
+        TEACHING_CANVAS_INITIALIZED = true;
+      }
+
+      redrawCurrentPageAnnotations();
+    }
+
+    function bindAnnotationPointerEvents() {
+      const canvas = document.getElementById('readerAnnotationCanvas');
+      if (!canvas) return;
+
+      const getPos = (e) => {
+        const rect = canvas.getBoundingClientRect();
+        const clientX = e.clientX !== undefined ? e.clientX : (e.touches && e.touches[0]?.clientX);
+        const clientY = e.clientY !== undefined ? e.clientY : (e.touches && e.touches[0]?.clientY);
+        const x = clientX - rect.left;
+        const y = clientY - rect.top;
+        const xRatio = Math.max(0, Math.min(1, x / rect.width));
+        const yRatio = Math.max(0, Math.min(1, y / rect.height));
+        return { xRatio, yRatio, px: x, py: y };
+      };
+
+      canvas.addEventListener('pointerdown', (e) => {
+        if (TEACHING_TOOL === 'pointer') return;
+        try { canvas.setPointerCapture(e.pointerId); } catch(err) {}
+        const pos = getPos(e);
+        TEACHING_IS_DRAWING = true;
+        TEACHING_START_PT = pos;
+
+        if (TEACHING_TOOL === 'eraser') {
+          eraseStrokeAt(pos);
+          return;
+        }
+
+        if (TEACHING_TOOL === 'pen' || TEACHING_TOOL === 'highlighter') {
+          TEACHING_CURRENT_STROKE = {
+            type: TEACHING_TOOL,
+            color: TEACHING_COLOR,
+            width: TEACHING_TOOL === 'highlighter' ? 18 : TEACHING_WIDTH,
+            points: [{ xRatio: pos.xRatio, yRatio: pos.yRatio }]
+          };
+        } else if (['circle', 'box', 'arrow', 'star', 'tick', 'cross'].includes(TEACHING_TOOL)) {
+          TEACHING_CURRENT_STROKE = {
+            type: TEACHING_TOOL,
+            color: TEACHING_COLOR,
+            width: TEACHING_WIDTH,
+            start: { xRatio: pos.xRatio, yRatio: pos.yRatio },
+            end: { xRatio: pos.xRatio, yRatio: pos.yRatio }
+          };
+        }
+      });
+
+      canvas.addEventListener('pointermove', (e) => {
+        const pos = getPos(e);
+
+        // Laser spotlight cursor logic
+        if (TEACHING_TOOL === 'laser') {
+          const halo = document.getElementById('readerLaserHalo');
+          if (halo) {
+            halo.classList.remove('hidden');
+            halo.style.left = pos.px + 'px';
+            halo.style.top = pos.py + 'px';
+          }
+          return;
+        }
+
+        if (!TEACHING_IS_DRAWING || !TEACHING_CURRENT_STROKE) return;
+
+        if (TEACHING_TOOL === 'eraser') {
+          eraseStrokeAt(pos);
+          return;
+        }
+
+        if (TEACHING_TOOL === 'pen' || TEACHING_TOOL === 'highlighter') {
+          TEACHING_CURRENT_STROKE.points.push({ xRatio: pos.xRatio, yRatio: pos.yRatio });
+          redrawCurrentPageAnnotations(TEACHING_CURRENT_STROKE);
+        } else if (['circle', 'box', 'arrow', 'star', 'tick', 'cross'].includes(TEACHING_TOOL)) {
+          TEACHING_CURRENT_STROKE.end = { xRatio: pos.xRatio, yRatio: pos.yRatio };
+          redrawCurrentPageAnnotations(TEACHING_CURRENT_STROKE);
+        }
+      });
+
+      const finishDrawing = (e) => {
+        if (!TEACHING_IS_DRAWING) return;
+        TEACHING_IS_DRAWING = false;
+
+        if (TEACHING_CURRENT_STROKE) {
+          const pageKey = getCurrentPageKey();
+          if (!TEACHING_PAGE_MARKS[pageKey]) TEACHING_PAGE_MARKS[pageKey] = [];
+          TEACHING_PAGE_MARKS[pageKey].push(TEACHING_CURRENT_STROKE);
+          TEACHING_CURRENT_STROKE = null;
+          redrawCurrentPageAnnotations();
+        }
+        TEACHING_START_PT = null;
+      };
+
+      canvas.addEventListener('pointerup', finishDrawing);
+      canvas.addEventListener('pointercancel', finishDrawing);
+
+      canvas.addEventListener('pointerleave', () => {
+        if (TEACHING_TOOL === 'laser') {
+          document.getElementById('readerLaserHalo')?.classList.add('hidden');
+        }
+      });
+    }
+
+    function getCurrentPageKey() {
+      const bId = CURRENT_READER_BOOK ? CURRENT_READER_BOOK.id : 'default';
+      return `${bId}_p${CURRENT_READER_PAGE}`;
+    }
+
+    function redrawCurrentPageAnnotations(inProgressStroke = null) {
+      const canvas = document.getElementById('readerAnnotationCanvas');
+      if (!canvas) return;
+      const ctx = canvas.getContext('2d');
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      const dpr = window.devicePixelRatio || 1;
+      const pageKey = getCurrentPageKey();
+      const strokes = TEACHING_PAGE_MARKS[pageKey] || [];
+
+      // Render committed strokes
+      strokes.forEach(s => renderSingleStroke(ctx, s, canvas.width, canvas.height, dpr));
+
+      // Render active drawing stroke (live preview)
+      if (inProgressStroke) {
+        renderSingleStroke(ctx, inProgressStroke, canvas.width, canvas.height, dpr);
+      }
+    }
+
+    function renderSingleStroke(ctx, s, cw, ch, dpr) {
+      ctx.save();
+      const strokeW = (s.width || 3) * dpr;
+
+      if (s.type === 'pen') {
+        if (s.points.length < 2) {
+          const pt = s.points[0];
+          ctx.beginPath();
+          ctx.arc(pt.xRatio * cw, pt.yRatio * ch, strokeW / 2, 0, Math.PI * 2);
+          ctx.fillStyle = s.color;
+          ctx.fill();
+        } else {
+          ctx.beginPath();
+          ctx.strokeStyle = s.color;
+          ctx.lineWidth = strokeW;
+          ctx.lineCap = 'round';
+          ctx.lineJoin = 'round';
+          ctx.moveTo(s.points[0].xRatio * cw, s.points[0].yRatio * ch);
+          for (let i = 1; i < s.points.length; i++) {
+            ctx.lineTo(s.points[i].xRatio * cw, s.points[i].yRatio * ch);
+          }
+          ctx.stroke();
+        }
+      } else if (s.type === 'highlighter') {
+        ctx.globalAlpha = 0.35;
+        ctx.beginPath();
+        ctx.strokeStyle = s.color || '#fef08a';
+        ctx.lineWidth = (s.width || 18) * dpr;
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+        if (s.points.length > 0) {
+          ctx.moveTo(s.points[0].xRatio * cw, s.points[0].yRatio * ch);
+          for (let i = 1; i < s.points.length; i++) {
+            ctx.lineTo(s.points[i].xRatio * cw, s.points[i].yRatio * ch);
+          }
+          ctx.stroke();
+        }
+      } else if (s.type === 'circle') {
+        const x1 = s.start.xRatio * cw;
+        const y1 = s.start.yRatio * ch;
+        const x2 = s.end.xRatio * cw;
+        const y2 = s.end.yRatio * ch;
+        const cx = (x1 + x2) / 2;
+        const cy = (y1 + y2) / 2;
+        const rx = Math.abs(x2 - x1) / 2;
+        const ry = Math.abs(y2 - y1) / 2;
+        if (rx > 0 && ry > 0) {
+          ctx.beginPath();
+          ctx.strokeStyle = s.color;
+          ctx.lineWidth = strokeW;
+          ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2);
+          ctx.stroke();
+        }
+      } else if (s.type === 'box') {
+        const x1 = s.start.xRatio * cw;
+        const y1 = s.start.yRatio * ch;
+        const x2 = s.end.xRatio * cw;
+        const y2 = s.end.yRatio * ch;
+        ctx.beginPath();
+        ctx.strokeStyle = s.color;
+        ctx.lineWidth = strokeW;
+        ctx.strokeRect(Math.min(x1, x2), Math.min(y1, y2), Math.abs(x2 - x1), Math.abs(y2 - y1));
+      } else if (s.type === 'arrow') {
+        const fromX = s.start.xRatio * cw;
+        const fromY = s.start.yRatio * ch;
+        const toX = s.end.xRatio * cw;
+        const toY = s.end.yRatio * ch;
+        const headLen = Math.max(14 * dpr, strokeW * 3);
+        const angle = Math.atan2(toY - fromY, toX - fromX);
+
+        ctx.beginPath();
+        ctx.strokeStyle = s.color;
+        ctx.fillStyle = s.color;
+        ctx.lineWidth = strokeW;
+        ctx.lineCap = 'round';
+        ctx.moveTo(fromX, fromY);
+        ctx.lineTo(toX, toY);
+        ctx.stroke();
+
+        ctx.beginPath();
+        ctx.moveTo(toX, toY);
+        ctx.lineTo(toX - headLen * Math.cos(angle - Math.PI / 6), toY - headLen * Math.sin(angle - Math.PI / 6));
+        ctx.lineTo(toX - headLen * Math.cos(angle + Math.PI / 6), toY - headLen * Math.sin(angle + Math.PI / 6));
+        ctx.closePath();
+        ctx.fill();
+      } else if (s.type === 'star') {
+        const cx = s.start.xRatio * cw;
+        const cy = s.start.yRatio * ch;
+        const dx = (s.end.xRatio - s.start.xRatio) * cw;
+        const dy = (s.end.yRatio - s.start.yRatio) * ch;
+        const r = Math.max(18 * dpr, Math.hypot(dx, dy));
+        drawStarPath(ctx, cx, cy, 5, r, r * 0.45);
+        ctx.fillStyle = s.color || '#f59e0b';
+        ctx.fill();
+        ctx.strokeStyle = '#d97706';
+        ctx.lineWidth = 1.5 * dpr;
+        ctx.stroke();
+      } else if (s.type === 'tick') {
+        const cx = s.start.xRatio * cw;
+        const cy = s.start.yRatio * ch;
+        const dx = (s.end.xRatio - s.start.xRatio) * cw;
+        const sz = Math.max(16 * dpr, Math.abs(dx));
+        ctx.beginPath();
+        ctx.strokeStyle = s.color || '#10b981';
+        ctx.lineWidth = strokeW * 1.5;
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+        ctx.moveTo(cx - sz * 0.6, cy);
+        ctx.lineTo(cx - sz * 0.1, cy + sz * 0.5);
+        ctx.lineTo(cx + sz * 0.8, cy - sz * 0.6);
+        ctx.stroke();
+      } else if (s.type === 'cross') {
+        const cx = s.start.xRatio * cw;
+        const cy = s.start.yRatio * ch;
+        const dx = (s.end.xRatio - s.start.xRatio) * cw;
+        const sz = Math.max(14 * dpr, Math.abs(dx));
+        ctx.beginPath();
+        ctx.strokeStyle = s.color || '#ef4444';
+        ctx.lineWidth = strokeW * 1.5;
+        ctx.lineCap = 'round';
+        ctx.moveTo(cx - sz * 0.6, cy - sz * 0.6);
+        ctx.lineTo(cx + sz * 0.6, cy + sz * 0.6);
+        ctx.moveTo(cx + sz * 0.6, cy - sz * 0.6);
+        ctx.lineTo(cx - sz * 0.6, cy + sz * 0.6);
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
+
+    function drawStarPath(ctx, cx, cy, spikes, outerRadius, innerRadius) {
+      let rot = (Math.PI / 2) * 3;
+      let x = cx;
+      let y = cy;
+      const step = Math.PI / spikes;
+
+      ctx.beginPath();
+      ctx.moveTo(cx, cy - outerRadius);
+      for (let i = 0; i < spikes; i++) {
+        x = cx + Math.cos(rot) * outerRadius;
+        y = cy + Math.sin(rot) * outerRadius;
+        ctx.lineTo(x, y);
+        rot += step;
+
+        x = cx + Math.cos(rot) * innerRadius;
+        y = cy + Math.sin(rot) * innerRadius;
+        ctx.lineTo(x, y);
+        rot += step;
+      }
+      ctx.lineTo(cx, cy - outerRadius);
+      ctx.closePath();
+    }
+
+    function eraseStrokeAt(pos) {
+      const pageKey = getCurrentPageKey();
+      const strokes = TEACHING_PAGE_MARKS[pageKey] || [];
+      if (strokes.length === 0) return;
+
+      const threshold = 0.05;
+      const filtered = strokes.filter(s => {
+        if (s.points) {
+          return !s.points.some(pt => Math.hypot(pt.xRatio - pos.xRatio, pt.yRatio - pos.yRatio) < threshold);
+        }
+        if (s.start) {
+          const dStart = Math.hypot(s.start.xRatio - pos.xRatio, s.start.yRatio - pos.yRatio);
+          const dEnd = s.end ? Math.hypot(s.end.xRatio - pos.xRatio, s.end.yRatio - pos.yRatio) : 1;
+          return dStart >= threshold && dEnd >= threshold;
+        }
+        return true;
+      });
+
+      if (filtered.length !== strokes.length) {
+        TEACHING_PAGE_MARKS[pageKey] = filtered;
+        redrawCurrentPageAnnotations();
+      }
+    }
+
+    function undoTeachingAnnotation() {
+      const pageKey = getCurrentPageKey();
+      if (TEACHING_PAGE_MARKS[pageKey] && TEACHING_PAGE_MARKS[pageKey].length > 0) {
+        TEACHING_PAGE_MARKS[pageKey].pop();
+        redrawCurrentPageAnnotations();
+      }
+    }
+
+    function clearCurrentPageAnnotations() {
+      const pageKey = getCurrentPageKey();
+      if (!TEACHING_PAGE_MARKS[pageKey] || TEACHING_PAGE_MARKS[pageKey].length === 0) return;
+      if (confirm("Clear all marks on this page?")) {
+        TEACHING_PAGE_MARKS[pageKey] = [];
+        redrawCurrentPageAnnotations();
+      }
+    }
+
+    // USER REQUIREMENT: Completely wipe session marks so next student gets a fresh, clean lesson!
+    function resetAllTeachingAnnotations() {
+      TEACHING_PAGE_MARKS = {};
+      TEACHING_CURRENT_STROKE = null;
+      TEACHING_IS_DRAWING = false;
+      const canvas = document.getElementById('readerAnnotationCanvas');
+      if (canvas) {
+        const ctx = canvas.getContext('2d');
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+      }
+      document.getElementById('readerLaserHalo')?.classList.add('hidden');
+      setTeachingTool('pointer');
+    }
+
+    function downloadAnnotatedLessonSnapshot() {
+      const img = document.getElementById('readerPageImg');
+      const canvas = document.getElementById('readerAnnotationCanvas');
+      if (!img || !canvas) return;
+
+      const offCanvas = document.createElement('canvas');
+      const w = img.naturalWidth || img.clientWidth || 800;
+      const h = img.naturalHeight || img.clientHeight || 1100;
+      offCanvas.width = w;
+      offCanvas.height = h;
+      const ctx = offCanvas.getContext('2d');
+
+      // 1. Draw base lesson image
+      ctx.drawImage(img, 0, 0, w, h);
+
+      // 2. Draw annotations on top
+      const pageKey = getCurrentPageKey();
+      const strokes = TEACHING_PAGE_MARKS[pageKey] || [];
+      strokes.forEach(s => renderSingleStroke(ctx, s, w, h, 1));
+
+      // 3. Add official footer watermark
+      ctx.fillStyle = 'rgba(15, 23, 42, 0.85)';
+      ctx.fillRect(0, h - 44, w, 44);
+      ctx.font = 'bold 15px sans-serif';
+      ctx.fillStyle = '#ffffff';
+      ctx.fillText('AL-HUDA ISLAMIC CENTRE LMS • Online Quran Class Assessment', 24, h - 18);
+      ctx.textAlign = 'right';
+      ctx.fillStyle = '#f59e0b';
+      ctx.fillText(new Date().toLocaleDateString('en-GB') + ` • Page ${CURRENT_READER_PAGE}`, w - 24, h - 18);
+
+      // 4. Download as PNG
+      const link = document.createElement('a');
+      link.download = `AlHuda_Lesson_Page_${CURRENT_READER_PAGE}_${Date.now()}.png`;
+      link.href = offCanvas.toDataURL('image/png');
+      link.click();
+    }
+
+    window.addEventListener('resize', function() {
+      if (CURRENT_READER_BOOK) {
+        setTimeout(initOrResizeAnnotationCanvas, 100);
+      }
+    });
+
+    window.addEventListener('keydown', function(e) {
+      const readerModal = document.getElementById('modalDigitalBookReader');
+      if (!readerModal || readerModal.classList.contains('hidden')) return;
+
+      if (['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement?.tagName)) return;
+
+      const k = e.key.toUpperCase();
+      if (e.ctrlKey && k === 'Z') {
+        e.preventDefault();
+        undoTeachingAnnotation();
+      } else if (k === 'P') {
+        setTeachingTool('pen');
+      } else if (k === 'H') {
+        setTeachingTool('highlighter');
+      } else if (k === 'L') {
+        setTeachingTool('laser');
+      } else if (k === 'V') {
+        setTeachingTool('pointer');
+      } else if (k === 'C') {
+        setTeachingTool('circle');
+      } else if (k === 'B') {
+        setTeachingTool('box');
+      } else if (k === 'A') {
+        setTeachingTool('arrow');
+      } else if (k === 'S') {
+        setTeachingTool('star');
+      } else if (k === 'E') {
+        setTeachingTool('eraser');
+      }
+    });
 
     function copyBookDeepLink(bookId, bookTitle) {
       const url = `${window.location.origin}/index.html?book=${bookId}`;
