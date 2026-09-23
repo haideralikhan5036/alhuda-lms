@@ -2832,16 +2832,18 @@
   <div id="modalAddNonTeachingStaff" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 hidden items-center justify-center p-4">
     <div class="bg-white rounded-2xl max-w-2xl w-full p-6 shadow-2xl border border-slate-200 max-h-[92vh] overflow-y-auto">
       <div class="flex justify-between items-center mb-4 border-b pb-3">
-        <div>
+        <div class="flex items-center gap-2">
           <h3 class="font-bold text-base text-brandDark flex items-center gap-2">
             <i class="fa-solid fa-id-badge text-indigo-600"></i> Register Non-Teaching Staff
           </h3>
-          <p class="text-[11px] text-slate-500 mt-0.5">Select designation to load the appropriate registration form</p>
+          <span id="ntsGeneratedIdBadge" class="px-2.5 py-0.5 bg-indigo-100 text-indigo-800 rounded font-mono font-extrabold text-[11px]">MGR-101</span>
         </div>
-        <button onclick="closeModal('modalAddNonTeachingStaff')" class="text-slate-400 hover:text-slate-600 text-xl font-bold">&times;</button>
+        <p class="text-[11px] text-slate-500 mt-0.5">Select designation to load the appropriate registration form</p>
       </div>
+      <button onclick="closeModal('modalAddNonTeachingStaff')" class="text-slate-400 hover:text-slate-600 text-xl font-bold">&times;</button>
+    </div>
 
-      <form onsubmit="submitNonTeachingStaff(event)" class="space-y-4 text-xs">
+    <form onsubmit="submitNonTeachingStaff(event)" class="space-y-4 text-xs">
         <input type="hidden" id="ntsGeneratedId" value="">
 
         <!-- Designation Selector -->
@@ -2958,6 +2960,64 @@
           </button>
         </div>
       </form>
+    </div>
+  </div>
+
+  <!-- MODAL: MANAGER REGISTRATION SUCCESS & PORTAL PROVISIONING -->
+  <div id="modalManagerRegisteredSuccess" class="fixed inset-0 bg-black/70 backdrop-blur-sm z-[80] hidden items-center justify-center p-4">
+    <div class="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-indigo-200">
+      <div class="flex items-center gap-3 mb-4">
+        <div class="w-12 h-12 rounded-2xl bg-gradient-to-br from-indigo-600 to-brandDark text-white flex items-center justify-center text-xl shadow-md shrink-0">
+          <i class="fa-solid fa-shield-halved text-brandGold"></i>
+        </div>
+        <div>
+          <h3 class="font-black text-slate-900 text-base leading-tight">Manager Account Provisioned!</h3>
+          <p class="text-[11px] text-slate-500 mt-0.5">Official Manager ID &amp; Portal Generated</p>
+        </div>
+      </div>
+
+      <div class="p-4 bg-indigo-50/70 border border-indigo-200 rounded-2xl space-y-2.5 mb-4 text-xs">
+        <div class="flex items-center justify-between">
+          <span class="text-slate-500 font-bold">Official Manager ID:</span>
+          <span id="succMgrIdBadge" class="px-2.5 py-0.5 rounded-lg bg-indigo-600 text-white font-mono font-black text-xs">MGR-101</span>
+        </div>
+        <div class="flex items-center justify-between">
+          <span class="text-slate-500 font-bold">Full Name:</span>
+          <strong id="succMgrName" class="text-slate-900 font-black">--</strong>
+        </div>
+        <div class="flex items-center justify-between">
+          <span class="text-slate-500 font-bold">Designation:</span>
+          <span id="succMgrRole" class="text-indigo-800 font-bold">Operations Manager</span>
+        </div>
+        <div class="pt-2 border-t border-indigo-200/60 grid grid-cols-2 gap-2 font-mono">
+          <div class="bg-white p-2 rounded-xl border border-indigo-100 truncate">
+            <span class="text-[10px] text-slate-400 block font-sans">Username:</span>
+            <strong id="succMgrUser" class="text-indigo-950 font-bold truncate block">--</strong>
+          </div>
+          <div class="bg-white p-2 rounded-xl border border-indigo-100 truncate">
+            <span class="text-[10px] text-slate-400 block font-sans">Password:</span>
+            <strong id="succMgrPass" class="text-indigo-950 font-bold truncate block">--</strong>
+          </div>
+        </div>
+        <div>
+          <span class="text-slate-500 font-bold block mb-1">Dedicated Manager Portal Link:</span>
+          <input type="text" id="succMgrPortalUrl" readonly class="w-full p-2 bg-white border border-indigo-200 rounded-xl font-mono text-[11px] text-indigo-900 font-bold">
+        </div>
+      </div>
+
+      <div class="space-y-2">
+        <a id="succMgrLaunchBtn" href="#" target="_blank" class="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold text-xs rounded-xl shadow-md transition flex items-center justify-center gap-2">
+          <i class="fa-solid fa-arrow-up-right-from-square"></i> Launch Manager Portal Directly
+        </a>
+        <div class="flex gap-2">
+          <button type="button" onclick="copyManagerCredentialsFromModal()" class="flex-1 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl transition flex items-center justify-center gap-1.5">
+            <i class="fa-regular fa-copy"></i> Copy Access Info
+          </button>
+          <button type="button" onclick="closeModal('modalManagerRegisteredSuccess')" class="px-4 py-2 bg-slate-800 hover:bg-slate-900 text-white font-bold text-xs rounded-xl transition">
+            Done
+          </button>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -8748,15 +8808,22 @@
 
     function previewNTSId() {
       const designation = document.getElementById('ntsDesignation')?.value || 'Manager';
-      const name = (document.getElementById('ntsFullName')?.value || '').trim();
-      const suffix = name.length > 0
-        ? name.replace(/[^a-zA-Z]/g, '').slice(0, 3).toUpperCase()
-        : String(Date.now()).slice(-3);
       const prefix = designation === 'Manager' ? 'MGR' : 'STF';
-      const genId = `${prefix}-${suffix}${String(Date.now()).slice(-3)}`;
-      document.getElementById('ntsGeneratedId').value = genId;
+
+      // Clean sequential ID generation e.g. MGR-101, MGR-102
+      const existing = (ALL_TEACHERS || []).filter(t => {
+        return String(t.id).startsWith(prefix + '-') || (t.notes && t.notes.includes(designation === 'Manager' ? 'manager' : 'other_staff'));
+      });
+      const seq = 101 + existing.length;
+      const genId = `${prefix}-${seq}`;
+
+      const genInput = document.getElementById('ntsGeneratedId');
+      if (genInput) genInput.value = genId;
       const preview = document.getElementById('ntsIdPreview');
       if (preview) preview.textContent = genId;
+      const badge = document.getElementById('ntsGeneratedIdBadge');
+      if (badge) badge.textContent = genId;
+      return genId;
     }
 
     async function submitNonTeachingStaff(e) {
@@ -8780,9 +8847,8 @@
         return;
       }
 
-      // ID generation
-      previewNTSId();
-      const emp_id = document.getElementById('ntsGeneratedId')?.value;
+      // Sequential ID generation
+      const emp_id = previewNTSId();
       const prefix = designation === 'Manager' ? 'MGR' : 'STF';
       const username = `${prefix.toLowerCase()}.${full_name.toLowerCase().replace(/[^a-z]/g, '').slice(0, 8)}`;
       const password = 'alhuda@' + String(Math.floor(Math.random() * 9000) + 1000);
@@ -8829,19 +8895,50 @@
 
         if (error) throw error;
 
-        const msg = designation === 'Manager'
-          ? `✅ Manager Registered Successfully!\n\n👤 Name: ${full_name}\n🆔 Manager ID: ${emp_id}\n👤 Portal Username: ${username}\n🔑 Portal Password: ${password}\n\nManager can be given portal access when ready.`
-          : `✅ Staff Registered Successfully!\n\n👤 Name: ${full_name}\n🆔 Staff ID: ${emp_id}\n📋 Role: ${role_title || 'Other Staff'}`;
-
-        alert(msg);
         closeModal('modalAddNonTeachingStaff');
         await loadTeachers();
+
+        if (designation === 'Manager') {
+          // Open official Manager Provisioning Success Modal
+          const portalUrl = `${window.location.origin}/manager.html?m=${emp_id}`;
+          const badgeEl = document.getElementById('succMgrIdBadge');
+          if (badgeEl) badgeEl.innerText = emp_id;
+          const nameEl = document.getElementById('succMgrName');
+          if (nameEl) nameEl.innerText = full_name;
+          const roleEl = document.getElementById('succMgrRole');
+          if (roleEl) roleEl.innerText = role_title || 'Operations Manager';
+          const userEl = document.getElementById('succMgrUser');
+          if (userEl) userEl.innerText = username;
+          const passEl = document.getElementById('succMgrPass');
+          if (passEl) passEl.innerText = password;
+          const urlEl = document.getElementById('succMgrPortalUrl');
+          if (urlEl) urlEl.value = portalUrl;
+          const launchBtn = document.getElementById('succMgrLaunchBtn');
+          if (launchBtn) launchBtn.href = portalUrl;
+          openModal('modalManagerRegisteredSuccess');
+        } else {
+          alert(`✅ Staff Registered Successfully!\n\n👤 Name: ${full_name}\n🆔 Staff ID: ${emp_id}\n📋 Role: ${role_title || 'Other Staff'}`);
+        }
       } catch (err) {
         alert('Error registering employee: ' + err.message);
       } finally {
         btn.disabled = false;
         btn.innerHTML = '<i class="fa-solid fa-floppy-disk"></i> Register Employee';
       }
+    }
+
+    function copyManagerCredentialsFromModal() {
+      const id = document.getElementById('succMgrIdBadge')?.innerText || '';
+      const name = document.getElementById('succMgrName')?.innerText || '';
+      const user = document.getElementById('succMgrUser')?.innerText || '';
+      const pass = document.getElementById('succMgrPass')?.innerText || '';
+      const url = document.getElementById('succMgrPortalUrl')?.value || '';
+      const text = `Al-Huda Islamic Centre — Manager Portal Access Details\n\n👤 Name: ${name}\n🆔 Manager ID: ${id}\n🌐 Portal Link: ${url}\n👤 Username: ${user}\n🔑 Password: ${pass}\n\nPlease keep your credentials confidential.`;
+      navigator.clipboard.writeText(text).then(() => {
+        alert('✅ Manager Portal Link & Credentials copied to clipboard!');
+      }).catch(() => {
+        alert(text);
+      });
     }
 
     function prepareAddTeacherModal() {
@@ -9132,8 +9229,10 @@
                 </div>
               </div>
 
-              <div class="pt-3 border-t mt-3 flex items-center justify-between">
-                <span class="text-[11px] font-mono text-slate-400">Non-Teaching Staff</span>
+              <div class="pt-3 border-t mt-3 flex items-center justify-between gap-2 flex-wrap">
+                <a href="manager.html?m=${t.id}" target="_blank" class="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold rounded-xl text-xs shadow-xs transition flex items-center gap-1.5">
+                  <i class="fa-solid fa-arrow-up-right-from-square"></i> Open Manager Portal
+                </a>
                 <button onclick="deleteTeacher('${t.id}')" class="px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-lg font-bold text-xs transition flex items-center gap-1">
                   <i class="fa-regular fa-trash-can"></i> Remove
                 </button>

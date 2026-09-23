@@ -131,10 +131,14 @@
           <span id="topLiveClock">--:--:-- PKT</span>
         </div>
 
-        <!-- Live Sync Status Badge -->
-        <div class="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-white/10 border border-white/20 text-white font-bold text-[11px]">
-          <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-          <span id="syncStatusLabel">Cloud Live</span>
+        <!-- Active Manager Profile Dropdown -->
+        <div class="flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-white/10 border border-white/20 text-xs">
+          <i class="fa-solid fa-user-tie text-brandGold"></i>
+          <span class="text-[10px] text-emerald-300 font-bold hidden lg:inline">Manager:</span>
+          <select id="portalManagerSelect" onchange="switchManagerProfile(this.value)" class="bg-transparent text-white font-bold text-xs border-none focus:outline-none cursor-pointer max-w-[120px] sm:max-w-[170px]">
+            <option value="loading" class="text-slate-800">Loading Managers...</option>
+          </select>
+          <span id="headerManagerIdBadge" class="px-2 py-0.5 rounded-md bg-indigo-500/50 text-indigo-100 font-mono font-bold text-[10px]">MGR-101</span>
         </div>
 
         <!-- Switch to Admin LMS -->
@@ -368,6 +372,8 @@
     let LIVE_STUDENTS = [];
     let LIVE_PARENTS = [];
     let LIVE_TEACHERS = [];
+    let LIVE_MANAGERS = [];
+    let ACTIVE_MANAGER = null;
     let LIVE_SCHEDULES = [];
     let LIVE_ATTENDANCE = [];
 
@@ -454,9 +460,25 @@
         if (LIVE_TEACHERS.length === 0) {
           LIVE_TEACHERS = [
             { id: "TCH-001", full_name: "Qari Gulfam", phone: "+92 300 1234567", email: "gulfam@alhuda.org", working_shift: "10 Hours Shift (Evening)", is_active: true, zoom_link: "https://zoom.us/j/5551112222", specialization: "Tajweed & Qaida" },
-            { id: "TCH-002", full_name: "Ustadh Bilal Ahmad", phone: "+92 312 9876543", email: "bilal@alhuda.org", working_shift: "8 Hours Shift (Morning)", is_active: true, zoom_link: "https://zoom.us/j/7778889999", specialization: "Hifz & Nazra" }
+            { id: "TCH-002", full_name: "Ustadh Bilal Ahmad", phone: "+92 312 9876543", email: "bilal@alhuda.org", working_shift: "8 Hours Shift (Morning)", is_active: true, zoom_link: "https://zoom.us/j/7778889999", specialization: "Hifz & Nazra" },
+            { id: "MGR-101", full_name: "Muhammad Tariq", phone: "+92 300 9988776", email: "tariq.manager@alhuda.org", working_shift: "Office Hours", is_active: true, qualification: "Operations Manager", notes: JSON.stringify({ employee_type: "manager", role_title: "Head of Operations", emp_id: "MGR-101" }) }
           ];
         }
+
+        // Filter Managers from employees
+        LIVE_MANAGERS = (LIVE_TEACHERS || []).filter(t => {
+          let meta = {};
+          try { meta = JSON.parse(t.notes || '{}'); } catch(e){}
+          return String(t.id).startsWith('MGR-') || meta.employee_type === 'manager' || t.qualification === 'Operations Manager';
+        });
+
+        if (LIVE_MANAGERS.length === 0) {
+          LIVE_MANAGERS = [
+            { id: "MGR-101", full_name: "Muhammad Tariq", phone: "+92 300 9988776", email: "tariq.manager@alhuda.org", working_shift: "Office Hours", qualification: "Operations Manager" }
+          ];
+        }
+
+        populateManagerDropdown();
 
         if (LIVE_PARENTS.length === 0) {
           LIVE_PARENTS = [
@@ -472,6 +494,49 @@
         console.warn("Supabase fetch failed, operating from local cache:", err);
         if (badge) badge.innerText = "Offline Cache";
       }
+    }
+
+    function populateManagerDropdown() {
+      const select = document.getElementById('portalManagerSelect');
+      if (!select) return;
+
+      const urlParams = new URLSearchParams(window.location.search);
+      const paramM = (urlParams.get('m') || urlParams.get('id') || urlParams.get('name') || '').trim().toLowerCase();
+
+      select.innerHTML = LIVE_MANAGERS.map(m => {
+        return `<option value="${m.id}" class="text-slate-800">${m.full_name} (${m.id})</option>`;
+      }).join('');
+
+      if (paramM) {
+        const found = LIVE_MANAGERS.find(m => m.id.toLowerCase() === paramM || m.full_name.toLowerCase().includes(paramM));
+        if (found) ACTIVE_MANAGER = found;
+      }
+
+      if (!ACTIVE_MANAGER && LIVE_MANAGERS.length > 0) {
+        ACTIVE_MANAGER = LIVE_MANAGERS[0];
+      }
+
+      if (ACTIVE_MANAGER) {
+        select.value = ACTIVE_MANAGER.id;
+        updateActiveManagerDisplay();
+      }
+    }
+
+    function switchManagerProfile(mgrId) {
+      const found = LIVE_MANAGERS.find(m => m.id === mgrId);
+      if (found) {
+        ACTIVE_MANAGER = found;
+        updateActiveManagerDisplay();
+        renderView();
+      }
+    }
+
+    function updateActiveManagerDisplay() {
+      if (!ACTIVE_MANAGER) return;
+      const badge = document.getElementById('headerManagerIdBadge');
+      if (badge) badge.innerText = ACTIVE_MANAGER.id;
+      const nameSidebar = document.getElementById('sidebarManagerName');
+      if (nameSidebar) nameSidebar.innerText = `${ACTIVE_MANAGER.full_name} (${ACTIVE_MANAGER.id})`;
     }
 
     function updateSidebarBadges() {
@@ -543,6 +608,34 @@
         const suspendedCount = LIVE_STUDENTS.filter(s => s.status === 'Suspended').length;
 
         container.innerHTML = `
+          <!-- Personalized Manager Welcome Banner -->
+          <div class="bg-gradient-to-r from-indigo-950 via-brandDarkest to-brandDark p-5 rounded-2xl text-white shadow-sm border border-indigo-400/30 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+            <div class="flex items-center gap-3.5">
+              <div class="w-12 h-12 rounded-2xl bg-white/10 backdrop-blur-sm border border-white/20 text-white flex items-center justify-center font-black text-xl shadow-xs shrink-0">
+                <i class="fa-solid fa-user-tie text-brandGold"></i>
+              </div>
+              <div>
+                <div class="flex items-center gap-2 flex-wrap">
+                  <h3 class="text-base sm:text-lg font-black text-white">Assalam-o-Alaikum, ${escapeHtml(ACTIVE_MANAGER?.full_name || 'Manager')}!</h3>
+                  <span class="px-2 py-0.5 rounded-full bg-indigo-500 text-white font-mono font-bold text-xs shadow-xs">
+                    ${ACTIVE_MANAGER?.id || 'MGR-101'}
+                  </span>
+                  <span class="px-2 py-0.5 rounded-full bg-emerald-500/30 border border-emerald-400/40 text-emerald-200 text-[10px] font-bold">
+                    Active Cockpit
+                  </span>
+                </div>
+                <p class="text-xs text-indigo-200 mt-0.5">
+                  ${escapeHtml(ACTIVE_MANAGER?.qualification || 'Operations Manager')} • Al-Huda Islamic Centre
+                </p>
+              </div>
+            </div>
+            <div class="flex items-center gap-2">
+              <button onclick="navTo('live-monitor')" class="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs rounded-xl shadow-xs transition flex items-center gap-1.5">
+                <i class="fa-solid fa-tower-broadcast"></i> Live Shift Radar
+              </button>
+            </div>
+          </div>
+
           <!-- KPI Stats Grid -->
           <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
             <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm border-l-4 border-l-emerald-600">
