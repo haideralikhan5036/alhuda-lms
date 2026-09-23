@@ -2832,18 +2832,19 @@
   <div id="modalAddNonTeachingStaff" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 hidden items-center justify-center p-4">
     <div class="bg-white rounded-2xl max-w-2xl w-full p-6 shadow-2xl border border-slate-200 max-h-[92vh] overflow-y-auto">
       <div class="flex justify-between items-center mb-4 border-b pb-3">
-        <div class="flex items-center gap-2">
-          <h3 class="font-bold text-base text-brandDark flex items-center gap-2">
-            <i class="fa-solid fa-id-badge text-indigo-600"></i> Register Non-Teaching Staff
-          </h3>
-          <span id="ntsGeneratedIdBadge" class="px-2.5 py-0.5 bg-indigo-100 text-indigo-800 rounded font-mono font-extrabold text-[11px]">MGR-101</span>
+        <div>
+          <div class="flex items-center gap-2">
+            <h3 class="font-bold text-base text-brandDark flex items-center gap-2">
+              <i class="fa-solid fa-id-badge text-indigo-600"></i> Register Non-Teaching Staff
+            </h3>
+            <span id="ntsGeneratedIdBadge" class="px-2.5 py-0.5 bg-indigo-100 text-indigo-800 rounded font-mono font-extrabold text-[11px]">MGR-101</span>
+          </div>
+          <p class="text-[11px] text-slate-500 mt-0.5">Select designation to load the appropriate registration form</p>
         </div>
-        <p class="text-[11px] text-slate-500 mt-0.5">Select designation to load the appropriate registration form</p>
+        <button onclick="closeModal('modalAddNonTeachingStaff')" class="text-slate-400 hover:text-slate-600 text-xl font-bold">&times;</button>
       </div>
-      <button onclick="closeModal('modalAddNonTeachingStaff')" class="text-slate-400 hover:text-slate-600 text-xl font-bold">&times;</button>
-    </div>
 
-    <form onsubmit="submitNonTeachingStaff(event)" class="space-y-4 text-xs">
+      <form onsubmit="submitNonTeachingStaff(event)" class="space-y-4 text-xs">
         <input type="hidden" id="ntsGeneratedId" value="">
 
         <!-- Designation Selector -->
