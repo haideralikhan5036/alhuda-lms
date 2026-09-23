@@ -1,14 +1,10 @@
 // ============================================================
 // Al-Huda Islamic Centre LMS - Progressive Web App Service Worker
-// Version: 1.0.3
+// Version: 1.0.4 - Zero-Stale HTML Cache Policy
 // ============================================================
 
-const CACHE_NAME = 'alhuda-lms-pwa-v3';
-const CORE_ASSETS = [
-  '/',
-  '/teacher',
-  '/parent',
-  '/curriculum_data.js',
+const CACHE_NAME = 'alhuda-lms-pwa-v4';
+const STATIC_ASSETS = [
   '/manifest.json',
   '/icon-192.png',
   '/icon-512.png',
@@ -17,41 +13,41 @@ const CORE_ASSETS = [
   '/alhuda_logo.jpg'
 ];
 
-// 1. Install Event: Cache Core App Shell
+// 1. Install Event: Cache only static media assets, never HTML
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
-      return cache.addAll(CORE_ASSETS).catch((err) => {
-        console.warn('[PWA] Cache prefetch warning (non-fatal):', err);
+      return cache.addAll(STATIC_ASSETS).catch((err) => {
+        console.warn('[PWA] Cache prefetch warning:', err);
       });
     })
   );
   self.skipWaiting();
 });
 
-// 2. Activate Event: Clean up legacy caches
+// 2. Activate Event: Clean up all legacy caches and claim clients
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys().then((keyList) => {
       return Promise.all(
         keyList.map((key) => {
           if (key !== CACHE_NAME) {
-            console.log('[PWA] Deleting old cache:', key);
+            console.log('[PWA] Purging outdated cache:', key);
             return caches.delete(key);
           }
         })
       );
+    }).then(() => {
+      return self.clients.claim();
     })
   );
-  self.clients.claim();
 });
 
-// 3. Fetch Event: Network-First Strategy with Cache Fallback
-// CRITICAL: Bypass Supabase DB queries and dynamic APIs so live updates are never stale
+// 3. Fetch Event: HTML pages are ALWAYS Network-First with zero caching
 self.addEventListener('fetch', (event) => {
   const reqUrl = new URL(event.request.url);
 
-  // Always fetch live from network for Supabase API calls, mutations, or non-GET requests
+  // Always bypass Supabase DB queries and mutations
   if (
     reqUrl.hostname.includes('supabase.co') ||
     event.request.method !== 'GET' ||
@@ -60,15 +56,27 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
+  const isHtmlRequest = event.request.headers.get('accept')?.includes('text/html') ||
+                        reqUrl.pathname === '/' ||
+                        reqUrl.pathname.endsWith('.html') ||
+                        reqUrl.pathname === '/teacher' ||
+                        reqUrl.pathname === '/parent';
+
+  if (isHtmlRequest) {
+    // ALWAYS fetch live HTML from network, never stale cache
+    event.respondWith(
+      fetch(event.request, { cache: 'no-cache' }).catch(() => {
+        return caches.match(event.request);
+      })
+    );
+    return;
+  }
+
+  // Static Assets: Network-first with cache fallback
   event.respondWith(
     fetch(event.request)
       .then((networkResponse) => {
-        // Cache successful GET responses for app shell
-        if (
-          networkResponse &&
-          networkResponse.status === 200 &&
-          networkResponse.type === 'basic'
-        ) {
+        if (networkResponse && networkResponse.status === 200 && networkResponse.type === 'basic') {
           const responseToCache = networkResponse.clone();
           caches.open(CACHE_NAME).then((cache) => {
             cache.put(event.request, responseToCache);
@@ -77,15 +85,7 @@ self.addEventListener('fetch', (event) => {
         return networkResponse;
       })
       .catch(() => {
-        // Fallback to cache when offline
-        return caches.match(event.request).then((cachedResponse) => {
-          if (cachedResponse) {
-            return cachedResponse;
-          }
-          if (event.request.headers.get('accept')?.includes('text/html')) {
-            return caches.match('/');
-          }
-        });
+        return caches.match(event.request);
       })
   );
 });

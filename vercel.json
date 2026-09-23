@@ -3,6 +3,13 @@
   "cleanUrls": true,
   "routes": [
     {
+      "src": "/(.*)",
+      "headers": {
+        "cache-control": "no-cache, no-store, must-revalidate"
+      },
+      "continue": true
+    },
+    {
       "handle": "filesystem"
     },
     {
