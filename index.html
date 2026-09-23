@@ -1954,66 +1954,69 @@
     </section>
 
     <!-- 7. COURSE MATERIAL & DIGITAL LIBRARY TAB -->
-    <section id="tab-curriculum" class="tab-content hidden space-y-5">
+    <section id="tab-curriculum" class="tab-content hidden space-y-4">
       <!-- HEADER BAR -->
-      <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex flex-wrap justify-between items-center gap-4">
+      <div class="bg-white p-5 rounded-2xl border border-slate-200/90 shadow-sm flex flex-wrap justify-between items-center gap-4">
         <div>
-          <div class="flex items-center gap-2">
-            <span class="w-10 h-10 rounded-xl bg-emerald-100 text-brandDark flex items-center justify-center text-lg font-bold shadow-xs">
+          <div class="flex items-center gap-3">
+            <span class="w-11 h-11 rounded-2xl bg-gradient-to-br from-emerald-600 to-teal-800 text-white flex items-center justify-center text-xl font-bold shadow-sm">
               <i class="fa-solid fa-book-quran"></i>
             </span>
             <div>
-              <h2 class="text-xl font-extrabold text-slate-900 tracking-tight flex items-center gap-2">
-                Course Material &amp; Digital Islamic Library
-                <span id="badgeCurriculumTotalCount" class="px-2.5 py-0.5 rounded-full text-xs font-mono font-bold bg-emerald-100 text-brandDark border border-emerald-300">
+              <h2 class="text-xl font-black text-slate-900 tracking-tight flex items-center gap-2.5">
+                Course Material &amp; Syllabus Library
+                <span id="badgeCurriculumTotalCount" class="px-2.5 py-0.5 rounded-full text-xs font-mono font-bold bg-emerald-50 text-emerald-800 border border-emerald-200 shadow-2xs">
                   Course Materials
+                </span>
+                <span class="hidden sm:inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-200">
+                  <i class="fa-solid fa-chalkboard-user text-amber-600"></i> Whiteboard Studio
                 </span>
               </h2>
               <p class="text-xs text-slate-500 mt-0.5">
-                Academy interactive course material &amp; syllabus library. Upload custom scans, read in real-time digital reader, or manage curriculum.
+                Integrated teaching syllabus with in-LMS interactive whiteboard reader, live laser spotlight, and digital annotation tools.
               </p>
             </div>
           </div>
         </div>
 
         <div class="flex items-center gap-2 flex-wrap">
-          <button onclick="loadCurriculumLibrary()" class="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-2xs">
+          <button onclick="loadCurriculumLibrary()" class="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-2xs">
             <i class="fa-solid fa-arrows-rotate"></i> Refresh Library
           </button>
-          <button onclick="openCustomBookUploadModal()" class="px-4 py-2 bg-brandDark hover:bg-brandDarkest text-white rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-md">
-            <i class="fa-solid fa-plus"></i> + Add Custom Book / Syllabus
+          <button onclick="openCustomBookUploadModal()" class="px-4 py-2 bg-brandDark hover:bg-brandDarkest text-white rounded-xl text-xs font-black transition flex items-center gap-1.5 shadow-md hover:shadow-lg">
+            <i class="fa-solid fa-plus text-brandGold"></i> + Add Course Material
           </button>
         </div>
       </div>
 
       <!-- CATEGORY FILTERS & SEARCH TOOLBAR -->
-      <div class="bg-white p-3.5 rounded-2xl border border-slate-200 shadow-sm flex items-center justify-between flex-wrap gap-3">
+      <div class="bg-white p-3.5 rounded-2xl border border-slate-200/90 shadow-sm flex items-center justify-between flex-wrap gap-3">
         <!-- Filter Pills -->
         <div class="flex items-center gap-1.5 flex-wrap" id="curriculumFilterPills">
-          <button onclick="filterCurriculumCategory('all', this)" class="curriculum-filter-btn active px-3.5 py-1.5 rounded-xl text-xs font-extrabold bg-brandDark text-white shadow-xs transition">
-            All Materials (<span id="catCountAll">0</span>)
+          <button onclick="filterCurriculumCategory('all', this)" class="curriculum-filter-btn active px-3.5 py-1.5 rounded-xl text-xs font-extrabold bg-brandDark text-white shadow-xs transition flex items-center gap-1.5">
+            <i class="fa-solid fa-layer-group text-slate-400"></i> All Materials (<span id="catCountAll">0</span>)
           </button>
-          <button onclick="filterCurriculumCategory('qaida', this)" class="curriculum-filter-btn px-3.5 py-1.5 rounded-xl text-xs font-bold bg-slate-100 text-slate-700 hover:bg-emerald-50 hover:text-brandDark transition">
-            Qaida &amp; Primers (<span id="catCountQaida">0</span>)
+          <button onclick="filterCurriculumCategory('qaida', this)" class="curriculum-filter-btn px-3.5 py-1.5 rounded-xl text-xs font-bold bg-slate-100 text-slate-700 hover:bg-emerald-50 hover:text-brandDark transition flex items-center gap-1.5">
+            <i class="fa-solid fa-book-open text-emerald-600"></i> Qaida &amp; Primers (<span id="catCountQaida">0</span>)
           </button>
-          <button onclick="filterCurriculumCategory('quran', this)" class="curriculum-filter-btn px-3.5 py-1.5 rounded-xl text-xs font-bold bg-slate-100 text-slate-700 hover:bg-emerald-50 hover:text-brandDark transition">
-            The Holy Quran (<span id="catCountQuran">0</span>)
+          <button onclick="filterCurriculumCategory('quran', this)" class="curriculum-filter-btn px-3.5 py-1.5 rounded-xl text-xs font-bold bg-slate-100 text-slate-700 hover:bg-emerald-50 hover:text-brandDark transition flex items-center gap-1.5">
+            <i class="fa-solid fa-book-quran text-amber-600"></i> The Holy Quran (<span id="catCountQuran">0</span>)
           </button>
-          <button onclick="filterCurriculumCategory('tafseer', this)" class="curriculum-filter-btn px-3.5 py-1.5 rounded-xl text-xs font-bold bg-slate-100 text-slate-700 hover:bg-emerald-50 hover:text-brandDark transition">
-            Tafseer &amp; Translation (<span id="catCountTafseer">0</span>)
+          <button onclick="filterCurriculumCategory('tafseer', this)" class="curriculum-filter-btn px-3.5 py-1.5 rounded-xl text-xs font-bold bg-slate-100 text-slate-700 hover:bg-emerald-50 hover:text-brandDark transition flex items-center gap-1.5">
+            <i class="fa-solid fa-scroll text-blue-600"></i> Tafseer &amp; Translation (<span id="catCountTafseer">0</span>)
           </button>
-          <button onclick="filterCurriculumCategory('hadith', this)" class="curriculum-filter-btn px-3.5 py-1.5 rounded-xl text-xs font-bold bg-slate-100 text-slate-700 hover:bg-emerald-50 hover:text-brandDark transition">
-            Hadith Collections (<span id="catCountHadith">0</span>)
+          <button onclick="filterCurriculumCategory('hadith', this)" class="curriculum-filter-btn px-3.5 py-1.5 rounded-xl text-xs font-bold bg-slate-100 text-slate-700 hover:bg-emerald-50 hover:text-brandDark transition flex items-center gap-1.5">
+            <i class="fa-solid fa-kaaba text-purple-600"></i> Hadith Collections (<span id="catCountHadith">0</span>)
           </button>
-          <button onclick="filterCurriculumCategory('essentials', this)" class="curriculum-filter-btn px-3.5 py-1.5 rounded-xl text-xs font-bold bg-slate-100 text-slate-700 hover:bg-emerald-50 hover:text-brandDark transition">
-            Namaz, Duas &amp; Tajweed (<span id="catCountEssentials">0</span>)
+          <button onclick="filterCurriculumCategory('essentials', this)" class="curriculum-filter-btn px-3.5 py-1.5 rounded-xl text-xs font-bold bg-slate-100 text-slate-700 hover:bg-emerald-50 hover:text-brandDark transition flex items-center gap-1.5">
+            <i class="fa-solid fa-hands-praying text-teal-600"></i> Islamic Essentials (<span id="catCountEssentials">0</span>)
           </button>
         </div>
 
         <!-- Real-time Search Input -->
         <div class="relative w-full sm:w-64">
           <i class="fa-solid fa-magnifying-glass absolute left-3 top-2.5 text-slate-400 text-xs"></i>
-          <input type="text" id="curriculumSearchInput" oninput="searchCurriculumLibrary(this.value)" placeholder="Search book, author, topic..." class="w-full pl-8 pr-3 py-1.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-semibold focus:outline-brandEmerald shadow-2xs">
+          <input type="text" id="curriculumSearchInput" oninput="searchCurriculumLibrary(this.value)" placeholder="Search course material..." class="w-full pl-8 pr-3 py-1.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-semibold focus:outline-brandEmerald shadow-2xs">
         </div>
       </div>
 
@@ -4056,11 +4059,17 @@
           </div>
 
           <!-- Zoom Controls -->
-          <div class="hidden sm:flex items-center gap-1 bg-slate-800/80 px-1.5 py-1 rounded-xl border border-slate-700 text-xs font-mono">
-            <button onclick="changeReaderZoom(-0.15)" class="w-6 h-6 rounded hover:bg-slate-700 flex items-center justify-center font-bold text-slate-300" title="Zoom Out">-</button>
-            <span id="readerZoomLevel" class="text-[11px] px-1 text-slate-300 min-w-[36px] text-center font-bold">100%</span>
-            <button onclick="changeReaderZoom(+0.15)" class="w-6 h-6 rounded hover:bg-slate-700 flex items-center justify-center font-bold text-slate-300" title="Zoom In">+</button>
-            <button onclick="resetReaderZoom()" class="w-6 h-6 rounded hover:bg-slate-700 text-[10px] text-slate-400" title="Reset Zoom"><i class="fa-solid fa-arrows-rotate"></i></button>
+          <div class="flex items-center gap-1 bg-slate-800/80 px-2 py-1 rounded-xl border border-slate-700 text-xs font-mono shadow-xs">
+            <button onclick="changeReaderZoom(-0.15)" class="w-6 h-6 rounded-lg hover:bg-slate-700 flex items-center justify-center font-bold text-slate-300 transition" title="Zoom Out (- or Ctrl+Scroll Down)">
+              <i class="fa-solid fa-minus text-[10px]"></i>
+            </button>
+            <span id="readerZoomLevel" class="text-[11px] px-1 text-amber-300 min-w-[38px] text-center font-bold font-mono">100%</span>
+            <button onclick="changeReaderZoom(+0.15)" class="w-6 h-6 rounded-lg hover:bg-slate-700 flex items-center justify-center font-bold text-slate-300 transition" title="Zoom In (+ or Ctrl+Scroll Up)">
+              <i class="fa-solid fa-plus text-[10px]"></i>
+            </button>
+            <button onclick="resetReaderZoom()" class="w-6 h-6 rounded-lg hover:bg-slate-700 text-[10px] text-slate-400 hover:text-white flex items-center justify-center transition" title="Reset Zoom (Press 0)">
+              <i class="fa-solid fa-arrows-rotate"></i>
+            </button>
           </div>
 
           <!-- Fullscreen Toggle -->
@@ -4186,10 +4195,10 @@
           </div>
 
           <!-- 1. IMAGE-BASED READER STAGE (Qaida, 16-Line Quran, Illustrated Books) -->
-          <div id="readerImageStage" class="h-full flex items-center justify-center w-full overflow-hidden">
-            <div id="readerCanvasWrapper" class="relative inline-block max-h-[76vh] max-w-full">
+          <div id="readerImageStage" class="min-h-full min-w-full flex items-center justify-center p-2 sm:p-4 overflow-visible">
+            <div id="readerCanvasWrapper" class="relative inline-block max-h-[76vh] max-w-full origin-center select-none">
               <img id="readerPageImg" src="" alt="Book Page" 
-                class="max-h-[76vh] w-auto max-w-full rounded-xl shadow-2xl object-contain border border-slate-700/80 bg-white block transition-transform duration-200 select-none pointer-events-none" />
+                class="max-h-[76vh] w-auto max-w-full rounded-xl shadow-2xl object-contain border border-slate-700/80 bg-white block select-none pointer-events-none" />
               
               <!-- INTERACTIVE DRAWING / ANNOTATION CANVAS -->
               <canvas id="readerAnnotationCanvas" class="absolute inset-0 w-full h-full rounded-xl cursor-default z-10 touch-none"></canvas>
@@ -5282,13 +5291,20 @@
 
       if (!books || books.length === 0) {
         container.innerHTML = `
-          <div class="col-span-full p-12 text-center bg-white rounded-2xl border border-slate-200">
-            <i class="fa-solid fa-book-bookmark text-4xl text-slate-300 mb-3"></i>
-            <h4 class="font-extrabold text-slate-700 text-base">No Course Materials Found</h4>
-            <p class="text-xs text-slate-400 mt-1 max-w-md mx-auto">Upload your own syllabus scans or course materials using the button below.</p>
-            <div class="mt-4 flex items-center justify-center gap-2.5 flex-wrap">
-              <button onclick="openCustomBookUploadModal()" class="px-4 py-2 bg-brandDark hover:bg-brandDarkest text-white rounded-xl text-xs font-bold transition inline-flex items-center gap-1.5 shadow-sm">
-                <i class="fa-solid fa-plus"></i> + Add Course Material
+          <div class="col-span-full py-16 px-6 text-center bg-white rounded-3xl border border-dashed border-slate-300 shadow-xs">
+            <div class="w-16 h-16 rounded-2xl bg-emerald-50 text-emerald-700 border border-emerald-200 flex items-center justify-center text-2xl mx-auto mb-4 shadow-xs">
+              <i class="fa-solid fa-book-open"></i>
+            </div>
+            <h4 class="font-black text-slate-800 text-lg tracking-tight">No Course Materials Found</h4>
+            <p class="text-xs text-slate-500 mt-1.5 max-w-md mx-auto leading-relaxed">
+              No materials match your current category or search filter. You can add new lessons, PDF/image scans, or custom course syllabus using the button below.
+            </p>
+            <div class="mt-6 flex items-center justify-center gap-3 flex-wrap">
+              <button onclick="openCustomBookUploadModal()" class="px-5 py-2.5 bg-gradient-to-r from-brandDark to-emerald-950 hover:from-emerald-900 hover:to-brandDark text-white rounded-xl text-xs font-black transition inline-flex items-center gap-2 shadow-md hover:shadow-lg">
+                <i class="fa-solid fa-plus text-brandGold"></i> + Add Course Material
+              </button>
+              <button onclick="loadCurriculumLibrary('all')" class="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition inline-flex items-center gap-1.5">
+                <i class="fa-solid fa-layer-group text-slate-500"></i> View All Materials
               </button>
             </div>
           </div>
@@ -5296,74 +5312,109 @@
         return;
       }
 
-      container.innerHTML = books.map(book => {
-        const totalIndicator = book.total_pages ? `${book.total_pages} Pages` :
-                               book.total_paras ? `${book.total_paras} Paras (Juz)` :
+      const categoryStyles = {
+        qaida: { badge: 'bg-emerald-50 text-emerald-800 border-emerald-200', icon: 'fa-solid fa-book-open', iconColor: 'text-emerald-600', grad: 'from-emerald-800 via-teal-900 to-slate-900' },
+        quran: { badge: 'bg-amber-50 text-amber-800 border-amber-200', icon: 'fa-solid fa-book-quran', iconColor: 'text-amber-600', grad: 'from-amber-900 via-stone-900 to-slate-950' },
+        tafseer: { badge: 'bg-blue-50 text-blue-800 border-blue-200', icon: 'fa-solid fa-scroll', iconColor: 'text-blue-600', grad: 'from-blue-900 via-slate-900 to-slate-950' },
+        hadith: { badge: 'bg-purple-50 text-purple-800 border-purple-200', icon: 'fa-solid fa-kaaba', iconColor: 'text-purple-600', grad: 'from-purple-950 via-slate-900 to-stone-950' },
+        essentials: { badge: 'bg-teal-50 text-teal-800 border-teal-200', icon: 'fa-solid fa-hands-praying', iconColor: 'text-teal-600', grad: 'from-teal-900 via-emerald-950 to-slate-900' }
+      };
+
+      container.innerHTML = books.map((book) => {
+        const catKey = book.category || 'qaida';
+        const style = categoryStyles[catKey] || categoryStyles.qaida;
+        const totalPages = book.total_pages || (book.pages ? book.pages.length : (book.paras ? 548 : 32));
+        const totalIndicator = book.total_paras ? `${book.total_paras} Paras` :
                                book.total_surahs ? `${book.total_surahs} Surahs` :
                                book.total_hadith ? `${book.total_hadith} Hadiths` :
-                               book.total_duas ? `${book.total_duas} Duas` : 'Complete Edition';
+                               `${totalPages} Pages`;
 
-        const hasChapters = (book.chapters && book.chapters.length > 0) || (book.paras && book.paras.length > 0);
+        const outlineSummary = book.chapters ? `${book.chapters.length} Takhtis / Units` : (book.paras ? '30 Paras (Complete)' : null);
 
         return `
-          <div class="bg-white rounded-2xl border border-slate-200 shadow-sm hover:shadow-md transition duration-200 overflow-hidden flex flex-col justify-between group">
+          <div class="bg-white rounded-2xl border border-slate-200/90 shadow-sm hover:shadow-xl hover:border-emerald-300/80 transition-all duration-300 flex flex-col justify-between overflow-hidden group">
             <div>
-              <!-- TOP CARD HEADER BANNER -->
-              <div class="p-4 bg-gradient-to-r ${book.cover_bg || 'from-slate-800 to-slate-900'} text-white relative overflow-hidden">
-                <div class="absolute right-2 -bottom-2 opacity-15 text-6xl select-none pointer-events-none">
-                  <i class="${book.cover_icon || 'fa-solid fa-book'}"></i>
+              <!-- CARD HERO HEADER -->
+              <div class="p-5 bg-gradient-to-br ${book.cover_bg || style.grad} text-white relative overflow-hidden">
+                <!-- Subtle Watermark Icon in Corner -->
+                <div class="absolute -right-3 -bottom-4 opacity-15 text-7xl select-none pointer-events-none group-hover:scale-110 transition-transform duration-300">
+                  <i class="${book.cover_icon || style.icon}"></i>
                 </div>
-                <div class="flex items-start justify-between gap-2 relative z-10">
-                  <span class="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-white/20 text-white backdrop-blur-xs">
-                    ${book.category_label || 'Curriculum'}
+
+                <!-- Top Badges Row -->
+                <div class="flex items-center justify-between gap-2 relative z-10">
+                  <span class="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-white/20 text-white backdrop-blur-xs border border-white/20">
+                    <i class="${style.icon} mr-1 text-[9px]"></i> ${book.category_label || 'Course Material'}
                   </span>
-                  <span class="px-2 py-0.5 rounded-full text-[10px] font-mono font-black bg-black/30 text-amber-200 border border-amber-300/30">
-                    ${totalIndicator}
+                  <span class="px-2.5 py-0.5 rounded-full text-[10px] font-mono font-black bg-black/40 text-amber-300 border border-amber-400/30 flex items-center gap-1 shadow-2xs">
+                    <i class="fa-regular fa-file-lines text-[9px]"></i> ${totalIndicator}
                   </span>
                 </div>
-                <h3 class="font-extrabold text-base text-white mt-2 leading-snug drop-shadow-xs">
-                  ${book.title}
-                </h3>
-                ${book.title_ar ? `<div class="text-xs text-emerald-200 font-semibold font-cinzel mt-0.5">${book.title_ar}</div>` : ''}
-                ${book.author ? `<div class="text-[11px] text-amber-200/90 font-medium mt-1"><i class="fa-solid fa-pen-nib text-[9px]"></i> ${book.author}</div>` : ''}
+
+                <!-- Title & Arabic Title -->
+                <div class="relative z-10 mt-3">
+                  <h3 class="font-black text-base sm:text-lg text-white leading-snug tracking-tight drop-shadow-xs group-hover:text-emerald-200 transition-colors">
+                    ${book.title}
+                  </h3>
+                  ${book.title_ar ? `<div class="text-xs text-emerald-300 font-bold font-cinzel mt-1 tracking-wide" dir="rtl">${book.title_ar}</div>` : ''}
+                  ${book.author ? `
+                    <div class="text-[11px] text-amber-200/90 font-medium mt-1.5 flex items-center gap-1">
+                      <i class="fa-solid fa-feather-pointed text-[10px] text-amber-300"></i> ${book.author}
+                    </div>` : ''}
+                </div>
               </div>
 
               <!-- CARD BODY -->
               <div class="p-4 space-y-3">
-                <div class="text-[11px] font-bold text-slate-500 bg-slate-50 px-2.5 py-1 rounded-lg border border-slate-100 flex items-center gap-1.5">
-                  <i class="fa-solid fa-award text-amber-500"></i>
-                  <span class="truncate">${book.edition || 'Standard Academy Syllabus'}</span>
+                <!-- Meta tags row: Edition / Whiteboard Ready -->
+                <div class="flex items-center gap-2 flex-wrap">
+                  <span class="text-[11px] font-bold text-slate-600 bg-slate-50 px-2.5 py-1 rounded-lg border border-slate-100 flex items-center gap-1.5 shadow-2xs">
+                    <i class="fa-solid fa-award text-amber-500 text-xs"></i>
+                    <span class="truncate max-w-[170px]">${book.edition || 'Academy Syllabus'}</span>
+                  </span>
+                  <span class="text-[10px] font-bold text-emerald-800 bg-emerald-50 px-2 py-1 rounded-lg border border-emerald-200/70 flex items-center gap-1">
+                    <i class="fa-solid fa-chalkboard-user text-emerald-600"></i> Live Whiteboard
+                  </span>
                 </div>
-                <p class="text-xs text-slate-600 leading-relaxed line-clamp-3">
-                  ${book.description}
+
+                <!-- Book Description -->
+                <p class="text-xs text-slate-600 leading-relaxed line-clamp-2">
+                  ${book.description || 'Interactive academy syllabus material for Quranic instruction.'}
                 </p>
 
-                ${hasChapters ? `
-                  <div class="p-2.5 bg-emerald-50/50 rounded-xl border border-emerald-100 text-[11px] text-slate-700">
-                    <div class="font-bold text-brandDark mb-1 flex items-center justify-between">
-                      <span><i class="fa-solid fa-list-ol text-brandEmerald"></i> Syllabus Outline:</span>
-                      <span class="text-[10px] text-slate-400">${book.chapters ? book.chapters.length + ' Takhtis/Units' : '30 Paras'}</span>
-                    </div>
-                    <div class="text-slate-600 text-[10px] truncate">
-                      ${book.chapters ? book.chapters.slice(0, 2).map(c => c.title.split(':')[0]).join(' • ') + '...' : 'Juz 1 (Alif-Lam-Meem) to Juz 30 (Amma)'}
-                    </div>
+                <!-- Outline or Pages snippet -->
+                ${outlineSummary ? `
+                  <div class="p-2.5 bg-slate-50 rounded-xl border border-slate-200/80 text-[11px] text-slate-700 flex items-center justify-between">
+                    <span class="font-bold text-slate-700 flex items-center gap-1.5">
+                      <i class="fa-solid fa-list-check text-brandEmerald"></i> Syllabus Outline:
+                    </span>
+                    <span class="font-mono font-bold text-emerald-700 text-[11px] bg-white px-2 py-0.5 rounded-md border border-slate-200">${outlineSummary}</span>
                   </div>
                 ` : ''}
               </div>
             </div>
 
             <!-- CARD FOOTER ACTIONS -->
-            <div class="p-3.5 pt-2 border-t border-slate-100 flex items-center gap-1.5 flex-wrap">
-              <button onclick="openDigitalBookReader('${book.id}', 1)" class="flex-1 min-w-[110px] py-2 px-3 bg-brandDark hover:bg-brandDarkest text-white rounded-xl font-bold text-xs shadow-xs transition flex items-center justify-center gap-1.5 group-hover:bg-emerald-700">
+            <div class="p-3.5 pt-2 border-t border-slate-100 bg-slate-50/50 flex items-center gap-2 flex-wrap">
+              <!-- Primary: Open Reader -->
+              <button onclick="openDigitalBookReader('${book.id}', 1)" class="flex-1 min-w-[125px] py-2.5 px-3 bg-gradient-to-r from-emerald-800 to-teal-900 hover:from-emerald-700 hover:to-teal-800 text-white rounded-xl font-black text-xs shadow-sm hover:shadow-md transition flex items-center justify-center gap-1.5">
                 <i class="fa-solid fa-book-open-reader text-brandGold"></i> Open Reader
               </button>
-              <button onclick="openEditCustomBookModal('${book.id}')" class="px-2.5 py-2 bg-slate-100 hover:bg-emerald-100 text-slate-700 hover:text-emerald-800 rounded-xl text-xs font-bold transition flex items-center gap-1" title="Edit Course Material Details">
-                <i class="fa-solid fa-pen-to-square text-emerald-600"></i> Edit
+              
+              <!-- Secondary: Edit Book -->
+              <button onclick="openEditCustomBookModal('${book.id}')" class="px-2.5 py-2.5 bg-white hover:bg-emerald-50 text-slate-700 hover:text-emerald-800 border border-slate-200 rounded-xl text-xs font-bold transition flex items-center gap-1 shadow-2xs" title="Edit Course Material Details & Pages">
+                <i class="fa-solid fa-pen-to-square text-emerald-600"></i>
+                <span class="hidden sm:inline">Edit</span>
               </button>
-              <button onclick="handleDeleteCurriculumBook('${book.id}', '${(book.title || '').replace(/'/g, "\\'")}')" class="px-2.5 py-2 bg-slate-100 hover:bg-rose-100 text-slate-700 hover:text-rose-700 rounded-xl text-xs font-bold transition flex items-center gap-1" title="Delete Course Material">
+
+              <!-- Secondary: Delete Book -->
+              <button onclick="handleDeleteCurriculumBook('${book.id}', '${(book.title || '').replace(/'/g, "\\'")}')" class="px-2.5 py-2.5 bg-white hover:bg-rose-50 text-slate-700 hover:text-rose-700 border border-slate-200 rounded-xl text-xs font-bold transition flex items-center gap-1 shadow-2xs" title="Delete Course Material">
                 <i class="fa-solid fa-trash-can text-rose-500"></i>
+                <span class="hidden sm:inline">Delete</span>
               </button>
-              <button onclick="copyBookDeepLink('${book.id}', '${(book.title || '').replace(/'/g, "\\'")}')" class="p-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs transition" title="Copy Direct Portal Link">
+
+              <!-- Share Deep Link -->
+              <button onclick="copyBookDeepLink('${book.id}', '${(book.title || '').replace(/'/g, "\\'")}')" class="p-2.5 bg-white hover:bg-slate-100 text-slate-600 hover:text-slate-900 border border-slate-200 rounded-xl text-xs transition shadow-2xs" title="Copy Direct Portal Link">
                 <i class="fa-solid fa-share-nodes"></i>
               </button>
             </div>
@@ -5408,6 +5459,7 @@
         slider.value = CURRENT_READER_PAGE;
       }
 
+      setupReaderPanningAndWheel();
       openModal('modalDigitalBookReader');
       renderReaderCurrentPage();
     }
@@ -5507,8 +5559,9 @@
       if (img) {
         if (spinner) spinner.classList.remove('hidden');
 
-        // Apply current zoom
-        img.style.transform = `scale(${CURRENT_READER_ZOOM})`;
+        // Reset individual image transform - wrapper handles uniform scaling
+        img.style.transform = 'none';
+        applyReaderZoom();
 
         // Get URL
         let pageUrl = '';
@@ -5524,7 +5577,10 @@
 
         img.onload = function() {
           if (spinner) spinner.classList.add('hidden');
-          setTimeout(initOrResizeAnnotationCanvas, 60);
+          setTimeout(() => {
+            initOrResizeAnnotationCanvas();
+            applyReaderZoom();
+          }, 60);
         };
 
         img.onerror = function() {
@@ -5539,7 +5595,10 @@
           }
           img.src = fallback;
           if (spinner) spinner.classList.add('hidden');
-          setTimeout(initOrResizeAnnotationCanvas, 60);
+          setTimeout(() => {
+            initOrResizeAnnotationCanvas();
+            applyReaderZoom();
+          }, 60);
         };
 
         img.src = pageUrl;
@@ -5661,22 +5720,106 @@
       renderReaderCurrentPage();
     }
 
-    function changeReaderZoom(scaleDelta) {
-      CURRENT_READER_ZOOM = Math.max(0.7, Math.min(2.5, CURRENT_READER_ZOOM + scaleDelta));
+    let READER_IS_PANNING = false;
+    let READER_PAN_START_X = 0;
+    let READER_PAN_START_Y = 0;
+    let READER_SCROLL_START_X = 0;
+    let READER_SCROLL_START_Y = 0;
+    let READER_SPACE_DOWN = false;
+
+    function applyReaderZoom() {
+      const wrapper = document.getElementById('readerCanvasWrapper');
       const img = document.getElementById('readerPageImg');
-      if (img) img.style.transform = `scale(${CURRENT_READER_ZOOM})`;
+      if (img) img.style.transform = 'none'; // Never scale image independently!
+      if (wrapper) {
+        wrapper.style.transform = `scale(${CURRENT_READER_ZOOM})`;
+        wrapper.style.transformOrigin = 'center center';
+        wrapper.style.transition = 'transform 0.15s cubic-bezier(0.2, 0, 0, 1)';
+      }
       const lbl = document.getElementById('readerZoomLevel');
       if (lbl) lbl.innerText = `${Math.round(CURRENT_READER_ZOOM * 100)}%`;
-      setTimeout(initOrResizeAnnotationCanvas, 60);
+      updateReaderPanningState();
+    }
+
+    function changeReaderZoom(scaleDelta) {
+      CURRENT_READER_ZOOM = Math.max(0.6, Math.min(3.0, Math.round((CURRENT_READER_ZOOM + scaleDelta) * 100) / 100));
+      applyReaderZoom();
     }
 
     function resetReaderZoom() {
       CURRENT_READER_ZOOM = 1.0;
-      const img = document.getElementById('readerPageImg');
-      if (img) img.style.transform = `scale(1)`;
-      const lbl = document.getElementById('readerZoomLevel');
-      if (lbl) lbl.innerText = `100%`;
-      setTimeout(initOrResizeAnnotationCanvas, 60);
+      applyReaderZoom();
+      const area = document.getElementById('readerContentArea');
+      if (area) {
+        area.scrollLeft = (area.scrollWidth - area.clientWidth) / 2;
+        area.scrollTop = (area.scrollHeight - area.clientHeight) / 2;
+      }
+    }
+
+    function updateReaderPanningState() {
+      const area = document.getElementById('readerContentArea');
+      const canvas = document.getElementById('readerAnnotationCanvas');
+      if (!area) return;
+
+      const canPan = CURRENT_READER_ZOOM > 1.0 || READER_SPACE_DOWN;
+      if (READER_SPACE_DOWN || (canPan && TEACHING_TOOL === 'pointer')) {
+        area.style.cursor = 'grab';
+        if (canvas) canvas.style.pointerEvents = 'none';
+      } else {
+        area.style.cursor = 'default';
+        if (canvas && TEACHING_TOOL !== 'pointer') {
+          canvas.style.pointerEvents = 'auto';
+        }
+      }
+    }
+
+    function setupReaderPanningAndWheel() {
+      const area = document.getElementById('readerContentArea');
+      if (!area || area._panWheelAttached) return;
+      area._panWheelAttached = true;
+
+      // 1. Mouse wheel zoom (Ctrl + Wheel, Alt + Wheel, or Trackpad Pinch)
+      area.addEventListener('wheel', function(e) {
+        const readerModal = document.getElementById('modalDigitalBookReader');
+        if (!readerModal || readerModal.classList.contains('hidden')) return;
+        if (!CURRENT_READER_BOOK || CURRENT_READER_BOOK.is_text_viewer) return;
+
+        if (e.ctrlKey || e.altKey) {
+          e.preventDefault();
+          const delta = e.deltaY < 0 ? 0.15 : -0.15;
+          changeReaderZoom(delta);
+        }
+      }, { passive: false });
+
+      // 2. Mouse Drag Panning when zoomed in or when holding Spacebar
+      area.addEventListener('mousedown', function(e) {
+        const canPan = READER_SPACE_DOWN || (CURRENT_READER_ZOOM > 1.0 && TEACHING_TOOL === 'pointer');
+        if (!canPan) return;
+        if (e.button !== 0 && e.button !== 1) return; // Left or middle mouse click
+
+        READER_IS_PANNING = true;
+        READER_PAN_START_X = e.clientX;
+        READER_PAN_START_Y = e.clientY;
+        READER_SCROLL_START_X = area.scrollLeft;
+        READER_SCROLL_START_Y = area.scrollTop;
+        area.style.cursor = 'grabbing';
+        e.preventDefault();
+      });
+
+      window.addEventListener('mousemove', function(e) {
+        if (!READER_IS_PANNING) return;
+        const dx = e.clientX - READER_PAN_START_X;
+        const dy = e.clientY - READER_PAN_START_Y;
+        area.scrollLeft = READER_SCROLL_START_X - dx;
+        area.scrollTop = READER_SCROLL_START_Y - dy;
+      });
+
+      window.addEventListener('mouseup', function() {
+        if (READER_IS_PANNING) {
+          READER_IS_PANNING = false;
+          updateReaderPanningState();
+        }
+      });
     }
 
     function toggleReaderFullscreen() {
@@ -5741,6 +5884,7 @@
       if (halo && tool !== 'laser') {
         halo.classList.add('hidden');
       }
+      updateReaderPanningState();
     }
 
     function setTeachingColor(color) {
@@ -5847,13 +5991,13 @@
       canvas.addEventListener('pointermove', (e) => {
         const pos = getPos(e);
 
-        // Laser spotlight cursor logic
+        // Laser spotlight cursor logic (percentage-based for perfect zoom alignment)
         if (TEACHING_TOOL === 'laser') {
           const halo = document.getElementById('readerLaserHalo');
           if (halo) {
             halo.classList.remove('hidden');
-            halo.style.left = pos.px + 'px';
-            halo.style.top = pos.py + 'px';
+            halo.style.left = (pos.xRatio * 100) + '%';
+            halo.style.top = (pos.yRatio * 100) + '%';
           }
           return;
         }
@@ -6178,6 +6322,55 @@
 
       if (['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement?.tagName)) return;
 
+      // 1. Spacebar for click-drag Panning
+      if (e.code === 'Space' && !READER_SPACE_DOWN) {
+        READER_SPACE_DOWN = true;
+        updateReaderPanningState();
+        e.preventDefault();
+        return;
+      }
+
+      // 2. Keyboard Zoom In: + or = or NumpadAdd
+      if (e.key === '+' || e.key === '=' || e.code === 'NumpadAdd') {
+        e.preventDefault();
+        changeReaderZoom(+0.15);
+        return;
+      }
+
+      // 3. Keyboard Zoom Out: - or _ or NumpadSubtract
+      if (e.key === '-' || e.key === '_' || e.code === 'NumpadSubtract') {
+        e.preventDefault();
+        changeReaderZoom(-0.15);
+        return;
+      }
+
+      // 4. Keyboard Reset Zoom: 0 or Numpad0
+      if ((e.key === '0' || e.code === 'Numpad0') && !e.ctrlKey) {
+        e.preventDefault();
+        resetReaderZoom();
+        return;
+      }
+
+      // 5. Page Navigation: Arrow keys
+      if (e.key === 'ArrowLeft') {
+        e.preventDefault();
+        changeReaderPage(-1);
+        return;
+      }
+      if (e.key === 'ArrowRight') {
+        e.preventDefault();
+        changeReaderPage(+1);
+        return;
+      }
+
+      // 6. Close Reader on Escape
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        closeDigitalBookReader();
+        return;
+      }
+
+      // 7. Whiteboard Teaching Studio Shortcuts
       const k = e.key.toUpperCase();
       if (e.ctrlKey && k === 'Z') {
         e.preventDefault();
@@ -6200,6 +6393,13 @@
         setTeachingTool('star');
       } else if (k === 'E') {
         setTeachingTool('eraser');
+      }
+    });
+
+    window.addEventListener('keyup', function(e) {
+      if (e.code === 'Space' && READER_SPACE_DOWN) {
+        READER_SPACE_DOWN = false;
+        updateReaderPanningState();
       }
     });
 
@@ -6494,19 +6694,6 @@
       });
     }
 
-    // Keyboard controls for digital reader
-    window.addEventListener('keydown', function(e) {
-      const readerModal = document.getElementById('modalDigitalBookReader');
-      if (readerModal && !readerModal.classList.contains('hidden')) {
-        if (e.key === 'ArrowLeft') {
-          changeReaderPage(-1);
-        } else if (e.key === 'ArrowRight') {
-          changeReaderPage(+1);
-        } else if (e.key === 'Escape') {
-          closeDigitalBookReader();
-        }
-      }
-    });
 
     // Check URL parameters for direct book links (e.g. ?book=quran-16-line&page=15)
     (function checkUrlBookParam() {
