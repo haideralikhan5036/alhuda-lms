@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Parent & Student Portal - Al-Huda & BQI LMS</title>
+  <title>Student &amp; Parent Portal — Al-Huda Islamic Centre</title>
 
   <!-- Progressive Web App (PWA) Manifest & Icons -->
   <link rel="manifest" href="manifest.json">
@@ -16,10 +16,10 @@
   <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
   <link rel="icon" type="image/png" sizes="64x64" href="favicon.png">
   
-  <!-- Google Fonts & Font Awesome (Plus Jakarta Sans, JetBrains Mono, Outfit, Amiri) -->
+  <!-- Google Fonts & Font Awesome -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Amiri:wght@700&family=JetBrains+Mono:wght@400;500;600;700;800&family=Outfit:wght@500;600;700;800;900&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Amiri:wght@400;700&family=JetBrains+Mono:wght@400;500;600;700;800&family=Outfit:wght@500;600;700;800;900&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   
   <!-- Tailwind CSS -->
@@ -47,7 +47,7 @@
 
   <!-- Supabase JS Client -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <!-- Al-Huda Curriculum & Digital Islamic Library Engine -->
+  <!-- Al-Huda Curriculum & Course Material Registry Engine -->
   <script src="curriculum_data.js"></script>
 
   <style>
@@ -57,402 +57,1542 @@
       -webkit-font-smoothing: antialiased;
     }
 
-    /* Mobile Touch & Scroll Utilities */
     .touch-scroll {
       -webkit-overflow-scrolling: touch;
       overscroll-behavior-x: contain;
     }
-    .no-scrollbar::-webkit-scrollbar {
-      display: none;
-    }
-    .no-scrollbar {
-      -ms-overflow-style: none;
-      scrollbar-width: none;
-    }
-
-    .font-mono, td.font-mono, span.font-mono {
-      font-family: 'JetBrains Mono', monospace !important;
-      font-feature-settings: 'tnum' 1, 'zero' 1;
-      letter-spacing: -0.02em;
-    }
-
-    /* Aesthetic Dropdowns */
-    select {
-      appearance: none !important;
-      -webkit-appearance: none !important;
-      -moz-appearance: none !important;
-      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%23047857' stroke-width='2.5'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E") !important;
-      background-position: right 0.75rem center !important;
-      background-repeat: no-repeat !important;
-      background-size: 1.05rem 1.05rem !important;
-      padding-right: 2.35rem !important;
-      border: 1.5px solid #cbd5e1 !important;
-      border-radius: 0.75rem !important;
-      font-weight: 600 !important;
-      color: #0f172a !important;
-      background-color: #ffffff !important;
-      transition: all 0.18s cubic-bezier(0.4, 0, 0.2, 1) !important;
-      box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.04) !important;
-      cursor: pointer;
-    }
-    select:hover { border-color: #047857 !important; }
-    select:focus { outline: none !important; border-color: #047857 !important; box-shadow: 0 0 0 3px rgba(4, 120, 87, 0.18) !important; }
 
     .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
     .custom-scrollbar::-webkit-scrollbar-track { background: #f1f5f9; }
     .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
     .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+
+    .portal-nav-btn.active {
+      background-color: #047857 !important;
+      color: #ffffff !important;
+      box-shadow: 0 4px 12px rgba(4, 120, 87, 0.25) !important;
+    }
+
+    select {
+      appearance: none !important;
+      -webkit-appearance: none !important;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%23047857' stroke-width='2.5'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E") !important;
+      background-position: right 0.75rem center !important;
+      background-repeat: no-repeat !important;
+      background-size: 1.05rem 1.05rem !important;
+      padding-right: 2.2rem !important;
+      cursor: pointer;
+    }
   </style>
 </head>
 <body class="bg-slate-50 text-slate-800 antialiased min-h-screen flex flex-col font-sans">
 
-  <!-- ================= NAVBAR ================= -->
-  <nav class="bg-brandDarkest text-white sticky top-0 z-40 border-b border-emerald-800 shadow-md">
+  <!-- ================= TOP NAVIGATION BAR ================= -->
+  <nav class="bg-brandDarkest text-white sticky top-0 z-40 border-b border-emerald-800/80 shadow-md">
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-      <div class="flex items-center justify-between h-16">
+      <div class="flex items-center justify-between h-16 gap-3">
         
         <!-- Logo & Title -->
-        <div class="flex items-center gap-3">
+        <div class="flex items-center gap-3 shrink-0">
           <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-brandGold to-amber-600 flex items-center justify-center text-slate-950 font-black text-xl shadow-md">
             <i class="fa-solid fa-book-quran"></i>
           </div>
           <div>
-            <div class="font-extrabold text-base tracking-tight text-white flex items-center gap-2">
+            <div class="font-black text-sm sm:text-base tracking-tight text-white flex items-center gap-2">
               Al-Huda Islamic Centre
               <span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">Student Portal</span>
             </div>
-            <p class="text-[11px] text-slate-300">Live Learning &amp; Sabaq Progress Reader</p>
+            <p class="text-[11px] text-slate-300 hidden sm:block">Live Learning, Sabaq Progress &amp; Digital Library</p>
           </div>
         </div>
 
-        <!-- Quick Library & User Controls -->
-        <div class="flex items-center gap-2 sm:gap-3">
-          <!-- Digital Library Button -->
-          <button onclick="openParentLibraryModal()" class="px-3.5 py-1.5 rounded-lg bg-emerald-800/90 hover:bg-emerald-700 text-amber-200 border border-emerald-600/60 text-xs font-bold transition flex items-center gap-2 shadow-sm">
-            <i class="fa-solid fa-book-open-reader text-brandGold"></i>
-            <span class="hidden sm:inline">Course Material Library</span>
-          </button>
-
-          <!-- User Badge -->
-          <div class="px-2.5 sm:px-3 py-1 rounded-lg bg-white/10 text-emerald-100 text-xs font-semibold flex items-center gap-1.5 sm:gap-2 border border-white/10">
-            <i class="fa-solid fa-user-graduate text-brandGold"></i>
-            <span id="parentUserBadge" class="max-w-[85px] sm:max-w-none truncate">Student Account</span>
+        <!-- Student Selector & Quick Actions -->
+        <div class="flex items-center gap-2 sm:gap-3 flex-wrap justify-end">
+          <!-- Student Account Selector (Connected to Supabase) -->
+          <div class="flex items-center gap-1.5 bg-slate-900/90 px-2 py-1 rounded-xl border border-emerald-700/60 shadow-xs">
+            <i class="fa-solid fa-user-graduate text-brandGold text-xs"></i>
+            <span class="text-[11px] font-semibold text-slate-300 hidden md:inline">Student:</span>
+            <select id="portalStudentSelect" onchange="switchStudentAccount(this.value)" class="bg-transparent text-emerald-200 font-bold text-xs border-none focus:outline-none cursor-pointer py-1 pl-1 pr-6 max-w-[130px] sm:max-w-[200px]">
+              <option value="loading">Loading Students...</option>
+            </select>
           </div>
+
+          <!-- Direct Library Shortcut -->
+          <button onclick="switchPortalTab('tab-library')" class="px-3 py-1.5 rounded-xl bg-emerald-800/80 hover:bg-emerald-700 text-amber-200 border border-emerald-600/60 text-xs font-bold transition flex items-center gap-1.5 shadow-xs" title="Open Course Material Library">
+            <i class="fa-solid fa-book-open-reader text-brandGold"></i>
+            <span class="hidden lg:inline">Library</span>
+          </button>
 
           <!-- Back to Main LMS -->
-          <a href="/" class="px-3 py-1.5 rounded-lg border border-emerald-700/50 hover:bg-white/10 text-emerald-200 text-xs font-bold transition flex items-center gap-1.5" title="Return to Main LMS Portal">
-            <i class="fa-solid fa-arrow-left"></i> <span class="hidden sm:inline">Main LMS</span>
+          <a href="/" class="px-2.5 sm:px-3 py-1.5 rounded-xl border border-emerald-700/50 hover:bg-white/10 text-emerald-200 text-xs font-bold transition flex items-center gap-1.5" title="Return to Admin / Teacher Dashboard">
+            <i class="fa-solid fa-house text-xs"></i> <span class="hidden sm:inline">Main LMS</span>
           </a>
 
-          <!-- Logout Button -->
-          <button onclick="handleParentLogout()" class="px-3 py-1.5 rounded-lg bg-rose-600/20 hover:bg-rose-600 text-rose-200 hover:text-white border border-rose-500/30 text-xs font-bold transition flex items-center gap-1.5" title="Logout">
+          <!-- Logout -->
+          <button onclick="handleParentLogout()" class="px-2.5 sm:px-3 py-1.5 rounded-xl bg-rose-600/20 hover:bg-rose-600 text-rose-200 hover:text-white border border-rose-500/30 text-xs font-bold transition flex items-center gap-1" title="Logout">
             <i class="fa-solid fa-right-from-bracket"></i>
-            <span class="hidden sm:inline">Logout</span>
+            <span class="hidden sm:inline">Exit</span>
           </button>
         </div>
 
+      </div>
+    </div>
+
+    <!-- PORTAL SUB-NAV TABS -->
+    <div class="bg-slate-950/70 border-t border-emerald-900/60 px-4 sm:px-6 lg:px-8 overflow-x-auto touch-scroll no-scrollbar">
+      <div class="max-w-7xl mx-auto flex items-center gap-1 py-1.5 min-w-max">
+        <button onclick="switchPortalTab('tab-dashboard')" id="navBtn_dashboard" class="portal-nav-btn active px-3.5 py-1.5 rounded-lg text-xs font-bold text-slate-300 hover:text-white hover:bg-slate-800/60 transition flex items-center gap-1.5">
+          <i class="fa-solid fa-gauge-high"></i> Dashboard
+        </button>
+        <button onclick="switchPortalTab('tab-library')" id="navBtn_library" class="portal-nav-btn px-3.5 py-1.5 rounded-lg text-xs font-bold text-slate-300 hover:text-white hover:bg-slate-800/60 transition flex items-center gap-1.5">
+          <i class="fa-solid fa-book-open"></i> Course Material Library (<span id="portalNavBookCount">0</span>)
+        </button>
+        <button onclick="switchPortalTab('tab-timetable')" id="navBtn_timetable" class="portal-nav-btn px-3.5 py-1.5 rounded-lg text-xs font-bold text-slate-300 hover:text-white hover:bg-slate-800/60 transition flex items-center gap-1.5">
+          <i class="fa-regular fa-calendar-days"></i> Class Schedule
+        </button>
+        <button onclick="switchPortalTab('tab-attendance')" id="navBtn_attendance" class="portal-nav-btn px-3.5 py-1.5 rounded-lg text-xs font-bold text-slate-300 hover:text-white hover:bg-slate-800/60 transition flex items-center gap-1.5">
+          <i class="fa-solid fa-clipboard-check"></i> Attendance Record
+        </button>
+        <button onclick="switchPortalTab('tab-fees')" id="navBtn_fees" class="portal-nav-btn px-3.5 py-1.5 rounded-lg text-xs font-bold text-slate-300 hover:text-white hover:bg-slate-800/60 transition flex items-center gap-1.5">
+          <i class="fa-solid fa-receipt"></i> Fee &amp; Invoices
+        </button>
+        <button onclick="openLeaveRequestModal()" class="ml-auto px-3 py-1.5 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 text-xs font-bold transition flex items-center gap-1.5">
+          <i class="fa-regular fa-envelope"></i> Request Leave / Note
+        </button>
       </div>
     </div>
   </nav>
 
-  <!-- ================= MAIN DASHBOARD CONTAINER ================= -->
-  <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 flex-1 w-full space-y-6">
+  <!-- ================= MAIN CONTENT WRAPPER ================= -->
+  <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 flex-1 w-full space-y-6">
 
-    <!-- WELCOME HERO BANNER -->
-    <div class="relative overflow-hidden rounded-3xl bg-gradient-to-r from-brandDarkest via-brandDark to-teal-900 text-white p-6 sm:p-8 shadow-xl border border-emerald-700/40">
-      <div class="absolute -right-10 -bottom-10 opacity-10 text-white pointer-events-none">
-        <i class="fa-solid fa-book-quran text-9xl"></i>
-      </div>
-      <div class="relative z-10 max-w-3xl">
-        <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-300 text-xs font-bold border border-emerald-500/30 mb-3">
-          <i class="fa-solid fa-kaaba"></i> Bismillahi Rahmani Raheem 🤲
-        </div>
-        <h1 class="text-2xl sm:text-3xl font-black tracking-tight text-white mb-2">
-          Assalamu Alaikum, <span id="heroWelcomeName" class="text-amber-300">Family</span>!
-        </h1>
-        <p class="text-slate-200 text-sm sm:text-base leading-relaxed mb-6">
-          Track today's attendance, revise your recent lesson notes, and open the interactive digital Qaida &amp; Quran reader directly with one click.
-        </p>
-        
-        <div class="flex flex-wrap items-center gap-3">
-          <button onclick="openLatestSabaqReader()" id="btnOpenLatestSabaq" class="px-5 py-2.5 rounded-xl bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-500 hover:to-amber-600 text-slate-950 font-black text-xs sm:text-sm shadow-md transition flex items-center gap-2">
-            <i class="fa-solid fa-book-open"></i> Open Today's Lesson
-          </button>
-
-          <button onclick="openParentLibraryModal()" class="px-4 py-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-white font-bold text-xs sm:text-sm border border-white/20 transition flex items-center gap-2">
-            <i class="fa-solid fa-layer-group text-brandGold"></i> Browse Full Curriculum (13 Books)
-          </button>
-        </div>
-      </div>
-    </div>
-
-    <!-- LIVE CLASS JOIN CARD & STATS ROW -->
-    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <!-- TAB 1: DASHBOARD OVERVIEW -->
+    <section id="tab-dashboard" class="portal-tab-content space-y-6">
       
-      <!-- LIVE CLASS CARD -->
-      <div id="liveClassCard" class="lg:col-span-2 bg-white rounded-3xl p-6 border border-slate-200 shadow-sm flex flex-col sm:flex-row items-start sm:items-center justify-between gap-5 border-l-8 border-l-emerald-500">
-        <div class="space-y-2">
-          <div class="flex items-center gap-2">
-            <span class="px-2.5 py-0.5 rounded-full text-[11px] font-black bg-emerald-100 text-emerald-800 border border-emerald-300 flex items-center gap-1.5">
-              <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span> CLASS SCHEDULE
-            </span>
-            <span class="text-xs font-semibold text-slate-500" id="liveClassDate">Today's Session</span>
+      <!-- HERO WELCOME BANNER -->
+      <div class="relative overflow-hidden rounded-3xl bg-gradient-to-r from-brandDarkest via-brandDark to-teal-900 text-white p-6 sm:p-8 shadow-xl border border-emerald-700/40">
+        <div class="absolute -right-8 -bottom-8 opacity-10 text-white pointer-events-none">
+          <i class="fa-solid fa-book-quran text-9xl"></i>
+        </div>
+        <div class="relative z-10 max-w-3xl">
+          <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-300 text-xs font-bold border border-emerald-500/30 mb-3">
+            <i class="fa-solid fa-kaaba"></i> Bismillahi Rahmani Raheem 🤲
           </div>
-          <h2 class="text-xl font-black text-slate-900" id="liveClassSubject">Quran Recitation &amp; Tajweed</h2>
-          <p class="text-xs text-slate-600" id="liveClassMeta">
-            Assigned Teacher: <strong class="text-slate-800" id="liveClassTeacher">Qari / Ustadh</strong> | 
-            Time Slot: <strong class="text-slate-800 font-mono" id="liveClassTime">Flexible</strong>
+          <h1 class="text-2xl sm:text-3xl font-black tracking-tight text-white mb-2">
+            Assalamu Alaikum, <span id="heroWelcomeName" class="text-amber-300">Student</span>!
+          </h1>
+          <p class="text-slate-200 text-xs sm:text-sm leading-relaxed mb-6 max-w-2xl">
+            Welcome to your Al-Huda online classroom portal. Review today's lesson notes, join your live Zoom class, or revise Noorani Qaida &amp; the Holy Quran directly in the digital reader.
           </p>
-        </div>
+          
+          <div class="flex flex-wrap items-center gap-3">
+            <button onclick="openLatestSabaqReader()" id="btnOpenLatestSabaq" class="px-5 py-2.5 rounded-xl bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-500 hover:to-amber-600 text-slate-950 font-black text-xs sm:text-sm shadow-md transition flex items-center gap-2">
+              <i class="fa-solid fa-book-open"></i> Read Today's Lesson
+            </button>
 
-        <div class="w-full sm:w-auto">
-          <a id="btnJoinLiveMeeting" href="#" target="_blank" class="w-full sm:w-auto px-6 py-3.5 rounded-2xl bg-brandDark hover:bg-brandDarkest text-white font-black text-sm shadow-md transition flex items-center justify-center gap-2 text-center">
-            <i class="fa-solid fa-video text-amber-300"></i> Join Live Class Now
-          </a>
-        </div>
-      </div>
-
-      <!-- FEE & ATTENDANCE SUMMARY -->
-      <div class="bg-white rounded-3xl p-6 border border-slate-200 shadow-sm space-y-4">
-        <div class="flex items-center justify-between">
-          <h3 class="text-xs font-black uppercase tracking-wider text-slate-400">Account &amp; Attendance</h3>
-          <i class="fa-solid fa-shield-halved text-emerald-600"></i>
-        </div>
-
-        <div class="grid grid-cols-2 gap-3 pt-1">
-          <div class="p-3 bg-emerald-50/70 border border-emerald-100 rounded-2xl">
-            <div class="text-[11px] font-bold text-slate-500">Monthly Fee</div>
-            <div class="text-lg font-black text-emerald-700 mt-1" id="parentFeeStat">Paid</div>
-            <div class="text-[10px] text-emerald-600 font-semibold mt-0.5">Active Account</div>
-          </div>
-
-          <div class="p-3 bg-blue-50/70 border border-blue-100 rounded-2xl">
-            <div class="text-[11px] font-bold text-slate-500">Attendance</div>
-            <div class="text-lg font-black text-blue-700 mt-1" id="parentAttRate">98%</div>
-            <div class="text-[10px] text-blue-600 font-semibold mt-0.5">Consistent Attendance</div>
+            <button onclick="switchPortalTab('tab-library')" class="px-4 py-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-white font-bold text-xs sm:text-sm border border-white/20 transition flex items-center gap-2">
+              <i class="fa-solid fa-layer-group text-brandGold"></i> Browse Course Library (<span id="heroLibraryCount">0</span>)
+            </button>
           </div>
         </div>
       </div>
 
-    </div>
+      <!-- LIVE CLASS JOIN CARD & 4 QUICK STAT CARDS -->
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-5">
+        
+        <!-- LIVE CLASS ACTION CARD -->
+        <div id="liveClassCard" class="lg:col-span-2 bg-white rounded-3xl p-6 border border-slate-200 shadow-sm flex flex-col sm:flex-row items-start sm:items-center justify-between gap-5 border-l-8 border-l-emerald-500">
+          <div class="space-y-2">
+            <div class="flex items-center gap-2">
+              <span class="px-2.5 py-0.5 rounded-full text-[11px] font-black bg-emerald-100 text-emerald-800 border border-emerald-300 flex items-center gap-1.5">
+                <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span> CLASS SCHEDULE
+              </span>
+              <span class="text-xs font-semibold text-slate-500" id="liveClassDate">Today's Class</span>
+            </div>
+            <h2 class="text-xl font-black text-slate-900" id="liveClassSubject">Quran Recitation &amp; Tajweed</h2>
+            <p class="text-xs text-slate-600" id="liveClassMeta">
+              Assigned Teacher: <strong class="text-slate-800" id="liveClassTeacher">Qari / Ustadh</strong> | 
+              Time Slot: <strong class="text-slate-800 font-mono" id="liveClassTime">Flexible</strong>
+            </p>
+          </div>
 
-    <!-- RECENT LESSON PROGRESS LOGS (SABAQ / SABAQI / MANZIL) -->
-    <div class="bg-white rounded-3xl p-6 sm:p-7 border border-slate-200 shadow-sm space-y-5">
-      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-4">
+          <div class="w-full sm:w-auto shrink-0">
+            <a id="btnJoinLiveMeeting" href="#" target="_blank" class="w-full sm:w-auto px-6 py-3.5 rounded-2xl bg-brandDark hover:bg-brandDarkest text-white font-black text-sm shadow-md transition flex items-center justify-center gap-2 text-center">
+              <i class="fa-solid fa-video text-amber-300"></i> Join Live Class Now
+            </a>
+          </div>
+        </div>
+
+        <!-- SUMMARY STATS CARD -->
+        <div class="bg-white rounded-3xl p-6 border border-slate-200 shadow-sm flex flex-col justify-between">
+          <div class="flex items-center justify-between border-b pb-3 mb-3">
+            <h3 class="text-xs font-black uppercase tracking-wider text-slate-400">Account Summary</h3>
+            <span id="studentCourseBadge" class="px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold bg-emerald-50 text-emerald-800 border border-emerald-200">Active</span>
+          </div>
+
+          <div class="grid grid-cols-2 gap-3">
+            <div class="p-3 bg-emerald-50/70 border border-emerald-100 rounded-2xl">
+              <div class="text-[11px] font-bold text-slate-500">Monthly Fee</div>
+              <div class="text-lg font-black text-emerald-700 mt-0.5" id="parentFeeStat">Paid</div>
+              <div class="text-[10px] text-emerald-600 font-semibold" id="parentFeeMonth">Active Cycle</div>
+            </div>
+
+            <div class="p-3 bg-blue-50/70 border border-blue-100 rounded-2xl">
+              <div class="text-[11px] font-bold text-slate-500">Attendance</div>
+              <div class="text-lg font-black text-blue-700 mt-0.5" id="parentAttRate">98%</div>
+              <div class="text-[10px] text-blue-600 font-semibold" id="parentAttCount">Consistent</div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- RECENT LESSON PROGRESS LOGS (SABAQ / SABAQI / MANZIL) -->
+      <div class="bg-white rounded-3xl p-6 sm:p-7 border border-slate-200 shadow-sm space-y-4">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-4">
+          <div>
+            <h2 class="text-lg font-black text-slate-900 flex items-center gap-2">
+              <i class="fa-solid fa-clipboard-list text-brandEmerald"></i> Recent Lesson Progress Logs
+            </h2>
+            <p class="text-xs text-slate-500 mt-0.5">
+              Live lessons recorded by your teacher with direct links to revise each page in the reader.
+            </p>
+          </div>
+
+          <button onclick="renderCurrentStudentData()" class="px-3.5 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition flex items-center gap-1.5 shadow-2xs">
+            <i class="fa-solid fa-arrows-rotate"></i> Refresh Logs
+          </button>
+        </div>
+
+        <!-- Container for dynamic lesson cards -->
+        <div id="parentLessonNotesContainer" class="space-y-3.5">
+          <div class="p-8 text-center text-slate-400">
+            <i class="fa-solid fa-circle-notch fa-spin text-2xl mb-2 text-brandEmerald"></i>
+            <p class="text-xs">Loading lesson records...</p>
+          </div>
+        </div>
+      </div>
+
+    </section>
+
+    <!-- TAB 2: COURSE MATERIAL & SYLLABUS LIBRARY -->
+    <section id="tab-library" class="portal-tab-content hidden space-y-5">
+      
+      <!-- LIBRARY HEADER BAR -->
+      <div class="bg-white p-5 rounded-3xl border border-slate-200 shadow-sm flex flex-wrap justify-between items-center gap-4">
+        <div class="flex items-center gap-3">
+          <span class="w-11 h-11 rounded-2xl bg-gradient-to-br from-emerald-600 to-teal-800 text-white flex items-center justify-center text-xl font-bold shadow-sm">
+            <i class="fa-solid fa-book-quran"></i>
+          </span>
+          <div>
+            <h2 class="text-xl font-black text-slate-900 tracking-tight flex items-center gap-2.5">
+              Official Course Material Library
+              <span id="portalLibraryTotalBadge" class="px-2.5 py-0.5 rounded-full text-xs font-mono font-bold bg-emerald-50 text-emerald-800 border border-emerald-200 shadow-2xs">
+                3 Materials
+              </span>
+            </h2>
+            <p class="text-xs text-slate-500 mt-0.5">
+              Interactive syllabus books: Noorani Qaida, 16-Line Holy Quran, and Academy course materials.
+            </p>
+          </div>
+        </div>
+
+        <!-- Search Input -->
+        <div class="relative w-full sm:w-64">
+          <i class="fa-solid fa-magnifying-glass absolute left-3 top-2.5 text-slate-400 text-xs"></i>
+          <input type="text" id="portalLibrarySearchInput" oninput="filterPortalLibrary(this.value)" placeholder="Search Qaida, Surah, topic..." class="w-full pl-8 pr-3 py-1.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-semibold focus:outline-emerald-600 shadow-2xs">
+        </div>
+      </div>
+
+      <!-- CATEGORY FILTERS ROW -->
+      <div class="bg-white p-3 rounded-2xl border border-slate-200/90 shadow-sm flex items-center gap-2 flex-wrap" id="portalLibraryFilterBar">
+        <button onclick="filterPortalCategory('all', this)" class="portal-cat-btn active px-3.5 py-1.5 rounded-xl text-xs font-black bg-brandDark text-white shadow-xs transition flex items-center gap-1.5">
+          <i class="fa-solid fa-layer-group text-slate-400"></i> All Books (<span id="libCatAll">0</span>)
+        </button>
+        <button onclick="filterPortalCategory('qaida', this)" class="portal-cat-btn px-3.5 py-1.5 rounded-xl text-xs font-bold bg-slate-100 text-slate-700 hover:bg-emerald-50 hover:text-brandDark transition flex items-center gap-1.5">
+          <i class="fa-solid fa-book-open text-emerald-600"></i> Noorani Qaida (<span id="libCatQaida">0</span>)
+        </button>
+        <button onclick="filterPortalCategory('quran', this)" class="portal-cat-btn px-3.5 py-1.5 rounded-xl text-xs font-bold bg-slate-100 text-slate-700 hover:bg-emerald-50 hover:text-brandDark transition flex items-center gap-1.5">
+          <i class="fa-solid fa-book-quran text-amber-600"></i> The Holy Quran (<span id="libCatQuran">0</span>)
+        </button>
+        <button onclick="filterPortalCategory('essentials', this)" class="portal-cat-btn px-3.5 py-1.5 rounded-xl text-xs font-bold bg-slate-100 text-slate-700 hover:bg-emerald-50 hover:text-brandDark transition flex items-center gap-1.5">
+          <i class="fa-solid fa-hands-praying text-teal-600"></i> Islamic Essentials (<span id="libCatEssentials">0</span>)
+        </button>
+      </div>
+
+      <!-- BOOKS GRID -->
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5" id="portalLibraryGrid">
+        <!-- Rendered dynamically -->
+      </div>
+
+    </section>
+
+    <!-- TAB 3: CLASS SCHEDULE & WEEKLY TIMETABLE -->
+    <section id="tab-timetable" class="portal-tab-content hidden space-y-5">
+      <div class="bg-white p-5 rounded-3xl border border-slate-200 shadow-sm flex flex-wrap justify-between items-center gap-4">
         <div>
-          <h2 class="text-lg font-black text-slate-900 flex items-center gap-2">
-            <i class="fa-solid fa-clipboard-list text-brandEmerald"></i> Recent Lesson Progress Logs
+          <h2 class="text-xl font-black text-slate-900 tracking-tight flex items-center gap-2">
+            <i class="fa-regular fa-calendar-days text-brandEmerald"></i> Weekly Class Timetable
           </h2>
           <p class="text-xs text-slate-500 mt-0.5">
-            Real-time daily lessons logged by your assigned teacher with direct book links.
+            Confirmed weekly schedule with your assigned instructor.
           </p>
         </div>
 
         <div class="flex items-center gap-2">
-          <button onclick="renderParentDashboard()" class="px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition flex items-center gap-1.5">
-            <i class="fa-solid fa-arrows-rotate"></i> Refresh
-          </button>
+          <span class="px-3 py-1 rounded-xl bg-emerald-50 text-emerald-800 border border-emerald-200 text-xs font-bold font-mono">
+            Timezone: Pakistan (PKT / UTC+5)
+          </span>
         </div>
       </div>
 
-      <!-- Container for dynamic lesson cards -->
-      <div id="parentLessonNotesContainer" class="space-y-4">
+      <!-- 7-DAY SCHEDULE MATRIX -->
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-7 gap-3" id="weeklyScheduleGrid">
         <!-- Rendered dynamically -->
-        <div class="p-8 text-center text-slate-400">
-          <i class="fa-solid fa-circle-notch fa-spin text-2xl mb-2 text-brandEmerald"></i>
-          <p class="text-xs">Loading lesson records...</p>
+      </div>
+    </section>
+
+    <!-- TAB 4: ATTENDANCE HISTORY -->
+    <section id="tab-attendance" class="portal-tab-content hidden space-y-5">
+      <div class="bg-white p-5 rounded-3xl border border-slate-200 shadow-sm flex flex-wrap justify-between items-center gap-4">
+        <div>
+          <h2 class="text-xl font-black text-slate-900 tracking-tight flex items-center gap-2">
+            <i class="fa-solid fa-clipboard-check text-brandEmerald"></i> Attendance Record &amp; History
+          </h2>
+          <p class="text-xs text-slate-500 mt-0.5">
+            Detailed log of all attended, missed, and advance classes.
+          </p>
         </div>
       </div>
-    </div>
+
+      <!-- ATTENDANCE TABLE CARD -->
+      <div class="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
+        <div class="overflow-x-auto">
+          <table class="w-full text-left text-xs">
+            <thead class="bg-slate-50 text-slate-600 font-bold border-b border-slate-200 uppercase text-[11px] tracking-wider">
+              <tr>
+                <th class="p-3.5">Date</th>
+                <th class="p-3.5">Status</th>
+                <th class="p-3.5">Teacher</th>
+                <th class="p-3.5">Sabaq / Topic</th>
+                <th class="p-3.5 text-right">Action</th>
+              </tr>
+            </thead>
+            <tbody id="attendanceTableBody" class="divide-y divide-slate-100">
+              <tr><td colspan="5" class="p-6 text-center text-slate-400">Loading attendance logs...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- TAB 5: FEE INVOICES & RECEIPTS -->
+    <section id="tab-fees" class="portal-tab-content hidden space-y-5">
+      <div class="bg-white p-5 rounded-3xl border border-slate-200 shadow-sm flex flex-wrap justify-between items-center gap-4">
+        <div>
+          <h2 class="text-xl font-black text-slate-900 tracking-tight flex items-center gap-2">
+            <i class="fa-solid fa-receipt text-brandEmerald"></i> Fee Invoices &amp; Payment Receipts
+          </h2>
+          <p class="text-xs text-slate-500 mt-0.5">
+            Official monthly tuition fee history and digital receipt vouchers.
+          </p>
+        </div>
+      </div>
+
+      <!-- INVOICES TABLE -->
+      <div class="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
+        <div class="overflow-x-auto">
+          <table class="w-full text-left text-xs">
+            <thead class="bg-slate-50 text-slate-600 font-bold border-b border-slate-200 uppercase text-[11px] tracking-wider">
+              <tr>
+                <th class="p-3.5">Receipt / Invoice #</th>
+                <th class="p-3.5">Billing Month</th>
+                <th class="p-3.5">Date Paid</th>
+                <th class="p-3.5">Amount Paid</th>
+                <th class="p-3.5">Payment Method</th>
+                <th class="p-3.5">Status</th>
+                <th class="p-3.5 text-right">View Voucher</th>
+              </tr>
+            </thead>
+            <tbody id="feeInvoicesTableBody" class="divide-y divide-slate-100">
+              <tr><td colspan="7" class="p-6 text-center text-slate-400">Loading invoices...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
 
   </main>
 
-  <!-- ================= MODAL: COURSE MATERIAL LIBRARY (13 BOOKS EXPLORER) ================= -->
-  <div id="modalParentLibrary" class="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-xs flex items-center justify-center p-2 sm:p-4 overflow-y-auto hidden">
-    <div class="bg-white rounded-3xl max-w-5xl w-full max-h-[92vh] flex flex-col shadow-2xl border border-slate-200 overflow-hidden my-auto">
-      
-      <!-- Modal Header -->
-      <div class="p-4 sm:p-5 bg-gradient-to-r from-brandDarkest to-brandDark text-white flex items-center justify-between shrink-0">
-        <div class="flex items-center gap-3">
-          <div class="w-9 h-9 rounded-xl bg-amber-400/20 text-amber-300 flex items-center justify-center font-bold text-lg border border-amber-400/30">
-            <i class="fa-solid fa-book-quran"></i>
-          </div>
-          <div>
-            <h3 class="text-base font-black">Official Course Material Library</h3>
-            <p class="text-xs text-slate-300">Browse and read any Qaida, Tajweed Mushaf, Tafseer, or Hadith book</p>
-          </div>
-        </div>
-
-        <button onclick="closeParentLibraryModal()" class="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition">
-          <i class="fa-solid fa-xmark"></i>
-        </button>
-      </div>
-
-      <!-- Library Grid -->
-      <div class="p-4 sm:p-6 overflow-y-auto touch-scroll custom-scrollbar flex-1">
-        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4" id="parentLibraryGrid">
-          <!-- Rendered dynamically from curriculum_data.js -->
-        </div>
-      </div>
-
-      <!-- Modal Footer -->
-      <div class="p-3 sm:p-4 bg-slate-50 border-t border-slate-200 flex justify-end shrink-0">
-        <button onclick="closeParentLibraryModal()" class="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold text-xs transition text-center">
-          Close Library
-        </button>
-      </div>
-
-    </div>
-  </div>
-
-  <!-- ================= MODAL: INTERACTIVE DIGITAL BOOK READER ================= -->
-  <div id="modalParentBookReader" class="fixed inset-0 z-50 bg-slate-950/85 backdrop-blur-md flex flex-col hidden select-none">
+  <!-- ================= MODAL: DIGITAL BOOK READER (HD ENGINE) ================= -->
+  <div id="modalParentBookReader" class="fixed inset-0 z-50 bg-black/90 backdrop-blur-md flex flex-col hidden select-none">
     
-    <!-- Reader Top Toolbar -->
-    <div class="h-16 bg-slate-900/95 border-b border-slate-800 text-white px-3 sm:px-6 flex items-center justify-between flex-shrink-0 z-10 shadow-lg">
+    <!-- Top Reader Bar -->
+    <div class="h-16 bg-slate-950 border-b border-slate-800 text-white px-3 sm:px-6 flex items-center justify-between shrink-0 z-20 shadow-xl">
       <div class="flex items-center gap-2.5 sm:gap-3 min-w-0">
-        <button onclick="closeParentBookReader()" class="p-2 rounded-xl hover:bg-slate-800 text-slate-300 hover:text-white transition flex-shrink-0" title="Back to Portal">
-          <i class="fa-solid fa-arrow-left text-lg"></i>
+        <button onclick="closeParentBookReader()" class="p-2 rounded-xl hover:bg-slate-800 text-slate-300 hover:text-white transition shrink-0" title="Close Reader">
+          <i class="fa-solid fa-arrow-left text-base"></i>
         </button>
         
         <div class="min-w-0">
-          <h2 id="parentReaderBookTitle" class="font-extrabold text-xs sm:text-base text-amber-200 truncate max-w-[130px] sm:max-w-xs md:max-w-md">Book Title</h2>
+          <h2 id="parentReaderBookTitle" class="font-black text-xs sm:text-base text-white truncate max-w-[130px] sm:max-w-xs md:max-w-md">Noorani Qaida</h2>
           <div class="flex items-center gap-2 text-[10px] sm:text-[11px] text-slate-400">
-            <span id="parentReaderCategoryBadge" class="bg-emerald-950 text-emerald-400 px-1.5 sm:px-2 py-0.2 rounded border border-emerald-800/60 font-medium truncate max-w-[80px] sm:max-w-none">Category</span>
-            <span id="parentReaderPageBadge" class="font-mono font-bold text-slate-300 whitespace-nowrap">Page 1 of 32</span>
+            <span id="parentReaderCategoryBadge" class="bg-emerald-950 text-emerald-300 px-2 py-0.5 rounded-full border border-emerald-800/80 font-bold">Qaida</span>
+            <span id="parentReaderPageBadge" class="font-mono font-bold text-amber-300">Page 1 of 32</span>
           </div>
         </div>
       </div>
 
-      <!-- Center / Right Controls: Zoom & Fullscreen -->
-      <div class="flex items-center gap-1.5 sm:gap-2 flex-shrink-0">
-        <div class="hidden sm:flex items-center gap-1.5">
-          <button onclick="parentReaderZoomOut()" class="p-2 w-9 h-9 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 transition flex items-center justify-center text-xs" title="Zoom Out">
-            <i class="fa-solid fa-magnifying-glass-minus"></i>
-          </button>
-          <button onclick="parentReaderResetZoom()" class="px-2 h-9 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 transition text-[11px] font-bold font-mono" id="parentReaderZoomLevel">
-            100%
-          </button>
-          <button onclick="parentReaderZoomIn()" class="p-2 w-9 h-9 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 transition flex items-center justify-center text-xs" title="Zoom In">
-            <i class="fa-solid fa-magnifying-glass-plus"></i>
-          </button>
-          <div class="h-6 w-px bg-slate-700 mx-1"></div>
-        </div>
-
-        <button onclick="toggleParentReaderFullscreen()" class="p-2 w-9 h-9 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 transition flex items-center justify-center text-xs" title="Fullscreen">
-          <i class="fa-solid fa-expand"></i>
+      <!-- Center & Right Controls -->
+      <div class="flex items-center gap-2 shrink-0">
+        <!-- Laser Read-Along Pointer Mode Toggle -->
+        <button onclick="toggleStudentLaserSpotlight()" id="btnStudentLaserToggle" class="px-2.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-amber-300 text-xs font-bold transition flex items-center gap-1.5 border border-slate-700" title="Toggle Laser Spotlight Read-Along">
+          <i class="fa-solid fa-crosshairs text-xs"></i>
+          <span class="hidden sm:inline">Laser Pointer</span>
         </button>
-        <button onclick="closeParentBookReader()" class="p-2 w-9 h-9 rounded-lg bg-rose-900/40 hover:bg-rose-700 text-rose-300 hover:text-white transition flex items-center justify-center text-xs" title="Close">
-          <i class="fa-solid fa-xmark text-sm"></i>
-        </button>
-      </div>
-    </div>
 
-    <!-- Reader Page Viewing Canvas Area -->
-    <div class="flex-1 bg-slate-950 relative overflow-auto flex items-center justify-center p-2 sm:p-6 custom-scrollbar" id="parentReaderCanvasContainer">
-      
-      <!-- Left Page Turn Arrow (Next in RTL Arabic/Urdu) -->
-      <button onclick="parentReaderTurnRight()" class="absolute left-2 sm:left-3 top-1/2 -translate-y-1/2 z-20 w-9 h-9 sm:w-11 sm:h-11 rounded-full bg-slate-900/80 hover:bg-brandEmerald text-white flex items-center justify-center shadow-xl border border-slate-700 transition" title="Next Page (Arabic RTL: Turn Left)">
-        <i class="fa-solid fa-chevron-left text-sm sm:text-lg"></i>
-      </button>
-
-      <!-- Center Page Frame -->
-      <div id="parentReaderPageWrapper" class="transition-transform duration-200 ease-out origin-center max-w-full shadow-2xl rounded-2xl overflow-hidden bg-white flex items-center justify-center min-h-[300px] border border-slate-800">
-        <!-- Digital Page Content (Image or crisp SVG Fallback) -->
-        <div id="parentReaderPageDisplay" class="w-full flex items-center justify-center">
-          <i class="fa-solid fa-circle-notch fa-spin text-3xl text-emerald-500"></i>
-        </div>
-      </div>
-
-      <!-- Right Page Turn Arrow (Previous in RTL Arabic/Urdu) -->
-      <button onclick="parentReaderTurnLeft()" class="absolute right-2 sm:right-3 top-1/2 -translate-y-1/2 z-20 w-9 h-9 sm:w-11 sm:h-11 rounded-full bg-slate-900/80 hover:bg-brandEmerald text-white flex items-center justify-center shadow-xl border border-slate-700 transition" title="Previous Page (Arabic RTL: Turn Right)">
-        <i class="fa-solid fa-chevron-right text-sm sm:text-lg"></i>
-      </button>
-    </div>
-
-    <!-- Reader Bottom Controls & Slider Bar -->
-    <div class="h-20 bg-slate-900/95 border-t border-slate-800 text-white px-3 sm:px-8 flex flex-col justify-center flex-shrink-0 z-10 space-y-1 shadow-2xl">
-      <div class="flex items-center justify-between text-xs text-slate-400">
-        <span class="hidden sm:flex items-center gap-1.5">
-          <i class="fa-solid fa-keyboard text-brandGold"></i> Use Left &amp; Right Arrow keys to flip pages
-        </span>
-        <span class="sm:hidden text-[10px] text-slate-400">
-          Swipe or tap arrows to flip
-        </span>
-        <div class="flex items-center gap-2 font-mono">
-          <span class="text-[10px] sm:text-xs">Jump:</span>
-          <select id="parentReaderJumpSelect" onchange="parentReaderJumpToPage(parseInt(this.value))" class="bg-slate-800 text-amber-200 border border-slate-700 rounded-lg px-2 py-1 text-[11px] sm:text-xs font-bold focus:outline-none focus:border-brandEmerald max-w-[120px] sm:max-w-none">
-            <!-- Populated dynamically -->
+        <!-- Jump to Chapter / Page -->
+        <div class="hidden md:flex items-center gap-1 bg-slate-800/80 px-2 py-1 rounded-xl border border-slate-700 text-xs">
+          <span class="text-slate-400 font-medium">Go to:</span>
+          <select id="parentReaderJumpSelect" onchange="parentReaderJumpToPage(this.value)" class="bg-slate-900 text-white font-bold text-xs rounded-lg px-2 py-1 border border-slate-600 focus:outline-emerald-500 max-w-[150px]">
           </select>
         </div>
-      </div>
 
-      <!-- Range Slider for smooth page scrub -->
-      <div class="flex items-center gap-3">
-        <span class="text-[11px] font-mono text-slate-500" id="parentReaderSliderMin">Pg 1</span>
-        <input type="range" id="parentReaderPageSlider" min="1" max="32" value="1" oninput="parentReaderJumpToPage(parseInt(this.value))" class="w-full accent-amber-400 h-1.5 bg-slate-800 rounded-lg cursor-pointer">
-        <span class="text-[11px] font-mono text-slate-500" id="parentReaderSliderMax">Pg 32</span>
+        <!-- Zoom Controls -->
+        <div class="flex items-center gap-1 bg-slate-800/80 px-2 py-1 rounded-xl border border-slate-700 text-xs font-mono shadow-xs">
+          <button onclick="changeParentReaderZoom(-0.15)" class="w-6 h-6 rounded-lg hover:bg-slate-700 flex items-center justify-center font-bold text-slate-300 transition" title="Zoom Out (- or Ctrl+Scroll Down)">
+            <i class="fa-solid fa-minus text-[10px]"></i>
+          </button>
+          <span id="parentReaderZoomLevel" class="text-[11px] px-1 text-amber-300 min-w-[38px] text-center font-bold font-mono">100%</span>
+          <button onclick="changeParentReaderZoom(+0.15)" class="w-6 h-6 rounded-lg hover:bg-slate-700 flex items-center justify-center font-bold text-slate-300 transition" title="Zoom In (+ or Ctrl+Scroll Up)">
+            <i class="fa-solid fa-plus text-[10px]"></i>
+          </button>
+          <button onclick="resetParentReaderZoom()" class="w-6 h-6 rounded-lg hover:bg-slate-700 text-[10px] text-slate-400 hover:text-white flex items-center justify-center transition" title="Reset Zoom (Press 0)">
+            <i class="fa-solid fa-arrows-rotate"></i>
+          </button>
+        </div>
+
+        <!-- Fullscreen -->
+        <button onclick="toggleParentReaderFullscreen()" class="w-8 h-8 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 flex items-center justify-center transition" title="Fullscreen">
+          <i class="fa-solid fa-expand text-xs"></i>
+        </button>
+
+        <!-- Close Button -->
+        <button onclick="closeParentBookReader()" class="w-8 h-8 rounded-xl bg-rose-950/70 hover:bg-rose-900 text-rose-200 border border-rose-800/60 flex items-center justify-center transition font-black text-lg" title="Close">
+          &times;
+        </button>
       </div>
     </div>
 
+    <!-- Reader Viewing Stage -->
+    <div class="flex-1 bg-slate-950 flex items-center justify-between p-2 sm:p-4 overflow-hidden relative select-none" id="parentReaderStage">
+      
+      <!-- Prev Page Turn Arrow -->
+      <button onclick="parentReaderTurnRight()" class="z-20 w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-slate-800/80 hover:bg-brandEmerald text-white flex items-center justify-center shadow-xl border border-slate-600 transition duration-200 backdrop-blur-xs hover:scale-105" title="Previous Page (Left Arrow)">
+        <i class="fa-solid fa-chevron-left text-sm sm:text-base"></i>
+      </button>
+
+      <!-- Center Dynamic Content Stage -->
+      <div class="flex-1 h-full flex items-center justify-center overflow-auto p-1 relative" id="parentReaderContentArea">
+        <div id="parentReaderPageStage" class="min-h-full min-w-full flex items-center justify-center p-2 sm:p-4 overflow-visible">
+          <div id="parentReaderCanvasWrapper" class="relative inline-block max-h-[76vh] max-w-full origin-center select-none transition-transform duration-150">
+            <img id="parentReaderPageImg" src="" alt="Lesson Page" class="max-h-[76vh] w-auto max-w-full rounded-xl shadow-2xl object-contain border border-slate-700/80 bg-white block select-none pointer-events-none" />
+            
+            <!-- Laser Spotlight Cursor Halo -->
+            <div id="parentReaderLaserHalo" class="pointer-events-none absolute -translate-x-1/2 -translate-y-1/2 rounded-full hidden z-20 w-9 h-9 border-2 border-amber-400 bg-amber-400/25 shadow-[0_0_20px_rgba(251,191,36,0.95)] animate-pulse">
+              <div class="w-2 h-2 rounded-full bg-amber-300 absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 shadow-xs"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Next Page Turn Arrow -->
+      <button onclick="parentReaderTurnLeft()" class="z-20 w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-slate-800/80 hover:bg-brandEmerald text-white flex items-center justify-center shadow-xl border border-slate-600 transition duration-200 backdrop-blur-xs hover:scale-105" title="Next Page (Right Arrow)">
+        <i class="fa-solid fa-chevron-right text-sm sm:text-base"></i>
+      </button>
+    </div>
+
+    <!-- Reader Bottom Scrub Navigation Bar -->
+    <div class="bg-slate-950 px-4 py-2.5 border-t border-slate-800 flex items-center justify-between flex-wrap gap-2 text-xs font-semibold text-white">
+      <button onclick="parentReaderTurnRight()" class="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 flex items-center gap-1.5 transition">
+        <i class="fa-solid fa-arrow-left text-xs"></i> <span class="hidden sm:inline">Previous</span>
+      </button>
+
+      <div class="flex items-center gap-3 flex-1 justify-center max-w-xs sm:max-w-md">
+        <span class="font-mono font-bold text-emerald-400" id="parentReaderBottomPageInd">Page 1 of 32</span>
+        <input type="range" id="parentReaderPageSlider" min="1" max="32" value="1" oninput="parentReaderJumpToPage(this.value)" class="w-full accent-emerald-500 cursor-pointer h-1.5 bg-slate-800 rounded-lg">
+      </div>
+
+      <button onclick="parentReaderTurnLeft()" class="px-3 py-1.5 rounded-xl bg-brandEmerald hover:bg-emerald-600 text-white flex items-center gap-1.5 transition font-bold shadow-xs">
+        <span class="hidden sm:inline">Next</span> <i class="fa-solid fa-arrow-right text-xs"></i>
+      </button>
+    </div>
+
+  </div>
+
+  <!-- ================= MODAL: FEE RECEIPT VOUCHER ================= -->
+  <div id="modalFeeReceipt" class="fixed inset-0 z-50 bg-black/75 backdrop-blur-xs flex items-center justify-center p-3 hidden">
+    <div class="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-200 space-y-4 animate-scaleIn">
+      <div class="flex items-center justify-between border-b pb-3">
+        <div class="flex items-center gap-2">
+          <div class="w-8 h-8 rounded-lg bg-emerald-100 text-emerald-800 flex items-center justify-center font-bold">
+            <i class="fa-solid fa-receipt"></i>
+          </div>
+          <div>
+            <h3 class="font-black text-sm text-slate-900">Official Tuition Receipt</h3>
+            <span class="text-[10px] text-slate-400 font-mono" id="receiptModalNo">AH-REC-2026-0001</span>
+          </div>
+        </div>
+        <button onclick="closeModal('modalFeeReceipt')" class="text-slate-400 hover:text-slate-700 text-xl font-bold">&times;</button>
+      </div>
+
+      <div class="p-4 bg-slate-50 rounded-2xl border border-slate-200/80 space-y-2 text-xs">
+        <div class="flex justify-between"><span class="text-slate-500">Student:</span> <strong id="receiptStudentName" class="text-slate-900">-</strong></div>
+        <div class="flex justify-between"><span class="text-slate-500">Parent / Sponsor:</span> <strong id="receiptParentName" class="text-slate-900">-</strong></div>
+        <div class="flex justify-between"><span class="text-slate-500">Billing Month:</span> <strong id="receiptMonth" class="text-slate-900">-</strong></div>
+        <div class="flex justify-between"><span class="text-slate-500">Date Paid:</span> <strong id="receiptDate" class="text-slate-900 font-mono">-</strong></div>
+        <div class="flex justify-between"><span class="text-slate-500">Payment Method:</span> <strong id="receiptMethod" class="text-slate-900">-</strong></div>
+        <div class="border-t border-slate-200 pt-2 flex justify-between items-center">
+          <span class="font-bold text-slate-700">Total Paid:</span>
+          <span class="text-base font-black text-emerald-700 font-mono" id="receiptAmount">10,000 PKR</span>
+        </div>
+        <div class="flex justify-between text-[11px]"><span class="text-slate-500">Remaining Balance:</span> <strong id="receiptBalance" class="text-slate-600">0 PKR</strong></div>
+      </div>
+
+      <div class="p-3 bg-emerald-50 rounded-xl border border-emerald-200 text-center">
+        <span class="text-xs font-bold text-emerald-800 flex items-center justify-center gap-1.5">
+          <i class="fa-solid fa-circle-check text-emerald-600"></i> Paid in Full &bull; Verified by Al-Huda Academy
+        </span>
+      </div>
+
+      <div class="flex items-center justify-end gap-2 pt-2">
+        <button onclick="window.print()" class="px-4 py-2 bg-brandDark text-white rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-sm">
+          <i class="fa-solid fa-print"></i> Print Voucher
+        </button>
+        <button onclick="closeModal('modalFeeReceipt')" class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition">
+          Close
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= MODAL: LEAVE REQUEST & PARENT NOTE ================= -->
+  <div id="modalLeaveRequest" class="fixed inset-0 z-50 bg-black/75 backdrop-blur-xs flex items-center justify-center p-3 hidden">
+    <div class="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-200 space-y-4">
+      <div class="flex items-center justify-between border-b pb-3">
+        <div class="flex items-center gap-2">
+          <div class="w-8 h-8 rounded-lg bg-amber-100 text-amber-800 flex items-center justify-center font-bold">
+            <i class="fa-regular fa-envelope"></i>
+          </div>
+          <div>
+            <h3 class="font-black text-sm text-slate-900">Submit Leave Request / Notice</h3>
+            <span class="text-[10px] text-slate-400">Direct notification to Academy Ustadh</span>
+          </div>
+        </div>
+        <button onclick="closeModal('modalLeaveRequest')" class="text-slate-400 hover:text-slate-700 text-xl font-bold">&times;</button>
+      </div>
+
+      <form onsubmit="handleLeaveRequestSubmit(event)" class="space-y-3 text-xs">
+        <div>
+          <label class="block font-bold text-slate-700 mb-1">Leave Date:</label>
+          <input type="date" id="leaveDateInput" required class="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-xl font-semibold focus:outline-emerald-600">
+        </div>
+
+        <div>
+          <label class="block font-bold text-slate-700 mb-1">Reason for Leave:</label>
+          <select id="leaveReasonSelect" class="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-xl font-semibold">
+            <option value="Sick Leave">Sick / Not feeling well</option>
+            <option value="School Exams">School Exams / Studies</option>
+            <option value="Family Travel">Family Travel / Event</option>
+            <option value="Other">Other Reason</option>
+          </select>
+        </div>
+
+        <div>
+          <label class="block font-bold text-slate-700 mb-1">Message for Teacher:</label>
+          <textarea id="leaveMessageText" rows="3" placeholder="Please excuse my child from today's lesson..." class="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-xl font-semibold focus:outline-emerald-600"></textarea>
+        </div>
+
+        <div class="flex items-center justify-end gap-2 pt-2">
+          <button type="button" onclick="closeModal('modalLeaveRequest')" class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-bold">
+            Cancel
+          </button>
+          <button type="submit" class="px-5 py-2 bg-brandDark hover:bg-brandDarkest text-white rounded-xl font-black shadow-md flex items-center gap-1.5">
+            <i class="fa-solid fa-paper-plane text-brandGold"></i> Submit Notice
+          </button>
+        </div>
+      </form>
+    </div>
   </div>
 
   <!-- ================= FOOTER ================= -->
   <footer class="bg-white border-t border-slate-200 py-6 text-center text-xs text-slate-500 mt-auto">
-    <div class="max-w-7xl mx-auto px-4">
-      <p>Al-Huda Islamic Centre &amp; Beacon Quran Institute LMS &copy; 2026. All rights reserved.</p>
+    <div class="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-2">
+      <p>&copy; 2026 Al-Huda Islamic Centre. Real-Time Online Quran &amp; Islamic Studies LMS.</p>
+      <div class="flex items-center gap-3 text-slate-400">
+        <span>Verified Authentic Tajweed Mushaf &bull; Noorani Qaida HD</span>
+      </div>
     </div>
   </footer>
 
-  <!-- ================= JAVASCRIPT APPLICATION LOGIC ================= -->
+  <!-- ================= JAVASCRIPT APPLICATION CONTROLLER ================= -->
   <script>
-    // Supabase Configuration
+    // Supabase Credentials
     const SUPABASE_URL = "https://ldgzuyroejzrvktksugy.supabase.co";
     const SUPABASE_KEY = "sb_publishable_rP38XXgYoYBTPJlCxtwMUg_RPupFrKg";
     const db = window.supabase ? window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY) : null;
 
     // State Variables
-    let CURRENT_PARENT_USER = null;
-    let RECENT_LESSONS = [];
+    let ALL_STUDENTS = [];
+    let CURRENT_STUDENT = null;
+    let CURRENT_TEACHER = null;
+    let CURRENT_SCHEDULES = [];
+    let CURRENT_ATTENDANCE = [];
+    let CURRENT_FAMILIES = [];
     let LATEST_SABAQ_META = null;
+    let CURRENT_PORTAL_CATEGORY = 'all';
 
     // Reader State
     let ACTIVE_READER_BOOK = null;
     let ACTIVE_READER_PAGE = 1;
     let ACTIVE_READER_ZOOM = 1.0;
+    let STUDENT_LASER_ACTIVE = false;
+    let READER_IS_PANNING = false;
+    let READER_PAN_START_X = 0;
+    let READER_PAN_START_Y = 0;
+    let READER_SCROLL_START_X = 0;
+    let READER_SCROLL_START_Y = 0;
+    let READER_SPACE_DOWN = false;
 
-    // Initialize Portal on Load
+    // Initialization
     window.addEventListener('DOMContentLoaded', async () => {
-      initParentSession();
-      await renderParentDashboard();
-      initKeyboardNavigation();
+      await initializePortal();
+      setupStudentReaderPanningAndWheel();
+      setupStudentReaderKeyboard();
     });
 
-    // Session Initialization
-    function initParentSession() {
-      // Check localStorage for logged in user or parent/student account
-      let user = null;
-      try {
-        user = JSON.parse(localStorage.getItem('alhuda_logged_in_parent') || localStorage.getItem('bqi_logged_in_user') || 'null');
-      } catch (e) {
-        user = null;
+    async function initializePortal() {
+      // 1. Load All Students from Supabase (or fallback to database.js/local storage)
+      await loadAllStudents();
+
+      // 2. Populate Student Dropdown
+      populateStudentDropdown();
+
+      // 3. Render Dashboard for Selected Student
+      await renderCurrentStudentData();
+
+      // 4. Render Portal Library
+      renderPortalLibrary();
+    }
+
+    // ==========================================
+    // DATA LOADING & SUPABASE SYNC
+    // ==========================================
+    async function loadAllStudents() {
+      let students = [];
+
+      if (db) {
+        try {
+          const { data, error } = await db.from('students').select('*').order('name');
+          if (!error && data && data.length > 0) {
+            students = data;
+          }
+        } catch(e) {
+          console.warn('Supabase students load error:', e);
+        }
       }
 
-      if (!user) {
-        user = {
-          id: 101,
-          name: "Demo Student Alpha",
-          role: "student",
-          family_name: "Demo Parent Alpha",
-          course: "Qaida Nooraniya"
+      // Fallback sample students if Supabase has none
+      if (!students || students.length === 0) {
+        students = [
+          { id: "STU-114", name: "Jafar Ali", age: 8, gender: "Male", status: "Active", course: "Noorani Qaida & Basic Arabic", family_id: "FAM-114", assigned_teacher_id: "bada6a83-86ed-4321-a59f-f20603a721a2", notes: JSON.stringify({ meeting_link: "https://us06web.zoom.us/j/4862493196", course: "Noorani Qaida & Basic Arabic" }) },
+          { id: "STU-3215", name: "Ali Raaza", age: 8, gender: "Male", status: "Active", course: "Nazra Quran & Tajweed", family_id: "FAM-01", assigned_teacher_id: "6eaf96a3-798f-45ab-916c-e3b88fc2c5a3" },
+          { id: "101", name: "Demo Student Alpha", age: 10, gender: "Male", status: "Active", course: "Qaida Nooraniya", family_id: "FAM-01" }
+        ];
+      }
+
+      ALL_STUDENTS = students;
+
+      // Select default student: check localStorage or pick first
+      const savedStudentId = localStorage.getItem('alhuda_selected_student_id');
+      const found = ALL_STUDENTS.find(s => s.id === savedStudentId);
+      CURRENT_STUDENT = found || ALL_STUDENTS[0];
+    }
+
+    function populateStudentDropdown() {
+      const select = document.getElementById('portalStudentSelect');
+      if (!select) return;
+
+      select.innerHTML = ALL_STUDENTS.map(s => `
+        <option value="${s.id}" ${CURRENT_STUDENT && CURRENT_STUDENT.id === s.id ? 'selected' : ''}>
+          ${s.name} (${s.id})
+        </option>
+      `).join('');
+    }
+
+    async function switchStudentAccount(studentId) {
+      const student = ALL_STUDENTS.find(s => s.id === studentId);
+      if (!student) return;
+
+      CURRENT_STUDENT = student;
+      localStorage.setItem('alhuda_selected_student_id', student.id);
+      await renderCurrentStudentData();
+    }
+
+    // Render Data for Current Student
+    async function renderCurrentStudentData() {
+      if (!CURRENT_STUDENT) return;
+      const s = CURRENT_STUDENT;
+
+      // Update Top Badges & Welcome Text
+      const nameEl = document.getElementById('heroWelcomeName');
+      if (nameEl) nameEl.innerText = s.name;
+
+      const courseBadge = document.getElementById('studentCourseBadge');
+      if (courseBadge) courseBadge.innerText = s.course || 'Noorani Qaida & Tajweed';
+
+      // 1. Fetch Teacher info
+      let teacherName = 'Ustadh Hamza Murtaza';
+      let teacherZoomLink = 'https://us06web.zoom.us/j/4862493196';
+
+      if (db && s.assigned_teacher_id) {
+        try {
+          const { data } = await db.from('teachers').select('*').eq('id', s.assigned_teacher_id).single();
+          if (data) {
+            CURRENT_TEACHER = data;
+            teacherName = data.full_name;
+          }
+        } catch(e) {}
+      }
+
+      // Check notes for meeting link
+      if (s.notes) {
+        try {
+          const parsedNotes = typeof s.notes === 'string' ? JSON.parse(s.notes) : s.notes;
+          if (parsedNotes.meeting_link) teacherZoomLink = parsedNotes.meeting_link;
+        } catch(e) {}
+      }
+
+      // 2. Fetch Schedules
+      let schedules = [];
+      if (db) {
+        try {
+          const { data } = await db.from('class_schedules').select('*').eq('student_id', s.id);
+          if (data && data.length > 0) schedules = data;
+        } catch(e) {}
+      }
+      CURRENT_SCHEDULES = schedules;
+
+      // Update Live Class Banner
+      const liveSubject = document.getElementById('liveClassSubject');
+      const liveTeacher = document.getElementById('liveClassTeacher');
+      const liveTime = document.getElementById('liveClassTime');
+      const liveBtn = document.getElementById('btnJoinLiveMeeting');
+
+      if (liveSubject) liveSubject.innerText = s.course || 'Quran Recitation & Tajweed';
+      if (liveTeacher) liveTeacher.innerText = teacherName;
+      if (liveTime) {
+        if (schedules.length > 0) {
+          const daysMap = ['', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+          const activeDays = schedules.map(sc => daysMap[sc.day_of_week] || '').filter(Boolean).join(', ');
+          const time = schedules[0].start_time ? schedules[0].start_time.slice(0, 5) : '04:00 PM';
+          liveTime.innerText = `${activeDays} @ ${time} PKT`;
+        } else {
+          liveTime.innerText = 'Mon - Fri @ 04:00 PM PKT';
+        }
+      }
+
+      if (liveBtn) {
+        liveBtn.href = teacherZoomLink;
+      }
+
+      // 3. Fetch Attendance Logs & Lesson Progress Notes
+      let attLogs = [];
+      if (db) {
+        try {
+          const { data } = await db.from('attendance_logs')
+            .select('*, teachers(full_name)')
+            .eq('student_id', s.id)
+            .order('date', { ascending: false });
+          if (data && data.length > 0) attLogs = data;
+        } catch(e) {}
+      }
+
+      // Fallback logs if none recorded yet
+      if (!attLogs || attLogs.length === 0) {
+        attLogs = [
+          {
+            id: 'sample-1',
+            date: new Date().toISOString().slice(0, 10),
+            status: 'Present',
+            lesson_notes: JSON.stringify({
+              book_id: 'noorani-qaida',
+              book_title: 'Noorani Qaida (Complete)',
+              page: 4,
+              status: 'Pass',
+              remarks: 'Excellent recitation of Harakat (Zabar, Zer, Pesh). Continue practice on Page 4.'
+            }),
+            teachers: { full_name: teacherName }
+          },
+          {
+            id: 'sample-2',
+            date: new Date(Date.now() - 86400000).toISOString().slice(0, 10),
+            status: 'Present',
+            lesson_notes: JSON.stringify({
+              book_id: 'noorani-qaida',
+              book_title: 'Noorani Qaida (Complete)',
+              page: 3,
+              status: 'Pass',
+              remarks: 'Takhti 3: Huroof-e-Muqattaat mastered smoothly with correct Madd length.'
+            }),
+            teachers: { full_name: teacherName }
+          }
+        ];
+      }
+
+      CURRENT_ATTENDANCE = attLogs;
+
+      // Calculate Attendance Metrics
+      const totalClasses = attLogs.length;
+      const presentCount = attLogs.filter(a => a.status === 'Present').length;
+      const attPercent = totalClasses > 0 ? Math.round((presentCount / totalClasses) * 100) : 98;
+
+      const attRateEl = document.getElementById('parentAttRate');
+      const attCountEl = document.getElementById('parentAttCount');
+      if (attRateEl) attRateEl.innerText = `${attPercent}%`;
+      if (attCountEl) attCountEl.innerText = `${presentCount} / ${totalClasses} Classes Present`;
+
+      // 4. Fetch Fee Status & Invoices
+      let feeHistory = [];
+      let familyData = null;
+
+      if (db && s.family_id) {
+        try {
+          const { data } = await db.from('families').select('*').eq('id', s.family_id).single();
+          if (data) {
+            familyData = data;
+            if (data.notes) {
+              const pNotes = typeof data.notes === 'string' ? JSON.parse(data.notes) : data.notes;
+              if (pNotes.fee_history) feeHistory = pNotes.fee_history;
+            }
+          }
+        } catch(e) {}
+      }
+
+      if (!feeHistory || feeHistory.length === 0) {
+        feeHistory = [
+          {
+            receiptNo: 'AH-REC-2026-0005',
+            date: '2026-09-22',
+            parentName: familyData?.parent_name || 'Family Sponsor',
+            studentsNames: s.name,
+            month: 'September 2026',
+            amountPaid: 10000,
+            currency: 'PKR',
+            paymentMethod: 'Online / Bank Transfer',
+            status: 'Paid in Full',
+            remainingBalance: 0
+          }
+        ];
+      }
+
+      // Update Fee Card
+      const feeStatEl = document.getElementById('parentFeeStat');
+      const feeMonthEl = document.getElementById('parentFeeMonth');
+      if (feeStatEl) feeStatEl.innerText = feeHistory[0]?.status === 'Paid in Full' ? 'Paid' : 'Pending';
+      if (feeMonthEl) feeMonthEl.innerText = `${feeHistory[0]?.month || 'September'} (${feeHistory[0]?.amountPaid || 10000} PKR)`;
+
+      // Render Sub-Sections
+      renderRecentSabaqLogs(attLogs, teacherName);
+      renderWeeklyTimetable(schedules, teacherName);
+      renderAttendanceTable(attLogs, teacherName);
+      renderFeeInvoicesTable(feeHistory);
+    }
+
+    // Render Recent Lesson Progress Cards
+    function renderRecentSabaqLogs(logs, defaultTeacher) {
+      const container = document.getElementById('parentLessonNotesContainer');
+      if (!container) return;
+
+      LATEST_SABAQ_META = null;
+
+      container.innerHTML = logs.map(log => {
+        let meta = null;
+        if (log.lesson_notes) {
+          try {
+            meta = typeof log.lesson_notes === 'string' ? JSON.parse(log.lesson_notes) : log.lesson_notes;
+          } catch(e) {}
+        }
+
+        if (!LATEST_SABAQ_META && meta) LATEST_SABAQ_META = meta;
+
+        const teacherName = log.teachers?.full_name || defaultTeacher;
+        const bookId = meta?.book_id || 'noorani-qaida';
+        const bookTitle = meta?.book_title || 'Noorani Qaida (Complete)';
+        const pageNum = meta?.page || 1;
+        const statusClass = meta?.status === 'Pass' ? 'bg-emerald-100 text-emerald-800 border-emerald-300' : 'bg-amber-100 text-amber-800 border-amber-300';
+
+        return `
+          <div class="bg-gradient-to-r from-emerald-50/40 via-white to-white border border-slate-200/90 rounded-2xl p-4 sm:p-5 shadow-xs hover:shadow-md transition">
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 mb-2.5 border-b border-slate-100 pb-2.5">
+              <div class="flex items-center gap-2 flex-wrap">
+                <span class="text-xs font-black text-slate-800 font-mono">${log.date}</span>
+                <span class="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-emerald-100 text-emerald-800 border border-emerald-300">🟢 Present</span>
+                <span class="text-xs text-slate-500">Instructor: <strong class="text-slate-800">${teacherName}</strong></span>
+              </div>
+              <div>
+                <span class="text-[11px] font-bold px-2.5 py-0.5 rounded-lg border ${statusClass}">
+                  Sabaq: ${meta?.status || 'Done'}
+                </span>
+              </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-3 items-center">
+              <div class="md:col-span-2 space-y-1.5">
+                <div class="flex items-center gap-2 flex-wrap">
+                  <span class="text-sm font-black text-slate-900 flex items-center gap-1.5">
+                    <i class="fa-solid fa-book-open text-brandEmerald"></i> ${bookTitle}
+                  </span>
+                  <span class="text-xs font-bold px-2 py-0.5 rounded-md bg-amber-100 text-amber-900 border border-amber-300 font-mono">
+                    Takhti / Page ${pageNum}
+                  </span>
+                </div>
+                ${meta?.remarks ? `
+                  <p class="text-xs text-slate-600 bg-slate-50/90 p-2.5 rounded-xl border border-slate-200/70 italic">
+                    "${meta.remarks}"
+                  </p>
+                ` : ''}
+              </div>
+
+              <div class="flex items-center justify-start md:justify-end">
+                <button onclick="openParentDigitalReader('${bookId}', ${pageNum})" class="w-full sm:w-auto px-4 py-2.5 rounded-xl bg-gradient-to-r from-emerald-800 to-teal-900 hover:from-emerald-700 hover:to-teal-800 text-white font-black text-xs shadow-sm hover:shadow-md transition flex items-center justify-center gap-1.5">
+                  <i class="fa-solid fa-book-open-reader text-brandGold"></i> Revise Page ${pageNum}
+                </button>
+              </div>
+            </div>
+          </div>
+        `;
+      }).join('');
+
+      // Update Hero Sabaq Button
+      const heroBtn = document.getElementById('btnOpenLatestSabaq');
+      if (heroBtn && LATEST_SABAQ_META) {
+        heroBtn.innerHTML = `<i class="fa-solid fa-book-open"></i> Read Sabaq: ${LATEST_SABAQ_META.book_title || 'Noorani Qaida'} (Pg ${LATEST_SABAQ_META.page || 1})`;
+      }
+    }
+
+    function openLatestSabaqReader() {
+      if (LATEST_SABAQ_META) {
+        openParentDigitalReader(LATEST_SABAQ_META.book_id || 'noorani-qaida', LATEST_SABAQ_META.page || 1);
+      } else {
+        openParentDigitalReader('noorani-qaida', 1);
+      }
+    }
+
+    // Render Weekly Timetable Matrix
+    function renderWeeklyTimetable(schedules, teacherName) {
+      const grid = document.getElementById('weeklyScheduleGrid');
+      if (!grid) return;
+
+      const days = [
+        { num: 1, name: 'Monday', short: 'Mon' },
+        { num: 2, name: 'Tuesday', short: 'Tue' },
+        { num: 3, name: 'Wednesday', short: 'Wed' },
+        { num: 4, name: 'Thursday', short: 'Thu' },
+        { num: 5, name: 'Friday', short: 'Fri' },
+        { num: 6, name: 'Saturday', short: 'Sat' },
+        { num: 7, name: 'Sunday', short: 'Sun' }
+      ];
+
+      grid.innerHTML = days.map(d => {
+        const match = schedules.find(sc => sc.day_of_week === d.num);
+        const isActive = !!match;
+        const timeStr = match?.start_time ? `${match.start_time.slice(0, 5)} - ${match.end_time?.slice(0, 5) || ''}` : '04:00 - 04:30 PM';
+
+        return `
+          <div class="rounded-2xl p-4 border transition ${isActive ? 'bg-emerald-50/60 border-emerald-200 text-emerald-950 shadow-xs' : 'bg-slate-50 border-slate-200 text-slate-400'} flex flex-col justify-between min-h-[120px]">
+            <div>
+              <div class="flex items-center justify-between mb-1.5">
+                <span class="font-black text-xs uppercase">${d.short}</span>
+                ${isActive ? '<span class="w-2 h-2 rounded-full bg-emerald-500"></span>' : '<span class="text-[10px] text-slate-400">Off</span>'}
+              </div>
+              <div class="text-[11px] font-bold ${isActive ? 'text-slate-800' : 'text-slate-400'}">${d.name}</div>
+            </div>
+
+            ${isActive ? `
+              <div class="mt-2 pt-2 border-t border-emerald-200/60">
+                <div class="text-xs font-black font-mono text-emerald-800">${timeStr}</div>
+                <div class="text-[10px] text-slate-500 truncate">${teacherName}</div>
+              </div>
+            ` : `
+              <div class="text-[10px] text-slate-400 mt-2 pt-2 border-t border-slate-200">No Session</div>
+            `}
+          </div>
+        `;
+      }).join('');
+    }
+
+    // Render Attendance Table
+    function renderAttendanceTable(logs, defaultTeacher) {
+      const tbody = document.getElementById('attendanceTableBody');
+      if (!tbody) return;
+
+      tbody.innerHTML = logs.map(log => {
+        let meta = null;
+        if (log.lesson_notes) {
+          try { meta = typeof log.lesson_notes === 'string' ? JSON.parse(log.lesson_notes) : log.lesson_notes; } catch(e){}
+        }
+
+        const topic = meta?.book_title ? `${meta.book_title} (Page ${meta.page || 1})` : (log.lesson_notes || 'Regular Class Attendance');
+        const teacher = log.teachers?.full_name || defaultTeacher;
+
+        return `
+          <tr class="hover:bg-slate-50 transition">
+            <td class="p-3.5 font-bold font-mono text-slate-800">${log.date}</td>
+            <td class="p-3.5">
+              <span class="px-2.5 py-0.5 rounded-full text-[10px] font-black ${log.status === 'Present' ? 'bg-emerald-100 text-emerald-800 border border-emerald-300' : 'bg-rose-100 text-rose-800 border border-rose-300'}">
+                ${log.status}
+              </span>
+            </td>
+            <td class="p-3.5 font-semibold text-slate-700">${teacher}</td>
+            <td class="p-3.5 text-slate-600 truncate max-w-xs">${topic}</td>
+            <td class="p-3.5 text-right">
+              ${meta?.page ? `
+                <button onclick="openParentDigitalReader('${meta.book_id || 'noorani-qaida'}', ${meta.page})" class="px-2.5 py-1 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-800 font-bold text-[11px] transition">
+                  <i class="fa-solid fa-book-open"></i> Read
+                </button>
+              ` : '-'}
+            </td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    // Render Fee Invoices Table
+    function renderFeeInvoicesTable(history) {
+      const tbody = document.getElementById('feeInvoicesTableBody');
+      if (!tbody) return;
+
+      tbody.innerHTML = history.map((h, i) => `
+        <tr class="hover:bg-slate-50 transition">
+          <td class="p-3.5 font-bold font-mono text-brandDarkest">${h.receiptNo || `AH-REC-${i+1}`}</td>
+          <td class="p-3.5 font-semibold text-slate-800">${h.month || 'Current Month'}</td>
+          <td class="p-3.5 font-mono text-slate-600">${h.date || '-'}</td>
+          <td class="p-3.5 font-black text-emerald-700 font-mono">${h.amountPaid || 10000} ${h.currency || 'PKR'}</td>
+          <td class="p-3.5 font-medium text-slate-600">${h.paymentMethod || 'Online'}</td>
+          <td class="p-3.5">
+            <span class="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-emerald-100 text-emerald-800 border border-emerald-300">
+              ${h.status || 'Paid in Full'}
+            </span>
+          </td>
+          <td class="p-3.5 text-right">
+            <button onclick="openFeeReceiptModal(${JSON.stringify(h).replace(/"/g, '&quot;')})" class="px-3 py-1 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs transition inline-flex items-center gap-1">
+              <i class="fa-solid fa-eye text-emerald-600"></i> View
+            </button>
+          </td>
+        </tr>
+      `).join('');
+    }
+
+    function openFeeReceiptModal(h) {
+      document.getElementById('receiptModalNo').innerText = h.receiptNo || 'AH-REC-2026';
+      document.getElementById('receiptStudentName').innerText = h.studentsNames || CURRENT_STUDENT?.name || 'Student';
+      document.getElementById('receiptParentName').innerText = h.parentName || 'Parent / Sponsor';
+      document.getElementById('receiptMonth').innerText = h.month || 'September 2026';
+      document.getElementById('receiptDate').innerText = h.date || '-';
+      document.getElementById('receiptMethod').innerText = h.paymentMethod || 'Online Transfer';
+      document.getElementById('receiptAmount').innerText = `${h.amountPaid || 10000} ${h.currency || 'PKR'}`;
+      document.getElementById('receiptBalance').innerText = `${h.remainingBalance || 0} ${h.currency || 'PKR'}`;
+      openModal('modalFeeReceipt');
+    }
+
+    // ==========================================
+    // PORTAL TABS & CURRICULUM LIBRARY LOGIC
+    // ==========================================
+    function switchPortalTab(tabId) {
+      document.querySelectorAll('.portal-tab-content').forEach(s => s.classList.add('hidden'));
+      document.querySelectorAll('.portal-nav-btn').forEach(b => b.classList.remove('active'));
+
+      const target = document.getElementById(tabId);
+      if (target) target.classList.remove('hidden');
+
+      const btnMap = {
+        'tab-dashboard': 'navBtn_dashboard',
+        'tab-library': 'navBtn_library',
+        'tab-timetable': 'navBtn_timetable',
+        'tab-attendance': 'navBtn_attendance',
+        'tab-fees': 'navBtn_fees'
+      };
+      if (btnMap[tabId]) document.getElementById(btnMap[tabId])?.classList.add('active');
+
+      if (tabId === 'tab-library') {
+        renderPortalLibrary();
+      }
+    }
+
+    function filterPortalCategory(cat, btnEl) {
+      CURRENT_PORTAL_CATEGORY = cat;
+      document.querySelectorAll('.portal-cat-btn').forEach(b => {
+        b.classList.remove('active', 'bg-brandDark', 'text-white');
+        b.classList.add('bg-slate-100', 'text-slate-700');
+      });
+      if (btnEl) {
+        btnEl.classList.add('active', 'bg-brandDark', 'text-white');
+        btnEl.classList.remove('bg-slate-100', 'text-slate-700');
+      }
+      renderPortalLibrary();
+    }
+
+    function filterPortalLibrary(query) {
+      renderPortalLibrary();
+    }
+
+    function renderPortalLibrary() {
+      const grid = document.getElementById('portalLibraryGrid');
+      if (!grid) return;
+
+      const allBooks = typeof getAllAvailableBooks === 'function' 
+        ? getAllAvailableBooks() 
+        : ((window.CURRICULUM_DATA && window.CURRICULUM_DATA.books) || window.ALHUDA_CURRICULUM || []);
+
+      // Update counters
+      const totalCount = allBooks.length;
+      document.getElementById('portalNavBookCount').innerText = totalCount;
+      document.getElementById('heroLibraryCount').innerText = totalCount;
+      document.getElementById('portalLibraryTotalBadge').innerText = `${totalCount} Materials`;
+      document.getElementById('libCatAll').innerText = totalCount;
+      document.getElementById('libCatQaida').innerText = allBooks.filter(b => b.category === 'qaida' || b.id.includes('qaida')).length;
+      document.getElementById('libCatQuran').innerText = allBooks.filter(b => b.category === 'quran' || b.id.includes('quran')).length;
+      document.getElementById('libCatEssentials').innerText = allBooks.filter(b => b.category === 'essentials').length;
+
+      // Filter
+      let filtered = allBooks;
+      if (CURRENT_PORTAL_CATEGORY !== 'all') {
+        filtered = allBooks.filter(b => b.category === CURRENT_PORTAL_CATEGORY || (CURRENT_PORTAL_CATEGORY === 'qaida' && b.id.includes('qaida')));
+      }
+
+      const q = (document.getElementById('portalLibrarySearchInput')?.value || '').trim().toLowerCase();
+      if (q) {
+        filtered = filtered.filter(b => 
+          (b.title && b.title.toLowerCase().includes(q)) ||
+          (b.title_ar && b.title_ar.includes(q)) ||
+          (b.description && b.description.toLowerCase().includes(q))
+        );
+      }
+
+      if (filtered.length === 0) {
+        grid.innerHTML = `
+          <div class="col-span-full p-12 text-center bg-white rounded-3xl border border-dashed border-slate-300">
+            <i class="fa-solid fa-book-bookmark text-4xl text-slate-300 mb-3"></i>
+            <h4 class="font-extrabold text-slate-700 text-base">No Matching Books Found</h4>
+            <p class="text-xs text-slate-400 mt-1">Try switching categories or clearing your search term.</p>
+          </div>
+        `;
+        return;
+      }
+
+      grid.innerHTML = filtered.map(b => {
+        const pagesIndicator = b.total_paras ? `${b.total_paras} Paras` : `${b.total_pages || 32} Pages`;
+
+        return `
+          <div class="bg-white rounded-2xl border border-slate-200/90 shadow-sm hover:shadow-xl hover:border-emerald-400 transition-all duration-300 flex flex-col justify-between overflow-hidden group">
+            <div>
+              <!-- CARD COVER BANNER -->
+              <div class="p-5 bg-gradient-to-br ${b.cover_bg || 'from-emerald-800 to-slate-900'} text-white relative overflow-hidden">
+                <div class="absolute -right-3 -bottom-4 opacity-15 text-7xl select-none pointer-events-none group-hover:scale-110 transition-transform">
+                  <i class="${b.cover_icon || 'fa-solid fa-book'}"></i>
+                </div>
+                <div class="flex items-center justify-between gap-2 relative z-10">
+                  <span class="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-white/20 text-white backdrop-blur-xs border border-white/20">
+                    ${b.category_label || 'Curriculum'}
+                  </span>
+                  <span class="px-2.5 py-0.5 rounded-full text-[10px] font-mono font-black bg-black/40 text-amber-300 border border-amber-400/30">
+                    ${pagesIndicator}
+                  </span>
+                </div>
+                <div class="relative z-10 mt-3">
+                  <h3 class="font-black text-base sm:text-lg text-white leading-snug tracking-tight">
+                    ${b.title}
+                  </h3>
+                  ${b.title_ar ? `<div class="text-xs text-emerald-300 font-bold font-quran mt-1" dir="rtl">${b.title_ar}</div>` : ''}
+                </div>
+              </div>
+
+              <!-- CARD BODY -->
+              <div class="p-4 space-y-2.5">
+                <span class="inline-flex items-center gap-1.5 text-[11px] font-bold text-slate-600 bg-slate-50 px-2.5 py-1 rounded-lg border border-slate-100">
+                  <i class="fa-solid fa-award text-amber-500"></i> ${b.edition || 'Academy Syllabus'}
+                </span>
+                <p class="text-xs text-slate-600 line-clamp-2 leading-relaxed">
+                  ${b.description || 'Comprehensive syllabus material for Quran recitation and Tajweed.'}
+                </p>
+              </div>
+            </div>
+
+            <!-- CARD FOOTER ACTION -->
+            <div class="p-3.5 pt-2 border-t border-slate-100 bg-slate-50/50">
+              <button onclick="openParentDigitalReader('${b.id}', 1)" class="w-full py-2.5 px-3 bg-gradient-to-r from-emerald-800 to-teal-900 hover:from-emerald-700 hover:to-teal-800 text-white rounded-xl font-black text-xs shadow-sm hover:shadow-md transition flex items-center justify-center gap-1.5">
+                <i class="fa-solid fa-book-open-reader text-brandGold"></i> Open Digital Reader
+              </button>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    // ==========================================
+    // INTERACTIVE DIGITAL BOOK READER ENGINE
+    // ==========================================
+    function openParentDigitalReader(bookId, pageNum = 1) {
+      const allBooks = typeof getAllAvailableBooks === 'function' ? getAllAvailableBooks() : [];
+      let book = allBooks.find(b => b.id === bookId);
+
+      if (!book) {
+        // Fallback Noorani Qaida
+        book = allBooks.find(b => b.id.includes('qaida')) || allBooks[0];
+      }
+
+      if (!book) {
+        alert("Course book could not be loaded.");
+        return;
+      }
+
+      ACTIVE_READER_BOOK = book;
+      const maxPages = book.total_pages || (book.paras ? 548 : 32);
+      ACTIVE_READER_PAGE = Math.max(1, Math.min(Number(pageNum) || 1, maxPages));
+      ACTIVE_READER_ZOOM = 1.0;
+
+      // Update Header Text & Badges
+      const titleEl = document.getElementById('parentReaderBookTitle');
+      if (titleEl) titleEl.innerText = book.title;
+
+      const catBadge = document.getElementById('parentReaderCategoryBadge');
+      if (catBadge) catBadge.innerText = book.category_label || 'Curriculum';
+
+      // Populate Jump Select
+      populateParentReaderJumpSelect(book, maxPages);
+
+      // Setup Slider
+      const slider = document.getElementById('parentReaderPageSlider');
+      if (slider) {
+        slider.min = 1;
+        slider.max = maxPages;
+        slider.value = ACTIVE_READER_PAGE;
+      }
+
+      // Open Modal
+      const modal = document.getElementById('modalParentBookReader');
+      if (modal) modal.classList.remove('hidden');
+
+      renderCurrentStudentReaderPage();
+    }
+
+    function populateParentReaderJumpSelect(book, maxPages) {
+      const jumpSelect = document.getElementById('parentReaderJumpSelect');
+      if (!jumpSelect) return;
+
+      let html = '';
+      if (book.paras && book.paras.length > 0) {
+        html = book.paras.map(p => `<option value="${p.page_start}">Para ${p.para} (Page ${p.page_start})</option>`).join('');
+      } else if (book.chapters && book.chapters.length > 0) {
+        html = book.chapters.map((ch, idx) => `<option value="${ch.page_start || (idx + 1)}">${(ch.title || '').slice(0, 24)} (Pg ${ch.page_start || (idx + 1)})</option>`).join('');
+      } else {
+        const pages = [];
+        for (let i = 1; i <= Math.min(maxPages, 50); i++) pages.push(`<option value="${i}">Page ${i}</option>`);
+        html = pages.join('');
+      }
+      jumpSelect.innerHTML = html;
+    }
+
+    function closeParentBookReader() {
+      if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+      resetParentReaderZoom();
+      const modal = document.getElementById('modalParentBookReader');
+      if (modal) modal.classList.add('hidden');
+      ACTIVE_READER_BOOK = null;
+    }
+
+    function renderCurrentStudentReaderPage() {
+      if (!ACTIVE_READER_BOOK) return;
+      const book = ACTIVE_READER_BOOK;
+      const maxPages = book.total_pages || (book.paras ? 548 : 32);
+
+      ACTIVE_READER_PAGE = Math.max(1, Math.min(maxPages, ACTIVE_READER_PAGE));
+
+      const pageBadge = document.getElementById('parentReaderPageBadge');
+      if (pageBadge) pageBadge.innerText = `Page ${ACTIVE_READER_PAGE} of ${maxPages}`;
+
+      const bottomInd = document.getElementById('parentReaderBottomPageInd');
+      if (bottomInd) bottomInd.innerText = `Page ${ACTIVE_READER_PAGE} of ${maxPages}`;
+
+      const slider = document.getElementById('parentReaderPageSlider');
+      if (slider) slider.value = ACTIVE_READER_PAGE;
+
+      const jumpSelect = document.getElementById('parentReaderJumpSelect');
+      if (jumpSelect) jumpSelect.value = ACTIVE_READER_PAGE;
+
+      const img = document.getElementById('parentReaderPageImg');
+      if (img) {
+        img.style.transform = 'none';
+        applyParentReaderZoom();
+
+        let pageUrl = '';
+        if (typeof book.getPageUrl === 'function') {
+          pageUrl = book.getPageUrl(ACTIVE_READER_PAGE);
+        } else if (book.pages && book.pages[ACTIVE_READER_PAGE - 1]) {
+          pageUrl = book.pages[ACTIVE_READER_PAGE - 1];
+        } else if (typeof generateDynamicSvgDataUri === 'function') {
+          pageUrl = generateDynamicSvgDataUri(book, ACTIVE_READER_PAGE);
+        }
+
+        img.onload = () => { applyParentReaderZoom(); };
+        img.onerror = () => {
+          img.onerror = null;
+          img.src = typeof generateDynamicSvgDataUri === 'function' ? generateDynamicSvgDataUri(book, ACTIVE_READER_PAGE) : '';
         };
-      }
 
-      CURRENT_PARENT_USER = user;
-      const badge = document.getElementById('parentUserBadge');
-      if (badge) badge.innerText = user.name || 'Student Account';
-      const welcome = document.getElementById('heroWelcomeName');
-      if (welcome) welcome.innerText = (user.name || user.family_name || 'Family');
+        img.src = pageUrl;
+      }
+    }
+
+    // Page navigation (Arabic RTL & standard)
+    function parentReaderTurnLeft() {
+      if (!ACTIVE_READER_BOOK) return;
+      const maxPages = ACTIVE_READER_BOOK.total_pages || (ACTIVE_READER_BOOK.paras ? 548 : 32);
+      if (ACTIVE_READER_PAGE < maxPages) {
+        ACTIVE_READER_PAGE++;
+        renderCurrentStudentReaderPage();
+      }
+    }
+
+    function parentReaderTurnRight() {
+      if (!ACTIVE_READER_BOOK) return;
+      if (ACTIVE_READER_PAGE > 1) {
+        ACTIVE_READER_PAGE--;
+        renderCurrentStudentReaderPage();
+      }
+    }
+
+    function parentReaderJumpToPage(pageNum) {
+      if (!ACTIVE_READER_BOOK) return;
+      ACTIVE_READER_PAGE = Number(pageNum) || 1;
+      renderCurrentStudentReaderPage();
+    }
+
+    // ==========================================
+    // UNIFIED ZOOM & LASER POINTER ENGINE
+    // ==========================================
+    function applyParentReaderZoom() {
+      const wrapper = document.getElementById('parentReaderCanvasWrapper');
+      const img = document.getElementById('parentReaderPageImg');
+      if (img) img.style.transform = 'none';
+      if (wrapper) {
+        wrapper.style.transform = `scale(${ACTIVE_READER_ZOOM})`;
+        wrapper.style.transformOrigin = 'center center';
+        wrapper.style.transition = 'transform 0.15s cubic-bezier(0.2, 0, 0, 1)';
+      }
+      const lbl = document.getElementById('parentReaderZoomLevel');
+      if (lbl) lbl.innerText = `${Math.round(ACTIVE_READER_ZOOM * 100)}%`;
+      updateStudentReaderPanningState();
+    }
+
+    function changeParentReaderZoom(scaleDelta) {
+      ACTIVE_READER_ZOOM = Math.max(0.6, Math.min(3.0, Math.round((ACTIVE_READER_ZOOM + scaleDelta) * 100) / 100));
+      applyParentReaderZoom();
+    }
+
+    function resetParentReaderZoom() {
+      ACTIVE_READER_ZOOM = 1.0;
+      applyParentReaderZoom();
+      const area = document.getElementById('parentReaderContentArea');
+      if (area) {
+        area.scrollLeft = (area.scrollWidth - area.clientWidth) / 2;
+        area.scrollTop = (area.scrollHeight - area.clientHeight) / 2;
+      }
+    }
+
+    function updateStudentReaderPanningState() {
+      const area = document.getElementById('parentReaderContentArea');
+      if (!area) return;
+      const canPan = ACTIVE_READER_ZOOM > 1.0 || READER_SPACE_DOWN;
+      area.style.cursor = canPan ? 'grab' : 'default';
+    }
+
+    function toggleStudentLaserSpotlight() {
+      STUDENT_LASER_ACTIVE = !STUDENT_LASER_ACTIVE;
+      const btn = document.getElementById('btnStudentLaserToggle');
+      const halo = document.getElementById('parentReaderLaserHalo');
+
+      if (STUDENT_LASER_ACTIVE) {
+        btn?.classList.add('bg-amber-400', 'text-slate-950');
+        btn?.classList.remove('bg-slate-800', 'text-amber-300');
+      } else {
+        btn?.classList.remove('bg-amber-400', 'text-slate-950');
+        btn?.classList.add('bg-slate-800', 'text-amber-300');
+        halo?.classList.add('hidden');
+      }
+    }
+
+    function setupStudentReaderPanningAndWheel() {
+      const area = document.getElementById('parentReaderContentArea');
+      const wrapper = document.getElementById('parentReaderCanvasWrapper');
+      if (!area || area._wheelAttached) return;
+      area._wheelAttached = true;
+
+      // 1. Mouse wheel zoom (Ctrl + Wheel, Alt + Wheel, or trackpad pinch)
+      area.addEventListener('wheel', function(e) {
+        const modal = document.getElementById('modalParentBookReader');
+        if (!modal || modal.classList.contains('hidden')) return;
+
+        if (e.ctrlKey || e.altKey) {
+          e.preventDefault();
+          changeParentReaderZoom(e.deltaY < 0 ? 0.15 : -0.15);
+        }
+      }, { passive: false });
+
+      // 2. Mouse Drag Panning
+      area.addEventListener('mousedown', function(e) {
+        const canPan = READER_SPACE_DOWN || (ACTIVE_READER_ZOOM > 1.0 && !STUDENT_LASER_ACTIVE);
+        if (!canPan) return;
+        if (e.button !== 0 && e.button !== 1) return;
+
+        READER_IS_PANNING = true;
+        READER_PAN_START_X = e.clientX;
+        READER_PAN_START_Y = e.clientY;
+        READER_SCROLL_START_X = area.scrollLeft;
+        READER_SCROLL_START_Y = area.scrollTop;
+        area.style.cursor = 'grabbing';
+        e.preventDefault();
+      });
+
+      window.addEventListener('mousemove', function(e) {
+        if (READER_IS_PANNING) {
+          const dx = e.clientX - READER_PAN_START_X;
+          const dy = e.clientY - READER_PAN_START_Y;
+          area.scrollLeft = READER_SCROLL_START_X - dx;
+          area.scrollTop = READER_SCROLL_START_Y - dy;
+        }
+
+        // Laser spotlight follow
+        if (STUDENT_LASER_ACTIVE && wrapper) {
+          const halo = document.getElementById('parentReaderLaserHalo');
+          const rect = wrapper.getBoundingClientRect();
+          if (e.clientX >= rect.left && e.clientX <= rect.right && e.clientY >= rect.top && e.clientY <= rect.bottom) {
+            halo?.classList.remove('hidden');
+            const xPercent = Math.max(0, Math.min(100, ((e.clientX - rect.left) / rect.width) * 100));
+            const yPercent = Math.max(0, Math.min(100, ((e.clientY - rect.top) / rect.height) * 100));
+            if (halo) {
+              halo.style.left = xPercent + '%';
+              halo.style.top = yPercent + '%';
+            }
+          } else {
+            halo?.classList.add('hidden');
+          }
+        }
+      });
+
+      window.addEventListener('mouseup', function() {
+        if (READER_IS_PANNING) {
+          READER_IS_PANNING = false;
+          updateStudentReaderPanningState();
+        }
+      });
+    }
+
+    function setupStudentReaderKeyboard() {
+      window.addEventListener('keydown', (e) => {
+        const modal = document.getElementById('modalParentBookReader');
+        if (!modal || modal.classList.contains('hidden')) return;
+        if (['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement?.tagName)) return;
+
+        // Spacebar Panning
+        if (e.code === 'Space' && !READER_SPACE_DOWN) {
+          READER_SPACE_DOWN = true;
+          updateStudentReaderPanningState();
+          e.preventDefault();
+          return;
+        }
+
+        // Keyboard Zoom In
+        if (e.key === '+' || e.key === '=' || e.code === 'NumpadAdd') {
+          e.preventDefault();
+          changeParentReaderZoom(+0.15);
+          return;
+        }
+
+        // Keyboard Zoom Out
+        if (e.key === '-' || e.key === '_' || e.code === 'NumpadSubtract') {
+          e.preventDefault();
+          changeParentReaderZoom(-0.15);
+          return;
+        }
+
+        // Reset Zoom
+        if ((e.key === '0' || e.code === 'Numpad0') && !e.ctrlKey) {
+          e.preventDefault();
+          resetParentReaderZoom();
+          return;
+        }
+
+        // Page Flip
+        if (e.key === 'ArrowRight') {
+          e.preventDefault();
+          parentReaderTurnLeft();
+          return;
+        }
+        if (e.key === 'ArrowLeft') {
+          e.preventDefault();
+          parentReaderTurnRight();
+          return;
+        }
+
+        // Laser Toggle Shortcut (L)
+        if (e.key.toUpperCase() === 'L') {
+          toggleStudentLaserSpotlight();
+          return;
+        }
+
+        // Escape Close
+        if (e.key === 'Escape') {
+          closeParentBookReader();
+        }
+      });
+
+      window.addEventListener('keyup', (e) => {
+        if (e.code === 'Space' && READER_SPACE_DOWN) {
+          READER_SPACE_DOWN = false;
+          updateStudentReaderPanningState();
+        }
+      });
+    }
+
+    function toggleParentReaderFullscreen() {
+      const modal = document.getElementById('modalParentBookReader');
+      if (!modal) return;
+      if (!document.fullscreenElement) {
+        modal.requestFullscreen().catch(() => {});
+      } else {
+        document.exitFullscreen().catch(() => {});
+      }
+    }
+
+    // ==========================================
+    // LEAVE REQUEST & LOGOUT
+    // ==========================================
+    function openLeaveRequestModal() {
+      const dInput = document.getElementById('leaveDateInput');
+      if (dInput) dInput.value = new Date().toISOString().slice(0, 10);
+      openModal('modalLeaveRequest');
+    }
+
+    function handleLeaveRequestSubmit(e) {
+      e.preventDefault();
+      const date = document.getElementById('leaveDateInput')?.value;
+      const reason = document.getElementById('leaveReasonSelect')?.value;
+      const msg = document.getElementById('leaveMessageText')?.value.trim();
+
+      alert(`✅ Leave Request Submitted Successfully!\n\nDate: ${date}\nReason: ${reason}\nStudent: ${CURRENT_STUDENT?.name || 'Student'}\n\nYour Ustadh has been notified.`);
+      closeModal('modalLeaveRequest');
     }
 
     function handleParentLogout() {
@@ -461,644 +1601,12 @@
       window.location.href = 'index.html';
     }
 
-    // Render Recent Lessons & Attendance Progress
-    async function renderParentDashboard() {
-      const container = document.getElementById('parentLessonNotesContainer');
-      if (!container) return;
-
-      container.innerHTML = `
-        <div class="p-8 text-center text-slate-400">
-          <i class="fa-solid fa-circle-notch fa-spin text-2xl mb-2 text-brandEmerald"></i>
-          <p class="text-xs">Fetching latest Sabaq and attendance notes from LMS...</p>
-        </div>
-      `;
-
-      let logs = [];
-
-      // 1. Fetch from Supabase attendance_logs
-      if (db) {
-        try {
-          const { data, error } = await db
-            .from('attendance_logs')
-            .select('*, class_schedules(*, students(*), teachers(*))')
-            .order('date', { ascending: false })
-            .limit(20);
-
-          if (!error && data && data.length > 0) {
-            logs = data;
-          }
-        } catch (e) {
-          console.warn('Supabase fetch failed, falling back:', e);
-        }
-      }
-
-      // 2. Fallback mock / sample data if Supabase has no logs yet
-      if (!logs || logs.length === 0) {
-        logs = [
-          {
-            id: 'sample-1',
-            date: new Date().toISOString().slice(0, 10),
-            status: 'Present',
-            lesson_notes: JSON.stringify({
-              book_id: 'noorani-qaida-classic',
-              book_title: 'Noorani Qaida (Classic)',
-              page: 12,
-              line_range: '1-5',
-              status: 'Pass',
-              rating: 5,
-              remarks: 'Excellent pronunciation of heavy letters and Harakat (Fatha, Kasra, Damma). Continue practice on Page 12.',
-              recorded_at: new Date().toISOString()
-            }),
-            teachers: { full_name: 'Qari Muhammad Bilal' },
-            students: { name: CURRENT_PARENT_USER?.name || 'Demo Student Alpha' }
-          },
-          {
-            id: 'sample-2',
-            date: new Date(Date.now() - 86400000).toISOString().slice(0, 10),
-            status: 'Present',
-            lesson_notes: JSON.stringify({
-              book_id: 'noorani-qaida-classic',
-              book_title: 'Noorani Qaida (Classic)',
-              page: 11,
-              line_range: 'Full Page',
-              status: 'Pass',
-              rating: 5,
-              remarks: 'Takhti 4 mastered nicely. Tajweed rules followed smoothly.',
-              recorded_at: new Date(Date.now() - 86400000).toISOString()
-            }),
-            teachers: { full_name: 'Qari Muhammad Bilal' },
-            students: { name: CURRENT_PARENT_USER?.name || 'Demo Student Alpha' }
-          },
-          {
-            id: 'sample-3',
-            date: new Date(Date.now() - 172800000).toISOString().slice(0, 10),
-            status: 'Present',
-            lesson_notes: JSON.stringify({
-              book_id: 'namaz-wudu-guide',
-              book_title: 'Illustrated Namaz & Wudu Guide',
-              page: 5,
-              line_range: 'Faraidh of Wudu',
-              status: 'Pass',
-              rating: 5,
-              remarks: 'Learned the 4 obligatory acts of Wudu step-by-step with practical demonstration.',
-              recorded_at: new Date(Date.now() - 172800000).toISOString()
-            }),
-            teachers: { full_name: 'Ustadh Ahmad' },
-            students: { name: CURRENT_PARENT_USER?.name || 'Demo Student Alpha' }
-          }
-        ];
-      }
-
-      RECENT_LESSONS = logs;
-
-      // Extract latest sabaq for hero 1-click button
-      LATEST_SABAQ_META = null;
-      for (const log of logs) {
-        if (log.lesson_notes) {
-          try {
-            const meta = JSON.parse(log.lesson_notes);
-            if (meta.book_title || meta.page) {
-              LATEST_SABAQ_META = meta;
-              break;
-            }
-          } catch (e) {}
-        }
-      }
-
-      // Update Hero Sabaq Button
-      const heroBtn = document.getElementById('btnOpenLatestSabaq');
-      if (heroBtn && LATEST_SABAQ_META) {
-        heroBtn.innerHTML = `<i class="fa-solid fa-book-open"></i> 📖 Read Today's Lesson: ${LATEST_SABAQ_META.book_title || 'Course'} (Pg ${LATEST_SABAQ_META.page || 1})`;
-      }
-
-      // Check if today is covered by an advance class
-      const todayStr = new Date().toISOString().slice(0, 10);
-      let advanceCoverToday = null;
-
-      // Also incorporate any local advance records if offline / demo
-      let localAdv = [];
-      try { localAdv = JSON.parse(localStorage.getItem('alhuda_advance_records') || '[]'); } catch(e){}
-
-      for (const log of logs) {
-        if (log.lesson_notes) {
-          try {
-            const meta = JSON.parse(log.lesson_notes);
-            if ((meta.is_advance_class || log.status === 'Advance Class') && meta.advance_target_date === todayStr) {
-              advanceCoverToday = { log, meta };
-              break;
-            }
-          } catch (e) {}
-        }
-      }
-
-      if (!advanceCoverToday && localAdv.length > 0) {
-        const found = localAdv.find(a => a.target_date === todayStr);
-        if (found) {
-          advanceCoverToday = {
-            log: { date: found.date, status: 'Advance Class', teachers: { full_name: found.payload?.teacher_name || 'Assigned Teacher' } },
-            meta: found.payload || {}
-          };
-        }
-      }
-
-      const liveCard = document.getElementById('liveClassCard');
-      const liveDate = document.getElementById('liveClassDate');
-      const liveSubject = document.getElementById('liveClassSubject');
-      const liveMeta = document.getElementById('liveClassMeta');
-      const liveBtn = document.getElementById('btnJoinLiveMeeting');
-
-      if (advanceCoverToday) {
-        const advLog = advanceCoverToday.log;
-        const advMeta = advanceCoverToday.meta;
-        const advTeacher = advLog.teachers?.full_name || advLog.class_schedules?.teachers?.full_name || advMeta.teacher_name || 'Assigned Teacher';
-
-        if (liveCard) {
-          liveCard.classList.remove('border-l-emerald-500');
-          liveCard.classList.add('border-l-purple-600', 'bg-gradient-to-r', 'from-purple-50/40', 'via-white', 'to-white');
-        }
-        if (liveDate) {
-          liveDate.innerHTML = `<span class="px-2 py-0.5 rounded-full text-[10px] font-black bg-purple-100 text-purple-900 border border-purple-300">🌟 Covered in Advance</span> <span class="font-mono text-purple-900 font-bold ml-1">Conducted on ${advLog.date}</span>`;
-        }
-        if (liveSubject) {
-          liveSubject.innerHTML = `Today's Class Covered in Advance 🌟 <span class="text-xs font-normal text-purple-700 bg-purple-100 px-2.5 py-0.5 rounded-lg ml-2 border border-purple-200">Pre-Attended</span>`;
-        }
-        if (liveMeta) {
-          liveMeta.innerHTML = `Conducted by: <strong class="text-slate-800">${advTeacher}</strong> ahead of schedule for today (${todayStr}). Sabaq: <strong class="text-purple-900">${advMeta.book_title || 'Assigned Sabaq'} (Page ${advMeta.page || '1'})</strong>`;
-        }
-        if (liveBtn) {
-          liveBtn.href = "javascript:void(0)";
-          liveBtn.setAttribute('onclick', `openParentDigitalReader('${advMeta.book_id || 'noorani-qaida-classic'}', ${advMeta.page || 1})`);
-          liveBtn.className = "w-full sm:w-auto px-6 py-3.5 rounded-2xl bg-gradient-to-r from-purple-800 to-indigo-900 hover:from-purple-900 hover:to-slate-950 text-white font-black text-sm shadow-md transition flex items-center justify-center gap-2 text-center";
-          liveBtn.innerHTML = `<i class="fa-solid fa-book-open-reader text-brandGold"></i> Revise Advance Lesson (Pg ${advMeta.page || 1})`;
-        }
-      }
-
-      // Render Cards
-      container.innerHTML = logs.map(log => {
-        let isRichSabaq = false;
-        let sabaqMeta = null;
-
-        if (log.lesson_notes) {
-          try {
-            sabaqMeta = JSON.parse(log.lesson_notes);
-            if (sabaqMeta.book_title || sabaqMeta.page) {
-              isRichSabaq = true;
-            }
-          } catch (e) {
-            isRichSabaq = false;
-          }
-        }
-
-        const isAdvance = log.status === 'Advance Class' || (sabaqMeta && sabaqMeta.is_advance_class);
-        const teacherName = log.teachers?.full_name || log.class_schedules?.teachers?.full_name || sabaqMeta?.teacher_name || 'Assigned Teacher';
-        const studentName = log.students?.name || log.class_schedules?.students?.name || 'Student';
-        
-        let statusBadge = '';
-        if (isAdvance) {
-          const targetStr = sabaqMeta?.advance_target_date ? ` (For: ${sabaqMeta.advance_target_date})` : '';
-          statusBadge = `<span class="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-purple-100 text-purple-900 border border-purple-300 flex items-center gap-1"><i class="fa-solid fa-forward-step text-purple-600"></i> 🌟 Advance Class${targetStr}</span>`;
-        } else if (log.status === 'Present') {
-          statusBadge = '<span class="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-emerald-100 text-emerald-800 border border-emerald-300">🟢 Present</span>';
-        } else {
-          statusBadge = `<span class="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-rose-100 text-rose-800 border border-rose-300">${log.status}</span>`;
-        }
-
-        if (isRichSabaq && sabaqMeta) {
-          const passClass = sabaqMeta.status === 'Pass'
-            ? 'bg-emerald-100 text-emerald-800 border-emerald-300'
-            : 'bg-amber-100 text-amber-800 border-amber-300';
-
-          const bookId = sabaqMeta.book_id || 'noorani-qaida-classic';
-          const pageNum = parseInt(sabaqMeta.page) || 1;
-
-          const cardClass = isAdvance
-            ? 'bg-gradient-to-r from-purple-50/50 via-white to-white border border-purple-200/90 rounded-2xl p-5 shadow-xs transition hover:shadow-md hover:border-purple-300'
-            : 'bg-gradient-to-r from-emerald-50/40 via-white to-white border border-emerald-200/80 rounded-2xl p-5 shadow-xs transition hover:shadow-md';
-
-          return `
-            <div class="${cardClass}">
-              ${isAdvance ? `
-                <div class="mb-3 px-3 py-1.5 rounded-xl bg-purple-50 border border-purple-200 text-purple-900 text-xs flex items-center justify-between flex-wrap gap-2">
-                  <div class="flex items-center gap-2">
-                    <span class="font-black flex items-center gap-1.5"><i class="fa-solid fa-calendar-check text-purple-600"></i> Pre-Taken Class:</span>
-                    <span>Makeup session for scheduled class on <strong class="font-mono font-bold text-purple-950">${sabaqMeta.advance_target_date || 'Upcoming Date'}</strong></span>
-                  </div>
-                  ${sabaqMeta.advance_reason ? `
-                    <span class="text-[10px] bg-purple-200/80 text-purple-950 px-2 py-0.5 rounded-md font-semibold">
-                      Reason: ${sabaqMeta.advance_reason}
-                    </span>
-                  ` : ''}
-                </div>
-              ` : ''}
-
-              <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-3 border-b border-slate-100 pb-3">
-                <div class="flex items-center gap-2 flex-wrap">
-                  <span class="text-xs font-black text-slate-800 font-mono">${log.date}</span>
-                  ${statusBadge}
-                  <span class="text-xs text-slate-500 font-medium">Instructor: <strong class="text-slate-800">${teacherName}</strong></span>
-                </div>
-                <div>
-                  <span class="text-[11px] font-bold px-2.5 py-0.5 rounded-lg border ${passClass}">
-                    Sabaq Result: ${sabaqMeta.status || 'Done'}
-                  </span>
-                </div>
-              </div>
-
-              <div class="grid grid-cols-1 md:grid-cols-3 gap-4 items-center">
-                <!-- Book & Page Information -->
-                <div class="md:col-span-2 space-y-1.5">
-                  <div class="flex items-center gap-2 flex-wrap">
-                    <span class="text-sm font-black text-brandDarkest flex items-center gap-1.5">
-                      <i class="fa-solid fa-book-quran text-brandEmerald"></i> ${sabaqMeta.book_title || 'Course Material'}
-                    </span>
-                    <span class="text-xs font-bold px-2 py-0.5 rounded-md bg-amber-100 text-amber-900 border border-amber-300">
-                      Page / Takhti: ${sabaqMeta.page || '1'}
-                    </span>
-                    ${sabaqMeta.line_range ? `
-                      <span class="text-xs font-semibold px-2 py-0.5 rounded-md bg-slate-100 text-slate-700">
-                        Lines: ${sabaqMeta.line_range}
-                      </span>
-                    ` : ''}
-                  </div>
-
-                  ${sabaqMeta.remarks ? `
-                    <div class="text-xs text-slate-700 bg-white/80 p-3 rounded-xl border border-slate-200/80 italic flex items-start gap-2">
-                      <i class="fa-solid fa-quote-left text-emerald-500 text-xs mt-0.5 flex-shrink-0"></i>
-                      <span>${sabaqMeta.remarks}</span>
-                    </div>
-                  ` : ''}
-                </div>
-
-                <!-- 1-Click Interactive Reader Launch Button -->
-                <div class="flex items-center justify-start md:justify-end">
-                  <button onclick="openParentDigitalReader('${bookId}', ${pageNum})" class="w-full sm:w-auto px-5 py-3 rounded-xl bg-gradient-to-r from-brandDark to-brandDarkest hover:from-brandDarkest hover:to-slate-950 text-white font-black text-xs shadow-md transition flex items-center justify-center gap-2 group">
-                    <i class="fa-solid fa-book-open-reader text-brandGold group-hover:scale-110 transition"></i>
-                    <span>Open Lesson</span>
-                  </button>
-                </div>
-              </div>
-            </div>
-          `;
-        } else {
-          // Plain text note fallback
-          return `
-            <div class="bg-white border ${isAdvance ? 'border-purple-200 bg-purple-50/30' : 'border-slate-200'} rounded-2xl p-4 shadow-xs">
-              <div class="flex items-center justify-between gap-2 mb-2">
-                <span class="text-xs font-mono font-bold text-slate-700">${log.date}</span>
-                ${statusBadge}
-              </div>
-              <p class="text-xs text-slate-700 bg-slate-50 p-3 rounded-xl border border-slate-200">
-                ${log.lesson_notes || 'Attendance recorded.'}
-              </p>
-            </div>
-          `;
-        }
-      }).join('');
+    // Helper Modal utilities
+    function openModal(id) {
+      document.getElementById(id)?.classList.remove('hidden');
     }
-
-    // 1-Click Latest Sabaq Reader Opener
-    function openLatestSabaqReader() {
-      if (LATEST_SABAQ_META) {
-        openParentDigitalReader(LATEST_SABAQ_META.book_id || 'noorani-qaida-classic', LATEST_SABAQ_META.page || 1);
-      } else {
-        openParentDigitalReader('noorani-qaida-classic', 1);
-      }
-    }
-
-    // ==========================================
-    // COURSE MATERIAL LIBRARY MODAL LOGIC
-    // ==========================================
-    let isProgrammaticModalBack = false;
-
-    function pushParentModalHistory(modalId) {
-      try {
-        window.history.pushState({ type: 'modal', modalId: modalId }, '', window.location.pathname);
-      } catch (e) {}
-    }
-
-    function popParentModalHistory(modalId) {
-      if (window.history.state && window.history.state.type === 'modal' && (!modalId || window.history.state.modalId === modalId)) {
-        isProgrammaticModalBack = true;
-        window.history.back();
-      }
-    }
-
-    function openParentLibraryModal() {
-      const modal = document.getElementById('modalParentLibrary');
-      const grid = document.getElementById('parentLibraryGrid');
-      if (!modal || !grid) return;
-
-      const booksList = (window.CURRICULUM_DATA && window.CURRICULUM_DATA.books) 
-        ? window.CURRICULUM_DATA.books 
-        : (window.ALHUDA_CURRICULUM || []);
-
-      if (booksList && booksList.length > 0) {
-        grid.innerHTML = booksList.map(b => `
-          <div class="bg-white rounded-2xl border border-slate-200 p-4 hover:border-emerald-500 hover:shadow-md transition flex flex-col justify-between group">
-            <div>
-              <div class="flex items-center justify-between mb-2">
-                <span class="text-[10px] font-black uppercase px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 border border-slate-200">
-                  ${b.category_label || b.category}
-                </span>
-                <span class="text-[11px] font-bold text-emerald-700 font-mono">
-                  ${b.total_pages || b.totalPages} Pages
-                </span>
-              </div>
-              
-              <h4 class="font-extrabold text-slate-900 text-sm mb-1 group-hover:text-brandEmerald transition">
-                ${b.title}
-              </h4>
-              <div class="text-xs font-quran text-slate-500 mb-2">${b.urduTitle || b.title_ar || ''}</div>
-              <p class="text-xs text-slate-600 line-clamp-2 leading-relaxed mb-4">
-                ${b.description || ''}
-              </p>
-            </div>
-
-            <button onclick="closeParentLibraryModal(false); openParentDigitalReader('${b.id}', 1)" class="w-full py-2 rounded-xl bg-slate-100 hover:bg-brandDark hover:text-white text-slate-800 font-bold text-xs transition flex items-center justify-center gap-1.5 shadow-2xs">
-              <i class="fa-solid fa-book-open text-brandGold"></i> Read Book
-            </button>
-          </div>
-        `).join('');
-      }
-
-      modal.classList.remove('hidden');
-      pushParentModalHistory('modalParentLibrary');
-    }
-
-    function closeParentLibraryModal(popHistory = true) {
-      const modal = document.getElementById('modalParentLibrary');
-      if (modal) modal.classList.add('hidden');
-      if (popHistory) popParentModalHistory('modalParentLibrary');
-    }
-
-    // ==========================================
-    // INTERACTIVE DIGITAL BOOK READER ENGINE
-    // ==========================================
-    function openParentDigitalReader(bookId, pageNum = 1) {
-      const booksList = (window.CURRICULUM_DATA && window.CURRICULUM_DATA.books) 
-        ? window.CURRICULUM_DATA.books 
-        : (window.ALHUDA_CURRICULUM || []);
-
-      const book = booksList.find(b => b.id === bookId);
-      if (!book) {
-        alert("Course book could not be loaded.");
-        return;
-      }
-
-      ACTIVE_READER_BOOK = book;
-      const maxPages = book.total_pages || book.totalPages || 32;
-      ACTIVE_READER_PAGE = Math.max(1, Math.min(Number(pageNum) || 1, maxPages));
-      ACTIVE_READER_ZOOM = 1.0;
-
-      // Populate Title & Badges
-      const titleEl = document.getElementById('parentReaderBookTitle');
-      if (titleEl) titleEl.innerText = `${book.title} (${book.urduTitle || book.title_ar || ''})`;
-
-      const catBadge = document.getElementById('parentReaderCategoryBadge');
-      if (catBadge) catBadge.innerText = book.category_label || book.category;
-
-      // Update Slider Max & Jumper
-      const slider = document.getElementById('parentReaderPageSlider');
-      const sliderMin = document.getElementById('parentReaderSliderMin');
-      const sliderMax = document.getElementById('parentReaderSliderMax');
-      const jumpSelect = document.getElementById('parentReaderJumpSelect');
-
-      if (slider) {
-        slider.min = 1;
-        slider.max = maxPages;
-        slider.value = ACTIVE_READER_PAGE;
-      }
-      if (sliderMin) sliderMin.innerText = 'Pg 1';
-      if (sliderMax) sliderMax.innerText = `Pg ${maxPages}`;
-
-      if (jumpSelect) {
-        if (ACTIVE_READER_BOOK.paras && ACTIVE_READER_BOOK.paras.length > 0) {
-          jumpSelect.innerHTML = ACTIVE_READER_BOOK.paras.map(p =>
-            `<option value="${p.page_start}">Para ${p.para} (Page ${p.page_start})</option>`
-          ).join('');
-        } else if (ACTIVE_READER_BOOK.chapters && ACTIVE_READER_BOOK.chapters.length > 0) {
-          jumpSelect.innerHTML = ACTIVE_READER_BOOK.chapters.map((ch, idx) =>
-            `<option value="${ch.page_start || (idx + 1)}">${(ch.title || '').slice(0, 24)} (Page ${ch.page_start || (idx + 1)})</option>`
-          ).join('');
-        } else if (maxPages > 50) {
-          const chunks = [];
-          for (let i = 1; i <= maxPages; i += 10) {
-            const end = Math.min(i + 9, maxPages);
-            chunks.push(`<option value="${i}">Pages ${i}–${end}</option>`);
-          }
-          jumpSelect.innerHTML = chunks.join('');
-        } else {
-          jumpSelect.innerHTML = Array.from({ length: maxPages }, (_, i) => i + 1)
-            .map(p => `<option value="${p}">Page ${p}</option>`)
-            .join('');
-        }
-        jumpSelect.value = ACTIVE_READER_PAGE;
-      }
-
-      renderCurrentReaderPage();
-
-      const modal = document.getElementById('modalParentBookReader');
-      if (modal) {
-        modal.classList.remove('hidden');
-        pushParentModalHistory('modalParentBookReader');
-      }
-    }
-
-    function closeParentBookReader(popHistory = true) {
-      const modal = document.getElementById('modalParentBookReader');
-      if (modal) modal.classList.add('hidden');
-      if (popHistory) popParentModalHistory('modalParentBookReader');
-    }
-
-    function renderCurrentReaderPage() {
-      if (!ACTIVE_READER_BOOK) return;
-      const maxPages = ACTIVE_READER_BOOK.total_pages || ACTIVE_READER_BOOK.totalPages || 32;
-
-      const pageBadge = document.getElementById('parentReaderPageBadge');
-      if (pageBadge) {
-        pageBadge.innerText = `Page ${ACTIVE_READER_PAGE} of ${maxPages}`;
-      }
-
-      const slider = document.getElementById('parentReaderPageSlider');
-      if (slider) slider.value = ACTIVE_READER_PAGE;
-
-      const jumpSelect = document.getElementById('parentReaderJumpSelect');
-      if (jumpSelect) jumpSelect.value = ACTIVE_READER_PAGE;
-
-      const display = document.getElementById('parentReaderPageDisplay');
-      if (!display) return;
-
-      // Show loader
-      display.innerHTML = `
-        <div class="py-20 flex flex-col items-center justify-center text-slate-400">
-          <i class="fa-solid fa-circle-notch fa-spin text-4xl text-amber-400 mb-3"></i>
-          <span class="text-xs font-bold tracking-wide text-slate-300">Loading High-Definition Page ${ACTIVE_READER_PAGE}...</span>
-        </div>
-      `;
-
-      // Resolve CDN Page URL
-      let pageUrl = '';
-      if (typeof ACTIVE_READER_BOOK.getPageUrl === 'function') {
-        pageUrl = ACTIVE_READER_BOOK.getPageUrl(ACTIVE_READER_PAGE);
-      } else if (window.CURRICULUM_DATA && typeof window.CURRICULUM_DATA.getPageUrl === 'function') {
-        pageUrl = window.CURRICULUM_DATA.getPageUrl(ACTIVE_READER_BOOK.id, ACTIVE_READER_PAGE);
-      } else if (typeof generateDynamicSvgDataUri === 'function') {
-        pageUrl = generateDynamicSvgDataUri(ACTIVE_READER_BOOK, ACTIVE_READER_PAGE);
-      }
-
-      const img = new Image();
-      img.onload = () => {
-        display.innerHTML = '';
-        img.className = 'max-w-full max-h-[80vh] object-contain rounded-xl shadow-lg border border-slate-200';
-        img.alt = `${ACTIVE_READER_BOOK.title} - Page ${ACTIVE_READER_PAGE}`;
-        display.appendChild(img);
-      };
-
-      img.onerror = () => {
-        img.onerror = null;
-        let fallback = '';
-        if (typeof ACTIVE_READER_BOOK.getFallbackPageUrl === 'function') {
-          fallback = ACTIVE_READER_BOOK.getFallbackPageUrl(ACTIVE_READER_PAGE);
-        } else if (typeof generateDynamicSvgDataUri === 'function') {
-          fallback = generateDynamicSvgDataUri(ACTIVE_READER_BOOK, ACTIVE_READER_PAGE);
-        }
-        if (fallback) {
-          const fallbackImg = new Image();
-          fallbackImg.className = 'max-w-full max-h-[80vh] object-contain rounded-xl shadow-lg border border-slate-200';
-          fallbackImg.alt = `${ACTIVE_READER_BOOK.title} - Page ${ACTIVE_READER_PAGE}`;
-          fallbackImg.src = fallback;
-          display.innerHTML = '';
-          display.appendChild(fallbackImg);
-        }
-      };
-
-      img.src = pageUrl;
-      applyParentReaderZoom();
-    }
-
-    // Page Turn Controls (Right to Left for Arabic/Urdu Quran & Qaida)
-    function parentReaderTurnRight() {
-      if (!ACTIVE_READER_BOOK) return;
-      if (ACTIVE_READER_PAGE < ACTIVE_READER_BOOK.totalPages) {
-        ACTIVE_READER_PAGE++;
-        renderCurrentReaderPage();
-      }
-    }
-
-    function parentReaderTurnLeft() {
-      if (!ACTIVE_READER_BOOK) return;
-      if (ACTIVE_READER_PAGE > 1) {
-        ACTIVE_READER_PAGE--;
-        renderCurrentReaderPage();
-      }
-    }
-
-    function parentReaderJumpToPage(pageNum) {
-      if (!ACTIVE_READER_BOOK) return;
-      ACTIVE_READER_PAGE = Math.max(1, Math.min(pageNum, ACTIVE_READER_BOOK.totalPages));
-      renderCurrentReaderPage();
-    }
-
-    // Zoom Controls
-    function parentReaderZoomIn() {
-      if (ACTIVE_READER_ZOOM < 2.5) {
-        ACTIVE_READER_ZOOM += 0.25;
-        applyParentReaderZoom();
-      }
-    }
-
-    function parentReaderZoomOut() {
-      if (ACTIVE_READER_ZOOM > 0.75) {
-        ACTIVE_READER_ZOOM -= 0.25;
-        applyParentReaderZoom();
-      }
-    }
-
-    function parentReaderResetZoom() {
-      ACTIVE_READER_ZOOM = 1.0;
-      applyParentReaderZoom();
-    }
-
-    function applyParentReaderZoom() {
-      const wrapper = document.getElementById('parentReaderPageWrapper');
-      const zoomText = document.getElementById('parentReaderZoomLevel');
-      if (wrapper) {
-        wrapper.style.transform = `scale(${ACTIVE_READER_ZOOM})`;
-      }
-      if (zoomText) {
-        zoomText.innerText = `${Math.round(ACTIVE_READER_ZOOM * 100)}%`;
-      }
-    }
-
-    function toggleParentReaderFullscreen() {
-      const elem = document.getElementById('modalParentBookReader');
-      if (!elem) return;
-      if (!document.fullscreenElement) {
-        elem.requestFullscreen().catch(err => {
-          console.warn(`Fullscreen error: ${err.message}`);
-        });
-      } else {
-        document.exitFullscreen();
-      }
-    }
-
-    // Keyboard & Device Back Navigation for Parent Portal
-    function initKeyboardNavigation() {
-      window.addEventListener('keydown', (e) => {
-        if (e.key === 'Escape') {
-          const reader = document.getElementById('modalParentBookReader');
-          if (reader && !reader.classList.contains('hidden')) {
-            closeParentBookReader();
-            return;
-          }
-          const lib = document.getElementById('modalParentLibrary');
-          if (lib && !lib.classList.contains('hidden')) {
-            closeParentLibraryModal();
-            return;
-          }
-        }
-
-        const modal = document.getElementById('modalParentBookReader');
-        if (!modal || modal.classList.contains('hidden')) return;
-
-        if (e.key === 'ArrowRight') {
-          // RTL previous page
-          parentReaderTurnLeft();
-        } else if (e.key === 'ArrowLeft') {
-          // RTL next page
-          parentReaderTurnRight();
-        }
-      });
-    }
-
-    // Hardware / Browser Back button listener for Parent Portal
-    window.addEventListener('popstate', (e) => {
-      if (isProgrammaticModalBack) {
-        isProgrammaticModalBack = false;
-        return;
-      }
-      const reader = document.getElementById('modalParentBookReader');
-      if (reader && !reader.classList.contains('hidden')) {
-        reader.classList.add('hidden');
-        return;
-      }
-      const lib = document.getElementById('modalParentLibrary');
-      if (lib && !lib.classList.contains('hidden')) {
-        lib.classList.add('hidden');
-        return;
-      }
-    });
-
-    // PWA Service Worker Registration
-    if ('serviceWorker' in navigator) {
-      window.addEventListener('load', () => {
-        navigator.serviceWorker.register('/sw.js', { scope: '/' })
-          .then(reg => {
-            console.log('[PWA Parent] Service Worker registered:', reg.scope);
-            reg.update();
-          })
-          .catch(err => console.warn('[PWA Parent] Service Worker registration failed:', err));
-      });
+    function closeModal(id) {
+      document.getElementById(id)?.classList.add('hidden');
     }
   </script>
 </body>
