@@ -1953,18 +1953,21 @@
               <h2 class="text-xl font-extrabold text-slate-900 tracking-tight flex items-center gap-2">
                 Course Material &amp; Digital Islamic Library
                 <span id="badgeCurriculumTotalCount" class="px-2.5 py-0.5 rounded-full text-xs font-mono font-bold bg-emerald-100 text-brandDark border border-emerald-300">
-                  13 Curriculums
+                  Course Materials
                 </span>
               </h2>
               <p class="text-xs text-slate-500 mt-0.5">
-                Noorani Qaida (Classic, English &amp; Kids), 16-Line Tajweed Quran, Tafseer (Mufti Taqi Usmani &amp; Dr. Farhat Hashmi), Mishkat Hadith &amp; Masnoon Duas.
+                Academy interactive course material &amp; syllabus library. Upload custom scans, read in real-time digital reader, or manage curriculum.
               </p>
             </div>
           </div>
         </div>
 
-        <div class="flex items-center gap-2.5 flex-wrap">
-          <button onclick="loadCurriculumLibrary()" class="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-xs">
+        <div class="flex items-center gap-2 flex-wrap">
+          <button onclick="toggleDefaultCurriculum()" id="btnToggleDefaultBooks" class="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-2xs" title="Show or hide standard default library books">
+            <i class="fa-solid fa-layer-group text-slate-500"></i> <span id="lblToggleDefaultBooks">Show Standard Library</span>
+          </button>
+          <button onclick="loadCurriculumLibrary()" class="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-2xs">
             <i class="fa-solid fa-arrows-rotate"></i> Refresh Library
           </button>
           <button onclick="openCustomBookUploadModal()" class="px-4 py-2 bg-brandDark hover:bg-brandDarkest text-white rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-md">
@@ -1978,22 +1981,22 @@
         <!-- Filter Pills -->
         <div class="flex items-center gap-1.5 flex-wrap" id="curriculumFilterPills">
           <button onclick="filterCurriculumCategory('all', this)" class="curriculum-filter-btn active px-3.5 py-1.5 rounded-xl text-xs font-extrabold bg-brandDark text-white shadow-xs transition">
-            All Materials (<span id="catCountAll">13</span>)
+            All Materials (<span id="catCountAll">0</span>)
           </button>
           <button onclick="filterCurriculumCategory('qaida', this)" class="curriculum-filter-btn px-3.5 py-1.5 rounded-xl text-xs font-bold bg-slate-100 text-slate-700 hover:bg-emerald-50 hover:text-brandDark transition">
-            Qaida &amp; Primers (<span id="catCountQaida">3</span>)
+            Qaida &amp; Primers (<span id="catCountQaida">0</span>)
           </button>
           <button onclick="filterCurriculumCategory('quran', this)" class="curriculum-filter-btn px-3.5 py-1.5 rounded-xl text-xs font-bold bg-slate-100 text-slate-700 hover:bg-emerald-50 hover:text-brandDark transition">
-            The Holy Quran (<span id="catCountQuran">2</span>)
+            The Holy Quran (<span id="catCountQuran">0</span>)
           </button>
           <button onclick="filterCurriculumCategory('tafseer', this)" class="curriculum-filter-btn px-3.5 py-1.5 rounded-xl text-xs font-bold bg-slate-100 text-slate-700 hover:bg-emerald-50 hover:text-brandDark transition">
-            Tafseer &amp; Translation (<span id="catCountTafseer">3</span>)
+            Tafseer &amp; Translation (<span id="catCountTafseer">0</span>)
           </button>
           <button onclick="filterCurriculumCategory('hadith', this)" class="curriculum-filter-btn px-3.5 py-1.5 rounded-xl text-xs font-bold bg-slate-100 text-slate-700 hover:bg-emerald-50 hover:text-brandDark transition">
-            Hadith Collections (<span id="catCountHadith">2</span>)
+            Hadith Collections (<span id="catCountHadith">0</span>)
           </button>
           <button onclick="filterCurriculumCategory('essentials', this)" class="curriculum-filter-btn px-3.5 py-1.5 rounded-xl text-xs font-bold bg-slate-100 text-slate-700 hover:bg-emerald-50 hover:text-brandDark transition">
-            Namaz, Duas &amp; Tajweed (<span id="catCountEssentials">3</span>)
+            Namaz, Duas &amp; Tajweed (<span id="catCountEssentials">0</span>)
           </button>
         </div>
 
@@ -4195,6 +4198,93 @@
   </div>
 
   <!-- ============================================================ -->
+  <!-- MODAL: EDIT COURSE MATERIAL / SYLLABUS BOOK -->
+  <!-- ============================================================ -->
+  <div id="modalEditCustomBook" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 hidden items-center justify-center p-3 sm:p-4 overflow-y-auto">
+    <div class="bg-white rounded-2xl max-w-xl w-full p-5 border border-slate-200 shadow-2xl space-y-4 my-auto">
+      <div class="flex justify-between items-center border-b pb-3">
+        <div>
+          <h3 class="font-black text-base text-brandDark flex items-center gap-2">
+            <i class="fa-solid fa-pen-to-square text-brandEmerald"></i> Edit Course Material
+          </h3>
+          <p class="text-xs text-slate-500 mt-0.5">Update book details, syllabus information, or add more pages</p>
+        </div>
+        <button onclick="closeModal('modalEditCustomBook')" class="text-slate-400 hover:text-slate-600 text-xl font-bold">&times;</button>
+      </div>
+
+      <form onsubmit="handleUpdateCustomBook(event)" class="space-y-3.5 text-xs">
+        <input type="hidden" id="editBookId">
+
+        <div>
+          <label class="block font-bold mb-1 text-slate-700">Book Title *:</label>
+          <input type="text" id="editBookTitle" required class="w-full p-2.5 border rounded-xl font-semibold focus:outline-brandEmerald">
+        </div>
+
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block font-bold mb-1 text-slate-700">Arabic Title (Optional):</label>
+            <input type="text" id="editBookTitleAr" class="w-full p-2.5 border rounded-xl font-semibold">
+          </div>
+          <div>
+            <label class="block font-bold mb-1 text-slate-700">Category *:</label>
+            <select id="editBookCategory" required class="w-full p-2.5 border rounded-xl font-bold text-slate-800">
+              <option value="qaida">Qaida &amp; Primers</option>
+              <option value="quran">The Holy Quran</option>
+              <option value="tafseer">Tafseer &amp; Translation</option>
+              <option value="hadith">Hadith Collections</option>
+              <option value="essentials">Islamic Essentials &amp; Duas</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block font-bold mb-1 text-slate-700">Author / Board:</label>
+            <input type="text" id="editBookAuthor" class="w-full p-2.5 border rounded-xl font-semibold">
+          </div>
+          <div>
+            <label class="block font-bold mb-1 text-slate-700">Edition / Level:</label>
+            <input type="text" id="editBookEdition" class="w-full p-2.5 border rounded-xl font-semibold">
+          </div>
+        </div>
+
+        <div>
+          <label class="block font-bold mb-1 text-slate-700">Description:</label>
+          <textarea id="editBookDescription" rows="2" class="w-full p-2.5 border rounded-xl"></textarea>
+        </div>
+
+        <!-- CURRENT PAGES & APPEND MORE PAGES -->
+        <div class="p-3.5 bg-slate-50 border border-slate-200 rounded-xl space-y-2">
+          <div class="flex items-center justify-between text-[11px]">
+            <span class="font-bold text-slate-700 flex items-center gap-1.5">
+              <i class="fa-solid fa-copy text-brandEmerald"></i> Current Pages:
+            </span>
+            <span id="editBookCurrentPagesCount" class="font-mono font-bold text-brandDark bg-emerald-100/70 px-2 py-0.5 rounded">0 Pages</span>
+          </div>
+
+          <div>
+            <label class="block font-bold text-[10px] text-slate-500 mb-1">Append More Page Scans (Optional):</label>
+            <input type="file" id="editBookAppendFiles" multiple accept="image/*" onchange="handleEditBookAppendFiles(this)" class="w-full text-xs text-slate-600 file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-bold file:bg-slate-200 file:text-slate-800 hover:file:bg-slate-300 cursor-pointer">
+            <p class="text-[10px] text-slate-400 mt-1" id="editBookAppendMsg">Select additional page scans to add at the end of this book.</p>
+          </div>
+        </div>
+
+        <div class="flex justify-between items-center border-t pt-3">
+          <button type="button" onclick="handleDeleteCurriculumBookFromModal()" class="px-3 py-2 text-rose-600 hover:bg-rose-50 rounded-xl font-bold border border-rose-200 transition flex items-center gap-1">
+            <i class="fa-solid fa-trash-can"></i> Delete Book
+          </button>
+          <div class="flex gap-2">
+            <button type="button" onclick="closeModal('modalEditCustomBook')" class="px-4 py-2 border rounded-xl font-bold text-slate-600 hover:bg-slate-100">Cancel</button>
+            <button type="submit" id="btnUpdateCustomBook" class="px-5 py-2 bg-brandDark hover:bg-brandDarkest text-white font-black rounded-xl flex items-center gap-1.5 shadow-sm transition">
+              <i class="fa-solid fa-check"></i> Save Changes
+            </button>
+          </div>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ============================================================ -->
   <!-- MODAL 1: OFFICIAL PRINTABLE TUITION FEE INVOICE RECEIPT -->
   <!-- ============================================================ -->
   <div id="modalFeeInvoice" class="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 hidden items-center justify-center p-2 sm:p-4 overflow-y-auto">
@@ -4600,6 +4690,7 @@
       loadCourses();
       loadFeeBillingLedger();
       loadTrialClassesData();
+      if (typeof loadCurriculumLibrary === 'function') loadCurriculumLibrary();
       if (typeof updateBackBtnVisibility === 'function') updateBackBtnVisibility();
 
       setInterval(loadDashboardData, 30000);
@@ -4999,10 +5090,36 @@
       }
     }
 
+    function getDeletedBookIds() {
+      try {
+        return JSON.parse(localStorage.getItem('alhuda_deleted_books') || '[]');
+      } catch(e) {
+        return [];
+      }
+    }
+
+    function saveDeletedBookIds(ids) {
+      try {
+        localStorage.setItem('alhuda_deleted_books', JSON.stringify(ids));
+      } catch(e) {}
+    }
+
+    function isDefaultCurriculumEnabled() {
+      return localStorage.getItem('alhuda_show_default_books') === 'true';
+    }
+
+    function toggleDefaultCurriculum() {
+      const current = isDefaultCurriculumEnabled();
+      localStorage.setItem('alhuda_show_default_books', (!current).toString());
+      loadCurriculumLibrary(CURRENT_CURRICULUM_CATEGORY);
+    }
+
     function getAllAvailableBooks() {
-      const baseBooks = (typeof ALHUDA_CURRICULUM !== 'undefined') ? ALHUDA_CURRICULUM : [];
+      const showDefault = isDefaultCurriculumEnabled();
+      const baseBooks = (showDefault && typeof ALHUDA_CURRICULUM !== 'undefined') ? ALHUDA_CURRICULUM : [];
       const customBooks = getCustomBooks();
-      return [...baseBooks, ...customBooks];
+      const deletedIds = getDeletedBookIds();
+      return [...customBooks, ...baseBooks].filter(b => !deletedIds.includes(b.id));
     }
 
     function loadCurriculumLibrary(category = 'all') {
@@ -5017,7 +5134,13 @@
       setTxt('catCountTafseer', allBooks.filter(b => b.category === 'tafseer').length);
       setTxt('catCountHadith', allBooks.filter(b => b.category === 'hadith').length);
       setTxt('catCountEssentials', allBooks.filter(b => b.category === 'essentials').length);
-      setTxt('badgeCurriculumTotalCount', `${allBooks.length} Curriculums`);
+      setTxt('badgeCurriculumTotalCount', `${allBooks.length} Materials`);
+
+      // Update Toggle Default Books Button Text & Icon
+      const btnToggleLbl = document.getElementById('lblToggleDefaultBooks');
+      if (btnToggleLbl) {
+        btnToggleLbl.innerText = isDefaultCurriculumEnabled() ? 'Hide Standard 13 Books' : 'Show Standard Library';
+      }
 
       // Filter by category
       let filtered = allBooks;
@@ -5066,8 +5189,16 @@
         container.innerHTML = `
           <div class="col-span-full p-12 text-center bg-white rounded-2xl border border-slate-200">
             <i class="fa-solid fa-book-bookmark text-4xl text-slate-300 mb-3"></i>
-            <h4 class="font-extrabold text-slate-700 text-base">No Books Found in this Category</h4>
-            <p class="text-xs text-slate-400 mt-1">Try selecting "All Materials" or clearing your search term.</p>
+            <h4 class="font-extrabold text-slate-700 text-base">No Course Materials Found</h4>
+            <p class="text-xs text-slate-400 mt-1 max-w-md mx-auto">Upload your own syllabus scans or toggle the standard academy curriculum library.</p>
+            <div class="mt-4 flex items-center justify-center gap-2.5 flex-wrap">
+              <button onclick="openCustomBookUploadModal()" class="px-4 py-2 bg-brandDark hover:bg-brandDarkest text-white rounded-xl text-xs font-bold transition inline-flex items-center gap-1.5 shadow-sm">
+                <i class="fa-solid fa-plus"></i> + Add Course Material
+              </button>
+              <button onclick="toggleDefaultCurriculum()" class="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition inline-flex items-center gap-1.5">
+                <i class="fa-solid fa-layer-group"></i> ${isDefaultCurriculumEnabled() ? 'Hide Standard Books' : 'Show Standard Library'}
+              </button>
+            </div>
           </div>
         `;
         return;
@@ -5130,11 +5261,17 @@
             </div>
 
             <!-- CARD FOOTER ACTIONS -->
-            <div class="p-4 pt-2 border-t border-slate-100 flex items-center gap-2">
-              <button onclick="openDigitalBookReader('${book.id}', 1)" class="flex-1 py-2 px-3 bg-brandDark hover:bg-brandDarkest text-white rounded-xl font-bold text-xs shadow-xs transition flex items-center justify-center gap-1.5 group-hover:bg-emerald-700">
-                <i class="fa-solid fa-book-open-reader text-brandGold"></i> Open Digital Reader
+            <div class="p-3.5 pt-2 border-t border-slate-100 flex items-center gap-1.5 flex-wrap">
+              <button onclick="openDigitalBookReader('${book.id}', 1)" class="flex-1 min-w-[110px] py-2 px-3 bg-brandDark hover:bg-brandDarkest text-white rounded-xl font-bold text-xs shadow-xs transition flex items-center justify-center gap-1.5 group-hover:bg-emerald-700">
+                <i class="fa-solid fa-book-open-reader text-brandGold"></i> Open Reader
               </button>
-              <button onclick="copyBookDeepLink('${book.id}', '${book.title}')" class="p-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs transition" title="Copy Direct Portal Link">
+              <button onclick="openEditCustomBookModal('${book.id}')" class="px-2.5 py-2 bg-slate-100 hover:bg-emerald-100 text-slate-700 hover:text-emerald-800 rounded-xl text-xs font-bold transition flex items-center gap-1" title="Edit Course Material Details">
+                <i class="fa-solid fa-pen-to-square text-emerald-600"></i> Edit
+              </button>
+              <button onclick="handleDeleteCurriculumBook('${book.id}', '${(book.title || '').replace(/'/g, "\\'")}')" class="px-2.5 py-2 bg-slate-100 hover:bg-rose-100 text-slate-700 hover:text-rose-700 rounded-xl text-xs font-bold transition flex items-center gap-1" title="Delete Course Material">
+                <i class="fa-solid fa-trash-can text-rose-500"></i>
+              </button>
+              <button onclick="copyBookDeepLink('${book.id}', '${(book.title || '').replace(/'/g, "\\'")}')" class="p-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs transition" title="Copy Direct Portal Link">
                 <i class="fa-solid fa-share-nodes"></i>
               </button>
             </div>
@@ -5549,6 +5686,175 @@
         btn.disabled = false;
         btn.innerHTML = '<i class="fa-solid fa-floppy-disk"></i> Save &amp; Add to Library';
       }
+    }
+
+    // ============================================================
+    // EDIT & MANAGE COURSE MATERIAL (CUSTOM / SYLLABUS BOOKS)
+    // ============================================================
+    let EDIT_BOOK_APPEND_FILES = [];
+
+    function openEditCustomBookModal(bookId) {
+      const allBooks = getAllAvailableBooks();
+      const book = allBooks.find(b => b.id === bookId);
+      if (!book) {
+        alert("Course book not found.");
+        return;
+      }
+
+      EDIT_BOOK_APPEND_FILES = [];
+      const appendInput = document.getElementById('editBookAppendFiles');
+      if (appendInput) appendInput.value = '';
+      const appendMsg = document.getElementById('editBookAppendMsg');
+      if (appendMsg) {
+        appendMsg.innerText = 'Select additional page scans to add at the end of this book.';
+        appendMsg.className = 'text-[10px] text-slate-400 mt-1';
+      }
+
+      document.getElementById('editBookId').value = book.id;
+      document.getElementById('editBookTitle').value = book.title || '';
+      document.getElementById('editBookTitleAr').value = book.title_ar || '';
+      document.getElementById('editBookCategory').value = book.category || 'qaida';
+      document.getElementById('editBookAuthor').value = book.author || '';
+      document.getElementById('editBookEdition').value = book.edition || '';
+      document.getElementById('editBookDescription').value = book.description || '';
+
+      const pageCount = (book.pages && book.pages.length) || book.total_pages || (book.paras ? 548 : 0);
+      document.getElementById('editBookCurrentPagesCount').innerText = `${pageCount} Pages`;
+
+      openModal('modalEditCustomBook');
+    }
+
+    function handleEditBookAppendFiles(input) {
+      EDIT_BOOK_APPEND_FILES = Array.from(input.files || []);
+      const appendMsg = document.getElementById('editBookAppendMsg');
+      if (appendMsg) {
+        appendMsg.innerText = `${EDIT_BOOK_APPEND_FILES.length} additional pages selected. They will be appended when you save.`;
+        appendMsg.className = 'text-[10px] text-emerald-700 font-bold mt-1';
+      }
+    }
+
+    async function handleUpdateCustomBook(e) {
+      e.preventDefault();
+      const bookId = document.getElementById('editBookId')?.value;
+      const title = document.getElementById('editBookTitle')?.value.trim();
+      const title_ar = document.getElementById('editBookTitleAr')?.value.trim() || '';
+      const category = document.getElementById('editBookCategory')?.value || 'qaida';
+      const author = document.getElementById('editBookAuthor')?.value.trim() || '';
+      const edition = document.getElementById('editBookEdition')?.value.trim() || '';
+      const description = document.getElementById('editBookDescription')?.value.trim() || '';
+
+      if (!title) {
+        alert("Please enter a book title.");
+        return;
+      }
+
+      const btn = document.getElementById('btnUpdateCustomBook');
+      btn.disabled = true;
+      btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Saving Changes...';
+
+      try {
+        let customBooks = getCustomBooks();
+        let bookIndex = customBooks.findIndex(b => b.id === bookId);
+
+        // Compress any new appended pages
+        let appendedPages = [];
+        if (EDIT_BOOK_APPEND_FILES.length > 0) {
+          for (let i = 0; i < EDIT_BOOK_APPEND_FILES.length; i++) {
+            const dataUrl = await compressImageToWebP(EDIT_BOOK_APPEND_FILES[i]);
+            appendedPages.push(dataUrl);
+          }
+        }
+
+        const catLabel = category === 'qaida' ? 'Qaida & Primers' :
+                         category === 'quran' ? 'The Holy Quran' :
+                         category === 'tafseer' ? 'Tafseer & Translation' :
+                         category === 'hadith' ? 'Hadith Collections' : 'Islamic Essentials';
+
+        if (bookIndex >= 0) {
+          // Existing custom book in localStorage
+          const targetBook = customBooks[bookIndex];
+          targetBook.title = title;
+          targetBook.title_ar = title_ar;
+          targetBook.category = category;
+          targetBook.category_label = catLabel;
+          targetBook.author = author;
+          targetBook.edition = edition;
+          targetBook.description = description;
+
+          if (appendedPages.length > 0) {
+            targetBook.pages = [...(targetBook.pages || []), ...appendedPages];
+            targetBook.total_pages = targetBook.pages.length;
+          }
+          targetBook.updated_at = new Date().toISOString();
+          customBooks[bookIndex] = targetBook;
+        } else {
+          // Editing a standard book converts it into a customized copy in customBooks
+          const allBooks = getAllAvailableBooks();
+          const origBook = allBooks.find(b => b.id === bookId) || {};
+          const newCustomBook = {
+            ...origBook,
+            id: 'custom-' + Date.now(),
+            title,
+            title_ar,
+            category,
+            category_label: catLabel,
+            author,
+            edition,
+            description,
+            pages: [...(origBook.pages || []), ...appendedPages],
+            total_pages: ((origBook.pages && origBook.pages.length) || origBook.total_pages || 0) + appendedPages.length,
+            updated_at: new Date().toISOString()
+          };
+          customBooks.unshift(newCustomBook);
+
+          // Mark standard book id as replaced/deleted
+          const deletedIds = getDeletedBookIds();
+          if (!deletedIds.includes(bookId)) {
+            deletedIds.push(bookId);
+            saveDeletedBookIds(deletedIds);
+          }
+        }
+
+        saveCustomBooks(customBooks);
+        alert(`✅ Course Material "${title}" updated successfully!`);
+        closeModal('modalEditCustomBook');
+        loadCurriculumLibrary(category);
+      } catch (err) {
+        alert("Error updating book: " + err.message);
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fa-solid fa-check"></i> Save Changes';
+      }
+    }
+
+    function handleDeleteCurriculumBook(bookId, bookTitle) {
+      if (!confirm(`Are you sure you want to delete course material "${bookTitle || 'this book'}" from the library?`)) {
+        return;
+      }
+
+      // 1. Remove from custom books if present
+      let customBooks = getCustomBooks();
+      const filteredCustom = customBooks.filter(b => b.id !== bookId);
+      saveCustomBooks(filteredCustom);
+
+      // 2. Mark ID as deleted so even default books stay removed
+      const deletedIds = getDeletedBookIds();
+      if (!deletedIds.includes(bookId)) {
+        deletedIds.push(bookId);
+        saveDeletedBookIds(deletedIds);
+      }
+
+      alert(`🗑️ "${bookTitle || 'Course material'}" has been deleted from library.`);
+      loadCurriculumLibrary(CURRENT_CURRICULUM_CATEGORY);
+    }
+
+    function handleDeleteCurriculumBookFromModal() {
+      const bookId = document.getElementById('editBookId')?.value;
+      const bookTitle = document.getElementById('editBookTitle')?.value;
+      if (!bookId) return;
+
+      closeModal('modalEditCustomBook');
+      handleDeleteCurriculumBook(bookId, bookTitle);
     }
 
     // Helper: Client-side image compression to 1200px WebP (<50KB)
