@@ -1964,9 +1964,6 @@
         </div>
 
         <div class="flex items-center gap-2 flex-wrap">
-          <button onclick="toggleDefaultCurriculum()" id="btnToggleDefaultBooks" class="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-2xs" title="Show or hide standard default library books">
-            <i class="fa-solid fa-layer-group text-slate-500"></i> <span id="lblToggleDefaultBooks">Show Standard Library</span>
-          </button>
           <button onclick="loadCurriculumLibrary()" class="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-2xs">
             <i class="fa-solid fa-arrows-rotate"></i> Refresh Library
           </button>
@@ -5104,22 +5101,10 @@
       } catch(e) {}
     }
 
-    function isDefaultCurriculumEnabled() {
-      return localStorage.getItem('alhuda_show_default_books') === 'true';
-    }
-
-    function toggleDefaultCurriculum() {
-      const current = isDefaultCurriculumEnabled();
-      localStorage.setItem('alhuda_show_default_books', (!current).toString());
-      loadCurriculumLibrary(CURRENT_CURRICULUM_CATEGORY);
-    }
-
     function getAllAvailableBooks() {
-      const showDefault = isDefaultCurriculumEnabled();
-      const baseBooks = (showDefault && typeof ALHUDA_CURRICULUM !== 'undefined') ? ALHUDA_CURRICULUM : [];
       const customBooks = getCustomBooks();
       const deletedIds = getDeletedBookIds();
-      return [...customBooks, ...baseBooks].filter(b => !deletedIds.includes(b.id));
+      return customBooks.filter(b => !deletedIds.includes(b.id));
     }
 
     function loadCurriculumLibrary(category = 'all') {
@@ -5135,12 +5120,6 @@
       setTxt('catCountHadith', allBooks.filter(b => b.category === 'hadith').length);
       setTxt('catCountEssentials', allBooks.filter(b => b.category === 'essentials').length);
       setTxt('badgeCurriculumTotalCount', `${allBooks.length} Materials`);
-
-      // Update Toggle Default Books Button Text & Icon
-      const btnToggleLbl = document.getElementById('lblToggleDefaultBooks');
-      if (btnToggleLbl) {
-        btnToggleLbl.innerText = isDefaultCurriculumEnabled() ? 'Hide Standard 13 Books' : 'Show Standard Library';
-      }
 
       // Filter by category
       let filtered = allBooks;
@@ -5190,13 +5169,10 @@
           <div class="col-span-full p-12 text-center bg-white rounded-2xl border border-slate-200">
             <i class="fa-solid fa-book-bookmark text-4xl text-slate-300 mb-3"></i>
             <h4 class="font-extrabold text-slate-700 text-base">No Course Materials Found</h4>
-            <p class="text-xs text-slate-400 mt-1 max-w-md mx-auto">Upload your own syllabus scans or toggle the standard academy curriculum library.</p>
+            <p class="text-xs text-slate-400 mt-1 max-w-md mx-auto">Upload your own syllabus scans or course materials using the button below.</p>
             <div class="mt-4 flex items-center justify-center gap-2.5 flex-wrap">
               <button onclick="openCustomBookUploadModal()" class="px-4 py-2 bg-brandDark hover:bg-brandDarkest text-white rounded-xl text-xs font-bold transition inline-flex items-center gap-1.5 shadow-sm">
                 <i class="fa-solid fa-plus"></i> + Add Course Material
-              </button>
-              <button onclick="toggleDefaultCurriculum()" class="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition inline-flex items-center gap-1.5">
-                <i class="fa-solid fa-layer-group"></i> ${isDefaultCurriculumEnabled() ? 'Hide Standard Books' : 'Show Standard Library'}
               </button>
             </div>
           </div>
