@@ -14665,26 +14665,23 @@ Web Portal: https://alhuda-lms.vercel.app`;
     }
 
     // ============================================================
-    // PROGRESSIVE WEB APP (PWA) SERVICE WORKER (Native Chrome PWA)
+    // ZERO-CACHE ENFORCEMENT: Unregister any service workers and clear all caches
     // ============================================================
     if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.addEventListener('controllerchange', () => {
-        console.log('[PWA] Controller changed, auto-reloading to fresh version...');
-        window.location.reload();
-      });
-      navigator.serviceWorker.addEventListener('message', (event) => {
-        if (event.data && event.data.type === 'RELOAD_PAGE') {
-          console.log('[PWA] Update message received, auto-reloading...');
-          window.location.reload();
+      navigator.serviceWorker.getRegistrations().then(registrations => {
+        for (let reg of registrations) {
+          reg.unregister().then(() => {
+            console.log('[PWA] Unregistered service worker:', reg.scope);
+          });
         }
       });
-      window.addEventListener('load', () => {
-        navigator.serviceWorker.register('/sw.js', { scope: '/' })
-          .then(reg => {
-            console.log('[PWA] Service Worker registered with scope:', reg.scope);
-            reg.update();
-          })
-          .catch(err => console.warn('[PWA] Service Worker registration failed:', err));
+    }
+    if ('caches' in window) {
+      caches.keys().then(keys => {
+        for (let k of keys) {
+          caches.delete(k);
+          console.log('[PWA] Cleared cache:', k);
+        }
       });
     }
 
