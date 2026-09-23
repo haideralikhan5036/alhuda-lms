@@ -426,7 +426,7 @@
         <i class="fa-solid fa-clipboard-check text-brandEmerald w-4 flex-shrink-0"></i>
         <span class="sidebar-label">Daily Attendance &amp; Notes</span>
       </button>
-      <button onclick="switchTab('tab-salaries')" data-tab="tab-salaries" class="sidebar-nav-btn nav-tab role-owner w-full text-left px-3 py-2.5 rounded-lg text-sm font-bold flex items-center gap-3 text-slate-700 hover:bg-emerald-50 hover:text-brandDark transition">
+      <button onclick="switchTab('tab-salaries')" data-tab="tab-salaries" class="sidebar-nav-btn nav-tab role-admin w-full text-left px-3 py-2.5 rounded-lg text-sm font-bold flex items-center gap-3 text-slate-700 hover:bg-emerald-50 hover:text-brandDark transition">
         <i class="fa-solid fa-hand-holding-dollar text-brandGold w-4 flex-shrink-0"></i>
         <span class="sidebar-label">Teacher Salaries (Auto)</span>
       </button>
@@ -434,7 +434,7 @@
         <i class="fa-solid fa-plane-departure text-blue-600 w-4 flex-shrink-0"></i>
         <span class="sidebar-label flex items-center gap-2">Leave Tracker <span id="navLeaveCountBadge" class="px-1.5 rounded-full text-[10px] font-mono bg-blue-100 text-blue-800 font-extrabold border border-blue-200">0</span></span>
       </button>
-      <button onclick="switchTab('tab-invoices')" data-tab="tab-invoices" class="sidebar-nav-btn nav-tab role-owner w-full text-left px-3 py-2.5 rounded-lg text-sm font-bold flex items-center gap-3 text-slate-700 hover:bg-emerald-50 hover:text-brandDark transition">
+      <button onclick="switchTab('tab-invoices')" data-tab="tab-invoices" class="sidebar-nav-btn nav-tab role-admin w-full text-left px-3 py-2.5 rounded-lg text-sm font-bold flex items-center gap-3 text-slate-700 hover:bg-emerald-50 hover:text-brandDark transition">
         <i class="fa-solid fa-file-invoice-dollar text-brandGold w-4 flex-shrink-0"></i>
         <span class="sidebar-label flex items-center justify-between flex-1">
           <span>Fee Management &amp; Matrix</span>
@@ -3915,12 +3915,12 @@
 
         <div class="flex flex-wrap gap-2">
           <!-- WhatsApp Quick Action -->
-          <button type="button" onclick="dispatchEmailViaWhatsApp()" class="px-3.5 py-2 bg-emerald-600 text-white rounded-xl font-bold text-xs hover:bg-emerald-700 flex items-center gap-1.5 shadow-xs">
+          <button type="button" id="btnEmailModalWhatsApp" onclick="dispatchEmailViaWhatsApp()" class="px-3.5 py-2 bg-emerald-600 text-white rounded-xl font-bold text-xs hover:bg-emerald-700 flex items-center gap-1.5 shadow-xs">
             <i class="fa-brands fa-whatsapp text-sm"></i> WhatsApp Copy
           </button>
 
           <!-- Gmail Official Composer Action -->
-          <button type="button" onclick="openOfficialGmailComposer()" class="px-3.5 py-2 bg-red-600 text-white rounded-xl font-extrabold text-xs hover:bg-red-700 flex items-center gap-1.5 shadow-sm" title="Open directly in Gmail from ceoislamiccentre@gmail.com">
+          <button type="button" id="btnEmailModalGmail" onclick="openOfficialGmailComposer()" class="px-3.5 py-2 bg-red-600 text-white rounded-xl font-extrabold text-xs hover:bg-red-700 flex items-center gap-1.5 shadow-sm" title="Open directly in Gmail from ceoislamiccentre@gmail.com">
             <i class="fa-solid fa-envelope-open-text text-sm"></i> Open in Gmail (ceoislamiccentre)
           </button>
 
@@ -4485,7 +4485,7 @@
         </div>
 
         <div class="flex justify-between items-center border-t pt-3">
-          <button type="button" onclick="handleDeleteCurriculumBookFromModal()" class="px-3 py-2 text-rose-600 hover:bg-rose-50 rounded-xl font-bold border border-rose-200 transition flex items-center gap-1">
+          <button type="button" id="btnDeleteCurriculumBookModal" onclick="handleDeleteCurriculumBookFromModal()" class="px-3 py-2 text-rose-600 hover:bg-rose-50 rounded-xl font-bold border border-rose-200 transition flex items-center gap-1">
             <i class="fa-solid fa-trash-can"></i> Delete Book
           </button>
           <div class="flex gap-2">
@@ -4859,6 +4859,27 @@
     let ALL_STUDENTS = [];
     let ALL_FAMILIES = [];
     let CURRENT_ROLE = 'owner';
+    let ACTIVE_MANAGER_ID = null;
+
+    // STUDENT CONTACT PRIVACY GUARDS (MANDATORY FOR MANAGER ROLE)
+    function maskStudentPhone(phone) {
+      if (CURRENT_ROLE !== 'manager') return phone || '--';
+      if (!phone) return '--';
+      const clean = String(phone).trim();
+      if (clean.length <= 5) return '••••••';
+      return clean.slice(0, 4) + ' ••• ••••';
+    }
+
+    function maskStudentEmail(email) {
+      if (CURRENT_ROLE !== 'manager') return email || '--';
+      if (!email) return '--';
+      const parts = String(email).trim().split('@');
+      if (parts.length < 2) return '••••••';
+      const name = parts[0];
+      const domain = parts[1];
+      const prefix = name.length > 2 ? name.slice(0, 2) : name.slice(0, 1);
+      return `${prefix}•••••@${domain}`;
+    }
     let CURRENT_MATRIX_TEACHER = null;
     let CURRENT_TEACHER_SCHEDULES = [];
     let CURRENT_MODAL_STUDENT_ID = null;
@@ -4889,6 +4910,7 @@
     const DAY_NAMES = ['', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 
     window.onload = function() {
+      if (typeof initRoleFromUrl === 'function') initRoleFromUrl();
       setInterval(() => {
         const now = new Date();
         const el = document.getElementById('liveClock');
@@ -5501,10 +5523,12 @@
               </button>
 
               <!-- Secondary: Delete Book -->
-              <button onclick="handleDeleteCurriculumBook('${book.id}', '${(book.title || '').replace(/'/g, "\\'")}')" class="px-2.5 py-2.5 bg-white hover:bg-rose-50 text-slate-700 hover:text-rose-700 border border-slate-200 rounded-xl text-xs font-bold transition flex items-center gap-1 shadow-2xs" title="Delete Course Material">
-                <i class="fa-solid fa-trash-can text-rose-500"></i>
-                <span class="hidden sm:inline">Delete</span>
-              </button>
+              ${CURRENT_ROLE !== 'manager' ? `
+                <button onclick="handleDeleteCurriculumBook('${book.id}', '${(book.title || '').replace(/'/g, "\\'")}')" class="px-2.5 py-2.5 bg-white hover:bg-rose-50 text-slate-700 hover:text-rose-700 border border-slate-200 rounded-xl text-xs font-bold transition flex items-center gap-1 shadow-2xs" title="Delete Course Material">
+                  <i class="fa-solid fa-trash-can text-rose-500"></i>
+                  <span class="hidden sm:inline">Delete</span>
+                </button>
+              ` : ''}
 
               <!-- Share Deep Link -->
               <button onclick="copyBookDeepLink('${book.id}', '${(book.title || '').replace(/'/g, "\\'")}')" class="p-2.5 bg-white hover:bg-slate-100 text-slate-600 hover:text-slate-900 border border-slate-200 rounded-xl text-xs transition shadow-2xs" title="Copy Direct Portal Link">
@@ -6613,6 +6637,11 @@
       const pageCount = (book.pages && book.pages.length) || book.total_pages || (book.paras ? 548 : 0);
       document.getElementById('editBookCurrentPagesCount').innerText = `${pageCount} Pages`;
 
+      const delBtn = document.getElementById('btnDeleteCurriculumBookModal');
+      if (delBtn) {
+        delBtn.style.display = CURRENT_ROLE === 'manager' ? 'none' : 'inline-flex';
+      }
+
       openModal('modalEditCustomBook');
     }
 
@@ -6720,6 +6749,10 @@
     }
 
     function handleDeleteCurriculumBook(bookId, bookTitle) {
+      if (CURRENT_ROLE === 'manager') {
+        alert("Access Denied: Managers are not authorized to delete course material books. Only the System Owner can delete books.");
+        return;
+      }
       if (!confirm(`Are you sure you want to delete course material "${bookTitle || 'this book'}" from the library?`)) {
         return;
       }
@@ -7419,7 +7452,7 @@
         }
 
         const cleanPhone = (c.students?.whatsapp || '').replace(/[^0-9]/g, '');
-        const waChat = cleanPhone ? `<a href="https://wa.me/${cleanPhone}" target="_blank" class="text-emerald-600 hover:text-emerald-800 ml-1.5" title="WhatsApp Parent"><i class="fa-brands fa-whatsapp"></i></a>` : '';
+        const waChat = (cleanPhone && CURRENT_ROLE !== 'manager') ? `<a href="https://wa.me/${cleanPhone}" target="_blank" class="text-emerald-600 hover:text-emerald-800 ml-1.5" title="WhatsApp Parent"><i class="fa-brands fa-whatsapp"></i></a>` : '';
 
         const typeBadge = c.isTrial 
           ? '<span class="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-purple-100 text-purple-800 border border-purple-200">Trial</span>'
@@ -7669,16 +7702,15 @@
       document.getElementById('stuDetailDays').innerText = days;
       document.getElementById('stuDetailJoining').innerText = student.joining_date || 'N/A';
       document.getElementById('stuDetailTeacher').innerText = teacherName;
-      document.getElementById('stuDetailFamilyId').innerText = student.family_id || 'N/A';
-      document.getElementById('stuDetailParentName').innerText = family ? family.parent_name : 'Parent / Family';
-      document.getElementById('stuDetailLocation').innerText = family ? `${family.country || 'Global'} • ${family.whatsapp || ''}` : 'Location N/A';
-
-      // WhatsApp direct contact
       const rawPhone = student.whatsapp || family?.whatsapp || '';
       const cleanPhone = rawPhone.replace(/[^0-9]/g, '');
+      const displayedPhone = (CURRENT_ROLE === 'manager') ? maskStudentPhone(rawPhone) : rawPhone;
+      document.getElementById('stuDetailLocation').innerText = family ? `${family.country || 'Global'} • ${displayedPhone || ''}` : 'Location N/A';
+
+      // WhatsApp direct contact (Protected from Manager)
       const waBtn = document.getElementById('stuDetailWhatsAppBtn');
       if (waBtn) {
-        if (cleanPhone) {
+        if (cleanPhone && CURRENT_ROLE !== 'manager') {
           const waMsg = `Assalam-o-Alaikum,\nRegarding student *${student.name}* (ID: ${student.id}) from *Al-Huda Islamic Centre LMS*.`;
           waBtn.href = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(waMsg)}`;
           waBtn.style.display = 'inline-flex';
@@ -8316,9 +8348,15 @@
                     </div>
                     <h4 class="font-extrabold text-base text-slate-900 mt-0.5">${f.parent_name}</h4>
                     <p class="text-[11px] text-slate-500 flex items-center gap-1">
-                      <i class="fa-brands fa-whatsapp text-emerald-600"></i>
-                      <a href="https://wa.me/${cleanPhone}" target="_blank" class="hover:underline font-mono">${f.whatsapp}</a>
-                      ${f.parent_email ? `&bull; <span class="truncate max-w-[130px]">${f.parent_email}</span>` : ''}
+                      ${CURRENT_ROLE === 'manager' ? `
+                        <i class="fa-solid fa-lock text-amber-500"></i>
+                        <span class="font-mono text-slate-600 font-bold" title="Protected Contact Number">${maskStudentPhone(f.whatsapp)}</span>
+                        ${f.parent_email ? `&bull; <span class="truncate max-w-[130px] font-mono text-slate-500" title="Protected Email">${maskStudentEmail(f.parent_email)}</span>` : ''}
+                      ` : `
+                        <i class="fa-brands fa-whatsapp text-emerald-600"></i>
+                        <a href="https://wa.me/${cleanPhone}" target="_blank" class="hover:underline font-mono">${f.whatsapp}</a>
+                        ${f.parent_email ? `&bull; <span class="truncate max-w-[130px]">${f.parent_email}</span>` : ''}
+                      `}
                     </p>
                   </div>
                 </div>
@@ -8346,12 +8384,18 @@
                     <strong class="text-brandDark">${creds.password}</strong>
                   </div>
                 </div>
-                <a href="${waUrl}" target="_blank" class="w-full py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-bold text-[11px] flex items-center justify-center gap-1.5 shadow-xs transition mt-1">
-                  <i class="fa-brands fa-whatsapp"></i> Send Portal Login to Parent WhatsApp
-                </a>
-                <button onclick="openFamilyEmailModal('${f.id}')" class="w-full py-1.5 bg-purple-50 hover:bg-purple-100 text-purple-800 border border-purple-200 rounded-lg font-bold text-[11px] flex items-center justify-center gap-1.5 shadow-xs transition mt-1">
-                  <i class="fa-solid fa-envelope text-purple-600"></i> Send Welcome & Zoom Email
-                </button>
+                ${CURRENT_ROLE !== 'manager' ? `
+                  <a href="${waUrl}" target="_blank" class="w-full py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-bold text-[11px] flex items-center justify-center gap-1.5 shadow-xs transition mt-1">
+                    <i class="fa-brands fa-whatsapp"></i> Send Portal Login to Parent WhatsApp
+                  </a>
+                  <button onclick="openFamilyEmailModal('${f.id}')" class="w-full py-1.5 bg-purple-50 hover:bg-purple-100 text-purple-800 border border-purple-200 rounded-lg font-bold text-[11px] flex items-center justify-center gap-1.5 shadow-xs transition mt-1">
+                    <i class="fa-solid fa-envelope text-purple-600"></i> Send Welcome & Zoom Email
+                  </button>
+                ` : `
+                  <div class="p-2 bg-amber-50 border border-amber-200 text-amber-800 text-[10px] rounded-lg font-semibold text-center mt-1 flex items-center justify-center gap-1.5">
+                    <i class="fa-solid fa-shield-halved text-amber-600"></i> Parent WhatsApp &amp; Email Protected (Manager Role)
+                  </div>
+                `}
               </div>
 
               <!-- Enrolled Sibling Students -->
@@ -8448,9 +8492,15 @@
             <td class="p-3 font-bold text-slate-900">${f.parent_name}</td>
             <td class="p-3 text-slate-600">${f.country || '--'}</td>
             <td class="p-3 font-mono">
-              <a href="https://wa.me/${cleanPhone}" target="_blank" class="text-emerald-700 hover:underline flex items-center gap-1">
-                <i class="fa-brands fa-whatsapp text-emerald-600"></i> ${f.whatsapp || '--'}
-              </a>
+              ${CURRENT_ROLE === 'manager' ? `
+                <span class="text-slate-600 flex items-center gap-1 font-bold" title="Protected Contact for Manager">
+                  <i class="fa-solid fa-lock text-amber-500 text-[10px]"></i> ${maskStudentPhone(f.whatsapp)}
+                </span>
+              ` : `
+                <a href="https://wa.me/${cleanPhone}" target="_blank" class="text-emerald-700 hover:underline flex items-center gap-1">
+                  <i class="fa-brands fa-whatsapp text-emerald-600"></i> ${f.whatsapp || '--'}
+                </a>
+              `}
             </td>
             <td class="p-3 font-mono font-extrabold text-brandEmerald">${f.currency} ${f.monthly_fee}</td>
             <td class="p-3 font-bold text-slate-700">
@@ -9187,6 +9237,10 @@
     }
 
     async function deleteTeacher(teacherId) {
+      if (CURRENT_ROLE === 'manager') {
+        alert("Access Denied: Managers are not authorized to permanently delete employee records. Only the System Owner can perform permanent deletions.");
+        return;
+      }
       const teacher = ALL_TEACHERS.find(t => t.id === teacherId);
       const tName = teacher ? teacher.full_name : 'this employee';
       let meta = {};
@@ -9297,11 +9351,13 @@
                   </div>
                   <div class="flex items-center gap-1">
                     <span class="px-2 py-0.5 rounded text-[10px] font-extrabold bg-indigo-100 text-indigo-800 border border-indigo-200">
-                      🏢 Manager
+                       Manager
                     </span>
-                    <button onclick="deleteTeacher('${t.id}')" title="Delete Manager" class="text-slate-300 hover:text-rose-600 transition p-1 text-xs">
-                      <i class="fa-regular fa-trash-can"></i>
-                    </button>
+                    ${CURRENT_ROLE !== 'manager' ? `
+                      <button onclick="deleteTeacher('${t.id}')" title="Delete Manager" class="text-slate-300 hover:text-rose-600 transition p-1 text-xs">
+                        <i class="fa-regular fa-trash-can"></i>
+                      </button>
+                    ` : ''}
                   </div>
                 </div>
 
@@ -9376,9 +9432,11 @@
                 <a href="${directPortalUrl}" target="_blank" class="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold rounded-xl text-xs shadow-xs transition flex items-center gap-1.5">
                   <i class="fa-solid fa-arrow-up-right-from-square"></i> Open Manager Portal
                 </a>
-                <button onclick="deleteTeacher('${t.id}')" class="px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-lg font-bold text-xs transition flex items-center gap-1">
-                  <i class="fa-regular fa-trash-can"></i> Remove
-                </button>
+                ${CURRENT_ROLE !== 'manager' ? `
+                  <button onclick="deleteTeacher('${t.id}')" class="px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-lg font-bold text-xs transition flex items-center gap-1">
+                    <i class="fa-regular fa-trash-can"></i> Remove
+                  </button>
+                ` : ''}
               </div>
             </div>
           `;
@@ -9409,9 +9467,11 @@
                     <span class="px-2 py-0.5 rounded text-[10px] font-extrabold bg-slate-100 text-slate-700 border border-slate-200">
                       🪪 Other Staff
                     </span>
-                    <button onclick="deleteTeacher('${t.id}')" title="Delete Staff" class="text-slate-300 hover:text-rose-600 transition p-1 text-xs">
-                      <i class="fa-regular fa-trash-can"></i>
-                    </button>
+                    ${CURRENT_ROLE !== 'manager' ? `
+                      <button onclick="deleteTeacher('${t.id}')" title="Delete Staff" class="text-slate-300 hover:text-rose-600 transition p-1 text-xs">
+                        <i class="fa-regular fa-trash-can"></i>
+                      </button>
+                    ` : ''}
                   </div>
                 </div>
 
@@ -9443,9 +9503,11 @@
 
               <div class="pt-3 border-t mt-3 flex items-center justify-between">
                 <span class="text-[11px] font-mono text-slate-400">Non-Teaching Staff</span>
-                <button onclick="deleteTeacher('${t.id}')" class="px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-lg font-bold text-xs transition flex items-center gap-1">
-                  <i class="fa-regular fa-trash-can"></i> Remove
-                </button>
+                ${CURRENT_ROLE !== 'manager' ? `
+                  <button onclick="deleteTeacher('${t.id}')" class="px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-lg font-bold text-xs transition flex items-center gap-1">
+                    <i class="fa-regular fa-trash-can"></i> Remove
+                  </button>
+                ` : ''}
               </div>
             </div>
           `;
@@ -9499,9 +9561,11 @@
                   <span class="px-2 py-0.5 rounded text-[10px] font-extrabold ${t.status === 'Active' ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-600'}">
                     ${t.status}
                   </span>
-                  <button onclick="deleteTeacher('${t.id}')" title="Delete Teacher" class="text-slate-300 hover:text-rose-600 transition p-1 text-xs">
-                    <i class="fa-regular fa-trash-can"></i>
-                  </button>
+                  ${CURRENT_ROLE !== 'manager' ? `
+                    <button onclick="deleteTeacher('${t.id}')" title="Delete Teacher" class="text-slate-300 hover:text-rose-600 transition p-1 text-xs">
+                      <i class="fa-regular fa-trash-can"></i>
+                    </button>
+                  ` : ''}
                 </div>
               </div>
 
@@ -9781,7 +9845,7 @@
       }
     }
 
-    // TEACHER PORTAL LOGIN & SESSION MANAGEMENT
+    // TEACHER & MANAGER PORTAL ROLE & SESSION MANAGEMENT
     function switchUserRole(role) {
       CURRENT_ROLE = role;
 
@@ -9801,15 +9865,74 @@
         }
       }
 
-      document.querySelectorAll('.role-owner').forEach(el => {
-        el.style.display = (role === 'owner') ? 'flex' : 'none';
+      // Owner and Manager get access to ALL tabs and features
+      const canAccessAllTabs = (role === 'owner' || role === 'manager');
+      document.querySelectorAll('.role-owner, .role-admin').forEach(el => {
+        el.style.display = canAccessAllTabs ? 'flex' : 'none';
       });
-      document.querySelectorAll('.role-admin').forEach(el => {
-        el.style.display = (role === 'owner' || role === 'manager') ? 'flex' : 'none';
-      });
+
+      // Synchronize role selector dropdown
+      const rSel = document.getElementById('userRoleSelect');
+      if (rSel && rSel.value !== role) rSel.value = role;
+
+      // Update Header Indicator / Badge
+      updateRoleHeaderBadge(role);
+
+      // Re-render UI components to reflect role permissions (deletion buttons & masked student contacts)
+      if (typeof renderFamiliesCards === 'function') renderFamiliesCards();
+      if (typeof renderFamiliesMasterTable === 'function') renderFamiliesMasterTable();
+      if (typeof renderAllStudentsListTable === 'function') renderAllStudentsListTable();
+      if (typeof renderTrialCards === 'function' && typeof CURRENT_TRIAL_FILTER !== 'undefined') renderTrialCards(CURRENT_TRIAL_FILTER);
+      if (typeof loadTeachers === 'function' && ALL_TEACHERS.length > 0) loadTeachers();
 
       if (role === 'teacher' || role === 'student') {
         switchTab('tab-attendance');
+      }
+    }
+
+    function updateRoleHeaderBadge(role) {
+      let badge = document.getElementById('headerRoleSecurityBadge');
+      if (!badge) {
+        const container = document.getElementById('userRoleSelect')?.parentElement;
+        if (container) {
+          badge = document.createElement('div');
+          badge.id = 'headerRoleSecurityBadge';
+          container.parentElement.insertBefore(badge, container.nextSibling);
+        }
+      }
+      if (!badge) return;
+
+      if (role === 'manager') {
+        const mgrLabel = ACTIVE_MANAGER_ID ? `Manager (${ACTIVE_MANAGER_ID})` : 'Manager Portal';
+        badge.className = 'hidden md:flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-indigo-950/80 border border-indigo-400/50 text-indigo-200 shadow-2xs';
+        badge.innerHTML = `<i class="fa-solid fa-user-shield text-amber-400"></i> <span>${mgrLabel}</span> &bull; <span class="text-[10px] text-amber-300 font-semibold"><i class="fa-solid fa-lock text-[9px]"></i> Protected Contacts &amp; Deletion Guard Active</span>`;
+        badge.classList.remove('hidden');
+      } else if (role === 'owner') {
+        badge.className = 'hidden md:flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-amber-950/60 border border-amber-400/50 text-amber-200 shadow-2xs';
+        badge.innerHTML = `<i class="fa-solid fa-crown text-brandGold"></i> <span>Owner &amp; Director</span>`;
+        badge.classList.remove('hidden');
+      } else {
+        badge.classList.add('hidden');
+      }
+    }
+
+    function initRoleFromUrl() {
+      const params = new URLSearchParams(window.location.search);
+      const urlRole = (params.get('role') || '').toLowerCase();
+      const mgrParam = params.get('m') || params.get('mgr') || params.get('id');
+
+      if (mgrParam) {
+        ACTIVE_MANAGER_ID = mgrParam;
+      }
+
+      if (urlRole === 'manager' || mgrParam) {
+        switchUserRole('manager');
+      } else if (urlRole === 'teacher') {
+        switchUserRole('teacher');
+      } else if (urlRole === 'student') {
+        switchUserRole('student');
+      } else {
+        switchUserRole('owner');
       }
     }
 
@@ -10081,9 +10204,11 @@
                         <button onclick="convertTrialFromSchedule('${slot.student_id}')" class="px-1.5 py-0.5 bg-emerald-600 hover:bg-emerald-700 text-white text-[9px] font-black rounded shadow-2xs flex items-center gap-0.5 transition" title="Regularize Student">
                           <i class="fa-solid fa-circle-check text-[8px]"></i> Regularize
                         </button>
-                        <button onclick="handleDeleteSlot('${slot.id}')" class="text-rose-500 hover:text-rose-700 text-[10px] font-bold" title="Unassign">
-                          <i class="fa-solid fa-trash-can"></i>
-                        </button>
+                        ${CURRENT_ROLE !== 'manager' ? `
+                          <button onclick="handleDeleteSlot('${slot.id}')" class="text-rose-500 hover:text-rose-700 text-[10px] font-bold" title="Unassign">
+                            <i class="fa-solid fa-trash-can"></i>
+                          </button>
+                        ` : ''}
                       </div>
                     </div>
                   </td>
@@ -10100,9 +10225,11 @@
                       </div>
                       <div class="flex items-center justify-between gap-1 mt-0.5">
                         <span class="text-[9px] text-slate-400 font-mono truncate max-w-[65px]">${slot.student_id || ''}</span>
-                        <button onclick="handleDeleteSlot('${slot.id}')" class="text-rose-500 hover:text-rose-700 text-[10px] font-bold ml-auto" title="Unassign">
-                          <i class="fa-solid fa-trash-can"></i>
-                        </button>
+                        ${CURRENT_ROLE !== 'manager' ? `
+                          <button onclick="handleDeleteSlot('${slot.id}')" class="text-rose-500 hover:text-rose-700 text-[10px] font-bold ml-auto" title="Unassign">
+                            <i class="fa-solid fa-trash-can"></i>
+                          </button>
+                        ` : ''}
                       </div>
                     </div>
                   </td>
@@ -10225,6 +10352,10 @@
     }
 
     async function handleDeleteSlot(scheduleId) {
+      if (CURRENT_ROLE === 'manager') {
+        alert("Access Denied: Managers are not authorized to permanently delete class schedule allocations. Only the System Owner can perform permanent deletions.");
+        return;
+      }
       if (confirm('Unassign this student from this 30-minute slot?')) {
         await db.from('class_schedules').delete().eq('id', scheduleId);
         await fetchTeacherSchedules();
@@ -12245,10 +12376,10 @@ Al-Huda Islamic Centre Management`;
       document.getElementById('feeInvPeriod').innerText = `${r.month} ${r.year}`;
 
       const emailEl = document.getElementById('feeInvParentEmail');
-      if (emailEl) emailEl.innerText = r.email || r.parentEmail || '--';
+      if (emailEl) emailEl.innerText = (CURRENT_ROLE === 'manager') ? maskStudentEmail(r.email || r.parentEmail || '') : (r.email || r.parentEmail || '--');
 
       const phoneEl = document.getElementById('feeInvWhatsAppNo');
-      if (phoneEl) phoneEl.innerText = r.whatsapp || '--';
+      if (phoneEl) phoneEl.innerText = (CURRENT_ROLE === 'manager') ? maskStudentPhone(r.whatsapp || '') : (r.whatsapp || '--');
 
       const cur = r.currency || 'USD';
       document.getElementById('feeInvCurrentDue').innerText = `${cur} ${parseFloat(r.monthlyFee || 0).toFixed(2)}`;
@@ -12329,7 +12460,14 @@ Al-Huda Islamic Centre Management`;
 
       const waMsg = `Assalam-o-Alaikum Respected ${r.parentName},\n\n*OFFICIAL TUITION FEE RECEIPT - AL-HUDA ISLAMIC CENTRE*\n--------------------------------------\nReceipt No: *${r.receiptNo}*\nDate: *${r.date}*\nStudent(s): *${r.studentsNames}*\nBilling Period: *${r.month} ${r.year}*\nTotal Due: *${cur} ${parseFloat(r.totalPayable || 0).toFixed(2)}*\n${creditMsg}Amount Paid: *${cur} ${parseFloat(r.amountPaid || 0).toFixed(2)}*\nRemaining Balance: *${cur} ${remaining.toFixed(2)}*\nStatus: *${r.status}*\n--------------------------------------\nJazakAllahu Khairan!\n*Al-Huda Islamic Centre Accounts*`;
       const waBtn = document.getElementById('feeInvWhatsAppBtn');
-      if (waBtn) waBtn.href = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(waMsg)}`;
+      if (waBtn) {
+        if (CURRENT_ROLE === 'manager') {
+          waBtn.style.display = 'none';
+        } else {
+          waBtn.style.display = 'inline-flex';
+          waBtn.href = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(waMsg)}`;
+        }
+      }
 
       openModal('modalFeeInvoice');
     }
@@ -12778,9 +12916,15 @@ Al-Huda Islamic Centre Management`;
               <button onclick="selectFeeFamily('${item.familyId}')" class="px-2.5 py-1 bg-emerald-700 text-white rounded-lg text-xs font-bold hover:bg-emerald-800 transition">
                 <i class="fa-solid fa-cash-register mr-1"></i>Collect
               </button>
-              <a href="${waUrl}" target="_blank" class="px-2.5 py-1 bg-emerald-600 text-white rounded-lg text-xs font-bold hover:bg-emerald-700 inline-flex items-center gap-1 transition">
-                <i class="fa-brands fa-whatsapp"></i>Remind
-              </a>
+              ${CURRENT_ROLE !== 'manager' ? `
+                <a href="${waUrl}" target="_blank" class="px-2.5 py-1 bg-emerald-600 text-white rounded-lg text-xs font-bold hover:bg-emerald-700 inline-flex items-center gap-1 transition">
+                  <i class="fa-brands fa-whatsapp"></i>Remind
+                </a>
+              ` : `
+                <span class="px-2.5 py-1 bg-amber-50 text-amber-800 border border-amber-200 rounded-lg text-[10px] font-bold inline-flex items-center gap-1" title="Protected Student Contact for Manager">
+                  <i class="fa-solid fa-lock text-amber-500 text-[10px]"></i> Protected
+                </span>
+              `}
             </td>
           </tr>
         `;
@@ -13182,7 +13326,8 @@ Al-Huda Islamic Centre Management`;
       const regStus = (fam.students || []).filter(s => (s.status || '').toLowerCase() !== 'trial');
       document.getElementById('ledgerStudentsNames').innerText = regStus.map(s => s.name).join(', ') || 'Enrolled Student';
       const availCredit = getFamilyAvailableAdvanceCredit(famId);
-      document.getElementById('ledgerContactInfo').innerHTML = `${fam.country || 'International'} • WhatsApp: ${fam.whatsapp || '--'} • <span class="text-emerald-700 font-bold bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200"><i class="fa-solid fa-wallet mr-1"></i>Advance Credit: ${fam.currency || 'USD'} ${availCredit.toFixed(2)}</span>`;
+      const displayedPhone = (CURRENT_ROLE === 'manager') ? maskStudentPhone(fam.whatsapp || '') : (fam.whatsapp || '--');
+      document.getElementById('ledgerContactInfo').innerHTML = `${fam.country || 'International'} • WhatsApp: ${displayedPhone} • <span class="text-emerald-700 font-bold bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200"><i class="fa-solid fa-wallet mr-1"></i>Advance Credit: ${fam.currency || 'USD'} ${availCredit.toFixed(2)}</span>`;
       document.getElementById('ledgerMonthlyFee').innerText = `${fam.currency || 'USD'} ${parseFloat(fam.monthly_fee || 0).toFixed(2)}`;
 
       // Render 12 months status cards
@@ -13765,9 +13910,15 @@ Al-Huda Islamic Centre Management`;
                 </div>
                 <div class="flex items-center justify-between">
                   <span class="text-slate-400 font-medium text-[11px]"><i class="fa-brands fa-whatsapp text-emerald-600"></i> WhatsApp:</span>
-                  <a href="${waLink}" target="_blank" class="font-mono font-bold text-emerald-700 hover:underline flex items-center gap-1">
-                    ${t.whatsapp} <i class="fa-solid fa-arrow-up-right-from-square text-[10px]"></i>
-                  </a>
+                  ${CURRENT_ROLE === 'manager' ? `
+                    <span class="font-mono font-bold text-slate-600 flex items-center gap-1" title="Protected Student Contact">
+                      <i class="fa-solid fa-lock text-amber-500 text-[10px]"></i> ${maskStudentPhone(t.whatsapp)}
+                    </span>
+                  ` : `
+                    <a href="${waLink}" target="_blank" class="font-mono font-bold text-emerald-700 hover:underline flex items-center gap-1">
+                      ${t.whatsapp} <i class="fa-solid fa-arrow-up-right-from-square text-[10px]"></i>
+                    </a>
+                  `}
                 </div>
                 <div class="flex items-center justify-between">
                   <span class="text-slate-400 font-medium text-[11px]"><i class="fa-solid fa-earth-americas text-blue-500"></i> Location:</span>
@@ -13814,9 +13965,15 @@ Al-Huda Islamic Centre Management`;
               `}
 
               <div class="flex items-center justify-between gap-1.5">
-                <a href="${waLink}" target="_blank" class="flex-1 py-1.5 px-2 bg-slate-100 hover:bg-emerald-50 hover:text-emerald-700 text-slate-600 rounded-lg text-[11px] font-bold text-center transition flex items-center justify-center gap-1">
-                  <i class="fa-brands fa-whatsapp text-emerald-600"></i> WhatsApp
-                </a>
+                ${CURRENT_ROLE !== 'manager' ? `
+                  <a href="${waLink}" target="_blank" class="flex-1 py-1.5 px-2 bg-slate-100 hover:bg-emerald-50 hover:text-emerald-700 text-slate-600 rounded-lg text-[11px] font-bold text-center transition flex items-center justify-center gap-1">
+                    <i class="fa-brands fa-whatsapp text-emerald-600"></i> WhatsApp
+                  </a>
+                ` : `
+                  <span class="flex-1 py-1.5 px-2 bg-amber-50 text-amber-800 rounded-lg text-[10px] font-bold text-center border border-amber-200 flex items-center justify-center gap-1" title="Protected Contact for Manager">
+                    <i class="fa-solid fa-shield-halved text-amber-600"></i> Protected
+                  </span>
+                `}
 
                 <button onclick="openTrialEmailModal('${t.id}')" title="Send Official Welcome & Zoom Link Email from ceoislamiccentre@gmail.com" class="flex-1 py-1.5 px-2 bg-purple-50 hover:bg-purple-100 hover:text-purple-800 text-purple-700 rounded-lg text-[11px] font-bold text-center transition flex items-center justify-center gap-1 border border-purple-200">
                   <i class="fa-solid fa-envelope text-purple-600"></i> Send Email
@@ -13828,9 +13985,11 @@ Al-Huda Islamic Centre Management`;
                   </a>
                 ` : ''}
 
-                <button onclick="deleteTrial('${t.id}')" title="Discontinue / Remove Trial" class="py-1.5 px-2.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg text-xs font-bold transition">
-                  <i class="fa-regular fa-trash-can"></i>
-                </button>
+                ${CURRENT_ROLE !== 'manager' ? `
+                  <button onclick="deleteTrial('${t.id}')" title="Discontinue / Remove Trial" class="py-1.5 px-2.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg text-xs font-bold transition">
+                    <i class="fa-regular fa-trash-can"></i>
+                  </button>
+                ` : ''}
               </div>
             </div>
 
@@ -14096,7 +14255,7 @@ Al-Huda Islamic Centre Management`;
       document.getElementById('convTrialId').value = trial.id;
       document.getElementById('convSummaryStudent').innerText = `${trial.student_name} (${trial.student_age} yrs, ${trial.student_gender || 'Child'})`;
       document.getElementById('convSummaryParent').innerText = trial.parent_name;
-      document.getElementById('convSummaryPhone').innerText = trial.whatsapp;
+      document.getElementById('convSummaryPhone').innerText = (CURRENT_ROLE === 'manager') ? maskStudentPhone(trial.whatsapp || '') : (trial.whatsapp || '--');
       document.getElementById('convSummaryLocation').innerText = `${trial.country} • ${trial.timezone || 'UTC'}`;
       document.getElementById('convSummaryCourse').innerText = trial.course;
       document.getElementById('convSummaryTeacher').innerText = teacherName;
@@ -14141,7 +14300,7 @@ Al-Huda Islamic Centre Management`;
       if (joiningInput) joiningInput.value = new Date().toISOString().slice(0, 10);
 
       const emailInput = document.getElementById('convStudentEmail');
-      if (emailInput) emailInput.value = trial.email || '';
+      if (emailInput) emailInput.value = (CURRENT_ROLE === 'manager') ? maskStudentEmail(trial.email || '') : (trial.email || '');
 
       const zoomInput = document.getElementById('convMeetingLink');
       if (zoomInput) zoomInput.value = trial.meeting_link || '';
@@ -14176,7 +14335,10 @@ Al-Huda Islamic Centre Management`;
       const billing_day = parseInt(document.getElementById('convBillingDay').value) || 1;
       const days_per_week = document.getElementById('convDaysPerWeek').value;
       const joining_date = document.getElementById('convJoiningDate').value || new Date().toISOString().slice(0, 10);
-      const student_email = (document.getElementById('convStudentEmail')?.value || trial.email || '').trim();
+      let student_email = (document.getElementById('convStudentEmail')?.value || '').trim();
+      if ((student_email.includes('••') || !student_email) && trial.email) {
+        student_email = trial.email;
+      }
       const permanent_zoom_link = (document.getElementById('convMeetingLink')?.value || trial.meeting_link || '').trim();
       const send_welcome_email = document.getElementById('convSendWelcomeEmail')?.checked;
 
@@ -14393,6 +14555,10 @@ Al-Huda Islamic Centre Management`;
     }
 
     async function deleteTrial(trialId) {
+      if (CURRENT_ROLE === 'manager') {
+        alert("Access Denied: Managers are not authorized to permanently delete trial records. Only the System Owner can perform permanent deletions.");
+        return;
+      }
       const trial = ALL_TRIALS.find(t => t.id === trialId);
       if (!trial) return;
 
@@ -14566,11 +14732,21 @@ Web Portal: https://alhuda-lms.vercel.app`;
           : 'px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-100 text-emerald-800 border border-emerald-200';
       }
 
-      document.getElementById('emailPreviewTo').value = data.toEmail || '';
-      document.getElementById('emailPreviewSubject').value = compiled.subject;
-      document.getElementById('emailPreviewHtmlRender').innerHTML = compiled.htmlContent;
-      document.getElementById('emailPreviewPlainText').value = compiled.plainText;
-      document.getElementById('emailRecipientPhone').value = data.phone || '';
+      if (CURRENT_ROLE === 'manager') {
+        document.getElementById('emailPreviewTo').value = maskStudentEmail(data.toEmail || '');
+        document.getElementById('emailRecipientPhone').value = maskStudentPhone(data.phone || '');
+        const waCopyBtn = document.getElementById('btnEmailModalWhatsApp');
+        if (waCopyBtn) waCopyBtn.style.display = 'none';
+        const gmailBtn = document.getElementById('btnEmailModalGmail');
+        if (gmailBtn) gmailBtn.style.display = 'none';
+      } else {
+        document.getElementById('emailPreviewTo').value = data.toEmail || '';
+        document.getElementById('emailRecipientPhone').value = data.phone || '';
+        const waCopyBtn = document.getElementById('btnEmailModalWhatsApp');
+        if (waCopyBtn) waCopyBtn.style.display = 'inline-flex';
+        const gmailBtn = document.getElementById('btnEmailModalGmail');
+        if (gmailBtn) gmailBtn.style.display = 'inline-flex';
+      }
 
       switchEmailModalView('html');
       openModal('modalEmailPreview');
@@ -14610,6 +14786,10 @@ Web Portal: https://alhuda-lms.vercel.app`;
     }
 
     function openOfficialGmailComposer() {
+      if (CURRENT_ROLE === 'manager') {
+        alert("Access Denied: Direct external emailing from CEO account is restricted for Managers. Please use the automated send button.");
+        return;
+      }
       const to = encodeURIComponent(document.getElementById('emailPreviewTo').value.trim());
       const su = encodeURIComponent(document.getElementById('emailPreviewSubject').value.trim());
       const body = encodeURIComponent(document.getElementById('emailPreviewPlainText').value.trim());
@@ -14619,6 +14799,10 @@ Web Portal: https://alhuda-lms.vercel.app`;
     }
 
     function dispatchEmailViaWhatsApp() {
+      if (CURRENT_ROLE === 'manager') {
+        alert("Access Denied: Managers cannot dispatch messages directly to parent WhatsApp.");
+        return;
+      }
       const phone = (document.getElementById('emailRecipientPhone').value || '').replace(/[^0-9]/g, '');
       const body = encodeURIComponent(document.getElementById('emailPreviewPlainText').value.trim());
       if (!phone) {
@@ -14629,7 +14813,10 @@ Web Portal: https://alhuda-lms.vercel.app`;
     }
 
     async function dispatchEmailNow() {
-      const toEmail = document.getElementById('emailPreviewTo').value.trim();
+      let toEmail = (document.getElementById('emailPreviewTo')?.value || '').trim();
+      if ((CURRENT_ROLE === 'manager' || toEmail.includes('••')) && CURRENT_EMAIL_PAYLOAD?.toEmail) {
+        toEmail = CURRENT_EMAIL_PAYLOAD.toEmail;
+      }
       const subject = document.getElementById('emailPreviewSubject').value.trim();
       const text = document.getElementById('emailPreviewPlainText').value.trim();
       const btn = document.getElementById('btnDispatchEmailNow');
