@@ -10090,6 +10090,7 @@
     }
 
     async function fetchTeacherSchedules() {
+      if (!CURRENT_MATRIX_TEACHER || !CURRENT_MATRIX_TEACHER.id) return;
       const { data: scheds } = await db.from('class_schedules')
         .select('*, students(name, status, notes)')
         .eq('teacher_id', CURRENT_MATRIX_TEACHER.id);
@@ -15460,9 +15461,11 @@ Web Portal: https://alhuda-lms.vercel.app`;
 
           await db.from('students').update({ notes: JSON.stringify(meta) }).eq('id', studentId);
 
-          await fetchTeacherSchedules();
-          render2DMatrixTable();
-          loadTeachers();
+          if (CURRENT_MATRIX_TEACHER && CURRENT_MATRIX_TEACHER.id) {
+            await fetchTeacherSchedules();
+            render2DMatrixTable();
+          }
+          try { loadTeachers(); } catch (e) {}
 
           alert(`✅ Approved & Schedule Updated Automatically!\n\nStudent: ${st.name} (${st.id})\nTeacher: ${req.teacher_name || 'Assigned Teacher'}\nOld Time: ${req.old_slot_label || oldStart}\nNew Time: ${req.new_slot_label || newStart.slice(0,5)}\nUpdated Timetable Slots: ${targetIds.length} weekly session(s)`);
         } else if (rType === 'reschedule') {
