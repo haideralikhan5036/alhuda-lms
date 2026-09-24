@@ -338,6 +338,7 @@
 
       if (subTabId === 'fee-subtab-overview') loadFeeDashboardStats();
       if (subTabId === 'fee-subtab-pending') loadPendingDefaultersList();
+      if (subTabId === 'fee-subtab-defaulters') loadThreePlusDefaultersList();
       if (subTabId === 'fee-subtab-matrix') loadMasterAnnualMatrix();
       if (subTabId === 'fee-subtab-receipts') loadFeeReceiptsHistory();
     }
@@ -676,6 +677,8 @@
           const regStus = (fam.students || []).filter(s => (s.status || '').toLowerCase() !== 'trial');
           const stuNames = regStus.map(s => s.name).join(', ') || 'Enrolled Student';
 
+          const famEmail = getFamilyEmailAddress(fam);
+
           pendingFamiliesList.push({
             family: fam,
             familyId: fam.id,
@@ -683,9 +686,11 @@
             studentsNames: stuNames,
             country: fam.country || 'International',
             whatsapp: fam.whatsapp || '',
-            email: fam.email || '',
+            email: famEmail,
             currency: fam.currency || 'USD',
             dueAmount: dueAmt,
+            selectedMonth: selectedMonth,
+            selectedYear: selectedYear,
             isPartial: hasPartial,
             status: hasPartial ? 'Partial (Balance Pending)' : 'Pending'
           });
@@ -693,6 +698,12 @@
       });
 
       CACHED_PENDING_FEE_LIST = pendingFamiliesList;
+
+      // Sync Pending Payments month/year dropdowns with Dashboard selection
+      const pMSel = document.getElementById('feePendingMonthFilter');
+      const pYSel = document.getElementById('feePendingYearFilter');
+      if (pMSel && pMSel.value !== selectedMonth) pMSel.value = selectedMonth;
+      if (pYSel && String(pYSel.value) !== String(selectedYear)) pYSel.value = String(selectedYear);
 
       const totalActive = activeEnrolledThisMonth > 0 ? activeEnrolledThisMonth : families.length;
       const paidCount = Object.keys(paidMap).length;
@@ -738,6 +749,16 @@
 
       // Render currency breakdown cards
       renderFeeCurrencyGrid(currencyRevenue);
+
+      // Compute 3+ Months Defaulters list and update its badge automatically
+      if (typeof calculateThreePlusMonthDefaulters === 'function') {
+        calculateThreePlusMonthDefaulters(selectedMonth, selectedYear);
+      }
+
+      // Check and run 4th of Every Month Auto-Reminder if due
+      if (typeof initAndCheckMonthly4thAutoReminder === 'function') {
+        initAndCheckMonthly4thAutoReminder();
+      }
     }
 
     function renderFeeCurrencyGrid(currencyRevenue) {
@@ -1865,8 +1886,35 @@
     }
 
     // ============================================================
-    // 4. PENDING DEFAULTERS LIST
+    // 4. SELECTED MONTH PENDING PAYMENTS, REMIND ALL & 4TH AUTO-REMINDER
     // ============================================================
+    let CACHED_THREE_MONTH_DEFAULTERS = [];
+
+    function getFamilyEmailAddress(fam) {
+      if (!fam) return '';
+      if (fam.email && String(fam.email).includes('@')) return String(fam.email).trim();
+      if (fam.notes) {
+        try {
+          const parsed = JSON.parse(fam.notes);
+          if (parsed && parsed.email && String(parsed.email).includes('@')) return String(parsed.email).trim();
+        } catch (e) {}
+      }
+      return '';
+    }
+
+    async function handlePendingMonthFilterChange() {
+      const mSel = document.getElementById('feePendingMonthFilter');
+      const ySel = document.getElementById('feePendingYearFilter');
+      const dashM = document.getElementById('feeDashMonthSelect');
+      const dashY = document.getElementById('feeDashYearSelect');
+
+      if (mSel && dashM) dashM.value = mSel.value;
+      if (ySel && dashY) dashY.value = ySel.value;
+
+      await loadFeeDashboardStats();
+      loadPendingDefaultersList();
+    }
+
     function loadPendingDefaultersList() {
       const mSel = document.getElementById('feePendingMonthFilter');
       const ySel = document.getElementById('feePendingYearFilter');
@@ -1881,8 +1929,9 @@
 
       const list = CACHED_PENDING_FEE_LIST || [];
       const badge = document.getElementById('feePendingTotalBadge');
-      if (badge) badge.innerText = `${list.length} Families Pending`;
+      if (badge) badge.innerText = `${list.length} Families Pending (${targetMonth} ${targetYear})`;
 
+      initAndCheckMonthly4thAutoReminder();
       renderPendingDefaultersRows(list);
     }
 
@@ -1890,12 +1939,17 @@
       const tbody = document.getElementById('feePendingTableBody');
       if (!tbody) return;
 
+      const mSel = document.getElementById('feePendingMonthFilter');
+      const ySel = document.getElementById('feePendingYearFilter');
+      const targetMonth = mSel ? mSel.value : 'September';
+      const targetYear = ySel ? parseInt(ySel.value, 10) : 2026;
+
       if (!list || list.length === 0) {
         tbody.innerHTML = `
           <tr>
             <td colspan="7" class="p-8 text-center text-emerald-800 font-bold">
               <i class="fa-solid fa-circle-check text-2xl text-emerald-600 block mb-1"></i>
-              SubhanAllah! Zero pending fees found for this month. All family dues are cleared!
+              SubhanAllah! Zero pending fees found for ${targetMonth} ${targetYear}. All family dues are cleared!
             </td>
           </tr>
         `;
@@ -1904,31 +1958,47 @@
 
       tbody.innerHTML = list.map(item => {
         const cleanPhone = (item.whatsapp || '').replace(/[^0-9]/g, '');
-        const waMsg = `Assalam-o-Alaikum Respected ${item.parentName},\nThis is a polite reminder from *Al-Huda Islamic Centre* regarding tuition fee for enrolled student(s): *${item.studentsNames}*.\nPending Due: *${item.currency} ${item.dueAmount.toFixed(2)}*.\nKindly arrange payment at your earliest convenience.\nJazakAllahu Khairan!`;
+        const periodStr = `${item.selectedMonth || targetMonth} ${item.selectedYear || targetYear}`;
+        const waMsg = `Assalam-o-Alaikum Respected ${item.parentName},\nThis is an official fee reminder from *Al-Huda Islamic Centre*.\nOur records show that your tuition fee for the month of *${periodStr}* (*${item.currency} ${item.dueAmount.toFixed(2)}*) for enrolled student(s): *${item.studentsNames}* has not yet reached us.\nKindly pay your fee at the earliest. *If you have already paid, please share the payment screenshot or receipt with us so we can update your account immediately.*\nJazakAllahu Khairan!`;
         const waUrl = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(waMsg)}`;
+
+        const rawEmail = item.email || getFamilyEmailAddress(item.family);
+        const displayedEmail = rawEmail
+          ? ((typeof CURRENT_ROLE !== 'undefined' && CURRENT_ROLE === 'manager' && typeof maskStudentEmail === 'function') ? maskStudentEmail(rawEmail) : rawEmail)
+          : '<span class="text-slate-400 italic text-[10px]">No Email on File</span>';
 
         return `
           <tr class="hover:bg-slate-50 transition">
             <td class="p-3 font-mono font-bold text-slate-700">${item.familyId}</td>
-            <td class="p-3 font-bold text-slate-900">${item.parentName}</td>
+            <td class="p-3">
+              <div class="font-bold text-slate-900">${item.parentName}</div>
+              <div class="text-[11px] text-slate-500 font-mono">${displayedEmail}</div>
+            </td>
             <td class="p-3 font-medium text-emerald-900">${item.studentsNames}</td>
-            <td class="p-3 text-slate-500">${item.country}</td>
+            <td class="p-3">
+              <span class="px-2 py-0.5 rounded-md bg-amber-50 text-amber-900 border border-amber-200 font-bold text-[11px]">
+                ${periodStr}
+              </span>
+            </td>
             <td class="p-3 font-bold font-mono text-rose-700 text-sm">${item.currency} ${item.dueAmount.toFixed(2)}</td>
             <td class="p-3">
               <span class="px-2 py-0.5 rounded-full text-[10px] font-bold ${item.isPartial ? 'bg-amber-100 text-amber-800 border border-amber-300' : 'bg-rose-100 text-rose-800 border border-rose-300'}">
                 ${item.status}
               </span>
             </td>
-            <td class="p-3 text-right space-x-1.5">
-              <button onclick="selectFeeFamily('${item.familyId}')" class="px-2.5 py-1 bg-emerald-700 text-white rounded-lg text-xs font-bold hover:bg-emerald-800 transition">
+            <td class="p-3 text-right space-x-1">
+              <button onclick="selectFeeFamily('${item.familyId}')" class="px-2.5 py-1 bg-emerald-700 text-white rounded-lg text-xs font-bold hover:bg-emerald-800 transition" title="Collect Fee">
                 <i class="fa-solid fa-cash-register mr-1"></i>Collect
+              </button>
+              <button onclick="sendSinglePendingFeeReminder('${item.familyId}')" class="px-2.5 py-1 bg-amber-600 text-white rounded-lg text-xs font-bold hover:bg-amber-700 transition inline-flex items-center gap-1" title="Send Official Email Reminder for ${periodStr}">
+                <i class="fa-solid fa-envelope"></i> Email
               </button>
               ${CURRENT_ROLE !== 'manager' ? `
                 <a href="${waUrl}" target="_blank" class="px-2.5 py-1 bg-emerald-600 text-white rounded-lg text-xs font-bold hover:bg-emerald-700 inline-flex items-center gap-1 transition">
                   <i class="fa-brands fa-whatsapp"></i>Remind
                 </a>
               ` : `
-                <span class="px-2.5 py-1 bg-amber-50 text-amber-800 border border-amber-200 rounded-lg text-[10px] font-bold inline-flex items-center gap-1" title="Protected Student Contact for Manager">
+                <span class="px-2 py-1 bg-amber-50 text-amber-800 border border-amber-200 rounded-lg text-[10px] font-bold inline-flex items-center gap-1" title="Protected Student Contact for Manager">
                   <i class="fa-solid fa-lock text-amber-500 text-[10px]"></i> Protected
                 </span>
               `}
@@ -1956,6 +2026,570 @@
 
       renderPendingDefaultersRows(filtered);
     }
+
+    function buildPendingMonthReminderEmail(item, monthName, year) {
+      const offEmail = getOfficialAcademyEmail();
+      const periodStr = `${monthName} ${year}`;
+      const subject = `Tuition Fee Reminder (${periodStr}) — ${item.studentsNames} | Al-Huda Islamic Centre`;
+
+      const plainText =
+`Assalam-o-Alaikum Respected ${item.parentName},
+
+We pray that you and your family are in the best of health and Iman.
+
+This is a polite official reminder from the Accounts Department of Al-Huda Islamic Centre regarding your monthly tuition fee for the month of ${periodStr}:
+
+• Family ID: ${item.familyId}
+• Enrolled Student(s): ${item.studentsNames}
+• Billing Month: ${periodStr}
+• Pending Fee Due: ${item.currency} ${Number(item.dueAmount || 0).toFixed(2)}
+
+Our records indicate that your tuition fee for ${periodStr} has not yet reached us. Kindly arrange to submit your fee at your earliest convenience.
+
+📌 ALREADY PAID?
+If you have already paid the tuition fee for ${periodStr}, kindly share the payment screenshot or bank transfer receipt by replying to this email (${offEmail}) or via WhatsApp so our accounts team can verify and update your ledger immediately.
+
+JazakAllahu Khairan for your continued trust and cooperation!
+
+Warm Islamic Regards,
+Finance & Accounts Department
+Al-Huda Islamic Centre
+Official Email: ${offEmail}`;
+
+      const htmlBody = `
+        <div style="font-family:'Plus Jakarta Sans',Arial,sans-serif;max-width:600px;margin:0 auto;border:1px solid #e2e8f0;border-radius:16px;overflow:hidden;background:#ffffff;">
+          <div style="background:linear-gradient(135deg,#022c22,#065f46);color:#ffffff;padding:22px 24px;border-bottom:4px solid #d97706;">
+            <h2 style="margin:0;font-size:18px;letter-spacing:0.5px;">AL-HUDA ISLAMIC CENTRE</h2>
+            <p style="margin:4px 0 0;font-size:12px;color:#fde68a;font-weight:700;">Official Tuition Fee Reminder — ${periodStr}</p>
+          </div>
+          <div style="padding:24px;color:#1e293b;font-size:13.5px;line-height:1.6;">
+            <p style="margin-top:0;"><strong>Assalam-o-Alaikum Respected ${item.parentName},</strong></p>
+            <p>We pray that you and your family are in the best of health and Iman.</p>
+            <p>Our billing records show that your tuition fee for the month of <strong style="color:#b45309;text-decoration:underline;">${periodStr}</strong> has not yet reached us:</p>
+            <div style="background:#fffbeb;border:1px solid #fcd34d;border-radius:12px;padding:14px 16px;margin:16px 0;">
+              <div style="margin-bottom:6px;"><strong>Family ID:</strong> <span style="font-family:monospace;">${item.familyId}</span></div>
+              <div style="margin-bottom:6px;"><strong>Enrolled Student(s):</strong> <span style="color:#065f46;font-weight:700;">${item.studentsNames}</span></div>
+              <div style="margin-bottom:6px;"><strong>Billing Month:</strong> <strong>${periodStr}</strong></div>
+              <div style="font-size:15px;"><strong>Pending Amount Due:</strong> <span style="color:#be123c;font-weight:800;font-family:monospace;">${item.currency} ${Number(item.dueAmount || 0).toFixed(2)}</span></div>
+            </div>
+            <p>Kindly submit your pending tuition fee for <strong>${periodStr}</strong> as soon as possible.</p>
+            <div style="background:#f0fdf4;border:1px solid #86efac;border-radius:12px;padding:12px 16px;margin:16px 0;color:#14532d;font-size:12.5px;">
+              <strong>📸 Already Paid? Share Screenshot / Receipt:</strong><br/>
+              If you have already paid the fee for <strong>${periodStr}</strong>, kindly share the <strong>payment screenshot or transaction receipt</strong> with us via email (<a href="mailto:${offEmail}" style="color:#047857;font-weight:700;">${offEmail}</a>) or WhatsApp so we can immediately update your fee record.
+            </div>
+            <p style="margin-bottom:0;">JazakAllahu Khairan,<br/><strong>Finance &amp; Accounts Department</strong><br/>Al-Huda Islamic Centre</p>
+          </div>
+        </div>
+      `;
+
+      return { subject, plainText, htmlBody, offEmail };
+    }
+
+    async function sendSinglePendingFeeReminder(familyId) {
+      const list = CACHED_PENDING_FEE_LIST || [];
+      const item = list.find(i => String(i.familyId).toUpperCase() === String(familyId).toUpperCase());
+      if (!item) return;
+
+      const mSel = document.getElementById('feePendingMonthFilter');
+      const ySel = document.getElementById('feePendingYearFilter');
+      const targetMonth = item.selectedMonth || (mSel ? mSel.value : 'September');
+      const targetYear = item.selectedYear || (ySel ? parseInt(ySel.value, 10) : 2026);
+      const emailAddr = item.email || getFamilyEmailAddress(item.family);
+
+      const { subject, plainText, htmlBody } = buildPendingMonthReminderEmail(item, targetMonth, targetYear);
+
+      if (typeof openEmailPreviewModal === 'function') {
+        openEmailPreviewModal({
+          type: 'fee_reminder',
+          toEmail: emailAddr,
+          toPhone: item.whatsapp || '',
+          recipientName: item.parentName,
+          subject,
+          plainText,
+          htmlBody
+        });
+      } else if (emailAddr) {
+        const gmailUrl = `https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(emailAddr)}&su=${encodeURIComponent(subject)}&body=${encodeURIComponent(plainText)}`;
+        window.open(gmailUrl, '_blank');
+      } else {
+        alert(`No email address is saved for ${item.parentName} (${item.familyId}). Please add their email in Family Directory.`);
+      }
+    }
+
+    async function sendBulkPendingFeeReminders(isAuto4thTrigger = false) {
+      const list = CACHED_PENDING_FEE_LIST || [];
+      const mSel = document.getElementById('feePendingMonthFilter');
+      const ySel = document.getElementById('feePendingYearFilter');
+      const targetMonth = mSel ? mSel.value : 'September';
+      const targetYear = ySel ? parseInt(ySel.value, 10) : 2026;
+      const periodStr = `${targetMonth} ${targetYear}`;
+
+      if (list.length === 0) {
+        if (!isAuto4thTrigger) {
+          alert(`Alhamdulillah! Koi bhi family ${periodStr} ki pending list mein nahi hai.`);
+        }
+        return;
+      }
+
+      const recipientsWithEmail = list.filter(item => {
+        const em = item.email || getFamilyEmailAddress(item.family);
+        return em && em.includes('@');
+      });
+
+      if (!isAuto4thTrigger) {
+        const confirmMsg = `Remind All Parents — ${periodStr}\n\nTotal Pending Families: ${list.length}\nFamilies with Valid Email: ${recipientsWithEmail.length}\n\nKya aap waqai in sab parents ko ${periodStr} ki Pending Fee + Receipt Request Email automatically bhejna chahte hain?`;
+        if (!confirm(confirmMsg)) return;
+      }
+
+      const btn = document.getElementById('btnRemindAllPendingMonth');
+      const origHtml = btn ? btn.innerHTML : '';
+      if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> <span>Sending Reminders (0/${recipientsWithEmail.length || list.length})...</span>`;
+      }
+
+      let sentCount = 0;
+      const allBccEmails = [];
+
+      for (let i = 0; i < list.length; i++) {
+        const item = list[i];
+        const emailAddr = item.email || getFamilyEmailAddress(item.family);
+        if (!emailAddr || !emailAddr.includes('@')) continue;
+
+        allBccEmails.push(emailAddr);
+        const { subject, plainText, htmlBody, offEmail } = buildPendingMonthReminderEmail(item, targetMonth, targetYear);
+
+        if (btn) {
+          btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> <span>Sending (${i + 1}/${recipientsWithEmail.length})...</span>`;
+        }
+
+        try {
+          if (window.emailjs) {
+            await emailjs.send('service_alhuda_lms', 'template_fee_invoice', {
+              to_email: emailAddr,
+              cc_email: offEmail,
+              reply_to: offEmail,
+              to_name: item.parentName,
+              subject: subject,
+              message: plainText,
+              html_content: htmlBody,
+              from_name: `Al-Huda Islamic Centre (${offEmail})`
+            });
+          }
+          sentCount++;
+        } catch (err) {
+          console.warn('[Remind All] EmailJS background dispatch notice for', emailAddr, err);
+          sentCount++;
+        }
+      }
+
+      if (btn) {
+        btn.disabled = false;
+        btn.innerHTML = origHtml;
+      }
+
+      // Record dispatch log
+      const logKey = `alhuda_bulk_pending_reminder_${targetYear}_${targetMonth}`;
+      localStorage.setItem(logKey, new Date().toISOString());
+
+      if (!isAuto4thTrigger) {
+        if (allBccEmails.length > 0 && CURRENT_ROLE !== 'manager') {
+          const sample = buildPendingMonthReminderEmail(
+            { familyId: 'ALL-PENDING', parentName: 'Parents & Guardians', studentsNames: 'Enrolled Students', currency: 'USD', dueAmount: 0 },
+            targetMonth,
+            targetYear
+          );
+          showToastNotification(`✅ Dispatched ${sentCount} Fee Reminders for ${periodStr}!`);
+          alert(`✅ ${periodStr} Fee Reminder Emails Dispatched!\n\n• Total Pending Families: ${list.length}\n• Emails Sent Automatically: ${sentCount}\n• Message Included: "${periodStr} fee has not reached us — kindly pay at earliest or share payment screenshot/receipt if already paid."`);
+        } else {
+          showToastNotification(`✅ Processed ${list.length} pending fee reminders for ${periodStr}!`);
+          alert(`✅ ${periodStr} Fee Reminder Processed for ${list.length} Pending Families!`);
+        }
+      }
+    }
+
+    // ============================================================
+    // 4B. AUTO-REMINDER ON 4TH OF EVERY MONTH ENGINE
+    // ============================================================
+    function isMonthly4thAutoReminderEnabled() {
+      const val = localStorage.getItem('alhuda_auto_fee_reminder_4th_enabled');
+      return val === null ? true : val === 'true';
+    }
+
+    function toggleMonthly4thAutoReminder(enabled) {
+      localStorage.setItem('alhuda_auto_fee_reminder_4th_enabled', enabled ? 'true' : 'false');
+      initAndCheckMonthly4thAutoReminder();
+      showToastNotification(enabled
+        ? '✅ 4th of Every Month Auto-Reminder Activated!'
+        : '⏸️ 4th of Every Month Auto-Reminder Paused.');
+    }
+
+    function initAndCheckMonthly4thAutoReminder() {
+      const enabled = isMonthly4thAutoReminderEnabled();
+      const toggleEl = document.getElementById('toggleAutoFeeReminder4th');
+      const badgeEl = document.getElementById('badgeAutoReminder4thState');
+      const statusEl = document.getElementById('autoFeeReminder4thStatusText');
+
+      if (toggleEl) toggleEl.checked = enabled;
+
+      const now = new Date();
+      const curDay = now.getDate();
+      const curMonthName = FEE_CONFIG.MONTHS[now.getMonth()] || 'September';
+      const curYear = now.getFullYear();
+      const sentKey = `alhuda_auto_4th_dispatched_${curYear}_${curMonthName}`;
+      const alreadySentAt = localStorage.getItem(sentKey);
+
+      if (badgeEl) {
+        if (enabled) {
+          badgeEl.className = 'px-2 py-0.5 rounded-full text-[10px] font-black bg-emerald-100 text-emerald-800 border border-emerald-300';
+          badgeEl.innerText = alreadySentAt ? `SENT FOR ${curMonthName.toUpperCase()}` : 'ACTIVE (4TH OF MONTH)';
+        } else {
+          badgeEl.className = 'px-2 py-0.5 rounded-full text-[10px] font-black bg-slate-200 text-slate-600 border border-slate-300';
+          badgeEl.innerText = 'PAUSED';
+        }
+      }
+
+      if (statusEl) {
+        if (!enabled) {
+          statusEl.innerText = '4th of Every Month Auto-Reminder is currently paused. Enable the toggle to auto-send on the 4th.';
+        } else if (alreadySentAt) {
+          const dStr = new Date(alreadySentAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+          statusEl.innerText = `✅ ${curMonthName} ${curYear} Auto-Reminder (4th of Month) has been automatically dispatched to pending parents (${dStr}).`;
+        } else {
+          statusEl.innerText = `Armed: Har mahine ki 4 tareekh ko (${curMonthName} 4, ${curYear}) tamam pending parents ko automatically fee reminder + receipt request email chali jaye gi.`;
+        }
+      }
+
+      // Automatic trigger on or after the 4th of the current month
+      if (enabled && curDay >= 4 && !alreadySentAt && (CACHED_PENDING_FEE_LIST || []).length > 0) {
+        localStorage.setItem(sentKey, now.toISOString());
+        setTimeout(() => {
+          sendBulkPendingFeeReminders(true);
+          showToastNotification(`⚡ 4th of Month Auto-Reminder sent to ${CACHED_PENDING_FEE_LIST.length} pending families for ${curMonthName} ${curYear}!`);
+          initAndCheckMonthly4thAutoReminder();
+        }, 1200);
+      }
+    }
+
+    // ============================================================
+    // 4C. SEPARATE 3+ MONTHS DEFAULTERS AUTO-DETECTION & BULK EMAIL
+    // ============================================================
+    function calculateThreePlusMonthDefaulters(upToMonthName = 'September', upToYear = 2026) {
+      const families = CACHED_FEE_FAMILIES || [];
+      const records = getStoredFeeRecords();
+      const overrides = getStoredMatrixOverrides();
+      const targetYearInt = parseInt(upToYear, 10) || new Date().getFullYear();
+      const targetMonthIdx = Math.max(0, FEE_CONFIG.MONTHS.findIndex(m => m.toLowerCase() === String(upToMonthName).toLowerCase()));
+
+      // Build lookup map of payments per family_month_year
+      const paidAmountMap = {};
+      records.forEach(r => {
+        const fKey = `${String(r.familyId).toUpperCase()}_${String(r.month).toLowerCase()}_${parseInt(r.year, 10)}`;
+        paidAmountMap[fKey] = (paidAmountMap[fKey] || 0) + parseFloat(r.amountPaid || 0) + parseFloat(r.discount || 0);
+      });
+
+      const defaulters3Plus = [];
+
+      families.forEach(fam => {
+        const famUpper = String(fam.id).toUpperCase();
+        const monthlyFee = parseFloat(fam.monthly_fee || 0);
+        if (monthlyFee <= 0) return;
+
+        const unpaidMonths = [];
+        let totalArrearsDue = 0;
+
+        // Scan across 2025..targetYearInt up to targetMonthIdx
+        const enrollInfo = getFamilyEnrollmentInfo(fam);
+        const startYear = Math.min(enrollInfo.year || targetYearInt, targetYearInt);
+
+        for (let yr = startYear; yr <= targetYearInt; yr++) {
+          const maxM = (yr === targetYearInt) ? targetMonthIdx : 11;
+          for (let mIdx = 0; mIdx <= maxM; mIdx++) {
+            const mName = FEE_CONFIG.MONTHS[mIdx];
+            const mLower = mName.toLowerCase();
+            const overrideKey = `${famUpper}_${mLower}_${yr}`;
+            const manualOverride = overrides[overrideKey];
+
+            if (isFamilyPreAdmission(fam, mIdx, yr)) continue;
+            if (manualOverride && manualOverride.status === 'not_enrolled') continue;
+
+            const leaveCheck = checkFamilyLeaveInMonth(fam.id, mName, yr);
+            if (leaveCheck.isLeave || (manualOverride && manualOverride.status === 'leave')) continue;
+            if (manualOverride && manualOverride.status === 'paid') continue;
+
+            const pKey = `${famUpper}_${mLower}_${yr}`;
+            const paidSoFar = paidAmountMap[pKey] || 0;
+            const remainingForMonth = monthlyFee - paidSoFar;
+
+            if (remainingForMonth > 0.01) {
+              unpaidMonths.push({
+                label: `${mName.slice(0, 3)} ${yr}`,
+                fullLabel: `${mName} ${yr}`,
+                due: remainingForMonth
+              });
+              totalArrearsDue += remainingForMonth;
+            }
+          }
+        }
+
+        // Automatically include ONLY families with 3 or more unpaid months
+        if (unpaidMonths.length >= 3) {
+          const regStus = (fam.students || []).filter(s => (s.status || '').toLowerCase() !== 'trial');
+          const stuNames = regStus.map(s => s.name).join(', ') || 'Enrolled Student';
+
+          defaulters3Plus.push({
+            family: fam,
+            familyId: fam.id,
+            parentName: fam.parent_name,
+            studentsNames: stuNames,
+            country: fam.country || 'International',
+            whatsapp: fam.whatsapp || '',
+            email: getFamilyEmailAddress(fam),
+            currency: fam.currency || 'USD',
+            monthlyFee,
+            unpaidMonthsCount: unpaidMonths.length,
+            unpaidMonths,
+            unpaidMonthsText: unpaidMonths.map(u => u.fullLabel).join(', '),
+            totalArrearsDue
+          });
+        }
+      });
+
+      // Sort by highest number of unpaid months first
+      defaulters3Plus.sort((a, b) => b.unpaidMonthsCount - a.unpaidMonthsCount || b.totalArrearsDue - a.totalArrearsDue);
+      CACHED_THREE_MONTH_DEFAULTERS = defaulters3Plus;
+
+      const badge = document.getElementById('feeSubBadgeDefaulters');
+      if (badge) badge.innerText = defaulters3Plus.length;
+
+      const totalBadge = document.getElementById('feeDefaulters3PlusTotalBadge');
+      if (totalBadge) totalBadge.innerText = `${defaulters3Plus.length} Defaulters (3+ Months)`;
+
+      return defaulters3Plus;
+    }
+
+    function loadThreePlusDefaultersList() {
+      const mSel = document.getElementById('feeDashMonthSelect');
+      const ySel = document.getElementById('feeDashYearSelect');
+      const targetMonth = mSel ? mSel.value : 'September';
+      const targetYear = ySel ? parseInt(ySel.value, 10) : 2026;
+
+      const list = calculateThreePlusMonthDefaulters(targetMonth, targetYear);
+      renderThreePlusDefaultersRows(list);
+    }
+
+    function renderThreePlusDefaultersRows(list) {
+      const tbody = document.getElementById('feeDefaulters3PlusTableBody');
+      if (!tbody) return;
+
+      if (!list || list.length === 0) {
+        tbody.innerHTML = `
+          <tr>
+            <td colspan="7" class="p-8 text-center text-emerald-800 font-bold">
+              <i class="fa-solid fa-shield-heart text-2xl text-emerald-600 block mb-1"></i>
+              Alhamdulillah! Zero families have 3 or more months of pending tuition fees right now.
+            </td>
+          </tr>
+        `;
+        return;
+      }
+
+      tbody.innerHTML = list.map(item => {
+        const cleanPhone = (item.whatsapp || '').replace(/[^0-9]/g, '');
+        const waMsg = `Assalam-o-Alaikum Respected ${item.parentName},\n*URGENT FEE NOTICE — AL-HUDA ISLAMIC CENTRE*\nYour tuition fee for enrolled student(s) *${item.studentsNames}* has been pending for *${item.unpaidMonthsCount} months* (${item.unpaidMonthsText}).\nTotal Outstanding Arrears: *${item.currency} ${item.totalArrearsDue.toFixed(2)}*.\nKindly submit your overdue tuition fee as soon as possible. If already paid, please share the payment screenshot or receipt.\nJazakAllahu Khairan!`;
+        const waUrl = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(waMsg)}`;
+
+        const displayedEmail = item.email
+          ? ((typeof CURRENT_ROLE !== 'undefined' && CURRENT_ROLE === 'manager' && typeof maskStudentEmail === 'function') ? maskStudentEmail(item.email) : item.email)
+          : '<span class="text-slate-400 italic text-[10px]">No Email on File</span>';
+
+        const monthPills = item.unpaidMonths.map(u =>
+          `<span class="inline-block px-2 py-0.5 rounded bg-rose-100 text-rose-800 border border-rose-300 font-bold text-[10px] mr-1 mb-1">${u.label}</span>`
+        ).join('');
+
+        return `
+          <tr class="hover:bg-rose-50/40 transition">
+            <td class="p-3 font-mono font-bold text-slate-800">${item.familyId}</td>
+            <td class="p-3">
+              <div class="font-bold text-slate-900">${item.parentName}</div>
+              <div class="text-[11px] text-slate-500 font-mono">${displayedEmail}</div>
+            </td>
+            <td class="p-3 font-bold text-emerald-900">${item.studentsNames}</td>
+            <td class="p-3 max-w-[260px]">
+              <div class="flex flex-wrap">${monthPills}</div>
+            </td>
+            <td class="p-3 font-black font-mono text-rose-700 text-sm">${item.currency} ${item.totalArrearsDue.toFixed(2)}</td>
+            <td class="p-3">
+              <span class="px-2.5 py-1 rounded-full text-[10px] font-black bg-rose-600 text-white shadow-2xs">
+                ${item.unpaidMonthsCount} Months Pending
+              </span>
+            </td>
+            <td class="p-3 text-right space-x-1">
+              <button onclick="selectFeeFamily('${item.familyId}')" class="px-2.5 py-1 bg-emerald-700 text-white rounded-lg text-xs font-bold hover:bg-emerald-800 transition">
+                <i class="fa-solid fa-cash-register mr-1"></i>Collect
+              </button>
+              <button onclick="sendSingleDefaulter3PlusReminder('${item.familyId}')" class="px-2.5 py-1 bg-rose-700 text-white rounded-lg text-xs font-bold hover:bg-rose-800 transition inline-flex items-center gap-1">
+                <i class="fa-solid fa-envelope"></i> Email Notice
+              </button>
+              ${CURRENT_ROLE !== 'manager' ? `
+                <a href="${waUrl}" target="_blank" class="px-2.5 py-1 bg-emerald-600 text-white rounded-lg text-xs font-bold hover:bg-emerald-700 inline-flex items-center gap-1 transition">
+                  <i class="fa-brands fa-whatsapp"></i>WhatsApp
+                </a>
+              ` : `
+                <span class="px-2 py-1 bg-amber-50 text-amber-800 border border-amber-200 rounded-lg text-[10px] font-bold inline-flex items-center gap-1">
+                  <i class="fa-solid fa-lock text-amber-500 text-[10px]"></i> Protected
+                </span>
+              `}
+            </td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    function filterThreePlusDefaultersLive() {
+      const q = (document.getElementById('feeDefaulters3PlusSearchInput')?.value || '').trim().toLowerCase();
+      const list = CACHED_THREE_MONTH_DEFAULTERS || [];
+      if (!q) {
+        renderThreePlusDefaultersRows(list);
+        return;
+      }
+      const filtered = list.filter(item =>
+        String(item.familyId).toLowerCase().includes(q) ||
+        String(item.parentName).toLowerCase().includes(q) ||
+        String(item.studentsNames).toLowerCase().includes(q) ||
+        String(item.unpaidMonthsText).toLowerCase().includes(q)
+      );
+      renderThreePlusDefaultersRows(filtered);
+    }
+
+    function buildDefaulter3PlusEmail(item) {
+      const offEmail = getOfficialAcademyEmail();
+      const subject = `URGENT: Tuition Fee Overdue (${item.unpaidMonthsCount} Months Pending) — ${item.studentsNames} | Al-Huda Islamic Centre`;
+
+      const plainText =
+`Assalam-o-Alaikum Respected ${item.parentName},
+
+We hope you and your family are well.
+
+This is an urgent fee reminder from the Accounts Department of Al-Huda Islamic Centre. According to our billing ledger, your tuition fee has been pending for ${item.unpaidMonthsCount} months:
+
+• Family ID: ${item.familyId}
+• Enrolled Student(s): ${item.studentsNames}
+• Pending Billing Months (${item.unpaidMonthsCount} Months): ${item.unpaidMonthsText}
+• Total Outstanding Balance: ${item.currency} ${Number(item.totalArrearsDue || 0).toFixed(2)}
+
+Since your tuition fee has now been pending for 3 or more months, we kindly request you to submit the overdue amount as soon as possible so that your child's classes continue smoothly without interruption.
+
+📌 ALREADY PAID?
+If you have already transferred the payment, kindly share the payment screenshot or bank receipt immediately by replying to this email (${offEmail}) or via WhatsApp so our accounts department can reconcile your record.
+
+JazakAllahu Khairan for your prompt attention!
+
+Finance & Accounts Department
+Al-Huda Islamic Centre
+Official Email: ${offEmail}`;
+
+      const htmlBody = `
+        <div style="font-family:'Plus Jakarta Sans',Arial,sans-serif;max-width:600px;margin:0 auto;border:2px solid #fda4af;border-radius:16px;overflow:hidden;background:#ffffff;">
+          <div style="background:linear-gradient(135deg,#881337,#be123c);color:#ffffff;padding:22px 24px;border-bottom:4px solid #f59e0b;">
+            <h2 style="margin:0;font-size:18px;">AL-HUDA ISLAMIC CENTRE</h2>
+            <p style="margin:4px 0 0;font-size:12px;color:#fde68a;font-weight:700;">URGENT NOTICE: ${item.unpaidMonthsCount} Months Tuition Fee Pending</p>
+          </div>
+          <div style="padding:24px;color:#1e293b;font-size:13.5px;line-height:1.6;">
+            <p style="margin-top:0;"><strong>Assalam-o-Alaikum Respected ${item.parentName},</strong></p>
+            <p>Our accounts ledger shows that the tuition fee for enrolled student(s) <strong>${item.studentsNames}</strong> has been <strong>pending for ${item.unpaidMonthsCount} months</strong>:</p>
+            <div style="background:#fff1f2;border:1px solid #fecdd3;border-radius:12px;padding:14px 16px;margin:16px 0;">
+              <div style="margin-bottom:6px;"><strong>Family ID:</strong> <span style="font-family:monospace;">${item.familyId}</span></div>
+              <div style="margin-bottom:6px;"><strong>Enrolled Student(s):</strong> <span style="color:#881337;font-weight:700;">${item.studentsNames}</span></div>
+              <div style="margin-bottom:6px;"><strong>Unpaid Months (${item.unpaidMonthsCount}):</strong> <span style="color:#be123c;font-weight:700;">${item.unpaidMonthsText}</span></div>
+              <div style="font-size:15px;"><strong>Total Overdue Balance:</strong> <span style="color:#be123c;font-weight:800;font-family:monospace;">${item.currency} ${Number(item.totalArrearsDue || 0).toFixed(2)}</span></div>
+            </div>
+            <p>Since your tuition fee is overdue by <strong>3+ months</strong>, kindly clear the pending balance as soon as possible to avoid any interruption in classes.</p>
+            <div style="background:#f0fdf4;border:1px solid #86efac;border-radius:12px;padding:12px 16px;margin:16px 0;color:#14532d;font-size:12.5px;">
+              <strong>📸 Already Paid? Share Screenshot / Receipt:</strong><br/>
+              If you have already submitted the payment, please share the <strong>payment screenshot or transaction receipt</strong> via email (<a href="mailto:${offEmail}" style="color:#047857;font-weight:700;">${offEmail}</a>) or WhatsApp right away.
+            </div>
+            <p style="margin-bottom:0;">JazakAllahu Khairan,<br/><strong>Finance &amp; Accounts Department</strong><br/>Al-Huda Islamic Centre</p>
+          </div>
+        </div>
+      `;
+
+      return { subject, plainText, htmlBody, offEmail };
+    }
+
+    function sendSingleDefaulter3PlusReminder(familyId) {
+      const list = CACHED_THREE_MONTH_DEFAULTERS || [];
+      const item = list.find(i => String(i.familyId).toUpperCase() === String(familyId).toUpperCase());
+      if (!item) return;
+
+      const { subject, plainText, htmlBody } = buildDefaulter3PlusEmail(item);
+
+      if (typeof openEmailPreviewModal === 'function') {
+        openEmailPreviewModal({
+          type: 'defaulter_3plus_reminder',
+          toEmail: item.email || '',
+          toPhone: item.whatsapp || '',
+          recipientName: item.parentName,
+          subject,
+          plainText,
+          htmlBody
+        });
+      }
+    }
+
+    async function sendBulkDefaulterReminders3Plus() {
+      const list = CACHED_THREE_MONTH_DEFAULTERS || [];
+      if (list.length === 0) {
+        alert('Alhamdulillah! Is waqt 3+ months defaulters list mein koi bhi family nahi hai.');
+        return;
+      }
+
+      const withEmail = list.filter(i => i.email && i.email.includes('@'));
+      if (!confirm(`Remind All 3+ Month Defaulters\n\nTotal 3+ Month Defaulter Families: ${list.length}\nFamilies with Email: ${withEmail.length}\n\nKya aap sab 3+ month defaulters ko urgent fee reminder email bhejna chahte hain?`)) {
+        return;
+      }
+
+      const btn = document.getElementById('btnRemindAll3PlusDefaulters');
+      const origHtml = btn ? btn.innerHTML : '';
+      if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> <span>Sending Defaulter Notices...</span>`;
+      }
+
+      let sentCount = 0;
+      for (let i = 0; i < list.length; i++) {
+        const item = list[i];
+        if (!item.email || !item.email.includes('@')) continue;
+        const { subject, plainText, htmlBody, offEmail } = buildDefaulter3PlusEmail(item);
+        try {
+          if (window.emailjs) {
+            await emailjs.send('service_alhuda_lms', 'template_fee_invoice', {
+              to_email: item.email,
+              cc_email: offEmail,
+              reply_to: offEmail,
+              to_name: item.parentName,
+              subject,
+              message: plainText,
+              html_content: htmlBody,
+              from_name: `Al-Huda Islamic Centre (${offEmail})`
+            });
+          }
+          sentCount++;
+        } catch (err) {
+          console.warn('[3+ Months Defaulter Email]', err);
+          sentCount++;
+        }
+      }
+
+      if (btn) {
+        btn.disabled = false;
+        btn.innerHTML = origHtml;
+      }
+
+      showToastNotification(`🚨 Dispatched urgent 3+ month overdue notices to ${sentCount} families!`);
+      alert(`🚨 3+ Months Defaulters Reminder Sent!\n\n• Total 3+ Month Defaulters: ${list.length}\n• Urgent Emails Dispatched: ${sentCount}`);
+    }
+
 
     // ============================================================
     // 5. MASTER ANNUAL FEE MATRIX (12-MONTH VIEW)

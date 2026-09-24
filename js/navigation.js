@@ -23,7 +23,8 @@
       'tab-schedule-search': 'Schedule Search',
       'fee-subtab-overview': 'Fee Overview',
       'fee-subtab-collect': 'Collect Fee',
-      'fee-subtab-pending': 'Defaulters',
+      'fee-subtab-pending': 'Pending Payments',
+      'fee-subtab-defaulters': 'Defaulters (3+ Months)',
       'fee-subtab-matrix': 'Annual Matrix',
       'fee-subtab-receipts': 'Receipts'
     };

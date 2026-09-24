@@ -1319,9 +1319,14 @@
           <span>Collect Fee</span>
         </button>
         <button id="btnFeeSubTab-pending" onclick="switchFeeSubTab('fee-subtab-pending')" class="fee-subtab-btn px-3 sm:px-3.5 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 text-slate-600 hover:bg-slate-100 shrink-0 whitespace-nowrap">
-          <i class="fa-solid fa-clock-rotate-left text-rose-600"></i>
-          <span>Defaulters</span>
-          <span id="feeSubBadgePending" class="px-1.5 py-0.2 rounded-full text-[10px] font-mono bg-rose-100 text-rose-800 font-bold border border-rose-300">0</span>
+          <i class="fa-solid fa-clock-rotate-left text-amber-600"></i>
+          <span>Pending Payments</span>
+          <span id="feeSubBadgePending" class="px-1.5 py-0.2 rounded-full text-[10px] font-mono bg-amber-100 text-amber-800 font-bold border border-amber-300">0</span>
+        </button>
+        <button id="btnFeeSubTab-defaulters" onclick="switchFeeSubTab('fee-subtab-defaulters')" class="fee-subtab-btn px-3 sm:px-3.5 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 text-slate-600 hover:bg-slate-100 shrink-0 whitespace-nowrap">
+          <i class="fa-solid fa-triangle-exclamation text-rose-600"></i>
+          <span>Defaulters (3+ Months)</span>
+          <span id="feeSubBadgeDefaulters" class="px-1.5 py-0.2 rounded-full text-[10px] font-mono bg-rose-100 text-rose-800 font-bold border border-rose-300">0</span>
         </button>
         <button id="btnFeeSubTab-matrix" onclick="switchFeeSubTab('fee-subtab-matrix')" class="fee-subtab-btn px-3 sm:px-3.5 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 text-slate-600 hover:bg-slate-100 shrink-0 whitespace-nowrap">
           <i class="fa-solid fa-table-cells text-cyan-600"></i>
@@ -1739,7 +1744,7 @@
       </div>
 
       <!-- ============================================================ -->
-      <!-- SUB-VIEW 3: PENDING DEFAULTERS TRACKER -->
+      <!-- SUB-VIEW 3: SELECTED MONTH PENDING PAYMENTS & REMIND ALL     -->
       <!-- ============================================================ -->
       <div id="feeSubView-pending" class="fee-subview-panel hidden space-y-5">
         <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs space-y-4">
@@ -1747,13 +1752,13 @@
           <div class="flex justify-between items-center flex-wrap gap-3">
             <div>
               <h3 class="text-base font-extrabold text-slate-900 flex items-center gap-2">
-                <i class="fa-solid fa-clock-rotate-left text-rose-600"></i> Pending Fee Defaulters Tracker
+                <i class="fa-solid fa-clock-rotate-left text-amber-600"></i> Monthly Pending Fee Payments
               </h3>
-              <p class="text-xs text-slate-500">Track and remind family accounts with overdue or unpaid tuition fees</p>
+              <p class="text-xs text-slate-500">All students &amp; families whose tuition fee is pending for the selected month — send 1-click automatic email reminders</p>
             </div>
 
-            <div class="flex items-center gap-2">
-              <select id="feePendingMonthFilter" onchange="loadPendingDefaultersList()" class="p-2 bg-white border border-slate-300 rounded-xl text-xs font-bold text-slate-800">
+            <div class="flex items-center gap-2 flex-wrap">
+              <select id="feePendingMonthFilter" onchange="handlePendingMonthFilterChange()" class="p-2 bg-white border border-slate-300 rounded-xl text-xs font-bold text-slate-800">
                 <option value="January">January</option>
                 <option value="February">February</option>
                 <option value="March">March</option>
@@ -1767,11 +1772,41 @@
                 <option value="November">November</option>
                 <option value="December">December</option>
               </select>
-              <select id="feePendingYearFilter" onchange="loadPendingDefaultersList()" class="p-2 bg-white border border-slate-300 rounded-xl text-xs font-bold text-slate-800">
+              <select id="feePendingYearFilter" onchange="handlePendingMonthFilterChange()" class="p-2 bg-white border border-slate-300 rounded-xl text-xs font-bold text-slate-800">
                 <option value="2025">2025</option>
                 <option value="2026" selected>2026</option>
                 <option value="2027">2027</option>
               </select>
+
+              <!-- REMIND ALL BUTTON FOR SELECTED MONTH -->
+              <button id="btnRemindAllPendingMonth" onclick="sendBulkPendingFeeReminders()" class="px-4 py-2 bg-gradient-to-r from-amber-600 to-rose-600 hover:from-amber-700 hover:to-rose-700 text-white rounded-xl text-xs font-extrabold shadow-sm transition flex items-center gap-2 cursor-pointer active:scale-95">
+                <i class="fa-solid fa-paper-plane"></i>
+                <span>Remind All (Auto Email)</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- 4TH OF EVERY MONTH AUTO-REMINDER SCHEDULER BAR -->
+          <div class="p-3.5 bg-indigo-50/80 border border-indigo-200 rounded-xl flex justify-between items-center flex-wrap gap-3">
+            <div class="flex items-center gap-2.5">
+              <div class="w-9 h-9 rounded-xl bg-indigo-600 text-white flex items-center justify-center shadow-2xs shrink-0">
+                <i class="fa-solid fa-calendar-day text-sm"></i>
+              </div>
+              <div>
+                <div class="text-xs font-extrabold text-indigo-950 flex items-center gap-2">
+                  <span>Auto-Reminder on 4th of Every Month</span>
+                  <span id="badgeAutoReminder4thState" class="px-2 py-0.5 rounded-full text-[10px] font-black bg-emerald-100 text-emerald-800 border border-emerald-300">ACTIVE</span>
+                </div>
+                <p id="autoFeeReminder4thStatusText" class="text-[11px] text-indigo-800 font-medium">
+                  Har mahine ki 4 tareekh ko tamam pending parents ko automatically fee reminder + receipt request email bhej di jaye gi.
+                </p>
+              </div>
+            </div>
+            <div class="flex items-center gap-2.5">
+              <label class="inline-flex items-center gap-2 cursor-pointer bg-white px-3 py-1.5 rounded-xl border border-indigo-200 shadow-2xs text-xs font-bold text-slate-800">
+                <input type="checkbox" id="toggleAutoFeeReminder4th" checked onchange="toggleMonthly4thAutoReminder(this.checked)" class="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500">
+                <span>Enable 4th Auto-Email</span>
+              </label>
             </div>
           </div>
 
@@ -1779,7 +1814,7 @@
           <div class="p-4 bg-amber-50/80 border border-amber-300 rounded-xl flex justify-between items-center flex-wrap gap-3">
             <div class="text-xs text-amber-950 font-medium">
               <i class="fa-solid fa-circle-exclamation text-amber-600 mr-1.5"></i>
-              Listing family accounts with pending tuition fees for <strong id="feePendingPeriodLabel" class="underline font-bold">September 2026</strong>.
+              Showing all families whose tuition fee is pending for <strong id="feePendingPeriodLabel" class="underline font-bold">September 2026</strong> (includes request to share payment screenshot/receipt if already paid).
             </div>
             <span id="feePendingTotalBadge" class="px-2.5 py-1 rounded-full text-xs font-extrabold bg-amber-200 text-amber-900 border border-amber-400">
               0 Families Pending
@@ -1788,25 +1823,85 @@
 
           <!-- SEARCH INPUT -->
           <div>
-            <input type="text" id="feePendingSearchInput" oninput="filterPendingDefaultersSearchLive()" placeholder="Search by student, parent name, or WhatsApp in this month's pending list..." class="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800">
+            <input type="text" id="feePendingSearchInput" oninput="filterPendingDefaultersSearchLive()" placeholder="Search by student, parent name, or Family ID in this month's pending list..." class="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800">
           </div>
 
-          <!-- DEFAULTERS TABLE -->
+          <!-- PENDING PAYMENTS TABLE -->
           <div class="overflow-x-auto touch-scroll rounded-xl border border-slate-200">
             <table class="w-full text-left text-xs border-collapse min-w-[750px]">
               <thead class="bg-slate-50 text-slate-600 font-extrabold border-b border-slate-200 uppercase tracking-wider text-[11px]">
                 <tr>
                   <th class="p-3">Family ID</th>
-                  <th class="p-3">Parent Name</th>
+                  <th class="p-3">Parent Name &amp; Email</th>
                   <th class="p-3">Student(s) Enrolled</th>
-                  <th class="p-3">Country</th>
+                  <th class="p-3">Selected Month</th>
                   <th class="p-3">Pending Due Amount</th>
                   <th class="p-3">Status</th>
                   <th class="p-3 text-right">1-Click Actions</th>
                 </tr>
               </thead>
               <tbody id="feePendingTableBody" class="divide-y divide-slate-100">
-                <tr><td colspan="7" class="p-8 text-center text-slate-400">Loading pending defaulters...</td></tr>
+                <tr><td colspan="7" class="p-8 text-center text-slate-400">Loading pending payments...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- ============================================================ -->
+      <!-- SUB-VIEW 3B: 3+ MONTHS DEFAULTERS (SEPARATE AUTO-LIST)       -->
+      <!-- ============================================================ -->
+      <div id="feeSubView-defaulters" class="fee-subview-panel hidden space-y-5">
+        <div class="bg-white p-5 rounded-2xl border border-rose-200 shadow-xs space-y-4">
+          
+          <div class="flex justify-between items-center flex-wrap gap-3">
+            <div>
+              <h3 class="text-base font-extrabold text-rose-950 flex items-center gap-2">
+                <i class="fa-solid fa-triangle-exclamation text-rose-600"></i> Long-Term Fee Defaulters (3+ Months Pending)
+              </h3>
+              <p class="text-xs text-slate-600">Students &amp; families whose tuition fees have been unpaid for <strong>3 or more months</strong> are automatically placed in this list</p>
+            </div>
+
+            <div class="flex items-center gap-2 flex-wrap">
+              <button id="btnRemindAll3PlusDefaulters" onclick="sendBulkDefaulterReminders3Plus()" class="px-4 py-2.5 bg-rose-700 hover:bg-rose-800 text-white rounded-xl text-xs font-extrabold shadow-sm transition flex items-center gap-2 cursor-pointer active:scale-95">
+                <i class="fa-solid fa-envelope-circle-check"></i>
+                <span>Remind All 3+ Month Defaulters (Auto Email)</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- 3+ MONTHS DEFAULTERS BANNER -->
+          <div class="p-4 bg-rose-50 border border-rose-300 rounded-xl flex justify-between items-center flex-wrap gap-3">
+            <div class="text-xs text-rose-950 font-medium">
+              <i class="fa-solid fa-bell text-rose-600 mr-1.5"></i>
+              Automatic Detection: Every family with <strong>3 or more unpaid billing months</strong> is listed below. Clicking <strong>Remind All 3+ Month Defaulters</strong> sends an urgent overdue notice requesting immediate fee submission (class pause controls can also be enabled later).
+            </div>
+            <span id="feeDefaulters3PlusTotalBadge" class="px-3 py-1 rounded-full text-xs font-extrabold bg-rose-200 text-rose-900 border border-rose-400">
+              0 Defaulters (3+ Months)
+            </span>
+          </div>
+
+          <!-- SEARCH INPUT -->
+          <div>
+            <input type="text" id="feeDefaulters3PlusSearchInput" oninput="filterThreePlusDefaultersLive()" placeholder="Search 3+ month defaulters by student name, parent name, or Family ID..." class="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800">
+          </div>
+
+          <!-- 3+ MONTHS DEFAULTERS TABLE -->
+          <div class="overflow-x-auto touch-scroll rounded-xl border border-rose-200">
+            <table class="w-full text-left text-xs border-collapse min-w-[800px]">
+              <thead class="bg-rose-950 text-white font-extrabold border-b border-rose-900 uppercase tracking-wider text-[11px]">
+                <tr>
+                  <th class="p-3">Family ID</th>
+                  <th class="p-3">Parent Name &amp; Contact</th>
+                  <th class="p-3">Student(s) Enrolled</th>
+                  <th class="p-3">Unpaid Months (3+ Months)</th>
+                  <th class="p-3">Total Arrears Due</th>
+                  <th class="p-3">Overdue Status</th>
+                  <th class="p-3 text-right">Urgent Actions</th>
+                </tr>
+              </thead>
+              <tbody id="feeDefaulters3PlusTableBody" class="divide-y divide-rose-100">
+                <tr><td colspan="7" class="p-8 text-center text-slate-400">Scanning billing ledger for 3+ months defaulters...</td></tr>
               </tbody>
             </table>
           </div>
