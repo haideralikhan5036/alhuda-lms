@@ -321,13 +321,12 @@
         <div onclick="switchTab('tab-dashboard')" class="cursor-pointer flex items-center gap-2 sm:gap-2.5 min-w-0" title="Return to Dashboard">
           <img src="alhuda_logo.jpg" alt="Al-Huda Logo" class="w-9 h-9 sm:w-10 sm:h-10 rounded-full border-2 border-brandGold object-cover shadow-sm bg-black shrink-0">
           <div class="min-w-0">
-            <h1 class="font-cinzel text-sm sm:text-base md:text-lg font-bold tracking-wide truncate leading-tight">AL-HUDA ISLAMIC CENTRE</h1>
-            <p class="text-[10px] sm:text-[11px] text-emerald-200 font-medium truncate leading-tight">Online Quran &amp; Islamic Studies Academy</p>
+            <h1 class="font-cinzel text-sm sm:text-base md:text-lg font-bold tracking-wide leading-tight">AL-HUDA ISLAMIC CENTRE</h1>
           </div>
         </div>
       </div>
 
-      <!-- ROLE SWITCHER & CONTROLS -->
+      <!-- ROLE BADGE & NOTIFICATIONS -->
       <div class="flex items-center gap-1.5 sm:gap-2.5 shrink-0">
         <!-- Logged-in Teacher Session Badge -->
         <div id="teacherSessionPill" class="hidden items-center gap-1.5 bg-emerald-950/80 border border-emerald-400/50 px-2.5 py-1 rounded-full text-xs font-semibold text-emerald-200 shadow-sm">
@@ -335,20 +334,18 @@
           <button onclick="logoutTeacherPortal()" class="text-amber-300 hover:text-amber-100 font-bold ml-1 text-[11px] underline" title="Exit Teacher Portal">Logout</button>
         </div>
 
-        <div class="bg-black/40 border border-brandGold/40 px-2 sm:px-3 py-1 sm:py-1.5 rounded-full text-[11px] sm:text-xs font-semibold text-amber-200 flex items-center gap-1.5 shadow-2xs">
-          <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shrink-0"></span>
-          <select id="userRoleSelect" onchange="switchUserRole(this.value)" class="bg-transparent text-white font-bold cursor-pointer focus:outline-none text-[11px] sm:text-xs">
-            <option value="owner" class="text-slate-900 font-bold">👑 Owner</option>
-            <option value="manager" class="text-slate-900 font-bold">💼 Manager</option>
-            <option value="teacher" class="text-slate-900 font-bold">👨‍🏫 Teacher</option>
-            <option value="student" class="text-slate-900 font-bold">🎓 Student/Parent</option>
+        <!-- Hidden Role Select for internal JS role synchronization -->
+        <div class="hidden">
+          <select id="userRoleSelect" onchange="switchUserRole(this.value)">
+            <option value="owner">Owner</option>
+            <option value="manager">Manager</option>
+            <option value="teacher">Teacher</option>
+            <option value="student">Student/Parent</option>
           </select>
         </div>
 
-        <!-- Quick Course Material Link on Header -->
-        <button onclick="switchTab('tab-curriculum')" class="hidden md:flex px-2.5 py-1.5 rounded-full bg-emerald-800/60 hover:bg-emerald-700 text-emerald-200 border border-emerald-500/40 text-xs font-bold transition items-center gap-1.5 shadow-2xs shrink-0" title="Course Material & Digital Islamic Library">
-          <i class="fa-solid fa-book-quran text-brandGold text-xs"></i> <span class="hidden xl:inline">Course Material</span>
-        </button>
+        <!-- Dynamic Security / Role Badge -->
+        <div id="headerRoleSecurityBadge"></div>
 
         <!-- Teacher Requests Notification Button -->
         <button onclick="openAdminTeacherRequestsModal()" class="w-8 h-8 sm:w-auto sm:px-3 sm:py-1.5 rounded-full bg-amber-500/20 hover:bg-amber-500/30 border border-amber-400/50 text-amber-200 text-xs font-bold transition flex items-center justify-center gap-1.5 shadow-xs shrink-0" title="Review Pending Teacher Requests">
@@ -363,14 +360,6 @@
           <span class="hidden md:inline">Returns Due</span>
           <span id="badgeReturnAlertsCount" class="px-1.5 py-0.2 rounded-full text-[10px] font-mono bg-rose-600 text-white font-black">0</span>
         </button>
-
-        <a href="manager.html" target="_blank" class="hidden sm:flex px-2.5 py-1.5 rounded-full bg-indigo-900/60 hover:bg-indigo-800 text-indigo-200 border border-indigo-500/40 text-xs font-bold transition items-center gap-1.5 shadow-xs shrink-0" title="Open Dedicated Manager Operations Portal">
-          <i class="fa-solid fa-user-tie text-brandGold text-xs"></i> <span class="hidden lg:inline">Manager Portal</span>
-        </a>
-
-        <a href="teacher.html" target="_blank" class="hidden sm:flex px-2.5 py-1.5 rounded-full bg-emerald-800/60 hover:bg-emerald-700 text-emerald-200 border border-emerald-500/40 text-xs font-bold transition items-center gap-1.5 shadow-xs shrink-0" title="Open Dedicated Teacher Operations Portal">
-          <i class="fa-solid fa-chalkboard-user text-brandGold text-xs"></i> <span class="hidden lg:inline">Teacher Portal</span>
-        </a>
       </div>
     </div>
   </header>
@@ -380,23 +369,6 @@
 
   <!-- COLLAPSIBLE LEFT SIDEBAR (Mobile Off-Canvas Drawer / Desktop Collapsible) -->
   <aside id="mainAppSidebar" class="bg-white border-r border-slate-200 shadow-xl flex flex-col overflow-hidden">
-    <!-- Sidebar Header / Toggle -->
-    <div class="flex items-center justify-between px-3.5 py-3.5 border-b border-slate-100 bg-brandDark">
-      <div class="flex items-center gap-2">
-        <img src="alhuda_logo.jpg" alt="Al-Huda Logo" class="w-7 h-7 rounded-full border border-brandGold object-cover bg-black shrink-0">
-        <span class="text-white font-black text-xs tracking-widest uppercase sidebar-label">Navigation</span>
-      </div>
-      <div class="flex items-center gap-1">
-        <!-- Desktop Collapse Toggle -->
-        <button onclick="toggleSidebar()" class="hidden lg:flex w-7 h-7 rounded-md bg-white/20 hover:bg-white/30 text-white items-center justify-center transition" title="Collapse Sidebar">
-          <i class="fa-solid fa-bars-staggered text-xs"></i>
-        </button>
-        <!-- Mobile Close Drawer Button -->
-        <button onclick="toggleSidebar()" class="lg:hidden w-7 h-7 rounded-md bg-white/20 hover:bg-white/30 text-white flex items-center justify-center transition" title="Close Navigation Drawer">
-          <i class="fa-solid fa-xmark text-sm"></i>
-        </button>
-      </div>
-    </div>
     <!-- Nav Items -->
     <nav class="flex flex-col gap-1 p-2 flex-1 overflow-y-auto touch-scroll">
       <button onclick="switchTab('tab-dashboard')" data-tab="tab-dashboard" class="sidebar-nav-btn nav-tab active w-full text-left px-3 py-2.5 rounded-lg text-sm font-bold flex items-center gap-3 bg-brandDark text-white transition">
@@ -485,9 +457,6 @@
           <div class="text-xs font-bold text-teal-800 bg-teal-50 px-2.5 py-1.5 rounded-lg border border-teal-200 shadow-2xs flex items-center gap-1.5" title="Active regular students">
             <i class="fa-solid fa-user-graduate text-teal-600"></i> Students: <span id="dashLiveActiveStudents" class="font-mono font-black text-teal-900 bg-white px-1.5 py-0.2 rounded border border-teal-300">0</span>
           </div>
-          <button onclick="prepareAddFamilyModal()" class="px-3 py-1.5 bg-brandDark text-white rounded-lg text-xs font-bold hover:bg-brandDarkest flex items-center gap-1.5 shadow-xs transition">
-            <i class="fa-solid fa-house-user"></i> + Add Family
-          </button>
           <button onclick="switchTab('tab-schedule-search')" class="px-3 py-1.5 bg-cyan-800 text-white rounded-lg text-xs font-bold hover:bg-cyan-900 flex items-center gap-1.5 shadow-xs transition" title="Search teacher free & busy slots">
             <i class="fa-solid fa-calendar-check text-cyan-200"></i> Free Slot Finder
           </button>
