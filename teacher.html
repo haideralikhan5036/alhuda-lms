@@ -1003,6 +1003,88 @@
     </div>
   </div>
 
+  <!-- ================= MODAL: STUDENT SCHEDULE TIME CHANGE REQUEST ================= -->
+  <div id="modalTimeChangeRequest" class="fixed inset-0 bg-black/70 backdrop-blur-xs z-50 hidden items-center justify-center p-2 sm:p-4 overflow-y-auto">
+    <div class="bg-white rounded-2xl max-w-lg w-full max-h-[94vh] flex flex-col p-4 sm:p-6 shadow-2xl border border-indigo-200 my-auto">
+      <div class="flex justify-between items-center border-b pb-3 shrink-0">
+        <div class="flex items-center gap-2.5">
+          <div class="w-10 h-10 rounded-xl bg-indigo-100 text-indigo-700 flex items-center justify-center font-black text-base shadow-2xs">
+            <i class="fa-solid fa-clock-rotate-left"></i>
+          </div>
+          <div>
+            <h3 class="font-black text-base text-slate-900">Request Student Time Change</h3>
+            <p class="text-xs text-slate-500" id="timeChangeModalSubtitle">Request Manager / Owner to update class timing</p>
+          </div>
+        </div>
+        <button onclick="closeTimeChangeRequestModal()" class="text-slate-400 hover:text-slate-600 text-xl font-bold">&times;</button>
+      </div>
+
+      <div class="space-y-3.5 text-xs overflow-y-auto touch-scroll flex-1 pr-1 mt-3">
+        <div class="p-3 bg-indigo-50/80 border border-indigo-200 rounded-xl flex items-start gap-2.5 text-xs">
+          <i class="fa-solid fa-user-shield text-indigo-600 mt-0.5 text-sm"></i>
+          <div class="text-indigo-950">
+            <div class="font-extrabold mb-0.5">Requires Manager / Owner Approval</div>
+            <p class="text-indigo-800/90 leading-relaxed">Select the new timing for this student below. Your request will appear in the Manager &amp; Owner Portal where they can approve it in 1 click to automatically update your timetable.</p>
+          </div>
+        </div>
+
+        <form id="formTimeChangeRequestInner" onsubmit="submitTimeChangeRequest(event)" class="space-y-3.5 text-xs">
+          <input type="hidden" id="timeChangeScheduleId">
+          <input type="hidden" id="timeChangeStudentId">
+
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5 p-3 bg-slate-50 rounded-xl border border-slate-200">
+            <div>
+              <span class="text-[10px] font-bold text-slate-400 uppercase block">Student Name</span>
+              <span id="timeChangeStudentNameDisplay" class="font-extrabold text-slate-900 text-sm">--</span>
+            </div>
+            <div>
+              <span class="text-[10px] font-bold text-slate-400 uppercase block">Current Scheduled Time</span>
+              <span id="timeChangeCurrentSlotDisplay" class="font-mono font-black text-rose-700 text-sm">--</span>
+            </div>
+          </div>
+
+          <div>
+            <label class="block font-bold text-slate-700 mb-1">Select New Proposed Time Slot (30-Min PKT) *:</label>
+            <select id="timeChangeNewSlotSelect" required class="w-full p-2.5 border border-indigo-300 rounded-xl font-mono font-bold text-slate-900 bg-white">
+              <!-- Populated dynamically with Free vs Occupied status -->
+            </select>
+            <p class="text-[10px] text-emerald-700 font-semibold mt-1 flex items-center gap-1">
+              <i class="fa-solid fa-circle-info"></i> Slots marked <strong class="font-extrabold">🟢 FREE</strong> have no other student booked in your schedule.
+            </p>
+          </div>
+
+          <div>
+            <label class="block font-bold text-slate-700 mb-1">Apply Time Change To *:</label>
+            <select id="timeChangeScopeSelect" class="w-full p-2.5 border border-slate-300 rounded-xl font-bold text-slate-800">
+              <option value="all_days">📅 Permanent Schedule Change (All weekly class days for this student)</option>
+              <option value="single_day">📌 Single Day Only (Only this specific day's session)</option>
+            </select>
+          </div>
+
+          <div>
+            <label class="block font-bold text-slate-700 mb-1">Reason for Time Change *:</label>
+            <select id="timeChangeReasonSelect" class="w-full p-2.5 border rounded-xl font-bold text-slate-700 mb-2">
+              <option value="Parent / Student requested new class timing">Parent / Student requested new class timing</option>
+              <option value="Daylight Saving Time (DST) adjustment">Daylight Saving Time (DST) adjustment</option>
+              <option value="Student school / routine timing changed">Student school / routine timing changed</option>
+              <option value="Mutual timetable optimization with family">Mutual timetable optimization with family</option>
+              <option value="Temporary reschedule for today">Temporary reschedule for today</option>
+              <option value="Other reason">Other reason</option>
+            </select>
+            <textarea id="timeChangeNotes" rows="2" placeholder="Optional note for Manager / Owner (e.g. Parent agreed to 6:30 PM PKT from Monday)..." class="w-full p-2.5 border border-slate-300 rounded-xl text-xs"></textarea>
+          </div>
+
+          <div class="flex flex-col-reverse sm:flex-row justify-end gap-2 border-t pt-3 shrink-0">
+            <button type="button" onclick="closeTimeChangeRequestModal()" class="w-full sm:w-auto px-4 py-2 border rounded-xl font-bold text-slate-600 hover:bg-slate-100 text-center">Cancel</button>
+            <button type="submit" id="btnSubmitTimeChangeReq" class="w-full sm:w-auto px-5 py-2.5 bg-gradient-to-r from-indigo-600 to-purple-700 hover:from-indigo-700 hover:to-purple-800 text-white font-black rounded-xl flex items-center justify-center gap-1.5 shadow-sm transition">
+              <i class="fa-solid fa-paper-plane"></i> Send Time Change Request
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
   <!-- ================= MODAL: 2D FULL WEEKLY TIMETABLE ================= -->
   <div id="modalWeeklyMatrix" class="fixed inset-0 bg-black/70 backdrop-blur-xs z-50 hidden items-center justify-center p-2 sm:p-4 overflow-y-auto">
     <div class="bg-white rounded-2xl max-w-6xl w-full p-4 sm:p-6 shadow-2xl border border-slate-200 max-h-[92vh] flex flex-col my-auto">
@@ -1524,6 +1606,7 @@
         let isLeaveStudent = s.students?.status === 'Leave';
         let leaveMeta = null;
         let pendingLeaveReq = null;
+        let pendingTimeChangeReq = null;
         if (s.students?.notes) {
           try {
             const pNotes = JSON.parse(s.students.notes);
@@ -1533,6 +1616,9 @@
             }
             if (pNotes.leave_request && pNotes.leave_request.status === 'pending') {
               pendingLeaveReq = pNotes.leave_request;
+            }
+            if (pNotes.time_change_request && pNotes.time_change_request.status === 'pending') {
+              pendingTimeChangeReq = pNotes.time_change_request;
             }
           } catch(e) {}
         }
@@ -1594,6 +1680,7 @@
           isLeaveStudent,
           leaveMeta,
           pendingLeaveReq,
+          pendingTimeChangeReq,
           status,
           badgeClass
         };
@@ -1758,6 +1845,16 @@
         if (c.pendingLeaveReq) {
           reqBadge = '<span class="px-2 py-0.5 rounded text-[10px] font-extrabold bg-amber-100 text-amber-900 border border-amber-300 animate-pulse">⏳ Leave Pending Admin</span>';
         }
+        if (c.pendingTimeChangeReq) {
+          const newLbl = c.pendingTimeChangeReq.new_start_time ? `${c.pendingTimeChangeReq.new_start_time.slice(0,5)} - ${c.pendingTimeChangeReq.new_end_time.slice(0,5)}` : 'New Slot';
+          reqBadge += ` <span class="px-2 py-0.5 rounded text-[10px] font-extrabold bg-indigo-100 text-indigo-900 border border-indigo-300 animate-pulse" title="Waiting for Manager/Owner Approval">⏳ Time Change Pending (➔ ${newLbl})</span>`;
+        }
+
+        const changeTimeBtn = !c.isAdvanceExtra ? `
+          <button onclick="openTimeChangeRequestModal('${c.id}')" class="px-2.5 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-900 border border-indigo-300 rounded-lg text-xs font-bold shadow-2xs flex items-center gap-1 transition" title="Request Manager / Owner to change this student's class timing">
+            <i class="fa-solid fa-clock-rotate-left text-indigo-600"></i> Change Time
+          </button>
+        ` : '';
 
         let actionButtons = '';
         if (c.isLeaveStudent) {
@@ -1765,6 +1862,7 @@
             <span class="px-3 py-1.5 rounded-lg text-xs font-black bg-blue-100 text-blue-900 border border-blue-300 flex items-center gap-1">
               <i class="fa-solid fa-umbrella-beach text-blue-600"></i> Slot Paused (On Leave)
             </span>
+            ${changeTimeBtn}
           `;
         } else {
           // Check if already marked (locked) — status must be a real mark, not just Waiting
@@ -1790,8 +1888,9 @@
                 <i class="fa-solid fa-lock text-xs opacity-60"></i> ${c.log.status} (Locked)
               </span>
               ${zoomBtn}
-              <button onclick="openRescheduleRequestModal('${c.id}')" class="px-2.5 py-1 bg-orange-50 hover:bg-orange-100 text-orange-900 border border-orange-300 rounded-lg text-xs font-bold shadow-2xs flex items-center gap-1 transition" title="Request Admin to approve a reschedule or status change">
-                <i class="fa-solid fa-rotate text-orange-600"></i> Request Reschedule
+              ${changeTimeBtn}
+              <button onclick="openRescheduleRequestModal('${c.id}')" class="px-2.5 py-1 bg-orange-50 hover:bg-orange-100 text-orange-900 border border-orange-300 rounded-lg text-xs font-bold shadow-2xs flex items-center gap-1 transition" title="Request Admin to approve a status change">
+                <i class="fa-solid fa-rotate text-orange-600"></i> Status Change
               </button>
             `;
           } else {
@@ -1801,6 +1900,7 @@
                 <i class="fa-solid fa-clipboard-check"></i> Mark Sabaq
               </button>
               ${zoomBtn}
+              ${changeTimeBtn}
             `;
           }
         }
@@ -2584,6 +2684,9 @@
           <div class="p-2 bg-slate-50 border border-slate-200 rounded-lg inline-flex items-center gap-2 m-1">
             <span class="font-mono font-bold text-brandDark bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">${s.start_time.slice(0,5)} - ${s.end_time.slice(0,5)}</span>
             <span class="font-bold text-slate-800">${s.students?.name || 'Student'}</span>
+            <button onclick="openTimeChangeRequestModal('${s.id}')" class="px-1.5 py-0.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-800 border border-indigo-200 rounded text-[10px] font-bold flex items-center gap-1 transition" title="Request Time Change for ${s.students?.name || 'Student'}">
+              <i class="fa-solid fa-clock-rotate-left text-indigo-600"></i> Change Time
+            </button>
             ${s.meeting_link ? `<a href="${s.meeting_link}" target="_blank" class="text-emerald-600 hover:text-emerald-800" title="Join Link"><i class="fa-solid fa-video"></i></a>` : ''}
           </div>
         `).join('') : '<span class="text-slate-400 italic text-[11px] p-2 block">No classes scheduled for this day</span>';
@@ -2979,6 +3082,183 @@
       } finally {
         btn.disabled = false;
         btn.innerHTML = '<i class="fa-solid fa-paper-plane"></i> Send Request to Admin';
+      }
+    }
+
+    // ============================================================
+    // STUDENT SCHEDULE TIME CHANGE REQUEST ENGINE (TEACHER PORTAL)
+    // ============================================================
+    function format24To12HourLabel(hhmm) {
+      if (!hhmm) return '';
+      const [hStr, mStr] = hhmm.split(':');
+      const h = parseInt(hStr, 10);
+      const m = mStr || '00';
+      const period = h >= 12 ? 'PM' : 'AM';
+      const h12 = h % 12 === 0 ? 12 : h % 12;
+      return `${String(h12).padStart(2, '0')}:${m} ${period}`;
+    }
+
+    function openTimeChangeRequestModal(scheduleId) {
+      let c = TODAY_CLASSES.find(x => String(x.id) === String(scheduleId));
+      if (!c) {
+        c = (ALL_TEACHER_SCHEDULES || []).find(x => String(x.id) === String(scheduleId));
+      }
+      if (!c) {
+        alert("Schedule slot not found. Please refresh.");
+        return;
+      }
+
+      const studentId = c.student_id || c.students?.id || '';
+      const studentName = c.students?.name || 'Student';
+      const oldStart = (c.start_time || '17:00').slice(0, 5);
+      const oldEnd = (c.end_time || '17:30').slice(0, 5);
+      const oldLabel12 = `${format24To12HourLabel(oldStart)} - ${format24To12HourLabel(oldEnd)} PKT (${oldStart} - ${oldEnd})`;
+
+      document.getElementById('timeChangeScheduleId').value = scheduleId;
+      document.getElementById('timeChangeStudentId').value = studentId;
+      document.getElementById('timeChangeStudentNameDisplay').innerText = `${studentName} (${studentId})`;
+      document.getElementById('timeChangeCurrentSlotDisplay').innerText = oldLabel12;
+      document.getElementById('timeChangeModalSubtitle').innerText = `${studentName} • Current: ${format24To12HourLabel(oldStart)} - ${format24To12HourLabel(oldEnd)}`;
+
+      // Populate 48 half-hour slots and check availability in ALL_TEACHER_SCHEDULES
+      const slotSelect = document.getElementById('timeChangeNewSlotSelect');
+      if (slotSelect) {
+        const occupiedMap = {};
+        (ALL_TEACHER_SCHEDULES || []).forEach(s => {
+          const stTime = (s.start_time || '').slice(0, 5);
+          if (stTime && String(s.student_id) !== String(studentId)) {
+            occupiedMap[stTime] = s.students?.name || s.student_id || 'Booked';
+          }
+        });
+
+        let optionsHtml = '';
+        let defaultSelectedVal = '';
+        for (let i = 0; i < 48; i++) {
+          const sH = Math.floor(i / 2);
+          const sM = (i % 2) * 30;
+          const eTotal = (i + 1) * 30;
+          const eH = Math.floor(eTotal / 60) % 24;
+          const eM = eTotal % 60;
+
+          const start24 = `${String(sH).padStart(2, '0')}:${String(sM).padStart(2, '0')}`;
+          const end24 = `${String(eH).padStart(2, '0')}:${String(eM).padStart(2, '0')}`;
+          const slotVal = `${start24}|${end24}`;
+          const label12 = `${format24To12HourLabel(start24)} - ${format24To12HourLabel(end24)} PKT (${start24} - ${end24})`;
+
+          const isCurrent = start24 === oldStart;
+          const occupiedBy = occupiedMap[start24];
+
+          let statusSuffix = '🟢 FREE / Available';
+          if (isCurrent) {
+            statusSuffix = '⚪ CURRENT SLOT';
+          } else if (occupiedBy) {
+            statusSuffix = `🔴 Occupied by ${occupiedBy}`;
+          }
+
+          if (!defaultSelectedVal && !isCurrent && !occupiedBy && sH >= 14) {
+            defaultSelectedVal = slotVal;
+          }
+
+          optionsHtml += `<option value="${slotVal}" ${isCurrent ? 'disabled' : ''}>${statusSuffix} — ${label12}</option>`;
+        }
+        slotSelect.innerHTML = optionsHtml;
+        if (defaultSelectedVal) slotSelect.value = defaultSelectedVal;
+      }
+
+      document.getElementById('timeChangeNotes').value = '';
+      document.getElementById('timeChangeScopeSelect').value = 'all_days';
+
+      const modal = document.getElementById('modalTimeChangeRequest');
+      if (modal) {
+        modal.classList.remove('hidden');
+        modal.classList.add('flex');
+        pushTeacherModalHistory('modalTimeChangeRequest');
+      }
+    }
+
+    function closeTimeChangeRequestModal(popHistory = true) {
+      const modal = document.getElementById('modalTimeChangeRequest');
+      if (modal) {
+        modal.classList.add('hidden');
+        modal.classList.remove('flex');
+      }
+      if (popHistory) popTeacherModalHistory('modalTimeChangeRequest');
+    }
+
+    async function submitTimeChangeRequest(e) {
+      e.preventDefault();
+      const scheduleId = document.getElementById('timeChangeScheduleId')?.value;
+      const studentId = document.getElementById('timeChangeStudentId')?.value;
+      const newSlotVal = document.getElementById('timeChangeNewSlotSelect')?.value || '';
+      const scope = document.getElementById('timeChangeScopeSelect')?.value || 'all_days';
+      const reason = document.getElementById('timeChangeReasonSelect')?.value || 'Parent / Student requested new class timing';
+      const notes = (document.getElementById('timeChangeNotes')?.value || '').trim();
+
+      if (!scheduleId || !studentId || !newSlotVal) {
+        alert("Please select a valid new time slot.");
+        return;
+      }
+
+      const [newStart24, newEnd24] = newSlotVal.split('|');
+      let c = TODAY_CLASSES.find(x => String(x.id) === String(scheduleId)) ||
+              (ALL_TEACHER_SCHEDULES || []).find(x => String(x.id) === String(scheduleId));
+
+      const studentName = c?.students?.name || 'Student';
+      const oldStart24 = (c?.start_time || '17:00').slice(0, 5);
+      const oldEnd24 = (c?.end_time || '17:30').slice(0, 5);
+
+      const oldLabel = `${format24To12HourLabel(oldStart24)} - ${format24To12HourLabel(oldEnd24)} PKT (${oldStart24} - ${oldEnd24})`;
+      const newLabel = `${format24To12HourLabel(newStart24)} - ${format24To12HourLabel(newEnd24)} PKT (${newStart24} - ${newEnd24})`;
+
+      const btn = document.getElementById('btnSubmitTimeChangeReq');
+      btn.disabled = true;
+      btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Sending to Manager / Owner...';
+
+      try {
+        const { data: st, error: fetchErr } = await db.from('students').select('*').eq('id', studentId).single();
+        if (fetchErr || !st) throw new Error("Student record not found.");
+
+        let meta = {};
+        try { meta = JSON.parse(st.notes || '{}'); } catch (err2) { meta = { text: st.notes || '' }; }
+
+        const reqObj = {
+          id: 'TIMEREQ-' + Date.now(),
+          type: 'time_change_request',
+          student_id: studentId,
+          student_name: studentName,
+          schedule_id: scheduleId,
+          day_of_week: c?.day_of_week || null,
+          teacher_id: CURRENT_TEACHER?.id || c?.teacher_id || '',
+          teacher_name: CURRENT_TEACHER?.full_name || 'Teacher',
+          old_start_time: oldStart24 + ':00',
+          old_end_time: oldEnd24 + ':00',
+          old_slot_label: oldLabel,
+          new_start_time: newStart24 + ':00',
+          new_end_time: newEnd24 + ':00',
+          new_slot_label: newLabel,
+          scope: scope,
+          reason: reason,
+          notes: notes,
+          status: 'pending',
+          requested_at: new Date().toISOString()
+        };
+
+        meta.time_change_request = reqObj;
+
+        const { error: upErr } = await db.from('students').update({
+          notes: JSON.stringify(meta)
+        }).eq('id', studentId);
+
+        if (upErr) throw upErr;
+
+        alert(`✅ Time Change Request Sent to Manager / Owner Portal!\n\nStudent: ${studentName}\nCurrent Time: ${oldLabel}\nRequested New Time: ${newLabel}\nScope: ${scope === 'all_days' ? 'All Weekly Days' : 'Single Day'}\n\nAs soon as the Manager or Owner clicks "Approve", this student's class timing will automatically update in your schedule!`);
+        closeTimeChangeRequestModal();
+        await loadTeacherPortalData();
+      } catch (err) {
+        alert("Error submitting time change request: " + err.message);
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fa-solid fa-paper-plane"></i> Send Time Change Request';
       }
     }
 

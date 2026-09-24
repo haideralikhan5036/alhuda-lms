@@ -603,6 +603,11 @@
 
       </div>
 
+      <!-- LIVE TEACHER SCHEDULE TIME CHANGE APPROVAL BANNER (OWNER & MANAGER 1-CLICK APPROVAL) -->
+      <div id="dashboardPendingTimeChangesBanner" class="hidden mb-4 bg-gradient-to-r from-indigo-950 via-slate-900 to-indigo-950 text-white p-4 rounded-2xl border-2 border-indigo-400/60 shadow-lg">
+        <!-- Populated dynamically by renderPendingTimeChangeBanners() -->
+      </div>
+
       <!-- COMPACT EXECUTIVE FEE BAR (Sleek, Space-Saving & Decluttered) -->
       <div class="mb-4 bg-slate-900/95 hover:bg-slate-900 text-white px-3.5 py-2 rounded-xl border border-slate-800 shadow-2xs flex items-center justify-between flex-wrap gap-2.5 text-xs transition">
         <div class="flex items-center gap-2.5">
@@ -912,6 +917,11 @@
         <button onclick="openEmployeeTypeChoice()" class="px-3.5 py-2 bg-brandDark text-white rounded-lg text-xs font-bold hover:bg-brandDarkest flex items-center gap-1.5 shadow">
           <i class="fa-solid fa-user-plus"></i> + Add New Employee
         </button>
+      </div>
+
+      <!-- LIVE TEACHER SCHEDULE TIME CHANGE APPROVAL BANNER IN TEACHERS TAB -->
+      <div id="teachersTabPendingTimeChangesBanner" class="hidden mb-5 bg-gradient-to-r from-indigo-950 via-slate-900 to-indigo-950 text-white p-4 rounded-2xl border-2 border-indigo-400/60 shadow-lg">
+        <!-- Populated dynamically by renderPendingTimeChangeBanners() -->
       </div>
 
       <div id="teachersGrid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
@@ -10392,6 +10402,8 @@
         const log = logsMap[s.id];
         const status = log?.status || 'Pending';
         const notes = log?.lesson_notes || '';
+        const sNameSafe = (s.students?.name || 'Student').replace(/'/g, "\\'");
+        const tNameSafe = (s.teachers?.full_name || 'Teacher').replace(/'/g, "\\'");
 
         return `
           <tr class="hover:bg-slate-50">
@@ -10410,11 +10422,83 @@
               <input type="text" id="note_${s.id}" value="${notes}" placeholder="e.g. Surah Baqarah v1-5 recited" class="w-full text-xs p-1.5 border rounded">
             </td>
             <td class="p-3 text-right">
-              <button onclick="saveAttendance('${s.id}', '${s.student_id}', '${s.teacher_id}', '${status}')" class="px-3 py-1 bg-slate-800 text-white rounded text-xs font-bold hover:bg-black"><i class="fa-solid fa-floppy-disk"></i></button>
+              <div class="flex items-center justify-end gap-1.5">
+                <button onclick="requestTimeChangeFromIndex('${s.id}', '${s.student_id}', '${s.teacher_id}', '${s.start_time.slice(0,5)}', '${s.end_time.slice(0,5)}', '${sNameSafe}', '${tNameSafe}')" class="px-2.5 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-900 border border-indigo-300 rounded text-xs font-bold flex items-center gap-1 transition" title="Request Manager/Owner to change this student's schedule time">
+                  <i class="fa-solid fa-clock-rotate-left text-indigo-600"></i> Change Time
+                </button>
+                <button onclick="saveAttendance('${s.id}', '${s.student_id}', '${s.teacher_id}', '${status}')" class="px-3 py-1 bg-slate-800 text-white rounded text-xs font-bold hover:bg-black" title="Save"><i class="fa-solid fa-floppy-disk"></i></button>
+              </div>
             </td>
           </tr>
         `;
       }).join('');
+    }
+
+    async function requestTimeChangeFromIndex(scheduleId, studentId, teacherId, oldStart, oldEnd, studentName, teacherName) {
+      const newStartInput = prompt(
+        `🕒 Request Schedule Time Change for ${studentName}\n\nCurrent Scheduled Time: ${oldStart} - ${oldEnd} PKT\nEnter New Start Time (24-hour format HH:MM, e.g. 18:30 for 6:30 PM PKT):`,
+        "18:00"
+      );
+      if (!newStartInput) return;
+
+      const m = newStartInput.trim().match(/^(\d{1,2}):(\d{2})$/);
+      if (!m) {
+        alert("Invalid time format. Please enter HH:MM (e.g., 18:30 or 16:00).");
+        return;
+      }
+      const sH = parseInt(m[1], 10);
+      const sM = parseInt(m[2], 10);
+      if (sH < 0 || sH > 23 || (sM !== 0 && sM !== 30)) {
+        alert("Please enter a valid 30-minute slot time ending in :00 or :30 (e.g. 17:00, 17:30, 18:00).");
+        return;
+      }
+
+      const endTotal = sH * 60 + sM + 30;
+      const eH = Math.floor(endTotal / 60) % 24;
+      const eM = endTotal % 60;
+      const newStart24 = `${String(sH).padStart(2, '0')}:${String(sM).padStart(2, '0')}`;
+      const newEnd24 = `${String(eH).padStart(2, '0')}:${String(eM).padStart(2, '0')}`;
+
+      const reason = prompt("Enter reason for requesting this schedule time change:", "Parent / Student requested new class timing") || "Schedule adjustment";
+
+      try {
+        const { data: st, error } = await db.from('students').select('*').eq('id', studentId).single();
+        if (error || !st) throw new Error("Student record not found.");
+
+        let meta = {};
+        try { meta = JSON.parse(st.notes || '{}'); } catch (e) { meta = { text: st.notes || '' }; }
+
+        meta.time_change_request = {
+          id: 'TIMEREQ-' + Date.now(),
+          type: 'time_change_request',
+          student_id: studentId,
+          student_name: studentName,
+          schedule_id: scheduleId,
+          teacher_id: teacherId,
+          teacher_name: teacherName,
+          old_start_time: oldStart + ':00',
+          old_end_time: oldEnd + ':00',
+          old_slot_label: `${oldStart} - ${oldEnd} PKT`,
+          new_start_time: newStart24 + ':00',
+          new_end_time: newEnd24 + ':00',
+          new_slot_label: `${newStart24} - ${newEnd24} PKT`,
+          scope: 'all_days',
+          reason: reason,
+          notes: '',
+          status: 'pending',
+          requested_at: new Date().toISOString()
+        };
+
+        const { error: upErr } = await db.from('students').update({
+          notes: JSON.stringify(meta)
+        }).eq('id', studentId);
+        if (upErr) throw upErr;
+
+        alert(`✅ Time Change Request Sent to Manager / Owner Portal!\n\nStudent: ${studentName}\nOld Time: ${oldStart} - ${oldEnd} PKT\nRequested New Time: ${newStart24} - ${newEnd24} PKT\n\nOnce approved by the Manager or Owner, the schedule will automatically update!`);
+        await checkLeaveReturnAlertsAndRequests(false);
+      } catch (err) {
+        alert("Error submitting time change request: " + err.message);
+      }
     }
 
     async function saveAttendance(schedule_id, student_id, teacher_id, status) {
@@ -14952,7 +15036,7 @@ Web Portal: https://alhuda-lms.vercel.app`;
             }
           }
 
-          // Check pending teacher requests (leave requests AND reschedule requests)
+          // Check pending teacher requests (leave requests, reschedule requests, AND schedule time change requests)
           if (meta && meta.leave_request && meta.leave_request.status === 'pending') {
             PENDING_TEACHER_REQUESTS.push({
               student: st,
@@ -14965,6 +15049,13 @@ Web Portal: https://alhuda-lms.vercel.app`;
               student: st,
               request: meta.reschedule_request,
               requestType: 'reschedule'
+            });
+          }
+          if (meta && meta.time_change_request && meta.time_change_request.status === 'pending') {
+            PENDING_TEACHER_REQUESTS.push({
+              student: st,
+              request: meta.time_change_request,
+              requestType: 'time_change'
             });
           }
         });
@@ -14998,6 +15089,9 @@ Web Portal: https://alhuda-lms.vercel.app`;
           }
         }
 
+        // Render Live 1-Click Approval Banners on Dashboard & Teachers Tab
+        renderPendingTimeChangeBanners();
+
         // Persistent Dashboard Alert Modal
         if (autoPopup && OVERDUE_LEAVE_STUDENTS.length > 0) {
           const dismissedSession = sessionStorage.getItem('alhuda_leave_alerts_dismissed');
@@ -15007,6 +15101,92 @@ Web Portal: https://alhuda-lms.vercel.app`;
         }
       } catch (err) {
         console.error('Error checking leave returns/requests:', err);
+      }
+    }
+
+    function renderPendingTimeChangeBanners() {
+      const dashBanner = document.getElementById('dashboardPendingTimeChangesBanner');
+      const tchBanner = document.getElementById('teachersTabPendingTimeChangesBanner');
+
+      const timeReqs = (PENDING_TEACHER_REQUESTS || []).filter(item => item.requestType === 'time_change');
+      if (timeReqs.length === 0 || CURRENT_ROLE === 'teacher' || CURRENT_ROLE === 'student') {
+        if (dashBanner) dashBanner.classList.add('hidden');
+        if (tchBanner) tchBanner.classList.add('hidden');
+        return;
+      }
+
+      const cardsHtml = timeReqs.map(item => {
+        const st = item.student;
+        const req = item.request || {};
+        const teacherName = req.teacher_name || st.teachers?.full_name || 'Teacher';
+        const oldSlot = req.old_slot_label || (req.old_start_time ? `${req.old_start_time.slice(0,5)} - ${req.old_end_time.slice(0,5)}` : 'Current Slot');
+        const newSlot = req.new_slot_label || (req.new_start_time ? `${req.new_start_time.slice(0,5)} - ${req.new_end_time.slice(0,5)}` : 'New Slot');
+        const scopeLabel = req.scope === 'single_day' ? '📌 Single Day Only' : '📅 All Weekly Days (Permanent)';
+
+        return `
+          <div class="p-3.5 bg-white/10 hover:bg-white/15 backdrop-blur-xs rounded-xl border border-indigo-400/40 flex items-center justify-between gap-3 flex-wrap transition">
+            <div class="space-y-1">
+              <div class="flex items-center gap-2 flex-wrap">
+                <span class="px-2 py-0.5 rounded text-[10px] font-extrabold bg-indigo-500 text-white uppercase tracking-wider">🕒 Schedule Time Change</span>
+                <span class="font-black text-white text-sm">${st.name}</span>
+                <span class="text-xs font-mono text-indigo-200">(ID: ${st.id})</span>
+                <span class="text-xs text-slate-300">• Requested by <strong class="text-emerald-300">${teacherName}</strong></span>
+                <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-400/20 text-amber-200 border border-amber-400/40">${scopeLabel}</span>
+              </div>
+              <div class="flex items-center gap-2 flex-wrap text-xs pt-0.5">
+                <span class="px-2.5 py-1 rounded-lg bg-rose-500/25 text-rose-200 border border-rose-400/40 font-mono font-bold">
+                  Old: ${oldSlot}
+                </span>
+                <i class="fa-solid fa-arrow-right text-amber-300 text-xs"></i>
+                <span class="px-2.5 py-1 rounded-lg bg-emerald-500/25 text-emerald-200 border border-emerald-400/40 font-mono font-extrabold">
+                  New: ${newSlot}
+                </span>
+                ${req.reason ? `<span class="text-indigo-200 text-[11px] italic ml-1">Reason: &ldquo;${req.reason}${req.notes ? ' — ' + req.notes : ''}&rdquo;</span>` : ''}
+              </div>
+            </div>
+
+            <div class="flex items-center gap-2 shrink-0">
+              <button onclick="handleDeclineTeacherRequest('${st.id}', 'time_change')" class="px-3 py-2 bg-rose-500/20 hover:bg-rose-600 text-rose-200 hover:text-white border border-rose-400/40 rounded-xl text-xs font-bold transition flex items-center gap-1">
+                <i class="fa-solid fa-xmark"></i> Decline
+              </button>
+              <button onclick="handleApproveTeacherRequest('${st.id}', 'time_change')" class="px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-black rounded-xl text-xs transition flex items-center gap-1.5 shadow-md">
+                <i class="fa-solid fa-circle-check"></i> Approve &amp; Auto-Change Time
+              </button>
+            </div>
+          </div>
+        `;
+      }).join('');
+
+      const bannerInner = `
+        <div class="flex items-center justify-between gap-2 mb-3 flex-wrap">
+          <div class="flex items-center gap-2.5">
+            <span class="w-8 h-8 rounded-xl bg-amber-400 text-slate-950 flex items-center justify-center font-black text-sm animate-bounce shadow-xs">
+              <i class="fa-solid fa-clock-rotate-left"></i>
+            </span>
+            <div>
+              <h3 class="font-black text-sm text-white flex items-center gap-2">
+                Pending Teacher Schedule Time Change Requests
+                <span class="px-2 py-0.5 rounded-full text-[10px] font-mono font-black bg-amber-400 text-slate-950">${timeReqs.length} Pending</span>
+              </h3>
+              <p class="text-[11px] text-indigo-200">Click <strong>"Approve &amp; Auto-Change Time"</strong> below to automatically update the student's timing in the teacher's schedule without manual searching.</p>
+            </div>
+          </div>
+          <button onclick="openAdminTeacherRequestsModal()" class="px-3 py-1.5 bg-white/10 hover:bg-white/20 text-white rounded-xl text-xs font-bold border border-white/20 transition">
+            View All Requests (${PENDING_TEACHER_REQUESTS.length})
+          </button>
+        </div>
+        <div class="space-y-2.5">
+          ${cardsHtml}
+        </div>
+      `;
+
+      if (dashBanner) {
+        dashBanner.innerHTML = bannerInner;
+        dashBanner.classList.remove('hidden');
+      }
+      if (tchBanner) {
+        tchBanner.innerHTML = bannerInner;
+        tchBanner.classList.remove('hidden');
       }
     }
 
@@ -15089,7 +15269,7 @@ Web Portal: https://alhuda-lms.vercel.app`;
           <div class="p-8 text-center bg-slate-50 rounded-2xl border border-slate-200">
             <i class="fa-solid fa-clipboard-check text-emerald-500 text-3xl mb-2"></i>
             <h4 class="font-black text-slate-800 text-sm">No Pending Teacher Requests</h4>
-            <p class="text-xs text-slate-500 mt-1">All leave submissions and adjustment requests have been reviewed.</p>
+            <p class="text-xs text-slate-500 mt-1">All schedule time change requests, leave submissions, and adjustments have been reviewed.</p>
           </div>
         `;
       } else {
@@ -15099,53 +15279,92 @@ Web Portal: https://alhuda-lms.vercel.app`;
           const rType = item.requestType || 'leave';
           const requestedAt = req.requested_at ? new Date(req.requested_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'Recently';
 
-          const typeTag = rType === 'reschedule'
-            ? '<span class="px-2 py-0.5 rounded-full text-[10px] font-mono bg-orange-100 text-orange-800 font-bold border border-orange-300">🔄 Reschedule Request</span>'
+          const typeTag = rType === 'time_change'
+            ? '<span class="px-2 py-0.5 rounded-full text-[10px] font-mono bg-indigo-100 text-indigo-900 font-extrabold border border-indigo-300">🕒 Schedule Time Change Request</span>'
+            : rType === 'reschedule'
+            ? '<span class="px-2 py-0.5 rounded-full text-[10px] font-mono bg-orange-100 text-orange-800 font-bold border border-orange-300">🔄 Attendance Status Change</span>'
             : '<span class="px-2 py-0.5 rounded-full text-[10px] font-mono bg-amber-100 text-amber-800 font-bold border border-amber-300">📅 Leave Request</span>';
 
-          const detailsHtml = rType === 'reschedule' ? `
-            <div class="p-3 bg-orange-50/70 rounded-xl border border-orange-100 grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
-              <div>
-                <span class="text-slate-500 font-bold block text-[11px]">Current Status (Locked):</span>
-                <span class="font-mono font-black text-rose-700">${req.current_status || 'Unknown'}</span>
-              </div>
-              <div>
-                <span class="text-slate-500 font-bold block text-[11px]">Requested Change To:</span>
-                <span class="font-mono font-black text-emerald-700">${req.requested_status || 'N/A'}</span>
-              </div>
-              <div>
-                <span class="text-slate-500 font-bold block text-[11px]">Reason:</span>
-                <span class="font-bold text-orange-950">${req.reason || 'Not specified'}</span>
-              </div>
-              ${req.notes ? `
-                <div class="sm:col-span-2 text-slate-600 italic bg-white p-2 rounded-lg border border-orange-200/60">
-                  &ldquo;${req.notes}&rdquo;
-                </div>
-              ` : ''}
-            </div>
-          ` : `
-            <div class="p-3 bg-amber-50/70 rounded-xl border border-amber-100 grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
-              <div>
-                <span class="text-slate-500 font-bold block text-[11px]">Proposed Leave Period:</span>
-                <span class="font-mono font-black text-slate-800">${req.start_date || 'N/A'} &rarr; ${req.return_date || 'N/A'}</span>
-              </div>
-              <div>
-                <span class="text-slate-500 font-bold block text-[11px]">Reason / Stated Need:</span>
-                <span class="font-bold text-amber-950">${req.reason || 'Not specified'}</span>
-              </div>
-              ${req.notes ? `
-                <div class="sm:col-span-2 text-slate-600 italic bg-white p-2 rounded-lg border border-amber-200/60">
-                  &ldquo;${req.notes}&rdquo;
-                </div>
-              ` : ''}
-            </div>
-          `;
+          let detailsHtml = '';
+          if (rType === 'time_change') {
+            const oldSlot = req.old_slot_label || (req.old_start_time ? `${req.old_start_time.slice(0,5)} - ${req.old_end_time.slice(0,5)}` : 'Current Slot');
+            const newSlot = req.new_slot_label || (req.new_start_time ? `${req.new_start_time.slice(0,5)} - ${req.new_end_time.slice(0,5)}` : 'New Slot');
+            const scopeLbl = req.scope === 'single_day' ? 'Single Day Session Only' : 'Permanent (All Weekly Scheduled Days)';
 
-          const approveLabel = rType === 'reschedule'
-            ? '<i class="fa-solid fa-check"></i> Approve & Update Status'
-            : '<i class="fa-solid fa-check"></i> Approve & Mark Leave';
+            detailsHtml = `
+              <div class="p-3.5 bg-indigo-50/80 rounded-xl border border-indigo-200 grid grid-cols-1 sm:grid-cols-2 gap-2.5 text-xs">
+                <div>
+                  <span class="text-slate-500 font-bold block text-[11px]">Current Scheduled Time:</span>
+                  <span class="font-mono font-black text-rose-700 text-sm">${oldSlot}</span>
+                </div>
+                <div>
+                  <span class="text-slate-500 font-bold block text-[11px]">Requested New Time Slot:</span>
+                  <span class="font-mono font-black text-emerald-700 text-sm">${newSlot}</span>
+                </div>
+                <div>
+                  <span class="text-slate-500 font-bold block text-[11px]">Change Scope:</span>
+                  <span class="font-extrabold text-indigo-950">${scopeLbl}</span>
+                </div>
+                <div>
+                  <span class="text-slate-500 font-bold block text-[11px]">Reason:</span>
+                  <span class="font-bold text-slate-800">${req.reason || 'Schedule adjustment'}</span>
+                </div>
+                ${req.notes ? `
+                  <div class="sm:col-span-2 text-slate-700 italic bg-white p-2 rounded-lg border border-indigo-200/70">
+                    &ldquo;${req.notes}&rdquo;
+                  </div>
+                ` : ''}
+              </div>
+            `;
+          } else if (rType === 'reschedule') {
+            detailsHtml = `
+              <div class="p-3 bg-orange-50/70 rounded-xl border border-orange-100 grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                <div>
+                  <span class="text-slate-500 font-bold block text-[11px]">Current Status (Locked):</span>
+                  <span class="font-mono font-black text-rose-700">${req.current_status || 'Unknown'}</span>
+                </div>
+                <div>
+                  <span class="text-slate-500 font-bold block text-[11px]">Requested Change To:</span>
+                  <span class="font-mono font-black text-emerald-700">${req.requested_status || 'N/A'}</span>
+                </div>
+                <div>
+                  <span class="text-slate-500 font-bold block text-[11px]">Reason:</span>
+                  <span class="font-bold text-orange-950">${req.reason || 'Not specified'}</span>
+                </div>
+                ${req.notes ? `
+                  <div class="sm:col-span-2 text-slate-600 italic bg-white p-2 rounded-lg border border-orange-200/60">
+                    &ldquo;${req.notes}&rdquo;
+                  </div>
+                ` : ''}
+              </div>
+            `;
+          } else {
+            detailsHtml = `
+              <div class="p-3 bg-amber-50/70 rounded-xl border border-amber-100 grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                <div>
+                  <span class="text-slate-500 font-bold block text-[11px]">Proposed Leave Period:</span>
+                  <span class="font-mono font-black text-slate-800">${req.start_date || 'N/A'} &rarr; ${req.return_date || 'N/A'}</span>
+                </div>
+                <div>
+                  <span class="text-slate-500 font-bold block text-[11px]">Reason / Stated Need:</span>
+                  <span class="font-bold text-amber-950">${req.reason || 'Not specified'}</span>
+                </div>
+                ${req.notes ? `
+                  <div class="sm:col-span-2 text-slate-600 italic bg-white p-2 rounded-lg border border-amber-200/60">
+                    &ldquo;${req.notes}&rdquo;
+                  </div>
+                ` : ''}
+              </div>
+            `;
+          }
 
-          const borderColor = rType === 'reschedule' ? 'border-orange-200' : 'border-amber-200';
+          const approveLabel = rType === 'time_change'
+            ? '<i class="fa-solid fa-check"></i> Approve &amp; Auto-Change Schedule'
+            : rType === 'reschedule'
+            ? '<i class="fa-solid fa-check"></i> Approve &amp; Update Status'
+            : '<i class="fa-solid fa-check"></i> Approve &amp; Mark Leave';
+
+          const borderColor = rType === 'time_change' ? 'border-indigo-300' : rType === 'reschedule' ? 'border-orange-200' : 'border-amber-200';
 
           return `
             <div class="p-4 bg-white rounded-2xl border ${borderColor} shadow-xs space-y-3">
@@ -15197,7 +15416,56 @@ Web Portal: https://alhuda-lms.vercel.app`;
         let meta = {};
         try { meta = JSON.parse(st.notes || '{}'); } catch(e) { meta = { text: st.notes || '' }; }
 
-        if (rType === 'reschedule') {
+        if (rType === 'time_change') {
+          // SCHEDULE TIME CHANGE APPROVAL: Automatically update student's slots in class_schedules!
+          const req = meta.time_change_request || {};
+          const oldStart = (req.old_start_time || '').slice(0, 5);
+          const newStart = req.new_start_time || '17:00:00';
+          const newEnd = req.new_end_time || '17:30:00';
+          const scope = req.scope || 'all_days';
+
+          const { data: stuScheds, error: sErr } = await db.from('class_schedules').select('*').eq('student_id', studentId);
+          if (sErr) throw sErr;
+
+          let targetRows = [];
+          if (scope === 'single_day' && req.schedule_id) {
+            targetRows = (stuScheds || []).filter(r => String(r.id) === String(req.schedule_id));
+          } else {
+            targetRows = (stuScheds || []).filter(r => (r.start_time || '').slice(0, 5) === oldStart);
+            if (targetRows.length === 0 && stuScheds && stuScheds.length > 0) {
+              targetRows = stuScheds;
+            }
+          }
+
+          const targetIds = targetRows.map(r => r.id);
+          if (targetIds.length > 0) {
+            const { error: upSchedErr } = await db.from('class_schedules')
+              .update({
+                start_time: newStart,
+                end_time: newEnd
+              })
+              .in('id', targetIds);
+            if (upSchedErr) throw upSchedErr;
+          }
+
+          // Sync student metadata & mark request approved
+          meta.pkt_slot = req.new_slot_label || `${newStart.slice(0,5)} - ${newEnd.slice(0,5)}`;
+          meta.start_time = newStart.slice(0,5);
+          meta.end_time = newEnd.slice(0,5);
+          if (meta.time_change_request) {
+            meta.time_change_request.status = 'approved';
+            meta.time_change_request.approved_at = new Date().toISOString();
+            meta.time_change_request.approved_by = CURRENT_ROLE;
+          }
+
+          await db.from('students').update({ notes: JSON.stringify(meta) }).eq('id', studentId);
+
+          await fetchTeacherSchedules();
+          render2DMatrixTable();
+          loadTeachers();
+
+          alert(`✅ Approved & Schedule Updated Automatically!\n\nStudent: ${st.name} (${st.id})\nTeacher: ${req.teacher_name || 'Assigned Teacher'}\nOld Time: ${req.old_slot_label || oldStart}\nNew Time: ${req.new_slot_label || newStart.slice(0,5)}\nUpdated Timetable Slots: ${targetIds.length} weekly session(s)`);
+        } else if (rType === 'reschedule') {
           // RESCHEDULE APPROVAL: update the attendance_log status to the requested status
           const req = meta.reschedule_request || {};
           const scheduleId = req.schedule_id;
@@ -15274,7 +15542,12 @@ Web Portal: https://alhuda-lms.vercel.app`;
         let meta = {};
         try { meta = JSON.parse(st.notes || '{}'); } catch(e) { meta = { text: st.notes || '' }; }
 
-        if (rType === 'reschedule' && meta.reschedule_request) {
+        if (rType === 'time_change' && meta.time_change_request) {
+          meta.time_change_request.status = 'declined';
+          meta.time_change_request.decline_reason = reason;
+          meta.time_change_request.declined_at = new Date().toISOString();
+          meta.time_change_request.declined_by = CURRENT_ROLE;
+        } else if (rType === 'reschedule' && meta.reschedule_request) {
           meta.reschedule_request.status = 'declined';
           meta.reschedule_request.decline_reason = reason;
           meta.reschedule_request.declined_at = new Date().toISOString();
