@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Recording Auditor Portal - Beacon Quran Institute LMS</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+    <!-- NAVBAR -->
+    <nav class="navbar">
+        <div class="navbar-brand">
+            <span>📹</span> BQI LMS <span>Recording Auditor Portal</span>
+        </div>
+        <div class="user-profile">
+            <div class="user-badge" style="background: rgba(245, 158, 11, 0.2); border-color: #f59e0b; color: #fbbf24;">
+                ⏳ 15-Day Auto-Delete Schedule Active
+            </div>
+            <div class="user-badge" id="userBadge">Recording Auditor</div>
+            <button class="btn-logout" onclick="BQI_DB.logout()">Logout</button>
+        </div>
+    </nav>
+
+    <!-- MAIN CONTAINER -->
+    <div class="dashboard-container">
+
+        <!-- STATS GRID -->
+        <div class="stats-grid">
+            <div class="stat-card glass">
+                <div class="stat-icon" style="background: rgba(11, 105, 163, 0.1); color: #0b69a3;">🎬</div>
+                <div>
+                    <div class="stat-val">142</div>
+                    <div class="stat-lbl">Classes Recorded</div>
+                </div>
+            </div>
+            <div class="stat-card glass">
+                <div class="stat-icon" style="background: rgba(239, 68, 68, 0.1); color: #ef4444;">🚨</div>
+                <div>
+                    <div class="stat-val" id="flaggedCount">1</div>
+                    <div class="stat-lbl">Flagged for Super Admin</div>
+                </div>
+            </div>
+            <div class="stat-card glass">
+                <div class="stat-icon" style="background: rgba(16, 185, 129, 0.1); color: #10b981;">💾</div>
+                <div>
+                    <div class="stat-val">14.2 GB</div>
+                    <div class="stat-lbl">360p Compressed Storage</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- RECORDINGS AUDIT TABLE -->
+        <div class="glass" style="padding: 24px;">
+            <div class="table-header-bar">
+                <div>
+                    <h2 style="font-size: 20px; font-weight: 700; color: #102a43;">Recorded Classes Audit Log</h2>
+                    <p style="font-size: 13px; color: #627d98; margin-top: 4px;">Auditor Scope: Class quality inspection & safety compliance only.</p>
+                </div>
+                <input type="text" id="searchInput" class="search-box" placeholder="Search Class ID, Student, Teacher..." onkeyup="renderRecordingsTable()">
+            </div>
+
+            <div class="table-responsive">
+                <table class="custom-table">
+                    <thead>
+                        <tr>
+                            <th>Class ID</th>
+                            <th>Date & Time</th>
+                            <th>Student Name</th>
+                            <th>Country</th>
+                            <th>Teacher Name</th>
+                            <th>Status</th>
+                            <th>Audit Flag</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="recordingsTableBody">
+                        <!-- Rendered dynamically -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- FLAG REASON INPUT MODAL -->
+    <div class="modal-overlay" id="flagModal">
+        <div class="modal-card">
+            <button class="modal-close" onclick="closeFlagModal()">×</button>
+            <h3 class="modal-title" style="color: #991b1b;">🚩 Flag Class for Super Admin Review</h3>
+            <p style="font-size: 14px; color: #627d98; margin-bottom: 15px;">Please describe the issue or safety policy violation observed in this recording.</p>
+            
+            <div class="form-group">
+                <label style="color: #102a43;">Violation / Review Reason</label>
+                <textarea id="flagReasonInput" style="width: 100%; height: 100px; padding: 12px; border-radius: 8px; border: 1px solid #d9e2ec; font-family: inherit; font-size: 14px;" placeholder="e.g. Teacher shared personal contact details around minute 12..."></textarea>
+            </div>
+
+            <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px;">
+                <button onclick="closeFlagModal()" style="padding: 10px 16px; border: 1px solid #d9e2ec; background: white; border-radius: 8px; cursor: pointer;">Cancel</button>
+                <button class="btn-action-danger" id="submitFlagBtn">Submit Flag Alert</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- VIDEO PLAYER MODAL -->
+    <div class="modal-overlay" id="videoModal">
+        <div class="modal-card">
+            <button class="modal-close" onclick="closeVideoModal()">×</button>
+            <h3 class="modal-title" id="videoModalTitle">Class Recording Preview</h3>
+            <video id="classVideoPlayer" controls>
+                <source src="https://www.w3schools.com/html/mov_bbb.mp4" type="video/mp4">
+                Your browser does not support HTML5 video.
+            </video>
+        </div>
+    </div>
+
+    <script src="database.js"></script>
+    <script>
+        // Ensure user is logged in as auditor / recording manager
+        const user = BQI_DB.getCurrentUser();
+        if (!user || user.role !== "recording_manager") {
+            window.location.href = "login.html";
+        } else {
+            document.getElementById("userBadge").innerText = `${user.name}`;
+        }
+
+        let selectedClassIdForFlag = null;
+
+        function renderRecordingsTable() {
+            const classes = BQI_DB.getClasses();
+            const search = document.getElementById("searchInput").value.toLowerCase();
+            const tbody = document.getElementById("recordingsTableBody");
+
+            // Filter classes
+            const filtered = classes.filter(c => 
+                c.id.toString().includes(search) || 
+                c.studentName.toLowerCase().includes(search) || 
+                c.teacherName.toLowerCase().includes(search)
+            );
+
+            // Update stats
+            const flaggedCount = classes.filter(c => c.isFlagged).length;
+            document.getElementById("flaggedCount").innerText = flaggedCount;
+
+            tbody.innerHTML = filtered.map(c => `
+                <tr>
+                    <td><strong>#${c.id}</strong></td>
+                    <td>${c.date}<br><small style="color: #627d98;">${c.time}</small></td>
+                    <td><strong>${c.studentName}</strong></td>
+                    <td>${c.studentCountry}</td>
+                    <td>${c.teacherName}</td>
+                    <td><span class="badge badge-active">${c.status.toUpperCase()}</span></td>
+                    <td>
+                        ${c.isFlagged 
+                            ? `<span class="badge badge-flagged" title="${c.flagNotes}">🚩 Flagged</span>` 
+                            : `<span style="color: #9fb3c8;">Normal</span>`
+                        }
+                    </td>
+                    <td>
+                        <button onclick="playRecording(${c.id})" style="padding: 6px 12px; background: #0b69a3; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 12px; margin-right: 4px;">
+                            🎬 Play
+                        </button>
+                        ${!c.isFlagged ? `
+                            <button onclick="openFlagModal(${c.id})" style="padding: 6px 12px; background: #ef4444; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 12px;">
+                                🚩 Flag
+                            </button>
+                        ` : `
+                            <button disabled style="padding: 6px 12px; background: #e2e8f0; color: #94a3b8; border: none; border-radius: 6px; font-size: 12px;">
+                                Flagged
+                            </button>
+                        `}
+                    </td>
+                </tr>
+            `).join("");
+        }
+
+        function playRecording(classId) {
+            const classes = BQI_DB.getClasses();
+            const cls = classes.find(c => c.id === classId);
+            if (cls) {
+                document.getElementById("videoModalTitle").innerText = `Class #${cls.id} Video Preview (${cls.studentName})`;
+                document.getElementById("videoModal").classList.add("active");
+                document.getElementById("classVideoPlayer").play();
+            }
+        }
+
+        function closeVideoModal() {
+            document.getElementById("videoModal").classList.remove("active");
+            document.getElementById("classVideoPlayer").pause();
+        }
+
+        function openFlagModal(classId) {
+            selectedClassIdForFlag = classId;
+            document.getElementById("flagReasonInput").value = "";
+            document.getElementById("submitFlagBtn").onclick = submitFlag;
+            document.getElementById("flagModal").classList.add("active");
+        }
+
+        function closeFlagModal() {
+            document.getElementById("flagModal").classList.remove("active");
+            selectedClassIdForFlag = null;
+        }
+
+        function submitFlag() {
+            const reason = document.getElementById("flagReasonInput").value.trim();
+            if (!reason) {
+                alert("Please enter a reason for flagging this class.");
+                return;
+            }
+            if (selectedClassIdForFlag) {
+                BQI_DB.flagClass(selectedClassIdForFlag, reason);
+                closeFlagModal();
+                renderRecordingsTable();
+                alert(`Class #${selectedClassIdForFlag} has been flagged. Super Admin Haider has been notified!`);
+            }
+        }
+
+        // Initialize table
+        renderRecordingsTable();
+    </script>
+</body>
+</html>

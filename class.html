@@ -1,0 +1,430 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Live Online Classroom - Beacon Quran Institute LMS</title>
+    <link rel="stylesheet" href="style.css">
+    <style>
+        .classroom-container {
+            display: grid;
+            grid-template-columns: 420px 1fr;
+            gap: 20px;
+            height: calc(100vh - 80px);
+            padding: 20px;
+            max-width: 1600px;
+            margin: 0 auto;
+        }
+
+        .video-column {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        .video-box {
+            position: relative;
+            background: var(--primary-dark);
+            border-radius: 14px;
+            overflow: hidden;
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border: 2px solid rgba(117, 116, 84, 0.25);
+        }
+
+        .video-box video, .video-box img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .video-label {
+            position: absolute;
+            bottom: 12px;
+            left: 12px;
+            background: rgba(5, 51, 68, 0.88);
+            backdrop-filter: blur(8px);
+            color: white;
+            padding: 6px 14px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            z-index: 10;
+            border: 1px solid rgba(255,255,255,0.15);
+        }
+
+        .live-tag {
+            width: 8px;
+            height: 8px;
+            background: #10b981;
+            border-radius: 50%;
+            display: inline-block;
+            box-shadow: 0 0 8px #10b981;
+        }
+
+        .call-controls {
+            background: var(--primary-dark);
+            padding: 12px;
+            border-radius: 14px;
+            display: flex;
+            justify-content: center;
+            gap: 12px;
+            flex-wrap: wrap;
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+
+        .ctrl-btn {
+            width: 44px;
+            height: 44px;
+            border-radius: 50%;
+            border: none;
+            background: rgba(255,255,255,0.12);
+            color: white;
+            font-size: 16px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: var(--transition);
+        }
+
+        .ctrl-btn:hover {
+            background: var(--secondary);
+            transform: scale(1.05);
+        }
+
+        .ctrl-btn-end {
+            background: #ef4444;
+        }
+
+        .ctrl-btn-end:hover {
+            background: #dc2626;
+        }
+
+        .qaida-column {
+            background: white;
+            border-radius: 14px;
+            box-shadow: var(--shadow-md);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            border: 1px solid var(--border-color);
+        }
+
+        .qaida-header {
+            padding: 16px 24px;
+            background: #FFFFFF;
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .qaida-body {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: var(--background);
+            padding: 20px;
+            overflow-y: auto;
+        }
+
+        .qaida-card {
+            background: white;
+            border-radius: 12px;
+            box-shadow: var(--shadow-sm);
+            padding: 36px;
+            max-width: 720px;
+            width: 100%;
+            text-align: center;
+            border: 1px solid var(--border-subtle);
+        }
+
+        .rec-pill {
+            background: rgba(239, 68, 68, 0.1);
+            color: #b91c1c;
+            border: 1px solid #fca5a5;
+            padding: 6px 14px;
+            border-radius: 20px;
+            font-size: 11.5px;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            animation: blinkRec 1.8s infinite;
+        }
+
+        @keyframes blinkRec {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        @media (max-width: 960px) {
+            .classroom-container {
+                grid-template-columns: 1fr;
+                height: auto;
+                padding: 10px;
+                gap: 15px;
+            }
+            .video-box {
+                min-height: 200px;
+                max-height: 280px;
+            }
+            .qaida-card {
+                padding: 16px;
+            }
+            .top-bar {
+                flex-wrap: wrap;
+                gap: 8px;
+                height: auto;
+                padding: 10px 14px !important;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- TOP CLASSROOM NAVBAR -->
+    <header class="top-bar" style="position:static; padding: 0 24px;">
+        <div class="sidebar-brand" style="color:var(--primary); font-size:17px; font-weight:800; display:flex; align-items:center; gap:8px;">
+            <svg class="icon-svg icon-lg" style="color:var(--secondary);" viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"></path></svg>
+            BQI Live Classroom <span id="classHeaderTitle" style="color:var(--secondary);">#101</span>
+        </div>
+
+        <div style="display: flex; gap: 12px; align-items: center;">
+            <button onclick="switchCameraRole()" style="padding: 7px 14px; background: var(--background); color: var(--primary); border: 1px solid var(--border-color); border-radius: 20px; font-size: 12px; font-weight: 600; cursor: pointer;">
+                Switch Active Camera Feed
+            </button>
+
+            <div class="rec-pill">
+                <span>🔴</span> RECORDING ACTIVE (360p Auto-Save)
+            </div>
+        </div>
+
+        <div class="user-profile">
+            <button class="btn-logout" onclick="endClass()">Exit Class</button>
+        </div>
+    </header>
+
+    <!-- CLASSROOM SPLIT LAYOUT -->
+    <div class="classroom-container">
+
+        <!-- LEFT COLUMN: DUAL VIDEO CALL GRID & CONTROLS -->
+        <div class="video-column">
+            
+            <!-- TEACHER VIDEO BOX -->
+            <div class="video-box" id="teacherBox">
+                <video id="teacherCamVideo" autoplay muted playsinline style="display: none;"></video>
+                <img id="teacherFallbackImg" src="https://images.unsplash.com/photo-1544717305-2782549b5136?w=500&auto=format&fit=crop&q=60" alt="Teacher Feed">
+                <div class="video-label" id="teacherLabel">
+                    <span class="live-tag"></span> Teacher: Demo Teacher 1
+                </div>
+            </div>
+
+            <!-- STUDENT VIDEO BOX -->
+            <div class="video-box" id="studentBox">
+                <video id="studentCamVideo" autoplay muted playsinline style="display: none;"></video>
+                <img id="studentFallbackImg" src="https://images.unsplash.com/photo-1577896851231-70ef18881754?w=500&auto=format&fit=crop&q=60" alt="Student Feed" style="display: none;">
+                <div class="video-label" id="studentLabel">
+                    <span class="live-tag"></span> Student: Demo Student Alpha (UK 🇬🇧)
+                </div>
+            </div>
+
+            <!-- CALL CONTROLS BAR -->
+            <div class="call-controls">
+                <button class="ctrl-btn" id="micBtn" onclick="toggleMic()" title="Mute/Unmute Mic">
+                    <svg class="icon-svg" viewBox="0 0 24 24"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><line x1="12" y1="19" x2="12" y2="23"></line><line x1="8" y1="23" x2="16" y2="23"></line></svg>
+                </button>
+                <button class="ctrl-btn" id="camBtn" onclick="toggleCam()" title="Camera On/Off">
+                    <svg class="icon-svg" viewBox="0 0 24 24"><polygon points="23 7 16 12 23 17 23 7"></polygon><rect x="1" y="5" width="15" height="14" rx="2" ry="2"></rect></svg>
+                </button>
+                <button class="ctrl-btn" onclick="openLessonModal()" title="Log Lesson Progress">
+                    <svg class="icon-svg" viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+                </button>
+                <button class="ctrl-btn ctrl-btn-end" onclick="endClass()" title="End Class & Save Recording">
+                    <svg class="icon-svg" viewBox="0 0 24 24"><path d="M10.68 13.31a16 16 0 0 0 3.41 2.6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7 2 2 0 0 1 1.72 2v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.42 19.42 0 0 1-6-6 19.8 19.8 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91"></path><line x1="23" y1="1" x2="1" y2="23"></line></svg>
+                </button>
+            </div>
+        </div>
+
+        <!-- RIGHT COLUMN: DIGITAL NOORANI QAIDA & QURAN READER -->
+        <div class="qaida-column">
+            <div class="qaida-header">
+                <div>
+                    <h3 style="font-size: 17px; font-weight: 700; color: var(--primary);">Digital Noorani Qaida & Tajweed Viewer</h3>
+                    <p style="font-size: 12px; color: var(--secondary);">Interactive Shared Board for Teacher & Student</p>
+                </div>
+                <div style="display: flex; gap: 10px; align-items: center;">
+                    <button onclick="prevPage()" class="btn-secondary" style="padding: 6px 14px; font-size: 12px;">◄ Prev</button>
+                    <span id="pageIndicator" style="font-weight: 700; color: var(--primary); font-size:13px;">Lesson #1 (Haroof-e-Mufredat)</span>
+                    <button onclick="nextPage()" class="btn-secondary" style="padding: 6px 14px; font-size: 12px;">Next ►</button>
+                </div>
+            </div>
+
+            <div class="qaida-body">
+                <div class="qaida-card">
+                    <div style="font-size: 13px; font-weight: 700; color: var(--secondary); text-transform: uppercase; margin-bottom: 12px; letter-spacing: 0.5px;">Lesson 1: Individual Letters (حُرُوفُ الْمُفْرَدَات)</div>
+                    <div style="font-size: 48px; font-weight: 700; color: var(--primary); direction: rtl; font-family: 'Traditional Arabic', serif; line-height: 1.6; word-spacing: 20px;" id="arabicLessonText">
+                        ا  ب  ت  ث  ج  ح  خ  د  ذ  ر  ز  س  ش  ص  ض  ط  ظ  ع  غ  ف  ق  ك  ل  م  ن  و  ه  ء  ي
+                    </div>
+                    <div style="margin-top: 25px; padding: 15px; background: var(--background); border-radius: 8px; border: 1px solid var(--border-color); font-size: 13px; color: var(--primary);">
+                        <strong>Tajweed Tip:</strong> Pronounce <strong>'ث' (Thaa)</strong> by touching the tip of the tongue to the edges of the upper front teeth softly.
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- IN-CLASS LESSON NOTES MODAL -->
+    <div class="modal-overlay" id="inClassLessonModal">
+        <div class="modal-card">
+            <button class="modal-close" onclick="closeLessonModal()">×</button>
+            <h3 class="modal-title">Log Student Progress During Class</h3>
+            <div class="form-group">
+                <label style="color: var(--primary);">Lesson Notes (Sabaq / Sabaqi)</label>
+                <textarea id="inClassNotesInput" class="form-input" style="height: 100px;" placeholder="e.g. Completed Lesson #1 with correct Makharij..."></textarea>
+            </div>
+            <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px;">
+                <button onclick="closeLessonModal()" style="padding: 9px 18px; border: 1px solid var(--border-color); background: white; border-radius: 6px; cursor: pointer; color:var(--primary);">Cancel</button>
+                <button class="btn-primary" onclick="saveInClassNotes()">Save Notes</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="database.js"></script>
+    <script>
+        const urlParams = new URLSearchParams(window.location.search);
+        let activeRole = urlParams.get('role') || 'parent';
+        const classId = parseInt(urlParams.get('id') || "101");
+        let mediaStream = null;
+
+        function updateRoomUI() {
+            const classTitle = document.getElementById("classHeaderTitle");
+            const teacherLabel = document.getElementById("teacherLabel");
+            const studentLabel = document.getElementById("studentLabel");
+
+            const tVideo = document.getElementById("teacherCamVideo");
+            const tImg = document.getElementById("teacherFallbackImg");
+            const sVideo = document.getElementById("studentCamVideo");
+            const sImg = document.getElementById("studentFallbackImg");
+
+            if (activeRole === 'teacher') {
+                classTitle.innerText = `#${classId} (Teacher Room)`;
+                teacherLabel.innerHTML = `<span class="live-tag"></span> Teacher: Demo Teacher 1 (You - LIVE CAM)`;
+                studentLabel.innerHTML = `<span class="live-tag"></span> Student: Demo Student Alpha (UK 🇬🇧)`;
+
+                if (mediaStream) {
+                    tVideo.srcObject = mediaStream;
+                    tVideo.style.display = "block";
+                    tImg.style.display = "none";
+
+                    sVideo.style.display = "none";
+                    sImg.style.display = "block";
+                }
+            } else {
+                classTitle.innerText = `#${classId} (Student Room)`;
+                teacherLabel.innerHTML = `<span class="live-tag"></span> Teacher: Demo Teacher 1`;
+                studentLabel.innerHTML = `<span class="live-tag"></span> Student: Demo Student Alpha (You - LIVE CAM)`;
+
+                if (mediaStream) {
+                    sVideo.srcObject = mediaStream;
+                    sVideo.style.display = "block";
+                    sImg.style.display = "none";
+
+                    tVideo.style.display = "none";
+                    tImg.style.display = "block";
+                }
+            }
+        }
+
+        async function initCamera() {
+            try {
+                mediaStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+                updateRoomUI();
+            } catch (err) {
+                console.log("Camera access fallback mode enabled:", err);
+                updateRoomUI();
+            }
+        }
+
+        function switchCameraRole() {
+            activeRole = activeRole === 'teacher' ? 'parent' : 'teacher';
+            updateRoomUI();
+        }
+
+        let isMuted = false;
+        let isCamOff = false;
+
+        function toggleMic() {
+            isMuted = !isMuted;
+            document.getElementById("micBtn").style.background = isMuted ? "#ef4444" : "rgba(255,255,255,0.12)";
+        }
+
+        function toggleCam() {
+            isCamOff = !isCamOff;
+            document.getElementById("camBtn").style.background = isCamOff ? "#ef4444" : "rgba(255,255,255,0.12)";
+            if (mediaStream) {
+                mediaStream.getVideoTracks().forEach(track => track.enabled = !isCamOff);
+            }
+        }
+
+        let currentPage = 1;
+        const LESSONS = [
+            { title: "Lesson #1 (Haroof-e-Mufredat)", text: "ا  ب  ت  ث  ج  ح  خ  د  ذ  ر  ز  س  ش  ص  ض  ط  ظ  ع  غ  ف  ق  ك  ل  م  ن  و  ه  ء  ي" },
+            { title: "Lesson #2 (Compound Letters - Murakkabat)", text: "لا  كا  كب  كما  لبا  تا  ثا  نج  نح  نخ  يم  تم  ثم  سج  شح" },
+            { title: "Lesson #3 (Harakat - Fatha, Kasra, Damma)", text: "بَ  بِ  بُ  -  تَ  تِ  تُ  -  ثَ  ثِ  ثُ  -  جَ  جِ  جُ" }
+        ];
+
+        function prevPage() {
+            if (currentPage > 1) {
+                currentPage--;
+                updatePage();
+            }
+        }
+
+        function nextPage() {
+            if (currentPage < LESSONS.length) {
+                currentPage++;
+                updatePage();
+            }
+        }
+
+        function updatePage() {
+            const lesson = LESSONS[currentPage - 1];
+            document.getElementById("pageIndicator").innerText = lesson.title;
+            document.getElementById("arabicLessonText").innerText = lesson.text;
+        }
+
+        function openLessonModal() {
+            document.getElementById("inClassLessonModal").classList.add("active");
+        }
+
+        function closeLessonModal() {
+            document.getElementById("inClassLessonModal").classList.remove("active");
+        }
+
+        function saveInClassNotes() {
+            const notes = document.getElementById("inClassNotesInput").value.trim();
+            if (notes) {
+                BQI_DB.updateLessonNotes(classId, notes);
+                closeLessonModal();
+                alert("Lesson progress notes saved!");
+            }
+        }
+
+        function endClass() {
+            alert("Class session ended. 360p recording has been saved to the database!");
+            window.location.href = activeRole === 'teacher' ? "teacher.html" : "parent.html";
+        }
+
+        initCamera();
+    </script>
+</body>
+</html>
