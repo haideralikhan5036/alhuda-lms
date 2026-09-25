@@ -360,8 +360,8 @@
         const isCurrentSlot = isLive && !isLeaveStudent;
         const isRunningMarked = isLive && Boolean(log && (log.status === 'Present' || log.status === 'Running'));
 
-        let status = 'Upcoming';
-        let badgeClass = 'bg-slate-100 text-slate-700 border-slate-200';
+        let status = 'Remaining';
+        let badgeClass = 'bg-amber-100 text-amber-900 border-amber-400 font-bold';
         let filterCategory = 'remaining';
 
         if (log) {
@@ -372,11 +372,11 @@
             badgeClass = 'bg-amber-100 text-amber-900 border-amber-400 font-extrabold animate-pulse';
           } else if (log.status === 'Present' || log.status === 'Running') {
             completedCount++;
-            status = isLive ? '🟢 Running (Attendance Marked)' : 'Taken';
+            status = isLive ? 'Running' : 'Taken';
             filterCategory = 'completed';
             badgeClass = isLive
-              ? 'bg-emerald-600 text-white border-emerald-700 font-extrabold animate-pulse'
-              : 'bg-emerald-100 text-emerald-800 border-emerald-300';
+              ? 'bg-emerald-100 text-emerald-900 border-emerald-400 font-extrabold animate-pulse'
+              : 'bg-teal-100 text-teal-900 border-teal-400 font-extrabold';
           } else if (log.status === 'Advance Class') {
             completedCount++;
             let advTarget = '';
@@ -384,47 +384,47 @@
               const parsed = JSON.parse(log.lesson_notes);
               if (parsed?.advance_target_date) advTarget = ` (For: ${parsed.advance_target_date})`;
             } catch(e) {}
-            status = `🌟 Advance Class${advTarget}`;
+            status = `Taken (Advance${advTarget})`;
             filterCategory = 'completed';
-            badgeClass = 'bg-purple-100 text-purple-900 border-purple-300 font-bold';
+            badgeClass = 'bg-teal-100 text-teal-900 border-teal-400 font-extrabold';
           } else if (log.status === 'Absent') {
             absentCount++;
             status = 'Absent';
             filterCategory = 'absent';
-            badgeClass = 'bg-rose-100 text-rose-800 border-rose-300';
+            badgeClass = 'bg-rose-100 text-rose-900 border-rose-400 font-extrabold';
           } else if (log.status === 'Leave') {
             leaveCount++;
             status = 'Leave';
             filterCategory = 'leave';
-            badgeClass = 'bg-blue-100 text-blue-800 border-blue-300';
+            badgeClass = 'bg-blue-100 text-blue-900 border-blue-400 font-extrabold';
           }
         } else if (advCoverMap[s.id] || advCoverMap['student_' + s.student_id]) {
           completedCount++;
           const cov = advCoverMap[s.id] || advCoverMap['student_' + s.student_id];
-          status = `🌟 Pre-Covered (${cov.log.date})`;
+          status = `Taken (Pre-Covered ${cov.log.date})`;
           filterCategory = 'completed';
-          badgeClass = 'bg-purple-100 text-purple-900 border-purple-300 font-bold';
+          badgeClass = 'bg-teal-100 text-teal-900 border-teal-400 font-extrabold';
         } else {
           if (isLeaveStudent) {
             leaveCount++;
             const returnInfo = leaveMeta?.return_date ? ` (Returns: ${leaveMeta.return_date.slice(5)})` : '';
-            status = `🏖️ On Vacation / Leave${returnInfo}`;
+            status = `Leave${returnInfo}`;
             filterCategory = 'leave';
-            badgeClass = 'bg-blue-100 text-blue-900 border-blue-400 font-bold';
+            badgeClass = 'bg-blue-100 text-blue-900 border-blue-400 font-extrabold';
           } else if (isLive) {
             liveCount++;
-            status = 'CURRENT SLOT (Awaiting Attendance)';
+            status = 'Current Class';
             filterCategory = 'current';
-            badgeClass = 'bg-emerald-600 text-white border-emerald-700 animate-pulse';
+            badgeClass = 'bg-cyan-100 text-cyan-900 border-cyan-400 font-extrabold animate-pulse';
           } else if (isPast) {
-            status = 'Pending Mark';
+            status = 'Remaining (Pending Mark)';
             filterCategory = 'remaining';
-            badgeClass = 'bg-amber-100 text-amber-800 border-amber-300';
+            badgeClass = 'bg-amber-100 text-amber-900 border-amber-400 font-bold';
           } else {
             remainingCount++;
             status = 'Remaining';
             filterCategory = 'remaining';
-            badgeClass = 'bg-slate-100 text-slate-700 border-slate-200';
+            badgeClass = 'bg-amber-100 text-amber-900 border-amber-400 font-bold';
           }
         }
 
@@ -497,7 +497,7 @@
       CURRENT_DASH_FILTER = filterType;
 
       document.querySelectorAll('.kpi-dash-card').forEach(box => {
-        box.classList.remove('ring-2', 'ring-brandDark', 'ring-offset-2', 'scale-105', 'shadow-md', 'ring-4', 'ring-white', 'shadow-xl');
+        box.classList.remove('ring-2', 'ring-brandDark', 'ring-offset-2', 'scale-105', 'scale-[1.02]', 'shadow-md', 'ring-4', 'ring-white', 'shadow-xl');
       });
 
       const selectedBox = document.getElementById(`kpiBox-${filterType}`);
@@ -511,16 +511,78 @@
       }
 
       const titleMap = {
-        'all': { text: 'All Scheduled Classes Today', subtitle: 'Full schedule roster across morning, afternoon & evening shifts', icon: 'fa-calendar-day' },
-        'current': { text: 'Current Classes (Current Time Slot)', subtitle: 'All classes scheduled in the active 30-minute time slot right now', icon: 'fa-clock' },
-        'running': { text: 'Running Classes (Attendance Marked)', subtitle: 'Ongoing classes in the current slot where the teacher has marked attendance', icon: 'fa-tower-broadcast' },
-        'live': { text: 'Current Classes', subtitle: 'Classes scheduled in the current time slot', icon: 'fa-tower-broadcast' },
-        'waiting': { text: 'Teacher Waiting Classes', subtitle: 'Teacher has launched Zoom and is actively waiting for student to join', icon: 'fa-hourglass-start' },
-        'completed': { text: 'Taken Classes Today', subtitle: 'Sessions marked Present / Taken since 12:00 AM midnight', icon: 'fa-circle-check' },
-        'remaining': { text: 'Remaining Classes Today', subtitle: 'Upcoming classes scheduled to take place before midnight', icon: 'fa-hourglass-half' },
-        'absent': { text: 'Absent Sessions Today', subtitle: 'Students marked Absent for their scheduled sessions today', icon: 'fa-user-xmark' },
-        'leave': { text: 'Student Leaves Today', subtitle: 'Students on approved leave for sessions today', icon: 'fa-calendar-xmark' },
-        'trial': { text: 'Trial Classes Today', subtitle: 'Trial and evaluation lessons scheduled for today', icon: 'fa-graduation-cap' }
+        'all': {
+          text: 'Total Scheduled Classes Today',
+          subtitle: 'Full schedule roster across morning, afternoon & evening shifts',
+          icon: 'fa-calendar-day',
+          headerBg: 'bg-slate-100/90 border-slate-300',
+          sectionBorder: 'border-slate-400',
+          iconBg: 'bg-slate-700 text-white',
+          badgeBg: 'bg-slate-200 text-slate-900 border-slate-400'
+        },
+        'current': {
+          text: 'Current Classes (Active Time Slot)',
+          subtitle: 'All classes scheduled in the active 30-minute time slot right now',
+          icon: 'fa-clock',
+          headerBg: 'bg-cyan-50/95 border-cyan-200',
+          sectionBorder: 'border-cyan-400',
+          iconBg: 'bg-cyan-600 text-white',
+          badgeBg: 'bg-cyan-100 text-cyan-900 border-cyan-300'
+        },
+        'running': {
+          text: 'Running Classes (Teacher Present)',
+          subtitle: 'Ongoing classes in the current slot where the teacher has marked attendance',
+          icon: 'fa-tower-broadcast',
+          headerBg: 'bg-emerald-50/95 border-emerald-200',
+          sectionBorder: 'border-emerald-400',
+          iconBg: 'bg-emerald-600 text-white',
+          badgeBg: 'bg-emerald-100 text-emerald-900 border-emerald-300'
+        },
+        'completed': {
+          text: 'Taken Classes Today',
+          subtitle: 'Sessions marked Present / Taken since 12:00 AM midnight',
+          icon: 'fa-circle-check',
+          headerBg: 'bg-teal-50/95 border-teal-200',
+          sectionBorder: 'border-teal-400',
+          iconBg: 'bg-teal-600 text-white',
+          badgeBg: 'bg-teal-100 text-teal-900 border-teal-300'
+        },
+        'remaining': {
+          text: 'Remaining Classes Today',
+          subtitle: 'Upcoming classes scheduled to take place before midnight',
+          icon: 'fa-hourglass-half',
+          headerBg: 'bg-amber-50/95 border-amber-200',
+          sectionBorder: 'border-amber-400',
+          iconBg: 'bg-amber-600 text-white',
+          badgeBg: 'bg-amber-100 text-amber-900 border-amber-300'
+        },
+        'absent': {
+          text: 'Absent Sessions Today',
+          subtitle: 'Students marked Absent for their scheduled sessions today',
+          icon: 'fa-user-xmark',
+          headerBg: 'bg-rose-50/95 border-rose-200',
+          sectionBorder: 'border-rose-400',
+          iconBg: 'bg-rose-600 text-white',
+          badgeBg: 'bg-rose-100 text-rose-900 border-rose-300'
+        },
+        'leave': {
+          text: 'Student Leaves Today',
+          subtitle: 'Students on approved leave for sessions today',
+          icon: 'fa-calendar-xmark',
+          headerBg: 'bg-blue-50/95 border-blue-200',
+          sectionBorder: 'border-blue-400',
+          iconBg: 'bg-blue-600 text-white',
+          badgeBg: 'bg-blue-100 text-blue-900 border-blue-300'
+        },
+        'trial': {
+          text: 'Trial Classes Today',
+          subtitle: 'Trial and evaluation lessons scheduled for today',
+          icon: 'fa-graduation-cap',
+          headerBg: 'bg-purple-50/95 border-purple-200',
+          sectionBorder: 'border-purple-400',
+          iconBg: 'bg-purple-600 text-white',
+          badgeBg: 'bg-purple-100 text-purple-900 border-purple-300'
+        }
       };
 
       const meta = titleMap[filterType] || titleMap['all'];
@@ -529,7 +591,21 @@
       const subEl = document.getElementById('dashFilterSubtitle');
       if (subEl) subEl.innerText = meta.subtitle;
       const iconContainer = document.getElementById('dashFilterIcon');
-      if (iconContainer) iconContainer.innerHTML = `<i class="fa-solid ${meta.icon}"></i>`;
+      if (iconContainer) {
+        iconContainer.className = `w-9 h-9 rounded-xl ${meta.iconBg} flex items-center justify-center text-sm shadow-xs`;
+        iconContainer.innerHTML = `<i class="fa-solid ${meta.icon}"></i>`;
+      }
+      const headerToolbar = document.getElementById('dashClassesHeaderToolbar');
+      if (headerToolbar) {
+        headerToolbar.className = `p-4 border-b flex justify-between items-center flex-wrap gap-3 transition-colors ${meta.headerBg}`;
+      }
+      if (classesSection) {
+        classesSection.className = `mb-6 bg-white rounded-2xl border-2 ${meta.sectionBorder} shadow-sm overflow-hidden transition-all duration-300`;
+      }
+      const countBadge = document.getElementById('dashFilterCountBadge');
+      if (countBadge) {
+        countBadge.className = `px-2.5 py-0.5 ${meta.badgeBg} rounded-full font-extrabold text-xs font-mono border`;
+      }
 
       renderDashboardClassesTable();
 
@@ -680,20 +756,28 @@
           }
         }
 
-        // KPI Color-Matched Row Styling
-        let rowClass = 'border-l-4 border-slate-300 hover:bg-slate-50 transition';
-        if (c.filterCategory === 'absent' || c.status === 'Absent') {
+        // KPI Color-Matched Row & Status Badge Styling (100% synced with the 8 KPI Boxes)
+        let rowClass = 'border-l-4 border-amber-500 bg-amber-50/50 hover:bg-amber-100/60 transition font-medium text-amber-950';
+        let effectiveBadgeClass = c.badgeClass;
+        let effectiveStatus = c.status;
+
+        if (CURRENT_DASH_FILTER === 'trial') {
+          rowClass = 'border-l-4 border-purple-500 bg-purple-50/60 hover:bg-purple-100/60 transition font-medium text-purple-950';
+          effectiveBadgeClass = 'bg-purple-100 text-purple-900 border-purple-400 font-extrabold';
+          effectiveStatus = `Trial (${c.status})`;
+        } else if (c.filterCategory === 'absent' || c.status === 'Absent') {
           rowClass = 'border-l-4 border-rose-500 bg-rose-50/80 hover:bg-rose-100/70 transition font-medium text-rose-950';
-        } else if (c.filterCategory === 'waiting' || c.status === '⏳ Teacher Waiting') {
-          rowClass = 'border-l-4 border-amber-500 bg-amber-50/80 hover:bg-amber-100/70 transition font-medium text-amber-950';
-        } else if (c.isLive || c.filterCategory === 'live') {
-          rowClass = 'border-l-4 border-emerald-500 bg-emerald-50/80 hover:bg-emerald-100/70 transition font-semibold text-emerald-950';
-        } else if (c.status?.includes('Advance') || c.status?.includes('Pre-Covered')) {
-          rowClass = 'border-l-4 border-purple-500 bg-purple-50/60 hover:bg-purple-100/70 transition font-medium text-purple-950';
-        } else if (c.filterCategory === 'completed' || c.status === 'Completed') {
-          rowClass = 'border-l-4 border-teal-500 bg-teal-50/50 hover:bg-teal-100/60 transition text-teal-950';
-        } else if (c.filterCategory === 'leave' || c.status === 'Leave' || c.status?.includes('Leave')) {
+        } else if (c.filterCategory === 'leave' || c.status?.includes('Leave')) {
           rowClass = 'border-l-4 border-blue-500 bg-blue-50/70 hover:bg-blue-100/60 transition font-medium text-blue-950';
+        } else if (c.isRunningMarked || CURRENT_DASH_FILTER === 'running') {
+          rowClass = 'border-l-4 border-emerald-500 bg-emerald-50/80 hover:bg-emerald-100/70 transition font-semibold text-emerald-950';
+          effectiveBadgeClass = 'bg-emerald-100 text-emerald-900 border-emerald-400 font-extrabold';
+        } else if (c.isCurrentSlot || c.filterCategory === 'current' || CURRENT_DASH_FILTER === 'current') {
+          rowClass = 'border-l-4 border-cyan-500 bg-cyan-50/70 hover:bg-cyan-100/70 transition font-semibold text-cyan-950';
+          effectiveBadgeClass = 'bg-cyan-100 text-cyan-900 border-cyan-400 font-extrabold';
+        } else if (c.filterCategory === 'completed') {
+          rowClass = 'border-l-4 border-teal-500 bg-teal-50/60 hover:bg-teal-100/60 transition font-medium text-teal-950';
+          effectiveBadgeClass = 'bg-teal-100 text-teal-900 border-teal-400 font-extrabold';
         } else if (c.isTrial) {
           rowClass = 'border-l-4 border-purple-500 bg-purple-50/50 hover:bg-purple-100/60 transition text-purple-950';
         }
@@ -744,8 +828,8 @@
             <td class="p-3 max-w-xs truncate">
               ${sabaqText}
               <div class="mt-0.5">
-                <span class="px-2 py-0.5 rounded text-[10px] font-extrabold border ${c.badgeClass}">
-                  ${c.status}
+                <span class="px-2 py-0.5 rounded text-[10px] font-extrabold border ${effectiveBadgeClass}">
+                  ${effectiveStatus}
                 </span>
               </div>
             </td>
