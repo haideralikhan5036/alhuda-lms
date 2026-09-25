@@ -1001,8 +1001,8 @@
                 ${waChat}
               </div>
               <div class="flex items-center gap-1 mt-0.5 text-[10px] text-slate-500 font-mono">
-                <span>${c.students?.id || 'STU-ID'}</span>
-                ${c.students?.family_id ? `&bull; <span>${c.students.family_id}</span>` : ''}
+                <button onclick="openStudent360Profile('${c.student_id || c.students?.id || ''}')" class="hover:text-brandEmerald hover:underline">${c.students?.id || 'STU-ID'}</button>
+                ${c.students?.family_id ? `&bull; <button onclick="openFamily360Profile('${c.students.family_id}')" class="text-emerald-700 hover:underline font-bold" title="Open Family 360° Profile">${c.students.family_id}</button>` : ''}
               </div>
             </td>
 

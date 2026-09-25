@@ -977,8 +977,8 @@
                   </div>
                   <div>
                     <div class="flex items-center gap-1.5">
-                      <h4 class="font-extrabold text-base text-slate-900 leading-tight">${t.full_name}</h4>
-                      <span class="px-1.5 py-0.5 rounded text-[9px] font-mono font-bold bg-slate-100 text-brandDark border border-slate-200">${creds.teacher_id}</span>
+                      <button onclick="openTeacher360Profile('${t.id}')" class="font-extrabold text-base text-slate-900 hover:text-indigo-700 hover:underline leading-tight text-left transition">${t.full_name}</button>
+                      <button onclick="openTeacher360Profile('${t.id}')" class="px-1.5 py-0.5 rounded text-[9px] font-mono font-bold bg-slate-100 hover:bg-indigo-100 text-brandDark border border-slate-200 transition">${creds.teacher_id}</button>
                     </div>
                     <p class="text-[11px] text-slate-500">${t.father_name ? 'S/O ' + t.father_name : 'Quran Instructor'}</p>
                   </div>
@@ -1098,6 +1098,9 @@
             </div>
 
             <div class="pt-2 border-t flex flex-col gap-2">
+              <button onclick="openTeacher360Profile('${t.id}')" class="w-full py-2.5 bg-indigo-900 hover:bg-indigo-950 text-white font-extrabold text-xs rounded-xl transition flex items-center justify-center gap-1.5 shadow-sm">
+                <i class="fa-solid fa-circle-nodes text-amber-300"></i> View 360° Teacher Profile &amp; Salary Ledger
+              </button>
               <button onclick="openEditTeacherModal('${t.id}')" class="w-full py-2 bg-amber-50 hover:bg-amber-100 text-amber-900 font-extrabold text-xs rounded-xl border border-amber-300 transition flex items-center justify-center gap-1.5 shadow-xs">
                 <i class="fa-solid fa-pen-to-square text-amber-600"></i> Edit Teacher Profile & Credentials
               </button>

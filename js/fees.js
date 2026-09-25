@@ -2746,16 +2746,23 @@ Official Email: ${offEmail}`;
 
         return `
           <tr class="hover:bg-slate-50 transition">
-            <td class="p-2.5 text-left font-mono font-bold text-slate-800 bg-white sticky left-0 z-20 shadow-[2px_0_5px_rgba(0,0,0,0.06)]">${r.familyId}</td>
+            <td class="p-2.5 text-left font-mono font-bold text-slate-800 bg-white sticky left-0 z-20 shadow-[2px_0_5px_rgba(0,0,0,0.06)]">
+              <button onclick="openFamily360Profile('${r.familyId}')" class="hover:text-brandEmerald hover:underline font-black text-brandDark">${r.familyId}</button>
+            </td>
             <td class="p-2.5 text-left bg-white sticky left-[90px] z-20 shadow-[2px_0_5px_rgba(0,0,0,0.06)]">
-              <strong class="text-slate-900 font-bold block truncate max-w-[130px] sm:max-w-none">${r.studentsNames}</strong>
-              <span class="text-[10px] text-slate-400 block truncate max-w-[130px] sm:max-w-none">${r.parentName} (${r.currency} ${r.monthlyFee.toFixed(0)}/m)</span>
+              <button onclick="openFamily360Profile('${r.familyId}')" class="text-slate-900 hover:text-brandEmerald hover:underline font-bold block truncate max-w-[130px] sm:max-w-none text-left">${r.studentsNames}</button>
+              <button onclick="openFamily360Profile('${r.familyId}')" class="text-[10px] text-slate-500 hover:text-emerald-700 block truncate max-w-[130px] sm:max-w-none text-left">${r.parentName} (${r.currency} ${r.monthlyFee.toFixed(0)}/m)</button>
             </td>
             ${monthsHtml}
             <td class="p-2 text-center bg-slate-50/50">
-              <button onclick="openFamilyAnnualLedgerModal('${r.familyId}')" class="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-[10px] font-bold transition shadow-2xs" title="View Full 12-Month Ledger">
-                Ledger
-              </button>
+              <div class="inline-flex items-center gap-1">
+                <button onclick="openFamily360Profile('${r.familyId}')" class="px-2 py-1 bg-brandDark hover:bg-brandDarkest text-white rounded-lg text-[10px] font-bold transition shadow-2xs" title="Open Family 360° Profile">
+                  360°
+                </button>
+                <button onclick="openFamilyAnnualLedgerModal('${r.familyId}')" class="px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-[10px] font-bold transition shadow-2xs" title="View Full 12-Month Ledger">
+                  Ledger
+                </button>
+              </div>
             </td>
           </tr>
         `;

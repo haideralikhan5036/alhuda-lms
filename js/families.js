@@ -513,10 +513,10 @@
                   <div>
                     <div class="flex items-center gap-1.5 flex-wrap">
                       <span class="text-[10px] font-mono px-2 py-0.5 bg-slate-900 text-white rounded font-black">#${fIdx + 1}</span>
-                      <span class="text-[10px] font-mono px-2 py-0.5 bg-emerald-100 text-emerald-800 rounded font-extrabold">${f.id}</span>
+                      <button onclick="openFamily360Profile('${f.id}')" class="text-[10px] font-mono px-2 py-0.5 bg-emerald-100 hover:bg-emerald-200 text-emerald-800 rounded font-extrabold transition" title="Open Family 360° Profile">${f.id}</button>
                       <span class="text-[10px] px-2 py-0.5 bg-slate-100 text-slate-600 rounded font-bold">${f.country}</span>
                     </div>
-                    <h4 class="font-extrabold text-base text-slate-900 mt-0.5">${f.parent_name}</h4>
+                    <button onclick="openFamily360Profile('${f.id}')" class="font-extrabold text-base text-slate-900 hover:text-brandEmerald hover:underline mt-0.5 text-left block transition" title="Click to open complete Family 360° Profile">${f.parent_name}</button>
                     <p class="text-[11px] text-slate-500 flex items-center gap-1">
                       ${CURRENT_ROLE === 'manager' ? `
                         <i class="fa-solid fa-lock text-amber-500"></i>
@@ -597,11 +597,11 @@
                         <div class="p-2.5 rounded-xl border border-slate-200 bg-slate-50/70 hover:bg-white text-xs transition space-y-1">
                           <div class="flex justify-between items-start">
                             <div class="flex items-center gap-1.5">
-                              <span class="font-bold text-slate-900">${s.name}</span>
+                              <button onclick="openStudent360Profile('${s.id}')" class="font-bold text-slate-900 hover:text-brandEmerald hover:underline text-left">${s.name}</button>
                               <span class="text-[9px] font-mono px-1.5 py-0.2 bg-slate-200 text-slate-700 rounded font-bold">${s.id}</span>
                             </div>
-                            <button onclick="openStudentDetailModal('${s.id}')" class="text-brandEmerald hover:text-brandDark font-bold text-[10px] flex items-center gap-1">
-                              View <i class="fa-solid fa-chevron-right text-[8px]"></i>
+                            <button onclick="openStudent360Profile('${s.id}')" class="text-brandEmerald hover:text-brandDark font-bold text-[10px] flex items-center gap-1">
+                              Student 360° <i class="fa-solid fa-chevron-right text-[8px]"></i>
                             </button>
                           </div>
                           <div class="flex justify-between text-[10px] text-slate-500">
@@ -610,7 +610,8 @@
                           </div>
                           <div class="text-[10px] text-slate-600 flex items-center gap-1">
                             <i class="fa-solid fa-chalkboard-user text-brandEmerald"></i>
-                            <strong>Teacher:</strong> <span class="text-brandDark font-semibold">${tName}</span>
+                            <strong>Teacher:</strong>
+                            ${assignedTeacher ? `<button onclick="openTeacher360Profile('${assignedTeacher.id}')" class="text-indigo-700 hover:underline font-extrabold">${tName}</button>` : `<span class="text-slate-400">${tName}</span>`}
                           </div>
                         </div>
                       `;
@@ -621,9 +622,12 @@
             </div>
 
             <!-- Card Bottom Action -->
-            <div class="pt-3 border-t mt-3 flex justify-end">
-              <button onclick="prepareAddStudentModal('${f.id}')" class="w-full py-2 bg-emerald-50 hover:bg-emerald-100 text-brandEmerald font-bold rounded-xl text-xs border border-emerald-200 flex items-center justify-center gap-1.5 transition">
-                <i class="fa-solid fa-plus"></i> Enroll Another Sibling to this Family
+            <div class="pt-3 border-t mt-3 grid grid-cols-2 gap-2">
+              <button onclick="openFamily360Profile('${f.id}')" class="py-2 bg-brandDark hover:bg-brandDarkest text-white font-extrabold rounded-xl text-xs flex items-center justify-center gap-1.5 transition shadow-2xs">
+                <i class="fa-solid fa-circle-nodes text-brandGold"></i> Family 360°
+              </button>
+              <button onclick="prepareAddStudentModal('${f.id}')" class="py-2 bg-emerald-50 hover:bg-emerald-100 text-brandEmerald font-bold rounded-xl text-xs border border-emerald-200 flex items-center justify-center gap-1.5 transition">
+                <i class="fa-solid fa-plus"></i> + Add Sibling
               </button>
             </div>
           </div>
@@ -658,8 +662,12 @@
         return `
           <tr class="hover:bg-slate-50 transition text-xs">
             <td class="p-3 text-center font-mono font-bold text-slate-500">${idx + 1}</td>
-            <td class="p-3 font-mono font-black text-brandDark">${f.id}</td>
-            <td class="p-3 font-bold text-slate-900">${f.parent_name}</td>
+            <td class="p-3 font-mono font-black text-brandDark">
+              <button onclick="openFamily360Profile('${f.id}')" class="hover:underline text-brandDark">${f.id}</button>
+            </td>
+            <td class="p-3 font-bold text-slate-900">
+              <button onclick="openFamily360Profile('${f.id}')" class="hover:text-brandEmerald hover:underline text-left font-extrabold">${f.parent_name}</button>
+            </td>
             <td class="p-3 text-slate-600">${f.country || '--'}</td>
             <td class="p-3 font-mono">
               ${CURRENT_ROLE === 'manager' ? `
@@ -674,13 +682,16 @@
             </td>
             <td class="p-3 font-mono font-extrabold text-brandEmerald">${f.currency} ${f.monthly_fee}</td>
             <td class="p-3 font-bold text-slate-700">
-              <span class="px-2 py-0.5 rounded-full bg-slate-100 border border-slate-200 text-xs">${childrenCount} Sibling(s)</span>
+              <button onclick="openFamily360Profile('${f.id}', 'students')" class="px-2 py-0.5 rounded-full bg-slate-100 hover:bg-emerald-100 border border-slate-200 text-xs transition">${childrenCount} Sibling(s)</button>
             </td>
             <td class="p-3 font-mono text-[11px]">
               <span class="text-slate-500">U:</span> <strong>${creds.username}</strong>
             </td>
             <td class="p-3 text-right">
               <div class="flex items-center justify-end gap-1.5">
+                <button onclick="openFamily360Profile('${f.id}')" class="px-2.5 py-1 bg-brandDark hover:bg-brandDarkest text-white rounded-lg font-bold text-[11px] transition">
+                  Family 360°
+                </button>
                 <button onclick="prepareAddStudentModal('${f.id}')" class="px-2.5 py-1 bg-emerald-50 hover:bg-emerald-100 text-brandEmerald rounded-lg font-bold text-[11px] border border-emerald-200 transition">
                   + Add Child
                 </button>
@@ -714,7 +725,9 @@
         const parentFam = (ALL_FAMILIES || []).find(f => f.id === s.family_id);
         const parentName = parentFam ? parentFam.parent_name : (s.family_id || '--');
         const assignedTeacher = (ALL_TEACHERS || []).find(t => t.id === s.assigned_teacher_id);
-        const tName = assignedTeacher ? assignedTeacher.full_name : '<span class="text-slate-400 italic">Not Assigned</span>';
+        const tName = assignedTeacher
+          ? `<button onclick="openTeacher360Profile('${assignedTeacher.id}')" class="font-bold text-indigo-700 hover:underline text-left">${assignedTeacher.full_name}</button>`
+          : '<span class="text-slate-400 italic">Not Assigned</span>';
         const status = s.status || 'Active';
 
         let statusBadge = '<span class="px-2 py-0.5 rounded text-[10px] font-extrabold bg-emerald-100 text-emerald-800 border border-emerald-200">Active</span>';
@@ -727,10 +740,14 @@
         return `
           <tr class="hover:bg-slate-50 transition text-xs">
             <td class="p-3 text-center font-mono font-bold text-slate-500">${idx + 1}</td>
-            <td class="p-3 font-mono font-black text-brandDark">${s.id}</td>
-            <td class="p-3 font-extrabold text-slate-900">${s.name}</td>
+            <td class="p-3 font-mono font-black text-brandDark">
+              <button onclick="openStudent360Profile('${s.id}')" class="hover:underline">${s.id}</button>
+            </td>
+            <td class="p-3 font-extrabold text-slate-900">
+              <button onclick="openStudent360Profile('${s.id}')" class="hover:text-brandEmerald hover:underline text-left font-extrabold">${s.name}</button>
+            </td>
             <td class="p-3">
-              <span class="font-bold text-slate-800">${parentName}</span>
+              <button onclick="openFamily360Profile('${s.family_id}')" class="font-bold text-emerald-800 hover:underline text-left block">${parentName}</button>
               <div class="text-[10px] text-slate-400 font-mono">${s.family_id}</div>
             </td>
             <td class="p-3">
@@ -742,8 +759,8 @@
             <td class="p-3">${statusBadge}</td>
             <td class="p-3 font-mono text-[11px] text-slate-600">${s.joining_date || '--'}</td>
             <td class="p-3 text-right">
-              <button onclick="openStudentDetailModal('${s.id}')" class="px-2.5 py-1 bg-brandDark text-white rounded-lg font-bold text-[11px] hover:bg-brandDarkest transition">
-                View Profile
+              <button onclick="openStudent360Profile('${s.id}')" class="px-2.5 py-1 bg-brandDark text-white rounded-lg font-bold text-[11px] hover:bg-brandDarkest transition">
+                Student 360°
               </button>
             </td>
           </tr>

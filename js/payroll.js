@@ -269,7 +269,7 @@
           <tr class="hover:bg-slate-50/80 transition">
             <!-- 1. TEACHER & SENIORITY -->
             <td class="p-3.5">
-              <div class="font-extrabold text-slate-900 text-xs">${t.full_name}</div>
+              <button onclick="openTeacher360Profile('${t.id}', 'salary')" class="font-extrabold text-slate-900 hover:text-indigo-700 hover:underline text-xs text-left block transition">${t.full_name}</button>
               <div class="flex items-center gap-1.5 mt-1">
                 ${seniorityBadge}
                 <span class="text-[10px] text-slate-400 font-mono">${t.phone}</span>
@@ -278,9 +278,9 @@
 
             <!-- 2. ASSIGNED STUDENTS -->
             <td class="p-3.5 max-w-xs">
-              <div class="font-black text-xs text-brandDark mb-1">
+              <button onclick="openTeacher360Profile('${t.id}', 'students')" class="font-black text-xs text-brandDark hover:text-brandEmerald hover:underline mb-1 block text-left">
                 <i class="fa-solid fa-user-graduate text-emerald-600"></i> ${studentRateItems.length} Enrolled Students
-              </div>
+              </button>
               <div class="flex flex-wrap">${courseSummaryPills}</div>
             </td>
 
