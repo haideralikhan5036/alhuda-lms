@@ -67,7 +67,7 @@
     function initDashboardCharts() {
       if (typeof Chart === 'undefined') return;
 
-      // 1. GRAPH 1 (TOP FULL-WIDTH): NEW SIGN-UPS REPORT (Scheduled Trial vs Regular vs Left)
+      // 1. GRAPH 1 (TOP FULL-WIDTH): NEW SIGN-UPS REPORT (Soft Pastel Professional: Soft Indigo / Soft Teal / Soft Amber)
       const ctxGrowth = document.getElementById('chartStudentGrowth')?.getContext('2d');
       if (ctxGrowth && !DASH_STUDENT_CHART) {
         DASH_STUDENT_CHART = new Chart(ctxGrowth, {
@@ -78,10 +78,10 @@
               {
                 label: 'Scheduled Trial',
                 data: [...BASELINE_SIGNUP_DATA.trial],
-                backgroundColor: '#7c3aed',
-                hoverBackgroundColor: '#6d28d9',
-                borderColor: '#5b21b6',
-                borderWidth: 1,
+                backgroundColor: 'rgba(99, 102, 241, 0.78)',
+                hoverBackgroundColor: '#6366f1',
+                borderColor: '#6366f1',
+                borderWidth: 1.5,
                 borderRadius: 6,
                 barPercentage: 0.76,
                 categoryPercentage: 0.68
@@ -89,10 +89,10 @@
               {
                 label: 'Regular',
                 data: [...BASELINE_SIGNUP_DATA.regular],
-                backgroundColor: '#10b981',
-                hoverBackgroundColor: '#059669',
-                borderColor: '#047857',
-                borderWidth: 1,
+                backgroundColor: 'rgba(20, 184, 166, 0.78)',
+                hoverBackgroundColor: '#14b8a6',
+                borderColor: '#14b8a6',
+                borderWidth: 1.5,
                 borderRadius: 6,
                 barPercentage: 0.76,
                 categoryPercentage: 0.68
@@ -100,10 +100,10 @@
               {
                 label: 'Left',
                 data: [...BASELINE_SIGNUP_DATA.left],
-                backgroundColor: '#f43f5e',
-                hoverBackgroundColor: '#e11d48',
-                borderColor: '#be123c',
-                borderWidth: 1,
+                backgroundColor: 'rgba(245, 158, 11, 0.78)',
+                hoverBackgroundColor: '#f59e0b',
+                borderColor: '#f59e0b',
+                borderWidth: 1.5,
                 borderRadius: 6,
                 barPercentage: 0.76,
                 categoryPercentage: 0.68
@@ -171,7 +171,7 @@
         updateSignupsGraphCalloutBar(ACTIVE_HOVER_SIGNUP_MONTH_IDX);
       }
 
-      // 2. GRAPH 2 (BOTTOM FULL-WIDTH): MONTHLY FEE PAYMENTS REPORT (Modern Violet / Emerald / Rose Bars + Click-to-Drilldown)
+      // 2. GRAPH 2 (BOTTOM FULL-WIDTH): MONTHLY FEE PAYMENTS REPORT (Soft Pastel Professional: Soft Indigo / Soft Teal / Soft Amber)
       const ctxRevenue = document.getElementById('chartFeeRevenue')?.getContext('2d');
       if (ctxRevenue && !DASH_REVENUE_CHART) {
         DASH_REVENUE_CHART = new Chart(ctxRevenue, {
@@ -182,10 +182,10 @@
               {
                 label: 'Target Fee ($)',
                 data: [...BASELINE_FEE_DATA.target],
-                backgroundColor: '#7c3aed',
-                hoverBackgroundColor: '#6d28d9',
-                borderColor: '#5b21b6',
-                borderWidth: 1,
+                backgroundColor: 'rgba(99, 102, 241, 0.78)',
+                hoverBackgroundColor: '#6366f1',
+                borderColor: '#6366f1',
+                borderWidth: 1.5,
                 borderRadius: 6,
                 barPercentage: 0.76,
                 categoryPercentage: 0.68
@@ -193,10 +193,10 @@
               {
                 label: 'Fee Received ($)',
                 data: [...BASELINE_FEE_DATA.received],
-                backgroundColor: '#10b981',
-                hoverBackgroundColor: '#059669',
-                borderColor: '#047857',
-                borderWidth: 1,
+                backgroundColor: 'rgba(20, 184, 166, 0.78)',
+                hoverBackgroundColor: '#14b8a6',
+                borderColor: '#14b8a6',
+                borderWidth: 1.5,
                 borderRadius: 6,
                 barPercentage: 0.76,
                 categoryPercentage: 0.68
@@ -204,10 +204,10 @@
               {
                 label: 'Pending Fee ($)',
                 data: [...BASELINE_FEE_DATA.pending],
-                backgroundColor: '#f43f5e',
-                hoverBackgroundColor: '#e11d48',
-                borderColor: '#be123c',
-                borderWidth: 1,
+                backgroundColor: 'rgba(245, 158, 11, 0.78)',
+                hoverBackgroundColor: '#f59e0b',
+                borderColor: '#f59e0b',
+                borderWidth: 1.5,
                 borderRadius: 6,
                 barPercentage: 0.76,
                 categoryPercentage: 0.68
@@ -2145,13 +2145,13 @@
 
         if (tabsEl) {
           tabsEl.innerHTML = `
-            <button onclick="openGraphMonthDrilldownModal(${safeIdx}, 'trial')" class="px-3.5 py-1.5 rounded-lg text-xs font-extrabold border-2 transition cursor-pointer ${category === 'trial' ? 'bg-[#7c3aed] text-white border-[#5b21b6] shadow-xs' : 'bg-white text-slate-700 border-[#7c3aed] hover:bg-violet-50'}">
+            <button onclick="openGraphMonthDrilldownModal(${safeIdx}, 'trial')" class="px-3.5 py-1.5 rounded-lg text-xs font-extrabold border-2 transition cursor-pointer ${category === 'trial' ? 'bg-[#6366f1] text-white border-[#4f46e5] shadow-xs' : 'bg-white text-slate-700 border-[#6366f1] hover:bg-indigo-50'}">
               Scheduled Trial in ${monthLabel}: ${tCount}
             </button>
-            <button onclick="openGraphMonthDrilldownModal(${safeIdx}, 'regular')" class="px-3.5 py-1.5 rounded-lg text-xs font-extrabold border-2 transition cursor-pointer ${category === 'regular' ? 'bg-[#10b981] text-white border-[#047857] shadow-xs' : 'bg-white text-slate-700 border-[#10b981] hover:bg-emerald-50'}">
+            <button onclick="openGraphMonthDrilldownModal(${safeIdx}, 'regular')" class="px-3.5 py-1.5 rounded-lg text-xs font-extrabold border-2 transition cursor-pointer ${category === 'regular' ? 'bg-[#14b8a6] text-white border-[#0d9488] shadow-xs' : 'bg-white text-slate-700 border-[#14b8a6] hover:bg-teal-50'}">
               Regular Enrolled in ${monthLabel}: ${rCount}
             </button>
-            <button onclick="openGraphMonthDrilldownModal(${safeIdx}, 'left')" class="px-3.5 py-1.5 rounded-lg text-xs font-extrabold border-2 transition cursor-pointer ${category === 'left' ? 'bg-[#f43f5e] text-white border-[#be123c] shadow-xs' : 'bg-white text-slate-700 border-[#f43f5e] hover:bg-rose-50'}">
+            <button onclick="openGraphMonthDrilldownModal(${safeIdx}, 'left')" class="px-3.5 py-1.5 rounded-lg text-xs font-extrabold border-2 transition cursor-pointer ${category === 'left' ? 'bg-[#f59e0b] text-white border-[#d97706] shadow-xs' : 'bg-white text-slate-700 border-[#f59e0b] hover:bg-amber-50'}">
               Left in ${monthLabel}: ${lCount}
             </button>
           `;
@@ -2161,32 +2161,32 @@
           'trial': {
             title: `Scheduled Trial Students in ${monthLabel}`,
             sub: `Showing prospective trial students entered/scheduled during ${monthLabel}`,
-            iconBg: 'bg-[#7c3aed] text-white',
-            badgeClass: 'bg-violet-100 text-violet-900 border-violet-300',
+            iconBg: 'bg-[#6366f1] text-white',
+            badgeClass: 'bg-indigo-100 text-indigo-900 border-indigo-300',
             statusLabel: 'Scheduled Trial',
             targetTotal: tCount
           },
           'regular': {
             title: `Regular Enrolled Students in ${monthLabel}`,
             sub: `Showing students who enrolled and started regular classes in ${monthLabel}`,
-            iconBg: 'bg-[#10b981] text-white',
-            badgeClass: 'bg-emerald-100 text-emerald-900 border-emerald-300',
+            iconBg: 'bg-[#14b8a6] text-white',
+            badgeClass: 'bg-teal-100 text-teal-900 border-teal-300',
             statusLabel: 'Regular Enrolled',
             targetTotal: rCount
           },
           'left': {
             title: `Left / Discontinued Students in ${monthLabel}`,
             sub: `Showing students who left or paused classes during ${monthLabel}`,
-            iconBg: 'bg-[#f43f5e] text-white',
-            badgeClass: 'bg-rose-100 text-rose-900 border-rose-300',
+            iconBg: 'bg-[#f59e0b] text-white',
+            badgeClass: 'bg-amber-100 text-amber-900 border-amber-300',
             statusLabel: 'Left LMS',
             targetTotal: lCount
           }
         }[category] || {
           title: `Students Report (${monthLabel})`,
           sub: `Monthly student records`,
-          iconBg: 'bg-emerald-600 text-white',
-          badgeClass: 'bg-emerald-100 text-emerald-900 border-emerald-300',
+          iconBg: 'bg-teal-600 text-white',
+          badgeClass: 'bg-teal-100 text-teal-900 border-teal-300',
           statusLabel: 'Active',
           targetTotal: rCount
         };
@@ -2309,13 +2309,13 @@
 
         if (tabsEl) {
           tabsEl.innerHTML = `
-            <button onclick="openGraphMonthDrilldownModal(${safeIdx}, 'fee_target')" class="px-3.5 py-1.5 rounded-lg text-xs font-extrabold border-2 transition cursor-pointer ${category === 'fee_target' ? 'bg-[#7c3aed] text-white border-[#5b21b6] shadow-xs' : 'bg-white text-slate-700 border-[#7c3aed] hover:bg-violet-50'}">
+            <button onclick="openGraphMonthDrilldownModal(${safeIdx}, 'fee_target')" class="px-3.5 py-1.5 rounded-lg text-xs font-extrabold border-2 transition cursor-pointer ${category === 'fee_target' ? 'bg-[#6366f1] text-white border-[#4f46e5] shadow-xs' : 'bg-white text-slate-700 border-[#6366f1] hover:bg-indigo-50'}">
               Target Fee in ${monthLabel}: $${Number(tgtVal).toLocaleString()}
             </button>
-            <button onclick="openGraphMonthDrilldownModal(${safeIdx}, 'fee_paid')" class="px-3.5 py-1.5 rounded-lg text-xs font-extrabold border-2 transition cursor-pointer ${category === 'fee_paid' ? 'bg-[#10b981] text-white border-[#047857] shadow-xs' : 'bg-white text-slate-700 border-[#10b981] hover:bg-emerald-50'}">
+            <button onclick="openGraphMonthDrilldownModal(${safeIdx}, 'fee_paid')" class="px-3.5 py-1.5 rounded-lg text-xs font-extrabold border-2 transition cursor-pointer ${category === 'fee_paid' ? 'bg-[#14b8a6] text-white border-[#0d9488] shadow-xs' : 'bg-white text-slate-700 border-[#14b8a6] hover:bg-teal-50'}">
               Received in ${monthLabel}: $${Number(recVal).toLocaleString()}
             </button>
-            <button onclick="openGraphMonthDrilldownModal(${safeIdx}, 'fee_pending')" class="px-3.5 py-1.5 rounded-lg text-xs font-extrabold border-2 transition cursor-pointer ${category === 'fee_pending' ? 'bg-[#f43f5e] text-white border-[#be123c] shadow-xs' : 'bg-white text-slate-700 border-[#f43f5e] hover:bg-rose-50'}">
+            <button onclick="openGraphMonthDrilldownModal(${safeIdx}, 'fee_pending')" class="px-3.5 py-1.5 rounded-lg text-xs font-extrabold border-2 transition cursor-pointer ${category === 'fee_pending' ? 'bg-[#f59e0b] text-white border-[#d97706] shadow-xs' : 'bg-white text-slate-700 border-[#f59e0b] hover:bg-amber-50'}">
               Pending in ${monthLabel}: $${Number(pndVal).toLocaleString()}
             </button>
           `;
@@ -2346,8 +2346,8 @@
 
         const statusLabel = category === 'fee_pending' ? 'Pending Due' : 'Paid / Verified';
         const badgeCls = category === 'fee_pending'
-          ? 'bg-rose-100 text-rose-900 border-rose-300'
-          : 'bg-emerald-100 text-emerald-900 border-emerald-300';
+          ? 'bg-amber-100 text-amber-900 border-amber-300'
+          : 'bg-teal-100 text-teal-900 border-teal-300';
 
         if (tbodyEl) {
           tbodyEl.innerHTML = fams.map((f, i) => `
