@@ -64,12 +64,30 @@
       setTxt('valCalloutFeePending', '$' + Number(pndVal).toLocaleString());
     }
 
+    let _dashGraphEntranceAnimatingUntil = 0;
+
+    function playDashboardGraphsEntranceAnimation() {
+      if (typeof Chart === 'undefined') return;
+      _dashGraphEntranceAnimatingUntil = Date.now() + 2200;
+
+      if (DASH_STUDENT_CHART) {
+        try { DASH_STUDENT_CHART.destroy(); } catch (e) {}
+        DASH_STUDENT_CHART = null;
+      }
+      if (DASH_REVENUE_CHART) {
+        try { DASH_REVENUE_CHART.destroy(); } catch (e) {}
+        DASH_REVENUE_CHART = null;
+      }
+      initDashboardCharts();
+    }
+
     function initDashboardCharts() {
       if (typeof Chart === 'undefined') return;
 
       // 1. GRAPH 1 (TOP FULL-WIDTH): NEW SIGN-UPS REPORT (Soft Pastel Professional: Soft Indigo / Soft Teal / Soft Amber)
       const ctxGrowth = document.getElementById('chartStudentGrowth')?.getContext('2d');
       if (ctxGrowth && !DASH_STUDENT_CHART) {
+        _dashGraphEntranceAnimatingUntil = Date.now() + 2200;
         DASH_STUDENT_CHART = new Chart(ctxGrowth, {
           type: 'bar',
           data: {
@@ -113,6 +131,27 @@
           options: {
             responsive: true,
             maintainAspectRatio: false,
+            animation: {
+              duration: 1350,
+              easing: 'easeOutQuart',
+              delay: (context) => {
+                if (context.type === 'data' && context.mode === 'default') {
+                  return context.dataIndex * 45 + context.datasetIndex * 85;
+                }
+                return 0;
+              }
+            },
+            animations: {
+              y: {
+                from: (ctx) => {
+                  if (ctx.type === 'data' && ctx.mode === 'default' && ctx.chart?.scales?.y) {
+                    return ctx.chart.scales.y.getPixelForValue(0);
+                  }
+                },
+                duration: 1350,
+                easing: 'easeOutQuart'
+              }
+            },
             interaction: { mode: 'index', intersect: false },
             onHover: (event, elements) => {
               if (elements && elements.length > 0) {
@@ -217,6 +256,27 @@
           options: {
             responsive: true,
             maintainAspectRatio: false,
+            animation: {
+              duration: 1350,
+              easing: 'easeOutQuart',
+              delay: (context) => {
+                if (context.type === 'data' && context.mode === 'default') {
+                  return context.dataIndex * 45 + context.datasetIndex * 85;
+                }
+                return 0;
+              }
+            },
+            animations: {
+              y: {
+                from: (ctx) => {
+                  if (ctx.type === 'data' && ctx.mode === 'default' && ctx.chart?.scales?.y) {
+                    return ctx.chart.scales.y.getPixelForValue(0);
+                  }
+                },
+                duration: 1350,
+                easing: 'easeOutQuart'
+              }
+            },
             interaction: { mode: 'index', intersect: false },
             onHover: (event, elements) => {
               if (elements && elements.length > 0) {
@@ -284,7 +344,6 @@
         if (families && families.length > 0) ALL_FAMILIES = families;
         if (teachers && teachers.length > 0) ALL_TEACHERS = teachers;
 
-        const totalStudents = (students || []).length;
         const activeStudents = (students || []).filter(s => s.status !== 'Left' && s.status !== 'Inactive').length;
         const leftStudents = (students || []).filter(s => s.status === 'Left' || s.status === 'Inactive').length;
 
@@ -293,20 +352,33 @@
           totalAgreedFee += Number(f.monthly_fee) || 0;
         });
 
+        const currentMonthIdx = new Date().getMonth();
+        const trialCountNow = (ALL_TRIALS && ALL_TRIALS.length > 0) ? ALL_TRIALS.length : BASELINE_SIGNUP_DATA.trial[currentMonthIdx];
+        BASELINE_SIGNUP_DATA.trial[currentMonthIdx] = Math.max(trialCountNow, BASELINE_SIGNUP_DATA.trial[currentMonthIdx]);
+        BASELINE_SIGNUP_DATA.regular[currentMonthIdx] = Math.max(activeStudents, BASELINE_SIGNUP_DATA.regular[currentMonthIdx]);
+        BASELINE_SIGNUP_DATA.left[currentMonthIdx] = Math.max(leftStudents, BASELINE_SIGNUP_DATA.left[currentMonthIdx]);
+        if (totalAgreedFee > 0) {
+          BASELINE_FEE_DATA.target[currentMonthIdx] = Math.max(totalAgreedFee, BASELINE_FEE_DATA.target[currentMonthIdx]);
+        }
+
+        // Do not interrupt the one-time entrance wave animation while it is playing
+        const isEntranceAnimating = Date.now() < _dashGraphEntranceAnimatingUntil;
+
         if (DASH_STUDENT_CHART) {
-          const currentMonthIdx = new Date().getMonth();
-          const trialCountNow = (ALL_TRIALS && ALL_TRIALS.length > 0) ? ALL_TRIALS.length : BASELINE_SIGNUP_DATA.trial[currentMonthIdx];
-          DASH_STUDENT_CHART.data.datasets[0].data[currentMonthIdx] = Math.max(trialCountNow, BASELINE_SIGNUP_DATA.trial[currentMonthIdx]);
-          DASH_STUDENT_CHART.data.datasets[1].data[currentMonthIdx] = Math.max(activeStudents, BASELINE_SIGNUP_DATA.regular[currentMonthIdx]);
-          DASH_STUDENT_CHART.data.datasets[2].data[currentMonthIdx] = Math.max(leftStudents, BASELINE_SIGNUP_DATA.left[currentMonthIdx]);
-          DASH_STUDENT_CHART.update();
+          DASH_STUDENT_CHART.data.datasets[0].data[currentMonthIdx] = BASELINE_SIGNUP_DATA.trial[currentMonthIdx];
+          DASH_STUDENT_CHART.data.datasets[1].data[currentMonthIdx] = BASELINE_SIGNUP_DATA.regular[currentMonthIdx];
+          DASH_STUDENT_CHART.data.datasets[2].data[currentMonthIdx] = BASELINE_SIGNUP_DATA.left[currentMonthIdx];
+          if (!isEntranceAnimating) {
+            DASH_STUDENT_CHART.update('none');
+          }
           updateSignupsGraphCalloutBar(ACTIVE_HOVER_SIGNUP_MONTH_IDX);
         }
 
         if (DASH_REVENUE_CHART && totalAgreedFee > 0) {
-          const currentMonthIdx = new Date().getMonth();
-          DASH_REVENUE_CHART.data.datasets[0].data[currentMonthIdx] = Math.max(totalAgreedFee, BASELINE_FEE_DATA.target[currentMonthIdx]);
-          DASH_REVENUE_CHART.update();
+          DASH_REVENUE_CHART.data.datasets[0].data[currentMonthIdx] = BASELINE_FEE_DATA.target[currentMonthIdx];
+          if (!isEntranceAnimating) {
+            DASH_REVENUE_CHART.update('none');
+          }
           updateFeeGraphCalloutBar(ACTIVE_HOVER_FEE_MONTH_IDX);
         }
 

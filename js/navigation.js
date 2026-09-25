@@ -302,7 +302,10 @@
         target.classList.add('block');
       }
 
-      if (targetId === 'tab-dashboard') loadDashboardData();
+      if (targetId === 'tab-dashboard') {
+        if (typeof playDashboardGraphsEntranceAnimation === 'function') playDashboardGraphsEntranceAnimation();
+        loadDashboardData();
+      }
       if (tabId === 'tab-attendance') loadAttendanceList();
       if (tabId === 'tab-families') loadFamiliesAndStudents();
       if (tabId === 'tab-teachers') loadTeachers();
