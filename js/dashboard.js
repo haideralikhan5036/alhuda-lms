@@ -1029,3 +1029,246 @@
       switchTab('tab-teachers');
     }
 
+    // =========================================================================
+    // MAIN DASHBOARD GLOBAL SEARCH BAR (STUDENTS, FAMILIES & TEACHERS)
+    // Searches by Name, Student/Family/Teacher ID, or Phone/WhatsApp Number
+    // =========================================================================
+    let _dashSearchDataPromise = null;
+
+    async function ensureDashboardSearchDataLoaded() {
+      if ((ALL_FAMILIES && ALL_FAMILIES.length > 0) && (ALL_STUDENTS && ALL_STUDENTS.length > 0) && (ALL_TEACHERS && ALL_TEACHERS.length > 0)) {
+        return;
+      }
+      if (_dashSearchDataPromise) return _dashSearchDataPromise;
+
+      _dashSearchDataPromise = (async () => {
+        try {
+          const [famRes, stuRes, tchRes] = await Promise.all([
+            (!ALL_FAMILIES || ALL_FAMILIES.length === 0) ? db.from('families').select('*, students(*)').order('created_at', { ascending: false }) : Promise.resolve({ data: ALL_FAMILIES }),
+            (!ALL_STUDENTS || ALL_STUDENTS.length === 0) ? db.from('students').select('*').order('created_at', { ascending: false }) : Promise.resolve({ data: ALL_STUDENTS }),
+            (!ALL_TEACHERS || ALL_TEACHERS.length === 0) ? db.from('teachers').select('*').order('created_at', { ascending: false }) : Promise.resolve({ data: ALL_TEACHERS })
+          ]);
+          if (famRes.data && (!ALL_FAMILIES || ALL_FAMILIES.length === 0)) ALL_FAMILIES = famRes.data;
+          if (stuRes.data && (!ALL_STUDENTS || ALL_STUDENTS.length === 0)) ALL_STUDENTS = stuRes.data;
+          if (tchRes.data && (!ALL_TEACHERS || ALL_TEACHERS.length === 0)) ALL_TEACHERS = tchRes.data;
+        } catch (err) {
+          console.error('Dashboard search cache load error:', err);
+        } finally {
+          _dashSearchDataPromise = null;
+        }
+      })();
+
+      return _dashSearchDataPromise;
+    }
+
+    async function handleDashboardGlobalSearch(rawQuery) {
+      const panel = document.getElementById('dashGlobalSearchResultsPanel');
+      const clearBtn = document.getElementById('btnClearDashGlobalSearch');
+      const q = (rawQuery || '').trim().toLowerCase();
+
+      if (clearBtn) {
+        if (q.length > 0) clearBtn.classList.remove('hidden');
+        else clearBtn.classList.add('hidden');
+      }
+
+      if (!panel) return;
+
+      if (!q) {
+        panel.classList.add('hidden');
+        panel.innerHTML = '';
+        return;
+      }
+
+      await ensureDashboardSearchDataLoaded();
+
+      const familyMap = {};
+      (ALL_FAMILIES || []).forEach(f => { familyMap[f.id] = f; });
+
+      const teacherMap = {};
+      (ALL_TEACHERS || []).forEach(t => { teacherMap[t.id] = t; });
+
+      // 1. Match Students (by Name, Student ID, Family ID, or Parent Phone)
+      const matchedStudents = (ALL_STUDENTS || []).filter(s => {
+        const sName = String(s.name || '').toLowerCase();
+        const sId = String(s.id || '').toLowerCase();
+        const fId = String(s.family_id || '').toLowerCase();
+        const fam = familyMap[s.family_id];
+        const fName = fam ? String(fam.parent_name || '').toLowerCase() : '';
+        const fPhone = fam ? String(fam.whatsapp || '').toLowerCase() : '';
+        return sName.includes(q) || sId.includes(q) || fId.includes(q) || fName.includes(q) || fPhone.includes(q);
+      }).slice(0, 6);
+
+      // 2. Match Families (by Parent Name, Family ID, or Phone/WhatsApp)
+      const matchedFamilies = (ALL_FAMILIES || []).filter(f => {
+        const fName = String(f.parent_name || '').toLowerCase();
+        const fId = String(f.id || '').toLowerCase();
+        const fPhone = String(f.whatsapp || '').toLowerCase();
+        return fName.includes(q) || fId.includes(q) || fPhone.includes(q);
+      }).slice(0, 5);
+
+      // 3. Match Teachers (by Full Name, Teacher ID/Portal ID, or Phone)
+      const matchedTeachers = (ALL_TEACHERS || []).filter(t => {
+        const tName = String(t.full_name || '').toLowerCase();
+        const tId = String(t.id || '').toLowerCase();
+        const tPhone = String(t.phone || '').toLowerCase();
+        let credsId = '';
+        if (typeof getTeacherCreds === 'function') {
+          try { credsId = String(getTeacherCreds(t)?.teacher_id || '').toLowerCase(); } catch (e) {}
+        }
+        return tName.includes(q) || tId.includes(q) || credsId.includes(q) || tPhone.includes(q);
+      }).slice(0, 5);
+
+      const totalCount = matchedStudents.length + matchedFamilies.length + matchedTeachers.length;
+
+      if (totalCount === 0) {
+        panel.innerHTML = `
+          <div class="p-4 text-center text-xs text-slate-400 font-semibold">
+            <i class="fa-solid fa-magnifying-glass-minus text-slate-300 text-base mb-1 block"></i>
+            No matching Student, Family, or Teacher found for "<span class="text-slate-700 font-bold">${rawQuery}</span>"
+          </div>
+        `;
+        panel.classList.remove('hidden');
+        return;
+      }
+
+      let html = '';
+
+      // Render Students Section
+      if (matchedStudents.length > 0) {
+        html += `
+          <div class="p-2">
+            <div class="px-2 py-1 text-[10px] font-black uppercase tracking-wider text-teal-800 bg-teal-50/80 rounded-lg mb-1 flex items-center justify-between">
+              <span><i class="fa-solid fa-user-graduate mr-1"></i> Students (${matchedStudents.length})</span>
+              <span class="text-[9px] text-teal-600 font-bold">Click to View Profile</span>
+            </div>
+            <div class="space-y-1">
+              ${matchedStudents.map(s => {
+                const fam = familyMap[s.family_id];
+                const parentName = fam ? fam.parent_name : (s.family_id || '--');
+                const rawPhone = fam ? (fam.whatsapp || '') : '';
+                const displayPhone = (typeof maskStudentPhone === 'function') ? maskStudentPhone(rawPhone) : (rawPhone || '--');
+                return `
+                  <div onclick="clearDashboardGlobalSearch(); openStudentDetailModal('${s.id}')" class="px-2.5 py-1.5 rounded-xl hover:bg-teal-50/70 cursor-pointer transition flex items-center justify-between gap-2 border border-transparent hover:border-teal-200">
+                    <div class="min-w-0">
+                      <div class="flex items-center gap-1.5">
+                        <span class="text-xs font-extrabold text-slate-900 truncate">${s.name}</span>
+                        <span class="px-1.5 py-0.2 rounded bg-slate-100 border border-slate-200 font-mono text-[9px] font-bold text-brandDark shrink-0">${s.id}</span>
+                      </div>
+                      <div class="text-[10px] text-slate-500 truncate">
+                        Parent: <strong class="text-slate-700">${parentName}</strong> &bull; <span class="font-mono">${displayPhone}</span>
+                      </div>
+                    </div>
+                    <span class="px-2 py-0.5 rounded-lg bg-brandDark text-white text-[10px] font-bold shrink-0">Profile</span>
+                  </div>
+                `;
+              }).join('')}
+            </div>
+          </div>
+        `;
+      }
+
+      // Render Families Section
+      if (matchedFamilies.length > 0) {
+        html += `
+          <div class="p-2">
+            <div class="px-2 py-1 text-[10px] font-black uppercase tracking-wider text-emerald-800 bg-emerald-50/80 rounded-lg mb-1 flex items-center justify-between">
+              <span><i class="fa-solid fa-house-user mr-1"></i> Families (${matchedFamilies.length})</span>
+              <span class="text-[9px] text-emerald-600 font-bold">Click to Open Family</span>
+            </div>
+            <div class="space-y-1">
+              ${matchedFamilies.map(f => {
+                const displayPhone = (typeof maskStudentPhone === 'function') ? maskStudentPhone(f.whatsapp) : (f.whatsapp || '--');
+                const childCount = (f.students || []).length;
+                return `
+                  <div onclick="openFamilyFromDashboardSearch('${f.id}')" class="px-2.5 py-1.5 rounded-xl hover:bg-emerald-50/70 cursor-pointer transition flex items-center justify-between gap-2 border border-transparent hover:border-emerald-200">
+                    <div class="min-w-0">
+                      <div class="flex items-center gap-1.5">
+                        <span class="text-xs font-extrabold text-slate-900 truncate">${f.parent_name}</span>
+                        <span class="px-1.5 py-0.2 rounded bg-emerald-100 border border-emerald-200 font-mono text-[9px] font-bold text-emerald-900 shrink-0">${f.id}</span>
+                      </div>
+                      <div class="text-[10px] text-slate-500 truncate">
+                        Phone: <span class="font-mono font-semibold text-slate-700">${displayPhone}</span> &bull; ${childCount} Child(ren)
+                      </div>
+                    </div>
+                    <span class="px-2 py-0.5 rounded-lg bg-emerald-700 text-white text-[10px] font-bold shrink-0">Open</span>
+                  </div>
+                `;
+              }).join('')}
+            </div>
+          </div>
+        `;
+      }
+
+      // Render Teachers Section
+      if (matchedTeachers.length > 0) {
+        html += `
+          <div class="p-2">
+            <div class="px-2 py-1 text-[10px] font-black uppercase tracking-wider text-indigo-800 bg-indigo-50/80 rounded-lg mb-1 flex items-center justify-between">
+              <span><i class="fa-solid fa-chalkboard-user mr-1"></i> Teachers &amp; Staff (${matchedTeachers.length})</span>
+              <span class="text-[9px] text-indigo-600 font-bold">Click to Inspect</span>
+            </div>
+            <div class="space-y-1">
+              ${matchedTeachers.map(t => {
+                let credsId = t.id || 'TCH';
+                if (typeof getTeacherCreds === 'function') {
+                  try { credsId = getTeacherCreds(t)?.teacher_id || credsId; } catch (e) {}
+                }
+                return `
+                  <div onclick="clearDashboardGlobalSearch(); openTeacherDetailModal('${t.id}')" class="px-2.5 py-1.5 rounded-xl hover:bg-indigo-50/70 cursor-pointer transition flex items-center justify-between gap-2 border border-transparent hover:border-indigo-200">
+                    <div class="min-w-0">
+                      <div class="flex items-center gap-1.5">
+                        <span class="text-xs font-extrabold text-slate-900 truncate">${t.full_name}</span>
+                        <span class="px-1.5 py-0.2 rounded bg-indigo-100 border border-indigo-200 font-mono text-[9px] font-bold text-indigo-900 shrink-0">${credsId}</span>
+                      </div>
+                      <div class="text-[10px] text-slate-500 truncate">
+                        Phone: <span class="font-mono font-semibold text-slate-700">${t.phone || '--'}</span>
+                      </div>
+                    </div>
+                    <span class="px-2 py-0.5 rounded-lg bg-indigo-700 text-white text-[10px] font-bold shrink-0">Details</span>
+                  </div>
+                `;
+              }).join('')}
+            </div>
+          </div>
+        `;
+      }
+
+      panel.innerHTML = html;
+      panel.classList.remove('hidden');
+    }
+
+    function clearDashboardGlobalSearch() {
+      const input = document.getElementById('dashGlobalSearchInput');
+      const panel = document.getElementById('dashGlobalSearchResultsPanel');
+      const clearBtn = document.getElementById('btnClearDashGlobalSearch');
+      if (input) input.value = '';
+      if (panel) {
+        panel.classList.add('hidden');
+        panel.innerHTML = '';
+      }
+      if (clearBtn) clearBtn.classList.add('hidden');
+    }
+
+    async function openFamilyFromDashboardSearch(familyId) {
+      clearDashboardGlobalSearch();
+      switchTab('tab-families');
+      await loadFamiliesAndStudents();
+      const searchInput = document.getElementById('familyDirectorySearchInput');
+      if (searchInput) {
+        searchInput.value = familyId;
+        if (typeof handleFamilyDirectorySearch === 'function') {
+          handleFamilyDirectorySearch(familyId);
+        }
+      }
+    }
+
+    // Close dashboard search dropdown when clicking outside
+    document.addEventListener('click', (e) => {
+      const container = document.getElementById('dashGlobalSearchContainer');
+      const panel = document.getElementById('dashGlobalSearchResultsPanel');
+      if (container && panel && !container.contains(e.target)) {
+        panel.classList.add('hidden');
+      }
+    });
+
+
