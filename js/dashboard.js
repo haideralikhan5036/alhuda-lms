@@ -78,34 +78,34 @@
               {
                 label: 'Scheduled Trial',
                 data: [...BASELINE_SIGNUP_DATA.trial],
-                backgroundColor: '#facc15',
-                hoverBackgroundColor: '#eab308',
-                borderColor: '#ca8a04',
+                backgroundColor: '#7c3aed',
+                hoverBackgroundColor: '#6d28d9',
+                borderColor: '#5b21b6',
                 borderWidth: 1,
-                borderRadius: 2,
-                barPercentage: 0.78,
+                borderRadius: 6,
+                barPercentage: 0.76,
                 categoryPercentage: 0.68
               },
               {
                 label: 'Regular',
                 data: [...BASELINE_SIGNUP_DATA.regular],
-                backgroundColor: '#84cc16',
-                hoverBackgroundColor: '#65a30d',
-                borderColor: '#4d7c0f',
+                backgroundColor: '#10b981',
+                hoverBackgroundColor: '#059669',
+                borderColor: '#047857',
                 borderWidth: 1,
-                borderRadius: 2,
-                barPercentage: 0.78,
+                borderRadius: 6,
+                barPercentage: 0.76,
                 categoryPercentage: 0.68
               },
               {
                 label: 'Left',
                 data: [...BASELINE_SIGNUP_DATA.left],
-                backgroundColor: '#0284c7',
-                hoverBackgroundColor: '#0369a1',
-                borderColor: '#075985',
+                backgroundColor: '#f43f5e',
+                hoverBackgroundColor: '#e11d48',
+                borderColor: '#be123c',
                 borderWidth: 1,
-                borderRadius: 2,
-                barPercentage: 0.78,
+                borderRadius: 6,
+                barPercentage: 0.76,
                 categoryPercentage: 0.68
               }
             ]
@@ -125,7 +125,6 @@
             },
             onClick: (event, elements) => {
               if (!elements || elements.length === 0) return;
-              // Determine exact bar clicked if intersected, else default to first dataset
               const directPoints = DASH_STUDENT_CHART.getElementsAtEventForMode(event, 'nearest', { intersect: true }, true);
               const targetPoint = (directPoints && directPoints.length > 0) ? directPoints[0] : elements[0];
               const mIdx = targetPoint.index;
@@ -137,33 +136,33 @@
               legend: {
                 position: 'top',
                 align: 'end',
-                labels: { boxWidth: 14, font: { size: 11, family: 'Plus Jakarta Sans', weight: 'bold' } }
+                labels: { boxWidth: 14, usePointStyle: true, pointStyle: 'rectRounded', font: { size: 11, family: 'Plus Jakarta Sans', weight: 'bold' } }
               },
               tooltip: {
-                backgroundColor: '#ffffff',
-                titleColor: '#0f172a',
-                bodyColor: '#1e293b',
-                borderColor: '#cbd5e1',
-                borderWidth: 1.5,
-                padding: 10,
+                backgroundColor: '#0f172a',
+                titleColor: '#f8fafc',
+                bodyColor: '#e2e8f0',
+                borderColor: '#334155',
+                borderWidth: 1,
+                padding: 11,
                 titleFont: { size: 12, weight: 'bold' },
                 bodyFont: { size: 11, weight: 'bold' },
                 callbacks: {
                   label: function(c) {
                     const mName = GRAPH_MONTH_LABELS[c.dataIndex];
-                    return ` ${c.dataset.label} in ${mName}: ${c.parsed.y} (Click to view list)`;
+                    return ` ${c.dataset.label} in ${mName}: ${c.parsed.y} (Click bar to inspect students)`;
                   }
                 }
               }
             },
             scales: {
               x: {
-                grid: { display: true, drawOnChartArea: false, color: '#94a3b8' },
+                grid: { display: false },
                 ticks: { font: { size: 11, weight: '600' }, color: '#334155' }
               },
               y: {
                 beginAtZero: true,
-                grid: { color: '#e2e8f0', borderDash: [3, 3] },
+                grid: { color: '#f1f5f9', borderDash: [3, 3] },
                 ticks: { font: { size: 11, weight: '600' }, color: '#475569' }
               }
             }
@@ -172,7 +171,7 @@
         updateSignupsGraphCalloutBar(ACTIVE_HOVER_SIGNUP_MONTH_IDX);
       }
 
-      // 2. GRAPH 2 (BOTTOM FULL-WIDTH): MONTHLY FEE PAYMENTS REPORT (Same 3-Bar Style + Click-to-Drilldown)
+      // 2. GRAPH 2 (BOTTOM FULL-WIDTH): MONTHLY FEE PAYMENTS REPORT (Modern Violet / Emerald / Rose Bars + Click-to-Drilldown)
       const ctxRevenue = document.getElementById('chartFeeRevenue')?.getContext('2d');
       if (ctxRevenue && !DASH_REVENUE_CHART) {
         DASH_REVENUE_CHART = new Chart(ctxRevenue, {
@@ -183,34 +182,34 @@
               {
                 label: 'Target Fee ($)',
                 data: [...BASELINE_FEE_DATA.target],
-                backgroundColor: '#facc15',
-                hoverBackgroundColor: '#eab308',
-                borderColor: '#ca8a04',
+                backgroundColor: '#7c3aed',
+                hoverBackgroundColor: '#6d28d9',
+                borderColor: '#5b21b6',
                 borderWidth: 1,
-                borderRadius: 2,
-                barPercentage: 0.78,
+                borderRadius: 6,
+                barPercentage: 0.76,
                 categoryPercentage: 0.68
               },
               {
                 label: 'Fee Received ($)',
                 data: [...BASELINE_FEE_DATA.received],
-                backgroundColor: '#84cc16',
-                hoverBackgroundColor: '#65a30d',
-                borderColor: '#4d7c0f',
+                backgroundColor: '#10b981',
+                hoverBackgroundColor: '#059669',
+                borderColor: '#047857',
                 borderWidth: 1,
-                borderRadius: 2,
-                barPercentage: 0.78,
+                borderRadius: 6,
+                barPercentage: 0.76,
                 categoryPercentage: 0.68
               },
               {
                 label: 'Pending Fee ($)',
                 data: [...BASELINE_FEE_DATA.pending],
-                backgroundColor: '#0284c7',
-                hoverBackgroundColor: '#0369a1',
-                borderColor: '#075985',
+                backgroundColor: '#f43f5e',
+                hoverBackgroundColor: '#e11d48',
+                borderColor: '#be123c',
                 borderWidth: 1,
-                borderRadius: 2,
-                barPercentage: 0.78,
+                borderRadius: 6,
+                barPercentage: 0.76,
                 categoryPercentage: 0.68
               }
             ]
@@ -241,19 +240,19 @@
               legend: {
                 position: 'top',
                 align: 'end',
-                labels: { boxWidth: 14, font: { size: 11, family: 'Plus Jakarta Sans', weight: 'bold' } }
+                labels: { boxWidth: 14, usePointStyle: true, pointStyle: 'rectRounded', font: { size: 11, family: 'Plus Jakarta Sans', weight: 'bold' } }
               },
               tooltip: {
-                backgroundColor: '#ffffff',
-                titleColor: '#0f172a',
-                bodyColor: '#1e293b',
-                borderColor: '#cbd5e1',
-                borderWidth: 1.5,
-                padding: 10,
+                backgroundColor: '#0f172a',
+                titleColor: '#f8fafc',
+                bodyColor: '#e2e8f0',
+                borderColor: '#334155',
+                borderWidth: 1,
+                padding: 11,
                 callbacks: {
                   label: function(c) {
                     const mName = GRAPH_MONTH_LABELS[c.dataIndex];
-                    return ` ${c.dataset.label} in ${mName}: $${Number(c.parsed.y).toLocaleString()} (Click to view families)`;
+                    return ` ${c.dataset.label} in ${mName}: $${Number(c.parsed.y).toLocaleString()} (Click bar to inspect families)`;
                   }
                 }
               }
@@ -1486,8 +1485,11 @@
     });
 
     // =========================================================================
-    // TOP BAR CIRCULAR NOTIFICATION RED DOTS SYNC ENGINE
-    // Syncs Red Dots for: (1) Teacher Requests, (2) Leave Overdue, (3) Parent Complaints
+    // TOP BAR 4 NEXT-GEN ACTION BADGES & NOTIFICATION DOTS SYNC ENGINE
+    // 1. Grey Arrow: Leave Over / Return Due (#btnTopCircleLeaveOver)
+    // 2. Sky-Blue Arrow: Teacher Time-Change & Wrong Leave/Absent Requests (#btnTopCircleRequests)
+    // 3. Green Arrow: Official Announcements (#btnTopCircleAnnouncements)
+    // 4. Red Arrow: Parent Complaints & Admin Direct Reply (#btnTopCircleComplaints)
     // =========================================================================
     function getParentComplaints() {
       let list = [];
@@ -1496,7 +1498,6 @@
       } catch (e) { list = null; }
 
       if (!Array.isArray(list)) {
-        // Seed 1 default sample pending complaint so the Admin Red Dot is active & ready to inspect
         list = [
           {
             id: 'CMP-101',
@@ -1508,7 +1509,9 @@
             category: 'Class Duration (Short / Late Join)',
             message: 'Class started 6 minutes late yesterday. Please ensure full 30-minute duration for Tajweed revision.',
             created_at: '2026-09-25 18:30',
-            status: 'Pending'
+            status: 'Pending',
+            admin_reply: '',
+            replied_at: ''
           }
         ];
         localStorage.setItem('alhuda_parent_complaints', JSON.stringify(list));
@@ -1521,27 +1524,75 @@
       syncTopCircleNotificationDots();
     }
 
-    function syncTopCircleNotificationDots() {
-      // 1. Teacher Reschedule & Leave Requests Red Dot
-      const reqDot = document.getElementById('dotTopCircleRequests');
-      const pendingReqs = (typeof PENDING_TEACHER_REQUESTS !== 'undefined' && Array.isArray(PENDING_TEACHER_REQUESTS)) ? PENDING_TEACHER_REQUESTS.length : 0;
-      if (reqDot) {
-        if (pendingReqs > 0) reqDot.classList.remove('hidden');
-        else reqDot.classList.add('hidden');
-      }
+    function getOfficialAnnouncements() {
+      let list = [];
+      try {
+        list = JSON.parse(localStorage.getItem('alhuda_official_announcements') || 'null');
+      } catch (e) { list = null; }
 
-      // 2. Leave Over / Return Due Red Dot
+      if (!Array.isArray(list)) {
+        list = [
+          {
+            id: 'ANN-101',
+            title: 'Monthly Tajweed Assessment & Punctuality Notice',
+            message: 'All instructors and students are requested to join their scheduled 30-minute slots on time. Monthly Tajweed evaluations start this week.',
+            target: 'both',
+            created_at: '2026-09-25 09:00'
+          }
+        ];
+        localStorage.setItem('alhuda_official_announcements', JSON.stringify(list));
+      }
+      return list;
+    }
+
+    function saveOfficialAnnouncements(list) {
+      localStorage.setItem('alhuda_official_announcements', JSON.stringify(list || []));
+      syncTopCircleNotificationDots();
+      renderPortalAnnouncementBanners();
+    }
+
+    function getLocalTeacherCorrectionRequests() {
+      let list = [];
+      try {
+        list = JSON.parse(localStorage.getItem('alhuda_local_teacher_requests') || '[]');
+      } catch (e) { list = []; }
+      return Array.isArray(list) ? list : [];
+    }
+
+    function saveLocalTeacherCorrectionRequests(list) {
+      localStorage.setItem('alhuda_local_teacher_requests', JSON.stringify(list || []));
+      syncTopCircleNotificationDots();
+    }
+
+    function mergeLocalTeacherRequestsIntoGlobal() {
+      if (typeof PENDING_TEACHER_REQUESTS === 'undefined' || !Array.isArray(PENDING_TEACHER_REQUESTS)) {
+        window.PENDING_TEACHER_REQUESTS = [];
+      }
+      const localReqs = getLocalTeacherCorrectionRequests();
+      localReqs.forEach(item => {
+        const exists = PENDING_TEACHER_REQUESTS.some(r => r.student?.id === item.student?.id && r.request?.requested_at === item.request?.requested_at);
+        if (!exists) {
+          PENDING_TEACHER_REQUESTS.unshift(item);
+        }
+      });
+    }
+
+    function syncTopCircleNotificationDots() {
+      mergeLocalTeacherRequestsIntoGlobal();
+
+      // 1. GREY ARROW: Leave Over / Return Due Alerts
       const leaveDotPing = document.getElementById('dotTopCircleLeaveOver');
       const leaveDotSolid = document.getElementById('dotTopCircleLeaveOverSolid');
+      const leaveBadge = document.getElementById('badgeTopLeaveOverCount');
       let overdueLeaves = (typeof OVERDUE_LEAVE_STUDENTS !== 'undefined' && Array.isArray(OVERDUE_LEAVE_STUDENTS)) ? OVERDUE_LEAVE_STUDENTS.length : 0;
       if (overdueLeaves === 0 && typeof ALL_LEAVE_RECORDS !== 'undefined' && Array.isArray(ALL_LEAVE_RECORDS)) {
         overdueLeaves = ALL_LEAVE_RECORDS.filter(r => r.status === 'Active' || r.isOverdue).length;
       }
-      // Also check if any student is on leave so the dot pops up clearly
       const leaveKpiVal = parseInt(document.getElementById('kpiDashLeave')?.innerText || '0', 10);
-      const showLeaveDot = overdueLeaves > 0 || leaveKpiVal > 0;
+      const effectiveLeaveCount = Math.max(overdueLeaves, leaveKpiVal);
+      if (leaveBadge) leaveBadge.innerText = effectiveLeaveCount;
       if (leaveDotPing && leaveDotSolid) {
-        if (showLeaveDot) {
+        if (effectiveLeaveCount > 0) {
           leaveDotPing.classList.remove('hidden');
           leaveDotSolid.classList.remove('hidden');
         } else {
@@ -1550,11 +1601,34 @@
         }
       }
 
-      // 3. Parent & Student Portal Complaints Red Dot
+      // 2. SKY-BLUE ARROW: Teacher Time-Change & Wrong Leave/Absent Correction Requests
+      const reqDot = document.getElementById('dotTopCircleRequests');
+      const reqBadge = document.getElementById('badgeTopRequestsCount');
+      const pendingReqs = (typeof PENDING_TEACHER_REQUESTS !== 'undefined' && Array.isArray(PENDING_TEACHER_REQUESTS)) ? PENDING_TEACHER_REQUESTS.length : 0;
+      if (reqBadge) reqBadge.innerText = pendingReqs;
+      if (reqDot) {
+        if (pendingReqs > 0) reqDot.classList.remove('hidden');
+        else reqDot.classList.add('hidden');
+      }
+
+      // 3. GREEN ARROW: Official Announcements (Teacher Portal & Student/Parent Portal)
+      const annBadge = document.getElementById('badgeTopAnnouncementsCount');
+      const annDot = document.getElementById('dotTopCircleAnnouncements');
+      const anns = getOfficialAnnouncements();
+      if (annBadge) annBadge.innerText = anns.length;
+      if (annDot) {
+        if (anns.length > 0) annDot.classList.remove('hidden');
+        else annDot.classList.add('hidden');
+      }
+      renderPortalAnnouncementBanners();
+
+      // 4. RED ARROW: Parent Complaints & Admin Direct Reply Inbox
       const compDotPing = document.getElementById('dotTopCircleComplaints');
       const compDotSolid = document.getElementById('dotTopCircleComplaintsSolid');
+      const compBadge = document.getElementById('badgeTopComplaintsCount');
       const complaints = getParentComplaints();
       const pendingComplaints = complaints.filter(c => c.status !== 'Resolved').length;
+      if (compBadge) compBadge.innerText = pendingComplaints;
       if (compDotPing && compDotSolid) {
         if (pendingComplaints > 0) {
           compDotPing.classList.remove('hidden');
@@ -1572,7 +1646,233 @@
     }
 
     // =========================================================================
-    // PARENT / STUDENT PORTAL COMPLAINT SUBMISSION & ADMIN CENTER
+    // OFFICIAL ANNOUNCEMENTS BROADCAST ENGINE (GREEN MEGAPHONE ICON)
+    // Linked directly to Teacher Portal & Student/Parent Portal
+    // =========================================================================
+    function openAdminAnnouncementsModal() {
+      renderAdminAnnouncementsList();
+      openModal('modalAdminAnnouncements');
+    }
+
+    function handlePublishAnnouncement(e) {
+      e.preventDefault();
+      const target = document.getElementById('annTargetAudience')?.value || 'both';
+      const title = (document.getElementById('annTitleInput')?.value || '').trim();
+      const message = (document.getElementById('annMessageInput')?.value || '').trim();
+
+      if (!title || !message) {
+        alert('Please enter both the Announcement Title and Message.');
+        return;
+      }
+
+      const list = getOfficialAnnouncements();
+      list.unshift({
+        id: 'ANN-' + Math.floor(100 + Math.random() * 900),
+        title,
+        message,
+        target,
+        created_at: new Date().toISOString().slice(0, 16).replace('T', ' ')
+      });
+      saveOfficialAnnouncements(list);
+
+      const titleEl = document.getElementById('annTitleInput');
+      const msgEl = document.getElementById('annMessageInput');
+      if (titleEl) titleEl.value = '';
+      if (msgEl) msgEl.value = '';
+
+      renderAdminAnnouncementsList();
+      alert('Official Announcement published! It is now live on the selected Portal(s).');
+    }
+
+    function deleteOfficialAnnouncement(annId) {
+      const list = getOfficialAnnouncements().filter(a => a.id !== annId);
+      saveOfficialAnnouncements(list);
+      renderAdminAnnouncementsList();
+    }
+
+    function renderAdminAnnouncementsList() {
+      const container = document.getElementById('adminAnnouncementsListContainer');
+      if (!container) return;
+      const list = getOfficialAnnouncements();
+
+      if (list.length === 0) {
+        container.innerHTML = `
+          <div class="p-6 text-center text-slate-400 bg-slate-50 rounded-xl border border-slate-200">
+            No active announcements published. Use the form above to broadcast an announcement to Teachers or Students/Parents.
+          </div>
+        `;
+        return;
+      }
+
+      const targetBadgeMap = {
+        'both': '<span class="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-100 text-emerald-900 border border-emerald-300"><i class="fa-solid fa-globe mr-1"></i> Both Portals (Teachers &amp; Students)</span>',
+        'teachers': '<span class="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-indigo-100 text-indigo-900 border border-indigo-300"><i class="fa-solid fa-chalkboard-user mr-1"></i> Teacher Portal Only</span>',
+        'students': '<span class="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-amber-100 text-amber-900 border border-amber-300"><i class="fa-solid fa-user-graduate mr-1"></i> Student / Parent Portal Only</span>'
+      };
+
+      container.innerHTML = list.map(a => `
+        <div class="p-3.5 rounded-xl bg-white border border-slate-200 shadow-2xs flex justify-between items-start gap-3">
+          <div class="space-y-1">
+            <div class="flex items-center gap-2 flex-wrap">
+              <span class="font-extrabold text-slate-900 text-xs">${a.title}</span>
+              ${targetBadgeMap[a.target] || targetBadgeMap['both']}
+              <span class="text-[10px] text-slate-400 font-mono">${a.created_at}</span>
+            </div>
+            <p class="text-xs text-slate-600 font-medium leading-relaxed">${a.message}</p>
+          </div>
+          <button onclick="deleteOfficialAnnouncement('${a.id}')" class="px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-rose-50 text-slate-500 hover:text-rose-600 text-[11px] font-bold shrink-0 cursor-pointer">
+            <i class="fa-solid fa-trash-can"></i>
+          </button>
+        </div>
+      `).join('');
+    }
+
+    function renderPortalAnnouncementBanners() {
+      const bannerEl = document.getElementById('portalOfficialAnnouncementsBanner');
+      if (!bannerEl) return;
+
+      const list = getOfficialAnnouncements();
+      if (!list || list.length === 0) {
+        bannerEl.classList.add('hidden');
+        bannerEl.innerHTML = '';
+        return;
+      }
+
+      bannerEl.classList.remove('hidden');
+      bannerEl.innerHTML = `
+        <div class="bg-gradient-to-r from-emerald-900 via-teal-800 to-emerald-900 text-white p-3.5 rounded-xl border border-emerald-400/40 shadow-sm space-y-2">
+          <div class="flex items-center justify-between gap-2">
+            <div class="flex items-center gap-2 font-extrabold text-xs text-emerald-200 uppercase tracking-wider">
+              <i class="fa-solid fa-bullhorn text-amber-300 animate-bounce"></i> Official Administration Announcements (${list.length})
+            </div>
+            <span class="text-[10px] text-emerald-200/80 font-semibold">Live Portal Noticeboard</span>
+          </div>
+          <div class="space-y-1.5">
+            ${list.slice(0, 3).map(a => {
+              const audLabel = a.target === 'teachers' ? 'Teacher Portal' : a.target === 'students' ? 'Student/Parent Portal' : 'All Portals';
+              return `
+                <div class="p-2.5 rounded-lg bg-white/10 border border-white/15 flex flex-wrap items-center justify-between gap-2 text-xs">
+                  <div>
+                    <span class="px-2 py-0.5 rounded bg-emerald-400/20 text-emerald-200 font-extrabold text-[10px] mr-1.5 border border-emerald-300/30">${audLabel}</span>
+                    <strong class="font-extrabold text-white">${a.title}:</strong>
+                    <span class="text-emerald-50 ml-1">${a.message}</span>
+                  </div>
+                  <span class="text-[10px] text-emerald-200/70 font-mono">${a.created_at}</span>
+                </div>
+              `;
+            }).join('')}
+          </div>
+        </div>
+      `;
+    }
+
+    // =========================================================================
+    // TEACHER PORTAL: WRONG LEAVE/ABSENT OR SCHEDULE TIME CORRECTION REQUEST
+    // Directly feeds into PENDING_TEACHER_REQUESTS & Sky-Blue Arrow Icon (#btnTopCircleRequests)
+    // =========================================================================
+    async function openTeacherCorrectionRequestQuickModal() {
+      await ensureDashboardSearchDataLoaded();
+      const stuSel = document.getElementById('tchReqStudentSelect');
+      if (stuSel) {
+        const stus = ALL_STUDENTS || [];
+        stuSel.innerHTML = `<option value="">-- Select Student --</option>` +
+          stus.map(s => `<option value="${s.id}">${s.name} (${s.id})</option>`).join('') +
+          `<option value="STD-001">Zayd Khan (STD-001)</option>`;
+      }
+      const notesInput = document.getElementById('tchReqNotesInput');
+      if (notesInput) notesInput.value = '';
+      toggleTeacherCorrectionRequestFields(document.getElementById('tchReqTypeSelect')?.value || 'reschedule');
+      openModal('modalTeacherCorrectionRequestQuick');
+    }
+
+    function toggleTeacherCorrectionRequestFields(val) {
+      const attBox = document.getElementById('tchReqAttendanceFields');
+      const timeBox = document.getElementById('tchReqTimeChangeFields');
+      if (val === 'time_change') {
+        if (attBox) attBox.classList.add('hidden');
+        if (timeBox) timeBox.classList.remove('hidden');
+      } else {
+        if (attBox) attBox.classList.remove('hidden');
+        if (timeBox) timeBox.classList.add('hidden');
+      }
+    }
+
+    async function handleSubmitTeacherCorrectionRequestQuick(e) {
+      e.preventDefault();
+      const rType = document.getElementById('tchReqTypeSelect')?.value || 'reschedule';
+      const stuId = document.getElementById('tchReqStudentSelect')?.value || 'STD-001';
+      const notes = (document.getElementById('tchReqNotesInput')?.value || '').trim();
+      const todayStr = new Date().toISOString().slice(0, 10);
+
+      let stuObj = (ALL_STUDENTS || []).find(s => s.id === stuId);
+      if (!stuObj) {
+        stuObj = { id: stuId, name: 'Zayd Khan', course_id: 'Tajweed & Quran', teachers: { full_name: 'Qari Abdul Rehman' } };
+      }
+
+      let requestPayload = {};
+      if (rType === 'time_change') {
+        const oldSlot = document.getElementById('tchReqOldTime')?.value || '15:00 - 15:30';
+        const newSlot = document.getElementById('tchReqNewTime')?.value || '16:30 - 17:00';
+        requestPayload = {
+          type: 'time_change',
+          old_slot_label: oldSlot,
+          new_slot_label: newSlot,
+          old_start_time: oldSlot.split('-')[0]?.trim() || '15:00',
+          old_end_time: oldSlot.split('-')[1]?.trim() || '15:30',
+          new_start_time: newSlot.split('-')[0]?.trim() || '16:30',
+          new_end_time: newSlot.split('-')[1]?.trim() || '17:00',
+          scope: 'permanent',
+          reason: 'Teacher Schedule Time Adjustment',
+          notes: notes || 'Requested new class time slot.',
+          requested_at: new Date().toISOString(),
+          requested_by: 'Teacher Portal'
+        };
+      } else {
+        const oldSt = document.getElementById('tchReqOldStatus')?.value || 'Leave';
+        const newSt = document.getElementById('tchReqNewStatus')?.value || 'Present';
+        requestPayload = {
+          type: 'reschedule',
+          date: todayStr,
+          old_status: oldSt,
+          new_status: newSt,
+          reason: `Marked ${oldSt} by mistake — Requesting change to ${newSt} (${notes})`,
+          requested_at: new Date().toISOString(),
+          requested_by: 'Teacher Portal'
+        };
+      }
+
+      // Also persist to student.notes if real student in DB so approveTeacherRequest works natively
+      try {
+        if (stuObj.id && stuObj.id !== 'STD-001') {
+          let meta = {};
+          if (stuObj.notes) {
+            try { meta = JSON.parse(stuObj.notes); } catch (err) { meta = {}; }
+          }
+          if (rType === 'time_change') meta.pending_time_change_request = requestPayload;
+          else meta.pending_reschedule_request = requestPayload;
+          await db.from('students').update({ notes: JSON.stringify(meta) }).eq('id', stuObj.id);
+        }
+      } catch (err) {}
+
+      const newEntry = {
+        student: stuObj,
+        request: requestPayload,
+        requestType: rType,
+        meta: {}
+      };
+
+      const localList = getLocalTeacherCorrectionRequests();
+      localList.unshift(newEntry);
+      saveLocalTeacherCorrectionRequests(localList);
+      mergeLocalTeacherRequestsIntoGlobal();
+      syncTopCircleNotificationDots();
+
+      closeModal('modalTeacherCorrectionRequestQuick');
+      alert('Request sent to Admin Portal! The Sky-Blue Teacher Requests badge in the Admin Top Bar is now active for 1-click Admin approval.');
+    }
+
+    // =========================================================================
+    // PARENT / STUDENT PORTAL COMPLAINT SUBMISSION & ADMIN DIRECT REPLY ENGINE
     // =========================================================================
     async function openParentComplaintSubmitModal() {
       await ensureDashboardSearchDataLoaded();
@@ -1597,7 +1897,48 @@
       const msgEl = document.getElementById('compMessageInput');
       if (msgEl) msgEl.value = '';
 
+      renderParentComplaintRepliesHistory();
       openModal('modalSubmitParentComplaint');
+    }
+
+    function renderParentComplaintRepliesHistory() {
+      const container = document.getElementById('parentComplaintRepliesHistoryContainer');
+      if (!container) return;
+
+      const list = getParentComplaints();
+      if (list.length === 0) {
+        container.innerHTML = `<div class="p-4 text-center text-slate-400 bg-slate-50 rounded-xl border border-slate-200">No complaints submitted yet.</div>`;
+        return;
+      }
+
+      container.innerHTML = list.map(c => {
+        const isResolved = c.status === 'Resolved';
+        return `
+          <div class="p-3.5 rounded-xl bg-white border ${isResolved ? 'border-emerald-300 bg-emerald-50/20' : 'border-slate-200'} space-y-2 shadow-2xs">
+            <div class="flex items-center justify-between gap-2 flex-wrap">
+              <div class="flex items-center gap-2">
+                <span class="font-mono text-[10px] font-black px-2 py-0.5 rounded bg-slate-100 text-slate-700 border border-slate-200">${c.id}</span>
+                <span class="font-extrabold text-slate-800 text-xs">${c.category}</span>
+                <span class="text-[10px] text-slate-400 font-mono">${c.created_at}</span>
+              </div>
+              ${isResolved
+                ? `<span class="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-100 text-emerald-800 border border-emerald-300"><i class="fa-solid fa-circle-check mr-1"></i> Resolved by Admin</span>`
+                : `<span class="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-amber-100 text-amber-900 border border-amber-300">Under Admin Review</span>`
+              }
+            </div>
+            <div class="text-xs text-slate-700 font-medium">"${c.message}"</div>
+            ${c.admin_reply ? `
+              <div class="p-2.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-950 space-y-0.5">
+                <div class="text-[10px] font-black uppercase tracking-wider text-emerald-800 flex items-center justify-between">
+                  <span><i class="fa-solid fa-reply text-emerald-600 mr-1"></i> Official Admin Reply to Parent:</span>
+                  <span class="font-mono text-[9px] text-emerald-700">${c.replied_at || ''}</span>
+                </div>
+                <div class="text-xs font-bold text-emerald-950">${c.admin_reply}</div>
+              </div>
+            ` : ''}
+          </div>
+        `;
+      }).join('');
     }
 
     function handleComplaintStudentChange(studentId) {
@@ -1641,15 +1982,19 @@
         category,
         message,
         created_at: new Date().toISOString().slice(0, 16).replace('T', ' '),
-        status: 'Pending'
+        status: 'Pending',
+        admin_reply: '',
+        replied_at: ''
       };
 
       const list = getParentComplaints();
       list.unshift(newComp);
       saveParentComplaints(list);
 
-      closeModal('modalSubmitParentComplaint');
-      alert('Your complaint has been sent directly to the Admin Portal! The Administration team has been notified immediately.');
+      const msgEl = document.getElementById('compMessageInput');
+      if (msgEl) msgEl.value = '';
+      renderParentComplaintRepliesHistory();
+      alert('Your complaint has been sent directly to the Admin Portal! You can track the Admin reply right below.');
     }
 
     function openAdminParentComplaintsModal() {
@@ -1679,10 +2024,12 @@
         const isPending = c.status !== 'Resolved';
         const statusBadge = isPending
           ? `<span class="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-rose-100 text-rose-800 border border-rose-300 flex items-center gap-1"><span class="w-1.5 h-1.5 rounded-full bg-rose-600 animate-ping"></span> Pending Action</span>`
-          : `<span class="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-100 text-emerald-800 border border-emerald-300"><i class="fa-solid fa-check mr-1"></i> Resolved</span>`;
+          : `<span class="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-100 text-emerald-800 border border-emerald-300"><i class="fa-solid fa-check mr-1"></i> Resolved &amp; Replied</span>`;
+
+        const defaultReplyText = c.admin_reply || 'Your complaint has been resolved and our Administration team has taken immediate action with the instructor.';
 
         return `
-          <div class="p-4 rounded-2xl bg-white border-2 ${isPending ? 'border-rose-200 shadow-xs' : 'border-slate-200 opacity-80'} transition space-y-2.5">
+          <div class="p-4 rounded-2xl bg-white border-2 ${isPending ? 'border-rose-200 shadow-xs' : 'border-emerald-200/80'} transition space-y-3">
             <div class="flex flex-wrap justify-between items-start gap-2">
               <div>
                 <div class="flex items-center gap-2 flex-wrap">
@@ -1707,39 +2054,70 @@
               "${c.message}"
             </div>
 
-            <div class="flex justify-end items-center gap-2 pt-1">
-              ${isPending ? `
-                <button onclick="resolveParentComplaint('${c.id}')" class="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-[11px] font-extrabold shadow-2xs transition flex items-center gap-1.5 cursor-pointer">
-                  <i class="fa-solid fa-check-double"></i> Mark Resolved
+            <!-- ADMIN DIRECT REPLY TO PARENT PORTAL BOX -->
+            <div class="p-3 rounded-xl bg-emerald-50/60 border border-emerald-200 space-y-2">
+              <label class="block text-[11px] font-extrabold text-emerald-950">
+                <i class="fa-solid fa-reply text-emerald-600 mr-1"></i> Official Admin Reply to Parent (Sent to Parent Portal):
+              </label>
+              <div class="flex flex-col sm:flex-row gap-2">
+                <input
+                  type="text"
+                  id="adminReplyInput_${c.id}"
+                  value="${defaultReplyText.replace(/"/g, '&quot;')}"
+                  placeholder="Type official reply to parent..."
+                  class="flex-1 p-2 rounded-xl border border-emerald-300 bg-white text-xs font-semibold text-slate-800 focus:outline-emerald-600"
+                />
+                <button
+                  type="button"
+                  onclick="replyToParentComplaint('${c.id}')"
+                  class="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-[11px] font-extrabold shadow-2xs transition flex items-center justify-center gap-1.5 shrink-0 cursor-pointer"
+                >
+                  <i class="fa-solid fa-paper-plane"></i> ${isPending ? 'Send Reply & Resolve' : 'Update Reply'}
                 </button>
-              ` : ''}
-              <button onclick="deleteParentComplaint('${c.id}')" class="px-3 py-1.5 bg-slate-100 hover:bg-rose-50 text-slate-600 hover:text-rose-700 rounded-xl text-[11px] font-bold transition cursor-pointer">
-                <i class="fa-solid fa-trash-can"></i> Delete
-              </button>
+                <button
+                  type="button"
+                  onclick="deleteParentComplaint('${c.id}')"
+                  class="px-3 py-2 bg-white hover:bg-rose-50 text-slate-500 hover:text-rose-700 border border-slate-200 rounded-xl text-[11px] font-bold transition shrink-0 cursor-pointer"
+                  title="Delete Complaint"
+                >
+                  <i class="fa-solid fa-trash-can"></i>
+                </button>
+              </div>
             </div>
           </div>
         `;
       }).join('');
     }
 
-    function resolveParentComplaint(compId) {
+    function replyToParentComplaint(compId) {
+      const inputEl = document.getElementById('adminReplyInput_' + compId);
+      const replyMsg = (inputEl ? inputEl.value : '').trim() || 'Your complaint has been resolved by Administration.';
       const list = getParentComplaints();
       const item = list.find(c => c.id === compId);
       if (item) {
         item.status = 'Resolved';
+        item.admin_reply = replyMsg;
+        item.replied_at = new Date().toISOString().slice(0, 16).replace('T', ' ');
         saveParentComplaints(list);
         renderAdminParentComplaintsList();
+        renderParentComplaintRepliesHistory();
+        alert('Official reply sent to Parent Portal and complaint marked Resolved!');
       }
+    }
+
+    function resolveParentComplaint(compId) {
+      replyToParentComplaint(compId);
     }
 
     function deleteParentComplaint(compId) {
       const list = getParentComplaints().filter(c => c.id !== compId);
       saveParentComplaints(list);
       renderAdminParentComplaintsList();
+      renderParentComplaintRepliesHistory();
     }
 
     // =========================================================================
-    // GRAPH MONTH DRILL-DOWN BACK-END DATA VIEWER (CLICK BAR OR CALLOUT BOX)
+    // GRAPH MONTH DRILL-DOWN BACK-END DATA VIEWER (CLICK ANY BAR IN CHART)
     // Opens exact monthly records for: Scheduled Trial, Regular Enrolled, Left,
     // or Monthly Fee Target / Received / Pending
     // =========================================================================
@@ -1750,7 +2128,6 @@
       const monthLabel = GRAPH_MONTH_LABELS[safeIdx] || 'Sep-2026';
       const monthNumStr = String(safeIdx + 1).padStart(2, '0');
 
-      const headerEl = document.getElementById('graphDrilldownModalHeader');
       const iconBoxEl = document.getElementById('graphDrilldownIconBox');
       const titleEl = document.getElementById('graphDrilldownTitle');
       const subEl = document.getElementById('graphDrilldownSubtitle');
@@ -1762,20 +2139,19 @@
       const isFeeCategory = String(category).startsWith('fee_');
 
       if (!isFeeCategory) {
-        // Render category tabs for Graph 1 (Scheduled Trial / Regular / Left)
         const tCount = DASH_STUDENT_CHART ? DASH_STUDENT_CHART.data.datasets[0].data[safeIdx] : BASELINE_SIGNUP_DATA.trial[safeIdx];
         const rCount = DASH_STUDENT_CHART ? DASH_STUDENT_CHART.data.datasets[1].data[safeIdx] : BASELINE_SIGNUP_DATA.regular[safeIdx];
         const lCount = DASH_STUDENT_CHART ? DASH_STUDENT_CHART.data.datasets[2].data[safeIdx] : BASELINE_SIGNUP_DATA.left[safeIdx];
 
         if (tabsEl) {
           tabsEl.innerHTML = `
-            <button onclick="openGraphMonthDrilldownModal(${safeIdx}, 'trial')" class="px-3.5 py-1.5 rounded-lg text-xs font-extrabold border-2 transition cursor-pointer ${category === 'trial' ? 'bg-amber-400 text-slate-950 border-amber-500 shadow-xs' : 'bg-white text-slate-700 border-[#facc15] hover:bg-amber-50'}">
+            <button onclick="openGraphMonthDrilldownModal(${safeIdx}, 'trial')" class="px-3.5 py-1.5 rounded-lg text-xs font-extrabold border-2 transition cursor-pointer ${category === 'trial' ? 'bg-[#7c3aed] text-white border-[#5b21b6] shadow-xs' : 'bg-white text-slate-700 border-[#7c3aed] hover:bg-violet-50'}">
               Scheduled Trial in ${monthLabel}: ${tCount}
             </button>
-            <button onclick="openGraphMonthDrilldownModal(${safeIdx}, 'regular')" class="px-3.5 py-1.5 rounded-lg text-xs font-extrabold border-2 transition cursor-pointer ${category === 'regular' ? 'bg-[#84cc16] text-white border-[#65a30d] shadow-xs' : 'bg-white text-slate-700 border-[#84cc16] hover:bg-lime-50'}">
+            <button onclick="openGraphMonthDrilldownModal(${safeIdx}, 'regular')" class="px-3.5 py-1.5 rounded-lg text-xs font-extrabold border-2 transition cursor-pointer ${category === 'regular' ? 'bg-[#10b981] text-white border-[#047857] shadow-xs' : 'bg-white text-slate-700 border-[#10b981] hover:bg-emerald-50'}">
               Regular Enrolled in ${monthLabel}: ${rCount}
             </button>
-            <button onclick="openGraphMonthDrilldownModal(${safeIdx}, 'left')" class="px-3.5 py-1.5 rounded-lg text-xs font-extrabold border-2 transition cursor-pointer ${category === 'left' ? 'bg-[#0284c7] text-white border-[#0369a1] shadow-xs' : 'bg-white text-slate-700 border-[#0284c7] hover:bg-sky-50'}">
+            <button onclick="openGraphMonthDrilldownModal(${safeIdx}, 'left')" class="px-3.5 py-1.5 rounded-lg text-xs font-extrabold border-2 transition cursor-pointer ${category === 'left' ? 'bg-[#f43f5e] text-white border-[#be123c] shadow-xs' : 'bg-white text-slate-700 border-[#f43f5e] hover:bg-rose-50'}">
               Left in ${monthLabel}: ${lCount}
             </button>
           `;
@@ -1785,24 +2161,24 @@
           'trial': {
             title: `Scheduled Trial Students in ${monthLabel}`,
             sub: `Showing prospective trial students entered/scheduled during ${monthLabel}`,
-            iconBg: 'bg-[#facc15] text-slate-950',
-            badgeClass: 'bg-amber-100 text-amber-900 border-amber-300',
+            iconBg: 'bg-[#7c3aed] text-white',
+            badgeClass: 'bg-violet-100 text-violet-900 border-violet-300',
             statusLabel: 'Scheduled Trial',
             targetTotal: tCount
           },
           'regular': {
             title: `Regular Enrolled Students in ${monthLabel}`,
             sub: `Showing students who enrolled and started regular classes in ${monthLabel}`,
-            iconBg: 'bg-[#84cc16] text-white',
-            badgeClass: 'bg-lime-100 text-lime-900 border-lime-300',
+            iconBg: 'bg-[#10b981] text-white',
+            badgeClass: 'bg-emerald-100 text-emerald-900 border-emerald-300',
             statusLabel: 'Regular Enrolled',
             targetTotal: rCount
           },
           'left': {
             title: `Left / Discontinued Students in ${monthLabel}`,
             sub: `Showing students who left or paused classes during ${monthLabel}`,
-            iconBg: 'bg-[#0284c7] text-white',
-            badgeClass: 'bg-sky-100 text-sky-900 border-sky-300',
+            iconBg: 'bg-[#f43f5e] text-white',
+            badgeClass: 'bg-rose-100 text-rose-900 border-rose-300',
             statusLabel: 'Left LMS',
             targetTotal: lCount
           }
@@ -1834,7 +2210,6 @@
           `;
         }
 
-        // Build rows combining real DB records + realistic back-end records for the selected month
         const rows = [];
         const realStudents = (ALL_STUDENTS || []);
         const realTeachers = (ALL_TEACHERS || []);
@@ -1928,20 +2303,19 @@
         }
 
       } else {
-        // Render Fee Drilldown for Graph 2 (Target / Received / Pending)
         const tgtVal = DASH_REVENUE_CHART ? DASH_REVENUE_CHART.data.datasets[0].data[safeIdx] : BASELINE_FEE_DATA.target[safeIdx];
         const recVal = DASH_REVENUE_CHART ? DASH_REVENUE_CHART.data.datasets[1].data[safeIdx] : BASELINE_FEE_DATA.received[safeIdx];
         const pndVal = DASH_REVENUE_CHART ? DASH_REVENUE_CHART.data.datasets[2].data[safeIdx] : BASELINE_FEE_DATA.pending[safeIdx];
 
         if (tabsEl) {
           tabsEl.innerHTML = `
-            <button onclick="openGraphMonthDrilldownModal(${safeIdx}, 'fee_target')" class="px-3.5 py-1.5 rounded-lg text-xs font-extrabold border-2 transition cursor-pointer ${category === 'fee_target' ? 'bg-amber-400 text-slate-950 border-amber-500 shadow-xs' : 'bg-white text-slate-700 border-[#facc15] hover:bg-amber-50'}">
+            <button onclick="openGraphMonthDrilldownModal(${safeIdx}, 'fee_target')" class="px-3.5 py-1.5 rounded-lg text-xs font-extrabold border-2 transition cursor-pointer ${category === 'fee_target' ? 'bg-[#7c3aed] text-white border-[#5b21b6] shadow-xs' : 'bg-white text-slate-700 border-[#7c3aed] hover:bg-violet-50'}">
               Target Fee in ${monthLabel}: $${Number(tgtVal).toLocaleString()}
             </button>
-            <button onclick="openGraphMonthDrilldownModal(${safeIdx}, 'fee_paid')" class="px-3.5 py-1.5 rounded-lg text-xs font-extrabold border-2 transition cursor-pointer ${category === 'fee_paid' ? 'bg-[#84cc16] text-white border-[#65a30d] shadow-xs' : 'bg-white text-slate-700 border-[#84cc16] hover:bg-lime-50'}">
+            <button onclick="openGraphMonthDrilldownModal(${safeIdx}, 'fee_paid')" class="px-3.5 py-1.5 rounded-lg text-xs font-extrabold border-2 transition cursor-pointer ${category === 'fee_paid' ? 'bg-[#10b981] text-white border-[#047857] shadow-xs' : 'bg-white text-slate-700 border-[#10b981] hover:bg-emerald-50'}">
               Received in ${monthLabel}: $${Number(recVal).toLocaleString()}
             </button>
-            <button onclick="openGraphMonthDrilldownModal(${safeIdx}, 'fee_pending')" class="px-3.5 py-1.5 rounded-lg text-xs font-extrabold border-2 transition cursor-pointer ${category === 'fee_pending' ? 'bg-[#0284c7] text-white border-[#0369a1] shadow-xs' : 'bg-white text-slate-700 border-[#0284c7] hover:bg-sky-50'}">
+            <button onclick="openGraphMonthDrilldownModal(${safeIdx}, 'fee_pending')" class="px-3.5 py-1.5 rounded-lg text-xs font-extrabold border-2 transition cursor-pointer ${category === 'fee_pending' ? 'bg-[#f43f5e] text-white border-[#be123c] shadow-xs' : 'bg-white text-slate-700 border-[#f43f5e] hover:bg-rose-50'}">
               Pending in ${monthLabel}: $${Number(pndVal).toLocaleString()}
             </button>
           `;
@@ -1972,8 +2346,8 @@
 
         const statusLabel = category === 'fee_pending' ? 'Pending Due' : 'Paid / Verified';
         const badgeCls = category === 'fee_pending'
-          ? 'bg-sky-100 text-sky-900 border-sky-300'
-          : 'bg-lime-100 text-lime-900 border-lime-300';
+          ? 'bg-rose-100 text-rose-900 border-rose-300'
+          : 'bg-emerald-100 text-emerald-900 border-emerald-300';
 
         if (tbodyEl) {
           tbodyEl.innerHTML = fams.map((f, i) => `
@@ -2001,7 +2375,7 @@
       openModal('modalGraphMonthDrilldown');
     }
 
-    // Initialize Top Bar Red Dots on script load
+    // Initialize Top Bar Badges & Portal Announcement Banners on script load
     setTimeout(() => {
       if (typeof syncTopCircleNotificationDots === 'function') {
         syncTopCircleNotificationDots();

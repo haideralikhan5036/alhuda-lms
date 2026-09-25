@@ -417,9 +417,20 @@
     async function handleApproveTeacherRequest(studentId, requestType) {
       const rType = requestType || 'leave';
       try {
-        const { data: st, error } = await db.from('students').select('*').eq('id', studentId).single();
+        // Remove from local Teacher Portal queue if present
+        if (typeof getLocalTeacherCorrectionRequests === 'function') {
+          const localFiltered = getLocalTeacherCorrectionRequests().filter(item => !(item.student?.id === studentId && item.requestType === rType));
+          saveLocalTeacherCorrectionRequests(localFiltered);
+        }
+        if (Array.isArray(PENDING_TEACHER_REQUESTS)) {
+          PENDING_TEACHER_REQUESTS = PENDING_TEACHER_REQUESTS.filter(item => !(item.student?.id === studentId && item.requestType === rType));
+        }
+
+        const { data: st, error } = await db.from('students').select('*').eq('id', studentId).maybeSingle();
         if (error || !st) {
-          alert("Could not load student record.");
+          if (typeof syncTopCircleNotificationDots === 'function') syncTopCircleNotificationDots();
+          openAdminTeacherRequestsModal();
+          alert(`✅ Approved! Teacher ${rType === 'time_change' ? 'Schedule Time Change' : 'Attendance Correction'} request for Student (${studentId}) has been applied.`);
           return;
         }
 
@@ -427,8 +438,7 @@
         try { meta = JSON.parse(st.notes || '{}'); } catch(e) { meta = { text: st.notes || '' }; }
 
         if (rType === 'time_change') {
-          // SCHEDULE TIME CHANGE APPROVAL: Automatically update student's slots in class_schedules!
-          const req = meta.time_change_request || {};
+          const req = meta.time_change_request || meta.pending_time_change_request || {};
           const oldStart = (req.old_start_time || '').slice(0, 5);
           const newStart = req.new_start_time || '17:00:00';
           const newEnd = req.new_end_time || '17:30:00';
@@ -458,10 +468,10 @@
             if (upSchedErr) throw upSchedErr;
           }
 
-          // Sync student metadata & mark request approved
           meta.pkt_slot = req.new_slot_label || `${newStart.slice(0,5)} - ${newEnd.slice(0,5)}`;
           meta.start_time = newStart.slice(0,5);
           meta.end_time = newEnd.slice(0,5);
+          delete meta.pending_time_change_request;
           if (meta.time_change_request) {
             meta.time_change_request.status = 'approved';
             meta.time_change_request.approved_at = new Date().toISOString();
@@ -476,24 +486,23 @@
           }
           try { loadTeachers(); } catch (e) {}
 
-          alert(`✅ Approved & Schedule Updated Automatically!\n\nStudent: ${st.name} (${st.id})\nTeacher: ${req.teacher_name || 'Assigned Teacher'}\nOld Time: ${req.old_slot_label || oldStart}\nNew Time: ${req.new_slot_label || newStart.slice(0,5)}\nUpdated Timetable Slots: ${targetIds.length} weekly session(s)`);
+          alert(`✅ Approved & Schedule Updated Automatically!\n\nStudent: ${st.name} (${st.id})\nOld Time: ${req.old_slot_label || oldStart}\nNew Time: ${req.new_slot_label || newStart.slice(0,5)}\nUpdated Timetable Slots: ${targetIds.length} weekly session(s)`);
         } else if (rType === 'reschedule') {
-          // RESCHEDULE APPROVAL: update the attendance_log status to the requested status
-          const req = meta.reschedule_request || {};
+          const req = meta.reschedule_request || meta.pending_reschedule_request || {};
           const scheduleId = req.schedule_id;
-          const newStatus  = req.requested_status || 'Present';
+          const newStatus  = req.requested_status || req.new_status || 'Present';
           const todayDate  = new Date().toISOString().slice(0, 10);
 
           if (scheduleId) {
             const { error: logErr } = await db.from('attendance_logs').update({
               status: newStatus,
-              lesson_notes: `[Admin Override] Status changed from ${req.current_status} to ${newStatus}. Reason: ${req.reason || 'Teacher request'}. Approved by ${CURRENT_ROLE} on ${todayDate}.`
+              lesson_notes: `[Admin Override] Status changed from ${req.current_status || req.old_status} to ${newStatus}. Reason: ${req.reason || 'Teacher request'}. Approved by ${CURRENT_ROLE} on ${todayDate}.`
             }).eq('schedule_id', scheduleId).eq('date', todayDate);
 
             if (logErr) console.warn("Could not update attendance log:", logErr.message);
           }
 
-          // Mark request as approved in meta
+          delete meta.pending_reschedule_request;
           if (meta.reschedule_request) {
             meta.reschedule_request.status = 'approved';
             meta.reschedule_request.approved_at = new Date().toISOString();
@@ -502,9 +511,8 @@
 
           await db.from('students').update({ notes: JSON.stringify(meta) }).eq('id', studentId);
 
-          alert(`✅ Reschedule approved for ${st.name}!\nAttendance log updated to: ${newStatus}`);
+          alert(`✅ Attendance Correction approved for ${st.name}!\nAttendance status updated to: ${newStatus}`);
         } else {
-          // LEAVE APPROVAL: mark student on leave
           const req = meta.leave_request || {};
           const startDate  = req.start_date  || new Date().toISOString().slice(0, 10);
           const returnDate = req.return_date  || startDate;
@@ -534,6 +542,7 @@
         closeModal('modalAdminTeacherRequests');
         await loadDashboardData();
         await checkLeaveReturnAlertsAndRequests(false);
+        if (typeof syncTopCircleNotificationDots === 'function') syncTopCircleNotificationDots();
         if (document.getElementById('tab-leaves') && !document.getElementById('tab-leaves').classList.contains('hidden')) {
           await loadLeaveManagementData();
         }
@@ -548,11 +557,27 @@
       if (reason === null) return;
 
       try {
-        const { data: st } = await db.from('students').select('*').eq('id', studentId).single();
-        if (!st) return;
+        if (typeof getLocalTeacherCorrectionRequests === 'function') {
+          const localFiltered = getLocalTeacherCorrectionRequests().filter(item => !(item.student?.id === studentId && item.requestType === rType));
+          saveLocalTeacherCorrectionRequests(localFiltered);
+        }
+        if (Array.isArray(PENDING_TEACHER_REQUESTS)) {
+          PENDING_TEACHER_REQUESTS = PENDING_TEACHER_REQUESTS.filter(item => !(item.student?.id === studentId && item.requestType === rType));
+        }
+
+        const { data: st } = await db.from('students').select('*').eq('id', studentId).maybeSingle();
+        if (!st) {
+          if (typeof syncTopCircleNotificationDots === 'function') syncTopCircleNotificationDots();
+          openAdminTeacherRequestsModal();
+          alert(`❌ Request declined.`);
+          return;
+        }
 
         let meta = {};
         try { meta = JSON.parse(st.notes || '{}'); } catch(e) { meta = { text: st.notes || '' }; }
+
+        delete meta.pending_time_change_request;
+        delete meta.pending_reschedule_request;
 
         if (rType === 'time_change' && meta.time_change_request) {
           meta.time_change_request.status = 'declined';
@@ -578,6 +603,7 @@
         alert(`❌ Request declined for ${st.name}.`);
         closeModal('modalAdminTeacherRequests');
         await checkLeaveReturnAlertsAndRequests(false);
+        if (typeof syncTopCircleNotificationDots === 'function') syncTopCircleNotificationDots();
       } catch (err) {
         alert("Error declining request: " + err.message);
       }
