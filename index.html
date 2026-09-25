@@ -455,32 +455,39 @@
     <!-- 1. MAIN EXECUTIVE DASHBOARD TAB -->
     <section id="tab-dashboard" class="tab-content block">
       
-      <!-- TOP TOOLBAR: COMPACT GLOBAL SEARCH BAR + LIVE STATUS BADGES -->
-      <div class="flex flex-col md:flex-row justify-between items-stretch md:items-center mb-3.5 gap-2.5 relative z-30">
+      <!-- TOP BAR: LEFT SEARCH + CENTER CIRCULAR NOTIFICATION ICONS (WITH RED DOTS) + RIGHT ADMIN INFO -->
+      <div class="bg-white px-3.5 py-2.5 rounded-xl border border-slate-200/90 shadow-2xs mb-3 flex flex-wrap items-center justify-between gap-3 relative z-30">
         
-        <!-- Sleek Main Dashboard Search Bar (Families, Students, Teachers by Name, ID or Phone) -->
-        <div class="relative w-full md:w-88 lg:w-96 shrink-0" id="dashGlobalSearchContainer">
-          <div class="relative flex items-center">
-            <i class="fa-solid fa-magnifying-glass absolute left-3 text-slate-400 text-xs pointer-events-none"></i>
+        <!-- Left: Search Input + Submit Button (Students, Families, Teachers by Name, ID or Phone) -->
+        <div class="relative flex items-center gap-1.5 w-full sm:w-auto" id="dashGlobalSearchContainer">
+          <div class="relative flex-1 sm:w-64 md:w-72">
             <input
               type="text"
               id="dashGlobalSearchInput"
               oninput="handleDashboardGlobalSearch(this.value)"
               onfocus="handleDashboardGlobalSearch(this.value)"
+              onkeydown="if(event.key==='Enter'){ event.preventDefault(); handleDashboardGlobalSearch(this.value); }"
               autocomplete="off"
-              placeholder="Search Student, Family or Teacher (Name, ID, Phone)..."
-              class="w-full pl-8 pr-8 py-1.5 bg-white border border-slate-300 rounded-xl text-xs font-semibold text-slate-800 placeholder-slate-400 shadow-2xs focus:outline-none focus:border-brandEmerald focus:ring-2 focus:ring-emerald-500/20 transition"
+              placeholder="Search Student, Family, Teacher..."
+              class="w-full pl-3 pr-7 py-1.5 bg-white border border-slate-300 rounded-md text-xs font-semibold text-slate-800 placeholder-slate-400 focus:outline-none focus:border-blue-600 transition"
             >
             <button
               type="button"
               id="btnClearDashGlobalSearch"
               onclick="clearDashboardGlobalSearch()"
-              class="hidden absolute right-2.5 text-slate-400 hover:text-slate-700 text-xs transition"
+              class="hidden absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 text-xs transition"
               title="Clear Search"
             >
               <i class="fa-solid fa-circle-xmark"></i>
             </button>
           </div>
+          <button
+            type="button"
+            onclick="handleDashboardGlobalSearch(document.getElementById('dashGlobalSearchInput').value)"
+            class="px-3.5 py-1.5 bg-[#2563eb] hover:bg-blue-700 text-white font-bold text-xs rounded-md shadow-2xs transition shrink-0"
+          >
+            Submit
+          </button>
 
           <!-- Instant Live Search Results Dropdown -->
           <div
@@ -489,31 +496,129 @@
           ></div>
         </div>
 
-        <!-- Compact Action & Counter Pills -->
-        <div class="flex items-center gap-1.5 sm:gap-2 flex-wrap justify-end">
-          <div class="text-[11px] font-bold text-slate-700 bg-white px-2.5 py-1.5 rounded-lg border border-slate-200 shadow-2xs flex items-center gap-1.5">
-            <i class="fa-regular fa-calendar-days text-brandEmerald"></i> <span id="dashTodayDateLabel">Today</span>
-          </div>
-          <div class="text-[11px] font-bold text-emerald-800 bg-emerald-50 px-2.5 py-1.5 rounded-lg border border-emerald-200 shadow-2xs flex items-center gap-1.5" title="Active registered families">
-            <i class="fa-solid fa-house-circle-check text-brandEmerald"></i> Families: <span id="dashLiveActiveFamilies" class="font-mono font-black text-emerald-900 bg-white px-1.5 py-0.2 rounded border border-emerald-300">0</span>
-          </div>
-          <div class="text-[11px] font-bold text-teal-800 bg-teal-50 px-2.5 py-1.5 rounded-lg border border-teal-200 shadow-2xs flex items-center gap-1.5" title="Active regular students">
-            <i class="fa-solid fa-user-graduate text-teal-600"></i> Students: <span id="dashLiveActiveStudents" class="font-mono font-black text-teal-900 bg-white px-1.5 py-0.2 rounded border border-teal-300">0</span>
-          </div>
-          <button onclick="switchTab('tab-schedule-search')" class="px-2.5 py-1.5 bg-cyan-800 text-white rounded-lg text-[11px] font-bold hover:bg-cyan-900 flex items-center gap-1.5 shadow-xs transition" title="Search teacher free & busy slots">
-            <i class="fa-solid fa-calendar-check text-cyan-200"></i> Free Slot Finder
+        <!-- Center: Sleek Circular Action & Notification Icons Row (With Red Pop-up Dots) -->
+        <div class="flex items-center gap-2 flex-wrap justify-center">
+          
+          <!-- 1. Teacher Reschedule & Leave Requests Circle -->
+          <button
+            onclick="openAdminTeacherRequestsModal()"
+            id="btnTopCircleRequests"
+            class="w-9 h-9 rounded-full bg-emerald-50 hover:bg-emerald-100 text-emerald-600 border border-emerald-200/80 flex items-center justify-center relative transition shadow-2xs cursor-pointer"
+            title="Teacher Reschedule & Leave Requests"
+          >
+            <i class="fa-solid fa-clipboard-list text-sm"></i>
+            <span id="dotTopCircleRequests" class="hidden absolute -top-0.5 -right-0.5 w-3 h-3 rounded-full bg-rose-600 border-2 border-white animate-pulse"></span>
           </button>
-          <button onclick="loadDashboardData()" class="px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg text-[11px] font-bold text-slate-700 hover:bg-slate-50 flex items-center gap-1.5 shadow-2xs transition">
-            <i class="fa-solid fa-arrows-rotate"></i> Refresh
+
+          <!-- 2. Active Families & Directory Circle -->
+          <button
+            onclick="switchTab('tab-families')"
+            class="w-9 h-9 rounded-full bg-emerald-50 hover:bg-emerald-100 text-emerald-600 border border-emerald-200/80 flex items-center justify-center relative transition shadow-2xs cursor-pointer"
+            title="Families & Students Directory"
+          >
+            <i class="fa-solid fa-user-group text-xs"></i>
           </button>
+
+          <!-- 3. Leave Over / Return Due Alert Circle (Red Dot Pops Up When Leave Is Over) -->
+          <button
+            onclick="openReturnAlertsModal()"
+            id="btnTopCircleLeaveOver"
+            class="w-9 h-9 rounded-full bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200/80 flex items-center justify-center relative transition shadow-2xs cursor-pointer"
+            title="Students Leave Over / Return Due Alerts"
+          >
+            <i class="fa-solid fa-calendar-check text-sm"></i>
+            <span id="dotTopCircleLeaveOver" class="hidden absolute -top-0.5 -right-0.5 w-3 h-3 rounded-full bg-rose-600 border-2 border-white animate-ping"></span>
+            <span id="dotTopCircleLeaveOverSolid" class="hidden absolute -top-0.5 -right-0.5 w-3 h-3 rounded-full bg-rose-600 border-2 border-white"></span>
+          </button>
+
+          <!-- 4. Parent / Student Portal Complaints Circle (Red Dot Pops Up On New Parent Complaint) -->
+          <button
+            onclick="openAdminParentComplaintsModal()"
+            id="btnTopCircleComplaints"
+            class="w-9 h-9 rounded-full bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200/80 flex items-center justify-center relative transition shadow-2xs cursor-pointer"
+            title="Parent & Student Portal Complaints (Teacher / Duration / Quality)"
+          >
+            <i class="fa-solid fa-face-frown-open text-sm"></i>
+            <span id="dotTopCircleComplaints" class="hidden absolute -top-0.5 -right-0.5 w-3 h-3 rounded-full bg-rose-600 border-2 border-white animate-ping"></span>
+            <span id="dotTopCircleComplaintsSolid" class="hidden absolute -top-0.5 -right-0.5 w-3 h-3 rounded-full bg-rose-600 border-2 border-white"></span>
+          </button>
+
+          <!-- 5. Free Slot Finder / Schedule Search Circle -->
+          <button
+            onclick="switchTab('tab-schedule-search')"
+            class="w-9 h-9 rounded-full bg-emerald-50 hover:bg-emerald-100 text-emerald-600 border border-emerald-200/80 flex items-center justify-center relative transition shadow-2xs cursor-pointer"
+            title="Free Slot Finder & Schedule Search"
+          >
+            <i class="fa-solid fa-clock-rotate-left text-sm"></i>
+          </button>
+
+          <!-- 6. Submit Parent Complaint (Student Portal Quick Form) Circle -->
+          <button
+            onclick="openParentComplaintSubmitModal()"
+            class="w-9 h-9 rounded-full bg-emerald-50 hover:bg-emerald-100 text-emerald-600 border border-emerald-200/80 flex items-center justify-center relative transition shadow-2xs cursor-pointer"
+            title="Student/Parent Portal: Submit Complaint or Feedback"
+          >
+            <i class="fa-solid fa-bullhorn text-xs"></i>
+          </button>
+
+          <!-- 7. Pending Fee Reminders Circle -->
+          <button
+            onclick="switchTab('tab-invoices'); if(typeof switchFeeSubTab==='function') switchFeeSubTab('fee-subtab-pending');"
+            class="w-9 h-9 rounded-full bg-emerald-50 hover:bg-emerald-100 text-emerald-600 border border-emerald-200/80 flex items-center justify-center relative transition shadow-2xs cursor-pointer"
+            title="Pending Fees & Auto Email Reminders"
+          >
+            <i class="fa-regular fa-envelope text-sm"></i>
+          </button>
+
+          <!-- 8. Refresh Dashboard Circle -->
+          <button
+            onclick="loadDashboardData()"
+            class="w-9 h-9 rounded-full bg-emerald-50 hover:bg-emerald-100 text-emerald-600 border border-emerald-200/80 flex items-center justify-center relative transition shadow-2xs cursor-pointer"
+            title="Refresh Live Dashboard Data"
+          >
+            <i class="fa-solid fa-arrows-rotate text-xs"></i>
+          </button>
+
         </div>
+
+        <!-- Right: Compact Admin Profile & Hidden Counters for JS Sync -->
+        <div class="flex items-center gap-2.5 pl-3 border-l border-slate-200 shrink-0">
+          <div class="hidden">
+            <span id="dashTodayDateLabel">Today</span>
+            <span id="dashLiveActiveFamilies">0</span>
+            <span id="dashLiveActiveStudents">0</span>
+          </div>
+          <div class="w-8 h-8 rounded-full bg-slate-700 text-white flex items-center justify-center text-xs shadow-2xs">
+            <i class="fa-solid fa-user-tie"></i>
+          </div>
+          <div class="leading-tight">
+            <div class="text-xs font-extrabold text-slate-800">Admin</div>
+            <div class="text-[10px] text-slate-400 font-semibold">Director Portal</div>
+          </div>
+        </div>
+
       </div>
 
-      <!-- 8 COMPACT EQUAL-SIZED KPI BOXES: 4 ON LEFT (2x2) + CLEAN OPEN CENTER + 4 ON RIGHT (2x2) -->
-      <div class="grid grid-cols-1 lg:grid-cols-12 gap-3 items-center mb-4">
+      <!-- SPACIOUS CLEAN OPEN BANNER AREA (EXACTLY AS MARKED IN SCREENSHOT 1 — UNCLUTTERED & SLEEK) -->
+      <div class="bg-[#f4f7f6] border border-slate-200/70 rounded-xl px-6 py-5 mb-5 flex items-center justify-between">
+        <div class="flex items-center gap-4">
+          <div class="w-12 h-12 rounded-xl bg-white shadow-xs border border-slate-100 text-cyan-600 flex items-center justify-center text-lg shrink-0">
+            <i class="fa-solid fa-inbox"></i>
+          </div>
+          <div>
+            <h2 class="text-base sm:text-lg font-bold text-slate-700 tracking-tight">Admin Dashboard</h2>
+            <p class="text-xs text-slate-400 font-medium mt-0.5">Class Details for Today!</p>
+          </div>
+        </div>
+        <!-- Intentionally Open Clean Breathing Space on Right -->
+        <div class="hidden sm:block"></div>
+      </div>
+
+      <!-- 8 COMPACT EQUAL-SIZED KPI BOXES INSIDE CLEAN WHITE CARDS (4 ON LEFT 2x2 + 4 ON RIGHT 2x2) -->
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-4 items-stretch mb-5">
         
-        <!-- LEFT SIDE: 4 SMALL EQUAL-SIZED BOXES (2x2 GRID) -->
-        <div class="lg:col-span-5 grid grid-cols-2 gap-2.5">
+        <!-- LEFT CARD: 4 SMALL EQUAL-SIZED BOXES (2x2 GRID) -->
+        <div class="lg:col-span-6 bg-white p-3.5 rounded-xl border border-slate-200/80 shadow-xs grid grid-cols-2 gap-2.5">
           
           <!-- 1. Total Today (Slate-Indigo Theme) -->
           <div onclick="filterDashboardClasses('all')" id="kpiBox-all" class="kpi-dash-card cursor-pointer px-3 py-2.5 rounded-xl shadow-2xs hover:shadow-md transition-all flex items-center justify-between h-[74px] min-h-[74px] max-h-[74px] w-full box-border">
@@ -580,11 +685,8 @@
 
         </div>
 
-        <!-- CENTER OPEN SPACE (EMPTY & CLEAN — NO TEXT OR CLUTTER) -->
-        <div class="hidden lg:block lg:col-span-2 pointer-events-none select-none" aria-hidden="true"></div>
-
-        <!-- RIGHT SIDE: 4 SMALL EQUAL-SIZED BOXES (2x2 GRID) -->
-        <div class="lg:col-span-5 grid grid-cols-2 gap-2.5">
+        <!-- RIGHT CARD: 4 SMALL EQUAL-SIZED BOXES (2x2 GRID) -->
+        <div class="lg:col-span-6 bg-white p-3.5 rounded-xl border border-slate-200/80 shadow-xs grid grid-cols-2 gap-2.5">
 
           <!-- 5. Remaining (Warm Amber-Gold Theme) -->
           <div onclick="filterDashboardClasses('remaining')" id="kpiBox-remaining" class="kpi-dash-card cursor-pointer px-3 py-2.5 rounded-xl shadow-2xs hover:shadow-md transition-all flex items-center justify-between h-[74px] min-h-[74px] max-h-[74px] w-full box-border">
@@ -651,37 +753,12 @@
         <!-- Populated dynamically by renderPendingTimeChangeBanners() -->
       </div>
 
-      <!-- COMPACT EXECUTIVE FEE BAR (Sleek, Space-Saving & Decluttered) -->
-      <div class="mb-4 bg-slate-900/95 hover:bg-slate-900 text-white px-3.5 py-2 rounded-xl border border-slate-800 shadow-2xs flex items-center justify-between flex-wrap gap-2.5 text-xs transition">
-        <div class="flex items-center gap-2.5">
-          <span class="w-6 h-6 rounded-lg bg-amber-500/20 text-amber-300 border border-amber-400/30 flex items-center justify-center text-xs">
-            <i class="fa-solid fa-file-invoice-dollar"></i>
-          </span>
-          <div class="flex items-center gap-2">
-            <span class="font-extrabold text-slate-200 text-xs">Tuition Fee Overview</span>
-            <span id="dashFeeWidgetPeriodBadge" class="px-2 py-0.2 rounded-full text-[9px] font-mono font-bold bg-amber-400/20 text-amber-200 border border-amber-400/40">
-              September 2026
-            </span>
-          </div>
-        </div>
-
-        <div class="flex items-center gap-3 font-semibold text-[11px] flex-wrap">
-          <div class="flex items-center gap-1.5 bg-white/5 px-2.5 py-1 rounded-lg border border-white/10">
-            <span class="text-slate-400">Paid Families:</span>
-            <strong id="dashFeeWidgetPaidCount" class="font-mono font-black text-emerald-400">0</strong>
-          </div>
-          <div class="flex items-center gap-1.5 bg-white/5 px-2.5 py-1 rounded-lg border border-white/10">
-            <span class="text-slate-400">Pending Due:</span>
-            <strong id="dashFeeWidgetPendingCount" class="font-mono font-black text-rose-400">0</strong>
-          </div>
-          <div class="flex items-center gap-1.5 bg-white/5 px-2.5 py-1 rounded-lg border border-white/10">
-            <span class="text-slate-400">On Leave:</span>
-            <strong id="dashFeeWidgetLeaveCount" class="font-mono font-black text-blue-400">0</strong>
-          </div>
-          <button onclick="switchTab('tab-invoices')" class="px-2.5 py-1 bg-amber-500/20 hover:bg-amber-500 text-amber-300 hover:text-slate-950 font-bold rounded-lg text-[11px] border border-amber-400/40 transition flex items-center gap-1" title="Open Fee Management">
-            Manage Fee <i class="fa-solid fa-arrow-right text-[9px]"></i>
-          </button>
-        </div>
+      <!-- HIDDEN FEE WIDGET COUNTERS FOR INTERNAL SYNC -->
+      <div class="hidden">
+        <span id="dashFeeWidgetPeriodBadge"></span>
+        <strong id="dashFeeWidgetPaidCount">0</strong>
+        <strong id="dashFeeWidgetPendingCount">0</strong>
+        <strong id="dashFeeWidgetLeaveCount">0</strong>
       </div>
 
       <!-- 1. CLASSES LIST / TIMETABLE SECTION (Expands above graphs when any KPI card is selected) -->
@@ -747,58 +824,108 @@
 
       </div>
 
-      <!-- 2. MONTH-WISE ANALYTICS GRAPHS (Full width large size, sits directly under KPI cards or below table) -->
-      <div id="dashGraphsSection" class="grid grid-cols-1 lg:grid-cols-2 gap-5 mb-6">
+      <!-- 2. TWO FULL-WIDTH STACKED INTERACTIVE GRAPHS (SCREENSHOT 2 STYLE WITH HOVER CALLOUTS & CLICK-TO-DRILLDOWN) -->
+      <div id="dashGraphsSection" class="flex flex-col gap-6 mb-6">
         
-        <!-- Graph 1: Monthly Student Inflow vs Left (Large & Wide) -->
-        <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex flex-col justify-between">
-          <div>
-            <div class="flex justify-between items-center mb-2 flex-wrap gap-1">
-              <div>
-                <h3 class="font-extrabold text-sm sm:text-base text-slate-900 flex items-center gap-2">
-                  <i class="fa-solid fa-chart-simple text-brandEmerald"></i> Monthly Student Inflow vs Left
-                </h3>
-                <p class="text-xs text-slate-500">New Enrollments vs Left Students (Month-wise Breakdown)</p>
-              </div>
+        <!-- GRAPH 1 (TOP FULL-WIDTH): NEW SIGN-UPS REPORT (Scheduled Trial vs Regular Enrolled vs Left) -->
+        <div class="bg-white p-5 sm:p-6 rounded-xl border border-slate-200/90 shadow-xs w-full relative">
+          <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+            <div>
+              <h3 class="font-extrabold text-xs sm:text-sm uppercase tracking-wider text-slate-700">
+                NEW SIGN-UPS REPORT
+              </h3>
+              <p class="text-[11px] text-slate-400 font-medium mt-0.5">
+                Hover over any month to view numbers &bull; Click any bar or callout box below to inspect that month's students
+              </p>
             </div>
-            <div class="flex items-center gap-3 mb-3 text-xs font-semibold">
-              <span class="inline-flex items-center gap-1.5 text-emerald-700">
-                <span class="w-2.5 h-2.5 rounded-full bg-emerald-500"></span> New Enrolled
-              </span>
-              <span class="inline-flex items-center gap-1.5 text-rose-600">
-                <span class="w-2.5 h-2.5 rounded-full bg-rose-500"></span> Left LMS
-              </span>
-              <span class="inline-flex items-center gap-1.5 text-slate-700 ml-auto">
-                <span class="w-3 h-0.5 bg-brandDark"></span> Net Active
-              </span>
+
+            <!-- Interactive Month Callout Badges (Updates Live on Hover & Clickable to Open Month Records!) -->
+            <div id="signupsGraphCalloutBar" class="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                id="btnCalloutTrial"
+                onclick="openGraphMonthDrilldownModal(ACTIVE_HOVER_SIGNUP_MONTH_IDX, 'trial')"
+                class="px-3 py-1 bg-white hover:bg-amber-50/80 border-2 border-[#facc15] rounded shadow-xs text-xs font-medium text-slate-800 transition cursor-pointer flex items-center gap-1"
+                title="Click to view all Trial students for this month"
+              >
+                <span>Scheduled Trial in <span id="lblCalloutTrialMonth">Sep-2026</span>:</span>
+                <strong id="valCalloutTrial" class="font-black text-slate-950">0</strong>
+              </button>
+
+              <button
+                type="button"
+                id="btnCalloutRegular"
+                onclick="openGraphMonthDrilldownModal(ACTIVE_HOVER_SIGNUP_MONTH_IDX, 'regular')"
+                class="px-3 py-1 bg-white hover:bg-lime-50/80 border-2 border-[#84cc16] rounded shadow-xs text-xs font-medium text-slate-800 transition cursor-pointer flex items-center gap-1"
+                title="Click to view all Regular Enrolled students for this month"
+              >
+                <span>Regular in <span id="lblCalloutRegularMonth">Sep-2026</span>:</span>
+                <strong id="valCalloutRegular" class="font-black text-slate-950">0</strong>
+              </button>
+
+              <button
+                type="button"
+                id="btnCalloutLeft"
+                onclick="openGraphMonthDrilldownModal(ACTIVE_HOVER_SIGNUP_MONTH_IDX, 'left')"
+                class="px-3 py-1 bg-white hover:bg-sky-50/80 border-2 border-[#0284c7] rounded shadow-xs text-xs font-medium text-slate-800 transition cursor-pointer flex items-center gap-1"
+                title="Click to view all Left students for this month"
+              >
+                <span>Left in <span id="lblCalloutLeftMonth">Sep-2026</span>:</span>
+                <strong id="valCalloutLeft" class="font-black text-slate-950">0</strong>
+              </button>
             </div>
           </div>
-          <div class="relative h-72 w-full">
+
+          <!-- Full-Width Large Bar Chart Canvas -->
+          <div class="relative h-80 w-full">
             <canvas id="chartStudentGrowth"></canvas>
           </div>
         </div>
 
-        <!-- Graph 2: Monthly Fee Payments Received vs Target (Large & Wide) -->
-        <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex flex-col justify-between">
-          <div>
-            <div class="flex justify-between items-center mb-2 flex-wrap gap-1">
-              <div>
-                <h3 class="font-extrabold text-sm sm:text-base text-slate-900 flex items-center gap-2">
-                  <i class="fa-solid fa-chart-line text-brandGold"></i> Monthly Fee Payments Received
-                </h3>
-                <p class="text-xs text-slate-500">Actual Revenue Collected vs Projected Target ($)</p>
-              </div>
+        <!-- GRAPH 2 (BOTTOM FULL-WIDTH): MONTHLY FEE PAYMENTS REPORT (Same Bar Style + Click-to-Drilldown) -->
+        <div class="bg-white p-5 sm:p-6 rounded-xl border border-slate-200/90 shadow-xs w-full relative">
+          <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+            <div>
+              <h3 class="font-extrabold text-xs sm:text-sm uppercase tracking-wider text-slate-700">
+                MONTHLY FEE PAYMENTS REPORT
+              </h3>
+              <p class="text-[11px] text-slate-400 font-medium mt-0.5">
+                Hover over any month to inspect fee collection &bull; Click any bar or callout box to view monthly family invoices
+              </p>
             </div>
-            <div class="flex items-center gap-3 mb-3 text-xs font-semibold">
-              <span class="inline-flex items-center gap-1.5 text-emerald-700">
-                <span class="w-2.5 h-2.5 rounded-full bg-emerald-600"></span> Fee Received
-              </span>
-              <span class="inline-flex items-center gap-1.5 text-amber-600 ml-auto">
-                <span class="w-3 h-0.5 border-t-2 border-dashed border-amber-500"></span> Target Projected
-              </span>
+
+            <!-- Interactive Month Callout Badges for Fee Graph -->
+            <div id="feeGraphCalloutBar" class="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onclick="openGraphMonthDrilldownModal(ACTIVE_HOVER_FEE_MONTH_IDX, 'fee_target')"
+                class="px-3 py-1 bg-white hover:bg-amber-50/80 border-2 border-[#facc15] rounded shadow-xs text-xs font-medium text-slate-800 transition cursor-pointer flex items-center gap-1"
+              >
+                <span>Target Fee in <span id="lblCalloutFeeTargetMonth">Sep-2026</span>:</span>
+                <strong id="valCalloutFeeTarget" class="font-black text-slate-950">$0</strong>
+              </button>
+
+              <button
+                type="button"
+                onclick="openGraphMonthDrilldownModal(ACTIVE_HOVER_FEE_MONTH_IDX, 'fee_paid')"
+                class="px-3 py-1 bg-white hover:bg-lime-50/80 border-2 border-[#84cc16] rounded shadow-xs text-xs font-medium text-slate-800 transition cursor-pointer flex items-center gap-1"
+              >
+                <span>Received in <span id="lblCalloutFeePaidMonth">Sep-2026</span>:</span>
+                <strong id="valCalloutFeePaid" class="font-black text-slate-950">$0</strong>
+              </button>
+
+              <button
+                type="button"
+                onclick="openGraphMonthDrilldownModal(ACTIVE_HOVER_FEE_MONTH_IDX, 'fee_pending')"
+                class="px-3 py-1 bg-white hover:bg-sky-50/80 border-2 border-[#0284c7] rounded shadow-xs text-xs font-medium text-slate-800 transition cursor-pointer flex items-center gap-1"
+              >
+                <span>Pending in <span id="lblCalloutFeePendingMonth">Sep-2026</span>:</span>
+                <strong id="valCalloutFeePending" class="font-black text-slate-950">$0</strong>
+              </button>
             </div>
           </div>
-          <div class="relative h-72 w-full">
+
+          <div class="relative h-80 w-full">
             <canvas id="chartFeeRevenue"></canvas>
           </div>
         </div>
@@ -1107,16 +1234,20 @@
       </div>
     </section>
 
-    <!-- 4. DAILY ATTENDANCE & TEACHER PORTAL -->
+    <!-- 4. DAILY ATTENDANCE & TEACHER / STUDENT PORTAL -->
     <section id="tab-attendance" class="tab-content hidden">
       <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm mb-5 flex flex-wrap justify-between items-center gap-3">
         <div>
           <h2 class="text-lg font-extrabold text-brandDark flex items-center gap-2">
-            <i class="fa-solid fa-clipboard-check text-brandEmerald"></i> Daily Class Attendance & Lesson Notes
+            <i class="fa-solid fa-clipboard-check text-brandEmerald"></i> Daily Class Attendance, Lesson Notes &amp; Student Portal
           </h2>
-          <p class="text-xs text-slate-500">Teachers mark Present, Absent, or Leave. Verified attendance automatically drives monthly payroll.</p>
+          <p class="text-xs text-slate-500">Teachers mark Present, Absent, or Leave. Parents can track daily progress or submit complaints directly to Administration.</p>
         </div>
-        <div class="flex items-center gap-2">
+        <div class="flex items-center gap-2 flex-wrap">
+          <!-- Parent / Student Portal Complaint Submission Button -->
+          <button onclick="openParentComplaintSubmitModal()" class="px-3.5 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-extrabold flex items-center gap-1.5 shadow-xs transition cursor-pointer">
+            <i class="fa-solid fa-comment-medical"></i> Submit Complaint to Admin (Parent Portal)
+          </button>
           <label class="text-xs font-bold text-slate-700">Select Date:</label>
           <input type="date" id="attendanceDateSelect" onchange="loadAttendanceList()" class="text-xs p-2 border border-slate-300 rounded-lg font-bold">
         </div>
@@ -4992,6 +5123,162 @@
         </button>
         <button onclick="ledgerCollectFeeNow()" class="px-5 py-2 bg-emerald-700 hover:bg-emerald-800 text-white rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 shadow-2xs">
           <i class="fa-solid fa-cash-register"></i> Collect Fee for this Family
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========================================================================== -->
+  <!-- MODAL 1: PARENT / STUDENT PORTAL COMPLAINT SUBMISSION MODAL                -->
+  <!-- ========================================================================== -->
+  <div id="modalSubmitParentComplaint" class="hidden fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center z-50 p-3 sm:p-4">
+    <div class="bg-white rounded-2xl max-w-lg w-full shadow-2xl border border-slate-200 overflow-hidden flex flex-col max-h-[90vh]">
+      <div class="bg-gradient-to-r from-rose-800 via-rose-700 to-rose-600 text-white p-4 flex justify-between items-center">
+        <div class="flex items-center gap-2.5">
+          <span class="w-9 h-9 rounded-xl bg-white/15 flex items-center justify-center text-base">
+            <i class="fa-solid fa-bullhorn"></i>
+          </span>
+          <div>
+            <h3 class="font-extrabold text-sm sm:text-base">Parent &amp; Student Complaint / Feedback</h3>
+            <p class="text-[11px] text-rose-100">Direct submission to Admin Portal (Teacher / Duration / Class Quality)</p>
+          </div>
+        </div>
+        <button onclick="closeModal('modalSubmitParentComplaint')" class="text-white/80 hover:text-white text-lg">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      </div>
+
+      <form onsubmit="handleSubmitParentComplaint(event)" class="p-4 sm:p-5 space-y-3.5 overflow-y-auto text-xs">
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <label class="block font-extrabold text-slate-700 mb-1">Student / Child *</label>
+            <select id="compStudentSelect" onchange="handleComplaintStudentChange(this.value)" class="w-full p-2 border border-slate-300 rounded-xl font-bold text-slate-800">
+              <option value="">-- Select Student --</option>
+            </select>
+          </div>
+          <div>
+            <label class="block font-extrabold text-slate-700 mb-1">Regarding Teacher *</label>
+            <select id="compTeacherSelect" class="w-full p-2 border border-slate-300 rounded-xl font-bold text-slate-800">
+              <option value="">-- Select Teacher --</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <label class="block font-extrabold text-slate-700 mb-1">Complaint Category *</label>
+            <select id="compCategorySelect" class="w-full p-2 border border-slate-300 rounded-xl font-bold text-slate-800">
+              <option value="Teacher Performance / Behavior">Teacher Performance / Behavior</option>
+              <option value="Class Duration (Short / Late Join)">Class Duration (Short / Late Join)</option>
+              <option value="Class Quality & Tajweed Standard">Class Quality &amp; Tajweed Standard</option>
+              <option value="Schedule / Reschedule Issue">Schedule / Reschedule Issue</option>
+              <option value="Other Parent Feedback">Other Parent Feedback</option>
+            </select>
+          </div>
+          <div>
+            <label class="block font-extrabold text-slate-700 mb-1">Parent Name / Contact</label>
+            <input type="text" id="compParentNameInput" placeholder="e.g. Parent Name or Phone" class="w-full p-2 border border-slate-300 rounded-xl font-semibold text-slate-800">
+          </div>
+        </div>
+
+        <div>
+          <label class="block font-extrabold text-slate-700 mb-1">Complaint Details / Message *</label>
+          <textarea id="compMessageInput" rows="3" required placeholder="Describe the issue regarding teacher, class duration, or class quality..." class="w-full p-2.5 border border-slate-300 rounded-xl font-semibold text-slate-800 focus:outline-rose-600"></textarea>
+        </div>
+
+        <div class="pt-2 flex justify-end gap-2 border-t border-slate-100">
+          <button type="button" onclick="closeModal('modalSubmitParentComplaint')" class="px-4 py-2 rounded-xl border border-slate-300 font-bold text-slate-600 hover:bg-slate-50">
+            Cancel
+          </button>
+          <button type="submit" class="px-5 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-extrabold shadow-sm transition flex items-center gap-1.5">
+            <i class="fa-solid fa-paper-plane"></i> Send Complaint to Admin
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ========================================================================== -->
+  <!-- MODAL 2: ADMIN PORTAL PARENT COMPLAINTS CENTER MODAL                       -->
+  <!-- ========================================================================== -->
+  <div id="modalAdminParentComplaints" class="hidden fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center z-50 p-3 sm:p-4">
+    <div class="bg-white rounded-2xl max-w-3xl w-full shadow-2xl border border-slate-200 overflow-hidden flex flex-col max-h-[90vh]">
+      <div class="bg-gradient-to-r from-slate-900 via-rose-950 to-slate-900 text-white p-4 flex justify-between items-center">
+        <div class="flex items-center gap-3">
+          <span class="w-10 h-10 rounded-xl bg-rose-500/20 border border-rose-400/40 text-rose-300 flex items-center justify-center text-lg">
+            <i class="fa-solid fa-face-frown-open"></i>
+          </span>
+          <div>
+            <h3 class="font-extrabold text-sm sm:text-base flex items-center gap-2">
+              <span>Parent &amp; Student Complaints Center</span>
+              <span id="adminComplaintsModalCountBadge" class="px-2 py-0.5 rounded-full text-[10px] font-mono font-black bg-rose-600 text-white">0 Pending</span>
+            </h3>
+            <p class="text-[11px] text-slate-300">Live complaints submitted from Student/Parent Portal regarding Teachers, Duration &amp; Class Quality</p>
+          </div>
+        </div>
+        <div class="flex items-center gap-2">
+          <button onclick="closeModal('modalAdminParentComplaints'); openParentComplaintSubmitModal();" class="px-3 py-1.5 bg-rose-600 hover:bg-rose-500 text-white rounded-lg text-[11px] font-bold transition">
+            + Submit New (Student Portal)
+          </button>
+          <button onclick="closeModal('modalAdminParentComplaints')" class="text-white/80 hover:text-white text-lg ml-1">
+            <i class="fa-solid fa-xmark"></i>
+          </button>
+        </div>
+      </div>
+
+      <div id="adminParentComplaintsListContainer" class="p-4 sm:p-5 overflow-y-auto space-y-3 flex-1 bg-slate-50/60">
+        <!-- Populated dynamically by renderAdminParentComplaintsList() -->
+      </div>
+
+      <div class="p-3.5 bg-white border-t border-slate-200 flex justify-between items-center text-xs">
+        <span class="text-slate-500 font-medium">Red dot in Top Bar clears automatically when all complaints are marked Resolved.</span>
+        <button onclick="closeModal('modalAdminParentComplaints')" class="px-4 py-1.5 bg-slate-800 hover:bg-slate-900 text-white rounded-xl font-bold">
+          Close
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========================================================================== -->
+  <!-- MODAL 3: GRAPH MONTH DRILL-DOWN DATA VIEW MODAL                            -->
+  <!-- ========================================================================== -->
+  <div id="modalGraphMonthDrilldown" class="hidden fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center z-50 p-3 sm:p-4">
+    <div class="bg-white rounded-2xl max-w-4xl w-full shadow-2xl border border-slate-200 overflow-hidden flex flex-col max-h-[90vh]">
+      <div id="graphDrilldownModalHeader" class="bg-slate-900 text-white p-4 flex justify-between items-center">
+        <div class="flex items-center gap-3">
+          <span id="graphDrilldownIconBox" class="w-10 h-10 rounded-xl bg-amber-400 text-slate-950 flex items-center justify-center text-base font-black">
+            <i class="fa-solid fa-chart-column"></i>
+          </span>
+          <div>
+            <h3 id="graphDrilldownTitle" class="font-extrabold text-sm sm:text-base">Monthly Report Details</h3>
+            <p id="graphDrilldownSubtitle" class="text-[11px] text-slate-300">Detailed records for the selected month and category</p>
+          </div>
+        </div>
+        <button onclick="closeModal('modalGraphMonthDrilldown')" class="text-white/80 hover:text-white text-lg">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      </div>
+
+      <!-- Category Quick Switcher Tabs Inside Drilldown Modal -->
+      <div id="graphDrilldownCategoryTabs" class="px-4 py-2.5 bg-slate-100 border-b border-slate-200 flex flex-wrap items-center gap-2">
+        <!-- Populated dynamically -->
+      </div>
+
+      <div class="p-4 overflow-y-auto flex-1">
+        <div class="overflow-x-auto rounded-xl border border-slate-200">
+          <table class="w-full text-left text-xs border-collapse min-w-[640px]">
+            <thead id="graphDrilldownTableHead" class="bg-slate-50 text-slate-700 font-extrabold uppercase tracking-wider text-[11px] border-b border-slate-200">
+            </thead>
+            <tbody id="graphDrilldownTableBody" class="divide-y divide-slate-100">
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="p-3.5 bg-slate-50 border-t border-slate-200 flex justify-between items-center text-xs">
+        <span id="graphDrilldownFooterNote" class="text-slate-500 font-semibold">Showing verified monthly records</span>
+        <button onclick="closeModal('modalGraphMonthDrilldown')" class="px-4 py-1.5 bg-slate-800 hover:bg-slate-900 text-white rounded-xl font-bold">
+          Close View
         </button>
       </div>
     </div>

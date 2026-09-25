@@ -95,6 +95,10 @@
           }
         }
 
+        if (typeof syncTopCircleNotificationDots === 'function') {
+          syncTopCircleNotificationDots();
+        }
+
         // Render Live 1-Click Approval Banners on Dashboard & Teachers Tab
         renderPendingTimeChangeBanners();
 
