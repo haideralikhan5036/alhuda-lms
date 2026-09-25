@@ -467,107 +467,147 @@
       </div>
 
       <!-- TOP ROW: 8 OPERATIONAL KPI STAT BOXES (Sleek, Compact & Executive) -->
-      <div class="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-2 mb-3.5">
+      <!-- TOP EXECUTIVE KPI LAYOUT: 4 STACKED LEFT + OPEN BREATHING SPACE + 4 STACKED RIGHT -->
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-4 lg:gap-8 items-stretch mb-4">
         
-        <!-- 1. Total Classes Today -->
-        <div onclick="filterDashboardClasses('all')" id="kpiBox-all" style="background-color: #ffffff !important; border: 1px solid #cbd5e1 !important; border-left: 4.5px solid #334155 !important;" class="kpi-dash-card cursor-pointer bg-white p-2 sm:p-2.5 rounded-xl shadow-2xs hover:shadow-sm hover:scale-[1.01] transition-all">
-          <div class="flex items-center justify-between text-slate-500 mb-0.5">
-            <span class="text-[9.5px] font-black uppercase tracking-wider text-slate-600">Total Today</span>
-            <span class="w-5 h-5 rounded-md bg-slate-100 text-slate-600 flex items-center justify-center text-[10px]">
-              <i class="fa-solid fa-calendar-day"></i>
-            </span>
+        <!-- LEFT COLUMN: 4 STACKED TABS (UP-TO-DOWN) -->
+        <div class="lg:col-span-4 flex flex-col gap-2.5">
+          
+          <!-- 1. Total Today -->
+          <div onclick="filterDashboardClasses('all')" id="kpiBox-all" style="background-color: #ffffff !important; border: 1px solid #cbd5e1 !important; border-left: 5px solid #334155 !important;" class="kpi-dash-card cursor-pointer bg-white px-4 py-3 rounded-xl shadow-2xs hover:shadow-md hover:translate-x-0.5 transition-all flex items-center justify-between">
+            <div class="flex items-center gap-3">
+              <span class="w-9 h-9 rounded-xl bg-slate-100 text-slate-700 flex items-center justify-center text-sm shrink-0">
+                <i class="fa-solid fa-calendar-day"></i>
+              </span>
+              <div>
+                <span class="text-[11px] font-black uppercase tracking-wider text-slate-700 block">Total Today</span>
+                <span class="text-[10px] text-slate-500 font-semibold">All Scheduled Classes</span>
+              </div>
+            </div>
+            <div class="text-2xl font-black text-slate-900 font-mono tracking-tight" id="kpiDashTotal">0</div>
           </div>
-          <div class="text-xl sm:text-2xl font-black text-slate-900 tracking-tight" style="color: #0f172a !important;" id="kpiDashTotal">0</div>
-          <div class="text-[9.5px] text-slate-500 font-semibold mt-0.5 truncate">All Scheduled</div>
+
+          <!-- 2. Current Classes (Current Time Slot) -->
+          <div onclick="filterDashboardClasses('current')" id="kpiBox-current" style="background-color: #ffffff !important; border: 1px solid #a7f3d0 !important; border-left: 5px solid #059669 !important;" class="kpi-dash-card cursor-pointer bg-white px-4 py-3 rounded-xl shadow-2xs hover:shadow-md hover:translate-x-0.5 transition-all flex items-center justify-between">
+            <div class="flex items-center gap-3">
+              <span class="w-9 h-9 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center text-sm shrink-0">
+                <i class="fa-solid fa-clock"></i>
+              </span>
+              <div>
+                <span class="text-[11px] font-black uppercase tracking-wider text-emerald-800 flex items-center gap-1.5">
+                  <span class="w-2 h-2 rounded-full bg-emerald-500 animate-ping"></span> Current Classes
+                </span>
+                <span class="text-[10px] text-emerald-700 font-semibold">Scheduled in Current Slot</span>
+              </div>
+            </div>
+            <div class="flex items-center gap-1.5">
+              <span id="kpiDashWaitingBadge" class="hidden px-1.5 py-0.5 rounded bg-amber-100 text-amber-900 border border-amber-300 text-[9px] font-extrabold animate-pulse">0 Wait</span>
+              <span class="text-2xl font-black text-slate-900 font-mono tracking-tight" id="kpiDashCurrent">0</span>
+            </div>
+          </div>
+
+          <!-- 3. Running Classes (Teacher Marked Attendance in Current Slot) -->
+          <div onclick="filterDashboardClasses('running')" id="kpiBox-running" style="background-color: #ffffff !important; border: 1px solid #6ee7b7 !important; border-left: 5px solid #047857 !important;" class="kpi-dash-card cursor-pointer bg-white px-4 py-3 rounded-xl shadow-2xs hover:shadow-md hover:translate-x-0.5 transition-all flex items-center justify-between">
+            <div class="flex items-center gap-3">
+              <span class="w-9 h-9 rounded-xl bg-emerald-100 text-emerald-800 flex items-center justify-center text-sm shrink-0">
+                <i class="fa-solid fa-tower-broadcast"></i>
+              </span>
+              <div>
+                <span class="text-[11px] font-black uppercase tracking-wider text-emerald-900 flex items-center gap-1.5">
+                  <span class="w-2 h-2 rounded-full bg-teal-600 animate-pulse"></span> Running Classes
+                </span>
+                <span class="text-[10px] text-emerald-700 font-semibold">Teacher Marked Running</span>
+              </div>
+            </div>
+            <div class="text-2xl font-black text-emerald-900 font-mono tracking-tight" id="kpiDashRunning">0</div>
+          </div>
+
+          <!-- 4. Taken (Formerly Completed) -->
+          <div onclick="filterDashboardClasses('completed')" id="kpiBox-completed" style="background-color: #ffffff !important; border: 1px solid #99f6e4 !important; border-left: 5px solid #0d9488 !important;" class="kpi-dash-card cursor-pointer bg-white px-4 py-3 rounded-xl shadow-2xs hover:shadow-md hover:translate-x-0.5 transition-all flex items-center justify-between">
+            <div class="flex items-center gap-3">
+              <span class="w-9 h-9 rounded-xl bg-teal-50 text-teal-600 flex items-center justify-center text-sm shrink-0">
+                <i class="fa-solid fa-circle-check"></i>
+              </span>
+              <div>
+                <span class="text-[11px] font-black uppercase tracking-wider text-teal-800 block">Taken</span>
+                <span class="text-[10px] text-teal-700 font-semibold">Classes Taken Today</span>
+              </div>
+            </div>
+            <div class="text-2xl font-black text-slate-900 font-mono tracking-tight" id="kpiDashCompleted">0</div>
+          </div>
+
         </div>
 
-        <!-- 2. Current Live Classes (Current Slot) -->
-        <div onclick="filterDashboardClasses('live')" id="kpiBox-live" style="background-color: #ffffff !important; border: 1px solid #a7f3d0 !important; border-left: 4.5px solid #059669 !important;" class="kpi-dash-card cursor-pointer bg-white p-2 sm:p-2.5 rounded-xl shadow-2xs hover:shadow-sm hover:scale-[1.01] transition-all">
-          <div class="flex items-center justify-between text-slate-500 mb-0.5">
-            <span class="text-[9.5px] font-black uppercase tracking-wider text-emerald-700 flex items-center gap-1">
-              <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping"></span> Live Now
-            </span>
-            <span class="w-5 h-5 rounded-md bg-emerald-50 text-emerald-600 flex items-center justify-center text-[10px]">
-              <i class="fa-solid fa-tower-broadcast"></i>
-            </span>
+        <!-- CENTER OPEN EXECUTIVE SPACE (DECLUTTERED BREATHING ROOM) -->
+        <div class="hidden lg:flex lg:col-span-4 flex-col items-center justify-center rounded-2xl border border-dashed border-slate-200/80 bg-white/40 p-6 text-center select-none">
+          <div class="w-12 h-12 rounded-2xl bg-emerald-50 border border-emerald-200 text-brandEmerald flex items-center justify-center text-lg shadow-2xs mb-2.5">
+            <i class="fa-solid fa-mosque"></i>
           </div>
-          <div class="flex items-baseline gap-1">
-            <span class="text-xl sm:text-2xl font-black text-slate-900 tracking-tight" style="color: #0f172a !important;" id="kpiDashLive">0</span>
-            <span id="kpiDashWaitingBadge" class="hidden px-1 py-0.2 rounded bg-amber-100 text-amber-900 border border-amber-300 text-[9px] font-extrabold animate-pulse">0 Wait</span>
-          </div>
-          <div class="text-[9.5px] text-emerald-700 font-semibold mt-0.5 truncate">Active Slots</div>
+          <h3 class="font-cinzel text-xs font-bold tracking-widest uppercase text-slate-700">Al-Huda Live Operations</h3>
+          <p class="text-[11px] text-slate-400 font-medium mt-1 max-w-[220px]">
+            Select any operational tab on the left or right to inspect live class details below.
+          </p>
         </div>
 
-        <!-- 3. Completed Classes (since 12:00 AM) -->
-        <div onclick="filterDashboardClasses('completed')" id="kpiBox-completed" style="background-color: #ffffff !important; border: 1px solid #99f6e4 !important; border-left: 4.5px solid #0d9488 !important;" class="kpi-dash-card cursor-pointer bg-white p-2 sm:p-2.5 rounded-xl shadow-2xs hover:shadow-sm hover:scale-[1.01] transition-all">
-          <div class="flex items-center justify-between text-slate-500 mb-0.5">
-            <span class="text-[9.5px] font-black uppercase tracking-wider text-teal-700">Completed</span>
-            <span class="w-5 h-5 rounded-md bg-teal-50 text-teal-600 flex items-center justify-center text-[10px]">
-              <i class="fa-solid fa-circle-check"></i>
-            </span>
-          </div>
-          <div class="text-xl sm:text-2xl font-black text-slate-900 tracking-tight" style="color: #0f172a !important;" id="kpiDashCompleted">0</div>
-          <div class="text-[9.5px] text-teal-700 font-semibold mt-0.5 truncate">Present &amp; Done</div>
-        </div>
+        <!-- RIGHT COLUMN: 4 STACKED TABS (UP-TO-DOWN) -->
+        <div class="lg:col-span-4 flex flex-col gap-2.5">
 
-        <!-- 4. Remaining Classes (till 12:00 AM midnight) -->
-        <div onclick="filterDashboardClasses('remaining')" id="kpiBox-remaining" style="background-color: #ffffff !important; border: 1px solid #fde68a !important; border-left: 4.5px solid #f59e0b !important;" class="kpi-dash-card cursor-pointer bg-white p-2 sm:p-2.5 rounded-xl shadow-2xs hover:shadow-sm hover:scale-[1.01] transition-all">
-          <div class="flex items-center justify-between text-slate-500 mb-0.5">
-            <span class="text-[9.5px] font-black uppercase tracking-wider text-amber-700">Remaining</span>
-            <span class="w-5 h-5 rounded-md bg-amber-50 text-amber-600 flex items-center justify-center text-[10px]">
-              <i class="fa-solid fa-hourglass-half"></i>
-            </span>
+          <!-- 5. Remaining -->
+          <div onclick="filterDashboardClasses('remaining')" id="kpiBox-remaining" style="background-color: #ffffff !important; border: 1px solid #fde68a !important; border-left: 5px solid #f59e0b !important;" class="kpi-dash-card cursor-pointer bg-white px-4 py-3 rounded-xl shadow-2xs hover:shadow-md hover:-translate-x-0.5 transition-all flex items-center justify-between">
+            <div class="flex items-center gap-3">
+              <span class="w-9 h-9 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center text-sm shrink-0">
+                <i class="fa-solid fa-hourglass-half"></i>
+              </span>
+              <div>
+                <span class="text-[11px] font-black uppercase tracking-wider text-amber-800 block">Remaining</span>
+                <span class="text-[10px] text-amber-700 font-semibold">Upcoming Slots Today</span>
+              </div>
+            </div>
+            <div class="text-2xl font-black text-slate-900 font-mono tracking-tight" id="kpiDashRemaining">0</div>
           </div>
-          <div class="text-xl sm:text-2xl font-black text-slate-900 tracking-tight" style="color: #0f172a !important;" id="kpiDashRemaining">0</div>
-          <div class="text-[9.5px] text-amber-700 font-semibold mt-0.5 truncate">Pending Slots</div>
-        </div>
 
-        <!-- 5. Absences Today -->
-        <div onclick="filterDashboardClasses('absent')" id="kpiBox-absent" style="background-color: #ffffff !important; border: 1px solid #fecdd3 !important; border-left: 4.5px solid #e11d48 !important;" class="kpi-dash-card cursor-pointer bg-white p-2 sm:p-2.5 rounded-xl shadow-2xs hover:shadow-sm hover:scale-[1.01] transition-all">
-          <div class="flex items-center justify-between text-slate-500 mb-0.5">
-            <span class="text-[9.5px] font-black uppercase tracking-wider text-rose-600">Absences</span>
-            <span class="w-5 h-5 rounded-md bg-rose-50 text-rose-600 flex items-center justify-center text-[10px]">
-              <i class="fa-solid fa-user-xmark"></i>
-            </span>
+          <!-- 6. Absent (Formerly Absences) -->
+          <div onclick="filterDashboardClasses('absent')" id="kpiBox-absent" style="background-color: #ffffff !important; border: 1px solid #fecdd3 !important; border-left: 5px solid #e11d48 !important;" class="kpi-dash-card cursor-pointer bg-white px-4 py-3 rounded-xl shadow-2xs hover:shadow-md hover:-translate-x-0.5 transition-all flex items-center justify-between">
+            <div class="flex items-center gap-3">
+              <span class="w-9 h-9 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center text-sm shrink-0">
+                <i class="fa-solid fa-user-xmark"></i>
+              </span>
+              <div>
+                <span class="text-[11px] font-black uppercase tracking-wider text-rose-700 block">Absent</span>
+                <span class="text-[10px] text-rose-600 font-semibold">Missed Sessions Today</span>
+              </div>
+            </div>
+            <div class="text-2xl font-black text-slate-900 font-mono tracking-tight" id="kpiDashAbsent">0</div>
           </div>
-          <div class="text-xl sm:text-2xl font-black text-slate-900 tracking-tight" style="color: #0f172a !important;" id="kpiDashAbsent">0</div>
-          <div class="text-[9.5px] text-rose-700 font-semibold mt-0.5 truncate">Missed Sessions</div>
-        </div>
 
-        <!-- 6. Student Leaves Today -->
-        <div onclick="filterDashboardClasses('leave')" id="kpiBox-leave" style="background-color: #ffffff !important; border: 1px solid #bfdbfe !important; border-left: 4.5px solid #3b82f6 !important;" class="kpi-dash-card cursor-pointer bg-white p-2 sm:p-2.5 rounded-xl shadow-2xs hover:shadow-sm hover:scale-[1.01] transition-all">
-          <div class="flex items-center justify-between text-slate-500 mb-0.5">
-            <span class="text-[9.5px] font-black uppercase tracking-wider text-blue-600">Leaves</span>
-            <span class="w-5 h-5 rounded-md bg-blue-50 text-blue-600 flex items-center justify-center text-[10px]">
-              <i class="fa-solid fa-calendar-xmark"></i>
-            </span>
+          <!-- 7. Leaves -->
+          <div onclick="filterDashboardClasses('leave')" id="kpiBox-leave" style="background-color: #ffffff !important; border: 1px solid #bfdbfe !important; border-left: 5px solid #3b82f6 !important;" class="kpi-dash-card cursor-pointer bg-white px-4 py-3 rounded-xl shadow-2xs hover:shadow-md hover:-translate-x-0.5 transition-all flex items-center justify-between">
+            <div class="flex items-center gap-3">
+              <span class="w-9 h-9 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center text-sm shrink-0">
+                <i class="fa-solid fa-calendar-xmark"></i>
+              </span>
+              <div>
+                <span class="text-[11px] font-black uppercase tracking-wider text-blue-700 block">Leaves</span>
+                <span class="text-[10px] text-blue-600 font-semibold">Approved Student Leaves</span>
+              </div>
+            </div>
+            <div class="text-2xl font-black text-slate-900 font-mono tracking-tight" id="kpiDashLeave">0</div>
           </div>
-          <div class="text-xl sm:text-2xl font-black text-slate-900 tracking-tight" style="color: #0f172a !important;" id="kpiDashLeave">0</div>
-          <div class="text-[9.5px] text-blue-700 font-semibold mt-0.5 truncate">Student Leaves</div>
-        </div>
 
-        <!-- 7. Trial Classes Today -->
-        <div onclick="filterDashboardClasses('trial')" id="kpiBox-trial" style="background-color: #ffffff !important; border: 1px solid #e9d5ff !important; border-left: 4.5px solid #9333ea !important;" class="kpi-dash-card cursor-pointer bg-white p-2 sm:p-2.5 rounded-xl shadow-2xs hover:shadow-sm hover:scale-[1.01] transition-all">
-          <div class="flex items-center justify-between text-slate-500 mb-0.5">
-            <span class="text-[9.5px] font-black uppercase tracking-wider text-purple-700">Trials</span>
-            <span class="w-5 h-5 rounded-md bg-purple-50 text-purple-600 flex items-center justify-center text-[10px]">
-              <i class="fa-solid fa-graduation-cap"></i>
-            </span>
+          <!-- 8. Trials -->
+          <div onclick="filterDashboardClasses('trial')" id="kpiBox-trial" style="background-color: #ffffff !important; border: 1px solid #e9d5ff !important; border-left: 5px solid #9333ea !important;" class="kpi-dash-card cursor-pointer bg-white px-4 py-3 rounded-xl shadow-2xs hover:shadow-md hover:-translate-x-0.5 transition-all flex items-center justify-between">
+            <div class="flex items-center gap-3">
+              <span class="w-9 h-9 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center text-sm shrink-0">
+                <i class="fa-solid fa-graduation-cap"></i>
+              </span>
+              <div>
+                <span class="text-[11px] font-black uppercase tracking-wider text-purple-800 block">Trials</span>
+                <span class="text-[10px] text-purple-700 font-semibold">Trial Sessions Today</span>
+              </div>
+            </div>
+            <div class="text-2xl font-black text-slate-900 font-mono tracking-tight" id="kpiDashTrial">0</div>
           </div>
-          <div class="text-xl sm:text-2xl font-black text-slate-900 tracking-tight" style="color: #0f172a !important;" id="kpiDashTrial">0</div>
-          <div class="text-[9.5px] text-purple-700 font-semibold mt-0.5 truncate">Trial Sessions</div>
-        </div>
 
-        <!-- 8. Active Teaching Staff -->
-        <div onclick="switchTab('tab-teachers')" id="kpiBox-teachers" style="background-color: #ffffff !important; border: 1px solid #a5f3fc !important; border-left: 4.5px solid #0891b2 !important;" class="kpi-dash-card cursor-pointer bg-white p-2 sm:p-2.5 rounded-xl shadow-2xs hover:shadow-sm hover:scale-[1.01] transition-all">
-          <div class="flex items-center justify-between text-slate-500 mb-0.5">
-            <span class="text-[9.5px] font-black uppercase tracking-wider text-cyan-700">Teachers</span>
-            <span class="w-5 h-5 rounded-md bg-cyan-50 text-cyan-600 flex items-center justify-center text-[10px]">
-              <i class="fa-solid fa-chalkboard-user"></i>
-            </span>
-          </div>
-          <div class="text-xl sm:text-2xl font-black text-slate-900 tracking-tight" style="color: #0f172a !important;" id="kpiDashTeachers">0</div>
-          <div class="text-[9.5px] text-cyan-700 font-semibold mt-0.5 truncate">Active Staff</div>
         </div>
 
       </div>
@@ -1798,7 +1838,7 @@
                   <span id="badgeAutoReminder4thState" class="px-2 py-0.5 rounded-full text-[10px] font-black bg-emerald-100 text-emerald-800 border border-emerald-300">ACTIVE</span>
                 </div>
                 <p id="autoFeeReminder4thStatusText" class="text-[11px] text-indigo-800 font-medium">
-                  Har mahine ki 4 tareekh ko tamam pending parents ko automatically fee reminder + receipt request email bhej di jaye gi.
+                  Automatically dispatches official tuition fee reminder emails (including receipt/screenshot request) to all pending parents on the 4th of every month.
                 </p>
               </div>
             </div>
@@ -2147,6 +2187,7 @@
               <i class="fa-regular fa-calendar text-brandEmerald"></i> Select Day:
             </label>
             <select id="schedSearchDay" onchange="executeScheduleSearch()" class="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-xl font-bold text-xs text-slate-800 focus:bg-white focus:outline-emerald-500">
+              <option value="all" selected>All Days (Full Week: Mon - Sun)</option>
               <option value="today">Today (Live Day)</option>
               <option value="1">Monday</option>
               <option value="2">Tuesday</option>
@@ -2155,7 +2196,6 @@
               <option value="5">Friday</option>
               <option value="6">Saturday</option>
               <option value="7">Sunday</option>
-              <option value="all">All Weekdays (Mon - Fri)</option>
             </select>
           </div>
 
@@ -2186,7 +2226,7 @@
               <i class="fa-solid fa-venus-mars text-indigo-600"></i> Teacher Gender:
             </label>
             <select id="schedSearchGender" onchange="executeScheduleSearch()" class="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-xl font-bold text-xs text-slate-800 focus:bg-white focus:outline-emerald-500">
-              <option value="all">All Teachers (Male &amp; Female)</option>
+              <option value="all" selected>All Teachers (Male &amp; Female)</option>
               <option value="Male">Male Teachers Only</option>
               <option value="Female">Female Teachers Only</option>
             </select>
@@ -2198,10 +2238,10 @@
               <i class="fa-solid fa-filter text-emerald-600"></i> Availability Status:
             </label>
             <select id="schedSearchStatus" onchange="executeScheduleSearch()" class="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-xl font-bold text-xs text-slate-800 focus:bg-white focus:outline-emerald-500">
+              <option value="all" selected>All Slots (Free &amp; Booked Overview)</option>
               <option value="free_only">Free / Available Teachers Only (Has Free Slots)</option>
               <option value="fully_free">100% Free in This Window (No Classes)</option>
               <option value="busy_only">Busy Teachers Only (Has Booked Classes)</option>
-              <option value="all">All Teachers (Complete Overview)</option>
             </select>
           </div>
         </div>

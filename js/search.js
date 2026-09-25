@@ -152,14 +152,13 @@
       if (!SCHED_SEARCH_INITIALIZED) {
         populateScheduleSearchTimeDropdowns();
 
-        // Auto-select today's day of week
-        const todayDayNum = new Date().getDay(); // 0 = Sun, 1 = Mon ...
-        const dayMap = [7, 1, 2, 3, 4, 5, 6];
-        const currentDay = dayMap[todayDayNum];
+        // Default all filters to 'all' (All Days, All Genders, All Slots)
         const daySelect = document.getElementById('schedSearchDay');
-        if (daySelect) {
-          daySelect.value = String(currentDay);
-        }
+        if (daySelect) daySelect.value = 'all';
+        const genderSelect = document.getElementById('schedSearchGender');
+        if (genderSelect) genderSelect.value = 'all';
+        const statusSelect = document.getElementById('schedSearchStatus');
+        if (statusSelect) statusSelect.value = 'all';
 
         SCHED_SEARCH_INITIALIZED = true;
       }
@@ -190,10 +189,8 @@
     }
 
     function resetScheduleSearchFilters() {
-      const dayMap = [7, 1, 2, 3, 4, 5, 6];
-      const currentDay = dayMap[new Date().getDay()];
       const dSel = document.getElementById('schedSearchDay');
-      if (dSel) dSel.value = String(currentDay);
+      if (dSel) dSel.value = 'all';
       const fSel = document.getElementById('schedSearchTimeFrom');
       if (fSel) fSel.value = '12:00';
       const tSel = document.getElementById('schedSearchTimeTo');
@@ -201,7 +198,7 @@
       const gSel = document.getElementById('schedSearchGender');
       if (gSel) gSel.value = 'all';
       const sSel = document.getElementById('schedSearchStatus');
-      if (sSel) sSel.value = 'free_only';
+      if (sSel) sSel.value = 'all';
       const qInp = document.getElementById('schedSearchTeacherQuery');
       if (qInp) qInp.value = '';
       refreshScheduleSearchCustomSelects();
@@ -215,23 +212,23 @@
       container.innerHTML = `
         <div class="bg-white p-12 rounded-2xl border border-slate-200 text-center shadow-xs">
           <i class="fa-solid fa-spinner fa-spin text-3xl text-emerald-600 mb-3"></i>
-          <h4 class="font-extrabold text-slate-700 text-sm">Analyzing Teacher Schedules...</h4>
-          <p class="text-xs text-slate-400 mt-1">Cross-referencing shifts, booked classes, and free slots</p>
+          <h4 class="font-extrabold text-slate-700 text-sm">Analyzing Weekly Teacher Schedules...</h4>
+          <p class="text-xs text-slate-400 mt-1">Cross-referencing shifts, booked classes, and free slots across the week</p>
         </div>
       `;
 
-      // 1. Get filter inputs
-      let dayVal = document.getElementById('schedSearchDay')?.value || 'today';
+      // 1. Get filter inputs (defaults: All Days, All Genders, All Slots)
+      let dayVal = document.getElementById('schedSearchDay')?.value || 'all';
       if (dayVal === 'today') {
         const dayMap = [7, 1, 2, 3, 4, 5, 6];
         dayVal = String(dayMap[new Date().getDay()]);
       }
-      const daysToEvaluate = (dayVal === 'all') ? [1, 2, 3, 4, 5] : [Number(dayVal)];
+      const daysToEvaluate = (dayVal === 'all') ? [1, 2, 3, 4, 5, 6, 7] : [Number(dayVal)];
 
       const timeFrom = document.getElementById('schedSearchTimeFrom')?.value || '12:00';
       const timeTo = document.getElementById('schedSearchTimeTo')?.value || '18:00';
       const genderFilter = document.getElementById('schedSearchGender')?.value || 'all';
-      const statusFilter = document.getElementById('schedSearchStatus')?.value || 'free_only';
+      const statusFilter = document.getElementById('schedSearchStatus')?.value || 'all';
       const teacherQuery = (document.getElementById('schedSearchTeacherQuery')?.value || '').trim().toLowerCase();
 
       // Convert times to minutes from midnight
@@ -278,7 +275,7 @@
         return true;
       });
 
-      // 3. Fetch schedules for the target days
+      // 3. Fetch schedules for the target days and index by O(1) hash map for big-data speed
       let schedulesQuery = db.from('class_schedules').select('*, students(name, course_id, status)');
       if (daysToEvaluate.length === 1) {
         schedulesQuery = schedulesQuery.eq('day_of_week', daysToEvaluate[0]);
@@ -287,6 +284,13 @@
       }
       const { data: scheds } = await schedulesQuery;
       const allSchedules = scheds || [];
+
+      const scheduleHashMap = {};
+      allSchedules.forEach(s => {
+        const sStart = (s.start_time || '').slice(0, 5);
+        const key = `${s.teacher_id}_${s.day_of_week}_${sStart}`;
+        scheduleHashMap[key] = s;
+      });
 
       // 4. Generate 30-min evaluation slots in requested window
       const evalSlots = [];
@@ -301,12 +305,15 @@
         
         const p1 = slotStartH >= 12 ? 'PM' : 'AM';
         const h12_1 = slotStartH % 12 === 0 ? 12 : slotStartH % 12;
+        const p2 = (slotEndH % 24) >= 12 ? 'PM' : 'AM';
+        const h12_2 = (slotEndH % 12) === 0 ? 12 : (slotEndH % 12);
         const label = `${h12_1}:${String(slotStartM).padStart(2, '0')} ${p1}`;
+        const rangeLabel = `${h12_1}:${String(slotStartM).padStart(2, '0')} ${p1} – ${h12_2}:${String(slotEndM).padStart(2, '0')} ${p2}`;
 
-        evalSlots.push({ startStr, endStr, label, startMin: m, endMin: m + 30 });
+        evalSlots.push({ startStr, endStr, label, rangeLabel, startMin: m, endMin: m + 30 });
       }
 
-      // 5. Evaluate each teacher's availability
+      // 5. Evaluate each teacher's availability across all days in daysToEvaluate (Row-by-Row Weekly Matrix)
       const teacherReports = [];
       let totalFreeSlotsAll = 0;
       let totalBookedClassesAll = 0;
@@ -318,54 +325,77 @@
           tGender = accs[teacher.id]?.gender || 'Male';
         }
 
-        const teacherScheds = allSchedules.filter(s => String(s.teacher_id) === String(teacher.id));
         const shiftStr = teacher.working_shift || '';
+        let teacherFreeCount = 0;
+        let teacherBookedCount = 0;
 
-        // Check each slot in window
-        const slotResults = evalSlots.map(slot => {
-          const bookedSchedule = teacherScheds.find(s => {
-            const sStart = (s.start_time || '').slice(0, 5);
-            return sStart === slot.startStr;
-          });
-
+        // Build row-by-row matrix: each row is 1 time slot, containing cells for every evaluated day
+        const slotRows = evalSlots.map(slot => {
           const inShift = isSlotInTeacherShift(slot.startStr, shiftStr);
 
-          if (bookedSchedule) {
-            return {
-              ...slot,
-              status: 'booked',
-              schedule: bookedSchedule,
-              studentName: bookedSchedule.students?.name || 'Enrolled Student',
-              course: bookedSchedule.students?.course_id || 'Class',
-              inShift
-            };
-          } else {
-            return {
-              ...slot,
-              status: 'free',
-              inShift
-            };
-          }
+          const dayCells = daysToEvaluate.map(dayNum => {
+            const key = `${teacher.id}_${dayNum}_${slot.startStr}`;
+            const bookedSchedule = scheduleHashMap[key];
+
+            if (bookedSchedule) {
+              teacherBookedCount++;
+              return {
+                dayNum,
+                dayShort: DAY_NAMES[dayNum].slice(0, 3),
+                dayFull: DAY_NAMES[dayNum],
+                status: 'booked',
+                schedule: bookedSchedule,
+                studentName: bookedSchedule.students?.name || 'Enrolled Student',
+                course: bookedSchedule.students?.course_id || 'Class',
+                inShift
+              };
+            } else {
+              teacherFreeCount++;
+              return {
+                dayNum,
+                dayShort: DAY_NAMES[dayNum].slice(0, 3),
+                dayFull: DAY_NAMES[dayNum],
+                status: 'free',
+                inShift
+              };
+            }
+          });
+
+          const rowHasFree = dayCells.some(c => c.status === 'free');
+          const rowHasBooked = dayCells.some(c => c.status === 'booked');
+
+          return {
+            ...slot,
+            inShift,
+            dayCells,
+            rowHasFree,
+            rowHasBooked
+          };
         });
 
-        const freeSlots = slotResults.filter(s => s.status === 'free');
-        const bookedSlots = slotResults.filter(s => s.status === 'booked');
+        totalFreeSlotsAll += teacherFreeCount;
+        totalBookedClassesAll += teacherBookedCount;
 
-        totalFreeSlotsAll += freeSlots.length;
-        totalBookedClassesAll += bookedSlots.length;
+        // Filter visible rows inside the teacher matrix if user specifically picked free_only or busy_only
+        let displayRows = slotRows;
+        if (statusFilter === 'free_only') {
+          displayRows = slotRows.filter(r => r.rowHasFree);
+        } else if (statusFilter === 'busy_only') {
+          displayRows = slotRows.filter(r => r.rowHasBooked);
+        }
 
         teacherReports.push({
           teacher,
           gender: tGender,
           shiftStr,
-          slotResults,
-          freeSlotsCount: freeSlots.length,
-          bookedSlotsCount: bookedSlots.length,
-          totalSlots: evalSlots.length
+          slotRows: displayRows,
+          freeSlotsCount: teacherFreeCount,
+          bookedSlotsCount: teacherBookedCount,
+          totalSlots: evalSlots.length * daysToEvaluate.length
         });
       });
 
-      // 6. Apply statusFilter
+      // 6. Apply statusFilter across teachers
       let filteredReports = teacherReports;
       if (statusFilter === 'free_only') {
         filteredReports = teacherReports.filter(r => r.freeSlotsCount > 0);
@@ -394,10 +424,10 @@
 
       const shiftBadge = document.getElementById('badgeSchedSearchActiveShift');
       if (shiftBadge) {
-        shiftBadge.innerText = `${evalSlots.length} Slots (${timeFrom} - ${timeTo})`;
+        shiftBadge.innerText = `${evalSlots.length} Time Slots × ${daysToEvaluate.length} Day(s) (${timeFrom} - ${timeTo})`;
       }
 
-      // 8. Render Results View
+      // 8. Render Results View (Full-Week Row-by-Row Slot Matrix Per Teacher)
       if (filteredReports.length === 0) {
         container.innerHTML = `
           <div class="p-12 bg-white rounded-2xl border border-slate-200 text-center shadow-xs">
@@ -416,8 +446,7 @@
         return;
       }
 
-      const activeDayName = daysToEvaluate.length === 1 ? DAY_NAMES[daysToEvaluate[0]] : 'Monday–Friday';
-      const targetDayId = daysToEvaluate[0];
+      const activeDayName = daysToEvaluate.length > 1 ? 'Full Weekly Matrix (Monday – Sunday)' : `${DAY_NAMES[daysToEvaluate[0]]} Schedule`;
 
       container.innerHTML = filteredReports.map(report => {
         const t = report.teacher;
@@ -427,10 +456,60 @@
           : `<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-50 text-rose-700 border border-rose-200"><i class="fa-solid fa-venus mr-1"></i>Female Teacher</span>`;
 
         const availBadge = report.freeSlotsCount === report.totalSlots
-          ? `<span class="px-2.5 py-1 rounded-xl text-xs font-black bg-emerald-100 text-emerald-800 border border-emerald-300 flex items-center gap-1"><i class="fa-solid fa-circle-check text-emerald-600"></i> 100% Free (${report.freeSlotsCount}/${report.totalSlots} Slots)</span>`
+          ? `<span class="px-2.5 py-1 rounded-xl text-xs font-black bg-emerald-100 text-emerald-800 border border-emerald-300 flex items-center gap-1"><i class="fa-solid fa-circle-check text-emerald-600"></i> 100% Free (${report.freeSlotsCount}/${report.totalSlots} Weekly Slots)</span>`
           : (report.freeSlotsCount > 0
               ? `<span class="px-2.5 py-1 rounded-xl text-xs font-black bg-teal-50 text-teal-800 border border-teal-300 flex items-center gap-1"><i class="fa-solid fa-clock text-teal-600"></i> ${report.freeSlotsCount} Free / ${report.bookedSlotsCount} Booked</span>`
               : `<span class="px-2.5 py-1 rounded-xl text-xs font-black bg-rose-50 text-rose-800 border border-rose-200 flex items-center gap-1"><i class="fa-solid fa-ban text-rose-600"></i> Fully Booked (${report.bookedSlotsCount} Classes)</span>`);
+
+        const dayHeadersHtml = daysToEvaluate.map(dayNum => `
+          <th class="p-2.5 text-center font-extrabold text-[11px] uppercase tracking-wider text-slate-700 bg-slate-100/90 border-b border-l border-slate-200 min-w-[115px]">
+            ${DAY_NAMES[dayNum]}
+          </th>
+        `).join('');
+
+        const slotRowsHtml = report.slotRows.map(row => {
+          const cellsHtml = row.dayCells.map(cell => {
+            if (cell.status === 'free') {
+              return `
+                <td class="p-1.5 border-l border-slate-100 align-middle">
+                  <button onclick="quickAssignFromSearch('${t.id}', ${cell.dayNum}, '${row.startStr}', '${row.endStr}')"
+                    class="w-full py-2 px-2.5 rounded-lg border border-emerald-300 bg-emerald-50/80 hover:bg-emerald-600 hover:text-white hover:border-emerald-700 text-emerald-900 transition group flex items-center justify-between gap-1 shadow-2xs cursor-pointer"
+                    title="Click to Assign Student on ${cell.dayFull} at ${row.label}">
+                    <span class="text-[11px] font-extrabold flex items-center gap-1">
+                      <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 group-hover:bg-white"></span> Free
+                    </span>
+                    <i class="fa-solid fa-plus text-[10px] opacity-70 group-hover:opacity-100"></i>
+                  </button>
+                </td>
+              `;
+            } else {
+              return `
+                <td class="p-1.5 border-l border-slate-100 align-middle">
+                  <div class="w-full py-1.5 px-2.5 rounded-lg border border-amber-200 bg-amber-50/80 text-left shadow-2xs"
+                    title="${cell.dayFull} (${row.label}) — Booked: ${cell.studentName} (${cell.course})">
+                    <div class="flex items-center justify-between gap-1">
+                      <span class="text-[10px] font-extrabold text-amber-900 truncate max-w-[85px]">${cell.studentName}</span>
+                      <span class="px-1 py-0.2 rounded text-[8px] font-black bg-amber-200 text-amber-950 shrink-0">BOOKED</span>
+                    </div>
+                    <div class="text-[9px] text-slate-500 truncate">${cell.course}</div>
+                  </div>
+                </td>
+              `;
+            }
+          }).join('');
+
+          return `
+            <tr class="hover:bg-slate-50/80 transition border-b border-slate-100 last:border-b-0">
+              <td class="p-2.5 font-mono font-black text-xs text-slate-900 bg-slate-50/70 whitespace-nowrap">
+                <div class="flex items-center gap-1.5">
+                  <i class="fa-regular fa-clock text-brandEmerald text-[11px]"></i>
+                  <span>${row.rangeLabel}</span>
+                </div>
+              </td>
+              ${cellsHtml}
+            </tr>
+          `;
+        }).join('');
 
         return `
           <div class="bg-white rounded-2xl border border-slate-200 p-5 shadow-xs hover:shadow-md transition">
@@ -456,57 +535,38 @@
 
               <div class="flex items-center gap-2">
                 ${availBadge}
-                <button onclick="openScheduleMatrix('${t.id}')" class="px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition flex items-center gap-1" title="View Full 2D Weekly Matrix">
+                <button onclick="open2DMatrixForTeacher('${t.id}')" class="px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition flex items-center gap-1" title="View Full 2D Weekly Matrix">
                   <i class="fa-solid fa-table-cells text-slate-500"></i> Full Matrix
                 </button>
               </div>
             </div>
 
-            <!-- SLOTS VISUAL BREAKDOWN IN REQUESTED WINDOW -->
+            <!-- FULL-WEEK ROW-BY-ROW SLOT MATRIX IN REQUESTED WINDOW -->
             <div class="pt-4">
-              <div class="flex items-center justify-between mb-2 text-xs">
-                <span class="font-bold text-slate-600 flex items-center gap-1.5">
-                  <i class="fa-solid fa-calendar-day text-brandEmerald"></i>
-                  ${activeDayName} Availability (${timeFrom} to ${timeTo}):
+              <div class="flex items-center justify-between mb-2.5 text-xs flex-wrap gap-2">
+                <span class="font-bold text-slate-700 flex items-center gap-1.5">
+                  <i class="fa-solid fa-calendar-week text-brandEmerald"></i>
+                  ${activeDayName} &bull; Slot-by-Slot Row View (${timeFrom} to ${timeTo}):
                 </span>
-                <span class="text-[11px] text-slate-400">
-                  Click any <strong class="text-emerald-700">Free Slot</strong> to assign a student
+                <span class="text-[11px] text-slate-500">
+                  Each row displays the full week for that time slot &bull; Click any <strong class="text-emerald-700">+ Free</strong> cell to assign a student
                 </span>
               </div>
 
-              <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2">
-                ${report.slotResults.map(slot => {
-                  if (slot.status === 'free') {
-                    return `
-                      <button onclick="quickAssignFromSearch('${t.id}', ${targetDayId}, '${slot.startStr}', '${slot.endStr}')"
-                        class="p-2.5 rounded-xl border border-emerald-300 bg-emerald-50/80 hover:bg-emerald-100 hover:border-emerald-500 text-left transition group shadow-2xs flex flex-col justify-between"
-                        title="Click to Assign Student to ${slot.startStr} - ${slot.endStr}">
-                        <div class="flex items-center justify-between">
-                          <span class="font-mono font-black text-xs text-emerald-950">${slot.label}</span>
-                          <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-                        </div>
-                        <div class="mt-1 flex items-center justify-between text-[11px] font-extrabold text-emerald-700">
-                          <span>Free Slot</span>
-                          <i class="fa-solid fa-plus text-[10px] opacity-70 group-hover:scale-125 transition"></i>
-                        </div>
-                      </button>
-                    `;
-                  } else {
-                    return `
-                      <div class="p-2.5 rounded-xl border border-amber-200 bg-amber-50/70 text-left shadow-2xs flex flex-col justify-between"
-                        title="Booked: ${slot.studentName} (${slot.course})">
-                        <div class="flex items-center justify-between">
-                          <span class="font-mono font-bold text-xs text-slate-700">${slot.label}</span>
-                          <span class="px-1.5 py-0.2 rounded text-[8px] font-bold bg-amber-200 text-amber-900">BOOKED</span>
-                        </div>
-                        <div class="mt-1">
-                          <p class="text-[11px] font-bold text-slate-900 truncate" title="${slot.studentName}">${slot.studentName}</p>
-                          <p class="text-[9px] text-slate-500 truncate">${slot.course}</p>
-                        </div>
-                      </div>
-                    `;
-                  }
-                }).join('')}
+              <div class="overflow-x-auto touch-scroll rounded-xl border border-slate-200">
+                <table class="w-full text-left text-xs border-collapse">
+                  <thead>
+                    <tr>
+                      <th class="p-2.5 font-extrabold text-[11px] uppercase tracking-wider text-slate-700 bg-slate-100 border-b border-slate-200 w-44">
+                        Time Slot (PKT)
+                      </th>
+                      ${dayHeadersHtml}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    ${slotRowsHtml}
+                  </tbody>
+                </table>
               </div>
             </div>
           </div>

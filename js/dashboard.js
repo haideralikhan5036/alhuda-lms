@@ -357,6 +357,9 @@
           } catch(e) {}
         }
 
+        const isCurrentSlot = isLive && !isLeaveStudent;
+        const isRunningMarked = isLive && Boolean(log && (log.status === 'Present' || log.status === 'Running'));
+
         let status = 'Upcoming';
         let badgeClass = 'bg-slate-100 text-slate-700 border-slate-200';
         let filterCategory = 'remaining';
@@ -367,11 +370,13 @@
             status = '⏳ Teacher Waiting';
             filterCategory = 'waiting';
             badgeClass = 'bg-amber-100 text-amber-900 border-amber-400 font-extrabold animate-pulse';
-          } else if (log.status === 'Present') {
+          } else if (log.status === 'Present' || log.status === 'Running') {
             completedCount++;
-            status = 'Completed';
+            status = isLive ? '🟢 Running (Attendance Marked)' : 'Taken';
             filterCategory = 'completed';
-            badgeClass = 'bg-emerald-100 text-emerald-800 border-emerald-300';
+            badgeClass = isLive
+              ? 'bg-emerald-600 text-white border-emerald-700 font-extrabold animate-pulse'
+              : 'bg-emerald-100 text-emerald-800 border-emerald-300';
           } else if (log.status === 'Advance Class') {
             completedCount++;
             let advTarget = '';
@@ -408,8 +413,8 @@
             badgeClass = 'bg-blue-100 text-blue-900 border-blue-400 font-bold';
           } else if (isLive) {
             liveCount++;
-            status = 'LIVE NOW';
-            filterCategory = 'live';
+            status = 'CURRENT SLOT (Awaiting Attendance)';
+            filterCategory = 'current';
             badgeClass = 'bg-emerald-600 text-white border-emerald-700 animate-pulse';
           } else if (isPast) {
             status = 'Pending Mark';
@@ -429,6 +434,8 @@
           startMin,
           endMin,
           isLive,
+          isCurrentSlot,
+          isRunningMarked,
           isPast,
           isUpcoming,
           isTrial,
@@ -441,9 +448,14 @@
 
       DASHBOARD_CLASSES.sort((a, b) => a.startMin - b.startMin);
 
+      const currentSlotTotal = DASHBOARD_CLASSES.filter(c => c.isCurrentSlot).length;
+      const runningMarkedTotal = DASHBOARD_CLASSES.filter(c => c.isRunningMarked).length;
+
       const setEl = (id, val) => { const el = document.getElementById(id); if (el) el.innerText = val; };
       setEl('kpiDashTotal', totalToday);
-      setEl('kpiDashLive', liveCount);
+      setEl('kpiDashCurrent', currentSlotTotal);
+      setEl('kpiDashRunning', runningMarkedTotal);
+      setEl('kpiDashLive', currentSlotTotal);
       const wBadge = document.getElementById('kpiDashWaitingBadge');
       if (wBadge) {
         if (waitingCount > 0) {
@@ -461,7 +473,7 @@
 
       // Also set legacy KPIs if element exists
       setEl('kpiTotalToday', totalToday);
-      setEl('kpiLiveNow', liveCount);
+      setEl('kpiLiveNow', currentSlotTotal);
       setEl('kpiCompleted', completedCount);
       setEl('kpiRemaining', remainingCount);
       setEl('kpiAbsent', absentCount);
@@ -490,7 +502,7 @@
 
       const selectedBox = document.getElementById(`kpiBox-${filterType}`);
       if (selectedBox) {
-        selectedBox.classList.add('ring-2', 'ring-brandDark', 'ring-offset-2', 'scale-105', 'shadow-md');
+        selectedBox.classList.add('ring-2', 'ring-brandDark', 'ring-offset-2', 'scale-[1.02]', 'shadow-md');
       }
 
       const classesSection = document.getElementById('dashClassesSection');
@@ -499,13 +511,15 @@
       }
 
       const titleMap = {
-        'all': { text: 'All Scheduled Classes Today', subtitle: 'Full schedule roster across morning, afternoon & evening batches', icon: 'fa-calendar-day' },
-        'live': { text: 'Current Live Classes', subtitle: 'Classes taking place right now in current time slot (including Teacher Waiting)', icon: 'fa-tower-broadcast' },
+        'all': { text: 'All Scheduled Classes Today', subtitle: 'Full schedule roster across morning, afternoon & evening shifts', icon: 'fa-calendar-day' },
+        'current': { text: 'Current Classes (Current Time Slot)', subtitle: 'All classes scheduled in the active 30-minute time slot right now', icon: 'fa-clock' },
+        'running': { text: 'Running Classes (Attendance Marked)', subtitle: 'Ongoing classes in the current slot where the teacher has marked attendance', icon: 'fa-tower-broadcast' },
+        'live': { text: 'Current Classes', subtitle: 'Classes scheduled in the current time slot', icon: 'fa-tower-broadcast' },
         'waiting': { text: 'Teacher Waiting Classes', subtitle: 'Teacher has launched Zoom and is actively waiting for student to join', icon: 'fa-hourglass-start' },
-        'completed': { text: 'Completed Classes Today', subtitle: 'Sessions marked Present since 12:00 AM midnight', icon: 'fa-circle-check' },
+        'completed': { text: 'Taken Classes Today', subtitle: 'Sessions marked Present / Taken since 12:00 AM midnight', icon: 'fa-circle-check' },
         'remaining': { text: 'Remaining Classes Today', subtitle: 'Upcoming classes scheduled to take place before midnight', icon: 'fa-hourglass-half' },
-        'absent': { text: 'Absences Marked Today', subtitle: 'Students marked Absent for their sessions today', icon: 'fa-user-xmark' },
-        'leave': { text: 'Student Leaves Today', subtitle: 'Students on excused leave for sessions today', icon: 'fa-calendar-xmark' },
+        'absent': { text: 'Absent Sessions Today', subtitle: 'Students marked Absent for their scheduled sessions today', icon: 'fa-user-xmark' },
+        'leave': { text: 'Student Leaves Today', subtitle: 'Students on approved leave for sessions today', icon: 'fa-calendar-xmark' },
         'trial': { text: 'Trial Classes Today', subtitle: 'Trial and evaluation lessons scheduled for today', icon: 'fa-graduation-cap' }
       };
 
@@ -529,7 +543,7 @@
     function closeDashboardClassesView() {
       CURRENT_DASH_FILTER = null;
       document.querySelectorAll('.kpi-dash-card').forEach(box => {
-        box.classList.remove('ring-2', 'ring-brandDark', 'ring-offset-2', 'scale-105', 'scale-[1.01]', 'shadow-md', 'ring-4', 'ring-white', 'shadow-xl');
+        box.classList.remove('ring-2', 'ring-brandDark', 'ring-offset-2', 'scale-105', 'scale-[1.02]', 'scale-[1.01]', 'shadow-md', 'ring-4', 'ring-white', 'shadow-xl');
       });
       const classesSection = document.getElementById('dashClassesSection');
       if (classesSection) {
@@ -552,8 +566,10 @@
       let filtered = DASHBOARD_CLASSES.filter(c => {
         if (CURRENT_DASH_FILTER === 'all') {
           // all
-        } else if (CURRENT_DASH_FILTER === 'live') {
-          if (!c.isLive && c.filterCategory !== 'waiting') return false;
+        } else if (CURRENT_DASH_FILTER === 'current' || CURRENT_DASH_FILTER === 'live') {
+          if (!c.isCurrentSlot) return false;
+        } else if (CURRENT_DASH_FILTER === 'running') {
+          if (!c.isRunningMarked) return false;
         } else if (CURRENT_DASH_FILTER === 'waiting') {
           if (c.filterCategory !== 'waiting') return false;
         } else if (CURRENT_DASH_FILTER === 'completed') {
@@ -592,10 +608,12 @@
           
           const emptyMessages = {
             'all': { title: 'No Classes Scheduled Today', msg: 'No classes are scheduled for today in the timetable.' },
-            'live': { title: 'No Live Classes In This Slot', msg: 'No ongoing classes in the current time slot. Next scheduled classes will appear here automatically.' },
-            'completed': { title: 'No Completed Classes Yet', msg: 'No completed classes recorded yet today since midnight.' },
-            'remaining': { title: 'All Scheduled Classes Completed', msg: 'No remaining classes scheduled for the rest of today.' },
-            'absent': { title: 'Zero Absences Today', msg: 'Zero absent students recorded today. All students are attending regularly!' },
+            'current': { title: 'No Classes Scheduled In Current Slot', msg: 'There are no classes scheduled in the current 30-minute time slot.' },
+            'running': { title: 'No Running Classes Marked Yet', msg: 'No teachers have marked attendance for the current time slot yet.' },
+            'live': { title: 'No Classes In This Slot', msg: 'No ongoing classes in the current time slot.' },
+            'completed': { title: 'No Taken Classes Yet', msg: 'No taken classes recorded yet today since midnight.' },
+            'remaining': { title: 'All Scheduled Classes Taken', msg: 'No remaining classes scheduled for the rest of today.' },
+            'absent': { title: 'Zero Absent Sessions Today', msg: 'Zero absent students recorded today. All students are attending regularly!' },
             'leave': { title: 'No Student Leaves Marked Today', msg: 'No student leaves recorded for today.' },
             'trial': { title: 'No Trial Classes Scheduled Today', msg: 'No trial classes booked for today.' }
           };

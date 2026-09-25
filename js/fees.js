@@ -2126,7 +2126,7 @@ Official Email: ${offEmail}`;
 
       if (list.length === 0) {
         if (!isAuto4thTrigger) {
-          alert(`Alhamdulillah! Koi bhi family ${periodStr} ki pending list mein nahi hai.`);
+          alert(`All clear! There are zero families with pending fees for ${periodStr}.`);
         }
         return;
       }
@@ -2137,7 +2137,7 @@ Official Email: ${offEmail}`;
       });
 
       if (!isAuto4thTrigger) {
-        const confirmMsg = `Remind All Parents — ${periodStr}\n\nTotal Pending Families: ${list.length}\nFamilies with Valid Email: ${recipientsWithEmail.length}\n\nKya aap waqai in sab parents ko ${periodStr} ki Pending Fee + Receipt Request Email automatically bhejna chahte hain?`;
+        const confirmMsg = `Remind All Parents — ${periodStr}\n\nTotal Pending Families: ${list.length}\nFamilies with Valid Email: ${recipientsWithEmail.length}\n\nDo you want to automatically dispatch the official ${periodStr} Pending Fee & Receipt Request email to all pending parents?`;
         if (!confirm(confirmMsg)) return;
       }
 
@@ -2194,11 +2194,6 @@ Official Email: ${offEmail}`;
 
       if (!isAuto4thTrigger) {
         if (allBccEmails.length > 0 && CURRENT_ROLE !== 'manager') {
-          const sample = buildPendingMonthReminderEmail(
-            { familyId: 'ALL-PENDING', parentName: 'Parents & Guardians', studentsNames: 'Enrolled Students', currency: 'USD', dueAmount: 0 },
-            targetMonth,
-            targetYear
-          );
           showToastNotification(`✅ Dispatched ${sentCount} Fee Reminders for ${periodStr}!`);
           alert(`✅ ${periodStr} Fee Reminder Emails Dispatched!\n\n• Total Pending Families: ${list.length}\n• Emails Sent Automatically: ${sentCount}\n• Message Included: "${periodStr} fee has not reached us — kindly pay at earliest or share payment screenshot/receipt if already paid."`);
         } else {
@@ -2256,7 +2251,7 @@ Official Email: ${offEmail}`;
           const dStr = new Date(alreadySentAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
           statusEl.innerText = `✅ ${curMonthName} ${curYear} Auto-Reminder (4th of Month) has been automatically dispatched to pending parents (${dStr}).`;
         } else {
-          statusEl.innerText = `Armed: Har mahine ki 4 tareekh ko (${curMonthName} 4, ${curYear}) tamam pending parents ko automatically fee reminder + receipt request email chali jaye gi.`;
+          statusEl.innerText = `Armed: Automatically dispatches official tuition fee reminder & receipt request emails to all pending parents on the 4th of every month (${curMonthName} 4, ${curYear}).`;
         }
       }
 
@@ -2540,12 +2535,12 @@ Official Email: ${offEmail}`;
     async function sendBulkDefaulterReminders3Plus() {
       const list = CACHED_THREE_MONTH_DEFAULTERS || [];
       if (list.length === 0) {
-        alert('Alhamdulillah! Is waqt 3+ months defaulters list mein koi bhi family nahi hai.');
+        alert('All clear! There are currently zero families in the 3+ Months Defaulters list.');
         return;
       }
 
       const withEmail = list.filter(i => i.email && i.email.includes('@'));
-      if (!confirm(`Remind All 3+ Month Defaulters\n\nTotal 3+ Month Defaulter Families: ${list.length}\nFamilies with Email: ${withEmail.length}\n\nKya aap sab 3+ month defaulters ko urgent fee reminder email bhejna chahte hain?`)) {
+      if (!confirm(`Remind All 3+ Month Defaulters\n\nTotal 3+ Month Defaulter Families: ${list.length}\nFamilies with Valid Email: ${withEmail.length}\n\nDo you want to automatically send the urgent 3+ Months Overdue Fee Reminder email to all defaulters?`)) {
         return;
       }
 
