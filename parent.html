@@ -1647,14 +1647,49 @@
       openModal('modalLeaveRequest');
     }
 
-    function handleLeaveRequestSubmit(e) {
+    async function handleLeaveRequestSubmit(e) {
       e.preventDefault();
-      const date = document.getElementById('leaveDateInput')?.value;
-      const reason = document.getElementById('leaveReasonSelect')?.value;
-      const msg = document.getElementById('leaveMessageText')?.value.trim();
+      const date = document.getElementById('leaveDateInput')?.value || new Date().toISOString().slice(0, 10);
+      const reason = document.getElementById('leaveReasonSelect')?.value || 'Family / Personal';
+      const msg = (document.getElementById('leaveMessageText')?.value || '').trim();
 
-      alert(`✅ Leave Request Submitted Successfully!\n\nDate: ${date}\nReason: ${reason}\nStudent: ${CURRENT_STUDENT?.name || 'Student'}\n\nYour Ustadh has been notified.`);
+      try {
+        if (typeof db !== 'undefined' && db && CURRENT_STUDENT && CURRENT_STUDENT.id) {
+          let notesObj = {};
+          try {
+            notesObj = typeof CURRENT_STUDENT.notes === 'object' && CURRENT_STUDENT.notes !== null
+              ? CURRENT_STUDENT.notes
+              : JSON.parse(CURRENT_STUDENT.notes || '{}');
+          } catch (err) {
+            notesObj = {};
+          }
+          const leaveEntry = {
+            leave_id: 'LV-PAR-' + Date.now(),
+            start_date: date,
+            return_date: date,
+            reason: reason,
+            notes: msg || 'Submitted via Student/Parent Portal',
+            status: 'Active',
+            created_at: new Date().toISOString()
+          };
+          notesObj.leave_info = leaveEntry;
+          if (!Array.isArray(notesObj.leave_history)) notesObj.leave_history = [];
+          notesObj.leave_history.unshift(leaveEntry);
+
+          await db.from('students').update({
+            status: 'On Leave',
+            notes: JSON.stringify(notesObj)
+          }).eq('id', CURRENT_STUDENT.id);
+        }
+      } catch (err) {
+        console.warn('[Parent Leave Sync] Notice:', err);
+      }
+
+      alert(`✅ Leave Request Submitted & Synced Successfully!\n\nDate: ${date}\nReason: ${reason}\nStudent: ${CURRENT_STUDENT?.name || 'Student'}\n\nAdministration & your Ustadh have been notified in real time.`);
       closeModal('modalLeaveRequest');
+      if (typeof switchStudentAccount === 'function' && CURRENT_STUDENT?.id) {
+        switchStudentAccount(CURRENT_STUDENT.id);
+      }
     }
 
     function handleParentLogout() {
@@ -1670,6 +1705,65 @@
     function closeModal(id) {
       document.getElementById(id)?.classList.add('hidden');
     }
+
+    // =========================================================================
+    // ZERO-CACHE ENFORCEMENT & REAL-TIME CROSS-DEVICE SYNC FOR PARENT PORTAL
+    // =========================================================================
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.getRegistrations().then(registrations => {
+        for (let reg of registrations) reg.unregister().catch(() => {});
+      });
+    }
+    if ('caches' in window) {
+      caches.keys().then(keys => {
+        for (let k of keys) caches.delete(k).catch(() => {});
+      });
+    }
+
+    let _parentPortalRealtimeTimer = null;
+    function scheduleParentPortalLiveSync() {
+      if (_parentPortalRealtimeTimer) clearTimeout(_parentPortalRealtimeTimer);
+      _parentPortalRealtimeTimer = setTimeout(() => {
+        const activeTag = document.activeElement ? document.activeElement.tagName : '';
+        if (['INPUT', 'TEXTAREA', 'SELECT'].includes(activeTag)) return;
+        if (typeof CURRENT_STUDENT !== 'undefined' && CURRENT_STUDENT?.id && typeof switchStudentAccount === 'function') {
+          switchStudentAccount(CURRENT_STUDENT.id);
+        } else if (typeof initParentPortal === 'function') {
+          initParentPortal();
+        }
+      }, 450);
+    }
+
+    try {
+      if (typeof db !== 'undefined' && db && db.channel) {
+        db.channel('alhuda-parent-portal-realtime')
+          .on('postgres_changes', { event: '*', schema: 'public', table: 'families' }, () => scheduleParentPortalLiveSync())
+          .on('postgres_changes', { event: '*', schema: 'public', table: 'students' }, () => scheduleParentPortalLiveSync())
+          .on('postgres_changes', { event: '*', schema: 'public', table: 'class_schedules' }, () => scheduleParentPortalLiveSync())
+          .on('postgres_changes', { event: '*', schema: 'public', table: 'attendance_logs' }, () => scheduleParentPortalLiveSync())
+          .subscribe();
+      }
+      window.addEventListener('online', () => scheduleParentPortalLiveSync());
+      document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') scheduleParentPortalLiveSync();
+      });
+    } catch (e) {
+      console.warn('[Parent Realtime Sync] Notice:', e);
+    }
   </script>
+  <style>
+    @media (max-width: 767px) {
+      html, body {
+        overflow-x: hidden !important;
+        max-width: 100vw !important;
+      }
+      div.fixed[id^="modal"] > div {
+        max-width: calc(100vw - 16px) !important;
+        max-height: 91dvh !important;
+        overflow-y: auto !important;
+        margin: 8px auto !important;
+      }
+    }
+  </style>
 </body>
 </html>

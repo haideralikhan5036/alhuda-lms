@@ -136,7 +136,19 @@
         return;
       }
 
-      // Load saved salary slips from localStorage
+      // Hydrate latest cloud-synced salaries & teacher accounts across Desktop and Mobile
+      try {
+        if (typeof hydrateGlobalSharedStateFromCloud === 'function') {
+          let famsForSync = (typeof ALL_FAMILIES !== 'undefined' && Array.isArray(ALL_FAMILIES) && ALL_FAMILIES.length > 0) ? ALL_FAMILIES : null;
+          if (!famsForSync) {
+            const { data: fData } = await db.from('families').select('id, notes').order('created_at', { ascending: true }).limit(20);
+            famsForSync = fData || [];
+          }
+          await hydrateGlobalSharedStateFromCloud(famsForSync, teachers);
+        }
+      } catch (e) {}
+
+      // Load saved salary slips from cloud-hydrated storage
       let savedSalaries = {};
       try {
         savedSalaries = JSON.parse(localStorage.getItem('alhuda_teacher_salaries') || '{}');
@@ -460,6 +472,9 @@
       };
 
       localStorage.setItem('alhuda_teacher_salaries', JSON.stringify(savedSalaries));
+      if (typeof syncGlobalSharedStateToCloud === 'function') {
+        syncGlobalSharedStateToCloud({ teacherId: CURRENT_SLIP_TEACHER_ID });
+      }
 
       calculateMonthlySalaries();
       alert(`✅ Salary Slip Saved Successfully!\n\n👨‍🏫 Teacher: ${CURRENT_SLIP_DATA.teacher_name}\n💵 Base Teaching: ${baseSubtotal.toLocaleString()} PKR\n💰 Net Payable: ${netPayable.toLocaleString()} PKR\n📌 Status: ${savedSalaries[slipKey].status}`);
@@ -510,6 +525,9 @@
       };
 
       localStorage.setItem('alhuda_teacher_salaries', JSON.stringify(savedSalaries));
+      if (typeof syncGlobalSharedStateToCloud === 'function') {
+        syncGlobalSharedStateToCloud({ teacherId });
+      }
       calculateMonthlySalaries();
     }
 

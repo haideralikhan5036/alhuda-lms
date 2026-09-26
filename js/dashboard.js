@@ -512,6 +512,10 @@
         if (families && families.length > 0) ALL_FAMILIES = families;
         if (teachers && teachers.length > 0) ALL_TEACHERS = teachers;
 
+        if (typeof hydrateGlobalSharedStateFromCloud === 'function') {
+          await hydrateGlobalSharedStateFromCloud(families || [], teachers || []);
+        }
+
         const activeStudents = (students || []).filter(s => s.status !== 'Left' && s.status !== 'Inactive').length;
         const leftStudents = (students || []).filter(s => s.status === 'Left' || s.status === 'Inactive').length;
 
@@ -1850,6 +1854,9 @@
 
     function saveParentComplaints(list) {
       localStorage.setItem('alhuda_parent_complaints', JSON.stringify(list || []));
+      if (typeof syncGlobalSharedStateToCloud === 'function') {
+        syncGlobalSharedStateToCloud();
+      }
       syncTopCircleNotificationDots();
     }
 
@@ -1876,6 +1883,9 @@
 
     function saveOfficialAnnouncements(list) {
       localStorage.setItem('alhuda_official_announcements', JSON.stringify(list || []));
+      if (typeof syncGlobalSharedStateToCloud === 'function') {
+        syncGlobalSharedStateToCloud();
+      }
       syncTopCircleNotificationDots();
       renderPortalAnnouncementBanners();
     }
@@ -1890,6 +1900,9 @@
 
     function saveLocalTeacherCorrectionRequests(list) {
       localStorage.setItem('alhuda_local_teacher_requests', JSON.stringify(list || []));
+      if (typeof syncGlobalSharedStateToCloud === 'function') {
+        syncGlobalSharedStateToCloud();
+      }
       syncTopCircleNotificationDots();
     }
 

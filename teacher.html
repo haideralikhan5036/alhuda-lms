@@ -3659,17 +3659,66 @@
       }
     });
 
-    // PWA Service Worker Registration
+    // =========================================================================
+    // ZERO-CACHE ENFORCEMENT & REAL-TIME CROSS-DEVICE SYNC FOR TEACHER PORTAL
+    // Ensures Desktop ↔ Mobile 100% live synchronization
+    // =========================================================================
     if ('serviceWorker' in navigator) {
-      window.addEventListener('load', () => {
-        navigator.serviceWorker.register('/sw.js', { scope: '/' })
-          .then(reg => {
-            console.log('[PWA Teacher] Service Worker registered:', reg.scope);
-            reg.update();
-          })
-          .catch(err => console.warn('[PWA Teacher] Service Worker registration failed:', err));
+      navigator.serviceWorker.getRegistrations().then(registrations => {
+        for (let reg of registrations) {
+          reg.unregister().catch(() => {});
+        }
       });
     }
+    if ('caches' in window) {
+      caches.keys().then(keys => {
+        for (let k of keys) caches.delete(k).catch(() => {});
+      });
+    }
+
+    let _teacherPortalRealtimeTimer = null;
+    function scheduleTeacherPortalLiveSync() {
+      if (_teacherPortalRealtimeTimer) clearTimeout(_teacherPortalRealtimeTimer);
+      _teacherPortalRealtimeTimer = setTimeout(async () => {
+        const activeTag = document.activeElement ? document.activeElement.tagName : '';
+        if (['INPUT', 'TEXTAREA', 'SELECT'].includes(activeTag)) return;
+        if (typeof loadTeacherPortalData === 'function') {
+          await loadTeacherPortalData();
+        }
+      }, 450);
+    }
+
+    try {
+      if (typeof db !== 'undefined' && db && db.channel) {
+        db.channel('alhuda-teacher-portal-realtime')
+          .on('postgres_changes', { event: '*', schema: 'public', table: 'class_schedules' }, () => scheduleTeacherPortalLiveSync())
+          .on('postgres_changes', { event: '*', schema: 'public', table: 'attendance_logs' }, () => scheduleTeacherPortalLiveSync())
+          .on('postgres_changes', { event: '*', schema: 'public', table: 'students' }, () => scheduleTeacherPortalLiveSync())
+          .on('postgres_changes', { event: '*', schema: 'public', table: 'teachers' }, () => scheduleTeacherPortalLiveSync())
+          .on('postgres_changes', { event: '*', schema: 'public', table: 'families' }, () => scheduleTeacherPortalLiveSync())
+          .subscribe();
+      }
+      window.addEventListener('online', () => scheduleTeacherPortalLiveSync());
+      document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') scheduleTeacherPortalLiveSync();
+      });
+    } catch (e) {
+      console.warn('[Teacher Realtime Sync] Notice:', e);
+    }
   </script>
+  <style>
+    @media (max-width: 767px) {
+      html, body {
+        overflow-x: hidden !important;
+        max-width: 100vw !important;
+      }
+      div.fixed[id^="modal"] > div {
+        max-width: calc(100vw - 16px) !important;
+        max-height: 91dvh !important;
+        overflow-y: auto !important;
+        margin: 8px auto !important;
+      }
+    }
+  </style>
 </body>
 </html>

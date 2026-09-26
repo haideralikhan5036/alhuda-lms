@@ -16,6 +16,9 @@
       const accounts = getTeacherAccounts();
       accounts[tId] = { ...(accounts[tId] || {}), ...creds };
       localStorage.setItem('alhuda_teacher_accounts', JSON.stringify(accounts));
+      if (typeof syncGlobalSharedStateToCloud === 'function') {
+        syncGlobalSharedStateToCloud({ teacherId: tId });
+      }
     }
 
     function getNextTeacherId() {
@@ -632,7 +635,14 @@
       document.getElementById('tGender').value = teacher.gender || acc.gender || 'Male';
       document.getElementById('tQualification').value = acc.qualification || '';
       document.getElementById('tCnic').value = acc.cnic || '';
-      document.getElementById('tAddress').value = teacher.address || '';
+      let cleanResidentialAddr = teacher.address || '';
+      if (typeof cleanResidentialAddr === 'string' && cleanResidentialAddr.trim().startsWith('{')) {
+        try {
+          const parsedAddr = JSON.parse(cleanResidentialAddr);
+          cleanResidentialAddr = parsedAddr.residential_address || parsedAddr.address || '';
+        } catch (e) {}
+      }
+      document.getElementById('tAddress').value = cleanResidentialAddr;
       document.getElementById('tPhone').value = teacher.phone || '';
       document.getElementById('tAltPhone').value = teacher.alt_phone || '';
       document.getElementById('tWitnessName').value = teacher.witness_name || '';
@@ -684,6 +694,9 @@
         const accounts = getTeacherAccounts();
         delete accounts[teacherId];
         localStorage.setItem('alhuda_teacher_accounts', JSON.stringify(accounts));
+        if (typeof syncGlobalSharedStateToCloud === 'function') {
+          syncGlobalSharedStateToCloud();
+        }
 
         await loadTeachers();
         alert(`${roleLabel} "${tName}" has been deleted successfully.`);
@@ -697,6 +710,10 @@
       if (!container) return;
       const { data: teachers } = await db.from('teachers').select('*').order('created_at', { ascending: false });
       ALL_TEACHERS = teachers || [];
+
+      if (typeof hydrateGlobalSharedStateFromCloud === 'function') {
+        await hydrateGlobalSharedStateFromCloud(window.ALL_FAMILIES, ALL_TEACHERS);
+      }
 
       const { data: scheds } = await db.from('class_schedules').select('teacher_id, student_id');
       const countMap = {};

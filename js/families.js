@@ -108,15 +108,30 @@
       const accounts = getParentAccounts();
       accounts[famId] = { ...(accounts[famId] || {}), ...creds };
       localStorage.setItem('alhuda_parent_accounts', JSON.stringify(accounts));
+      if (typeof syncGlobalSharedStateToCloud === 'function') {
+        syncGlobalSharedStateToCloud();
+      }
     }
 
     function getParentCreds(family) {
+      if (!family) return { username: 'parent_user', password: 'alhuda_786' };
       const accounts = getParentAccounts();
-      if (accounts[family.id]) return accounts[family.id];
+      if (accounts[family.id] && accounts[family.id].username) return accounts[family.id];
+      if (family.notes) {
+        try {
+          const nObj = typeof family.notes === 'object' ? family.notes : JSON.parse(family.notes);
+          if (nObj && nObj.portal_credentials && nObj.portal_credentials.username) {
+            accounts[family.id] = nObj.portal_credentials;
+            localStorage.setItem('alhuda_parent_accounts', JSON.stringify(accounts));
+            return nObj.portal_credentials;
+          }
+        } catch (e) {}
+      }
       const baseUser = (family.parent_name || 'parent').toLowerCase().replace(/[^a-z0-9]/g, '_').replace(/_+/g, '_').replace(/^_|_$/g, '').slice(0, 15) || 'parent';
+      const stableDigits = String(family.whatsapp || family.id || '786').replace(/[^0-9]/g, '').slice(-3).padStart(3, '7');
       const defaultCred = {
         username: 'parent_' + baseUser,
-        password: 'alhuda_' + Math.floor(100 + Math.random() * 900),
+        password: 'alhuda_' + stableDigits,
         parent_name: family.parent_name,
         whatsapp: family.whatsapp
       };
