@@ -580,6 +580,8 @@ async function openFamily360Profile(familyId, initialTab = 'students', skipHisto
   );
 
   // Determine selected Student inside Family Profile
+  // Only auto-open the bottom Student Detail Drawer if a specific student was explicitly requested (e.g. from Student Search)
+  const hasExplicitStudent = Boolean(options.selectedStudentId);
   let selectedStudentId = options.selectedStudentId || _CURRENT_360_STATE.selectedStudentId;
   if (!selectedStudentId || !familyStudents.some(s => String(s.id).toUpperCase() === String(selectedStudentId).toUpperCase())) {
     selectedStudentId = familyStudents[0]?.id || null;
@@ -591,6 +593,7 @@ async function openFamily360Profile(familyId, initialTab = 'students', skipHisto
   _CURRENT_360_STATE.activeTab = activeTab;
   _CURRENT_360_STATE.selectedStudentId = selectedStudentId;
   _CURRENT_360_STATE.studentSubView = studentSubView;
+  _CURRENT_360_STATE.studentDrawerOpen = hasExplicitStudent;
 
   if (!skipHistoryPush) {
     _push360History('family', family.id, `${family.parent_name} (${family.id})`, activeTab);
@@ -628,10 +631,21 @@ function switchFamilyWorkspaceTab(tabId) {
 
 /**
  * Select a Student inside the Family Profile (NO separate Student Profile page!)
+ * Clicking the same active subView again collapses the inline detail drawer for a clean table view.
  */
 function selectStudentInFamilyProfile(familyId, studentId, subView = 'history') {
+  if (
+    _CURRENT_360_STATE.selectedStudentId === studentId &&
+    _CURRENT_360_STATE.studentSubView === subView &&
+    _CURRENT_360_STATE.studentDrawerOpen === true
+  ) {
+    _CURRENT_360_STATE.studentDrawerOpen = false;
+    _renderFamilyWorkspaceDOM();
+    return;
+  }
   _CURRENT_360_STATE.selectedStudentId = studentId;
   _CURRENT_360_STATE.studentSubView = subView || 'history';
+  _CURRENT_360_STATE.studentDrawerOpen = true;
   _CURRENT_360_STATE.activeTab = 'students';
   _renderFamilyWorkspaceDOM();
 
@@ -643,8 +657,13 @@ function selectStudentInFamilyProfile(familyId, studentId, subView = 'history') 
   }, 60);
 }
 
+function closeSelectedStudentDrawer() {
+  _CURRENT_360_STATE.studentDrawerOpen = false;
+  _renderFamilyWorkspaceDOM();
+}
+
 /**
- * Render the Complete Modern Full-Screen Family Workspace DOM
+ * Render the Complete Modern Full-Screen Family Workspace DOM (Well-Settled & Symmetrical)
  */
 function _renderFamilyWorkspaceDOM() {
   const workspace = document.getElementById('unified360PageWorkspace');
@@ -666,30 +685,26 @@ function _renderFamilyWorkspaceDOM() {
   const displayStatusLabel = (famStatus === 'ACTIVE' || famStatus === 'REGULAR') ? 'REGULAR' : famStatus;
 
   const statusBadgeStyle = (displayStatusLabel === 'REGULAR')
-    ? 'bg-emerald-500/15 text-emerald-300 border-emerald-400/30'
+    ? 'bg-emerald-500/20 text-emerald-300 border-emerald-400/40'
     : (displayStatusLabel === 'ON LEAVE' || displayStatusLabel === 'LEAVE')
-    ? 'bg-amber-500/15 text-amber-300 border-amber-400/30'
-    : 'bg-rose-500/15 text-rose-300 border-rose-400/30';
+    ? 'bg-amber-500/20 text-amber-300 border-amber-400/40'
+    : 'bg-rose-500/20 text-rose-300 border-rose-400/40';
 
   const invoiceSentThisMonth = Boolean(bioMeta.last_invoice_sent_month === 'September 2026' || payData.currentMonthPaid);
   const displayEmail = (window.CURRENT_ROLE === 'manager' && typeof maskStudentEmail === 'function')
     ? maskStudentEmail(family.parent_email || '')
     : (family.parent_email || 'Not Provided');
 
-  // Count Manager & Teacher Notes for tab badges
   const managerNotesCount = (fNotes.manager_notes || []).length;
   const teacherNotesList = _collectAllFamilyTeacherNotes(family, familyStudents, famLogs);
   const teacherNotesCount = teacherNotesList.length;
 
-  // ==========================================================================
-  // 5 REQUIRED TABS ONLY (Section #5)
-  // ==========================================================================
   const navTabs = [
-    { id: 'students',      label: 'Students',        icon: 'fa-user-graduate', count: familyStudents.length },
-    { id: 'payments',      label: 'Payments',        icon: 'fa-credit-card',   count: payData.rows.length },
-    { id: 'manager_notes', label: "Manager's Notes", icon: 'fa-clipboard-list', count: managerNotesCount },
+    { id: 'students',      label: 'Students',        icon: 'fa-user-graduate',   count: familyStudents.length },
+    { id: 'payments',      label: 'Payments',        icon: 'fa-credit-card',     count: payData.rows.length },
+    { id: 'manager_notes', label: "Manager's Notes", icon: 'fa-clipboard-list',  count: managerNotesCount },
     { id: 'teacher_notes', label: "Teacher's Notes", icon: 'fa-chalkboard-user', count: teacherNotesCount },
-    { id: 'biodata',       label: 'Bio Data',        icon: 'fa-id-card',       count: null }
+    { id: 'biodata',       label: 'Bio Data',        icon: 'fa-id-card',         count: null }
   ];
 
   let activeSectionHtml = '';
@@ -711,29 +726,29 @@ function _renderFamilyWorkspaceDOM() {
   const isFamSuspended = famStatus === 'SUSPENDED' || Boolean(bioMeta.classes_suspended);
 
   const bottomFamilyActionsHtml = `
-    <div class="bg-slate-50/90 border-t border-slate-200 px-6 py-4 flex items-center justify-center gap-3 flex-wrap">
+    <div class="bg-slate-50 border-t border-slate-200 px-6 py-4 flex items-center justify-center gap-3 flex-wrap">
       <button onclick="handleFamilyLevelDeactivate('${_esc360(family.id)}')"
-              class="px-5 py-2.5 rounded-xl font-extrabold text-xs text-white shadow-xs transition flex items-center gap-2 ${isFamInactive ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-rose-600 hover:bg-rose-700'}">
+              class="h-9 px-5 rounded-xl font-extrabold text-xs text-white shadow-xs transition inline-flex items-center gap-2 whitespace-nowrap cursor-pointer ${isFamInactive ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-rose-600 hover:bg-rose-700'}">
         <i class="fa-solid ${isFamInactive ? 'fa-user-check' : 'fa-ban'}"></i>
-        ${isFamInactive ? 'Activate Family' : 'Deactivate'}
+        <span>${isFamInactive ? 'Activate Family' : 'Deactivate'}</span>
       </button>
 
       <button onclick="handleFamilyLevelLeave('${_esc360(family.id)}')"
-              class="px-5 py-2.5 rounded-xl font-extrabold text-xs text-white bg-sky-600 hover:bg-sky-700 shadow-xs transition flex items-center gap-2">
+              class="h-9 px-5 rounded-xl font-extrabold text-xs text-white bg-sky-600 hover:bg-sky-700 shadow-xs transition inline-flex items-center gap-2 whitespace-nowrap cursor-pointer">
         <i class="fa-solid fa-calendar-pause"></i>
-        ${isFamOnLeave ? 'Return Family from Leave' : 'Make on Leave'}
+        <span>${isFamOnLeave ? 'Return Family from Leave' : 'Make on Leave'}</span>
       </button>
 
       <button onclick="handleFamilyLevelSuspendClasses('${_esc360(family.id)}')"
-              class="px-5 py-2.5 rounded-xl font-extrabold text-xs text-white ${isFamSuspended ? 'bg-teal-600 hover:bg-teal-700' : 'bg-rose-700 hover:bg-rose-800'} shadow-xs transition flex items-center gap-2">
+              class="h-9 px-5 rounded-xl font-extrabold text-xs text-white ${isFamSuspended ? 'bg-teal-600 hover:bg-teal-700' : 'bg-rose-700 hover:bg-rose-800'} shadow-xs transition inline-flex items-center gap-2 whitespace-nowrap cursor-pointer">
         <i class="fa-solid ${isFamSuspended ? 'fa-play' : 'fa-pause-circle'}"></i>
-        ${isFamSuspended ? 'Unsuspend Classes' : 'Suspend Classes'}
+        <span>${isFamSuspended ? 'Unsuspend Classes' : 'Suspend Classes'}</span>
       </button>
 
       <button onclick="openEditFamilyProfileModal('${_esc360(family.id)}')"
-              class="px-5 py-2.5 rounded-xl font-extrabold text-xs text-white bg-indigo-600 hover:bg-indigo-700 shadow-xs transition flex items-center gap-2">
+              class="h-9 px-5 rounded-xl font-extrabold text-xs text-white bg-indigo-600 hover:bg-indigo-700 shadow-xs transition inline-flex items-center gap-2 whitespace-nowrap cursor-pointer">
         <i class="fa-solid fa-pen-to-square"></i>
-        Edit Profile
+        <span>Edit Profile</span>
       </button>
     </div>
   `;
@@ -741,79 +756,80 @@ function _renderFamilyWorkspaceDOM() {
   workspace.innerHTML = `
     ${_buildTopWorkspaceNavHtml()}
 
-    <!-- MODERN FULL-SCREEN FAMILY WORKSPACE CARD (NO OLD GREEN BACKGROUND) -->
-    <div class="bg-white rounded-2xl border border-slate-200/95 shadow-sm overflow-hidden">
+    <!-- WELL-SETTLED MODERN FULL-SCREEN FAMILY WORKSPACE CARD -->
+    <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
 
-      <!-- COMPACT MODERN EXECUTIVE FAMILY HEADER (Sections #3, #4, #24, #25) -->
-      <div class="bg-gradient-to-r from-slate-900 via-slate-800 to-indigo-950 text-white px-6 pt-5 pb-0 relative">
-        <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 pb-5 border-b border-white/10">
+      <!-- CENTERED, BALANCED & SYMMETRICAL FAMILY HEADER BANNER -->
+      <div class="bg-gradient-to-b from-slate-900 via-slate-900 to-indigo-950 text-white px-6 pt-6 pb-0">
+        <div class="max-w-4xl mx-auto flex flex-col items-center text-center space-y-3.5 pb-5">
 
-          <!-- Left: Family Identity & Status Badges -->
-          <div class="flex items-start sm:items-center gap-4">
-            <div class="w-14 h-14 rounded-2xl bg-white/10 border border-white/20 flex items-center justify-center text-2xl font-black text-amber-400 shrink-0 shadow-inner">
+          <!-- Row 1: Avatar + Family Name + Registration Date + Family ID -->
+          <div class="flex flex-col items-center">
+            <div class="w-14 h-14 rounded-2xl bg-white/10 border-2 border-white/20 flex items-center justify-center text-2xl font-black text-amber-400 shadow-md mb-2">
               ${_esc360((family.parent_name || 'F').charAt(0).toUpperCase())}
             </div>
-            <div>
-              <div class="flex items-center gap-2.5 flex-wrap">
-                <h1 class="text-xl sm:text-2xl font-black tracking-tight text-white">${_esc360(family.parent_name)}</h1>
-                <span class="px-2.5 py-0.5 rounded-md bg-white/10 border border-white/15 font-mono text-xs font-extrabold text-slate-200">${_esc360(family.id)}</span>
-                <span class="px-2.5 py-0.5 rounded-md border text-[11px] font-black uppercase tracking-wider ${statusBadgeStyle}">
-                  ${_esc360(displayStatusLabel)}
-                </span>
-                ${isFamSuspended ? `<span class="px-2.5 py-0.5 rounded-md bg-rose-600 text-white text-[10px] font-black uppercase">CLASSES SUSPENDED</span>` : ''}
-              </div>
-
-              <div class="flex items-center gap-2 flex-wrap mt-2 text-xs text-slate-300">
-                <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md bg-white/5 border border-white/10 font-mono text-[11px]">
-                  <i class="fa-regular fa-calendar text-amber-400"></i> ${_esc360(regDate)}
-                </span>
-                <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md ${invoiceSentThisMonth ? 'bg-amber-400/20 text-amber-300 border border-amber-400/30' : 'bg-slate-700/60 text-slate-300 border border-slate-600'} text-[11px] font-extrabold">
-                  MONTHLY INVOICE ${invoiceSentThisMonth ? '<i class="fa-solid fa-check text-emerald-400"></i>' : 'PENDING'}
-                </span>
-                <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md bg-sky-500/20 text-sky-300 border border-sky-400/30 text-[11px] font-extrabold">
-                  MONTHLY PAYMENT &bull; ${_esc360(family.currency || 'USD')} ${_esc360(family.monthly_fee || 0)}
-                </span>
-                <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md bg-indigo-500/20 text-indigo-200 border border-indigo-400/30 text-[11px] font-bold">
-                  <i class="fa-regular fa-envelope"></i> EMAIL: ${_esc360(displayEmail)}
-                </span>
-              </div>
+            <div class="flex items-center justify-center gap-2.5 flex-wrap">
+              <h1 class="text-xl sm:text-2xl font-black tracking-tight text-white capitalize">${_esc360(family.parent_name)}</h1>
+              <span class="px-2.5 py-0.5 rounded-md bg-white/10 border border-white/20 font-mono text-xs font-extrabold text-slate-200 whitespace-nowrap">${_esc360(family.id)}</span>
             </div>
+            <div class="text-xs font-mono text-slate-300 mt-0.5">${_esc360(regDate)}</div>
           </div>
 
-          <!-- Right: ONLY THE 4 REQUIRED TOP FAMILY ACTIONS (Section #4 & #25) -->
-          <div class="flex items-center gap-2 flex-wrap">
+          <!-- Row 2: Single-Line Status & Billing Summary Strip -->
+          <div class="flex items-center justify-center gap-2 flex-wrap">
+            <span class="px-3 py-1 rounded-md border text-[11px] font-black uppercase tracking-wider whitespace-nowrap ${statusBadgeStyle}">
+              ${_esc360(displayStatusLabel)}
+            </span>
+            ${isFamSuspended ? `<span class="px-3 py-1 rounded-md bg-rose-600 text-white text-[11px] font-black uppercase whitespace-nowrap">CLASSES SUSPENDED</span>` : ''}
+            <span class="px-3 py-1 rounded-md ${invoiceSentThisMonth ? 'bg-amber-400 text-slate-950' : 'bg-slate-800 text-slate-300 border border-slate-700'} text-[11px] font-black uppercase tracking-wide whitespace-nowrap">
+              MONTHLY INVOICE ${invoiceSentThisMonth ? '✓' : 'PENDING'}
+            </span>
+            <span class="px-3 py-1 rounded-md bg-sky-500/20 text-sky-200 border border-sky-400/30 text-[11px] font-extrabold uppercase whitespace-nowrap">
+              MONTHLY PAYMENT &bull; ${_esc360(family.currency || 'USD')} ${_esc360(family.monthly_fee || 0)}
+            </span>
+            <span class="px-3 py-1 rounded-md bg-indigo-500/20 text-indigo-200 border border-indigo-400/30 text-[11px] font-bold whitespace-nowrap">
+              <i class="fa-regular fa-envelope mr-1"></i> ${_esc360(displayEmail)}
+            </span>
+          </div>
+
+          <!-- Row 3: Single-Line 4 Required Family Action Buttons (Never Wraps Unevenly) -->
+          <div class="flex items-center justify-center gap-2.5 flex-wrap pt-1">
             <button onclick="openFamilyAddStudentModal('${_esc360(family.id)}')"
-                    class="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-extrabold transition shadow-xs flex items-center gap-1.5 cursor-pointer">
-              <i class="fa-solid fa-user-plus"></i> Add Student
+                    class="h-9 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-extrabold transition shadow-xs inline-flex items-center gap-1.5 whitespace-nowrap cursor-pointer">
+              <i class="fa-solid fa-user-plus"></i>
+              <span>Add Student</span>
             </button>
 
             <button onclick="openFamilySendInvoiceModal('${_esc360(family.id)}')"
-                    class="px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-extrabold transition shadow-xs flex items-center gap-1.5 cursor-pointer">
-              <i class="fa-solid fa-file-invoice-dollar"></i> Send Invoice
+                    class="h-9 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-extrabold transition shadow-xs inline-flex items-center gap-1.5 whitespace-nowrap cursor-pointer">
+              <i class="fa-solid fa-file-invoice-dollar"></i>
+              <span>Send Invoice</span>
             </button>
 
             <button onclick="openFamilyCustomEmailModal('${_esc360(family.id)}')"
-                    class="px-3.5 py-2 rounded-xl bg-sky-600 hover:bg-sky-500 text-white text-xs font-extrabold transition shadow-xs flex items-center gap-1.5 cursor-pointer">
-              <i class="fa-solid fa-paper-plane"></i> Send Email
+                    class="h-9 px-4 rounded-xl bg-sky-600 hover:bg-sky-500 text-white text-xs font-extrabold transition shadow-xs inline-flex items-center gap-1.5 whitespace-nowrap cursor-pointer">
+              <i class="fa-solid fa-paper-plane"></i>
+              <span>Send Email</span>
             </button>
 
             <button onclick="openFamilyManualInvoiceModal('${_esc360(family.id)}')"
-                    class="px-3.5 py-2 rounded-xl bg-amber-600 hover:bg-amber-500 text-white text-xs font-extrabold transition shadow-xs flex items-center gap-1.5 cursor-pointer">
-              <i class="fa-solid fa-file-circle-plus"></i> Add Manual Invoice
+                    class="h-9 px-4 rounded-xl bg-amber-600 hover:bg-amber-500 text-white text-xs font-extrabold transition shadow-xs inline-flex items-center gap-1.5 whitespace-nowrap cursor-pointer">
+              <i class="fa-solid fa-file-circle-plus"></i>
+              <span>Add Manual Invoice</span>
             </button>
           </div>
         </div>
 
-        <!-- DOCKED 5-TAB NAVIGATION BAR (Section #5: ONLY Students, Payments, Manager's Notes, Teacher's Notes, Bio Data) -->
-        <div class="flex items-center gap-1.5 pt-3 overflow-x-auto no-scrollbar">
+        <!-- Row 4: Centered 5-Tab Navigation Bar Docked to Bottom of Header -->
+        <div class="flex items-center justify-center gap-1.5 pt-2 overflow-x-auto no-scrollbar border-t border-white/10">
           ${navTabs.map(t => {
             const isActive = activeTab === t.id;
             return `
               <button onclick="switchFamilyWorkspaceTab('${t.id}')"
-                      class="px-4 py-2.5 rounded-t-xl text-xs font-extrabold transition flex items-center gap-2 whitespace-nowrap cursor-pointer ${
+                      class="px-5 py-2.5 rounded-t-xl text-xs font-extrabold transition inline-flex items-center gap-2 whitespace-nowrap cursor-pointer ${
                         isActive
                           ? 'bg-white text-slate-900 shadow-xs'
-                          : 'bg-slate-800/80 hover:bg-slate-700/80 text-slate-300 hover:text-white'
+                          : 'bg-slate-800/90 hover:bg-slate-700 text-slate-300 hover:text-white'
                       }">
                 <i class="fa-solid ${t.icon} ${isActive ? 'text-indigo-600' : 'text-slate-400'}"></i>
                 <span>${_esc360(t.label)}</span>
@@ -829,7 +845,7 @@ function _renderFamilyWorkspaceDOM() {
       </div>
 
       <!-- ACTIVE TAB WORKSPACE CONTENT AREA -->
-      <div class="bg-white min-h-[400px]">
+      <div class="bg-white">
         ${activeSectionHtml}
       </div>
 
@@ -843,8 +859,7 @@ function _renderFamilyWorkspaceDOM() {
 }
 
 // ============================================================================
-// TAB 1: STUDENTS TAB + INLINE SELECTED STUDENT DETAIL WORKSPACE
-// (Sections #6, #7, #8, #9, #10, #11, #12, #13, #14)
+// TAB 1: STUDENTS TAB + CLEAN, SETTLED INLINE STUDENT WORKSPACE
 // ============================================================================
 function _buildFamilyStudentsTabHtml(family, familyStudents, famSchedules, famLogs, selectedStudentId, studentSubView) {
   if (!familyStudents || familyStudents.length === 0) {
@@ -854,7 +869,7 @@ function _buildFamilyStudentsTabHtml(family, familyStudents, famSchedules, famLo
           <i class="fa-solid fa-user-graduate"></i>
         </div>
         <h3 class="text-base font-extrabold text-slate-800">No Students Enrolled in This Family Yet</h3>
-        <p class="text-xs text-slate-500 mt-1 max-w-md mx-auto">Click the button below or "Add Student" in the header to add the first child to ${_esc360(family.parent_name)}'s family profile.</p>
+        <p class="text-xs text-slate-500 mt-1 max-w-md mx-auto">Click "Add Student" to enroll the first child under ${_esc360(family.parent_name)}'s family profile.</p>
         <button onclick="openFamilyAddStudentModal('${_esc360(family.id)}')"
                 class="mt-4 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-extrabold transition inline-flex items-center gap-2">
           <i class="fa-solid fa-user-plus"></i> Add Student to Family
@@ -864,9 +879,10 @@ function _buildFamilyStudentsTabHtml(family, familyStudents, famSchedules, famLo
   }
 
   const selectedStudent = familyStudents.find(s => String(s.id).toUpperCase() === String(selectedStudentId).toUpperCase()) || familyStudents[0];
+  const isDrawerOpen = _CURRENT_360_STATE.studentDrawerOpen !== false;
 
   const rowsHtml = familyStudents.map((stu, idx) => {
-    const isSelected = selectedStudent && String(stu.id).toUpperCase() === String(selectedStudent.id).toUpperCase();
+    const isSelected = isDrawerOpen && selectedStudent && String(stu.id).toUpperCase() === String(selectedStudent.id).toUpperCase();
     const stuMeta = _parseStudentStructuredNotes(stu);
     const certCount = (stuMeta.certificates || []).length;
 
@@ -878,115 +894,116 @@ function _buildFamilyStudentsTabHtml(family, familyStudents, famSchedules, famLo
     const isDeactivated = stLower === 'inactive' || stLower === 'deactivated';
     const isOnLeave = stLower === 'leave' || stLower === 'on leave' || Boolean(stuMeta.on_leave);
 
-    const statusBadge = isDeactivated
-      ? `<span class="px-2 py-0.5 rounded text-[10px] font-black bg-rose-100 text-rose-700 border border-rose-200">Deactivated</span>`
+    const statusDot = isDeactivated
+      ? `<span class="inline-block w-2 h-2 rounded-full bg-rose-500" title="Deactivated"></span>`
       : isOnLeave
-      ? `<span class="px-2 py-0.5 rounded text-[10px] font-black bg-amber-100 text-amber-800 border border-amber-200">On Leave</span>`
-      : `<span class="px-2 py-0.5 rounded text-[10px] font-black bg-emerald-100 text-emerald-800 border border-emerald-200">Active</span>`;
+      ? `<span class="inline-block w-2 h-2 rounded-full bg-amber-500" title="On Leave"></span>`
+      : `<i class="fa-solid fa-check text-emerald-600 text-xs"></i>`;
+
+    const statusBadge = isDeactivated
+      ? `<span class="px-2 py-0.5 rounded text-[10px] font-extrabold bg-rose-50 text-rose-700 border border-rose-200 whitespace-nowrap">Deactivated</span>`
+      : isOnLeave
+      ? `<span class="px-2 py-0.5 rounded text-[10px] font-extrabold bg-amber-50 text-amber-800 border border-amber-200 whitespace-nowrap">On Leave</span>`
+      : `<span class="px-2 py-0.5 rounded text-[10px] font-extrabold bg-emerald-50 text-emerald-800 border border-emerald-200 whitespace-nowrap">Active</span>`;
 
     return `
-      <tr class="border-b border-slate-100 transition ${isSelected ? 'bg-indigo-50/70 border-l-4 border-l-indigo-600' : 'hover:bg-slate-50/80'}">
+      <tr class="border-b border-slate-200/80 transition ${isSelected ? 'bg-indigo-50/50' : 'hover:bg-slate-50/80'}">
         <!-- # -->
-        <td class="p-3.5 w-14">
-          <span class="inline-flex items-center justify-center w-6 h-6 rounded-md font-mono text-xs font-black ${isSelected ? 'bg-indigo-600 text-white' : 'bg-amber-400/90 text-slate-900'}">
+        <td class="px-4 py-3.5 w-14 align-middle">
+          <span class="inline-flex items-center justify-center w-6 h-6 rounded-md font-mono text-xs font-black ${isSelected ? 'bg-indigo-600 text-white' : 'bg-amber-400 text-slate-900'}">
             ${idx + 1}
           </span>
         </td>
 
-        <!-- Student (Clickable — keeps Admin inside Family Profile & selects Student) -->
-        <td class="p-3.5">
-          <div class="flex items-center gap-2 flex-wrap">
+        <!-- Student Name (Clickable — selects Student inside Family Profile) -->
+        <td class="px-4 py-3.5 align-middle">
+          <div class="flex items-center gap-2 flex-nowrap">
             <button onclick="selectStudentInFamilyProfile('${_esc360(family.id)}', '${_esc360(stu.id)}', 'info')"
-                    class="font-extrabold text-xs sm:text-sm ${isSelected ? 'text-indigo-900 underline' : 'text-slate-900 hover:text-indigo-700 hover:underline'} flex items-center gap-1.5 text-left cursor-pointer">
-              <i class="fa-solid ${isDeactivated ? 'fa-user-slash text-rose-500' : isOnLeave ? 'fa-clock text-amber-500' : 'fa-check text-emerald-600'} text-xs"></i>
+                    class="font-extrabold text-xs sm:text-sm ${isSelected ? 'text-indigo-900 underline' : 'text-slate-900 hover:text-indigo-700 hover:underline'} inline-flex items-center gap-1.5 text-left whitespace-nowrap cursor-pointer">
+              ${statusDot}
               <span>${_esc360(stu.name)}</span>
             </button>
             ${statusBadge}
-            ${isSelected ? `<span class="px-2 py-0.5 rounded-full bg-indigo-600 text-white text-[9px] font-black uppercase tracking-wider">Selected</span>` : ''}
-          </div>
-          <div class="text-[11px] text-slate-500 mt-0.5 font-medium">
-            <span class="font-mono">${_esc360(stu.id)}</span> &bull; ${_esc360(stu.course_id || 'Quran Studies')}
+            <span class="text-[11px] font-mono text-slate-400 whitespace-nowrap">(${_esc360(stu.id)})</span>
           </div>
         </td>
 
-        <!-- History (Progress / Attendance & Daily Lessons) -->
-        <td class="p-3.5">
+        <!-- History -->
+        <td class="px-4 py-3.5 align-middle">
           <button onclick="selectStudentInFamilyProfile('${_esc360(family.id)}', '${_esc360(stu.id)}', 'history')"
-                  class="px-2.5 py-1 rounded-lg font-extrabold text-xs transition cursor-pointer ${isSelected && studentSubView === 'history' ? 'bg-indigo-600 text-white shadow-2xs' : 'text-indigo-700 hover:bg-indigo-50 hover:underline'}">
+                  class="px-3 py-1 rounded-lg font-extrabold text-xs transition whitespace-nowrap cursor-pointer ${isSelected && studentSubView === 'history' ? 'bg-indigo-600 text-white shadow-2xs' : 'text-indigo-700 hover:bg-indigo-50 hover:underline'}">
             Progress
           </button>
         </td>
 
-        <!-- Reports (Academic Evaluation & Attendance Report) -->
-        <td class="p-3.5">
+        <!-- Reports -->
+        <td class="px-4 py-3.5 align-middle">
           <button onclick="selectStudentInFamilyProfile('${_esc360(family.id)}', '${_esc360(stu.id)}', 'report')"
-                  class="px-2.5 py-1 rounded-lg font-extrabold text-xs transition cursor-pointer ${isSelected && studentSubView === 'report' ? 'bg-indigo-600 text-white shadow-2xs' : 'text-indigo-700 hover:bg-indigo-50 hover:underline'}">
+                  class="px-3 py-1 rounded-lg font-extrabold text-xs transition whitespace-nowrap cursor-pointer ${isSelected && studentSubView === 'report' ? 'bg-indigo-600 text-white shadow-2xs' : 'text-indigo-700 hover:bg-indigo-50 hover:underline'}">
             Report
           </button>
         </td>
 
-        <!-- Teacher (Clickable — opens Teacher Schedule & Info) -->
-        <td class="p-3.5">
+        <!-- Teacher -->
+        <td class="px-4 py-3.5 align-middle">
           ${assignedTeacher ? `
             <button onclick="openTeacherScheduleFromFamily('${_esc360(assignedTeacher.id)}', '${_esc360(stu.id)}')"
-                    class="font-extrabold text-xs text-indigo-700 hover:text-indigo-950 hover:underline flex items-center gap-1.5 text-left cursor-pointer"
-                    title="Click to inspect Teacher Schedule & Assigned Slots">
-              <i class="fa-solid fa-chalkboard-user text-indigo-500"></i>
+                    class="font-extrabold text-xs text-indigo-700 hover:text-indigo-950 hover:underline inline-flex items-center gap-1.5 text-left whitespace-nowrap cursor-pointer"
+                    title="Click to open Teacher Schedule">
               <span>${_esc360(teacherName)}</span>
             </button>
           ` : `
             <button onclick="openEditSingleStudentModal('${_esc360(family.id)}', '${_esc360(stu.id)}')"
-                    class="text-xs font-bold text-amber-700 hover:underline flex items-center gap-1 cursor-pointer">
+                    class="text-xs font-bold text-amber-700 hover:underline inline-flex items-center gap-1 whitespace-nowrap cursor-pointer">
               <i class="fa-solid fa-user-plus"></i> Assign Teacher
             </button>
           `}
         </td>
 
-        <!-- Certificates (+ Issue & View List) -->
-        <td class="p-3.5">
-          <div class="flex items-center gap-1.5">
+        <!-- Certificate -->
+        <td class="px-4 py-3.5 align-middle">
+          <div class="inline-flex items-center gap-1.5 flex-nowrap">
             <button onclick="openIssueStudentCertificateModal('${_esc360(family.id)}', '${_esc360(stu.id)}')"
-                    class="w-7 h-7 rounded-lg border border-rose-300 bg-rose-50 hover:bg-rose-100 text-rose-700 flex items-center justify-center text-xs font-black transition cursor-pointer"
+                    class="w-7 h-7 rounded-lg border border-rose-300 bg-rose-50 hover:bg-rose-100 text-rose-700 inline-flex items-center justify-center text-xs font-black transition cursor-pointer"
                     title="Issue New Certificate for ${_esc360(stu.name)}">
               <i class="fa-solid fa-plus"></i>
             </button>
             <button onclick="selectStudentInFamilyProfile('${_esc360(family.id)}', '${_esc360(stu.id)}', 'certificates')"
-                    class="px-2.5 h-7 rounded-lg border border-emerald-300 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 flex items-center gap-1 text-xs font-extrabold transition cursor-pointer"
+                    class="px-2.5 h-7 rounded-lg border ${isSelected && studentSubView === 'certificates' ? 'border-emerald-600 bg-emerald-600 text-white' : 'border-emerald-300 bg-emerald-50 hover:bg-emerald-100 text-emerald-800'} inline-flex items-center gap-1 text-xs font-extrabold transition whitespace-nowrap cursor-pointer"
                     title="View Certificates (${certCount})">
-              <i class="fa-solid fa-award text-emerald-600"></i>
-              <span>${certCount > 0 ? certCount : 'View'}</span>
+              <span>${certCount > 0 ? `${certCount} Cert` : '•••'}</span>
             </button>
           </div>
         </td>
 
-        <!-- Student-Only Actions (Edit Student, Student Leave, Student Schedule, Deactivate This Student Only) -->
-        <td class="p-3.5 text-right">
-          <div class="inline-flex items-center justify-end gap-1.5">
-            <!-- 1. Yellow Edit Student Information Button (Section #12) -->
+        <!-- Student-Only Actions -->
+        <td class="px-4 py-3.5 text-right align-middle">
+          <div class="inline-flex items-center justify-end gap-1.5 flex-nowrap">
+            <!-- 1. Yellow Edit Student Information -->
             <button onclick="openEditSingleStudentModal('${_esc360(family.id)}', '${_esc360(stu.id)}')"
-                    class="w-8 h-8 rounded-lg border border-amber-300 bg-amber-50 hover:bg-amber-100 text-amber-700 flex items-center justify-center transition cursor-pointer"
+                    class="w-8 h-8 rounded-lg border border-amber-300 bg-amber-50 hover:bg-amber-100 text-amber-700 inline-flex items-center justify-center transition cursor-pointer"
                     title="Edit ONLY ${_esc360(stu.name)}'s Student Information">
               <i class="fa-regular fa-pen-to-square"></i>
             </button>
 
-            <!-- 2. Student-Only Leave Toggle Button (Section #14) -->
+            <!-- 2. Student-Only Leave Toggle -->
             <button onclick="toggleSingleStudentLeave('${_esc360(family.id)}', '${_esc360(stu.id)}')"
-                    class="w-8 h-8 rounded-lg border ${isOnLeave ? 'border-amber-500 bg-amber-500 text-white' : 'border-emerald-300 bg-emerald-50 hover:bg-emerald-100 text-emerald-700'} flex items-center justify-center transition cursor-pointer"
+                    class="w-8 h-8 rounded-lg border ${isOnLeave ? 'border-amber-500 bg-amber-500 text-white' : 'border-emerald-300 bg-emerald-50 hover:bg-emerald-100 text-emerald-700'} inline-flex items-center justify-center transition cursor-pointer"
                     title="${isOnLeave ? `Resume ${_esc360(stu.name)} from Leave` : `Put ONLY ${_esc360(stu.name)} On Leave`}">
               <i class="fa-regular fa-clock"></i>
             </button>
 
-            <!-- 3. Student Teacher & Schedule Slot Button (Section #10) -->
+            <!-- 3. Student Timetable & Teacher Slot -->
             <button onclick="${assignedTeacher ? `openTeacherScheduleFromFamily('${_esc360(assignedTeacher.id)}', '${_esc360(stu.id)}')` : `openEditSingleStudentModal('${_esc360(family.id)}', '${_esc360(stu.id)}')`}"
-                    class="w-8 h-8 rounded-lg border border-indigo-200 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 flex items-center justify-center transition cursor-pointer"
+                    class="w-8 h-8 rounded-lg border border-indigo-200 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 inline-flex items-center justify-center transition cursor-pointer"
                     title="View / Manage ${_esc360(stu.name)}'s Class Timetable">
               <i class="fa-regular fa-calendar-check"></i>
             </button>
 
-            <!-- 4. Red Deactivate This Student Only Button (Section #13) -->
+            <!-- 4. Red Deactivate This Student Only -->
             <button onclick="toggleSingleStudentDeactivate('${_esc360(family.id)}', '${_esc360(stu.id)}')"
-                    class="w-8 h-8 rounded-lg border ${isDeactivated ? 'border-emerald-400 bg-emerald-600 text-white' : 'border-rose-300 bg-rose-50 hover:bg-rose-100 text-rose-700'} flex items-center justify-center transition cursor-pointer"
-                    title="${isDeactivated ? `Reactivate ${_esc360(stu.name)} Only` : `Deactivate ONLY ${_esc360(stu.name)} (Family & Siblings stay Active)`}">
+                    class="w-8 h-8 rounded-lg border ${isDeactivated ? 'border-emerald-500 bg-emerald-600 text-white' : 'border-rose-300 bg-rose-50 hover:bg-rose-100 text-rose-700'} inline-flex items-center justify-center transition cursor-pointer"
+                    title="${isDeactivated ? `Reactivate ${_esc360(stu.name)} Only` : `Deactivate ONLY ${_esc360(stu.name)}`}">
               <i class="fa-solid ${isDeactivated ? 'fa-user-check' : 'fa-user-xmark'}"></i>
             </button>
           </div>
@@ -995,24 +1012,24 @@ function _buildFamilyStudentsTabHtml(family, familyStudents, famSchedules, famLo
     `;
   }).join('');
 
-  const selectedDetailHtml = selectedStudent
+  const selectedDetailHtml = (selectedStudent && isDrawerOpen)
     ? _buildSelectedStudentWorkspaceHtml(family, selectedStudent, famSchedules, famLogs, studentSubView)
     : '';
 
   return `
     <div>
-      <!-- STUDENTS MASTER TABLE -->
+      <!-- CLEAN SETTLED STUDENTS TABLE -->
       <div class="overflow-x-auto">
         <table class="w-full text-left text-xs border-collapse">
-          <thead class="bg-slate-50 text-slate-700 font-extrabold border-b border-slate-200 uppercase tracking-wider text-[11px]">
+          <thead class="bg-slate-50 text-slate-700 font-extrabold border-b border-slate-200 text-[11px] uppercase tracking-wider">
             <tr>
-              <th class="p-3.5 w-14">#</th>
-              <th class="p-3.5">Student</th>
-              <th class="p-3.5">History</th>
-              <th class="p-3.5">Reports</th>
-              <th class="p-3.5">Teacher</th>
-              <th class="p-3.5">Certificate</th>
-              <th class="p-3.5 text-right">Student Actions</th>
+              <th class="px-4 py-3.5 w-14">#</th>
+              <th class="px-4 py-3.5">Name</th>
+              <th class="px-4 py-3.5">History</th>
+              <th class="px-4 py-3.5">Reports</th>
+              <th class="px-4 py-3.5">Teacher</th>
+              <th class="px-4 py-3.5">Certificate</th>
+              <th class="px-4 py-3.5 text-right">Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -1021,16 +1038,18 @@ function _buildFamilyStudentsTabHtml(family, familyStudents, famSchedules, famLo
         </table>
       </div>
 
-      <!-- INLINE SELECTED STUDENT WORKSPACE (Remains inside Family Profile — Section #7, #8, #9, #10, #11) -->
-      <div id="familySelectedStudentWorkspace" class="p-6 bg-slate-50/70 border-t border-slate-200">
-        ${selectedDetailHtml}
-      </div>
+      <!-- UNIFIED SINGLE-CARD SELECTED STUDENT DRAWER (Well-Settled, Zero Wrapping Clutter) -->
+      ${selectedDetailHtml ? `
+        <div id="familySelectedStudentWorkspace" class="px-6 py-5 bg-slate-50/70 border-t border-slate-200">
+          ${selectedDetailHtml}
+        </div>
+      ` : ''}
     </div>
   `;
 }
 
 /**
- * Build the Selected Student's Detailed Sub-Workspace inside the Family Profile
+ * Build the Selected Student's Detailed Sub-Workspace inside ONE Single Settled Card
  */
 function _buildSelectedStudentWorkspaceHtml(family, student, famSchedules, famLogs, subView) {
   const stuId = student.id;
@@ -1039,7 +1058,6 @@ function _buildSelectedStudentWorkspaceHtml(family, student, famSchedules, famLo
   const assignedTeacher = (window.ALL_TEACHERS || []).find(t => String(t.id) === String(student.assigned_teacher_id));
   const stuMeta = _parseStudentStructuredNotes(student);
 
-  // Compute real Attendance Statistics (Section #8)
   const totalLogs = stuLogs.length;
   const presentLogs = stuLogs.filter(l => String(l.status || '').toLowerCase() === 'present');
   const absentLogs = stuLogs.filter(l => String(l.status || '').toLowerCase() === 'absent');
@@ -1050,18 +1068,17 @@ function _buildSelectedStudentWorkspaceHtml(family, student, famSchedules, famLo
   const leaveCount = leaveLogs.length;
   const attendancePct = totalLogs > 0 ? Math.round((attendedCount / totalLogs) * 100) : 100;
 
+  // Compact single-line sub-tabs so they NEVER wrap onto 2 rows
   const subNavItems = [
-    { id: 'history',      label: 'History, Attendance & Daily Lessons', icon: 'fa-calendar-check' },
-    { id: 'report',       label: 'Academic Progress Report',            icon: 'fa-chart-line' },
+    { id: 'history',      label: 'Attendance & Daily Lessons', icon: 'fa-calendar-check' },
+    { id: 'report',       label: 'Progress Report',            icon: 'fa-chart-line' },
     { id: 'certificates', label: `Certificates (${(stuMeta.certificates || []).length})`, icon: 'fa-award' },
-    { id: 'info',         label: 'Student Information & Schedule',      icon: 'fa-user-gear' }
+    { id: 'info',         label: 'Student Info',               icon: 'fa-user-gear' }
   ];
 
   let bodyHtml = '';
 
-  // ---------------------------------------------------------------------------
-  // SUB-VIEW 1: STUDENT HISTORY / ATTENDANCE & DAILY LESSONS (Sections #8 & #9)
-  // ---------------------------------------------------------------------------
+  // SUB-VIEW 1: STUDENT HISTORY / ATTENDANCE & DAILY LESSONS
   if (subView === 'history') {
     const filterStatus = _CURRENT_360_STATE.attFilterStatus || 'all';
     const filteredLogs = stuLogs.filter(l => {
@@ -1073,65 +1090,58 @@ function _buildSelectedStudentWorkspaceHtml(family, student, famSchedules, famLo
     const activeLessonLog = stuLogs.find(l => l.date === selectedDate) || stuLogs[0] || null;
 
     bodyHtml = `
-      <div class="space-y-5">
-        <!-- Attendance Summary KPIs -->
+      <div class="p-5 space-y-4">
+        <!-- Compact 4-Box Attendance Strip -->
         <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs">
-            <span class="text-[11px] font-bold text-slate-500 uppercase block">Classes Attended</span>
-            <div class="text-2xl font-black text-emerald-700 mt-1">${attendedCount} <span class="text-xs font-bold text-slate-400">Days</span></div>
+          <div class="bg-slate-50 px-4 py-3 rounded-xl border border-slate-200 flex items-center justify-between">
+            <span class="text-xs font-bold text-slate-500">Attended</span>
+            <strong class="text-base font-black text-emerald-700">${attendedCount}</strong>
           </div>
-          <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs">
-            <span class="text-[11px] font-bold text-slate-500 uppercase block">Classes Missed</span>
-            <div class="text-2xl font-black text-rose-600 mt-1">${missedCount} <span class="text-xs font-bold text-slate-400">Absent</span></div>
+          <div class="bg-slate-50 px-4 py-3 rounded-xl border border-slate-200 flex items-center justify-between">
+            <span class="text-xs font-bold text-slate-500">Missed</span>
+            <strong class="text-base font-black text-rose-600">${missedCount}</strong>
           </div>
-          <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs">
-            <span class="text-[11px] font-bold text-slate-500 uppercase block">Approved Leaves</span>
-            <div class="text-2xl font-black text-amber-600 mt-1">${leaveCount} <span class="text-xs font-bold text-slate-400">Days</span></div>
+          <div class="bg-slate-50 px-4 py-3 rounded-xl border border-slate-200 flex items-center justify-between">
+            <span class="text-xs font-bold text-slate-500">On Leave</span>
+            <strong class="text-base font-black text-amber-600">${leaveCount}</strong>
           </div>
-          <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs">
-            <span class="text-[11px] font-bold text-slate-500 uppercase block">Attendance Rate</span>
-            <div class="flex items-center gap-2 mt-1">
-              <span class="text-2xl font-black text-indigo-700">${attendancePct}%</span>
-              <span class="text-[11px] font-bold px-2 py-0.5 rounded bg-indigo-50 text-indigo-700">${totalLogs} Total Sessions</span>
-            </div>
+          <div class="bg-slate-50 px-4 py-3 rounded-xl border border-slate-200 flex items-center justify-between">
+            <span class="text-xs font-bold text-slate-500">Attendance Rate</span>
+            <strong class="text-base font-black text-indigo-700">${attendancePct}%</strong>
           </div>
         </div>
 
-        <div class="grid grid-cols-1 lg:grid-cols-3 gap-5">
-          <!-- Left 2 Columns: Attendance Dates & Lesson History Table -->
-          <div class="lg:col-span-2 bg-white rounded-xl border border-slate-200 shadow-2xs overflow-hidden">
-            <div class="px-4 py-3 bg-slate-50 border-b border-slate-200 flex items-center justify-between gap-2 flex-wrap">
-              <div>
-                <h4 class="text-xs font-black text-slate-800 uppercase tracking-wider">Attendance Dates &amp; Teacher Lesson Logs</h4>
-                <p class="text-[11px] text-slate-500">Click any date row to view the exact Daily Lesson recorded by the Teacher on that date.</p>
-              </div>
-              <div class="flex items-center gap-1.5 flex-wrap">
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+          <!-- Attendance & Daily Lessons Table -->
+          <div class="lg:col-span-2 rounded-xl border border-slate-200 overflow-hidden">
+            <div class="px-4 py-2.5 bg-slate-50 border-b border-slate-200 flex items-center justify-between gap-2 flex-wrap">
+              <div class="flex items-center gap-1.5">
                 ${['all', 'Present', 'Absent', 'Leave'].map(st => `
                   <button onclick="filterStudentAttendanceInFamily('${st}')"
                           class="px-2.5 py-1 rounded-lg text-[11px] font-extrabold transition cursor-pointer ${filterStatus === st ? 'bg-slate-900 text-white' : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-100'}">
                     ${st === 'all' ? 'All Dates' : st}
                   </button>
                 `).join('')}
-                <button onclick="openRecordDailyLessonModal('${_esc360(family.id)}', '${_esc360(student.id)}')"
-                        class="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-extrabold transition cursor-pointer flex items-center gap-1">
-                  <i class="fa-solid fa-plus"></i> Record Attendance / Lesson
-                </button>
               </div>
+              <button onclick="openRecordDailyLessonModal('${_esc360(family.id)}', '${_esc360(student.id)}')"
+                      class="px-3 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-extrabold transition cursor-pointer inline-flex items-center gap-1 whitespace-nowrap">
+                <i class="fa-solid fa-plus"></i> Record Attendance / Lesson
+              </button>
             </div>
 
             ${filteredLogs.length === 0 ? `
-              <div class="p-10 text-center text-slate-400 text-xs">
-                No attendance records found for the selected filter.
+              <div class="p-8 text-center text-slate-400 text-xs">
+                No attendance records found for this student yet.
               </div>
             ` : `
-              <div class="overflow-x-auto max-h-96 overflow-y-auto">
+              <div class="overflow-x-auto max-h-72 overflow-y-auto">
                 <table class="w-full text-left text-xs border-collapse">
-                  <thead class="bg-slate-50/90 text-slate-600 font-extrabold border-b border-slate-200 sticky top-0">
+                  <thead class="bg-slate-50 text-slate-600 font-extrabold border-b border-slate-200 sticky top-0">
                     <tr>
-                      <th class="p-3">Date</th>
-                      <th class="p-3">Attendance Status</th>
-                      <th class="p-3">Recorded Daily Lesson (Teacher Portal)</th>
-                      <th class="p-3 text-right">Action</th>
+                      <th class="px-3.5 py-2.5">Date</th>
+                      <th class="px-3.5 py-2.5">Status</th>
+                      <th class="px-3.5 py-2.5">Teacher's Recorded Lesson</th>
+                      <th class="px-3.5 py-2.5 text-right">View</th>
                     </tr>
                   </thead>
                   <tbody class="divide-y divide-slate-100">
@@ -1140,30 +1150,23 @@ function _buildSelectedStudentWorkspaceHtml(family, student, famSchedules, famLo
                       const isActiveDate = activeLessonLog && activeLessonLog.date === log.date;
                       const st = String(log.status || 'Present');
                       const badgeCls = st.toLowerCase() === 'present'
-                        ? 'bg-emerald-100 text-emerald-800 border-emerald-200'
+                        ? 'bg-emerald-100 text-emerald-800'
                         : st.toLowerCase() === 'absent'
-                        ? 'bg-rose-100 text-rose-800 border-rose-200'
-                        : 'bg-amber-100 text-amber-800 border-amber-200';
+                        ? 'bg-rose-100 text-rose-800'
+                        : 'bg-amber-100 text-amber-800';
 
                       return `
                         <tr onclick="selectStudentLessonDateInFamily('${_esc360(log.date)}')"
-                            class="cursor-pointer transition ${isActiveDate ? 'bg-indigo-50/80 font-bold' : 'hover:bg-slate-50'}">
-                          <td class="p-3 font-mono font-extrabold text-slate-800">${_esc360(log.date)}</td>
-                          <td class="p-3">
-                            <span class="px-2 py-0.5 rounded border text-[10px] font-extrabold ${badgeCls}">${_esc360(st)}</span>
+                            class="cursor-pointer transition ${isActiveDate ? 'bg-indigo-50/70 font-bold' : 'hover:bg-slate-50'}">
+                          <td class="px-3.5 py-2.5 font-mono font-bold text-slate-800 whitespace-nowrap">${_esc360(log.date)}</td>
+                          <td class="px-3.5 py-2.5 whitespace-nowrap">
+                            <span class="px-2 py-0.5 rounded text-[10px] font-extrabold ${badgeCls}">${_esc360(st)}</span>
                           </td>
-                          <td class="p-3 text-slate-700">
-                            ${parsedLesson.hasLesson
-                              ? `<span class="font-bold text-slate-900">${_esc360(parsedLesson.summaryTitle)}</span>
-                                 ${parsedLesson.remarks ? `<span class="text-slate-500 block text-[11px] truncate max-w-xs">${_esc360(parsedLesson.remarks)}</span>` : ''}`
-                              : `<span class="text-slate-400 italic">No lesson recorded for this date</span>`
-                            }
+                          <td class="px-3.5 py-2.5 text-slate-700 truncate max-w-xs">
+                            ${parsedLesson.hasLesson ? _esc360(parsedLesson.summaryTitle) : '<span class="text-slate-400 italic">No lesson recorded</span>'}
                           </td>
-                          <td class="p-3 text-right">
-                            <button onclick="event.stopPropagation(); selectStudentLessonDateInFamily('${_esc360(log.date)}')"
-                                    class="px-2.5 py-1 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-extrabold text-[11px]">
-                              Inspect Lesson
-                            </button>
+                          <td class="px-3.5 py-2.5 text-right whitespace-nowrap">
+                            <span class="text-indigo-600 font-extrabold text-[11px] hover:underline">Open</span>
                           </td>
                         </tr>
                       `;
@@ -1174,66 +1177,39 @@ function _buildSelectedStudentWorkspaceHtml(family, student, famSchedules, famLo
             `}
           </div>
 
-          <!-- Right Column: Selected Date's Daily Lesson Detail Card (Section #9) -->
-          <div class="bg-white rounded-xl border border-slate-200 shadow-2xs p-5 flex flex-col justify-between">
+          <!-- Selected Date Lesson Inspector -->
+          <div class="rounded-xl border border-slate-200 bg-slate-50/60 p-4 flex flex-col justify-between">
             ${activeLessonLog ? (() => {
               const p = _parseLessonDetails360(activeLessonLog);
               return `
-                <div>
-                  <div class="flex items-center justify-between border-b border-slate-100 pb-3 mb-4">
-                    <div>
-                      <span class="text-[10px] font-extrabold uppercase tracking-wider text-indigo-600 block">Daily Lesson Inspector</span>
-                      <h4 class="text-base font-black text-slate-900 mt-0.5 font-mono">${_esc360(activeLessonLog.date)}</h4>
-                    </div>
-                    <span class="px-2.5 py-1 rounded-lg text-xs font-extrabold ${String(activeLessonLog.status).toLowerCase() === 'present' ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'}">
+                <div class="space-y-2.5 text-xs">
+                  <div class="flex items-center justify-between border-b border-slate-200 pb-2">
+                    <span class="font-mono font-black text-slate-900">${_esc360(activeLessonLog.date)}</span>
+                    <span class="px-2 py-0.5 rounded text-[10px] font-extrabold ${String(activeLessonLog.status).toLowerCase() === 'present' ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'}">
                       ${_esc360(activeLessonLog.status || 'Present')}
                     </span>
                   </div>
-
                   ${p.hasLesson ? `
-                    <div class="space-y-3 text-xs">
-                      <div class="p-3 rounded-xl bg-slate-50 border border-slate-200/80">
-                        <span class="text-[10px] font-bold text-slate-400 uppercase block">Book / Surah / Sabaq</span>
-                        <strong class="text-slate-900 text-sm block mt-0.5">${_esc360(p.bookTitle || p.summaryTitle)}</strong>
-                      </div>
-                      <div class="grid grid-cols-2 gap-2.5">
-                        <div class="p-3 rounded-xl bg-slate-50 border border-slate-200/80">
-                          <span class="text-[10px] font-bold text-slate-400 uppercase block">Page / Verse</span>
-                          <strong class="text-slate-800">${_esc360(p.page ? `Page ${p.page}` : 'Standard')} ${_esc360(p.lineRange ? `(${p.lineRange})` : '')}</strong>
-                        </div>
-                        <div class="p-3 rounded-xl bg-slate-50 border border-slate-200/80">
-                          <span class="text-[10px] font-bold text-slate-400 uppercase block">Evaluation</span>
-                          <strong class="text-emerald-700">${_esc360(p.assessment || 'Completed')}</strong>
-                        </div>
-                      </div>
-                      <div class="p-3 rounded-xl bg-indigo-50/50 border border-indigo-100">
-                        <span class="text-[10px] font-bold text-indigo-700 uppercase block">Teacher's Recorded Lesson &amp; Notes</span>
-                        <p class="text-slate-800 font-medium mt-1 leading-relaxed">${_esc360(p.remarks || p.summaryTitle)}</p>
-                      </div>
+                    <div>
+                      <span class="text-[10px] font-bold text-slate-400 uppercase block">Book / Surah / Sabaq</span>
+                      <strong class="text-slate-900 block">${_esc360(p.bookTitle || p.summaryTitle)}</strong>
+                    </div>
+                    <div>
+                      <span class="text-[10px] font-bold text-slate-400 uppercase block">Teacher Remarks</span>
+                      <p class="text-slate-700 mt-0.5">${_esc360(p.remarks || p.summaryTitle)}</p>
                     </div>
                   ` : `
-                    <div class="py-8 text-center text-slate-400 text-xs">
-                      <i class="fa-solid fa-book-open text-2xl mb-2 block text-slate-300"></i>
-                      No lesson details were recorded by the teacher for <strong>${_esc360(activeLessonLog.date)}</strong>.
-                    </div>
+                    <div class="py-6 text-center text-slate-400">No lesson recorded for ${_esc360(activeLessonLog.date)}.</div>
                   `}
                 </div>
-                <div class="pt-4 border-t border-slate-100 mt-4">
-                  <button onclick="openRecordDailyLessonModal('${_esc360(family.id)}', '${_esc360(student.id)}', '${_esc360(activeLessonLog.date)}')"
-                          class="w-full py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-extrabold transition cursor-pointer">
-                    <i class="fa-solid fa-pen-to-square mr-1"></i> Update Lesson for ${_esc360(activeLessonLog.date)}
-                  </button>
-                </div>
+                <button onclick="openRecordDailyLessonModal('${_esc360(family.id)}', '${_esc360(student.id)}', '${_esc360(activeLessonLog.date)}')"
+                        class="mt-3 w-full py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-white text-xs font-extrabold transition cursor-pointer">
+                  Update Lesson (${_esc360(activeLessonLog.date)})
+                </button>
               `;
             })() : `
-              <div class="py-12 text-center text-slate-400 text-xs">
-                No attendance or daily lesson history has been recorded yet for ${_esc360(student.name)}.
-                <div class="mt-3">
-                  <button onclick="openRecordDailyLessonModal('${_esc360(family.id)}', '${_esc360(student.id)}')"
-                          class="px-4 py-2 rounded-xl bg-emerald-600 text-white font-extrabold text-xs">
-                    + Record First Attendance &amp; Lesson
-                  </button>
-                </div>
+              <div class="py-8 text-center text-slate-400 text-xs">
+                Click "Record Attendance / Lesson" to log the first session.
               </div>
             `}
           </div>
@@ -1242,91 +1218,79 @@ function _buildSelectedStudentWorkspaceHtml(family, student, famSchedules, famLo
     `;
   }
 
-  // ---------------------------------------------------------------------------
-  // SUB-VIEW 2: STUDENT ACADEMIC PROGRESS & REPORT (Section #8)
-  // ---------------------------------------------------------------------------
+  // SUB-VIEW 2: ACADEMIC PROGRESS REPORT
   else if (subView === 'report') {
     const currentLevel = stuMeta.current_level || student.course_id || 'Noorani Qaida / Nazra Quran';
     const currentSabaq = stuMeta.current_sabaq || (stuLogs[0] ? _parseLessonDetails360(stuLogs[0]).summaryTitle : 'In Progress');
     const teacherEval = stuMeta.overall_evaluation || (attendancePct >= 85 ? 'Excellent Consistency' : 'Needs Regular Attendance');
 
     bodyHtml = `
-      <div class="bg-white rounded-xl border border-slate-200 p-5 shadow-2xs space-y-4">
-        <div class="flex items-center justify-between flex-wrap gap-3 border-b border-slate-100 pb-3">
-          <div>
-            <h4 class="text-sm font-black text-slate-900">Academic Progress &amp; Performance Report — ${_esc360(student.name)}</h4>
-            <p class="text-xs text-slate-500">Instructor: <strong>${_esc360(assignedTeacher ? assignedTeacher.full_name : 'Not Assigned')}</strong> &bull; Course: <strong>${_esc360(student.course_id || 'Quran Studies')}</strong></p>
+      <div class="p-5 space-y-4">
+        <div class="flex items-center justify-between flex-wrap gap-2">
+          <div class="text-xs text-slate-600">
+            Instructor: <strong class="text-slate-900">${_esc360(assignedTeacher ? assignedTeacher.full_name : 'Not Assigned')}</strong> &bull;
+            Course: <strong class="text-emerald-700">${_esc360(student.course_id || 'Quran Studies')}</strong>
           </div>
-          <div class="flex items-center gap-2">
-            <button onclick="openUpdateStudentProgressModal('${_esc360(family.id)}', '${_esc360(student.id)}')"
-                    class="px-3.5 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-extrabold transition cursor-pointer">
-              <i class="fa-solid fa-pen-to-square mr-1"></i> Update Progress Milestone
-            </button>
-          </div>
+          <button onclick="openUpdateStudentProgressModal('${_esc360(family.id)}', '${_esc360(student.id)}')"
+                  class="px-3.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-extrabold transition cursor-pointer">
+            <i class="fa-solid fa-pen-to-square mr-1"></i> Update Progress Milestone
+          </button>
         </div>
 
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
-          <div class="p-4 rounded-xl bg-slate-50 border border-slate-200">
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
+          <div class="p-3.5 rounded-xl bg-slate-50 border border-slate-200">
             <span class="text-[10px] font-bold text-slate-400 uppercase block">Current Syllabus / Level</span>
-            <strong class="text-sm text-slate-900 block mt-1">${_esc360(currentLevel)}</strong>
-            <span class="text-slate-500 block mt-1">Latest Sabaq: ${_esc360(currentSabaq)}</span>
+            <strong class="text-sm text-slate-900 block mt-0.5">${_esc360(currentLevel)}</strong>
+            <span class="text-slate-500 block mt-0.5">Latest Sabaq: ${_esc360(currentSabaq)}</span>
           </div>
-          <div class="p-4 rounded-xl bg-slate-50 border border-slate-200">
-            <span class="text-[10px] font-bold text-slate-400 uppercase block">Cumulative Attendance</span>
-            <strong class="text-sm text-emerald-700 block mt-1">${attendancePct}% (${attendedCount} Present / ${missedCount} Missed)</strong>
-            <span class="text-slate-500 block mt-1">Joined: ${_esc360(student.joining_date || '2026-01-01')}</span>
+          <div class="p-3.5 rounded-xl bg-slate-50 border border-slate-200">
+            <span class="text-[10px] font-bold text-slate-400 uppercase block">Attendance Accuracy</span>
+            <strong class="text-sm text-emerald-700 block mt-0.5">${attendancePct}% (${attendedCount} Present / ${missedCount} Missed)</strong>
+            <span class="text-slate-500 block mt-0.5">Joined: ${_esc360(student.joining_date || '2026-01-01')}</span>
           </div>
-          <div class="p-4 rounded-xl bg-slate-50 border border-slate-200">
+          <div class="p-3.5 rounded-xl bg-slate-50 border border-slate-200">
             <span class="text-[10px] font-bold text-slate-400 uppercase block">Instructor Evaluation</span>
-            <strong class="text-sm text-indigo-700 block mt-1">${_esc360(teacherEval)}</strong>
-            <span class="text-slate-500 block mt-1">Certificates Earned: ${(stuMeta.certificates || []).length}</span>
+            <strong class="text-sm text-indigo-700 block mt-0.5">${_esc360(teacherEval)}</strong>
+            <span class="text-slate-500 block mt-0.5">Certificates Earned: ${(stuMeta.certificates || []).length}</span>
           </div>
         </div>
       </div>
     `;
   }
 
-  // ---------------------------------------------------------------------------
-  // SUB-VIEW 3: STUDENT CERTIFICATES (Section #11)
-  // ---------------------------------------------------------------------------
+  // SUB-VIEW 3: STUDENT CERTIFICATES
   else if (subView === 'certificates') {
     const certs = stuMeta.certificates || [];
     bodyHtml = `
-      <div class="bg-white rounded-xl border border-slate-200 p-5 shadow-2xs space-y-4">
-        <div class="flex items-center justify-between flex-wrap gap-3 border-b border-slate-100 pb-3">
-          <div>
-            <h4 class="text-sm font-black text-slate-900">Issued Academic Certificates — ${_esc360(student.name)}</h4>
-            <p class="text-xs text-slate-500">Manage official course completion and achievement certificates for this student.</p>
-          </div>
+      <div class="p-5 space-y-4">
+        <div class="flex items-center justify-between flex-wrap gap-2">
+          <span class="text-xs text-slate-600 font-semibold">Official course completion and milestone certificates issued to <strong>${_esc360(student.name)}</strong>.</span>
           <button onclick="openIssueStudentCertificateModal('${_esc360(family.id)}', '${_esc360(student.id)}')"
-                  class="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-extrabold transition cursor-pointer flex items-center gap-1.5">
+                  class="px-3.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-extrabold transition cursor-pointer inline-flex items-center gap-1.5 whitespace-nowrap">
             <i class="fa-solid fa-plus"></i> Issue New Certificate
           </button>
         </div>
 
         ${certs.length === 0 ? `
-          <div class="py-10 text-center text-slate-400 text-xs">
-            <i class="fa-solid fa-award text-2xl text-slate-300 mb-2 block"></i>
+          <div class="py-8 text-center bg-slate-50 rounded-xl border border-dashed border-slate-200 text-slate-400 text-xs">
             No certificates have been issued for ${_esc360(student.name)} yet.
           </div>
         ` : `
           <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
             ${certs.map(c => `
-              <div class="p-4 rounded-xl border border-emerald-200 bg-emerald-50/40 flex items-center justify-between gap-3">
+              <div class="p-3.5 rounded-xl border border-emerald-200 bg-emerald-50/40 flex items-center justify-between gap-3">
                 <div>
                   <span class="px-2 py-0.5 rounded bg-emerald-700 text-white text-[10px] font-black uppercase">${_esc360(c.code || 'CERT')}</span>
-                  <h5 class="text-sm font-black text-slate-900 mt-1">${_esc360(c.title)}</h5>
-                  <p class="text-xs text-slate-600">Awarded on: <strong>${_esc360(c.date)}</strong> &bull; Grade: <strong>${_esc360(c.grade || 'A+ Distinction')}</strong></p>
-                  ${c.remarks ? `<p class="text-[11px] text-slate-500 mt-0.5">${_esc360(c.remarks)}</p>` : ''}
+                  <h5 class="text-xs font-black text-slate-900 mt-1">${_esc360(c.title)}</h5>
+                  <p class="text-[11px] text-slate-600">Date: <strong>${_esc360(c.date)}</strong> &bull; Grade: <strong>${_esc360(c.grade || 'A+')}</strong></p>
                 </div>
                 <div class="flex items-center gap-1.5 shrink-0">
                   <button onclick="printStudentCertificate360('${_esc360(family.id)}', '${_esc360(student.id)}', '${_esc360(c.id)}')"
-                          class="px-3 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-white text-xs font-extrabold transition cursor-pointer">
-                    <i class="fa-solid fa-print mr-1"></i> View / Print
+                          class="px-2.5 py-1 rounded-lg bg-slate-900 text-white text-xs font-extrabold cursor-pointer">
+                    Print
                   </button>
                   <button onclick="deleteStudentCertificate360('${_esc360(family.id)}', '${_esc360(student.id)}', '${_esc360(c.id)}')"
-                          class="w-8 h-8 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 flex items-center justify-center transition cursor-pointer"
-                          title="Delete Certificate">
+                          class="w-7 h-7 rounded-lg bg-rose-50 text-rose-600 border border-rose-200 inline-flex items-center justify-center cursor-pointer">
                     <i class="fa-solid fa-trash-can text-xs"></i>
                   </button>
                 </div>
@@ -1338,49 +1302,42 @@ function _buildSelectedStudentWorkspaceHtml(family, student, famSchedules, famLo
     `;
   }
 
-  // ---------------------------------------------------------------------------
-  // SUB-VIEW 4: STUDENT INFORMATION & SCHEDULE (Sections #7, #10, #12)
-  // ---------------------------------------------------------------------------
+  // SUB-VIEW 4: STUDENT INFORMATION & SCHEDULE
   else {
     const scheduleStr = stuSchedules.length > 0
       ? stuSchedules.map(sc => `${_DAY_LABELS_360[sc.day_of_week] || sc.day_of_week} (${(sc.start_time || '').slice(0,5)} - ${(sc.end_time || '').slice(0,5)})`).join(', ')
-      : (stuMeta.days_per_week || 'Flexible Weekly Schedule');
+      : (stuMeta.days_per_week || '5 Days (Mon-Fri)');
 
     bodyHtml = `
-      <div class="bg-white rounded-xl border border-slate-200 p-5 shadow-2xs space-y-4">
-        <div class="flex items-center justify-between flex-wrap gap-3 border-b border-slate-100 pb-3">
-          <div>
-            <h4 class="text-sm font-black text-slate-900">Student Profile Information — ${_esc360(student.name)} (${_esc360(student.id)})</h4>
-            <p class="text-xs text-slate-500">Individual student settings, assigned teacher, and weekly timetable inside ${_esc360(family.parent_name)}'s Family Profile.</p>
-          </div>
-          <div class="flex items-center gap-2">
-            <button onclick="openEditSingleStudentModal('${_esc360(family.id)}', '${_esc360(student.id)}')"
-                    class="px-3.5 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-white text-xs font-extrabold transition cursor-pointer flex items-center gap-1.5">
-              <i class="fa-solid fa-pen-to-square"></i> Edit Student Information
-            </button>
-          </div>
+      <div class="p-5 space-y-3">
+        <div class="flex items-center justify-between flex-wrap gap-2">
+          <span class="text-xs text-slate-600 font-semibold">Individual student details and class schedule for <strong>${_esc360(student.name)}</strong>.</span>
+          <button onclick="openEditSingleStudentModal('${_esc360(family.id)}', '${_esc360(student.id)}')"
+                  class="px-3.5 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-600 text-white text-xs font-extrabold transition cursor-pointer inline-flex items-center gap-1.5">
+            <i class="fa-solid fa-pen-to-square"></i> Edit Student Info
+          </button>
         </div>
 
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
           <div class="p-3.5 rounded-xl bg-slate-50 border border-slate-200 space-y-1.5">
-            <div><span class="text-slate-400 font-bold">Student Name:</span> <strong class="text-slate-900 float-right">${_esc360(student.name)}</strong></div>
-            <div><span class="text-slate-400 font-bold">Student ID:</span> <strong class="text-slate-900 font-mono float-right">${_esc360(student.id)}</strong></div>
-            <div><span class="text-slate-400 font-bold">Age / Gender:</span> <strong class="text-slate-900 float-right">${_esc360(student.age || '--')} yrs &bull; ${_esc360(student.gender || '--')}</strong></div>
+            <div class="flex justify-between"><span class="text-slate-500">Student Name:</span> <strong class="text-slate-900">${_esc360(student.name)}</strong></div>
+            <div class="flex justify-between"><span class="text-slate-500">Student ID:</span> <strong class="font-mono text-slate-900">${_esc360(student.id)}</strong></div>
+            <div class="flex justify-between"><span class="text-slate-500">Age / Gender:</span> <strong class="text-slate-900">${_esc360(student.age || '--')} yrs &bull; ${_esc360(student.gender || '--')}</strong></div>
           </div>
           <div class="p-3.5 rounded-xl bg-slate-50 border border-slate-200 space-y-1.5">
-            <div><span class="text-slate-400 font-bold">Course:</span> <strong class="text-emerald-700 float-right">${_esc360(student.course_id || 'Quran Studies')}</strong></div>
-            <div><span class="text-slate-400 font-bold">Joining Date:</span> <strong class="text-slate-900 font-mono float-right">${_esc360(student.joining_date || '--')}</strong></div>
-            <div><span class="text-slate-400 font-bold">Status:</span> <strong class="text-slate-900 float-right">${_esc360(student.status || 'Active')}</strong></div>
+            <div class="flex justify-between"><span class="text-slate-500">Course:</span> <strong class="text-emerald-700">${_esc360(student.course_id || 'Quran Studies')}</strong></div>
+            <div class="flex justify-between"><span class="text-slate-500">Joining Date:</span> <strong class="font-mono text-slate-900">${_esc360(student.joining_date || '--')}</strong></div>
+            <div class="flex justify-between"><span class="text-slate-500">Status:</span> <strong class="text-slate-900">${_esc360(student.status || 'Active')}</strong></div>
           </div>
           <div class="p-3.5 rounded-xl bg-slate-50 border border-slate-200 space-y-1.5">
-            <div>
-              <span class="text-slate-400 font-bold">Assigned Teacher:</span>
+            <div class="flex justify-between">
+              <span class="text-slate-500">Teacher:</span>
               ${assignedTeacher
-                ? `<button onclick="openTeacherScheduleFromFamily('${_esc360(assignedTeacher.id)}', '${_esc360(student.id)}')" class="text-indigo-700 font-extrabold hover:underline float-right cursor-pointer">${_esc360(assignedTeacher.full_name)}</button>`
-                : `<span class="text-slate-400 float-right">Not Assigned</span>`
+                ? `<button onclick="openTeacherScheduleFromFamily('${_esc360(assignedTeacher.id)}', '${_esc360(student.id)}')" class="text-indigo-700 font-extrabold hover:underline cursor-pointer">${_esc360(assignedTeacher.full_name)}</button>`
+                : `<span class="text-slate-400">Not Assigned</span>`
               }
             </div>
-            <div class="clear-both pt-1"><span class="text-slate-400 font-bold block">Weekly Schedule:</span> <strong class="text-slate-800 block mt-0.5">${_esc360(scheduleStr)}</strong></div>
+            <div class="flex justify-between"><span class="text-slate-500">Schedule:</span> <strong class="text-slate-800 text-right">${_esc360(scheduleStr)}</strong></div>
           </div>
         </div>
       </div>
@@ -1388,34 +1345,35 @@ function _buildSelectedStudentWorkspaceHtml(family, student, famSchedules, famLo
   }
 
   return `
-    <div class="space-y-4">
-      <!-- Selected Student Sub-Header & Sub-Navigation -->
-      <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 bg-white p-3.5 rounded-xl border border-indigo-200 shadow-2xs">
-        <div class="flex items-center gap-3">
-          <div class="w-9 h-9 rounded-xl bg-indigo-600 text-white font-black text-sm flex items-center justify-center">
+    <div class="bg-white rounded-xl border border-slate-200 shadow-2xs overflow-hidden">
+      <!-- Single Unified Header Bar (Never wraps STU-ID or Sub-Tabs onto messy lines) -->
+      <div class="px-4 py-3 bg-slate-900 text-white flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
+        <div class="flex items-center gap-2.5 whitespace-nowrap">
+          <span class="w-7 h-7 rounded-lg bg-indigo-600 text-white font-black text-xs inline-flex items-center justify-center shrink-0">
             ${_esc360((student.name || 'S').charAt(0).toUpperCase())}
-          </div>
-          <div>
-            <div class="flex items-center gap-2">
-              <span class="text-[10px] font-black uppercase tracking-wider text-indigo-600">Selected Student Workspace</span>
-              <span class="font-mono text-[11px] font-bold text-slate-400">${_esc360(student.id)}</span>
-            </div>
-            <h3 class="text-sm font-black text-slate-900">${_esc360(student.name)} — ${_esc360(student.course_id || 'Quran Studies')}</h3>
-          </div>
+          </span>
+          <span class="font-black text-sm text-white">${_esc360(student.name)}</span>
+          <span class="px-2 py-0.5 rounded bg-white/10 font-mono text-[11px] font-bold text-slate-200 whitespace-nowrap">${_esc360(student.id)}</span>
+          <span class="text-xs text-slate-400 hidden sm:inline">&bull; ${_esc360(student.course_id || 'Quran Studies')}</span>
         </div>
 
-        <div class="flex items-center gap-1.5 flex-wrap">
+        <div class="flex items-center gap-1.5 overflow-x-auto no-scrollbar">
           ${subNavItems.map(item => `
             <button onclick="selectStudentInFamilyProfile('${_esc360(family.id)}', '${_esc360(student.id)}', '${item.id}')"
-                    class="px-3 py-1.5 rounded-xl text-xs font-extrabold transition flex items-center gap-1.5 cursor-pointer ${
+                    class="px-3 py-1.5 rounded-lg text-xs font-extrabold transition inline-flex items-center gap-1.5 whitespace-nowrap cursor-pointer ${
                       subView === item.id
                         ? 'bg-indigo-600 text-white shadow-2xs'
-                        : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
+                        : 'bg-white/10 hover:bg-white/20 text-slate-200'
                     }">
               <i class="fa-solid ${item.icon}"></i>
               <span>${_esc360(item.label)}</span>
             </button>
           `).join('')}
+          <button onclick="closeSelectedStudentDrawer()"
+                  class="ml-1 w-7 h-7 rounded-lg bg-white/10 hover:bg-rose-600 text-slate-300 hover:text-white inline-flex items-center justify-center transition shrink-0 cursor-pointer"
+                  title="Collapse Student Detail Panel">
+            <i class="fa-solid fa-xmark text-xs"></i>
+          </button>
         </div>
       </div>
 
