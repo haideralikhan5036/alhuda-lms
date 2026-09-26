@@ -2397,6 +2397,14 @@
       </div>
     </section>
 
+    <!-- ========================================================== -->
+    <!-- TAB: FULL-SCREEN DEDICATED 360° PROFILE WORKSPACE          -->
+    <!-- (Student Profile • Family/Parent Profile • Teacher Profile)-->
+    <!-- ========================================================== -->
+    <section id="tab-profile-360" class="tab-content hidden space-y-5 pb-10">
+      <div id="unified360PageWorkspace" class="w-full space-y-5"></div>
+    </section>
+
   </main>
 
   <!-- ============================================================= -->
@@ -5365,35 +5373,6 @@
         <span id="graphDrilldownFooterNote" class="text-slate-500 font-semibold">Showing verified monthly records</span>
         <button onclick="closeModal('modalGraphMonthDrilldown')" class="px-4 py-1.5 bg-slate-800 hover:bg-slate-900 text-white rounded-xl font-bold">
           Close View
-        </button>
-      </div>
-    </div>
-  </div>
-
-  <!-- ========================================================================== -->
-  <!-- UNIFIED 360° ENTITY PROFILE MODAL (STUDENT • FAMILY/PARENT • TEACHER)      -->
-  <!-- ========================================================================== -->
-  <div id="modalUnified360Profile" class="fixed inset-0 bg-black/65 backdrop-blur-xs z-50 hidden items-center justify-center p-2 sm:p-4 overflow-y-auto">
-    <div class="bg-slate-50 rounded-3xl max-w-6xl w-full shadow-2xl border border-slate-200 overflow-hidden my-auto max-h-[94vh] flex flex-col">
-      <!-- Top Breadcrumb & Cross-Entity Navigation Bar -->
-      <div class="px-4 py-2.5 bg-white border-b border-slate-200 flex items-center justify-between gap-3 shrink-0">
-        <div id="unified360BreadcrumbBar" class="flex-1 min-w-0"></div>
-        <button onclick="closeModal('modalUnified360Profile')" class="w-8 h-8 rounded-xl bg-slate-100 hover:bg-rose-100 text-slate-600 hover:text-rose-700 flex items-center justify-center font-bold transition shrink-0" title="Close 360° Profile">
-          <i class="fa-solid fa-xmark"></i>
-        </button>
-      </div>
-
-      <!-- Dynamic 360° Profile Content Body -->
-      <div id="unified360BodyContainer" class="p-4 sm:p-5 overflow-y-auto flex-1 space-y-4">
-      </div>
-
-      <!-- Modal Footer -->
-      <div class="px-4 py-3 bg-white border-t border-slate-200 flex items-center justify-between text-xs shrink-0">
-        <span class="text-slate-500 font-semibold flex items-center gap-1.5">
-          <i class="fa-solid fa-circle-nodes text-brandEmerald"></i> Unified 360° Profile System &bull; Live LMS Data Sync
-        </span>
-        <button onclick="closeModal('modalUnified360Profile')" class="px-4 py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl font-extrabold transition">
-          Close 360° Profile
         </button>
       </div>
     </div>
