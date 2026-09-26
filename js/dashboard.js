@@ -81,28 +81,129 @@
       initDashboardCharts();
     }
 
+    let _lastTappedMobileChartMonth = { signups: -1, fees: -1 };
+
+    function dismissMobileChartTooltip() {
+      const tooltipEl = document.getElementById('lmsModernChartTooltip');
+      if (tooltipEl) {
+        tooltipEl.style.opacity = '0';
+        tooltipEl.style.pointerEvents = 'none';
+      }
+      _lastTappedMobileChartMonth = { signups: -1, fees: -1 };
+    }
+
+    // Dismiss mobile chart tooltip when tapping outside chart canvases
+    if (typeof document !== 'undefined' && !window._lmsMobileChartDismissBound) {
+      window._lmsMobileChartDismissBound = true;
+      document.addEventListener('touchstart', (e) => {
+        if (window.innerWidth >= 768) return;
+        const t = e.target;
+        if (!t) return;
+        if (t.closest && (t.closest('#chartStudentGrowth') || t.closest('#chartFeeRevenue') || t.closest('#lmsModernChartTooltip'))) {
+          return;
+        }
+        dismissMobileChartTooltip();
+      }, { passive: true });
+    }
+
     function renderModernChartExternalTooltip(context, chartKind) {
       const { chart, tooltip } = context;
       let tooltipEl = document.getElementById('lmsModernChartTooltip');
       if (!tooltipEl) {
         tooltipEl = document.createElement('div');
         tooltipEl.id = 'lmsModernChartTooltip';
-        tooltipEl.style.cssText = 'position:fixed;z-index:9999;pointer-events:none;opacity:0;transition:opacity 0.16s ease, transform 0.16s cubic-bezier(0.16,1,0.3,1);transform:translate(-50%, -105%);';
+        tooltipEl.style.cssText = 'position:fixed;z-index:9999;pointer-events:none;opacity:0;transition:opacity 0.15s ease, transform 0.15s cubic-bezier(0.16,1,0.3,1);transform:translate(-50%, -105%);';
         document.body.appendChild(tooltipEl);
       }
 
       if (!tooltip || tooltip.opacity === 0 || !tooltip.dataPoints || tooltip.dataPoints.length === 0) {
         tooltipEl.style.opacity = '0';
+        tooltipEl.style.pointerEvents = 'none';
         return;
       }
 
+      const isMobile = window.innerWidth < 768;
       const primaryPt = tooltip.dataPoints[0];
       const mIdx = primaryPt.dataIndex;
       const dsIdx = primaryPt.datasetIndex;
       const mLabel = GRAPH_MONTH_LABELS[mIdx] || 'Current';
+      const shortMonthTitle = mLabel.replace('-', ' ');
       const prevMLabel = mIdx > 0 ? GRAPH_MONTH_LABELS[mIdx - 1] : 'Prior Period';
       const isFeeChart = chartKind === 'fees';
 
+      // =========================================================================
+      // COMPACT, TOUCH-FRIENDLY MOBILE TOOLTIP (< 768px)
+      // Stays strictly inside viewport, never covers bars, shows essential values
+      // =========================================================================
+      if (isMobile) {
+        const fmtCompact = (v) => {
+          const n = Number(v || 0);
+          if (!isFeeChart) return n.toLocaleString();
+          return n >= 1000 ? '$' + (n / 1000).toFixed(n % 1000 === 0 ? 0 : 1) + 'k' : '$' + n.toLocaleString();
+        };
+
+        const shortLabels = isFeeChart ? ['Target', 'Paid', 'Pending'] : ['Trial', 'Regular', 'Left'];
+        const defaultDrillCat = isFeeChart ? 'fee_paid' : 'regular';
+
+        const seriesPillsHtml = chart.data.datasets.map((series, idx) => {
+          const val = Number(series.data[mIdx] || 0);
+          const dotColor = series.borderColor || '#059669';
+          const isSelected = idx === dsIdx;
+          return `
+            <div class="flex flex-col items-center justify-center px-2 py-1 rounded-lg ${isSelected ? 'bg-slate-100 ring-1 ring-slate-300/80' : 'bg-slate-50/80'}">
+              <span class="flex items-center gap-1 text-[10px] font-semibold text-slate-500 leading-none">
+                <span style="background:${dotColor}" class="w-2 h-2 rounded-full inline-block shrink-0"></span>
+                ${shortLabels[idx] || series.label}
+              </span>
+              <span class="lms-num-table font-extrabold text-slate-900 text-xs mt-1 leading-none">${fmtCompact(val)}</span>
+            </div>
+          `;
+        }).join('');
+
+        tooltipEl.style.pointerEvents = 'auto';
+        tooltipEl.innerHTML = `
+          <div class="bg-white/98 backdrop-blur-md rounded-xl border border-slate-200 shadow-lg px-3 py-2.5 w-[224px] max-w-[calc(100vw-20px)] text-slate-800">
+            <div class="flex items-center justify-between gap-1.5 pb-1.5 mb-1.5 border-b border-slate-100">
+              <span class="px-2 py-0.5 rounded bg-slate-900 text-white lms-num-id text-[11px] font-bold">${shortMonthTitle}</span>
+              <div class="flex items-center gap-1">
+                <button type="button" onclick="openGraphMonthDrilldownModal(${mIdx}, '${defaultDrillCat}'); dismissMobileChartTooltip();" class="px-2 py-0.5 rounded bg-indigo-50 text-indigo-700 border border-indigo-200 text-[10.5px] font-extrabold flex items-center gap-1 active:scale-95">
+                  Details <i class="fa-solid fa-arrow-right text-[9px]"></i>
+                </button>
+                <button type="button" onclick="dismissMobileChartTooltip()" class="w-5 h-5 rounded text-slate-400 hover:text-slate-700 flex items-center justify-center text-xs">
+                  <i class="fa-solid fa-xmark"></i>
+                </button>
+              </div>
+            </div>
+            <div class="grid grid-cols-3 gap-1.5">
+              ${seriesPillsHtml}
+            </div>
+          </div>
+        `;
+
+        const rect = chart.canvas.getBoundingClientRect();
+        const cardW = 224;
+        let left = rect.left + tooltip.caretX;
+        if (left - cardW / 2 < 10) left = cardW / 2 + 10;
+        if (left + cardW / 2 > window.innerWidth - 10) left = window.innerWidth - cardW / 2 - 10;
+
+        // Anchor cleanly near the top of the chart canvas so bars remain visible
+        let top = Math.max(12, rect.top - 8);
+        tooltipEl.style.transform = 'translate(-50%, -85%)';
+        if (top < 70) {
+          top = rect.top + 4;
+          tooltipEl.style.transform = 'translate(-50%, 0%)';
+        }
+
+        tooltipEl.style.left = `${left}px`;
+        tooltipEl.style.top = `${top}px`;
+        tooltipEl.style.opacity = '1';
+        return;
+      }
+
+      // =========================================================================
+      // DESKTOP FULL ANALYTICAL HOVER TOOLTIP (>= 768px) — UNCHANGED
+      // =========================================================================
+      tooltipEl.style.pointerEvents = 'none';
       const ds = chart.data.datasets[dsIdx] || chart.data.datasets[0];
       const currentVal = Number(ds.data[mIdx] || 0);
       const prevVal = mIdx > 0 ? Number(ds.data[mIdx - 1] || 0) : Number(ds.data[0] || 0);
@@ -128,7 +229,6 @@
 
       const changeIcon = diffVal > 0 ? 'fa-arrow-trend-up' : (diffVal < 0 ? 'fa-arrow-trend-down' : 'fa-minus');
 
-      // Build month breakdown across all 3 datasets for clear comparison
       const allSeriesHtml = chart.data.datasets.map((series, idx) => {
         const val = Number(series.data[mIdx] || 0);
         const dotColor = series.borderColor || '#059669';
@@ -235,10 +335,11 @@
       tooltipEl.style.opacity = '1';
     }
 
-    // Custom Chart.js Plugin: Render clean tabular numbers above bars
+    // Custom Chart.js Plugin: Render clean tabular numbers above bars (Desktop Only — Disabled on Mobile to eliminate clutter)
     const lmsBarValueLabelsPlugin = {
       id: 'lmsBarValueLabels',
       afterDatasetsDraw(chart) {
+        if (window.innerWidth < 768) return; // Keep Mobile graphs 100% clean & uncluttered
         const { ctx } = chart;
         const isRevenue = chart.canvas?.id === 'chartFeeRevenue';
         ctx.save();
@@ -270,10 +371,12 @@
       if (typeof Chart === 'undefined') return;
       Chart.defaults.font.family = "'Plus Jakarta Sans', 'Inter', 'Segoe UI', system-ui, sans-serif";
 
+      const isMobile = window.innerWidth < 768;
+
       // 1. GRAPH 1 (TOP FULL-WIDTH): NEW SIGN-UPS REPORT (Refined Violet-Indigo / Emerald-Teal / Coral-Rose)
       const ctxGrowth = document.getElementById('chartStudentGrowth')?.getContext('2d');
       if (ctxGrowth && !DASH_STUDENT_CHART) {
-        _dashGraphEntranceAnimatingUntil = Date.now() + 2200;
+        _dashGraphEntranceAnimatingUntil = Date.now() + (isMobile ? 600 : 2200);
         DASH_STUDENT_CHART = new Chart(ctxGrowth, {
           type: 'bar',
           plugins: [lmsBarValueLabelsPlugin],
@@ -281,37 +384,37 @@
             labels: GRAPH_MONTH_LABELS,
             datasets: [
               {
-                label: 'Scheduled Trial',
+                label: isMobile ? 'Trial' : 'Scheduled Trial',
                 data: [...BASELINE_SIGNUP_DATA.trial],
                 backgroundColor: 'rgba(99, 102, 241, 0.84)',
                 hoverBackgroundColor: '#4f46e5',
                 borderColor: '#4f46e5',
-                borderWidth: 1.5,
-                borderRadius: 6,
-                barPercentage: 0.78,
-                categoryPercentage: 0.72
+                borderWidth: isMobile ? 1 : 1.5,
+                borderRadius: isMobile ? 3 : 6,
+                barPercentage: isMobile ? 0.86 : 0.78,
+                categoryPercentage: isMobile ? 0.80 : 0.72
               },
               {
-                label: 'Regular Enrolled',
+                label: isMobile ? 'Regular' : 'Regular Enrolled',
                 data: [...BASELINE_SIGNUP_DATA.regular],
                 backgroundColor: 'rgba(13, 148, 136, 0.85)',
                 hoverBackgroundColor: '#0f766e',
                 borderColor: '#0d9488',
-                borderWidth: 1.5,
-                borderRadius: 6,
-                barPercentage: 0.78,
-                categoryPercentage: 0.72
+                borderWidth: isMobile ? 1 : 1.5,
+                borderRadius: isMobile ? 3 : 6,
+                barPercentage: isMobile ? 0.86 : 0.78,
+                categoryPercentage: isMobile ? 0.80 : 0.72
               },
               {
-                label: 'Left / Discontinued',
+                label: isMobile ? 'Left' : 'Left / Discontinued',
                 data: [...BASELINE_SIGNUP_DATA.left],
                 backgroundColor: 'rgba(244, 63, 94, 0.80)',
                 hoverBackgroundColor: '#e11d48',
                 borderColor: '#e11d48',
-                borderWidth: 1.5,
-                borderRadius: 6,
-                barPercentage: 0.78,
-                categoryPercentage: 0.72
+                borderWidth: isMobile ? 1 : 1.5,
+                borderRadius: isMobile ? 3 : 6,
+                barPercentage: isMobile ? 0.86 : 0.78,
+                categoryPercentage: isMobile ? 0.80 : 0.72
               }
             ]
           },
@@ -319,9 +422,10 @@
             responsive: true,
             maintainAspectRatio: false,
             animation: {
-              duration: 1350,
+              duration: isMobile ? 500 : 1350,
               easing: 'easeOutQuart',
               delay: (context) => {
+                if (isMobile) return 0;
                 if (context.type === 'data' && context.mode === 'default') {
                   return context.dataIndex * 45 + context.datasetIndex * 85;
                 }
@@ -335,11 +439,11 @@
                     return ctx.chart.scales.y.getPixelForValue(0);
                   }
                 },
-                duration: 1350,
+                duration: isMobile ? 500 : 1350,
                 easing: 'easeOutQuart'
               }
             },
-            interaction: { mode: 'nearest', axis: 'x', intersect: false },
+            interaction: { mode: isMobile ? 'index' : 'nearest', axis: 'x', intersect: false },
             onHover: (event, elements) => {
               if (elements && elements.length > 0) {
                 const mIdx = elements[0].index;
@@ -356,13 +460,32 @@
               const mIdx = targetPoint.index;
               const dsIdx = targetPoint.datasetIndex;
               const catMap = ['trial', 'regular', 'left'];
+              if (window.innerWidth < 768) {
+                // On Mobile: first tap reveals the compact tooltip & highlights month; second tap on same month opens drilldown
+                if (_lastTappedMobileChartMonth.signups === mIdx) {
+                  _lastTappedMobileChartMonth.signups = -1;
+                  dismissMobileChartTooltip();
+                  openGraphMonthDrilldownModal(mIdx, catMap[dsIdx] || 'regular');
+                } else {
+                  _lastTappedMobileChartMonth.signups = mIdx;
+                  updateSignupsGraphCalloutBar(mIdx);
+                }
+                return;
+              }
               openGraphMonthDrilldownModal(mIdx, catMap[dsIdx] || 'regular');
             },
             plugins: {
               legend: {
                 position: 'top',
-                align: 'end',
-                labels: { boxWidth: 14, usePointStyle: true, pointStyle: 'rectRounded', font: { size: 12.5, family: "'Plus Jakarta Sans', 'Inter', sans-serif", weight: '700' } }
+                align: isMobile ? 'center' : 'end',
+                labels: {
+                  boxWidth: isMobile ? 8 : 14,
+                  boxHeight: isMobile ? 8 : 14,
+                  padding: isMobile ? 10 : 16,
+                  usePointStyle: true,
+                  pointStyle: 'rectRounded',
+                  font: { size: isMobile ? 11 : 12.5, family: "'Plus Jakarta Sans', 'Inter', sans-serif", weight: '700' }
+                }
               },
               tooltip: {
                 enabled: false,
@@ -372,13 +495,28 @@
             scales: {
               x: {
                 grid: { display: false },
-                ticks: { font: { size: 12.5, family: "'Plus Jakarta Sans', 'Inter', sans-serif", weight: '600' }, color: '#1e293b' }
+                ticks: {
+                  maxRotation: 0,
+                  minRotation: 0,
+                  autoSkip: true,
+                  maxTicksLimit: isMobile ? 6 : 12,
+                  callback: function(value, index) {
+                    const rawLabel = this.getLabelForValue ? this.getLabelForValue(value) : (GRAPH_MONTH_LABELS[index] || '');
+                    return window.innerWidth < 768 ? String(rawLabel).split('-')[0] : rawLabel;
+                  },
+                  font: { size: isMobile ? 10.5 : 12.5, family: "'Plus Jakarta Sans', 'Inter', sans-serif", weight: '600' },
+                  color: '#475569'
+                }
               },
               y: {
                 beginAtZero: true,
-                grace: '15%',
-                grid: { color: '#f1f5f9', borderDash: [3, 3] },
-                ticks: { font: { size: 12.5, family: "'Plus Jakarta Sans', 'Inter', sans-serif", weight: '600' }, color: '#334155' }
+                grace: isMobile ? '8%' : '15%',
+                grid: { color: '#f1f5f9', borderDash: [3, 3], drawBorder: false },
+                ticks: {
+                  maxTicksLimit: isMobile ? 4 : 7,
+                  font: { size: isMobile ? 10.5 : 12.5, family: "'Plus Jakarta Sans', 'Inter', sans-serif", weight: '600' },
+                  color: '#64748b'
+                }
               }
             }
           }
@@ -396,37 +534,37 @@
             labels: GRAPH_MONTH_LABELS,
             datasets: [
               {
-                label: 'Target Fee ($)',
+                label: isMobile ? 'Target' : 'Target Fee ($)',
                 data: [...BASELINE_FEE_DATA.target],
                 backgroundColor: 'rgba(37, 99, 235, 0.82)',
                 hoverBackgroundColor: '#1d4ed8',
                 borderColor: '#2563eb',
-                borderWidth: 1.5,
-                borderRadius: 6,
-                barPercentage: 0.78,
-                categoryPercentage: 0.72
+                borderWidth: isMobile ? 1 : 1.5,
+                borderRadius: isMobile ? 3 : 6,
+                barPercentage: isMobile ? 0.86 : 0.78,
+                categoryPercentage: isMobile ? 0.80 : 0.72
               },
               {
-                label: 'Fee Received ($)',
+                label: isMobile ? 'Received' : 'Fee Received ($)',
                 data: [...BASELINE_FEE_DATA.received],
                 backgroundColor: 'rgba(16, 185, 129, 0.86)',
                 hoverBackgroundColor: '#059669',
                 borderColor: '#059669',
-                borderWidth: 1.5,
-                borderRadius: 6,
-                barPercentage: 0.78,
-                categoryPercentage: 0.72
+                borderWidth: isMobile ? 1 : 1.5,
+                borderRadius: isMobile ? 3 : 6,
+                barPercentage: isMobile ? 0.86 : 0.78,
+                categoryPercentage: isMobile ? 0.80 : 0.72
               },
               {
-                label: 'Pending Fee ($)',
+                label: isMobile ? 'Pending' : 'Pending Fee ($)',
                 data: [...BASELINE_FEE_DATA.pending],
                 backgroundColor: 'rgba(245, 158, 11, 0.86)',
                 hoverBackgroundColor: '#d97706',
                 borderColor: '#d97706',
-                borderWidth: 1.5,
-                borderRadius: 6,
-                barPercentage: 0.78,
-                categoryPercentage: 0.72
+                borderWidth: isMobile ? 1 : 1.5,
+                borderRadius: isMobile ? 3 : 6,
+                barPercentage: isMobile ? 0.86 : 0.78,
+                categoryPercentage: isMobile ? 0.80 : 0.72
               }
             ]
           },
@@ -434,9 +572,10 @@
             responsive: true,
             maintainAspectRatio: false,
             animation: {
-              duration: 1350,
+              duration: isMobile ? 500 : 1350,
               easing: 'easeOutQuart',
               delay: (context) => {
+                if (isMobile) return 0;
                 if (context.type === 'data' && context.mode === 'default') {
                   return context.dataIndex * 45 + context.datasetIndex * 85;
                 }
@@ -450,11 +589,11 @@
                     return ctx.chart.scales.y.getPixelForValue(0);
                   }
                 },
-                duration: 1350,
+                duration: isMobile ? 500 : 1350,
                 easing: 'easeOutQuart'
               }
             },
-            interaction: { mode: 'nearest', axis: 'x', intersect: false },
+            interaction: { mode: isMobile ? 'index' : 'nearest', axis: 'x', intersect: false },
             onHover: (event, elements) => {
               if (elements && elements.length > 0) {
                 const mIdx = elements[0].index;
@@ -471,13 +610,31 @@
               const mIdx = targetPoint.index;
               const dsIdx = targetPoint.datasetIndex;
               const catMap = ['fee_target', 'fee_paid', 'fee_pending'];
+              if (window.innerWidth < 768) {
+                if (_lastTappedMobileChartMonth.fees === mIdx) {
+                  _lastTappedMobileChartMonth.fees = -1;
+                  dismissMobileChartTooltip();
+                  openGraphMonthDrilldownModal(mIdx, catMap[dsIdx] || 'fee_paid');
+                } else {
+                  _lastTappedMobileChartMonth.fees = mIdx;
+                  updateFeeGraphCalloutBar(mIdx);
+                }
+                return;
+              }
               openGraphMonthDrilldownModal(mIdx, catMap[dsIdx] || 'fee_paid');
             },
             plugins: {
               legend: {
                 position: 'top',
-                align: 'end',
-                labels: { boxWidth: 14, usePointStyle: true, pointStyle: 'rectRounded', font: { size: 12.5, family: "'Plus Jakarta Sans', 'Inter', sans-serif", weight: '700' } }
+                align: isMobile ? 'center' : 'end',
+                labels: {
+                  boxWidth: isMobile ? 8 : 14,
+                  boxHeight: isMobile ? 8 : 14,
+                  padding: isMobile ? 10 : 16,
+                  usePointStyle: true,
+                  pointStyle: 'rectRounded',
+                  font: { size: isMobile ? 11 : 12.5, family: "'Plus Jakarta Sans', 'Inter', sans-serif", weight: '700' }
+                }
               },
               tooltip: {
                 enabled: false,
@@ -486,20 +643,67 @@
             },
             scales: {
               x: {
-                grid: { display: true, drawOnChartArea: false, color: '#94a3b8' },
-                ticks: { font: { size: 12.5, family: "'Plus Jakarta Sans', 'Inter', sans-serif", weight: '600' }, color: '#1e293b' }
+                grid: { display: false },
+                ticks: {
+                  maxRotation: 0,
+                  minRotation: 0,
+                  autoSkip: true,
+                  maxTicksLimit: isMobile ? 6 : 12,
+                  callback: function(value, index) {
+                    const rawLabel = this.getLabelForValue ? this.getLabelForValue(value) : (GRAPH_MONTH_LABELS[index] || '');
+                    return window.innerWidth < 768 ? String(rawLabel).split('-')[0] : rawLabel;
+                  },
+                  font: { size: isMobile ? 10.5 : 12.5, family: "'Plus Jakarta Sans', 'Inter', sans-serif", weight: '600' },
+                  color: '#475569'
+                }
               },
               y: {
                 beginAtZero: true,
-                grace: '15%',
-                grid: { color: '#e2e8f0', borderDash: [3, 3] },
-                ticks: { callback: function(v) { return '$' + Number(v).toLocaleString(); }, font: { size: 12.5, family: "'Plus Jakarta Sans', 'Inter', sans-serif", weight: '600' }, color: '#334155' }
+                grace: isMobile ? '8%' : '15%',
+                grid: { color: '#f1f5f9', borderDash: [3, 3], drawBorder: false },
+                ticks: {
+                  maxTicksLimit: isMobile ? 4 : 7,
+                  callback: function(v) {
+                    const num = Number(v || 0);
+                    if (window.innerWidth < 768 && num >= 1000) {
+                      return '$' + (num / 1000).toFixed(num % 1000 === 0 ? 0 : 1) + 'k';
+                    }
+                    return '$' + num.toLocaleString();
+                  },
+                  font: { size: isMobile ? 10.5 : 12.5, family: "'Plus Jakarta Sans', 'Inter', sans-serif", weight: '600' },
+                  color: '#64748b'
+                }
               }
             }
           }
         });
         updateFeeGraphCalloutBar(ACTIVE_HOVER_FEE_MONTH_IDX);
       }
+    }
+
+    // Automatically re-adapt chart layout if viewport crosses between Mobile (< 768px) and Desktop (>= 768px)
+    let _lastChartViewportIsMobile = typeof window !== 'undefined' ? (window.innerWidth < 768) : false;
+    if (typeof window !== 'undefined' && !window._lmsChartResizeWatcherBound) {
+      window._lmsChartResizeWatcherBound = true;
+      window.addEventListener('resize', () => {
+        const nowMobile = window.innerWidth < 768;
+        if (nowMobile !== _lastChartViewportIsMobile) {
+          _lastChartViewportIsMobile = nowMobile;
+          dismissMobileChartTooltip();
+          if (DASH_STUDENT_CHART) {
+            try { DASH_STUDENT_CHART.destroy(); } catch (e) {}
+            DASH_STUDENT_CHART = null;
+          }
+          if (DASH_REVENUE_CHART) {
+            try { DASH_REVENUE_CHART.destroy(); } catch (e) {}
+            DASH_REVENUE_CHART = null;
+          }
+          initDashboardCharts();
+          if (typeof updateDashboardAnalytics === 'function') {
+            updateDashboardAnalytics();
+          }
+        }
+      });
     }
 
     async function updateDashboardAnalytics() {

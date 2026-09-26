@@ -888,41 +888,54 @@
       </div>
 
       <!-- 2. TWO FULL-WIDTH STACKED INTERACTIVE GRAPHS (CLEAN HEADER WITHOUT CALLOUT BOXES + CLICK-TO-DRILLDOWN) -->
-      <div id="dashGraphsSection" class="flex flex-col gap-6 mb-6">
+      <div id="dashGraphsSection" class="flex flex-col gap-4 sm:gap-6 mb-6">
         
         <!-- GRAPH 1 (TOP FULL-WIDTH): NEW SIGN-UPS REPORT (Scheduled Trial vs Regular Enrolled vs Left) -->
-        <div class="bg-white p-5 sm:p-6 rounded-xl border border-slate-200/90 shadow-xs w-full relative">
-          <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+        <div class="bg-white p-3.5 sm:p-6 rounded-xl border border-slate-200/90 shadow-xs w-full relative">
+          <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 sm:gap-3 mb-2.5 sm:mb-4">
             <div>
-              <h3 class="font-extrabold text-xs sm:text-sm uppercase tracking-wider text-slate-700">
-                NEW SIGN-UPS REPORT
-              </h3>
-              <p class="text-[11px] text-slate-400 font-medium mt-0.5">
+              <div class="flex items-center justify-between gap-2">
+                <h3 class="font-extrabold text-xs sm:text-sm uppercase tracking-wider text-slate-700">
+                  NEW SIGN-UPS REPORT
+                </h3>
+                <span class="sm:hidden text-[10.5px] font-semibold text-slate-400">2026</span>
+              </div>
+              <p class="hidden sm:block text-[11px] text-slate-400 font-medium mt-0.5">
                 Click any bar in the chart to view that month's Scheduled Trial, Regular Enrolled, or Left students
+              </p>
+              <p class="sm:hidden text-[11px] text-slate-400 font-medium mt-0.5">
+                Tap a month to view numbers
               </p>
             </div>
           </div>
 
-          <!-- Full-Width Large Bar Chart Canvas -->
-          <div class="relative h-80 w-full">
+          <!-- Responsive Bar Chart Canvas (215px on Mobile, 320px on Desktop) -->
+          <div class="relative h-[215px] sm:h-80 w-full">
             <canvas id="chartStudentGrowth"></canvas>
           </div>
         </div>
 
         <!-- GRAPH 2 (BOTTOM FULL-WIDTH): MONTHLY FEE PAYMENTS REPORT -->
-        <div class="bg-white p-5 sm:p-6 rounded-xl border border-slate-200/90 shadow-xs w-full relative">
-          <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+        <div class="bg-white p-3.5 sm:p-6 rounded-xl border border-slate-200/90 shadow-xs w-full relative">
+          <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 sm:gap-3 mb-2.5 sm:mb-4">
             <div>
-              <h3 class="font-extrabold text-xs sm:text-sm uppercase tracking-wider text-slate-700">
-                MONTHLY FEE PAYMENTS REPORT
-              </h3>
-              <p class="text-[11px] text-slate-400 font-medium mt-0.5">
+              <div class="flex items-center justify-between gap-2">
+                <h3 class="font-extrabold text-xs sm:text-sm uppercase tracking-wider text-slate-700">
+                  MONTHLY FEE PAYMENTS REPORT
+                </h3>
+                <span class="sm:hidden text-[10.5px] font-semibold text-slate-400">USD ($)</span>
+              </div>
+              <p class="hidden sm:block text-[11px] text-slate-400 font-medium mt-0.5">
                 Click any bar in the chart to view that month's Target Fee, Received Fee, or Pending Family Invoices
+              </p>
+              <p class="sm:hidden text-[11px] text-slate-400 font-medium mt-0.5">
+                Tap a month to view fee breakdown
               </p>
             </div>
           </div>
 
-          <div class="relative h-80 w-full">
+          <!-- Responsive Bar Chart Canvas (215px on Mobile, 320px on Desktop) -->
+          <div class="relative h-[215px] sm:h-80 w-full">
             <canvas id="chartFeeRevenue"></canvas>
           </div>
         </div>
