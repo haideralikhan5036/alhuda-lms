@@ -393,24 +393,28 @@
     // Live Active Families & Active Students Real-time Metrics Engine
     async function updateLiveActiveMetrics() {
       try {
-        const { data: fams } = await db.from('families').select('id, status');
-        const { data: stus } = await db.from('students').select('id, status, notes');
+        const { data: fams } = await db.from('families').select('id, status, notes, parent_name, whatsapp');
+        const { data: stus } = await db.from('students').select('id, family_id, status, notes, name');
 
+        const normalizePhone = (p) => String(p || '').replace(/[^0-9]/g, '').slice(-10);
+        const normalizeName = (n) => String(n || '').trim().toLowerCase().replace(/\s+/g, ' ');
+
+        const seenFamKeys = new Set();
         const activeFams = (fams || []).filter(f => {
+          if (typeof isRegularFamilyRecord === 'function' && !isRegularFamilyRecord(f)) return false;
           const s = (f.status || 'Active').toLowerCase();
-          return s === 'active' || s === 'regular';
+          if (s !== 'active' && s !== 'regular') return false;
+          const key = normalizePhone(f.whatsapp) || normalizeName(f.parent_name) || f.id;
+          if (seenFamKeys.has(key)) return false;
+          seenFamKeys.add(key);
+          return true;
         });
 
         const activeStus = (stus || []).filter(s => {
+          if (typeof isRegularStudentRecord === 'function' && !isRegularStudentRecord(s)) return false;
           const st = (s.status || 'Active').toLowerCase();
           if (st === 'leave' || st === 'inactive' || st === 'deactivated' || st === 'deleted' || st === 'trial' || st === 'converted') {
             return false;
-          }
-          if (s.notes) {
-            try {
-              const p = JSON.parse(s.notes);
-              if (p.is_trial && !p.converted_from_trial) return false;
-            } catch(e) {}
           }
           return true;
         });
@@ -1331,13 +1335,20 @@
 
       _dashSearchDataPromise = (async () => {
         try {
+          if (typeof consolidateDuplicateTrialAndRegularRecords === 'function') {
+            await consolidateDuplicateTrialAndRegularRecords();
+          }
           const [famRes, stuRes, tchRes] = await Promise.all([
             (!ALL_FAMILIES || ALL_FAMILIES.length === 0) ? db.from('families').select('*, students(*)').order('created_at', { ascending: false }) : Promise.resolve({ data: ALL_FAMILIES }),
             (!ALL_STUDENTS || ALL_STUDENTS.length === 0) ? db.from('students').select('*').order('created_at', { ascending: false }) : Promise.resolve({ data: ALL_STUDENTS }),
             (!ALL_TEACHERS || ALL_TEACHERS.length === 0) ? db.from('teachers').select('*').order('created_at', { ascending: false }) : Promise.resolve({ data: ALL_TEACHERS })
           ]);
-          if (famRes.data && (!ALL_FAMILIES || ALL_FAMILIES.length === 0)) ALL_FAMILIES = famRes.data;
-          if (stuRes.data && (!ALL_STUDENTS || ALL_STUDENTS.length === 0)) ALL_STUDENTS = stuRes.data;
+          if (famRes.data && (!ALL_FAMILIES || ALL_FAMILIES.length === 0)) {
+            ALL_FAMILIES = famRes.data.filter(f => typeof isRegularFamilyRecord === 'function' ? isRegularFamilyRecord(f) : f.status !== 'Trial');
+          }
+          if (stuRes.data && (!ALL_STUDENTS || ALL_STUDENTS.length === 0)) {
+            ALL_STUDENTS = stuRes.data.filter(s => typeof isRegularStudentRecord === 'function' ? isRegularStudentRecord(s) : s.status !== 'Trial');
+          }
           if (tchRes.data && (!ALL_TEACHERS || ALL_TEACHERS.length === 0)) ALL_TEACHERS = tchRes.data;
         } catch (err) {
           console.error('Dashboard search cache load error:', err);
@@ -1369,29 +1380,45 @@
 
       await ensureDashboardSearchDataLoaded();
 
+      const regularFamilies = (ALL_FAMILIES || []).filter(f => typeof isRegularFamilyRecord === 'function' ? isRegularFamilyRecord(f) : f.status !== 'Trial');
+      const regularStudents = (ALL_STUDENTS || []).filter(s => typeof isRegularStudentRecord === 'function' ? isRegularStudentRecord(s) : s.status !== 'Trial');
+
       const familyMap = {};
-      (ALL_FAMILIES || []).forEach(f => { familyMap[f.id] = f; });
+      regularFamilies.forEach(f => { familyMap[f.id] = f; });
 
       const teacherMap = {};
       (ALL_TEACHERS || []).forEach(t => { teacherMap[t.id] = t; });
 
-      // 1. Match Students (by Name, Student ID, Family ID, or Parent Phone)
-      const matchedStudents = (ALL_STUDENTS || []).filter(s => {
+      // 1. Match Regular Students (by Name, Student ID, Family ID, or Parent Phone)
+      const seenStudentKeys = new Set();
+      const matchedStudents = regularStudents.filter(s => {
+        const fam = familyMap[s.family_id];
+        if (!fam && String(s.family_id || '').toUpperCase().startsWith('TRL-')) return false;
         const sName = String(s.name || '').toLowerCase();
         const sId = String(s.id || '').toLowerCase();
         const fId = String(s.family_id || '').toLowerCase();
-        const fam = familyMap[s.family_id];
         const fName = fam ? String(fam.parent_name || '').toLowerCase() : '';
         const fPhone = fam ? String(fam.whatsapp || '').toLowerCase() : '';
-        return sName.includes(q) || sId.includes(q) || fId.includes(q) || fName.includes(q) || fPhone.includes(q);
+        const matches = sName.includes(q) || sId.includes(q) || fId.includes(q) || fName.includes(q) || fPhone.includes(q);
+        if (!matches) return false;
+        const dedupKey = `${sName}__${fPhone || fId}`;
+        if (seenStudentKeys.has(dedupKey)) return false;
+        seenStudentKeys.add(dedupKey);
+        return true;
       }).slice(0, 6);
 
-      // 2. Match Families (by Parent Name, Family ID, or Phone/WhatsApp)
-      const matchedFamilies = (ALL_FAMILIES || []).filter(f => {
+      // 2. Match Regular Families (by Parent Name, Family ID, or Phone/WhatsApp)
+      const seenFamilyKeys = new Set();
+      const matchedFamilies = regularFamilies.filter(f => {
         const fName = String(f.parent_name || '').toLowerCase();
         const fId = String(f.id || '').toLowerCase();
         const fPhone = String(f.whatsapp || '').toLowerCase();
-        return fName.includes(q) || fId.includes(q) || fPhone.includes(q);
+        const matches = fName.includes(q) || fId.includes(q) || fPhone.includes(q);
+        if (!matches) return false;
+        const dedupKey = String(f.whatsapp || '').replace(/[^0-9]/g, '').slice(-10) || fName || fId;
+        if (seenFamilyKeys.has(dedupKey)) return false;
+        seenFamilyKeys.add(dedupKey);
+        return true;
       }).slice(0, 5);
 
       // 3. Match Teachers (by Full Name, Teacher ID/Portal ID, or Phone)

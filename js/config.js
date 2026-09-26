@@ -41,10 +41,173 @@
     let CURRENT_MODAL_STUDENT_ID = null;
     let CURRENT_MODAL_TEACHER_ID = null;
 
-    // TRIAL CLASSES MANAGEMENT STATE
+    // TRIAL CLASSES MANAGEMENT STATE (Default to 'active' so Active Trials list shows current trials only)
     let ALL_TRIALS = [];
-    let CURRENT_TRIAL_FILTER = 'all';
+    let CURRENT_TRIAL_FILTER = 'active';
     let CURRENT_TRIAL_TEACHER_FILTER = 'all';
+
+    // CANONICAL STATUS CLASSIFIERS (ONE SOURCE OF TRUTH FOR REGULAR VS TRIAL)
+    function isRegularFamilyRecord(f) {
+      if (!f) return false;
+      const st = String(f.status || 'Active').trim().toLowerCase();
+      if (st === 'trial' || st === 'converted' || st === 'discontinued' || st === 'deleted') return false;
+      if (String(f.id || '').toUpperCase().startsWith('TRL-')) return false;
+      if (f.notes) {
+        try {
+          const parsed = typeof f.notes === 'string' ? JSON.parse(f.notes) : f.notes;
+          if (parsed && parsed.is_trial === true && !parsed.converted_to_regular && !parsed.converted_from_trial) {
+            return false;
+          }
+        } catch (e) {}
+      }
+      return true;
+    }
+
+    function isRegularStudentRecord(s) {
+      if (!s) return false;
+      const st = String(s.status || 'Active').trim().toLowerCase();
+      if (st === 'trial' || st === 'converted' || st === 'discontinued' || st === 'deleted') return false;
+      if (String(s.id || '').toUpperCase().startsWith('TRL-')) return false;
+      if (String(s.family_id || '').toUpperCase().startsWith('TRL-')) return false;
+      if (s.notes) {
+        try {
+          const parsed = typeof s.notes === 'string' ? JSON.parse(s.notes) : s.notes;
+          if (parsed && parsed.is_trial === true && !parsed.converted_to_regular && !parsed.converted_from_trial) {
+            return false;
+          }
+        } catch (e) {}
+      }
+      return true;
+    }
+
+    let _CONSOLIDATION_PROMISE = null;
+    async function consolidateDuplicateTrialAndRegularRecords() {
+      if (_CONSOLIDATION_PROMISE) return _CONSOLIDATION_PROMISE;
+      _CONSOLIDATION_PROMISE = (async () => {
+        try {
+          const { data: allFams } = await db.from('families').select('*, students(*)');
+          const { data: allStus } = await db.from('students').select('*');
+          if (!allFams || !allStus) return;
+
+          const regularFams = allFams.filter(f => isRegularFamilyRecord(f));
+          const legacyTrialFams = allFams.filter(f => !isRegularFamilyRecord(f));
+
+          const normalizePhone = (p) => String(p || '').replace(/[^0-9]/g, '').slice(-10);
+          const normalizeName = (n) => String(n || '').trim().toLowerCase().replace(/\s+/g, ' ');
+
+          for (const trFam of legacyTrialFams) {
+            const trStatus = String(trFam.status || '').toLowerCase();
+            const isLegacyTrlId = String(trFam.id || '').toUpperCase().startsWith('TRL-');
+            const trPhone = normalizePhone(trFam.whatsapp);
+            const trName = normalizeName(trFam.parent_name);
+
+            // Find if a matching Canonical Regular Family already exists for this Trial Family
+            let canonicalFam = regularFams.find(rf => {
+              const rfPhone = normalizePhone(rf.whatsapp);
+              const rfName = normalizeName(rf.parent_name);
+              if (trPhone && rfPhone && trPhone === rfPhone) return true;
+              if (trName && rfName && trName === rfName) return true;
+              if (rf.notes && String(rf.notes).includes(trFam.id)) return true;
+              return false;
+            });
+
+            if (canonicalFam && (isLegacyTrlId || trStatus === 'converted')) {
+              // Consolidate Trial Family history & students into canonicalFam
+              const trStudents = allStus.filter(s => String(s.family_id) === String(trFam.id));
+              const canonicalStudents = allStus.filter(s => String(s.family_id) === String(canonicalFam.id) && isRegularStudentRecord(s));
+              const targetStu = canonicalStudents[0] || null;
+
+              let famNotesObj = {};
+              try {
+                famNotesObj = typeof canonicalFam.notes === 'string' ? JSON.parse(canonicalFam.notes) : (canonicalFam.notes || {});
+              } catch (e) {
+                famNotesObj = { custom_notes: String(canonicalFam.notes || '') };
+              }
+
+              famNotesObj.converted_to_regular = true;
+              famNotesObj.is_trial = false;
+              famNotesObj.trial_history = {
+                ...(famNotesObj.trial_history || {}),
+                was_trial: true,
+                previous_status: 'Trial',
+                trial_status: 'Converted',
+                legacy_trial_family_id: trFam.id,
+                trial_start_date: (trFam.created_at || new Date().toISOString()).slice(0, 10),
+                converted_at: famNotesObj.trial_history?.converted_at || (canonicalFam.created_at || new Date().toISOString()).slice(0, 10)
+              };
+
+              await db.from('families').update({
+                status: canonicalFam.status === 'Trial' || canonicalFam.status === 'Converted' ? 'Active' : (canonicalFam.status || 'Active'),
+                notes: JSON.stringify(famNotesObj)
+              }).eq('id', canonicalFam.id);
+
+              // Migrate attendance_logs & schedules from duplicate trial students and delete duplicate student rows
+              for (const trStu of trStudents) {
+                if (targetStu && String(trStu.id) !== String(targetStu.id)) {
+                  let trStuNotes = {};
+                  try { trStuNotes = JSON.parse(trStu.notes || '{}'); } catch (e) {}
+
+                  let targetStuNotes = {};
+                  try { targetStuNotes = JSON.parse(targetStu.notes || '{}'); } catch (e) {}
+                  targetStuNotes.converted_to_regular = true;
+                  targetStuNotes.trial_history = {
+                    was_trial: true,
+                    previous_status: 'Trial',
+                    trial_status: 'Converted',
+                    trial_course: trStuNotes.trial_course || targetStu.course_id || 'Quran Studies',
+                    pkt_slot: trStuNotes.pkt_slot || '',
+                    trial_start_date: trStu.joining_date || (trStu.created_at || '').slice(0, 10),
+                    converted_at: trStuNotes.converted_at || targetStu.joining_date
+                  };
+
+                  await db.from('students').update({
+                    notes: JSON.stringify(targetStuNotes)
+                  }).eq('id', targetStu.id);
+
+                  // Re-link any attendance_logs from trStu.id to targetStu.id
+                  await db.from('attendance_logs').update({ student_id: targetStu.id }).eq('student_id', trStu.id);
+                  await db.from('class_schedules').delete().eq('student_id', trStu.id);
+                  await db.from('students').delete().eq('id', trStu.id);
+                } else if (!targetStu) {
+                  // Re-parent student to canonicalFam
+                  await db.from('students').update({
+                    family_id: canonicalFam.id,
+                    status: 'Active'
+                  }).eq('id', trStu.id);
+                }
+              }
+
+              // Update localStorage trial records to reference canonical IDs with status='Converted'
+              try {
+                const storedTrials = JSON.parse(localStorage.getItem('alhuda_trial_classes') || '[]');
+                let updatedLocal = false;
+                storedTrials.forEach(t => {
+                  if (t.family_id === trFam.id || normalizePhone(t.whatsapp) === trPhone) {
+                    t.family_id = canonicalFam.id;
+                    if (targetStu) t.student_id = targetStu.id;
+                    t.status = 'Converted';
+                    t.converted_family_id = canonicalFam.id;
+                    if (targetStu) t.converted_student_id = targetStu.id;
+                    updatedLocal = true;
+                  }
+                });
+                if (updatedLocal) {
+                  localStorage.setItem('alhuda_trial_classes', JSON.stringify(storedTrials));
+                }
+              } catch (e) {}
+
+              // Remove the duplicate TRL-FAM record from Supabase
+              await db.from('families').delete().eq('id', trFam.id);
+            }
+          }
+        } catch (err) {
+          console.warn('Duplicate trial/regular consolidation notice:', err);
+        } finally {
+          _CONSOLIDATION_PROMISE = null;
+        }
+      })();
+      return _CONSOLIDATION_PROMISE;
+    }
 
     // TEACHER SALARIES & PAYROLL STATE
     let ALL_TEACHER_SALARIES = {};
@@ -65,7 +228,7 @@
 
     const DAY_NAMES = ['', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 
-    window.onload = function() {
+    window.onload = async function() {
       if (typeof initRoleFromUrl === 'function') initRoleFromUrl();
       setInterval(() => {
         const now = new Date();
@@ -77,6 +240,7 @@
       const attDateInput = document.getElementById('attendanceDateSelect');
       if (attDateInput) attDateInput.value = today;
 
+      await consolidateDuplicateTrialAndRegularRecords();
       loadDashboardData();
       loadFamiliesAndStudents();
       loadTeachers();

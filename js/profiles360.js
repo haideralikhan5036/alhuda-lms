@@ -780,6 +780,7 @@ function _renderFamilyWorkspaceDOM() {
             <span class="px-3 py-1 rounded-md border text-[11px] font-black uppercase tracking-wider whitespace-nowrap ${statusBadgeStyle}">
               ${_esc360(displayStatusLabel)}
             </span>
+            ${(Boolean(fNotes.converted_to_regular) || Boolean(fNotes.trial_history?.was_trial) || String(family.notes || '').includes('Converted from Trial')) ? `<span class="px-3 py-1 rounded-md bg-purple-500/20 text-purple-200 border border-purple-400/30 text-[11px] font-extrabold uppercase whitespace-nowrap" title="Originally enrolled via 3-Day Trial and converted to Regular Family"><i class="fa-solid fa-graduation-cap mr-1"></i>CONVERTED FROM TRIAL</span>` : ''}
             ${isFamSuspended ? `<span class="px-3 py-1 rounded-md bg-rose-600 text-white text-[11px] font-black uppercase whitespace-nowrap">CLASSES SUSPENDED</span>` : ''}
             <span class="px-3 py-1 rounded-md ${invoiceSentThisMonth ? 'bg-amber-400 text-slate-950' : 'bg-slate-800 text-slate-300 border border-slate-700'} text-[11px] font-black uppercase tracking-wide whitespace-nowrap">
               MONTHLY INVOICE ${invoiceSentThisMonth ? '✓' : 'PENDING'}
@@ -1759,6 +1760,16 @@ function _buildFamilyBioDataTabHtml(family, fNotes, creds) {
       { label: 'Account Status', value: (family.status || 'Regular').toUpperCase() }
     ]
   ];
+
+  const tHist = fNotes.trial_history || {};
+  const wasTrialFamily = Boolean(fNotes.converted_to_regular) || Boolean(tHist.was_trial) || Boolean(fNotes.converted_from_trial) || String(family.notes || '').includes('Converted from Trial');
+  if (wasTrialFamily) {
+    rows.push([
+      { label: 'Origin / Previous Stage', value: 'Trial Evaluation' },
+      { label: 'Trial Started Date', value: tHist.trial_start_date || (family.created_at || '').slice(0, 10) || '--' },
+      { label: 'Converted to Regular', value: tHist.converted_at || (family.created_at || '').slice(0, 10) || 'Converted ✓' }
+    ]);
+  }
 
   return `
     <div>

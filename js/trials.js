@@ -30,27 +30,54 @@
     async function loadTrialClassesData() {
       try {
         let storedTrials = getStoredTrials();
+        const normalizePhone = (p) => String(p || '').replace(/[^0-9]/g, '').slice(-10);
+        const normalizeName = (n) => String(n || '').trim().toLowerCase().replace(/\s+/g, ' ');
 
-        // 1. Fetch trials from Supabase students table (both 'Trial' and 'Converted')
+        // 1. Fetch students from Supabase (including active trials and regular students that started as trials)
         try {
-          const { data: supaTrials, error } = await db.from('students')
-            .select('*, families(*), teachers(*)')
-            .in('status', ['Trial', 'Converted']);
+          const { data: supaStudents, error } = await db.from('students')
+            .select('*, families(*), teachers(*)');
 
-          if (!error && supaTrials && supaTrials.length > 0) {
-            supaTrials.forEach(st => {
-              const exists = storedTrials.find(t => t.student_id === st.id || t.id === st.id || t.id === 'TRL-' + String(st.id).replace(/[^0-9]/g, ''));
+          if (!error && supaStudents && supaStudents.length > 0) {
+            supaStudents.forEach(st => {
               let parsedNotes = {};
               try {
-                parsedNotes = JSON.parse(st.notes || '{}');
-              } catch(e){}
+                parsedNotes = typeof st.notes === 'string' ? JSON.parse(st.notes || '{}') : (st.notes || {});
+              } catch (e) {}
 
-              const isSupabaseConverted = st.status === 'Converted' || parsedNotes.converted_to_student_id;
-              const effectiveStatus = isSupabaseConverted ? 'Converted' : (parsedNotes.trial_status || 'Active');
+              let famNotes = {};
+              try {
+                famNotes = typeof st.families?.notes === 'string' ? JSON.parse(st.families.notes || '{}') : (st.families?.notes || {});
+              } catch (e) {}
+
+              const isActiveTrial = st.status === 'Trial' || (parsedNotes.is_trial === true && !parsedNotes.converted_to_regular && !parsedNotes.converted_from_trial);
+              const wasConvertedFromTrial = st.status === 'Converted' ||
+                Boolean(parsedNotes.converted_to_regular) ||
+                Boolean(parsedNotes.converted_from_trial) ||
+                Boolean(parsedNotes.converted_to_student_id) ||
+                Boolean(parsedNotes.trial_history?.was_trial) ||
+                Boolean(famNotes.converted_to_regular) ||
+                Boolean(famNotes.trial_history?.was_trial);
+
+              if (!isActiveTrial && !wasConvertedFromTrial) return;
+
+              const stPhone = normalizePhone(st.families?.whatsapp);
+              const stName = normalizeName(st.name);
+
+              const exists = storedTrials.find(t =>
+                t.student_id === st.id ||
+                t.converted_student_id === st.id ||
+                t.family_id === st.family_id ||
+                (stPhone && normalizePhone(t.whatsapp) === stPhone && normalizeName(t.student_name) === stName)
+              );
+
+              const isConvertedNow = !isActiveTrial && (st.status === 'Active' || st.status === 'Regular' || st.status === 'Converted' || wasConvertedFromTrial);
+              const effectiveStatus = isConvertedNow ? 'Converted' : (parsedNotes.trial_status || 'Active');
+              const tHist = parsedNotes.trial_history || famNotes.trial_history || {};
 
               if (!exists) {
                 storedTrials.unshift({
-                  id: 'TRL-' + String(st.id).replace(/[^0-9]/g, ''),
+                  id: tHist.trial_id || parsedNotes.converted_from_trial || ('TRL-' + String(st.id).replace(/[^0-9]/g, '')),
                   student_id: st.id,
                   family_id: st.family_id,
                   student_name: st.name,
@@ -60,29 +87,48 @@
                   whatsapp: st.families?.whatsapp || '',
                   country: st.families?.country || 'International',
                   timezone: st.families?.timezone || 'UTC',
-                  course: parsedNotes.trial_course || 'Noorani Qaida & Basic Arabic',
+                  course: tHist.trial_course || parsedNotes.trial_course || parsedNotes.course || 'Noorani Qaida & Basic Arabic',
                   teacher_id: st.assigned_teacher_id,
                   teacher_name: st.teachers?.full_name || 'Assigned Teacher',
-                  start_date: st.joining_date || new Date().toISOString().slice(0, 10),
-                  pkt_slot: parsedNotes.pkt_slot || '16:00 - 16:30',
+                  start_date: tHist.trial_start_date || st.joining_date || new Date().toISOString().slice(0, 10),
+                  pkt_slot: tHist.pkt_slot || parsedNotes.pkt_slot || '16:00 - 16:30',
                   student_time: parsedNotes.student_time || '',
                   meeting_link: parsedNotes.meeting_link || '',
-                  conducted_sessions: isSupabaseConverted ? 3 : 0,
+                  conducted_sessions: isConvertedNow ? 3 : 0,
                   status: effectiveStatus,
-                  converted_student_id: parsedNotes.converted_to_student_id || null,
+                  converted_student_id: isConvertedNow ? st.id : (parsedNotes.converted_to_student_id || null),
+                  converted_family_id: isConvertedNow ? st.family_id : (parsedNotes.converted_family_id || null),
+                  converted_at: tHist.converted_at || parsedNotes.converted_at || null,
+                  agreed_fee: tHist.agreed_fee || parsedNotes.agreed_fee || (st.families?.monthly_fee ? `${st.families.currency || 'USD'} ${st.families.monthly_fee}` : null),
                   created_at: st.created_at || new Date().toISOString()
                 });
               } else {
-                if (isSupabaseConverted) {
+                exists.student_id = st.id;
+                exists.family_id = st.family_id;
+                if (isConvertedNow) {
                   exists.status = 'Converted';
-                  if (parsedNotes.converted_to_student_id) exists.converted_student_id = parsedNotes.converted_to_student_id;
+                  exists.converted_student_id = st.id;
+                  exists.converted_family_id = st.family_id;
+                  exists.conducted_sessions = 3;
+                  if (tHist.converted_at || parsedNotes.converted_at) exists.converted_at = tHist.converted_at || parsedNotes.converted_at;
                 }
               }
             });
           }
-        } catch(err) {
+        } catch (err) {
           console.warn("Could not query Supabase trial students:", err);
         }
+
+        // Deduplicate storedTrials by canonical student_id or phone+student_name
+        const dedupedTrials = [];
+        const seenKeys = new Set();
+        for (const tr of storedTrials) {
+          const key = `${normalizePhone(tr.whatsapp)}__${normalizeName(tr.student_name)}`;
+          if (seenKeys.has(key) && key !== '__') continue;
+          seenKeys.add(key);
+          dedupedTrials.push(tr);
+        }
+        storedTrials = dedupedTrials;
 
         // 2. Fetch attendance logs to sync conducted sessions
         try {
@@ -111,9 +157,9 @@
         // 4. Update KPI summary cards
         updateTrialKpis();
 
-        // 5. Render Scorecard & Trial Cards
+        // 5. Render Scorecard & Trial Cards (Default: Active Trials only)
         renderTeacherPerformanceBanner(CURRENT_TRIAL_TEACHER_FILTER);
-        renderTrialCards(CURRENT_TRIAL_FILTER);
+        filterTrialCards(CURRENT_TRIAL_FILTER || 'active');
 
       } catch(e) {
         console.error("Error loading trial classes data:", e);
@@ -301,7 +347,7 @@
       renderTrialCards(CURRENT_TRIAL_FILTER, query);
     }
 
-    function renderTrialCards(filter = 'all', searchQuery = '') {
+    function renderTrialCards(filter = 'active', searchQuery = '') {
       const container = document.getElementById('trialsListContainer');
       const emptyState = document.getElementById('trialsEmptyState');
       if (!container) return;
@@ -310,7 +356,7 @@
 
       let filtered = ALL_TRIALS.filter(t => {
         if (filter === 'active') {
-          return (t.status === 'Active' || !t.status) && (t.conducted_sessions || 0) < 3;
+          return t.status !== 'Converted' && t.status !== 'Discontinued';
         }
         if (filter === 'completed') {
           return t.status === 'Completed' || (t.status !== 'Converted' && t.status !== 'Discontinued' && (t.conducted_sessions || 0) >= 3);
@@ -604,28 +650,44 @@
         return;
       }
 
-      const randomSuffix = Date.now().toString().slice(-4);
-      const trialFamId = `TRL-FAM-${randomSuffix}`;
-      const trialStuId = `TRL-STU-${randomSuffix}`;
+      const normalizePhone = (p) => String(p || '').replace(/[^0-9]/g, '').slice(-10);
+      const targetPhone = normalizePhone(whatsapp);
+      const existingFam = (ALL_FAMILIES || []).find(f => targetPhone && normalizePhone(f.whatsapp) === targetPhone);
 
-      // 1. Insert Family in Supabase
-      try {
-        await db.from('families').insert([{
-          id: trialFamId,
-          parent_name,
-          whatsapp,
-          country,
-          timezone,
-          monthly_fee: 0,
-          currency: 'USD',
-          status: 'Trial',
-          notes: JSON.stringify({ is_trial: true, student_time })
-        }]);
-      } catch (err) {
-        console.warn("Supabase family insert notice:", err);
+      const trialFamId = existingFam ? existingFam.id : getNextFamilyId();
+      const trialStuId = getNextStudentId();
+      const trialRefId = `TRL-${Date.now().toString().slice(-4)}`;
+
+      // 1. Insert Canonical Family in Supabase (only if not already existing)
+      if (!existingFam) {
+        try {
+          await db.from('families').insert([{
+            id: trialFamId,
+            parent_name,
+            whatsapp,
+            country,
+            timezone,
+            monthly_fee: 0,
+            currency: 'USD',
+            status: 'Trial',
+            notes: JSON.stringify({
+              is_trial: true,
+              converted_to_regular: false,
+              student_time,
+              trial_history: {
+                was_trial: true,
+                trial_id: trialRefId,
+                trial_start_date: start_date,
+                trial_status: 'Active'
+              }
+            })
+          }]);
+        } catch (err) {
+          console.warn("Supabase family insert notice:", err);
+        }
       }
 
-      // 2. Insert Student in Supabase
+      // 2. Insert Canonical Student in Supabase with status = 'Trial'
       try {
         await db.from('students').insert([{
           id: trialStuId,
@@ -637,7 +699,22 @@
           assigned_teacher_id: teacher_id,
           joining_date: start_date,
           status: 'Trial',
-          notes: JSON.stringify({ trial_course: course, student_time, meeting_link, pkt_slot })
+          notes: JSON.stringify({
+            is_trial: true,
+            converted_to_regular: false,
+            trial_course: course,
+            student_time,
+            meeting_link,
+            pkt_slot,
+            trial_history: {
+              was_trial: true,
+              trial_id: trialRefId,
+              trial_course: course,
+              pkt_slot,
+              trial_start_date: start_date,
+              trial_status: 'Active'
+            }
+          })
         }]);
       } catch (err) {
         console.warn("Supabase student insert notice:", err);
@@ -878,31 +955,84 @@
         return;
       }
 
-      // 1. Generate Formal Sequence IDs
-      const newFamId = getNextFamilyId();
-      const newStuId = getNextStudentId();
+      // 1. Determine Canonical Family & Student IDs (Reuse existing canonical IDs in-place; upgrade legacy TRL- IDs cleanly)
+      const isLegacyFamId = !trial.family_id || String(trial.family_id).toUpperCase().startsWith('TRL-');
+      const isLegacyStuId = !trial.student_id || String(trial.student_id).toUpperCase().startsWith('TRL-');
+      const canonicalFamId = isLegacyFamId ? getNextFamilyId() : trial.family_id;
+      const canonicalStuId = isLegacyStuId ? getNextStudentId() : trial.student_id;
+      const convertedDateIso = new Date().toISOString().slice(0, 10);
 
       // 2. Parent Account credentials
       const rawParent = (trial.parent_name || 'parent').toLowerCase().replace(/[^a-z0-9]/g, '');
-      const username = rawParent.length > 2 ? rawParent : `parent_${newFamId.toLowerCase()}`;
+      const username = rawParent.length > 2 ? rawParent : `parent_${canonicalFamId.toLowerCase()}`;
       const password = 'alhuda_' + Math.floor(1000 + Math.random() * 9000);
 
-      // 3. Save Regular Family in Supabase
-      try {
-        await db.from('families').insert([{
-          id: newFamId,
-          parent_name: trial.parent_name,
-          whatsapp: trial.whatsapp,
-          country: trial.country,
-          timezone: trial.timezone || 'UTC',
-          monthly_fee,
-          currency,
-          billing_day,
-          status: 'Active',
-          notes: `Converted from Trial ${trial.id}`
-        }]);
+      const familyNotesPayload = JSON.stringify({
+        is_trial: false,
+        converted_to_regular: true,
+        converted_from_trial: trial.id,
+        parent_user: username,
+        trial_history: {
+          was_trial: true,
+          previous_status: 'Trial',
+          trial_status: 'Converted',
+          trial_id: trial.id,
+          trial_start_date: trial.start_date || joining_date,
+          converted_at: convertedDateIso,
+          agreed_fee: `${currency} ${monthly_fee}`
+        }
+      });
 
-        saveParentAccount(newFamId, {
+      const studentNotesPayload = JSON.stringify({
+        is_trial: false,
+        converted_to_regular: true,
+        course: trial.course,
+        days_per_week,
+        converted_from_trial: trial.id,
+        parent_user: username,
+        trial_history: {
+          was_trial: true,
+          previous_status: 'Trial',
+          trial_status: 'Converted',
+          trial_id: trial.id,
+          trial_course: trial.course,
+          pkt_slot: trial.pkt_slot,
+          trial_start_date: trial.start_date || joining_date,
+          converted_at: convertedDateIso,
+          agreed_fee: `${currency} ${monthly_fee}`
+        }
+      });
+
+      // 3. Convert Family in Supabase (Update existing canonical record in-place, or upgrade & remove legacy TRL- record)
+      try {
+        if (!isLegacyFamId) {
+          await db.from('families').update({
+            parent_name: trial.parent_name,
+            whatsapp: trial.whatsapp,
+            country: trial.country,
+            timezone: trial.timezone || 'UTC',
+            monthly_fee,
+            currency,
+            billing_day,
+            status: 'Active',
+            notes: familyNotesPayload
+          }).eq('id', canonicalFamId);
+        } else {
+          await db.from('families').insert([{
+            id: canonicalFamId,
+            parent_name: trial.parent_name,
+            whatsapp: trial.whatsapp,
+            country: trial.country,
+            timezone: trial.timezone || 'UTC',
+            monthly_fee,
+            currency,
+            billing_day,
+            status: 'Active',
+            notes: familyNotesPayload
+          }]);
+        }
+
+        saveParentAccount(canonicalFamId, {
           username,
           password,
           parent_name: trial.parent_name,
@@ -912,35 +1042,57 @@
           currency
         });
       } catch(err) {
-        console.warn("Supabase family regular insert notice:", err);
+        console.warn("Supabase family regular conversion notice:", err);
       }
 
-      // 4. Save Regular Student in Supabase
+      // 4. Convert Student in Supabase (Update existing canonical record in-place, or upgrade & remove legacy TRL- record)
       try {
-        await db.from('students').insert([{
-          id: newStuId,
-          family_id: newFamId,
-          name: trial.student_name,
-          age: parseInt(trial.student_age) || 8,
-          gender: trial.student_gender,
-          course_id: null,
-          assigned_teacher_id: trial.teacher_id,
-          joining_date,
-          status: 'Active',
-          notes: JSON.stringify({
-            course: trial.course,
-            days_per_week,
-            converted_from_trial: trial.id,
-            parent_user: username
-          })
-        }]);
+        if (!isLegacyStuId) {
+          await db.from('students').update({
+            family_id: canonicalFamId,
+            name: trial.student_name,
+            age: parseInt(trial.student_age) || 8,
+            gender: trial.student_gender,
+            assigned_teacher_id: trial.teacher_id,
+            joining_date,
+            status: 'Active',
+            notes: studentNotesPayload
+          }).eq('id', canonicalStuId);
+        } else {
+          await db.from('students').insert([{
+            id: canonicalStuId,
+            family_id: canonicalFamId,
+            name: trial.student_name,
+            age: parseInt(trial.student_age) || 8,
+            gender: trial.student_gender,
+            course_id: null,
+            assigned_teacher_id: trial.teacher_id,
+            joining_date,
+            status: 'Active',
+            notes: studentNotesPayload
+          }]);
+
+          // Migrate attendance logs from legacy trial.student_id to canonicalStuId and delete legacy TRL- rows
+          if (trial.student_id && trial.student_id !== canonicalStuId) {
+            await db.from('attendance_logs').update({ student_id: canonicalStuId }).eq('student_id', trial.student_id);
+            await db.from('class_schedules').delete().eq('student_id', trial.student_id);
+            await db.from('students').delete().eq('id', trial.student_id);
+          }
+        }
+
+        // Also convert any sibling students under the same family that were in Trial status
+        if (!isLegacyFamId) {
+          await db.from('students').update({ status: 'Active' }).eq('family_id', canonicalFamId).eq('status', 'Trial');
+        } else if (trial.family_id && trial.family_id !== canonicalFamId) {
+          await db.from('students').update({ family_id: canonicalFamId, status: 'Active' }).eq('family_id', trial.family_id);
+          await db.from('families').delete().eq('id', trial.family_id);
+        }
       } catch(err) {
-        console.warn("Supabase student regular insert notice:", err);
+        console.warn("Supabase student regular conversion notice:", err);
       }
 
       // 5. Expand & Promote Class Schedules from Trial to Active Regular across requested days
       try {
-        // Map requested days per week to day of week numbers (1 = Mon, 7 = Sun)
         let daysToSchedule = [1, 2, 3, 4, 5]; // default: 5 Days (Mon - Fri)
         const dStr = (days_per_week || '').toLowerCase();
         if (dStr.includes('3 day') || dStr.includes('mon / wed / fri') || dStr.includes('mon, wed, fri')) {
@@ -955,7 +1107,6 @@
           daysToSchedule = [1, 2, 3, 4, 5]; // Mon - Fri
         }
 
-        // Determine Start & End times
         let startTime = '16:00:00';
         let endTime = '16:30:00';
         if (trial.pkt_slot && trial.pkt_slot.includes('-')) {
@@ -966,14 +1117,11 @@
           endTime = eT.length === 5 ? `${eT}:00` : eT;
         }
 
-        // Safely delete old temporary 3-day trial slots for this trial student
-        if (trial.student_id) {
-          await db.from('class_schedules').delete().eq('student_id', trial.student_id);
-        }
+        // Remove temporary 3-day trial schedule slots for this student
+        await db.from('class_schedules').delete().eq('student_id', canonicalStuId);
 
-        // Insert fresh regular schedule rows for the converted regular student across ALL requested days
         const scheduleRows = daysToSchedule.map(dayNum => ({
-          student_id: newStuId,
+          student_id: canonicalStuId,
           teacher_id: trial.teacher_id,
           day_of_week: dayNum,
           start_time: startTime,
@@ -988,36 +1136,12 @@
         console.warn("Supabase schedule expansion insert notice:", err);
       }
 
-      // 6. Update Old Trial Student & Family in Supabase to permanently persist conversion history
-      try {
-        if (trial.student_id) {
-          await db.from('students').update({
-            status: 'Converted',
-            notes: JSON.stringify({
-              trial_course: trial.course,
-              student_time: trial.student_time,
-              meeting_link: trial.meeting_link,
-              pkt_slot: trial.pkt_slot,
-              converted_to_student_id: newStuId,
-              converted_family_id: newFamId,
-              converted_at: new Date().toISOString(),
-              agreed_fee: `${currency} ${monthly_fee}`
-            })
-          }).eq('id', trial.student_id);
-        }
-        if (trial.family_id) {
-          await db.from('families').update({
-            status: 'Converted'
-          }).eq('id', trial.family_id);
-        }
-      } catch(err) {
-        console.warn("Supabase trial student status update notice:", err);
-      }
-
-      // 7. Mark Trial Record in Memory as Converted
+      // 6. Update Trial History Record in Memory (linked to the SAME canonical Family/Student IDs)
+      trial.family_id = canonicalFamId;
+      trial.student_id = canonicalStuId;
       trial.status = 'Converted';
-      trial.converted_student_id = newStuId;
-      trial.converted_family_id = newFamId;
+      trial.converted_student_id = canonicalStuId;
+      trial.converted_family_id = canonicalFamId;
       trial.agreed_fee = `${currency} ${monthly_fee}`;
       trial.converted_at = new Date().toISOString();
 
@@ -1031,8 +1155,8 @@
       closeModal('modalConvertTrialToRegular');
       updateTrialKpis();
       
-      // Switch filter to 'all' so converted student stays visibly tracked with green badge
-      filterTrialCards('all');
+      // Keep Trial view on 'active' so the converted family immediately leaves the Active Trial list
+      filterTrialCards('active');
 
       // Refresh systems
       await loadFamiliesAndStudents();
@@ -1046,8 +1170,8 @@
       }
 
       alert(`🎉 Conversion Completed Successfully!\n\n` +
-        `👨‍👩‍👧 New Family ID: ${newFamId}\n` +
-        `🎓 New Student ID: ${newStuId}\n` +
+        `👨‍👩‍👧 Family ID: ${canonicalFamId}\n` +
+        `🎓 Student ID: ${canonicalStuId}\n` +
         `👤 Student: ${trial.student_name}\n` +
         `💰 Agreed Monthly Fee: ${currency} ${monthly_fee}\n` +
         `📅 Billing Due Day: ${billing_day}th of every month\n\n` +

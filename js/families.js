@@ -402,24 +402,34 @@
     }
 
     async function loadFamiliesAndStudents() {
+      if (typeof consolidateDuplicateTrialAndRegularRecords === 'function') {
+        await consolidateDuplicateTrialAndRegularRecords();
+      }
       const { data: families } = await db.from('families').select('*, students(*)').order('created_at', { ascending: false });
       
-      // Exclude Trial families: status='Trial' OR id starts with 'TRL-'
+      const normalizePhone = (p) => String(p || '').replace(/[^0-9]/g, '').slice(-10);
+      const normalizeName = (n) => String(n || '').trim().toLowerCase().replace(/\s+/g, ' ');
+      const seenFamKeys = new Set();
+
+      // Strictly include ONLY canonical Regular Families (exclude active Trials and legacy duplicate rows)
       const regularFamilies = (families || []).filter(f => {
-        if ((f.status || '').toLowerCase() === 'trial') return false;
-        if ((f.status || '').toLowerCase() === 'converted') return false;
-        if ((f.id || '').toUpperCase().startsWith('TRL-')) return false;
+        if (typeof isRegularFamilyRecord === 'function' ? !isRegularFamilyRecord(f) : ((f.status || '').toLowerCase() === 'trial' || (f.status || '').toLowerCase() === 'converted' || (f.id || '').toUpperCase().startsWith('TRL-'))) {
+          return false;
+        }
+        const key = normalizePhone(f.whatsapp) || normalizeName(f.parent_name) || f.id;
+        if (seenFamKeys.has(key)) return false;
+        seenFamKeys.add(key);
         return true;
       });
       ALL_FAMILIES = regularFamilies;
 
-      // Also strip any Trial students from within each regular family
+      // Strictly include ONLY canonical Regular Students inside each Regular Family
       ALL_FAMILIES = ALL_FAMILIES.map(f => ({
         ...f,
         students: (f.students || []).filter(s => {
-          if ((s.status || '').toLowerCase() === 'trial') return false;
-          if ((s.id || '').toUpperCase().startsWith('TRL-')) return false;
-          return true;
+          return typeof isRegularStudentRecord === 'function'
+            ? isRegularStudentRecord(s)
+            : ((s.status || '').toLowerCase() !== 'trial' && !(s.id || '').toUpperCase().startsWith('TRL-'));
         })
       }));
 
@@ -429,14 +439,14 @@
       });
       ALL_STUDENTS = allStu;
 
-      // Count trial families (for info badge in tab)
+      // Count ONLY currently active Trial families (for info badge in tab)
       const trialFamCount = (families || []).filter(f =>
-        (f.status || '').toLowerCase() === 'trial' || (f.id || '').toUpperCase().startsWith('TRL-')
+        (f.status || '').toLowerCase() === 'trial'
       ).length;
       const trialInfoEl = document.getElementById('trialFamiliesInfoNote');
       if (trialInfoEl) {
         if (trialFamCount > 0) {
-          trialInfoEl.innerHTML = `<i class="fa-solid fa-circle-info text-purple-500"></i> <span class="text-purple-800 font-bold">${trialFamCount} Trial Entr${trialFamCount === 1 ? 'y' : 'ies'} not shown here</span> — <button onclick="switchTab('tab-trials')" class="underline text-purple-700 font-extrabold hover:text-purple-900">View in Trial Classes tab →</button>`;
+          trialInfoEl.innerHTML = `<i class="fa-solid fa-circle-info text-purple-500"></i> <span class="text-purple-800 font-bold">${trialFamCount} Active Trial Entr${trialFamCount === 1 ? 'y' : 'ies'} in Evaluation</span> — <button onclick="switchTab('tab-trials')" class="underline text-purple-700 font-extrabold hover:text-purple-900">View in Trial Classes tab →</button>`;
           trialInfoEl.classList.remove('hidden');
         } else {
           trialInfoEl.innerHTML = '';
@@ -451,7 +461,10 @@
 
       // Update Summary Badges
       const totalFams = regularFamilies.length;
-      const activeFams = regularFamilies.filter(f => (f.status || 'Active').toLowerCase() === 'active').length;
+      const activeFams = regularFamilies.filter(f => {
+        const st = (f.status || 'Active').toLowerCase();
+        return st === 'active' || st === 'regular';
+      }).length;
       const totalStus = allStu.length;
       const activeStus = allStu.filter(s => {
         const st = (s.status || 'Active').toLowerCase();
