@@ -11,16 +11,16 @@
     // SMART IN-APP NAVIGATION HISTORY & BACK BUTTON ENGINE
     // ============================================================
     const NAV_FEATURE_LABELS = {
-      'tab-dashboard': 'Dashboard',
-      'tab-families': 'Families & Students',
-      'tab-teachers': 'Teachers & Staff',
-      'tab-trials': 'Trial Classes',
-      'tab-attendance': 'Live Attendance',
-      'tab-salaries': 'Payroll & Salaries',
-      'tab-leaves': 'Leaves & Exceptions',
+      'tab-dashboard': 'Main Dashboard',
+      'tab-families': 'Families',
+      'tab-teachers': 'Employees',
+      'tab-trials': 'Trials',
+      'tab-attendance': 'Daily Attendance & Notes',
+      'tab-salaries': 'Teacher Auto Salary Generation',
+      'tab-leaves': 'Leave',
       'tab-invoices': 'Fee Management',
-      'tab-curriculum': 'Islamic Curriculum',
-      'tab-schedule-search': 'Schedule Search',
+      'tab-curriculum': 'Course Materials',
+      'tab-schedule-search': 'Schedule Slot Finder',
       'fee-subtab-overview': 'Fee Overview',
       'fee-subtab-collect': 'Collect Fee',
       'fee-subtab-pending': 'Pending Payments',
@@ -242,8 +242,17 @@
       }
     });
 
-    // Keyboard shortcut Alt + Left Arrow for desktop back, and Escape for modals
+    // Keyboard shortcut Ctrl+K / Cmd+K for Global Search, Alt + Left Arrow for back, and Escape for modals
     window.addEventListener('keydown', (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        const searchInput = document.getElementById('dashGlobalSearchInput');
+        if (searchInput) {
+          searchInput.focus();
+          searchInput.select();
+        }
+        return;
+      }
       if (e.altKey && e.key === 'ArrowLeft') {
         e.preventDefault();
         navigateAppBack();
@@ -265,6 +274,11 @@
     function switchTab(tabId) {
       const targetId = (tabId === 'tab-live-monitor') ? 'tab-dashboard' : tabId;
 
+      const chartTooltip = document.getElementById('lmsModernChartTooltip');
+      if (chartTooltip) chartTooltip.style.opacity = '0';
+      const searchPanel = document.getElementById('dashGlobalSearchResultsPanel');
+      if (searchPanel) searchPanel.classList.add('hidden');
+
       if (!isNavigatingHistory) {
         recordNavigation(targetId, null);
       }
@@ -280,15 +294,12 @@
       // Reset all sidebar nav buttons
       document.querySelectorAll('.sidebar-nav-btn').forEach(btn => {
         btn.classList.remove('active', 'bg-brandDark', 'text-white', 'shadow');
-        btn.classList.add('text-slate-700');
-        btn.classList.remove('text-white');
       });
 
       // Highlight the active sidebar button using data-tab attribute
       const activeBtn = document.querySelector(`.sidebar-nav-btn[data-tab="${tabId}"]`);
       if (activeBtn) {
-        activeBtn.classList.add('active', 'bg-brandDark', 'text-white', 'shadow');
-        activeBtn.classList.remove('text-slate-700');
+        activeBtn.classList.add('active');
       }
 
       document.querySelectorAll('.tab-content').forEach(el => {

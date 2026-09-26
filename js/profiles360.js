@@ -235,8 +235,7 @@ function _activateFullScreenProfilePage(entityType) {
   const highlightSidebarTab = entityType === 'teacher' ? 'tab-teachers' : 'tab-families';
   const activeSidebarBtn = document.querySelector(`.sidebar-nav-btn[data-tab="${highlightSidebarTab}"]`);
   if (activeSidebarBtn) {
-    activeSidebarBtn.classList.add('active', 'bg-brandDark', 'text-white', 'shadow');
-    activeSidebarBtn.classList.remove('text-slate-700');
+    activeSidebarBtn.classList.add('active');
   }
 
   try {

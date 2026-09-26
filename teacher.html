@@ -18,10 +18,10 @@
   <!-- Tailwind CSS CDN -->
   <script src="https://cdn.tailwindcss.com"></script>
   <!-- Font Awesome 6 Icons -->
-  <!-- Modern Fonts & Icons (Plus Jakarta Sans, JetBrains Mono, Outfit) -->
+  <!-- Modern Fonts & Icons (Inter, Outfit, Plus Jakarta Sans) -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700;800&family=Outfit:wght@500;600;700;800;900&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Outfit:wght@500;600;700;800;900&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   
   <!-- Supabase JS Client -->
@@ -34,9 +34,9 @@
       theme: {
         extend: {
           fontFamily: {
-            sans: ['"Plus Jakarta Sans"', 'sans-serif'],
-            mono: ['"JetBrains Mono"', 'monospace'],
-            num: ['"Outfit"', '"JetBrains Mono"', 'sans-serif']
+            sans: ['"Inter"', '"Plus Jakarta Sans"', 'system-ui', '-apple-system', 'sans-serif'],
+            mono: ['"Inter"', '"Outfit"', 'system-ui', 'sans-serif'],
+            num: ['"Outfit"', '"Inter"', 'system-ui', 'sans-serif']
           },
           colors: {
             brandDark: '#064e3b',
@@ -51,9 +51,51 @@
 
   <style>
     body {
-      font-family: 'Plus Jakarta Sans', sans-serif;
-      font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11', 'tnum';
+      font-family: 'Inter', 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+      font-size: 14.5px;
+      line-height: 1.55;
+      color: #0f172a;
+      font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11', 'tnum' 1, 'lnum' 1, 'zero' 0;
+      font-variant-numeric: tabular-nums lining-nums;
       -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
+
+    /* Dedicated Number & Financial Typography System */
+    .font-num,
+    .font-mono,
+    .lms-num,
+    td[class*="font-bold"],
+    td[class*="font-extrabold"],
+    td[class*="font-black"],
+    span[id*="stat"],
+    span[id*="kpi"],
+    span[id*="salary"],
+    span[id*="Salary"],
+    h2[id*="stat"],
+    h3[id*="stat"] {
+      font-family: 'Outfit', 'Inter', system-ui, -apple-system, sans-serif !important;
+      font-variant-numeric: tabular-nums lining-nums !important;
+      font-feature-settings: 'tnum' 1, 'lnum' 1, 'zero' 0 !important;
+      letter-spacing: -0.015em;
+    }
+
+    /* Global Typography Readability & Anti-Eye-Strain Scale */
+    .text-\[8\.5px\], .text-\[9px\], .text-\[9\.5px\] {
+      font-size: 11px !important;
+      line-height: 1.4 !important;
+    }
+    .text-\[10px\], .text-\[10\.5px\] {
+      font-size: 11.75px !important;
+      line-height: 1.45 !important;
+    }
+    .text-\[11px\] {
+      font-size: 12.25px !important;
+      line-height: 1.45 !important;
+    }
+    .text-xs {
+      font-size: 12.75px !important;
+      line-height: 1.5 !important;
     }
 
     /* Mobile Touch & Scroll Utilities */

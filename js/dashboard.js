@@ -81,10 +81,163 @@
       initDashboardCharts();
     }
 
+    function renderModernChartExternalTooltip(context, chartKind) {
+      const { chart, tooltip } = context;
+      let tooltipEl = document.getElementById('lmsModernChartTooltip');
+      if (!tooltipEl) {
+        tooltipEl = document.createElement('div');
+        tooltipEl.id = 'lmsModernChartTooltip';
+        tooltipEl.style.cssText = 'position:fixed;z-index:9999;pointer-events:none;opacity:0;transition:opacity 0.16s ease, transform 0.16s cubic-bezier(0.16,1,0.3,1);transform:translate(-50%, -105%);';
+        document.body.appendChild(tooltipEl);
+      }
+
+      if (!tooltip || tooltip.opacity === 0 || !tooltip.dataPoints || tooltip.dataPoints.length === 0) {
+        tooltipEl.style.opacity = '0';
+        return;
+      }
+
+      const primaryPt = tooltip.dataPoints[0];
+      const mIdx = primaryPt.dataIndex;
+      const dsIdx = primaryPt.datasetIndex;
+      const mLabel = GRAPH_MONTH_LABELS[mIdx] || 'Current';
+      const prevMLabel = mIdx > 0 ? GRAPH_MONTH_LABELS[mIdx - 1] : 'Prior Period';
+      const isFeeChart = chartKind === 'fees';
+
+      const ds = chart.data.datasets[dsIdx] || chart.data.datasets[0];
+      const currentVal = Number(ds.data[mIdx] || 0);
+      const prevVal = mIdx > 0 ? Number(ds.data[mIdx - 1] || 0) : Number(ds.data[0] || 0);
+      const diffVal = currentVal - prevVal;
+      const pctChange = prevVal > 0 ? ((diffVal / prevVal) * 100).toFixed(1) : '0.0';
+
+      const fmtVal = (v) => isFeeChart ? '$' + Number(v).toLocaleString() : Number(v).toLocaleString();
+      const fmtDiff = (d) => {
+        const sign = d > 0 ? '+' : (d < 0 ? '-' : '');
+        const absV = Math.abs(d);
+        return sign + (isFeeChart ? '$' + absV.toLocaleString() : absV.toLocaleString());
+      };
+
+      const isPositiveMeaning = (ds.label || '').toLowerCase().includes('left') || (ds.label || '').toLowerCase().includes('pending')
+        ? diffVal <= 0
+        : diffVal >= 0;
+
+      const changeBadgeClass = diffVal === 0
+        ? 'bg-slate-100 text-slate-700 border-slate-200'
+        : isPositiveMeaning
+        ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+        : 'bg-rose-50 text-rose-800 border-rose-200';
+
+      const changeIcon = diffVal > 0 ? 'fa-arrow-trend-up' : (diffVal < 0 ? 'fa-arrow-trend-down' : 'fa-minus');
+
+      // Build month breakdown across all 3 datasets for clear comparison
+      const allSeriesHtml = chart.data.datasets.map((series, idx) => {
+        const val = Number(series.data[mIdx] || 0);
+        const dotColor = series.borderColor || '#059669';
+        const isHovered = idx === dsIdx;
+        return `
+          <div class="flex items-center justify-between py-1 px-2 rounded-lg ${isHovered ? 'bg-slate-100/90 font-extrabold' : 'text-slate-600'}">
+            <span class="flex items-center gap-1.5 text-[11.5px]">
+              <span style="background:${dotColor}" class="w-2.5 h-2.5 rounded-sm inline-block shrink-0"></span>
+              <span>${series.label.replace(' ($)', '')}</span>
+            </span>
+            <span class="font-num font-bold text-slate-900 text-[12px]">${fmtVal(val)}</span>
+          </div>
+        `;
+      }).join('');
+
+      let extraRatioHtml = '';
+      if (isFeeChart) {
+        const tgt = Number(chart.data.datasets[0]?.data[mIdx] || 0);
+        const rec = Number(chart.data.datasets[1]?.data[mIdx] || 0);
+        const ratio = tgt > 0 ? Math.min(100, Math.round((rec / tgt) * 100)) : 0;
+        extraRatioHtml = `
+          <div class="mt-2 pt-2 border-t border-slate-100 flex items-center justify-between text-[11px]">
+            <span class="text-slate-500 font-semibold">Collection Ratio</span>
+            <span class="font-num font-extrabold text-emerald-700">${ratio}% Collected</span>
+          </div>
+        `;
+      } else {
+        const tr = Number(chart.data.datasets[0]?.data[mIdx] || 0);
+        const reg = Number(chart.data.datasets[1]?.data[mIdx] || 0);
+        const convRatio = tr > 0 ? Math.min(100, Math.round((reg / tr) * 100)) : 0;
+        extraRatioHtml = `
+          <div class="mt-2 pt-2 border-t border-slate-100 flex items-center justify-between text-[11px]">
+            <span class="text-slate-500 font-semibold">Regular vs Trial Ratio</span>
+            <span class="font-num font-extrabold text-teal-700">${convRatio}%</span>
+          </div>
+        `;
+      }
+
+      tooltipEl.innerHTML = `
+        <div class="bg-white/98 backdrop-blur-md rounded-2xl border border-slate-200/95 shadow-2xl p-3.5 w-[275px] text-slate-800">
+          <!-- Top Header: Category & Period -->
+          <div class="flex items-center justify-between gap-2 pb-2.5 mb-2.5 border-b border-slate-100">
+            <div class="flex items-center gap-2 min-w-0">
+              <span style="background:${ds.borderColor || '#059669'}" class="w-3 h-3 rounded-md shrink-0 shadow-2xs"></span>
+              <span class="text-xs font-extrabold text-slate-900 truncate">${ds.label.replace(' ($)', '')}</span>
+            </div>
+            <span class="px-2 py-0.5 rounded-md bg-slate-900 text-white font-num text-[11px] font-bold shrink-0">${mLabel}</span>
+          </div>
+
+          <!-- Separated Current vs Previous vs Change Grid -->
+          <div class="grid grid-cols-2 gap-2 mb-2.5">
+            <div class="bg-slate-50 rounded-xl p-2 border border-slate-200/70">
+              <span class="text-[10px] font-extrabold uppercase tracking-wider text-slate-400 block">Current (${mLabel.slice(0, 3)})</span>
+              <span class="font-num text-base font-extrabold text-slate-900 mt-0.5 block">${fmtVal(currentVal)}</span>
+            </div>
+            <div class="bg-slate-50 rounded-xl p-2 border border-slate-200/70">
+              <span class="text-[10px] font-extrabold uppercase tracking-wider text-slate-400 block">Previous (${prevMLabel.slice(0, 3)})</span>
+              <span class="font-num text-base font-bold text-slate-600 mt-0.5 block">${fmtVal(prevVal)}</span>
+            </div>
+          </div>
+
+          <!-- Period Change Pill Row -->
+          <div class="flex items-center justify-between px-2.5 py-1.5 rounded-xl border ${changeBadgeClass} mb-2.5">
+            <span class="text-[10.5px] font-bold uppercase tracking-wide">Period Change</span>
+            <span class="font-num text-xs font-extrabold flex items-center gap-1">
+              <i class="fa-solid ${changeIcon} text-[10px]"></i>
+              <span>${fmtDiff(diffVal)} (${diffVal >= 0 ? '+' : ''}${pctChange}%)</span>
+            </span>
+          </div>
+
+          <!-- All Series in Month -->
+          <div class="space-y-0.5 border-t border-slate-100 pt-2">
+            ${allSeriesHtml}
+          </div>
+
+          ${extraRatioHtml}
+
+          <!-- Drilldown Hint -->
+          <div class="mt-2 pt-1.5 border-t border-slate-100 text-[10.5px] font-bold text-indigo-600 flex items-center justify-between">
+            <span>Click bar to inspect details</span>
+            <i class="fa-solid fa-arrow-right text-[10px]"></i>
+          </div>
+        </div>
+      `;
+
+      const rect = chart.canvas.getBoundingClientRect();
+      let left = rect.left + tooltip.caretX;
+      let top = rect.top + tooltip.caretY - 12;
+
+      const cardW = 285;
+      const cardH = 310;
+      if (left - cardW / 2 < 12) left = cardW / 2 + 12;
+      if (left + cardW / 2 > window.innerWidth - 12) left = window.innerWidth - cardW / 2 - 12;
+
+      if (top - cardH < 12) {
+        tooltipEl.style.transform = 'translate(-50%, 16px)';
+      } else {
+        tooltipEl.style.transform = 'translate(-50%, -104%)';
+      }
+
+      tooltipEl.style.left = `${left}px`;
+      tooltipEl.style.top = `${top}px`;
+      tooltipEl.style.opacity = '1';
+    }
+
     function initDashboardCharts() {
       if (typeof Chart === 'undefined') return;
 
-      // 1. GRAPH 1 (TOP FULL-WIDTH): NEW SIGN-UPS REPORT (Soft Pastel Professional: Soft Indigo / Soft Teal / Soft Amber)
+      // 1. GRAPH 1 (TOP FULL-WIDTH): NEW SIGN-UPS REPORT (Refined Violet-Indigo / Emerald-Teal / Coral-Rose)
       const ctxGrowth = document.getElementById('chartStudentGrowth')?.getContext('2d');
       if (ctxGrowth && !DASH_STUDENT_CHART) {
         _dashGraphEntranceAnimatingUntil = Date.now() + 2200;
@@ -96,31 +249,31 @@
               {
                 label: 'Scheduled Trial',
                 data: [...BASELINE_SIGNUP_DATA.trial],
-                backgroundColor: 'rgba(99, 102, 241, 0.78)',
-                hoverBackgroundColor: '#6366f1',
-                borderColor: '#6366f1',
+                backgroundColor: 'rgba(99, 102, 241, 0.84)',
+                hoverBackgroundColor: '#4f46e5',
+                borderColor: '#4f46e5',
                 borderWidth: 1.5,
                 borderRadius: 6,
                 barPercentage: 0.76,
                 categoryPercentage: 0.68
               },
               {
-                label: 'Regular',
+                label: 'Regular Enrolled',
                 data: [...BASELINE_SIGNUP_DATA.regular],
-                backgroundColor: 'rgba(20, 184, 166, 0.78)',
-                hoverBackgroundColor: '#14b8a6',
-                borderColor: '#14b8a6',
+                backgroundColor: 'rgba(13, 148, 136, 0.85)',
+                hoverBackgroundColor: '#0f766e',
+                borderColor: '#0d9488',
                 borderWidth: 1.5,
                 borderRadius: 6,
                 barPercentage: 0.76,
                 categoryPercentage: 0.68
               },
               {
-                label: 'Left',
+                label: 'Left / Discontinued',
                 data: [...BASELINE_SIGNUP_DATA.left],
-                backgroundColor: 'rgba(245, 158, 11, 0.78)',
-                hoverBackgroundColor: '#f59e0b',
-                borderColor: '#f59e0b',
+                backgroundColor: 'rgba(244, 63, 94, 0.80)',
+                hoverBackgroundColor: '#e11d48',
+                borderColor: '#e11d48',
                 borderWidth: 1.5,
                 borderRadius: 6,
                 barPercentage: 0.76,
@@ -152,7 +305,7 @@
                 easing: 'easeOutQuart'
               }
             },
-            interaction: { mode: 'index', intersect: false },
+            interaction: { mode: 'nearest', axis: 'x', intersect: false },
             onHover: (event, elements) => {
               if (elements && elements.length > 0) {
                 const mIdx = elements[0].index;
@@ -175,34 +328,22 @@
               legend: {
                 position: 'top',
                 align: 'end',
-                labels: { boxWidth: 14, usePointStyle: true, pointStyle: 'rectRounded', font: { size: 11, family: 'Plus Jakarta Sans', weight: 'bold' } }
+                labels: { boxWidth: 14, usePointStyle: true, pointStyle: 'rectRounded', font: { size: 12, family: 'Inter, Plus Jakarta Sans', weight: '700' } }
               },
               tooltip: {
-                backgroundColor: '#0f172a',
-                titleColor: '#f8fafc',
-                bodyColor: '#e2e8f0',
-                borderColor: '#334155',
-                borderWidth: 1,
-                padding: 11,
-                titleFont: { size: 12, weight: 'bold' },
-                bodyFont: { size: 11, weight: 'bold' },
-                callbacks: {
-                  label: function(c) {
-                    const mName = GRAPH_MONTH_LABELS[c.dataIndex];
-                    return ` ${c.dataset.label} in ${mName}: ${c.parsed.y} (Click bar to inspect students)`;
-                  }
-                }
+                enabled: false,
+                external: (ctx) => renderModernChartExternalTooltip(ctx, 'signups')
               }
             },
             scales: {
               x: {
                 grid: { display: false },
-                ticks: { font: { size: 11, weight: '600' }, color: '#334155' }
+                ticks: { font: { size: 12, family: 'Outfit, Inter', weight: '600' }, color: '#334155' }
               },
               y: {
                 beginAtZero: true,
                 grid: { color: '#f1f5f9', borderDash: [3, 3] },
-                ticks: { font: { size: 11, weight: '600' }, color: '#475569' }
+                ticks: { font: { size: 12, family: 'Outfit, Inter', weight: '600' }, color: '#475569' }
               }
             }
           }
@@ -210,7 +351,7 @@
         updateSignupsGraphCalloutBar(ACTIVE_HOVER_SIGNUP_MONTH_IDX);
       }
 
-      // 2. GRAPH 2 (BOTTOM FULL-WIDTH): MONTHLY FEE PAYMENTS REPORT (Soft Pastel Professional: Soft Indigo / Soft Teal / Soft Amber)
+      // 2. GRAPH 2 (BOTTOM FULL-WIDTH): MONTHLY FEE PAYMENTS REPORT (Professional Financial Color System)
       const ctxRevenue = document.getElementById('chartFeeRevenue')?.getContext('2d');
       if (ctxRevenue && !DASH_REVENUE_CHART) {
         DASH_REVENUE_CHART = new Chart(ctxRevenue, {
@@ -221,9 +362,9 @@
               {
                 label: 'Target Fee ($)',
                 data: [...BASELINE_FEE_DATA.target],
-                backgroundColor: 'rgba(99, 102, 241, 0.78)',
-                hoverBackgroundColor: '#6366f1',
-                borderColor: '#6366f1',
+                backgroundColor: 'rgba(37, 99, 235, 0.82)',
+                hoverBackgroundColor: '#1d4ed8',
+                borderColor: '#2563eb',
                 borderWidth: 1.5,
                 borderRadius: 6,
                 barPercentage: 0.76,
@@ -232,9 +373,9 @@
               {
                 label: 'Fee Received ($)',
                 data: [...BASELINE_FEE_DATA.received],
-                backgroundColor: 'rgba(20, 184, 166, 0.78)',
-                hoverBackgroundColor: '#14b8a6',
-                borderColor: '#14b8a6',
+                backgroundColor: 'rgba(16, 185, 129, 0.86)',
+                hoverBackgroundColor: '#059669',
+                borderColor: '#059669',
                 borderWidth: 1.5,
                 borderRadius: 6,
                 barPercentage: 0.76,
@@ -243,9 +384,9 @@
               {
                 label: 'Pending Fee ($)',
                 data: [...BASELINE_FEE_DATA.pending],
-                backgroundColor: 'rgba(245, 158, 11, 0.78)',
-                hoverBackgroundColor: '#f59e0b',
-                borderColor: '#f59e0b',
+                backgroundColor: 'rgba(245, 158, 11, 0.86)',
+                hoverBackgroundColor: '#d97706',
+                borderColor: '#d97706',
                 borderWidth: 1.5,
                 borderRadius: 6,
                 barPercentage: 0.76,
@@ -277,7 +418,7 @@
                 easing: 'easeOutQuart'
               }
             },
-            interaction: { mode: 'index', intersect: false },
+            interaction: { mode: 'nearest', axis: 'x', intersect: false },
             onHover: (event, elements) => {
               if (elements && elements.length > 0) {
                 const mIdx = elements[0].index;
@@ -300,32 +441,22 @@
               legend: {
                 position: 'top',
                 align: 'end',
-                labels: { boxWidth: 14, usePointStyle: true, pointStyle: 'rectRounded', font: { size: 11, family: 'Plus Jakarta Sans', weight: 'bold' } }
+                labels: { boxWidth: 14, usePointStyle: true, pointStyle: 'rectRounded', font: { size: 12, family: 'Inter, Plus Jakarta Sans', weight: '700' } }
               },
               tooltip: {
-                backgroundColor: '#0f172a',
-                titleColor: '#f8fafc',
-                bodyColor: '#e2e8f0',
-                borderColor: '#334155',
-                borderWidth: 1,
-                padding: 11,
-                callbacks: {
-                  label: function(c) {
-                    const mName = GRAPH_MONTH_LABELS[c.dataIndex];
-                    return ` ${c.dataset.label} in ${mName}: $${Number(c.parsed.y).toLocaleString()} (Click bar to inspect families)`;
-                  }
-                }
+                enabled: false,
+                external: (ctx) => renderModernChartExternalTooltip(ctx, 'fees')
               }
             },
             scales: {
               x: {
                 grid: { display: true, drawOnChartArea: false, color: '#94a3b8' },
-                ticks: { font: { size: 11, weight: '600' }, color: '#334155' }
+                ticks: { font: { size: 12, family: 'Outfit, Inter', weight: '600' }, color: '#334155' }
               },
               y: {
                 beginAtZero: true,
                 grid: { color: '#e2e8f0', borderDash: [3, 3] },
-                ticks: { callback: function(v) { return '$' + v; }, font: { size: 11, weight: '600' }, color: '#475569' }
+                ticks: { callback: function(v) { return '$' + Number(v).toLocaleString(); }, font: { size: 12, family: 'Outfit, Inter', weight: '600' }, color: '#475569' }
               }
             }
           }
@@ -1365,9 +1496,14 @@
       const clearBtn = document.getElementById('btnClearDashGlobalSearch');
       const q = (rawQuery || '').trim().toLowerCase();
 
+      const kbdHint = document.getElementById('kbdDashGlobalSearchHint');
       if (clearBtn) {
         if (q.length > 0) clearBtn.classList.remove('hidden');
         else clearBtn.classList.add('hidden');
+      }
+      if (kbdHint) {
+        if (q.length > 0) kbdHint.classList.add('hidden');
+        else kbdHint.classList.remove('hidden');
       }
 
       if (!panel) return;
@@ -1421,7 +1557,17 @@
         return true;
       }).slice(0, 5);
 
-      // 3. Match Teachers (by Full Name, Teacher ID/Portal ID, or Phone)
+      // 3. Match Active Trials (from ALL_TRIALS where status is not Converted/Discontinued)
+      const matchedTrials = (ALL_TRIALS || []).filter(tr => {
+        if (tr.status === 'Converted' || tr.status === 'Discontinued') return false;
+        const sName = String(tr.student_name || '').toLowerCase();
+        const pName = String(tr.parent_name || '').toLowerCase();
+        const phone = String(tr.whatsapp || '').toLowerCase();
+        const trId = String(tr.id || '').toLowerCase();
+        return sName.includes(q) || pName.includes(q) || phone.includes(q) || trId.includes(q);
+      }).slice(0, 4);
+
+      // 4. Match Employees / Teachers (by Full Name, Employee/Teacher ID, or Phone)
       const matchedTeachers = (ALL_TEACHERS || []).filter(t => {
         const tName = String(t.full_name || '').toLowerCase();
         const tId = String(t.id || '').toLowerCase();
@@ -1433,13 +1579,13 @@
         return tName.includes(q) || tId.includes(q) || credsId.includes(q) || tPhone.includes(q);
       }).slice(0, 5);
 
-      const totalCount = matchedStudents.length + matchedFamilies.length + matchedTeachers.length;
+      const totalCount = matchedStudents.length + matchedFamilies.length + matchedTrials.length + matchedTeachers.length;
 
       if (totalCount === 0) {
         panel.innerHTML = `
-          <div class="p-4 text-center text-xs text-slate-400 font-semibold">
-            <i class="fa-solid fa-magnifying-glass-minus text-slate-300 text-base mb-1 block"></i>
-            No matching Student, Family, or Teacher found for "<span class="text-slate-700 font-bold">${rawQuery}</span>"
+          <div class="p-5 text-center text-xs text-slate-400 font-semibold">
+            <i class="fa-solid fa-magnifying-glass-minus text-slate-300 text-lg mb-1.5 block"></i>
+            No matching Student, Family, Trial, or Employee found for "<span class="text-slate-700 font-bold">${rawQuery}</span>"
           </div>
         `;
         panel.classList.remove('hidden');
@@ -1451,10 +1597,10 @@
       // Render Students Section
       if (matchedStudents.length > 0) {
         html += `
-          <div class="p-2">
-            <div class="px-2 py-1 text-[10px] font-black uppercase tracking-wider text-teal-800 bg-teal-50/80 rounded-lg mb-1 flex items-center justify-between">
-              <span><i class="fa-solid fa-user-graduate mr-1"></i> Students (${matchedStudents.length})</span>
-              <span class="text-[9px] text-teal-600 font-bold">Click to View Profile</span>
+          <div class="p-2.5">
+            <div class="px-2.5 py-1 text-[11px] font-extrabold uppercase tracking-wider text-teal-800 bg-teal-50/90 rounded-lg mb-1.5 flex items-center justify-between">
+              <span><i class="fa-solid fa-user-graduate mr-1.5"></i> Students (${matchedStudents.length})</span>
+              <span class="text-[10px] text-teal-700 font-bold">Click to Open Family &amp; Select Student</span>
             </div>
             <div class="space-y-1">
               ${matchedStudents.map(s => {
@@ -1463,17 +1609,17 @@
                 const rawPhone = fam ? (fam.whatsapp || '') : '';
                 const displayPhone = (typeof maskStudentPhone === 'function') ? maskStudentPhone(rawPhone) : (rawPhone || '--');
                 return `
-                  <div onclick="clearDashboardGlobalSearch(); openStudent360Profile('${s.id}')" class="px-2.5 py-1.5 rounded-xl hover:bg-teal-50/70 cursor-pointer transition flex items-center justify-between gap-2 border border-transparent hover:border-teal-200">
+                  <div onclick="clearDashboardGlobalSearch(); openStudent360Profile('${s.id}')" class="px-3 py-2 rounded-xl hover:bg-teal-50/80 cursor-pointer transition flex items-center justify-between gap-2 border border-transparent hover:border-teal-200">
                     <div class="min-w-0">
-                      <div class="flex items-center gap-1.5">
-                        <span class="text-xs font-extrabold text-slate-900 truncate">${s.name}</span>
-                        <span class="px-1.5 py-0.2 rounded bg-slate-100 border border-slate-200 font-mono text-[9px] font-bold text-brandDark shrink-0">${s.id}</span>
+                      <div class="flex items-center gap-2">
+                        <span class="text-[13px] font-extrabold text-slate-900 truncate">${s.name}</span>
+                        <span class="px-2 py-0.5 rounded-md bg-slate-100 border border-slate-200 font-num text-[11px] font-bold text-brandDark shrink-0">${s.id}</span>
                       </div>
-                      <div class="text-[10px] text-slate-500 truncate">
-                        Family: <strong class="text-slate-700">${parentName}</strong> (${s.family_id || '--'}) &bull; <span class="font-mono">${displayPhone}</span>
+                      <div class="text-[11.5px] text-slate-500 truncate mt-0.5">
+                        Family: <strong class="text-slate-700">${parentName}</strong> (${s.family_id || '--'}) &bull; <span class="font-num">${displayPhone}</span>
                       </div>
                     </div>
-                    <span class="px-2 py-0.5 rounded-lg bg-brandDark text-white text-[10px] font-bold shrink-0">Open Family &amp; Select Student</span>
+                    <span class="px-2.5 py-1 rounded-lg bg-brandDark text-white text-[11px] font-bold shrink-0">View Student</span>
                   </div>
                 `;
               }).join('')}
@@ -1485,27 +1631,27 @@
       // Render Families Section
       if (matchedFamilies.length > 0) {
         html += `
-          <div class="p-2">
-            <div class="px-2 py-1 text-[10px] font-black uppercase tracking-wider text-emerald-800 bg-emerald-50/80 rounded-lg mb-1 flex items-center justify-between">
-              <span><i class="fa-solid fa-house-user mr-1"></i> Families (${matchedFamilies.length})</span>
-              <span class="text-[9px] text-emerald-600 font-bold">Click to Open Family Profile</span>
+          <div class="p-2.5">
+            <div class="px-2.5 py-1 text-[11px] font-extrabold uppercase tracking-wider text-emerald-800 bg-emerald-50/90 rounded-lg mb-1.5 flex items-center justify-between">
+              <span><i class="fa-solid fa-people-roof mr-1.5"></i> Families (${matchedFamilies.length})</span>
+              <span class="text-[10px] text-emerald-700 font-bold">Click to Open Family Profile</span>
             </div>
             <div class="space-y-1">
               ${matchedFamilies.map(f => {
                 const displayPhone = (typeof maskStudentPhone === 'function') ? maskStudentPhone(f.whatsapp) : (f.whatsapp || '--');
                 const childCount = (f.students || []).length;
                 return `
-                  <div onclick="openFamilyFromDashboardSearch('${f.id}')" class="px-2.5 py-1.5 rounded-xl hover:bg-emerald-50/70 cursor-pointer transition flex items-center justify-between gap-2 border border-transparent hover:border-emerald-200">
+                  <div onclick="openFamilyFromDashboardSearch('${f.id}')" class="px-3 py-2 rounded-xl hover:bg-emerald-50/80 cursor-pointer transition flex items-center justify-between gap-2 border border-transparent hover:border-emerald-200">
                     <div class="min-w-0">
-                      <div class="flex items-center gap-1.5">
-                        <span class="text-xs font-extrabold text-slate-900 truncate">${f.parent_name}</span>
-                        <span class="px-1.5 py-0.2 rounded bg-emerald-100 border border-emerald-200 font-mono text-[9px] font-bold text-emerald-900 shrink-0">${f.id}</span>
+                      <div class="flex items-center gap-2">
+                        <span class="text-[13px] font-extrabold text-slate-900 truncate">${f.parent_name}</span>
+                        <span class="px-2 py-0.5 rounded-md bg-emerald-100 border border-emerald-200 font-num text-[11px] font-bold text-emerald-900 shrink-0">${f.id}</span>
                       </div>
-                      <div class="text-[10px] text-slate-500 truncate">
-                        Phone: <span class="font-mono font-semibold text-slate-700">${displayPhone}</span> &bull; ${childCount} Student(s)
+                      <div class="text-[11.5px] text-slate-500 truncate mt-0.5">
+                        Phone: <span class="font-num font-semibold text-slate-700">${displayPhone}</span> &bull; <span class="font-num font-bold text-slate-700">${childCount}</span> Student(s)
                       </div>
                     </div>
-                    <span class="px-2 py-0.5 rounded-lg bg-emerald-700 text-white text-[10px] font-bold shrink-0">Open Family Profile</span>
+                    <span class="px-2.5 py-1 rounded-lg bg-emerald-700 text-white text-[11px] font-bold shrink-0">Family Profile</span>
                   </div>
                 `;
               }).join('')}
@@ -1514,32 +1660,63 @@
         `;
       }
 
-      // Render Teachers Section
+      // Render Active Trials Section
+      if (matchedTrials.length > 0) {
+        html += `
+          <div class="p-2.5">
+            <div class="px-2.5 py-1 text-[11px] font-extrabold uppercase tracking-wider text-purple-800 bg-purple-50/90 rounded-lg mb-1.5 flex items-center justify-between">
+              <span><i class="fa-solid fa-user-plus mr-1.5"></i> Active Trials (${matchedTrials.length})</span>
+              <span class="text-[10px] text-purple-700 font-bold">Click to Open Trial Evaluation</span>
+            </div>
+            <div class="space-y-1">
+              ${matchedTrials.map(tr => {
+                const displayPhone = (typeof maskStudentPhone === 'function') ? maskStudentPhone(tr.whatsapp) : (tr.whatsapp || '--');
+                return `
+                  <div onclick="openTrialFromGlobalSearch('${(tr.student_name || '').replace(/'/g, "\\'")}')" class="px-3 py-2 rounded-xl hover:bg-purple-50/80 cursor-pointer transition flex items-center justify-between gap-2 border border-transparent hover:border-purple-200">
+                    <div class="min-w-0">
+                      <div class="flex items-center gap-2">
+                        <span class="text-[13px] font-extrabold text-slate-900 truncate">${tr.student_name}</span>
+                        <span class="px-2 py-0.5 rounded-md bg-purple-100 border border-purple-200 font-num text-[11px] font-bold text-purple-900 shrink-0">Trial (${tr.conducted_sessions || 0}/3)</span>
+                      </div>
+                      <div class="text-[11.5px] text-slate-500 truncate mt-0.5">
+                        Parent: <strong class="text-slate-700">${tr.parent_name || '--'}</strong> &bull; <span class="font-num">${displayPhone}</span>
+                      </div>
+                    </div>
+                    <span class="px-2.5 py-1 rounded-lg bg-purple-700 text-white text-[11px] font-bold shrink-0">Open Trial</span>
+                  </div>
+                `;
+              }).join('')}
+            </div>
+          </div>
+        `;
+      }
+
+      // Render Employees / Teachers Section
       if (matchedTeachers.length > 0) {
         html += `
-          <div class="p-2">
-            <div class="px-2 py-1 text-[10px] font-black uppercase tracking-wider text-indigo-800 bg-indigo-50/80 rounded-lg mb-1 flex items-center justify-between">
-              <span><i class="fa-solid fa-chalkboard-user mr-1"></i> Teachers &amp; Staff (${matchedTeachers.length})</span>
-              <span class="text-[9px] text-indigo-600 font-bold">Click to Inspect Schedule</span>
+          <div class="p-2.5">
+            <div class="px-2.5 py-1 text-[11px] font-extrabold uppercase tracking-wider text-indigo-800 bg-indigo-50/90 rounded-lg mb-1.5 flex items-center justify-between">
+              <span><i class="fa-solid fa-user-tie mr-1.5"></i> Employees (${matchedTeachers.length})</span>
+              <span class="text-[10px] text-indigo-700 font-bold">Click to Open Employee Profile</span>
             </div>
             <div class="space-y-1">
               ${matchedTeachers.map(t => {
-                let credsId = t.id || 'TCH';
+                let credsId = t.id || 'EMP';
                 if (typeof getTeacherCreds === 'function') {
                   try { credsId = getTeacherCreds(t)?.teacher_id || credsId; } catch (e) {}
                 }
                 return `
-                  <div onclick="clearDashboardGlobalSearch(); openTeacher360Profile('${t.id}')" class="px-2.5 py-1.5 rounded-xl hover:bg-indigo-50/70 cursor-pointer transition flex items-center justify-between gap-2 border border-transparent hover:border-indigo-200">
+                  <div onclick="clearDashboardGlobalSearch(); openTeacher360Profile('${t.id}')" class="px-3 py-2 rounded-xl hover:bg-indigo-50/80 cursor-pointer transition flex items-center justify-between gap-2 border border-transparent hover:border-indigo-200">
                     <div class="min-w-0">
-                      <div class="flex items-center gap-1.5">
-                        <span class="text-xs font-extrabold text-slate-900 truncate">${t.full_name}</span>
-                        <span class="px-1.5 py-0.2 rounded bg-indigo-100 border border-indigo-200 font-mono text-[9px] font-bold text-indigo-900 shrink-0">${credsId}</span>
+                      <div class="flex items-center gap-2">
+                        <span class="text-[13px] font-extrabold text-slate-900 truncate">${t.full_name}</span>
+                        <span class="px-2 py-0.5 rounded-md bg-indigo-100 border border-indigo-200 font-num text-[11px] font-bold text-indigo-900 shrink-0">${credsId}</span>
                       </div>
-                      <div class="text-[10px] text-slate-500 truncate">
-                        Phone: <span class="font-mono font-semibold text-slate-700">${t.phone || '--'}</span>
+                      <div class="text-[11.5px] text-slate-500 truncate mt-0.5">
+                        Phone: <span class="font-num font-semibold text-slate-700">${t.phone || '--'}</span>
                       </div>
                     </div>
-                    <span class="px-2 py-0.5 rounded-lg bg-indigo-700 text-white text-[10px] font-bold shrink-0">Schedule</span>
+                    <span class="px-2.5 py-1 rounded-lg bg-indigo-700 text-white text-[11px] font-bold shrink-0">Employee Profile</span>
                   </div>
                 `;
               }).join('')}
@@ -1556,12 +1733,31 @@
       const input = document.getElementById('dashGlobalSearchInput');
       const panel = document.getElementById('dashGlobalSearchResultsPanel');
       const clearBtn = document.getElementById('btnClearDashGlobalSearch');
+      const kbdHint = document.getElementById('kbdDashGlobalSearchHint');
       if (input) input.value = '';
       if (panel) {
         panel.classList.add('hidden');
         panel.innerHTML = '';
       }
       if (clearBtn) clearBtn.classList.add('hidden');
+      if (kbdHint) kbdHint.classList.remove('hidden');
+    }
+
+    function openTrialFromGlobalSearch(studentName) {
+      clearDashboardGlobalSearch();
+      if (typeof switchTab === 'function') {
+        switchTab('tab-trials');
+      }
+      if (typeof filterTrialCards === 'function') {
+        filterTrialCards('active');
+      }
+      const searchInput = document.getElementById('trialSearchInput');
+      if (searchInput) {
+        searchInput.value = studentName || '';
+        if (typeof handleTrialSearch === 'function') {
+          handleTrialSearch(studentName || '');
+        }
+      }
     }
 
     async function openFamilyFromDashboardSearch(familyId) {

@@ -19,10 +19,10 @@
   <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
   <link rel="icon" type="image/png" sizes="64x64" href="favicon.png">
   
-  <!-- Modern Fonts & Icons (Plus Jakarta Sans, JetBrains Mono, Outfit for Luxury Numbers, Cinzel) -->
+  <!-- Modern Fonts & Icons (Inter, Plus Jakarta Sans, Outfit for Tabular Numbers, JetBrains Mono, Cinzel) -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700;800&family=JetBrains+Mono:wght@400;500;600;700;800&family=Outfit:wght@500;600;700;800;900&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700;800&family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;600;700&family=Outfit:wght@500;600;700;800;900&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   
   <!-- Tailwind CSS via CDN -->
@@ -59,9 +59,9 @@
           },
           fontFamily: {
             cinzel: ['Cinzel', 'serif'],
-            sans: ['"Plus Jakarta Sans"', 'sans-serif'],
-            mono: ['"JetBrains Mono"', 'monospace'],
-            num: ['"Outfit"', '"JetBrains Mono"', 'sans-serif']
+            sans: ['"Inter"', '"Plus Jakarta Sans"', 'sans-serif'],
+            mono: ['"Outfit"', '"Inter"', 'sans-serif'],
+            num: ['"Outfit"', '"Inter"', 'sans-serif']
           }
         }
       }
@@ -69,16 +69,57 @@
   </script>
 
   <style>
+    :root {
+      --font-ui: 'Inter', 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+      --font-num: 'Outfit', 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    }
+
     body {
-      font-family: 'Plus Jakarta Sans', sans-serif;
+      font-family: var(--font-ui);
       background-color: #f8fafc;
-      font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11', 'tnum';
+      color: #0f172a;
+      font-size: 14px;
+      line-height: 1.5;
+      font-feature-settings: 'cv02' 1, 'cv03' 1, 'cv04' 1, 'cv11' 1, 'tnum' 1;
+      font-variant-numeric: tabular-nums;
       -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
     }
 
     /* ============================================================ */
+    /* GLOBAL TYPOGRAPHY HIERARCHY & ANTI-EYE-STRAIN SCALE          */
     /* ============================================================ */
-    /* EXECUTIVE KPI DASHBOARD CARDS THEME (FILLED SLEEK PALETTE)   */
+    /* Prevent overly tiny micro-fonts across all tables, cards & badges */
+    .text-\[8px\], .text-\[8\.5px\], .text-\[9px\], .text-\[9\.5px\] {
+      font-size: 0.72rem !important; /* 11.5px readable minimum */
+      line-height: 1.35 !important;
+    }
+    .text-\[10px\] {
+      font-size: 0.75rem !important; /* 12px crisp label */
+      line-height: 1.4 !important;
+    }
+    .text-\[11px\] {
+      font-size: 0.79rem !important; /* 12.6px secondary text */
+      line-height: 1.42 !important;
+    }
+    .text-xs {
+      font-size: 0.825rem !important; /* 13.2px clean readable UI text */
+      line-height: 1.48 !important;
+    }
+    table th {
+      font-family: var(--font-ui) !important;
+      font-size: 0.76rem !important;
+      font-weight: 700 !important;
+      letter-spacing: 0.035em !important;
+      color: #334155 !important;
+    }
+    table td {
+      font-size: 0.84rem !important;
+      line-height: 1.45 !important;
+    }
+
+    /* ============================================================ */
+    /* EXECUTIVE KPI DASHBOARD CARDS THEME (REFINED MODERN PALETTE) */
     /* ============================================================ */
     .kpi-dash-card {
       transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1) !important;
@@ -87,64 +128,116 @@
       transform: translateY(-1.5px) !important;
     }
     #kpiBox-all {
-      background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%) !important;
+      background: linear-gradient(135deg, #f8fafc 0%, #eef2f6 100%) !important;
       border: 1px solid #cbd5e1 !important;
-      border-left: 5px solid #334155 !important;
+      border-left: 4px solid #334155 !important;
     }
     #kpiBox-current {
-      background: linear-gradient(135deg, #ecfeff 0%, #cffafe 100%) !important;
-      border: 1px solid #67e8f9 !important;
-      border-left: 5px solid #0891b2 !important;
+      background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%) !important;
+      border: 1px solid #7dd3fc !important;
+      border-left: 4px solid #0284c7 !important;
     }
     #kpiBox-running {
       background: linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%) !important;
       border: 1px solid #6ee7b7 !important;
-      border-left: 5px solid #059669 !important;
+      border-left: 4px solid #059669 !important;
     }
     #kpiBox-completed {
       background: linear-gradient(135deg, #f0fdfa 0%, #ccfbf1 100%) !important;
       border: 1px solid #5eead4 !important;
-      border-left: 5px solid #0d9488 !important;
+      border-left: 4px solid #0d9488 !important;
     }
     #kpiBox-remaining {
       background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%) !important;
       border: 1px solid #fcd34d !important;
-      border-left: 5px solid #d97706 !important;
+      border-left: 4px solid #d97706 !important;
     }
     #kpiBox-absent {
       background: linear-gradient(135deg, #fff1f2 0%, #ffe4e6 100%) !important;
       border: 1px solid #fda4af !important;
-      border-left: 5px solid #e11d48 !important;
+      border-left: 4px solid #e11d48 !important;
     }
     #kpiBox-leave {
       background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%) !important;
       border: 1px solid #93c5fd !important;
-      border-left: 5px solid #2563eb !important;
+      border-left: 4px solid #2563eb !important;
     }
     #kpiBox-trial {
-      background: linear-gradient(135deg, #faf5ff 0%, #f3e8ff 100%) !important;
-      border: 1px solid #d8b4fe !important;
-      border-left: 5px solid #9333ea !important;
+      background: linear-gradient(135deg, #f5f3ff 0%, #ede9fe 100%) !important;
+      border: 1px solid #c4b5fd !important;
+      border-left: 4px solid #7c3aed !important;
     }
     .kpi-dash-card [id^="kpiDash"] {
-      font-weight: 900 !important;
+      font-family: var(--font-num) !important;
+      font-size: 1.35rem !important;
+      font-weight: 800 !important;
+      letter-spacing: -0.02em !important;
+      font-variant-numeric: tabular-nums !important;
     }
 
     /* ============================================================ */
-    /* NUMBERS AESTHETICS (JetBrains Mono & Outfit Modern Figures)  */
+    /* DEDICATED NUMERIC & FINANCIAL TYPOGRAPHY SYSTEM              */
+    /* Clean, Natural, High-Readability Tabular Numerals            */
     /* ============================================================ */
-    .font-mono, td.font-mono, span.font-mono, div.font-mono {
-      font-family: 'JetBrains Mono', monospace !important;
-      font-feature-settings: 'tnum' 1, 'zero' 1;
-      letter-spacing: -0.025em;
+    .font-mono, td.font-mono, span.font-mono, div.font-mono,
+    .font-num, .num-display, .financial-val,
+    [id^="kpiDash"], [id^="payrollKpi"], [id^="kpiSched"],
+    [id^="dashLive"], [id^="sidebarActive"], [id^="kpiFee"],
+    [id^="trialsKpi"], [id^="famSummary"], [id^="badgeTop"] {
+      font-family: var(--font-num) !important;
+      font-variant-numeric: tabular-nums lining-nums !important;
+      font-feature-settings: 'tnum' 1, 'lnum' 1, 'zero' 0 !important;
+      letter-spacing: -0.015em !important;
     }
 
-    /* Primary KPI Number Displays & Badges (Sharp, Modern, Luxury Tabular) */
-    .font-num, [id^="kpiDash"], [id^="payrollKpi"], [id^="kpiSched"], [id^="dashLive"], [id^="sidebarActive"], .num-display {
-      font-family: 'Outfit', 'Plus Jakarta Sans', sans-serif !important;
+    /* Primary KPI & Financial Totals */
+    [id^="kpiFee"], [id^="trialsKpi"], [id^="payrollKpi"], [id^="famSummary"] {
+      font-weight: 800 !important;
+    }
+
+    /* ============================================================ */
+    /* MODERN SIDEBAR NAVIGATION & SUBTLE ACTIVE STATE              */
+    /* ============================================================ */
+    .sidebar-nav-btn {
+      position: relative;
+      border-radius: 0.75rem !important;
+      font-size: 0.84rem !important;
+      font-weight: 600 !important;
+      color: #334155;
+      transition: all 0.18s cubic-bezier(0.16, 1, 0.3, 1) !important;
+      border: 1px solid transparent;
+    }
+    .sidebar-nav-btn:hover:not(.active) {
+      background-color: #f1f5f9 !important;
+      color: #0f172a !important;
+    }
+    .sidebar-nav-btn .sidebar-icon-box {
+      width: 1.85rem;
+      height: 1.85rem;
+      border-radius: 0.55rem;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      background-color: #f1f5f9;
+      color: #475569;
+      font-size: 0.82rem;
+      transition: all 0.18s ease;
+      flex-shrink: 0;
+    }
+    .sidebar-nav-btn:hover:not(.active) .sidebar-icon-box {
+      background-color: #e2e8f0;
+      color: #0f172a;
+    }
+    .sidebar-nav-btn.active {
+      background: linear-gradient(90deg, #064e3b 0%, #047857 100%) !important;
+      color: #ffffff !important;
       font-weight: 700 !important;
-      font-feature-settings: 'tnum' 1, 'ss01' 1 !important;
-      letter-spacing: -0.04em !important;
+      box-shadow: 0 4px 12px -2px rgba(6, 78, 59, 0.25) !important;
+      border-left: 3.5px solid #fbbf24 !important;
+    }
+    .sidebar-nav-btn.active .sidebar-icon-box {
+      background-color: rgba(255, 255, 255, 0.16) !important;
+      color: #fde68a !important;
     }
 
     /* Custom Floating Dropdowns Animation */
@@ -386,65 +479,93 @@
   <div id="sidebarBackdrop" onclick="toggleSidebar()" class="hidden fixed inset-0 bg-black/60 backdrop-blur-sm z-50 lg:hidden transition-opacity"></div>
 
   <!-- COLLAPSIBLE LEFT SIDEBAR (Mobile Off-Canvas Drawer / Desktop Collapsible) -->
-  <aside id="mainAppSidebar" class="bg-white border-r border-slate-200 shadow-xl flex flex-col overflow-hidden">
-    <!-- Nav Items -->
-    <nav class="flex flex-col gap-1 p-2 flex-1 overflow-y-auto touch-scroll">
-      <button onclick="switchTab('tab-dashboard')" data-tab="tab-dashboard" class="sidebar-nav-btn nav-tab active w-full text-left px-3 py-2.5 rounded-lg text-sm font-bold flex items-center gap-3 bg-brandDark text-white transition">
-        <i class="fa-solid fa-gauge-high text-brandGold w-4 flex-shrink-0"></i>
-        <span class="sidebar-label">Main Dashboard</span>
+  <aside id="mainAppSidebar" class="bg-white border-r border-slate-200/90 shadow-xl flex flex-col overflow-hidden">
+    <!-- Primary & Secondary Nav Items -->
+    <nav class="flex flex-col gap-1 p-2.5 flex-1 overflow-y-auto touch-scroll">
+      <!-- 1. Main Dashboard -->
+      <button onclick="switchTab('tab-dashboard')" data-tab="tab-dashboard" class="sidebar-nav-btn nav-tab active w-full text-left px-2.5 py-2 flex items-center gap-2.5">
+        <span class="sidebar-icon-box"><i class="fa-solid fa-chart-pie"></i></span>
+        <span class="sidebar-label truncate">Main Dashboard</span>
       </button>
-      <button onclick="switchTab('tab-curriculum')" data-tab="tab-curriculum" class="sidebar-nav-btn nav-tab w-full text-left px-3 py-2.5 rounded-lg text-sm font-bold flex items-center gap-3 text-slate-700 hover:bg-emerald-50 hover:text-brandDark transition">
-        <i class="fa-solid fa-book-quran text-brandEmerald w-4 flex-shrink-0"></i>
-        <span class="sidebar-label flex items-center justify-between flex-1">
-          <span>Course Material &amp; Library</span>
-          <span class="px-1.5 py-0.2 rounded-full text-[9px] font-extrabold bg-emerald-100 text-brandEmerald border border-emerald-200">Syllabus</span>
+
+      <!-- 2. Families -->
+      <button onclick="switchTab('tab-families')" data-tab="tab-families" class="sidebar-nav-btn nav-tab role-admin w-full text-left px-2.5 py-2 flex items-center gap-2.5">
+        <span class="sidebar-icon-box"><i class="fa-solid fa-people-roof"></i></span>
+        <span class="sidebar-label truncate">Families</span>
+      </button>
+
+      <!-- 3. Employees -->
+      <button onclick="switchTab('tab-teachers')" data-tab="tab-teachers" class="sidebar-nav-btn nav-tab role-admin w-full text-left px-2.5 py-2 flex items-center gap-2.5">
+        <span class="sidebar-icon-box"><i class="fa-solid fa-user-tie"></i></span>
+        <span class="sidebar-label truncate">Employees</span>
+      </button>
+
+      <!-- 4. Trials -->
+      <button onclick="switchTab('tab-trials')" data-tab="tab-trials" class="sidebar-nav-btn nav-tab role-admin w-full text-left px-2.5 py-2 flex items-center gap-2.5">
+        <span class="sidebar-icon-box"><i class="fa-solid fa-user-plus"></i></span>
+        <span class="sidebar-label truncate">Trials</span>
+      </button>
+
+      <!-- 5. Fee Management -->
+      <button onclick="switchTab('tab-invoices')" data-tab="tab-invoices" class="sidebar-nav-btn nav-tab role-admin w-full text-left px-2.5 py-2 flex items-center gap-2.5">
+        <span class="sidebar-icon-box"><i class="fa-solid fa-wallet"></i></span>
+        <span class="sidebar-label flex items-center justify-between flex-1 min-w-0">
+          <span class="truncate">Fee Management</span>
+          <span id="navFeePendingBadge" class="hidden px-1.5 py-0.5 rounded-full text-[11px] font-num bg-rose-100 text-rose-800 font-extrabold border border-rose-200 shrink-0">0</span>
         </span>
       </button>
-      <button onclick="switchTab('tab-families')" data-tab="tab-families" class="sidebar-nav-btn nav-tab role-admin w-full text-left px-3 py-2.5 rounded-lg text-sm font-bold flex items-center gap-3 text-slate-700 hover:bg-emerald-50 hover:text-brandDark transition">
-        <i class="fa-solid fa-users text-brandEmerald w-4 flex-shrink-0"></i>
-        <span class="sidebar-label">Families &amp; Students</span>
+
+      <!-- 6. Teacher Auto Salary Generation -->
+      <button onclick="switchTab('tab-salaries')" data-tab="tab-salaries" class="sidebar-nav-btn nav-tab role-admin w-full text-left px-2.5 py-2 flex items-center gap-2.5" title="Teacher Auto Salary Generation">
+        <span class="sidebar-icon-box"><i class="fa-solid fa-calculator"></i></span>
+        <span class="sidebar-label truncate">Teacher Auto Salary Generation</span>
       </button>
-      <button onclick="switchTab('tab-trials')" data-tab="tab-trials" class="sidebar-nav-btn nav-tab role-admin w-full text-left px-3 py-2.5 rounded-lg text-sm font-bold flex items-center gap-3 text-slate-700 hover:bg-purple-50 hover:text-purple-900 transition">
-        <i class="fa-solid fa-graduation-cap text-purple-600 text-xs w-4 flex-shrink-0"></i>
-        <span class="sidebar-label">Trial Classes</span>
-      </button>
-      <button onclick="switchTab('tab-teachers')" data-tab="tab-teachers" class="sidebar-nav-btn nav-tab role-admin w-full text-left px-3 py-2.5 rounded-lg text-sm font-bold flex items-center gap-3 text-slate-700 hover:bg-emerald-50 hover:text-brandDark transition">
-        <i class="fa-solid fa-id-card text-brandEmerald w-4 flex-shrink-0"></i>
-        <span class="sidebar-label">Employee Registration</span>
-      </button>
-      <button onclick="switchTab('tab-attendance')" data-tab="tab-attendance" class="sidebar-nav-btn nav-tab w-full text-left px-3 py-2.5 rounded-lg text-sm font-bold flex items-center gap-3 text-slate-700 hover:bg-emerald-50 hover:text-brandDark transition">
-        <i class="fa-solid fa-clipboard-check text-brandEmerald w-4 flex-shrink-0"></i>
-        <span class="sidebar-label">Daily Attendance &amp; Notes</span>
-      </button>
-      <button onclick="switchTab('tab-salaries')" data-tab="tab-salaries" class="sidebar-nav-btn nav-tab role-admin w-full text-left px-3 py-2.5 rounded-lg text-sm font-bold flex items-center gap-3 text-slate-700 hover:bg-emerald-50 hover:text-brandDark transition">
-        <i class="fa-solid fa-hand-holding-dollar text-brandGold w-4 flex-shrink-0"></i>
-        <span class="sidebar-label">Teacher Salaries (Auto)</span>
-      </button>
-      <button onclick="switchTab('tab-leaves')" data-tab="tab-leaves" class="sidebar-nav-btn nav-tab role-admin w-full text-left px-3 py-2.5 rounded-lg text-sm font-bold flex items-center gap-3 text-slate-700 hover:bg-blue-50 hover:text-blue-900 transition">
-        <i class="fa-solid fa-plane-departure text-blue-600 w-4 flex-shrink-0"></i>
-        <span class="sidebar-label flex items-center gap-2">Leave Tracker <span id="navLeaveCountBadge" class="px-1.5 rounded-full text-[10px] font-mono bg-blue-100 text-blue-800 font-extrabold border border-blue-200">0</span></span>
-      </button>
-      <button onclick="switchTab('tab-invoices')" data-tab="tab-invoices" class="sidebar-nav-btn nav-tab role-admin w-full text-left px-3 py-2.5 rounded-lg text-sm font-bold flex items-center gap-3 text-slate-700 hover:bg-emerald-50 hover:text-brandDark transition">
-        <i class="fa-solid fa-file-invoice-dollar text-brandGold w-4 flex-shrink-0"></i>
-        <span class="sidebar-label flex items-center justify-between flex-1">
-          <span>Fee Management &amp; Matrix</span>
-          <span id="navFeePendingBadge" class="hidden px-1.5 rounded-full text-[10px] font-mono bg-rose-100 text-rose-800 font-extrabold border border-rose-200">0</span>
+
+      <!-- 7. Leave -->
+      <button onclick="switchTab('tab-leaves')" data-tab="tab-leaves" class="sidebar-nav-btn nav-tab role-admin w-full text-left px-2.5 py-2 flex items-center gap-2.5">
+        <span class="sidebar-icon-box"><i class="fa-solid fa-calendar-minus"></i></span>
+        <span class="sidebar-label flex items-center justify-between flex-1 min-w-0">
+          <span class="truncate">Leave</span>
+          <span id="navLeaveCountBadge" class="px-1.5 py-0.5 rounded-full text-[11px] font-num bg-blue-100 text-blue-800 font-extrabold border border-blue-200 shrink-0">0</span>
         </span>
       </button>
-      <button onclick="switchTab('tab-schedule-search')" data-tab="tab-schedule-search" class="sidebar-nav-btn nav-tab role-admin w-full text-left px-3 py-2.5 rounded-lg text-sm font-bold flex items-center gap-3 text-slate-700 hover:bg-cyan-50 hover:text-cyan-900 transition">
-        <i class="fa-solid fa-calendar-check text-cyan-600 w-4 flex-shrink-0"></i>
-        <span class="sidebar-label">Schedule Search / Slot Finder</span>
+
+      <!-- 8. Schedule Slot Finder -->
+      <button onclick="switchTab('tab-schedule-search')" data-tab="tab-schedule-search" class="sidebar-nav-btn nav-tab role-admin w-full text-left px-2.5 py-2 flex items-center gap-2.5">
+        <span class="sidebar-icon-box"><i class="fa-solid fa-calendar-days"></i></span>
+        <span class="sidebar-label truncate">Schedule Slot Finder</span>
+      </button>
+
+      <!-- Divider for Preserved Academic & Operations Modules -->
+      <div class="my-1.5 border-t border-slate-100 pt-1.5 sidebar-label">
+        <span class="px-2.5 text-[10px] font-extrabold uppercase tracking-wider text-slate-400 block mb-1">Academic &amp; Operations</span>
+      </div>
+
+      <!-- 9. Course Materials (Preserved with Book/Library Icon) -->
+      <button onclick="switchTab('tab-curriculum')" data-tab="tab-curriculum" class="sidebar-nav-btn nav-tab w-full text-left px-2.5 py-2 flex items-center gap-2.5">
+        <span class="sidebar-icon-box"><i class="fa-solid fa-book-open-reader"></i></span>
+        <span class="sidebar-label flex items-center justify-between flex-1 min-w-0">
+          <span class="truncate">Course Materials</span>
+          <span class="px-1.5 py-0.2 rounded-full text-[10px] font-extrabold bg-emerald-50 text-emerald-800 border border-emerald-200 shrink-0">Library</span>
+        </span>
+      </button>
+
+      <!-- 10. Daily Attendance & Notes (Preserved) -->
+      <button onclick="switchTab('tab-attendance')" data-tab="tab-attendance" class="sidebar-nav-btn nav-tab w-full text-left px-2.5 py-2 flex items-center gap-2.5">
+        <span class="sidebar-icon-box"><i class="fa-solid fa-clipboard-user"></i></span>
+        <span class="sidebar-label truncate">Daily Attendance &amp; Notes</span>
       </button>
     </nav>
-    <!-- Sidebar Footer: Active Counters -->
-    <div class="p-2 border-t border-slate-100 space-y-1.5 sidebar-label">
-      <div class="flex items-center gap-2 px-2 py-1.5 rounded-lg bg-emerald-50 border border-emerald-200 text-xs font-bold text-emerald-900">
-        <i class="fa-solid fa-house-circle-check text-brandEmerald"></i>
-        <span>Families: <span id="sidebarActiveFamilies" class="font-mono font-black">0</span></span>
+
+    <!-- Sidebar Footer: Active Counters (High-Readability Tabular Numbers) -->
+    <div class="p-2.5 border-t border-slate-200/80 bg-slate-50/70 space-y-1.5 sidebar-label">
+      <div class="flex items-center justify-between px-2.5 py-1.5 rounded-xl bg-white border border-slate-200/90 text-xs font-bold text-slate-700 shadow-2xs">
+        <span class="flex items-center gap-2"><i class="fa-solid fa-people-roof text-brandEmerald"></i> Active Families</span>
+        <span id="sidebarActiveFamilies" class="font-num font-extrabold text-sm text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200">0</span>
       </div>
-      <div class="flex items-center gap-2 px-2 py-1.5 rounded-lg bg-teal-50 border border-teal-200 text-xs font-bold text-teal-900">
-        <i class="fa-solid fa-user-graduate text-teal-600"></i>
-        <span>Students: <span id="sidebarActiveStudents" class="font-mono font-black">0</span></span>
+      <div class="flex items-center justify-between px-2.5 py-1.5 rounded-xl bg-white border border-slate-200/90 text-xs font-bold text-slate-700 shadow-2xs">
+        <span class="flex items-center gap-2"><i class="fa-solid fa-user-graduate text-teal-600"></i> Active Students</span>
+        <span id="sidebarActiveStudents" class="font-num font-extrabold text-sm text-teal-800 bg-teal-50 px-2 py-0.5 rounded-md border border-teal-200">0</span>
       </div>
     </div>
   </aside>
@@ -452,117 +573,121 @@
   <!-- MAIN WRAPPER (Fluid on mobile, offset on desktop) -->
   <main id="mainContentArea" class="w-full flex-grow transition-all duration-300 ease-in-out">
 
+    <!-- GLOBAL PERSISTENT SEARCH & QUICK OPERATIONS HEADER BAR (VISIBLE ON EVERY LMS PAGE & PROFILE) -->
+    <div id="globalPersistentTopSearchBar" class="bg-white px-4 py-2.5 rounded-2xl border border-slate-200/90 shadow-xs mb-4 flex flex-wrap items-center justify-between gap-3 relative z-30">
+      
+      <!-- Left: Modern Global Search Input (Students, Families, Employees, Trials by Name, ID or Phone) -->
+      <div class="relative flex items-center gap-2 w-full sm:w-auto flex-1 max-w-md" id="dashGlobalSearchContainer">
+        <div class="relative w-full group">
+          <i class="fa-solid fa-magnifying-glass absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-emerald-600 text-xs transition-colors pointer-events-none"></i>
+          <input
+            type="text"
+            id="dashGlobalSearchInput"
+            oninput="handleDashboardGlobalSearch(this.value)"
+            onfocus="handleDashboardGlobalSearch(this.value)"
+            onkeydown="if(event.key==='Enter'){ event.preventDefault(); handleDashboardGlobalSearch(this.value); } else if(event.key==='Escape'){ clearDashboardGlobalSearch(); this.blur(); }"
+            autocomplete="off"
+            placeholder="Search student, family, employee, trial, phone or ID... (Ctrl+K)"
+            class="w-full pl-9 pr-16 py-2 bg-slate-50/90 hover:bg-white focus:bg-white border border-slate-300 hover:border-slate-400 focus:border-emerald-600 rounded-xl text-[13px] font-semibold text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-3 focus:ring-emerald-500/15 transition-all shadow-2xs"
+          >
+          <span id="kbdDashGlobalSearchHint" class="hidden sm:inline-flex items-center px-1.5 py-0.5 rounded bg-slate-200/80 text-slate-500 font-mono text-[10px] font-bold absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none">
+            Ctrl K
+          </span>
+          <button
+            type="button"
+            id="btnClearDashGlobalSearch"
+            onclick="clearDashboardGlobalSearch()"
+            class="hidden absolute right-2.5 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full bg-slate-200/80 hover:bg-slate-300 text-slate-600 hover:text-slate-900 text-xs flex items-center justify-center transition cursor-pointer"
+            title="Clear Search (Esc)"
+          >
+            <i class="fa-solid fa-xmark"></i>
+          </button>
+        </div>
+
+        <!-- Instant Live Search Results Dropdown -->
+        <div
+          id="dashGlobalSearchResultsPanel"
+          class="hidden absolute left-0 right-0 top-full mt-2 bg-white rounded-2xl border border-slate-200 shadow-2xl max-h-96 overflow-y-auto z-50 divide-y divide-slate-100"
+        ></div>
+      </div>
+
+      <!-- Right/Center: 4 Global LMS Action Badges (Leave Over, Teacher Time/Attendance Requests, Official Announcements, Parent Complaints Inbox) -->
+      <div class="flex items-center gap-2 flex-wrap justify-end">
+        
+        <!-- 1. Students Leave Over / Return Due Alerts -->
+        <button
+          onclick="openReturnAlertsModal()"
+          id="btnTopCircleLeaveOver"
+          class="group relative px-3 py-1.5 rounded-xl bg-amber-50/90 hover:bg-amber-100 text-amber-900 border border-amber-200/90 flex items-center gap-2 transition-all shadow-2xs hover:shadow-xs cursor-pointer"
+          title="Students Leave Over / Return Date Arrived Alerts"
+        >
+          <span class="w-6 h-6 rounded-lg bg-amber-500 text-white flex items-center justify-center text-xs shadow-2xs group-hover:scale-105 transition">
+            <i class="fa-solid fa-calendar-check"></i>
+          </span>
+          <span class="text-xs font-bold tracking-tight hidden sm:inline">Leave Over</span>
+          <span id="badgeTopLeaveOverCount" class="px-1.5 py-0.5 rounded-md bg-amber-200/80 text-amber-950 font-num text-xs font-extrabold">0</span>
+          <span id="dotTopCircleLeaveOver" class="hidden absolute -top-1 -right-1 w-3 h-3 rounded-full bg-rose-600 border-2 border-white animate-ping"></span>
+          <span id="dotTopCircleLeaveOverSolid" class="hidden absolute -top-1 -right-1 w-3 h-3 rounded-full bg-rose-600 border-2 border-white"></span>
+        </button>
+
+        <!-- 2. Teacher Time-Change & Wrong Leave/Absent Correction Requests -->
+        <button
+          onclick="openAdminTeacherRequestsModal()"
+          id="btnTopCircleRequests"
+          class="group relative px-3 py-1.5 rounded-xl bg-indigo-50/90 hover:bg-indigo-100 text-indigo-900 border border-indigo-200/90 flex items-center gap-2 transition-all shadow-2xs hover:shadow-xs cursor-pointer"
+          title="Teacher Schedule Time-Change & Wrong Leave/Absent Correction Requests"
+        >
+          <span class="w-6 h-6 rounded-lg bg-indigo-600 text-white flex items-center justify-center text-xs shadow-2xs group-hover:scale-105 transition">
+            <i class="fa-solid fa-clock-rotate-left"></i>
+          </span>
+          <span class="text-xs font-bold tracking-tight hidden sm:inline">Teacher Requests</span>
+          <span id="badgeTopRequestsCount" class="px-1.5 py-0.5 rounded-md bg-indigo-200/80 text-indigo-950 font-num text-xs font-extrabold">0</span>
+          <span id="dotTopCircleRequests" class="hidden absolute -top-1 -right-1 w-3 h-3 rounded-full bg-rose-600 border-2 border-white animate-pulse"></span>
+        </button>
+
+        <!-- 3. Official Announcements -->
+        <button
+          onclick="openAdminAnnouncementsModal()"
+          id="btnTopCircleAnnouncements"
+          class="group relative px-3 py-1.5 rounded-xl bg-emerald-50/90 hover:bg-emerald-100 text-emerald-900 border border-emerald-200/90 flex items-center gap-2 transition-all shadow-2xs hover:shadow-xs cursor-pointer"
+          title="Publish Official Announcements to Teacher Portal & Student/Parent Portal"
+        >
+          <span class="w-6 h-6 rounded-lg bg-emerald-600 text-white flex items-center justify-center text-xs shadow-2xs group-hover:scale-105 transition">
+            <i class="fa-solid fa-bullhorn"></i>
+          </span>
+          <span class="text-xs font-bold tracking-tight hidden sm:inline">Announcements</span>
+          <span id="badgeTopAnnouncementsCount" class="px-1.5 py-0.5 rounded-md bg-emerald-200/80 text-emerald-950 font-num text-xs font-extrabold">1</span>
+          <span id="dotTopCircleAnnouncements" class="hidden absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-emerald-500 border-2 border-white"></span>
+        </button>
+
+        <!-- 4. Parent Complaints & Admin Official Reply Inbox -->
+        <button
+          onclick="openAdminParentComplaintsModal()"
+          id="btnTopCircleComplaints"
+          class="group relative px-3 py-1.5 rounded-xl bg-rose-50/90 hover:bg-rose-100 text-rose-900 border border-rose-200/90 flex items-center gap-2 transition-all shadow-2xs hover:shadow-xs cursor-pointer"
+          title="Parent Complaints Inbox & Admin Direct Reply to Parents"
+        >
+          <span class="w-6 h-6 rounded-lg bg-rose-600 text-white flex items-center justify-center text-xs shadow-2xs group-hover:scale-105 transition">
+            <i class="fa-solid fa-envelope-open-text"></i>
+          </span>
+          <span class="text-xs font-bold tracking-tight hidden sm:inline">Complaints</span>
+          <span id="badgeTopComplaintsCount" class="px-1.5 py-0.5 rounded-md bg-rose-200/80 text-rose-950 font-num text-xs font-extrabold">1</span>
+          <span id="dotTopCircleComplaints" class="hidden absolute -top-1 -right-1 w-3 h-3 rounded-full bg-rose-600 border-2 border-white animate-ping"></span>
+          <span id="dotTopCircleComplaintsSolid" class="hidden absolute -top-1 -right-1 w-3 h-3 rounded-full bg-rose-600 border-2 border-white"></span>
+        </button>
+
+        <!-- Hidden Counters for Internal JS Sync -->
+        <div class="hidden">
+          <span id="dashTodayDateLabel">Today</span>
+          <span id="dashLiveActiveFamilies">0</span>
+          <span id="dashLiveActiveStudents">0</span>
+        </div>
+      </div>
+
+    </div>
+
     <!-- 1. MAIN EXECUTIVE DASHBOARD TAB -->
     <section id="tab-dashboard" class="tab-content block">
-      
-      <!-- TOP BAR: LEFT SEARCH + CENTER CIRCULAR NOTIFICATION ICONS (WITH RED DOTS) + RIGHT ADMIN INFO -->
-      <div class="bg-white px-3.5 py-2.5 rounded-xl border border-slate-200/90 shadow-2xs mb-3 flex flex-wrap items-center justify-between gap-3 relative z-30">
-        
-        <!-- Left: Search Input + Submit Button (Students, Families, Teachers by Name, ID or Phone) -->
-        <div class="relative flex items-center gap-1.5 w-full sm:w-auto" id="dashGlobalSearchContainer">
-          <div class="relative flex-1 sm:w-64 md:w-72">
-            <input
-              type="text"
-              id="dashGlobalSearchInput"
-              oninput="handleDashboardGlobalSearch(this.value)"
-              onfocus="handleDashboardGlobalSearch(this.value)"
-              onkeydown="if(event.key==='Enter'){ event.preventDefault(); handleDashboardGlobalSearch(this.value); }"
-              autocomplete="off"
-              placeholder="Search Student, Family, Teacher..."
-              class="w-full pl-3 pr-7 py-1.5 bg-white border border-slate-300 rounded-md text-xs font-semibold text-slate-800 placeholder-slate-400 focus:outline-none focus:border-blue-600 transition"
-            >
-            <button
-              type="button"
-              id="btnClearDashGlobalSearch"
-              onclick="clearDashboardGlobalSearch()"
-              class="hidden absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 text-xs transition"
-              title="Clear Search"
-            >
-              <i class="fa-solid fa-circle-xmark"></i>
-            </button>
-          </div>
-
-          <!-- Instant Live Search Results Dropdown -->
-          <div
-            id="dashGlobalSearchResultsPanel"
-            class="hidden absolute left-0 right-0 top-full mt-1.5 bg-white rounded-2xl border border-slate-200 shadow-2xl max-h-80 overflow-y-auto z-50 divide-y divide-slate-100"
-          ></div>
-        </div>
-
-        <!-- Right/Center: 4 Upgraded Next-Gen LMS Action Badges (Leave Over, Teacher Time/Attendance Requests, Official Announcements, Parent Complaints Inbox) -->
-        <div class="flex items-center gap-2.5 flex-wrap justify-end">
-          
-          <!-- 1. GREY ARROW: Students Leave Over / Return Due Alerts -->
-          <button
-            onclick="openReturnAlertsModal()"
-            id="btnTopCircleLeaveOver"
-            class="group relative px-3 py-1.5 rounded-xl bg-gradient-to-br from-amber-50 to-orange-50 hover:from-amber-100 hover:to-orange-100 text-amber-800 border border-amber-200/90 flex items-center gap-2 transition-all shadow-2xs hover:shadow-sm cursor-pointer"
-            title="Students Leave Over / Return Date Arrived Alerts"
-          >
-            <span class="w-6 h-6 rounded-lg bg-amber-500 text-white flex items-center justify-center text-xs shadow-2xs group-hover:scale-105 transition">
-              <i class="fa-solid fa-calendar-check"></i>
-            </span>
-            <span class="text-[11px] font-extrabold tracking-tight hidden sm:inline">Leave Over</span>
-            <span id="badgeTopLeaveOverCount" class="px-1.5 py-0.2 rounded-md bg-amber-200/80 text-amber-950 font-mono text-[10px] font-black">0</span>
-            <span id="dotTopCircleLeaveOver" class="hidden absolute -top-1 -right-1 w-3 h-3 rounded-full bg-rose-600 border-2 border-white animate-ping"></span>
-            <span id="dotTopCircleLeaveOverSolid" class="hidden absolute -top-1 -right-1 w-3 h-3 rounded-full bg-rose-600 border-2 border-white"></span>
-          </button>
-
-          <!-- 2. SKY-BLUE ARROW: Teacher Time-Change & Wrong Leave/Absent Correction Requests -->
-          <button
-            onclick="openAdminTeacherRequestsModal()"
-            id="btnTopCircleRequests"
-            class="group relative px-3 py-1.5 rounded-xl bg-gradient-to-br from-sky-50 to-indigo-50 hover:from-sky-100 hover:to-indigo-100 text-indigo-900 border border-sky-200/90 flex items-center gap-2 transition-all shadow-2xs hover:shadow-sm cursor-pointer"
-            title="Teacher Schedule Time-Change & Wrong Leave/Absent Correction Requests"
-          >
-            <span class="w-6 h-6 rounded-lg bg-indigo-600 text-white flex items-center justify-center text-xs shadow-2xs group-hover:scale-105 transition">
-              <i class="fa-solid fa-clock-rotate-left"></i>
-            </span>
-            <span class="text-[11px] font-extrabold tracking-tight hidden sm:inline">Teacher Requests</span>
-            <span id="badgeTopRequestsCount" class="px-1.5 py-0.2 rounded-md bg-indigo-200/80 text-indigo-950 font-mono text-[10px] font-black">0</span>
-            <span id="dotTopCircleRequests" class="hidden absolute -top-1 -right-1 w-3 h-3 rounded-full bg-rose-600 border-2 border-white animate-pulse"></span>
-          </button>
-
-          <!-- 3. GREEN ARROW: Official Announcements (Linked to Teacher Portal & Student/Parent Portal) -->
-          <button
-            onclick="openAdminAnnouncementsModal()"
-            id="btnTopCircleAnnouncements"
-            class="group relative px-3 py-1.5 rounded-xl bg-gradient-to-br from-emerald-50 to-teal-50 hover:from-emerald-100 hover:to-teal-100 text-emerald-900 border border-emerald-200/90 flex items-center gap-2 transition-all shadow-2xs hover:shadow-sm cursor-pointer"
-            title="Publish Official Announcements to Teacher Portal & Student/Parent Portal"
-          >
-            <span class="w-6 h-6 rounded-lg bg-emerald-600 text-white flex items-center justify-center text-xs shadow-2xs group-hover:scale-105 transition">
-              <i class="fa-solid fa-bullhorn"></i>
-            </span>
-            <span class="text-[11px] font-extrabold tracking-tight hidden sm:inline">Announcements</span>
-            <span id="badgeTopAnnouncementsCount" class="px-1.5 py-0.2 rounded-md bg-emerald-200/80 text-emerald-950 font-mono text-[10px] font-black">1</span>
-            <span id="dotTopCircleAnnouncements" class="hidden absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-emerald-500 border-2 border-white"></span>
-          </button>
-
-          <!-- 4. RED ARROW: Parent Complaints & Admin Official Reply Inbox (Envelope) -->
-          <button
-            onclick="openAdminParentComplaintsModal()"
-            id="btnTopCircleComplaints"
-            class="group relative px-3 py-1.5 rounded-xl bg-gradient-to-br from-rose-50 to-pink-50 hover:from-rose-100 hover:to-pink-100 text-rose-900 border border-rose-200/90 flex items-center gap-2 transition-all shadow-2xs hover:shadow-sm cursor-pointer"
-            title="Parent Complaints Inbox & Admin Direct Reply to Parents"
-          >
-            <span class="w-6 h-6 rounded-lg bg-rose-600 text-white flex items-center justify-center text-xs shadow-2xs group-hover:scale-105 transition">
-              <i class="fa-solid fa-envelope-open-text"></i>
-            </span>
-            <span class="text-[11px] font-extrabold tracking-tight hidden sm:inline">Complaints</span>
-            <span id="badgeTopComplaintsCount" class="px-1.5 py-0.2 rounded-md bg-rose-200/80 text-rose-950 font-mono text-[10px] font-black">1</span>
-            <span id="dotTopCircleComplaints" class="hidden absolute -top-1 -right-1 w-3 h-3 rounded-full bg-rose-600 border-2 border-white animate-ping"></span>
-            <span id="dotTopCircleComplaintsSolid" class="hidden absolute -top-1 -right-1 w-3 h-3 rounded-full bg-rose-600 border-2 border-white"></span>
-          </button>
-
-          <!-- Hidden Counters for Internal JS Sync -->
-          <div class="hidden">
-            <span id="dashTodayDateLabel">Today</span>
-            <span id="dashLiveActiveFamilies">0</span>
-            <span id="dashLiveActiveStudents">0</span>
-          </div>
-        </div>
-
-      </div>
 
       <!-- SPACIOUS CLEAN OPEN BANNER AREA (UNCLUTTERED & SLEEK) -->
       <div class="bg-[#f4f7f6] border border-slate-200/70 rounded-xl px-6 py-4 mb-5 flex items-center justify-between">
@@ -976,14 +1101,14 @@
       </div>
     </section>
 
-    <!-- 3. EMPLOYEE REGISTRATION TAB -->
+    <!-- 3. EMPLOYEES TAB -->
     <section id="tab-teachers" class="tab-content hidden">
       <div class="flex justify-between items-center mb-5 flex-wrap gap-3">
         <div>
           <h2 class="text-xl font-extrabold text-brandDark flex items-center gap-2">
-            <i class="fa-solid fa-id-card text-brandEmerald"></i> Employee Registration
+            <i class="fa-solid fa-user-tie text-brandEmerald"></i> Employees
           </h2>
-          <p class="text-xs text-slate-500">Teaching Staff, Managers & Non-Teaching Staff — Profiles, Credentials & Schedule Matrix</p>
+          <p class="text-xs text-slate-500">Teaching Staff, Managers &amp; Non-Teaching Staff — Profiles, Credentials &amp; Schedule Matrix</p>
         </div>
         <button onclick="openEmployeeTypeChoice()" class="px-3.5 py-2 bg-brandDark text-white rounded-lg text-xs font-bold hover:bg-brandDarkest flex items-center gap-1.5 shadow">
           <i class="fa-solid fa-user-plus"></i> + Add New Employee
