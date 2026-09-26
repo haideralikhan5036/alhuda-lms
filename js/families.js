@@ -601,7 +601,7 @@
                               <span class="text-[9px] font-mono px-1.5 py-0.2 bg-slate-200 text-slate-700 rounded font-bold">${s.id}</span>
                             </div>
                             <button onclick="openStudent360Profile('${s.id}')" class="text-brandEmerald hover:text-brandDark font-bold text-[10px] flex items-center gap-1">
-                              Student 360° <i class="fa-solid fa-chevron-right text-[8px]"></i>
+                              Family Profile <i class="fa-solid fa-chevron-right text-[8px]"></i>
                             </button>
                           </div>
                           <div class="flex justify-between text-[10px] text-slate-500">
@@ -760,7 +760,7 @@
             <td class="p-3 font-mono text-[11px] text-slate-600">${s.joining_date || '--'}</td>
             <td class="p-3 text-right">
               <button onclick="openStudent360Profile('${s.id}')" class="px-2.5 py-1 bg-brandDark text-white rounded-lg font-bold text-[11px] hover:bg-brandDarkest transition">
-                Student 360°
+                Open Family Profile
               </button>
             </td>
           </tr>

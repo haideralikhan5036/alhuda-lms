@@ -1119,10 +1119,13 @@
       await loadDashboardData();
     }
 
-    // INTERACTIVE STUDENT DETAIL MODAL
+    // INTERACTIVE STUDENT DETAIL — ROUTES TO FULL-SCREEN FAMILY PROFILE WORKSPACE (SELECTING STUDENT)
     async function openStudentDetailModal(studentId) {
       if (!studentId) return;
-      CURRENT_MODAL_STUDENT_ID = studentId;
+      if (typeof openStudent360Profile === 'function') {
+        await openStudent360Profile(studentId);
+        return;
+      }
 
       let student = (ALL_STUDENTS || []).find(s => s.id === studentId);
       if (!student) {
@@ -1433,17 +1436,17 @@
                 const rawPhone = fam ? (fam.whatsapp || '') : '';
                 const displayPhone = (typeof maskStudentPhone === 'function') ? maskStudentPhone(rawPhone) : (rawPhone || '--');
                 return `
-                  <div onclick="clearDashboardGlobalSearch(); openStudentDetailModal('${s.id}')" class="px-2.5 py-1.5 rounded-xl hover:bg-teal-50/70 cursor-pointer transition flex items-center justify-between gap-2 border border-transparent hover:border-teal-200">
+                  <div onclick="clearDashboardGlobalSearch(); openStudent360Profile('${s.id}')" class="px-2.5 py-1.5 rounded-xl hover:bg-teal-50/70 cursor-pointer transition flex items-center justify-between gap-2 border border-transparent hover:border-teal-200">
                     <div class="min-w-0">
                       <div class="flex items-center gap-1.5">
                         <span class="text-xs font-extrabold text-slate-900 truncate">${s.name}</span>
                         <span class="px-1.5 py-0.2 rounded bg-slate-100 border border-slate-200 font-mono text-[9px] font-bold text-brandDark shrink-0">${s.id}</span>
                       </div>
                       <div class="text-[10px] text-slate-500 truncate">
-                        Parent: <strong class="text-slate-700">${parentName}</strong> &bull; <span class="font-mono">${displayPhone}</span>
+                        Family: <strong class="text-slate-700">${parentName}</strong> (${s.family_id || '--'}) &bull; <span class="font-mono">${displayPhone}</span>
                       </div>
                     </div>
-                    <span class="px-2 py-0.5 rounded-lg bg-brandDark text-white text-[10px] font-bold shrink-0">Profile</span>
+                    <span class="px-2 py-0.5 rounded-lg bg-brandDark text-white text-[10px] font-bold shrink-0">Open Family &amp; Select Student</span>
                   </div>
                 `;
               }).join('')}
@@ -1458,7 +1461,7 @@
           <div class="p-2">
             <div class="px-2 py-1 text-[10px] font-black uppercase tracking-wider text-emerald-800 bg-emerald-50/80 rounded-lg mb-1 flex items-center justify-between">
               <span><i class="fa-solid fa-house-user mr-1"></i> Families (${matchedFamilies.length})</span>
-              <span class="text-[9px] text-emerald-600 font-bold">Click to Open Family</span>
+              <span class="text-[9px] text-emerald-600 font-bold">Click to Open Family Profile</span>
             </div>
             <div class="space-y-1">
               ${matchedFamilies.map(f => {
@@ -1472,10 +1475,10 @@
                         <span class="px-1.5 py-0.2 rounded bg-emerald-100 border border-emerald-200 font-mono text-[9px] font-bold text-emerald-900 shrink-0">${f.id}</span>
                       </div>
                       <div class="text-[10px] text-slate-500 truncate">
-                        Phone: <span class="font-mono font-semibold text-slate-700">${displayPhone}</span> &bull; ${childCount} Child(ren)
+                        Phone: <span class="font-mono font-semibold text-slate-700">${displayPhone}</span> &bull; ${childCount} Student(s)
                       </div>
                     </div>
-                    <span class="px-2 py-0.5 rounded-lg bg-emerald-700 text-white text-[10px] font-bold shrink-0">Open</span>
+                    <span class="px-2 py-0.5 rounded-lg bg-emerald-700 text-white text-[10px] font-bold shrink-0">Open Family Profile</span>
                   </div>
                 `;
               }).join('')}
@@ -1490,7 +1493,7 @@
           <div class="p-2">
             <div class="px-2 py-1 text-[10px] font-black uppercase tracking-wider text-indigo-800 bg-indigo-50/80 rounded-lg mb-1 flex items-center justify-between">
               <span><i class="fa-solid fa-chalkboard-user mr-1"></i> Teachers &amp; Staff (${matchedTeachers.length})</span>
-              <span class="text-[9px] text-indigo-600 font-bold">Click to Inspect</span>
+              <span class="text-[9px] text-indigo-600 font-bold">Click to Inspect Schedule</span>
             </div>
             <div class="space-y-1">
               ${matchedTeachers.map(t => {
@@ -1499,7 +1502,7 @@
                   try { credsId = getTeacherCreds(t)?.teacher_id || credsId; } catch (e) {}
                 }
                 return `
-                  <div onclick="clearDashboardGlobalSearch(); openTeacherDetailModal('${t.id}')" class="px-2.5 py-1.5 rounded-xl hover:bg-indigo-50/70 cursor-pointer transition flex items-center justify-between gap-2 border border-transparent hover:border-indigo-200">
+                  <div onclick="clearDashboardGlobalSearch(); openTeacher360Profile('${t.id}')" class="px-2.5 py-1.5 rounded-xl hover:bg-indigo-50/70 cursor-pointer transition flex items-center justify-between gap-2 border border-transparent hover:border-indigo-200">
                     <div class="min-w-0">
                       <div class="flex items-center gap-1.5">
                         <span class="text-xs font-extrabold text-slate-900 truncate">${t.full_name}</span>
@@ -1509,7 +1512,7 @@
                         Phone: <span class="font-mono font-semibold text-slate-700">${t.phone || '--'}</span>
                       </div>
                     </div>
-                    <span class="px-2 py-0.5 rounded-lg bg-indigo-700 text-white text-[10px] font-bold shrink-0">Details</span>
+                    <span class="px-2 py-0.5 rounded-lg bg-indigo-700 text-white text-[10px] font-bold shrink-0">Schedule</span>
                   </div>
                 `;
               }).join('')}
@@ -1536,14 +1539,8 @@
 
     async function openFamilyFromDashboardSearch(familyId) {
       clearDashboardGlobalSearch();
-      switchTab('tab-families');
-      await loadFamiliesAndStudents();
-      const searchInput = document.getElementById('familyDirectorySearchInput');
-      if (searchInput) {
-        searchInput.value = familyId;
-        if (typeof handleFamilyDirectorySearch === 'function') {
-          handleFamilyDirectorySearch(familyId);
-        }
+      if (typeof openFamily360Profile === 'function') {
+        await openFamily360Profile(familyId, 'students');
       }
     }
 

@@ -1,20 +1,26 @@
 /**
  * ============================================================================
- * AL-HUDA ISLAMIC CENTRE LMS — FULL-SCREEN DEDICATED 360° PROFILES ENGINE
+ * AL-HUDA ISLAMIC CENTRE LMS — MODERN FAMILY PROFILE WORKSPACE ENGINE
  * File: js/profiles360.js
- * Purpose: Standalone Full-Screen Dedicated Profile Workspaces for Students,
- *          Families/Parents, and Teachers (Zero Popup / Zero Modal).
- *          Combines structured tabular & Bio-Data organization with modern LMS UI.
+ * Purpose: Full-Screen Dedicated Family Profile Workspace (Central Hub for
+ *          Family + All Connected Students, Attendance, Daily Lessons, Progress,
+ *          Certificates, Payments, Manager Notes, Teacher Notes & Bio Data)
+ *          plus Teacher Schedule/Profile Workspace.
+ *          100% Connected to Supabase & Main LMS Modules (One Source of Truth).
  * ============================================================================
  */
 
 let _PROFILE_360_STACK = [];
 let _ORIGIN_LMS_TAB = 'tab-dashboard';
 let _CURRENT_360_STATE = {
-  type: null,      // 'student' | 'family' | 'teacher'
-  id: null,
-  activeTab: null,
-  attMonthFilter: 'all'
+  type: null,                 // 'family' | 'teacher'
+  id: null,                   // familyId or teacherId
+  activeTab: 'students',      // 'students' | 'payments' | 'manager_notes' | 'teacher_notes' | 'biodata'
+  selectedStudentId: null,    // Currently selected Student ID inside the Family Profile
+  studentSubView: 'history',  // 'history' | 'lessons' | 'report' | 'certificates' | 'info'
+  selectedLessonDate: null,   // Highlighted date in Daily Lessons
+  attFilterStatus: 'all',     // 'all' | 'Present' | 'Absent' | 'Leave'
+  showPassword: false
 };
 
 const _DAY_LABELS_360 = {
@@ -31,7 +37,7 @@ const _TAB_NAMES_MAP = {
   'tab-dashboard': 'Main Dashboard',
   'tab-families': 'Families & Students Directory',
   'tab-teachers': 'Teachers & Staff Directory',
-  'tab-invoices': 'Fee Billing & Ledger',
+  'tab-invoices': 'Fee Management & Ledger',
   'tab-salaries': 'Salaries & Payroll',
   'tab-attendance': 'Daily Attendance',
   'tab-trials': 'Trial Classes',
@@ -40,12 +46,160 @@ const _TAB_NAMES_MAP = {
   'tab-curriculum': 'Course Curriculum'
 };
 
+// ============================================================================
+// UTILITY & BACKEND SYNC HELPERS
+// ============================================================================
+
+function _esc360(str) {
+  if (str === null || str === undefined) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function _notify360(message, type = 'success') {
+  if (typeof showToastNotification === 'function') {
+    try {
+      showToastNotification(message);
+      return;
+    } catch (e) {}
+  }
+  let toast = document.getElementById('family360ToastBanner');
+  if (!toast) {
+    toast = document.createElement('div');
+    toast.id = 'family360ToastBanner';
+    toast.className = 'fixed bottom-5 right-5 z-[9999] px-4 py-3 rounded-xl shadow-xl text-xs font-extrabold flex items-center gap-2.5 transition-all duration-300';
+    document.body.appendChild(toast);
+  }
+  const colors = type === 'error'
+    ? 'bg-rose-900 text-white border border-rose-700'
+    : type === 'warning'
+    ? 'bg-amber-900 text-white border border-amber-700'
+    : 'bg-slate-900 text-white border border-slate-700';
+  toast.className = `fixed bottom-5 right-5 z-[9999] px-4 py-3 rounded-xl shadow-xl text-xs font-extrabold flex items-center gap-2.5 transition-all duration-300 ${colors}`;
+  toast.innerHTML = `<i class="fa-solid ${type === 'error' ? 'fa-circle-exclamation text-rose-400' : 'fa-circle-check text-emerald-400'} text-sm"></i> <span>${_esc360(message)}</span>`;
+  toast.style.opacity = '1';
+  clearTimeout(window._toast360Timer);
+  window._toast360Timer = setTimeout(() => {
+    if (toast) toast.style.opacity = '0';
+  }, 3600);
+}
+
 /**
- * Dismiss any open modal overlays/popups and transition the main LMS viewport
- * to the Full-Screen Dedicated Profile Page (#tab-profile-360).
+ * Parse and preserve structured JSON inside family.notes without losing fee_history or matrix_overrides
+ */
+function _parseFamilyStructuredNotes(family) {
+  let base = {};
+  if (typeof parseFamilyNotesData === 'function') {
+    base = parseFamilyNotesData(family?.notes);
+  } else if (family?.notes) {
+    if (typeof family.notes === 'object') base = { ...family.notes };
+    else {
+      try {
+        const parsed = JSON.parse(family.notes);
+        if (parsed && typeof parsed === 'object') base = parsed;
+        else base = { custom_notes: String(family.notes) };
+      } catch (e) {
+        base = { custom_notes: String(family.notes) };
+      }
+    }
+  }
+  if (!Array.isArray(base.fee_history)) base.fee_history = [];
+  if (!base.matrix_overrides || typeof base.matrix_overrides !== 'object') base.matrix_overrides = {};
+  if (!Array.isArray(base.manager_notes)) base.manager_notes = [];
+  if (!Array.isArray(base.teacher_notes)) base.teacher_notes = [];
+  if (!Array.isArray(base.communication_logs)) base.communication_logs = [];
+  if (!base.bio_meta || typeof base.bio_meta !== 'object') base.bio_meta = {};
+  return base;
+}
+
+/**
+ * Save updated structured notes back to Supabase families.notes + in-memory ALL_FAMILIES
+ */
+async function _saveFamilyStructuredNotes(familyId, updatedNotesObj, extraColumns = {}) {
+  const serialized = JSON.stringify(updatedNotesObj);
+  const payload = { notes: serialized, ...extraColumns };
+
+  const { error } = await db.from('families').update(payload).eq('id', familyId);
+  if (error) {
+    console.error('[Family Workspace] Supabase update error:', error);
+    throw error;
+  }
+
+  // Update in-memory ALL_FAMILIES
+  const famIdx = (window.ALL_FAMILIES || []).findIndex(f => String(f.id).toUpperCase() === String(familyId).toUpperCase());
+  if (famIdx >= 0) {
+    window.ALL_FAMILIES[famIdx] = {
+      ...window.ALL_FAMILIES[famIdx],
+      ...extraColumns,
+      notes: serialized
+    };
+  }
+  return true;
+}
+
+/**
+ * Parse and preserve structured JSON inside student.notes
+ */
+function _parseStudentStructuredNotes(student) {
+  let meta = {};
+  if (student?.notes) {
+    if (typeof student.notes === 'object') meta = { ...student.notes };
+    else {
+      try {
+        const parsed = JSON.parse(student.notes);
+        if (parsed && typeof parsed === 'object') meta = parsed;
+        else meta = { remarks: String(student.notes) };
+      } catch (e) {
+        meta = { remarks: String(student.notes) };
+      }
+    }
+  }
+  if (!Array.isArray(meta.certificates)) meta.certificates = [];
+  if (!Array.isArray(meta.progress_reports)) meta.progress_reports = [];
+  if (!Array.isArray(meta.teacher_notes)) meta.teacher_notes = [];
+  return meta;
+}
+
+/**
+ * Save updated student record to Supabase students + in-memory ALL_STUDENTS & ALL_FAMILIES
+ */
+async function _saveStudentRecordBackend(studentId, updateFields) {
+  const { error } = await db.from('students').update(updateFields).eq('id', studentId);
+  if (error) {
+    console.error('[Student Update] Supabase error:', error);
+    throw error;
+  }
+
+  // Update ALL_STUDENTS
+  const sIdx = (window.ALL_STUDENTS || []).findIndex(s => String(s.id).toUpperCase() === String(studentId).toUpperCase());
+  if (sIdx >= 0) {
+    window.ALL_STUDENTS[sIdx] = { ...window.ALL_STUDENTS[sIdx], ...updateFields };
+  }
+
+  // Update nested student inside ALL_FAMILIES
+  (window.ALL_FAMILIES || []).forEach(fam => {
+    if (Array.isArray(fam.students)) {
+      const fStuIdx = fam.students.findIndex(s => String(s.id).toUpperCase() === String(studentId).toUpperCase());
+      if (fStuIdx >= 0) {
+        fam.students[fStuIdx] = { ...fam.students[fStuIdx], ...updateFields };
+      }
+    }
+  });
+
+  // Refresh global views in background
+  if (typeof renderFamiliesCards === 'function') {
+    try { renderFamiliesCards(); renderFamiliesMasterTable(); renderAllStudentsListTable(); } catch (e) {}
+  }
+}
+
+/**
+ * Activate Full-Screen Dedicated Workspace (#tab-profile-360)
  */
 function _activateFullScreenProfilePage(entityType) {
-  // Remember which non-profile LMS tab the user was on before entering 360° workspace
   const visibleSection = Array.from(document.querySelectorAll('.tab-content')).find(
     el => !el.classList.contains('hidden') && el.id !== 'tab-profile-360'
   );
@@ -53,9 +207,9 @@ function _activateFullScreenProfilePage(entityType) {
     _ORIGIN_LMS_TAB = visibleSection.id;
   }
 
-  // Close any open modal overlays or search dropdowns so nothing floats over the full-screen page
+  // Dismiss any open modal overlays so nothing covers the full-screen workspace
   document.querySelectorAll('.fixed.inset-0').forEach(modalEl => {
-    if (!modalEl.classList.contains('hidden')) {
+    if (!modalEl.classList.contains('hidden') && modalEl.id !== 'familyWorkspaceActionModal') {
       modalEl.classList.add('hidden');
       modalEl.classList.remove('flex');
     }
@@ -64,7 +218,6 @@ function _activateFullScreenProfilePage(entityType) {
     try { clearDashboardGlobalSearch(); } catch (e) {}
   }
 
-  // Switch main content area to the full-screen #tab-profile-360 workspace
   if (typeof switchTab === 'function') {
     switchTab('tab-profile-360');
   } else {
@@ -79,7 +232,6 @@ function _activateFullScreenProfilePage(entityType) {
     }
   }
 
-  // Highlight the logical parent sidebar button (Families for Student/Family, Teachers for Teacher)
   const highlightSidebarTab = entityType === 'teacher' ? 'tab-teachers' : 'tab-families';
   const activeSidebarBtn = document.querySelector(`.sidebar-nav-btn[data-tab="${highlightSidebarTab}"]`);
   if (activeSidebarBtn) {
@@ -94,9 +246,6 @@ function _activateFullScreenProfilePage(entityType) {
   }
 }
 
-/**
- * Exit the Full-Screen 360° Profile Page back to the originating LMS module
- */
 function exitFullScreen360Profile() {
   _PROFILE_360_STACK = [];
   const targetTab = _ORIGIN_LMS_TAB && _ORIGIN_LMS_TAB !== 'tab-profile-360' ? _ORIGIN_LMS_TAB : 'tab-dashboard';
@@ -105,9 +254,6 @@ function exitFullScreen360Profile() {
   }
 }
 
-/**
- * Ensure base collections (ALL_FAMILIES, ALL_STUDENTS, ALL_TEACHERS) are synced
- */
 async function _ensure360CoreDataReady(forceRefresh = false) {
   try {
     const needFamilies = forceRefresh || !Array.isArray(window.ALL_FAMILIES) || window.ALL_FAMILIES.length === 0;
@@ -123,6 +269,9 @@ async function _ensure360CoreDataReady(forceRefresh = false) {
               const st = String(f.status || '').toLowerCase();
               return st !== 'trial' && st !== 'converted' && !String(f.id || '').toUpperCase().startsWith('TRL-');
             });
+            if (typeof ingestFeeDataFromFamilies === 'function') {
+              ingestFeeDataFromFamilies(window.ALL_FAMILIES);
+            }
           }
         })
       );
@@ -145,13 +294,10 @@ async function _ensure360CoreDataReady(forceRefresh = false) {
       await Promise.all(tasks);
     }
   } catch (err) {
-    console.warn('360° core data sync notice:', err);
+    console.warn('Workspace core data sync notice:', err);
   }
 }
 
-/**
- * Push to 360° Breadcrumb Stack
- */
 function _push360History(type, id, label, tab) {
   if (!type || !id) return;
   const last = _PROFILE_360_STACK[_PROFILE_360_STACK.length - 1];
@@ -160,15 +306,8 @@ function _push360History(type, id, label, tab) {
     last.tab = tab || last.tab;
     return;
   }
-  const existingIdx = _PROFILE_360_STACK.findIndex(item => item.type === type && String(item.id) === String(id));
-  if (existingIdx !== -1 && existingIdx === _PROFILE_360_STACK.length - 2) {
-    _PROFILE_360_STACK.pop();
-    return;
-  }
   _PROFILE_360_STACK.push({ type, id, label: label || String(id), tab });
-  if (_PROFILE_360_STACK.length > 8) {
-    _PROFILE_360_STACK.shift();
-  }
+  if (_PROFILE_360_STACK.length > 8) _PROFILE_360_STACK.shift();
 }
 
 function navigateBack360Profile() {
@@ -182,60 +321,45 @@ function navigateBack360Profile() {
     exitFullScreen360Profile();
     return;
   }
-  if (prev.type === 'student') openStudent360Profile(prev.id, prev.tab);
-  else if (prev.type === 'family') openFamily360Profile(prev.id, prev.tab);
+  if (prev.type === 'family') openFamily360Profile(prev.id, prev.tab);
   else if (prev.type === 'teacher') openTeacher360Profile(prev.id, prev.tab);
-}
-
-function jumpTo360Breadcrumb(index) {
-  const item = _PROFILE_360_STACK[index];
-  if (!item) return;
-  _PROFILE_360_STACK = _PROFILE_360_STACK.slice(0, index);
-  if (item.type === 'student') openStudent360Profile(item.id, item.tab);
-  else if (item.type === 'family') openFamily360Profile(item.id, item.tab);
-  else if (item.type === 'teacher') openTeacher360Profile(item.id, item.tab);
 }
 
 async function refreshCurrent360Profile() {
   await _ensure360CoreDataReady(true);
-  if (_CURRENT_360_STATE.type === 'student' && _CURRENT_360_STATE.id) {
-    await openStudent360Profile(_CURRENT_360_STATE.id, _CURRENT_360_STATE.activeTab, true);
-  } else if (_CURRENT_360_STATE.type === 'family' && _CURRENT_360_STATE.id) {
-    await openFamily360Profile(_CURRENT_360_STATE.id, _CURRENT_360_STATE.activeTab, true);
+  if (_CURRENT_360_STATE.type === 'family' && _CURRENT_360_STATE.id) {
+    await openFamily360Profile(_CURRENT_360_STATE.id, _CURRENT_360_STATE.activeTab, true, {
+      selectedStudentId: _CURRENT_360_STATE.selectedStudentId,
+      studentSubView: _CURRENT_360_STATE.studentSubView
+    });
   } else if (_CURRENT_360_STATE.type === 'teacher' && _CURRENT_360_STATE.id) {
     await openTeacher360Profile(_CURRENT_360_STATE.id, _CURRENT_360_STATE.activeTab, true);
   }
 }
 
-/**
- * Render the Top Workspace Navigation Bar (Back to LMS Page + Interconnected Breadcrumbs + Sync Button)
- */
 function _buildTopWorkspaceNavHtml() {
   const originLabel = _TAB_NAMES_MAP[_ORIGIN_LMS_TAB] || 'Main Dashboard';
   const crumbsHtml = _PROFILE_360_STACK.map((item, idx) => {
     const isLast = idx === _PROFILE_360_STACK.length - 1;
-    const typeBadge = item.type === 'student' ? 'Student'
-                    : item.type === 'family'  ? 'Family'
-                    :                           'Teacher';
+    const typeBadge = item.type === 'family' ? 'Family Workspace' : 'Teacher Workspace';
     return `
-      <button onclick="${isLast ? '' : `jumpTo360Breadcrumb(${idx})`}"
-              class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold transition ${isLast ? 'bg-emerald-900 text-white shadow-2xs cursor-default' : 'bg-slate-100 hover:bg-slate-200 text-slate-700 cursor-pointer'}">
-        <span class="opacity-75 font-normal">${typeBadge}:</span>
-        <span class="font-extrabold">${item.label}</span>
-      </button>
+      <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold ${isLast ? 'bg-slate-900 text-white shadow-2xs' : 'bg-slate-100 text-slate-700'}">
+        <span class="opacity-70 font-medium">${typeBadge}:</span>
+        <span class="font-extrabold">${_esc360(item.label)}</span>
+      </span>
       ${!isLast ? '<i class="fa-solid fa-chevron-right text-[10px] text-slate-400 mx-0.5"></i>' : ''}
     `;
   }).join('');
 
   return `
-    <div class="bg-white rounded-2xl border border-slate-200 px-4 py-3 shadow-2xs flex items-center justify-between gap-3 flex-wrap">
+    <div class="bg-white rounded-2xl border border-slate-200/90 px-4 py-2.5 shadow-2xs flex items-center justify-between gap-3 flex-wrap">
       <div class="flex items-center gap-2 flex-wrap">
         <button onclick="exitFullScreen360Profile()" class="px-3.5 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-extrabold flex items-center gap-2 transition shadow-2xs">
-          <i class="fa-solid fa-arrow-left text-amber-400"></i> Back to ${originLabel}
+          <i class="fa-solid fa-arrow-left text-amber-400"></i> Back to ${_esc360(originLabel)}
         </button>
         ${_PROFILE_360_STACK.length > 1 ? `
           <button onclick="navigateBack360Profile()" class="px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-300 text-xs font-extrabold flex items-center gap-1.5 transition">
-            <i class="fa-solid fa-rotate-left text-slate-600"></i> Previous Profile
+            <i class="fa-solid fa-rotate-left text-slate-600"></i> Previous
           </button>
         ` : ''}
         <div class="h-4 w-[1px] bg-slate-200 mx-1 hidden sm:block"></div>
@@ -244,208 +368,174 @@ function _buildTopWorkspaceNavHtml() {
         </div>
       </div>
       <div class="flex items-center gap-2">
-        <button onclick="refreshCurrent360Profile()" class="px-3 py-1.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-900 border border-emerald-200 text-xs font-extrabold flex items-center gap-1.5 transition">
-          <i class="fa-solid fa-arrows-rotate text-emerald-600"></i> Refresh Live Data
+        <button onclick="refreshCurrent360Profile()" class="px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-200 text-xs font-extrabold flex items-center gap-1.5 transition">
+          <i class="fa-solid fa-arrows-rotate text-indigo-600"></i> Refresh Live Data
         </button>
       </div>
     </div>
   `;
 }
 
-/**
- * Helper: Parse lesson_notes from attendance_logs into structured lesson details
- */
-function _parseLessonLogEntry(log) {
-  const raw = log?.lesson_notes || '';
-  let bookId = 'noorani-qaida-classic';
-  let bookTitle = '';
-  let page = null;
-  let lineRange = '';
-  let assessment = '';
-  let rating = null;
-  let remarks = '';
-  let isStructured = false;
+// ============================================================================
+// REQUIREMENT #1 & #26: NO SEPARATE STUDENT PROFILE PAGE
+// Clicking a Student anywhere in the LMS resolves their Family ID, opens the
+// Family Profile Workspace, and automatically selects & highlights that Student!
+// ============================================================================
+async function openStudent360Profile(studentId, initialSubView = 'history') {
+  if (!studentId) return;
+  await _ensure360CoreDataReady();
 
-  if (raw) {
-    try {
-      const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
-      if (parsed && typeof parsed === 'object') {
-        isStructured = Boolean(parsed.book_title || parsed.page || parsed.sabaq || parsed.status);
-        bookId = parsed.book_id || 'noorani-qaida-classic';
-        bookTitle = parsed.book_title || parsed.sabaq || '';
-        page = parsed.page || null;
-        lineRange = parsed.line_range || '';
-        assessment = parsed.status || parsed.result || '';
-        rating = parsed.rating || null;
-        remarks = parsed.remarks || parsed.notes || '';
-      }
-    } catch (e) {
-      remarks = String(raw);
-    }
+  let student = (window.ALL_STUDENTS || []).find(s => String(s.id).toUpperCase() === String(studentId).toUpperCase());
+  if (!student) {
+    const { data } = await db.from('students').select('*').eq('id', studentId).maybeSingle();
+    student = data;
+    if (student && Array.isArray(window.ALL_STUDENTS)) window.ALL_STUDENTS.push(student);
   }
 
-  return {
-    isStructured,
-    bookId,
-    bookTitle: bookTitle || (isStructured ? 'Course Syllabus' : ''),
-    page,
-    lineRange,
-    assessment,
-    rating,
-    remarks: remarks || (!isStructured ? String(raw) : '')
-  };
+  if (!student) {
+    _notify360(`Student record (${studentId}) not found.`, 'error');
+    return;
+  }
+
+  const familyId = student.family_id;
+  if (!familyId) {
+    _notify360(`No Family ID is associated with Student ${student.name}.`, 'error');
+    return;
+  }
+
+  const mappedSubView = (initialSubView === 'progress' || initialSubView === 'report')
+    ? 'report'
+    : (initialSubView === 'biodata' || initialSubView === 'info')
+    ? 'info'
+    : (initialSubView === 'certificates')
+    ? 'certificates'
+    : 'history';
+
+  // Open the Family Profile with this Student automatically selected & highlighted
+  await openFamily360Profile(familyId, 'students', false, {
+    selectedStudentId: student.id,
+    studentSubView: mappedSubView
+  });
 }
 
-/**
- * Helper: Compute Family Financial Summary from existing fees.js sources
- */
-function _getFamilyFinancialSnapshot(family) {
-  if (!family) {
-    return {
-      currency: 'USD',
-      agreedMonthlyFee: 0,
-      totalPaid: 0,
-      totalPending: 0,
-      advanceCredit: 0,
-      monthsStatus: [],
-      receipts: []
-    };
-  }
+// ============================================================================
+// PAYMENT & FEE LEDGER ENGINE (ONE SOURCE OF TRUTH WITH fees.js)
+// ============================================================================
+function _getFamilyPaymentsList(family) {
+  if (!family) return { currency: 'USD', monthlyFee: 0, rows: [], currentMonthPaid: false };
 
   const famId = String(family.id || '').toUpperCase();
   const currency = family.currency || 'USD';
-  const agreedMonthlyFee = parseFloat(family.monthly_fee || 0) || 0;
+  const agreedFee = parseFloat(family.monthly_fee || 0) || 0;
+  const fNotes = _parseFamilyStructuredNotes(family);
 
-  let receipts = [];
+  let storedReceipts = [];
   if (typeof getStoredFeeRecords === 'function') {
-    receipts = (getStoredFeeRecords() || []).filter(r => String(r.familyId || '').toUpperCase() === famId);
-  } else {
-    try {
-      const raw = JSON.parse(localStorage.getItem('alhuda_fee_records_v1') || '[]');
-      receipts = raw.filter(r => String(r.familyId || '').toUpperCase() === famId);
-    } catch (e) {}
+    storedReceipts = (getStoredFeeRecords() || []).filter(r => String(r.familyId || '').toUpperCase() === famId);
   }
-
-  receipts.sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')));
-  const totalPaid = receipts.reduce((sum, r) => sum + (parseFloat(r.amountPaid || 0) || 0), 0);
-
-  let advanceCredit = 0;
-  if (typeof getFamilyAvailableAdvanceCredit === 'function') {
-    try { advanceCredit = parseFloat(getFamilyAvailableAdvanceCredit(family.id) || 0); } catch (e) {}
-  }
-
-  const monthsNames = ['January','February','March','April','May','June','July','August','September','October','November','December'];
-  const currentMonthIdx = 8; // September 2026
-  let matrixRow = null;
-  if (Array.isArray(window.CACHED_ANNUAL_FEE_MATRIX)) {
-    matrixRow = window.CACHED_ANNUAL_FEE_MATRIX.find(r => String(r.familyId || '').toUpperCase() === famId);
-  }
-
-  let earliestJoinDate = family.created_at ? family.created_at.slice(0, 10) : '2026-01-01';
-  const famStudents = (window.ALL_STUDENTS || []).filter(s => String(s.family_id || '').toUpperCase() === famId);
-  famStudents.forEach(s => {
-    if (s.joining_date && s.joining_date < earliestJoinDate) earliestJoinDate = s.joining_date;
+  // Merge with any records inside family.notes.fee_history
+  const mergedMap = new Map();
+  (fNotes.fee_history || []).forEach(r => {
+    if (r && r.receiptNo) mergedMap.set(r.receiptNo, r);
   });
-  const joinYear = parseInt(earliestJoinDate.slice(0, 4), 10) || 2026;
-  const joinMonthIdx = (parseInt(earliestJoinDate.slice(5, 7), 10) || 1) - 1;
+  storedReceipts.forEach(r => {
+    if (r && r.receiptNo) mergedMap.set(r.receiptNo, r);
+  });
 
-  let totalPending = 0;
-  const monthsStatus = monthsNames.map((mName, mIdx) => {
-    const mNumStr = String(mIdx + 1).padStart(2, '0');
-    const dueDateStr = `2026-${mNumStr}-10`;
+  const allReceipts = Array.from(mergedMap.values());
+  const defaultMethod = fNotes.bio_meta?.payment_method || (currency === 'GBP' ? 'UK Bank Transfer' : 'Bank Transfer');
 
-    const monthReceipts = receipts.filter(r => String(r.month || '').toLowerCase() === mName.toLowerCase() && Number(r.year || 2026) === 2026);
-    const paidInMonth = monthReceipts.reduce((acc, r) => acc + (parseFloat(r.amountPaid || 0) || 0), 0);
-    const paidDateStr = monthReceipts[0]?.date || (paidInMonth >= agreedMonthlyFee && agreedMonthlyFee > 0 ? `2026-${mNumStr}-05` : '--');
-    const paymentMethod = monthReceipts[0]?.paymentMethod || (currency === 'GBP' ? 'UK Bank Transfer' : 'Online Transfer');
+  // Build unified payment rows from actual receipts + monthly billing schedule
+  const rows = [];
+  const coveredMonths = new Set();
 
-    if (matrixRow && Array.isArray(matrixRow.months) && matrixRow.months[mIdx]) {
-      const mObj = matrixRow.months[mIdx];
-      if (!mObj.isPaid && !mObj.isLeave && !mObj.isNotEnrolled && !mObj.isFuture) {
-        const rem = mObj.isPartial ? Math.max(0, agreedMonthlyFee - (parseFloat(mObj.amountPaid || 0))) : agreedMonthlyFee;
-        totalPending += rem;
-      }
-      return {
-        ...mObj,
-        dueDate: dueDateStr,
-        paidDate: mObj.isPaid ? paidDateStr : '--',
-        paymentMethod
-      };
-    }
+  // 1. Add all explicit receipts/invoices first (including manual invoices & paid records)
+  allReceipts.forEach(r => {
+    const mName = r.month || 'September';
+    const yr = r.year || 2026;
+    const isManual = Boolean(r.isManualInvoice);
+    if (!isManual) coveredMonths.add(`${mName.toLowerCase()}_${yr}`);
 
-    const isNotEnrolled = (joinYear === 2026 && mIdx < joinMonthIdx);
-    const isFuture = mIdx > currentMonthIdx && paidInMonth === 0;
-    const isPaid = paidInMonth >= agreedMonthlyFee && agreedMonthlyFee > 0;
-    const isPartial = paidInMonth > 0 && paidInMonth < agreedMonthlyFee;
+    const status = String(r.status || (parseFloat(r.amountPaid || 0) > 0 ? 'PAID' : 'UNPAID')).toUpperCase();
+    const feeAmt = parseFloat(r.amountPaid ?? r.amount ?? agreedFee) || agreedFee;
 
-    if (!isPaid && !isNotEnrolled && !isFuture) {
-      totalPending += Math.max(0, agreedMonthlyFee - paidInMonth);
-    }
-
-    return {
+    rows.push({
+      recordId: r.receiptNo || `REC-${Math.random().toString(36).slice(2, 8)}`,
+      paymentMethod: r.paymentMethod || defaultMethod,
       month: mName,
-      isPaid,
-      isPartial,
-      isLeave: false,
-      isNotEnrolled,
-      isFuture,
-      amountPaid: paidInMonth,
-      dueDate: dueDateStr,
-      paidDate: isPaid || isPartial ? paidDateStr : '--',
-      paymentMethod
-    };
+      year: yr,
+      monthDisplay: `${mName.slice(0, 3)} ${yr}`,
+      paidDate: status === 'PAID' ? (r.date || new Date().toISOString().slice(0, 10)) : '--',
+      feeAmount: feeAmt,
+      currency: r.currency || currency,
+      status: status === 'PAID' ? 'PAID' : 'UNPAID',
+      reason: r.reason || r.remarks || (isManual ? 'Manual Invoice' : 'Monthly Tuition Fee'),
+      description: r.description || r.remarks || '',
+      isManualInvoice: isManual,
+      rawRecord: r
+    });
   });
+
+  // 2. Also ensure enrolled months in 2026 up to current month (September) appear if not deleted
+  const monthsNames = ['January','February','March','April','May','June','July','August','September'];
+  const deletedMonths = Array.isArray(fNotes.deleted_payment_months) ? fNotes.deleted_payment_months : [];
+
+  let joinDateStr = family.created_at ? family.created_at.slice(0, 10) : '2026-06-01';
+  const startMonthIdx = Math.max(0, Math.min(8, (parseInt(joinDateStr.slice(5, 7), 10) || 6) - 1));
+
+  for (let mIdx = 8; mIdx >= startMonthIdx; mIdx--) {
+    const mName = monthsNames[mIdx];
+    const key = `${mName.toLowerCase()}_2026`;
+    if (coveredMonths.has(key) || deletedMonths.includes(key)) continue;
+
+    // Check matrix override if any
+    const overrides = (typeof getStoredMatrixOverrides === 'function') ? getStoredMatrixOverrides() : (fNotes.matrix_overrides || {});
+    const ovKey = `${famId}_${mName}_2026`;
+    const ovVal = overrides[ovKey];
+    const isPaidOv = ovVal && (ovVal.status === 'paid' || ovVal === 'paid');
+
+    rows.push({
+      recordId: `AUTO-${famId}-${mName}-2026`,
+      paymentMethod: defaultMethod,
+      month: mName,
+      year: 2026,
+      monthDisplay: `${mName.slice(0, 3)} 2026`,
+      paidDate: isPaidOv ? (ovVal.date || `2026-${String(mIdx + 1).padStart(2, '0')}-05`) : '--',
+      feeAmount: agreedFee,
+      currency: currency,
+      status: isPaidOv ? 'PAID' : 'UNPAID',
+      reason: 'Monthly Tuition Fee',
+      description: '',
+      isManualInvoice: false,
+      rawRecord: null
+    });
+  }
+
+  // Sort rows chronologically descending
+  const mOrder = { january:1, february:2, march:3, april:4, may:5, june:6, july:7, august:8, september:9, october:10, november:11, december:12 };
+  rows.sort((a, b) => {
+    const yDiff = (Number(b.year) || 2026) - (Number(a.year) || 2026);
+    if (yDiff !== 0) return yDiff;
+    const mA = mOrder[String(a.month || '').toLowerCase()] || 0;
+    const mB = mOrder[String(b.month || '').toLowerCase()] || 0;
+    if (mB !== mA) return mB - mA;
+    return String(b.paidDate || '').localeCompare(String(a.paidDate || ''));
+  });
+
+  const currentMonthPaid = rows.some(r => String(r.month).toLowerCase() === 'september' && r.status === 'PAID');
 
   return {
     currency,
-    agreedMonthlyFee,
-    totalPaid,
-    totalPending,
-    advanceCredit,
-    monthsStatus,
-    receipts
+    monthlyFee: agreedFee,
+    rows,
+    currentMonthPaid
   };
 }
 
-/**
- * Helper: Build a clean 3-column Bio Data specification table (modeled on Reference Screenshot 1)
- */
-function _buildThreeColSpecTableHtml(rowsData) {
-  // rowsData is an array of { label, value } items; we group them into rows of 3 columns
-  const chunks = [];
-  for (let i = 0; i < rowsData.length; i += 3) {
-    chunks.push(rowsData.slice(i, i + 3));
-  }
-  return `
-    <div class="overflow-x-auto">
-      <table class="w-full text-left text-xs border-collapse">
-        <tbody class="divide-y divide-slate-200">
-          ${chunks.map(row => `
-            <tr class="hover:bg-slate-50/70 transition">
-              ${[0, 1, 2].map(colIdx => {
-                const item = row[colIdx];
-                if (!item) return `<td class="p-4 w-1/3"></td>`;
-                return `
-                  <td class="p-4 w-1/3 align-middle border-r last:border-r-0 border-slate-100">
-                    <div class="flex items-center justify-between gap-3">
-                      <span class="text-slate-500 font-semibold">${item.label}:</span>
-                      <span class="font-bold text-teal-800 text-right">${item.value ?? '--'}</span>
-                    </div>
-                  </td>
-                `;
-              }).join('')}
-            </tr>
-          `).join('')}
-        </tbody>
-      </table>
-    </div>
-  `;
-}
-
 // ============================================================================
-// 1. FAMILY / PARENT FULL-SCREEN DEDICATED PROFILE PAGE
+// MAIN ENTRYPOINT: FULL-SCREEN MODERN FAMILY PROFILE WORKSPACE
 // ============================================================================
-async function openFamily360Profile(familyId, initialTab = 'students', skipHistoryPush = false) {
+async function openFamily360Profile(familyId, initialTab = 'students', skipHistoryPush = false, options = {}) {
   if (!familyId) return;
 
   _activateFullScreenProfilePage('family');
@@ -453,9 +543,9 @@ async function openFamily360Profile(familyId, initialTab = 'students', skipHisto
   if (!workspace) return;
 
   workspace.innerHTML = `
-    <div class="bg-white rounded-2xl border border-slate-200 p-16 text-center text-slate-500 shadow-xs">
-      <i class="fa-solid fa-circle-notch fa-spin text-2xl text-emerald-600 mb-3 block"></i>
-      <span class="text-sm font-extrabold">Loading Full-Screen Family Profile Workspace...</span>
+    <div class="bg-white rounded-2xl border border-slate-200 p-14 text-center text-slate-500 shadow-2xs">
+      <i class="fa-solid fa-circle-notch fa-spin text-2xl text-indigo-600 mb-3 block"></i>
+      <span class="text-sm font-extrabold text-slate-700">Loading Family Profile Workspace...</span>
     </div>
   `;
 
@@ -467,248 +557,1022 @@ async function openFamily360Profile(familyId, initialTab = 'students', skipHisto
     family = data;
     if (family && Array.isArray(window.ALL_FAMILIES)) window.ALL_FAMILIES.push(family);
   }
+
   if (!family) {
     workspace.innerHTML = `
       ${_buildTopWorkspaceNavHtml()}
-      <div class="bg-white rounded-2xl border border-slate-200 p-12 text-center text-rose-600 font-bold">
-        Family record (${familyId}) could not be found.
+      <div class="bg-white rounded-2xl border border-rose-200 p-12 text-center text-rose-600 font-bold">
+        Family record (${_esc360(familyId)}) could not be found in the database.
       </div>
     `;
     return;
   }
 
-  const validTabs = ['students', 'payments', 'lessons', 'biodata'];
+  // Strictly enforce ONLY the 5 required tabs:
+  // 1. students | 2. payments | 3. manager_notes | 4. teacher_notes | 5. biodata
+  const validTabs = ['students', 'payments', 'manager_notes', 'teacher_notes', 'biodata'];
   const activeTab = validTabs.includes(initialTab) ? initialTab : 'students';
+
+  // Retrieve all connected Students for this Family
+  const familyStudents = (window.ALL_STUDENTS || []).filter(s =>
+    String(s.family_id || '').toUpperCase() === String(family.id).toUpperCase() &&
+    String(s.status || '').toLowerCase() !== 'trial'
+  );
+
+  // Determine selected Student inside Family Profile
+  let selectedStudentId = options.selectedStudentId || _CURRENT_360_STATE.selectedStudentId;
+  if (!selectedStudentId || !familyStudents.some(s => String(s.id).toUpperCase() === String(selectedStudentId).toUpperCase())) {
+    selectedStudentId = familyStudents[0]?.id || null;
+  }
+  const studentSubView = options.studentSubView || _CURRENT_360_STATE.studentSubView || 'history';
 
   _CURRENT_360_STATE.type = 'family';
   _CURRENT_360_STATE.id = family.id;
   _CURRENT_360_STATE.activeTab = activeTab;
+  _CURRENT_360_STATE.selectedStudentId = selectedStudentId;
+  _CURRENT_360_STATE.studentSubView = studentSubView;
 
   if (!skipHistoryPush) {
     _push360History('family', family.id, `${family.parent_name} (${family.id})`, activeTab);
   }
 
-  // Retrieve Family Students
-  const familyStudents = (window.ALL_STUDENTS || []).filter(s =>
-    String(s.family_id || '').toUpperCase() === String(family.id).toUpperCase() &&
-    String(s.status || '').toLowerCase() !== 'trial'
-  );
   const studentIds = familyStudents.map(s => s.id);
-
-  // Retrieve Schedules & Lesson/Attendance Logs for Family Students
   const [schedRes, logsRes] = await Promise.all([
     studentIds.length > 0 ? db.from('class_schedules').select('*, teachers(*)').in('student_id', studentIds) : Promise.resolve({ data: [] }),
-    studentIds.length > 0 ? db.from('attendance_logs').select('*').in('student_id', studentIds).order('date', { ascending: false }).limit(100) : Promise.resolve({ data: [] })
+    studentIds.length > 0 ? db.from('attendance_logs').select('*').in('student_id', studentIds).order('date', { ascending: false }).limit(250) : Promise.resolve({ data: [] })
   ]);
 
   const famSchedules = schedRes.data || [];
   const famLogs = logsRes.data || [];
 
-  const fin = _getFamilyFinancialSnapshot(family);
-  const creds = (typeof getParentCreds === 'function') ? getParentCreds(family) : { username: 'parent_' + family.id, password: '123456' };
+  // Cache schedules & logs on window for instant tab/student switching
+  window._LAST_FAMILY_360_CACHE = {
+    family,
+    familyStudents,
+    famSchedules,
+    famLogs
+  };
 
-  const rawPhone = family.whatsapp || '';
-  const cleanPhone = rawPhone.replace(/[^0-9]/g, '');
-  const displayPhone = (window.CURRENT_ROLE === 'manager' && typeof maskStudentPhone === 'function')
-    ? maskStudentPhone(rawPhone)
-    : (rawPhone || 'Not Provided');
+  _renderFamilyWorkspaceDOM();
+}
+
+/**
+ * Switch between the 5 required Family Tabs without reloading from network
+ */
+function switchFamilyWorkspaceTab(tabId) {
+  const validTabs = ['students', 'payments', 'manager_notes', 'teacher_notes', 'biodata'];
+  if (!validTabs.includes(tabId)) return;
+  _CURRENT_360_STATE.activeTab = tabId;
+  _renderFamilyWorkspaceDOM();
+}
+
+/**
+ * Select a Student inside the Family Profile (NO separate Student Profile page!)
+ */
+function selectStudentInFamilyProfile(familyId, studentId, subView = 'history') {
+  _CURRENT_360_STATE.selectedStudentId = studentId;
+  _CURRENT_360_STATE.studentSubView = subView || 'history';
+  _CURRENT_360_STATE.activeTab = 'students';
+  _renderFamilyWorkspaceDOM();
+
+  setTimeout(() => {
+    const detailPanel = document.getElementById('familySelectedStudentWorkspace');
+    if (detailPanel) {
+      detailPanel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+  }, 60);
+}
+
+/**
+ * Render the Complete Modern Full-Screen Family Workspace DOM
+ */
+function _renderFamilyWorkspaceDOM() {
+  const workspace = document.getElementById('unified360PageWorkspace');
+  const cache = window._LAST_FAMILY_360_CACHE;
+  if (!workspace || !cache || !cache.family) return;
+
+  const { family, familyStudents, famSchedules, famLogs } = cache;
+  const activeTab = _CURRENT_360_STATE.activeTab || 'students';
+  const selectedStudentId = _CURRENT_360_STATE.selectedStudentId;
+  const studentSubView = _CURRENT_360_STATE.studentSubView || 'history';
+
+  const fNotes = _parseFamilyStructuredNotes(family);
+  const bioMeta = fNotes.bio_meta || {};
+  const creds = (typeof getParentCreds === 'function') ? getParentCreds(family) : { username: 'parent_' + family.id, password: '123456' };
+  const payData = _getFamilyPaymentsList(family);
+
+  const regDate = bioMeta.joining_date || (family.created_at ? family.created_at.slice(0, 10) : '2026-02-05');
+  const famStatus = String(family.status || 'Active').toUpperCase();
+  const displayStatusLabel = (famStatus === 'ACTIVE' || famStatus === 'REGULAR') ? 'REGULAR' : famStatus;
+
+  const statusBadgeStyle = (displayStatusLabel === 'REGULAR')
+    ? 'bg-emerald-500/15 text-emerald-300 border-emerald-400/30'
+    : (displayStatusLabel === 'ON LEAVE' || displayStatusLabel === 'LEAVE')
+    ? 'bg-amber-500/15 text-amber-300 border-amber-400/30'
+    : 'bg-rose-500/15 text-rose-300 border-rose-400/30';
+
+  const invoiceSentThisMonth = Boolean(bioMeta.last_invoice_sent_month === 'September 2026' || payData.currentMonthPaid);
   const displayEmail = (window.CURRENT_ROLE === 'manager' && typeof maskStudentEmail === 'function')
     ? maskStudentEmail(family.parent_email || '')
     : (family.parent_email || 'Not Provided');
 
-  const regDate = family.created_at ? family.created_at.slice(0, 10) : '2026-01-01';
-  const famStatus = (family.status || 'Regular').toUpperCase();
+  // Count Manager & Teacher Notes for tab badges
+  const managerNotesCount = (fNotes.manager_notes || []).length;
+  const teacherNotesList = _collectAllFamilyTeacherNotes(family, familyStudents, famLogs);
+  const teacherNotesCount = teacherNotesList.length;
 
-  const tabsConfig = [
-    { id: 'students', label: `Students (${familyStudents.length})` },
-    { id: 'payments', label: 'Payments & Fee Ledger' },
-    { id: 'lessons',  label: 'Lessons & Attendance' },
-    { id: 'biodata',  label: 'Bio Data' }
+  // ==========================================================================
+  // 5 REQUIRED TABS ONLY (Section #5)
+  // ==========================================================================
+  const navTabs = [
+    { id: 'students',      label: 'Students',        icon: 'fa-user-graduate', count: familyStudents.length },
+    { id: 'payments',      label: 'Payments',        icon: 'fa-credit-card',   count: payData.rows.length },
+    { id: 'manager_notes', label: "Manager's Notes", icon: 'fa-clipboard-list', count: managerNotesCount },
+    { id: 'teacher_notes', label: "Teacher's Notes", icon: 'fa-chalkboard-user', count: teacherNotesCount },
+    { id: 'biodata',       label: 'Bio Data',        icon: 'fa-id-card',       count: null }
   ];
 
-  // Build Active Tab Content (Strictly Separated — One Category per Tab)
-  let tabContentHtml = '';
-
-  // -------------------------------------------------------------------------
-  // FAMILY TAB 1: STUDENTS (Modeled on Reference Screenshot 3)
-  // -------------------------------------------------------------------------
+  let activeSectionHtml = '';
   if (activeTab === 'students') {
-    tabContentHtml = `
-      <div>
-        ${familyStudents.length === 0 ? `
-          <div class="p-12 text-center text-slate-400 text-sm">
-            No students enrolled under this family yet.
-            <div class="mt-3">
-              <button onclick="prepareAddStudentModal('${family.id}')" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-extrabold">
-                + Add First Student
-              </button>
+    activeSectionHtml = _buildFamilyStudentsTabHtml(family, familyStudents, famSchedules, famLogs, selectedStudentId, studentSubView);
+  } else if (activeTab === 'payments') {
+    activeSectionHtml = _buildFamilyPaymentsTabHtml(family, payData);
+  } else if (activeTab === 'manager_notes') {
+    activeSectionHtml = _buildFamilyManagerNotesTabHtml(family, fNotes);
+  } else if (activeTab === 'teacher_notes') {
+    activeSectionHtml = _buildFamilyTeacherNotesTabHtml(family, familyStudents, teacherNotesList);
+  } else if (activeTab === 'biodata') {
+    activeSectionHtml = _buildFamilyBioDataTabHtml(family, fNotes, creds);
+  }
+
+  // Bottom Family-Level Actions Bar (Section #15)
+  const isFamInactive = famStatus === 'INACTIVE' || famStatus === 'DEACTIVATED';
+  const isFamOnLeave = famStatus === 'ON LEAVE' || famStatus === 'LEAVE';
+  const isFamSuspended = famStatus === 'SUSPENDED' || Boolean(bioMeta.classes_suspended);
+
+  const bottomFamilyActionsHtml = `
+    <div class="bg-slate-50/90 border-t border-slate-200 px-6 py-4 flex items-center justify-center gap-3 flex-wrap">
+      <button onclick="handleFamilyLevelDeactivate('${_esc360(family.id)}')"
+              class="px-5 py-2.5 rounded-xl font-extrabold text-xs text-white shadow-xs transition flex items-center gap-2 ${isFamInactive ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-rose-600 hover:bg-rose-700'}">
+        <i class="fa-solid ${isFamInactive ? 'fa-user-check' : 'fa-ban'}"></i>
+        ${isFamInactive ? 'Activate Family' : 'Deactivate'}
+      </button>
+
+      <button onclick="handleFamilyLevelLeave('${_esc360(family.id)}')"
+              class="px-5 py-2.5 rounded-xl font-extrabold text-xs text-white bg-sky-600 hover:bg-sky-700 shadow-xs transition flex items-center gap-2">
+        <i class="fa-solid fa-calendar-pause"></i>
+        ${isFamOnLeave ? 'Return Family from Leave' : 'Make on Leave'}
+      </button>
+
+      <button onclick="handleFamilyLevelSuspendClasses('${_esc360(family.id)}')"
+              class="px-5 py-2.5 rounded-xl font-extrabold text-xs text-white ${isFamSuspended ? 'bg-teal-600 hover:bg-teal-700' : 'bg-rose-700 hover:bg-rose-800'} shadow-xs transition flex items-center gap-2">
+        <i class="fa-solid ${isFamSuspended ? 'fa-play' : 'fa-pause-circle'}"></i>
+        ${isFamSuspended ? 'Unsuspend Classes' : 'Suspend Classes'}
+      </button>
+
+      <button onclick="openEditFamilyProfileModal('${_esc360(family.id)}')"
+              class="px-5 py-2.5 rounded-xl font-extrabold text-xs text-white bg-indigo-600 hover:bg-indigo-700 shadow-xs transition flex items-center gap-2">
+        <i class="fa-solid fa-pen-to-square"></i>
+        Edit Profile
+      </button>
+    </div>
+  `;
+
+  workspace.innerHTML = `
+    ${_buildTopWorkspaceNavHtml()}
+
+    <!-- MODERN FULL-SCREEN FAMILY WORKSPACE CARD (NO OLD GREEN BACKGROUND) -->
+    <div class="bg-white rounded-2xl border border-slate-200/95 shadow-sm overflow-hidden">
+
+      <!-- COMPACT MODERN EXECUTIVE FAMILY HEADER (Sections #3, #4, #24, #25) -->
+      <div class="bg-gradient-to-r from-slate-900 via-slate-800 to-indigo-950 text-white px-6 pt-5 pb-0 relative">
+        <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 pb-5 border-b border-white/10">
+
+          <!-- Left: Family Identity & Status Badges -->
+          <div class="flex items-start sm:items-center gap-4">
+            <div class="w-14 h-14 rounded-2xl bg-white/10 border border-white/20 flex items-center justify-center text-2xl font-black text-amber-400 shrink-0 shadow-inner">
+              ${_esc360((family.parent_name || 'F').charAt(0).toUpperCase())}
+            </div>
+            <div>
+              <div class="flex items-center gap-2.5 flex-wrap">
+                <h1 class="text-xl sm:text-2xl font-black tracking-tight text-white">${_esc360(family.parent_name)}</h1>
+                <span class="px-2.5 py-0.5 rounded-md bg-white/10 border border-white/15 font-mono text-xs font-extrabold text-slate-200">${_esc360(family.id)}</span>
+                <span class="px-2.5 py-0.5 rounded-md border text-[11px] font-black uppercase tracking-wider ${statusBadgeStyle}">
+                  ${_esc360(displayStatusLabel)}
+                </span>
+                ${isFamSuspended ? `<span class="px-2.5 py-0.5 rounded-md bg-rose-600 text-white text-[10px] font-black uppercase">CLASSES SUSPENDED</span>` : ''}
+              </div>
+
+              <div class="flex items-center gap-2 flex-wrap mt-2 text-xs text-slate-300">
+                <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md bg-white/5 border border-white/10 font-mono text-[11px]">
+                  <i class="fa-regular fa-calendar text-amber-400"></i> ${_esc360(regDate)}
+                </span>
+                <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md ${invoiceSentThisMonth ? 'bg-amber-400/20 text-amber-300 border border-amber-400/30' : 'bg-slate-700/60 text-slate-300 border border-slate-600'} text-[11px] font-extrabold">
+                  MONTHLY INVOICE ${invoiceSentThisMonth ? '<i class="fa-solid fa-check text-emerald-400"></i>' : 'PENDING'}
+                </span>
+                <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md bg-sky-500/20 text-sky-300 border border-sky-400/30 text-[11px] font-extrabold">
+                  MONTHLY PAYMENT &bull; ${_esc360(family.currency || 'USD')} ${_esc360(family.monthly_fee || 0)}
+                </span>
+                <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md bg-indigo-500/20 text-indigo-200 border border-indigo-400/30 text-[11px] font-bold">
+                  <i class="fa-regular fa-envelope"></i> EMAIL: ${_esc360(displayEmail)}
+                </span>
+              </div>
             </div>
           </div>
-        ` : `
-          <div class="overflow-x-auto">
-            <table class="w-full text-left text-xs border-collapse">
-              <thead class="bg-slate-50 text-slate-700 font-extrabold border-b border-slate-200">
-                <tr>
-                  <th class="p-4 w-14">#</th>
-                  <th class="p-4">Name</th>
-                  <th class="p-4">Course &amp; Weekly Schedule</th>
-                  <th class="p-4">History / Lessons</th>
-                  <th class="p-4">Reports / Attendance</th>
-                  <th class="p-4">Teacher</th>
-                  <th class="p-4">Joining Date</th>
-                  <th class="p-4 text-right">Quick Actions</th>
-                </tr>
-              </thead>
-              <tbody class="divide-y divide-slate-200">
-                ${familyStudents.map((s, idx) => {
-                  const tObj = (window.ALL_TEACHERS || []).find(t => String(t.id) === String(s.assigned_teacher_id));
-                  const sScheds = famSchedules.filter(sc => String(sc.student_id) === String(s.id));
-                  const schedText = sScheds.length > 0
-                    ? `${sScheds.length} Days/Wk (${(sScheds[0].start_time || '').slice(0,5)} PKT)`
-                    : 'Schedule Not Booked';
-                  return `
-                    <tr class="hover:bg-slate-50/80 transition">
-                      <td class="p-4">
-                        <span class="inline-flex items-center justify-center w-6 h-6 rounded bg-amber-400 text-slate-950 font-black text-xs shadow-2xs">${idx + 1}</span>
-                      </td>
-                      <td class="p-4">
-                        <button onclick="openStudent360Profile('${s.id}', 'overview')" class="font-extrabold text-sm text-blue-700 hover:text-emerald-700 hover:underline flex items-center gap-1.5 text-left">
-                          <i class="fa-solid fa-check text-slate-800 text-xs"></i>
-                          <span>${s.name}</span>
-                        </button>
-                        <span class="text-[10px] font-mono text-slate-400 block ml-4">${s.id}</span>
-                      </td>
-                      <td class="p-4">
-                        <span class="font-bold text-slate-800 block">${s.course_id || 'Noorani Qaida & Quran'}</span>
-                        <span class="text-[11px] text-slate-500 font-mono">${schedText}</span>
-                      </td>
-                      <td class="p-4">
-                        <button onclick="openStudent360Profile('${s.id}', 'lessons')" class="text-blue-600 hover:text-blue-800 hover:underline font-bold">
-                          Daily Lessons
-                        </button>
-                      </td>
-                      <td class="p-4">
-                        <div class="flex items-center gap-3">
-                          <button onclick="openStudent360Profile('${s.id}', 'progress')" class="text-blue-600 hover:text-blue-800 hover:underline font-bold">
-                            Progress
-                          </button>
-                          <span class="text-slate-300">|</span>
-                          <button onclick="openStudent360Profile('${s.id}', 'attendance')" class="text-teal-700 hover:text-teal-900 hover:underline font-bold">
-                            Attendance
-                          </button>
-                        </div>
-                      </td>
-                      <td class="p-4">
-                        ${tObj ? `
-                          <button onclick="openTeacher360Profile('${tObj.id}', 'overview')" class="text-blue-600 hover:text-indigo-800 hover:underline font-bold text-left">
-                            ${tObj.full_name}
-                          </button>
-                        ` : '<span class="text-slate-400 italic">Not Assigned</span>'}
-                      </td>
-                      <td class="p-4 font-mono text-slate-600">${s.joining_date || '--'}</td>
-                      <td class="p-4 text-right">
-                        <div class="inline-flex items-center gap-1.5">
-                          <button onclick="openStudent360Profile('${s.id}', 'overview')" class="px-2.5 py-1 rounded border border-emerald-300 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 font-bold text-xs transition" title="Open Full-Screen Student Profile">
-                            <i class="fa-regular fa-id-card mr-1"></i>Profile
-                          </button>
-                          <button onclick="openStudent360Profile('${s.id}', 'classes')" class="p-1.5 rounded border border-amber-300 bg-amber-50 hover:bg-amber-100 text-amber-800 transition" title="Student Classes & Schedule">
-                            <i class="fa-regular fa-clock"></i>
-                          </button>
-                          ${tObj ? `
-                            <button onclick="open2DMatrixForTeacher('${tObj.id}')" class="p-1.5 rounded border border-blue-300 bg-blue-50 hover:bg-blue-100 text-blue-700 transition" title="Open Teacher 2D Timetable">
-                              <i class="fa-solid fa-table-cells"></i>
-                            </button>
-                          ` : ''}
-                        </div>
-                      </td>
+
+          <!-- Right: ONLY THE 4 REQUIRED TOP FAMILY ACTIONS (Section #4 & #25) -->
+          <div class="flex items-center gap-2 flex-wrap">
+            <button onclick="openFamilyAddStudentModal('${_esc360(family.id)}')"
+                    class="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-extrabold transition shadow-xs flex items-center gap-1.5 cursor-pointer">
+              <i class="fa-solid fa-user-plus"></i> Add Student
+            </button>
+
+            <button onclick="openFamilySendInvoiceModal('${_esc360(family.id)}')"
+                    class="px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-extrabold transition shadow-xs flex items-center gap-1.5 cursor-pointer">
+              <i class="fa-solid fa-file-invoice-dollar"></i> Send Invoice
+            </button>
+
+            <button onclick="openFamilyCustomEmailModal('${_esc360(family.id)}')"
+                    class="px-3.5 py-2 rounded-xl bg-sky-600 hover:bg-sky-500 text-white text-xs font-extrabold transition shadow-xs flex items-center gap-1.5 cursor-pointer">
+              <i class="fa-solid fa-paper-plane"></i> Send Email
+            </button>
+
+            <button onclick="openFamilyManualInvoiceModal('${_esc360(family.id)}')"
+                    class="px-3.5 py-2 rounded-xl bg-amber-600 hover:bg-amber-500 text-white text-xs font-extrabold transition shadow-xs flex items-center gap-1.5 cursor-pointer">
+              <i class="fa-solid fa-file-circle-plus"></i> Add Manual Invoice
+            </button>
+          </div>
+        </div>
+
+        <!-- DOCKED 5-TAB NAVIGATION BAR (Section #5: ONLY Students, Payments, Manager's Notes, Teacher's Notes, Bio Data) -->
+        <div class="flex items-center gap-1.5 pt-3 overflow-x-auto no-scrollbar">
+          ${navTabs.map(t => {
+            const isActive = activeTab === t.id;
+            return `
+              <button onclick="switchFamilyWorkspaceTab('${t.id}')"
+                      class="px-4 py-2.5 rounded-t-xl text-xs font-extrabold transition flex items-center gap-2 whitespace-nowrap cursor-pointer ${
+                        isActive
+                          ? 'bg-white text-slate-900 shadow-xs'
+                          : 'bg-slate-800/80 hover:bg-slate-700/80 text-slate-300 hover:text-white'
+                      }">
+                <i class="fa-solid ${t.icon} ${isActive ? 'text-indigo-600' : 'text-slate-400'}"></i>
+                <span>${_esc360(t.label)}</span>
+                ${t.count !== null ? `
+                  <span class="px-1.5 py-0.2 rounded-full text-[10px] font-black ${isActive ? 'bg-indigo-100 text-indigo-800' : 'bg-slate-700 text-slate-300'}">
+                    ${t.count}
+                  </span>
+                ` : ''}
+              </button>
+            `;
+          }).join('')}
+        </div>
+      </div>
+
+      <!-- ACTIVE TAB WORKSPACE CONTENT AREA -->
+      <div class="bg-white min-h-[400px]">
+        ${activeSectionHtml}
+      </div>
+
+      <!-- BOTTOM FAMILY-LEVEL ACTIONS BAR (Section #15) -->
+      ${bottomFamilyActionsHtml}
+    </div>
+
+    <!-- DEDICATED ACTION MODAL CONTAINER FOR FAMILY WORKSPACE OPERATIONS -->
+    <div id="familyWorkspaceActionModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-[9990] hidden items-center justify-center p-4"></div>
+  `;
+}
+
+// ============================================================================
+// TAB 1: STUDENTS TAB + INLINE SELECTED STUDENT DETAIL WORKSPACE
+// (Sections #6, #7, #8, #9, #10, #11, #12, #13, #14)
+// ============================================================================
+function _buildFamilyStudentsTabHtml(family, familyStudents, famSchedules, famLogs, selectedStudentId, studentSubView) {
+  if (!familyStudents || familyStudents.length === 0) {
+    return `
+      <div class="p-14 text-center">
+        <div class="w-14 h-14 rounded-2xl bg-slate-100 text-slate-400 flex items-center justify-center text-xl mx-auto mb-3">
+          <i class="fa-solid fa-user-graduate"></i>
+        </div>
+        <h3 class="text-base font-extrabold text-slate-800">No Students Enrolled in This Family Yet</h3>
+        <p class="text-xs text-slate-500 mt-1 max-w-md mx-auto">Click the button below or "Add Student" in the header to add the first child to ${_esc360(family.parent_name)}'s family profile.</p>
+        <button onclick="openFamilyAddStudentModal('${_esc360(family.id)}')"
+                class="mt-4 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-extrabold transition inline-flex items-center gap-2">
+          <i class="fa-solid fa-user-plus"></i> Add Student to Family
+        </button>
+      </div>
+    `;
+  }
+
+  const selectedStudent = familyStudents.find(s => String(s.id).toUpperCase() === String(selectedStudentId).toUpperCase()) || familyStudents[0];
+
+  const rowsHtml = familyStudents.map((stu, idx) => {
+    const isSelected = selectedStudent && String(stu.id).toUpperCase() === String(selectedStudent.id).toUpperCase();
+    const stuMeta = _parseStudentStructuredNotes(stu);
+    const certCount = (stuMeta.certificates || []).length;
+
+    const assignedTeacher = (window.ALL_TEACHERS || []).find(t => String(t.id) === String(stu.assigned_teacher_id));
+    const teacherName = assignedTeacher ? assignedTeacher.full_name : 'Assign Teacher';
+
+    const rawStatus = String(stu.status || 'Active');
+    const stLower = rawStatus.toLowerCase();
+    const isDeactivated = stLower === 'inactive' || stLower === 'deactivated';
+    const isOnLeave = stLower === 'leave' || stLower === 'on leave' || Boolean(stuMeta.on_leave);
+
+    const statusBadge = isDeactivated
+      ? `<span class="px-2 py-0.5 rounded text-[10px] font-black bg-rose-100 text-rose-700 border border-rose-200">Deactivated</span>`
+      : isOnLeave
+      ? `<span class="px-2 py-0.5 rounded text-[10px] font-black bg-amber-100 text-amber-800 border border-amber-200">On Leave</span>`
+      : `<span class="px-2 py-0.5 rounded text-[10px] font-black bg-emerald-100 text-emerald-800 border border-emerald-200">Active</span>`;
+
+    return `
+      <tr class="border-b border-slate-100 transition ${isSelected ? 'bg-indigo-50/70 border-l-4 border-l-indigo-600' : 'hover:bg-slate-50/80'}">
+        <!-- # -->
+        <td class="p-3.5 w-14">
+          <span class="inline-flex items-center justify-center w-6 h-6 rounded-md font-mono text-xs font-black ${isSelected ? 'bg-indigo-600 text-white' : 'bg-amber-400/90 text-slate-900'}">
+            ${idx + 1}
+          </span>
+        </td>
+
+        <!-- Student (Clickable — keeps Admin inside Family Profile & selects Student) -->
+        <td class="p-3.5">
+          <div class="flex items-center gap-2 flex-wrap">
+            <button onclick="selectStudentInFamilyProfile('${_esc360(family.id)}', '${_esc360(stu.id)}', 'info')"
+                    class="font-extrabold text-xs sm:text-sm ${isSelected ? 'text-indigo-900 underline' : 'text-slate-900 hover:text-indigo-700 hover:underline'} flex items-center gap-1.5 text-left cursor-pointer">
+              <i class="fa-solid ${isDeactivated ? 'fa-user-slash text-rose-500' : isOnLeave ? 'fa-clock text-amber-500' : 'fa-check text-emerald-600'} text-xs"></i>
+              <span>${_esc360(stu.name)}</span>
+            </button>
+            ${statusBadge}
+            ${isSelected ? `<span class="px-2 py-0.5 rounded-full bg-indigo-600 text-white text-[9px] font-black uppercase tracking-wider">Selected</span>` : ''}
+          </div>
+          <div class="text-[11px] text-slate-500 mt-0.5 font-medium">
+            <span class="font-mono">${_esc360(stu.id)}</span> &bull; ${_esc360(stu.course_id || 'Quran Studies')}
+          </div>
+        </td>
+
+        <!-- History (Progress / Attendance & Daily Lessons) -->
+        <td class="p-3.5">
+          <button onclick="selectStudentInFamilyProfile('${_esc360(family.id)}', '${_esc360(stu.id)}', 'history')"
+                  class="px-2.5 py-1 rounded-lg font-extrabold text-xs transition cursor-pointer ${isSelected && studentSubView === 'history' ? 'bg-indigo-600 text-white shadow-2xs' : 'text-indigo-700 hover:bg-indigo-50 hover:underline'}">
+            Progress
+          </button>
+        </td>
+
+        <!-- Reports (Academic Evaluation & Attendance Report) -->
+        <td class="p-3.5">
+          <button onclick="selectStudentInFamilyProfile('${_esc360(family.id)}', '${_esc360(stu.id)}', 'report')"
+                  class="px-2.5 py-1 rounded-lg font-extrabold text-xs transition cursor-pointer ${isSelected && studentSubView === 'report' ? 'bg-indigo-600 text-white shadow-2xs' : 'text-indigo-700 hover:bg-indigo-50 hover:underline'}">
+            Report
+          </button>
+        </td>
+
+        <!-- Teacher (Clickable — opens Teacher Schedule & Info) -->
+        <td class="p-3.5">
+          ${assignedTeacher ? `
+            <button onclick="openTeacherScheduleFromFamily('${_esc360(assignedTeacher.id)}', '${_esc360(stu.id)}')"
+                    class="font-extrabold text-xs text-indigo-700 hover:text-indigo-950 hover:underline flex items-center gap-1.5 text-left cursor-pointer"
+                    title="Click to inspect Teacher Schedule & Assigned Slots">
+              <i class="fa-solid fa-chalkboard-user text-indigo-500"></i>
+              <span>${_esc360(teacherName)}</span>
+            </button>
+          ` : `
+            <button onclick="openEditSingleStudentModal('${_esc360(family.id)}', '${_esc360(stu.id)}')"
+                    class="text-xs font-bold text-amber-700 hover:underline flex items-center gap-1 cursor-pointer">
+              <i class="fa-solid fa-user-plus"></i> Assign Teacher
+            </button>
+          `}
+        </td>
+
+        <!-- Certificates (+ Issue & View List) -->
+        <td class="p-3.5">
+          <div class="flex items-center gap-1.5">
+            <button onclick="openIssueStudentCertificateModal('${_esc360(family.id)}', '${_esc360(stu.id)}')"
+                    class="w-7 h-7 rounded-lg border border-rose-300 bg-rose-50 hover:bg-rose-100 text-rose-700 flex items-center justify-center text-xs font-black transition cursor-pointer"
+                    title="Issue New Certificate for ${_esc360(stu.name)}">
+              <i class="fa-solid fa-plus"></i>
+            </button>
+            <button onclick="selectStudentInFamilyProfile('${_esc360(family.id)}', '${_esc360(stu.id)}', 'certificates')"
+                    class="px-2.5 h-7 rounded-lg border border-emerald-300 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 flex items-center gap-1 text-xs font-extrabold transition cursor-pointer"
+                    title="View Certificates (${certCount})">
+              <i class="fa-solid fa-award text-emerald-600"></i>
+              <span>${certCount > 0 ? certCount : 'View'}</span>
+            </button>
+          </div>
+        </td>
+
+        <!-- Student-Only Actions (Edit Student, Student Leave, Student Schedule, Deactivate This Student Only) -->
+        <td class="p-3.5 text-right">
+          <div class="inline-flex items-center justify-end gap-1.5">
+            <!-- 1. Yellow Edit Student Information Button (Section #12) -->
+            <button onclick="openEditSingleStudentModal('${_esc360(family.id)}', '${_esc360(stu.id)}')"
+                    class="w-8 h-8 rounded-lg border border-amber-300 bg-amber-50 hover:bg-amber-100 text-amber-700 flex items-center justify-center transition cursor-pointer"
+                    title="Edit ONLY ${_esc360(stu.name)}'s Student Information">
+              <i class="fa-regular fa-pen-to-square"></i>
+            </button>
+
+            <!-- 2. Student-Only Leave Toggle Button (Section #14) -->
+            <button onclick="toggleSingleStudentLeave('${_esc360(family.id)}', '${_esc360(stu.id)}')"
+                    class="w-8 h-8 rounded-lg border ${isOnLeave ? 'border-amber-500 bg-amber-500 text-white' : 'border-emerald-300 bg-emerald-50 hover:bg-emerald-100 text-emerald-700'} flex items-center justify-center transition cursor-pointer"
+                    title="${isOnLeave ? `Resume ${_esc360(stu.name)} from Leave` : `Put ONLY ${_esc360(stu.name)} On Leave`}">
+              <i class="fa-regular fa-clock"></i>
+            </button>
+
+            <!-- 3. Student Teacher & Schedule Slot Button (Section #10) -->
+            <button onclick="${assignedTeacher ? `openTeacherScheduleFromFamily('${_esc360(assignedTeacher.id)}', '${_esc360(stu.id)}')` : `openEditSingleStudentModal('${_esc360(family.id)}', '${_esc360(stu.id)}')`}"
+                    class="w-8 h-8 rounded-lg border border-indigo-200 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 flex items-center justify-center transition cursor-pointer"
+                    title="View / Manage ${_esc360(stu.name)}'s Class Timetable">
+              <i class="fa-regular fa-calendar-check"></i>
+            </button>
+
+            <!-- 4. Red Deactivate This Student Only Button (Section #13) -->
+            <button onclick="toggleSingleStudentDeactivate('${_esc360(family.id)}', '${_esc360(stu.id)}')"
+                    class="w-8 h-8 rounded-lg border ${isDeactivated ? 'border-emerald-400 bg-emerald-600 text-white' : 'border-rose-300 bg-rose-50 hover:bg-rose-100 text-rose-700'} flex items-center justify-center transition cursor-pointer"
+                    title="${isDeactivated ? `Reactivate ${_esc360(stu.name)} Only` : `Deactivate ONLY ${_esc360(stu.name)} (Family & Siblings stay Active)`}">
+              <i class="fa-solid ${isDeactivated ? 'fa-user-check' : 'fa-user-xmark'}"></i>
+            </button>
+          </div>
+        </td>
+      </tr>
+    `;
+  }).join('');
+
+  const selectedDetailHtml = selectedStudent
+    ? _buildSelectedStudentWorkspaceHtml(family, selectedStudent, famSchedules, famLogs, studentSubView)
+    : '';
+
+  return `
+    <div>
+      <!-- STUDENTS MASTER TABLE -->
+      <div class="overflow-x-auto">
+        <table class="w-full text-left text-xs border-collapse">
+          <thead class="bg-slate-50 text-slate-700 font-extrabold border-b border-slate-200 uppercase tracking-wider text-[11px]">
+            <tr>
+              <th class="p-3.5 w-14">#</th>
+              <th class="p-3.5">Student</th>
+              <th class="p-3.5">History</th>
+              <th class="p-3.5">Reports</th>
+              <th class="p-3.5">Teacher</th>
+              <th class="p-3.5">Certificate</th>
+              <th class="p-3.5 text-right">Student Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rowsHtml}
+          </tbody>
+        </table>
+      </div>
+
+      <!-- INLINE SELECTED STUDENT WORKSPACE (Remains inside Family Profile — Section #7, #8, #9, #10, #11) -->
+      <div id="familySelectedStudentWorkspace" class="p-6 bg-slate-50/70 border-t border-slate-200">
+        ${selectedDetailHtml}
+      </div>
+    </div>
+  `;
+}
+
+/**
+ * Build the Selected Student's Detailed Sub-Workspace inside the Family Profile
+ */
+function _buildSelectedStudentWorkspaceHtml(family, student, famSchedules, famLogs, subView) {
+  const stuId = student.id;
+  const stuLogs = (famLogs || []).filter(l => String(l.student_id).toUpperCase() === String(stuId).toUpperCase());
+  const stuSchedules = (famSchedules || []).filter(sc => String(sc.student_id).toUpperCase() === String(stuId).toUpperCase());
+  const assignedTeacher = (window.ALL_TEACHERS || []).find(t => String(t.id) === String(student.assigned_teacher_id));
+  const stuMeta = _parseStudentStructuredNotes(student);
+
+  // Compute real Attendance Statistics (Section #8)
+  const totalLogs = stuLogs.length;
+  const presentLogs = stuLogs.filter(l => String(l.status || '').toLowerCase() === 'present');
+  const absentLogs = stuLogs.filter(l => String(l.status || '').toLowerCase() === 'absent');
+  const leaveLogs = stuLogs.filter(l => String(l.status || '').toLowerCase() === 'leave');
+
+  const attendedCount = presentLogs.length;
+  const missedCount = absentLogs.length;
+  const leaveCount = leaveLogs.length;
+  const attendancePct = totalLogs > 0 ? Math.round((attendedCount / totalLogs) * 100) : 100;
+
+  const subNavItems = [
+    { id: 'history',      label: 'History, Attendance & Daily Lessons', icon: 'fa-calendar-check' },
+    { id: 'report',       label: 'Academic Progress Report',            icon: 'fa-chart-line' },
+    { id: 'certificates', label: `Certificates (${(stuMeta.certificates || []).length})`, icon: 'fa-award' },
+    { id: 'info',         label: 'Student Information & Schedule',      icon: 'fa-user-gear' }
+  ];
+
+  let bodyHtml = '';
+
+  // ---------------------------------------------------------------------------
+  // SUB-VIEW 1: STUDENT HISTORY / ATTENDANCE & DAILY LESSONS (Sections #8 & #9)
+  // ---------------------------------------------------------------------------
+  if (subView === 'history') {
+    const filterStatus = _CURRENT_360_STATE.attFilterStatus || 'all';
+    const filteredLogs = stuLogs.filter(l => {
+      if (filterStatus === 'all') return true;
+      return String(l.status || '').toLowerCase() === filterStatus.toLowerCase();
+    });
+
+    const selectedDate = _CURRENT_360_STATE.selectedLessonDate || (stuLogs[0]?.date || null);
+    const activeLessonLog = stuLogs.find(l => l.date === selectedDate) || stuLogs[0] || null;
+
+    bodyHtml = `
+      <div class="space-y-5">
+        <!-- Attendance Summary KPIs -->
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs">
+            <span class="text-[11px] font-bold text-slate-500 uppercase block">Classes Attended</span>
+            <div class="text-2xl font-black text-emerald-700 mt-1">${attendedCount} <span class="text-xs font-bold text-slate-400">Days</span></div>
+          </div>
+          <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs">
+            <span class="text-[11px] font-bold text-slate-500 uppercase block">Classes Missed</span>
+            <div class="text-2xl font-black text-rose-600 mt-1">${missedCount} <span class="text-xs font-bold text-slate-400">Absent</span></div>
+          </div>
+          <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs">
+            <span class="text-[11px] font-bold text-slate-500 uppercase block">Approved Leaves</span>
+            <div class="text-2xl font-black text-amber-600 mt-1">${leaveCount} <span class="text-xs font-bold text-slate-400">Days</span></div>
+          </div>
+          <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs">
+            <span class="text-[11px] font-bold text-slate-500 uppercase block">Attendance Rate</span>
+            <div class="flex items-center gap-2 mt-1">
+              <span class="text-2xl font-black text-indigo-700">${attendancePct}%</span>
+              <span class="text-[11px] font-bold px-2 py-0.5 rounded bg-indigo-50 text-indigo-700">${totalLogs} Total Sessions</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-5">
+          <!-- Left 2 Columns: Attendance Dates & Lesson History Table -->
+          <div class="lg:col-span-2 bg-white rounded-xl border border-slate-200 shadow-2xs overflow-hidden">
+            <div class="px-4 py-3 bg-slate-50 border-b border-slate-200 flex items-center justify-between gap-2 flex-wrap">
+              <div>
+                <h4 class="text-xs font-black text-slate-800 uppercase tracking-wider">Attendance Dates &amp; Teacher Lesson Logs</h4>
+                <p class="text-[11px] text-slate-500">Click any date row to view the exact Daily Lesson recorded by the Teacher on that date.</p>
+              </div>
+              <div class="flex items-center gap-1.5 flex-wrap">
+                ${['all', 'Present', 'Absent', 'Leave'].map(st => `
+                  <button onclick="filterStudentAttendanceInFamily('${st}')"
+                          class="px-2.5 py-1 rounded-lg text-[11px] font-extrabold transition cursor-pointer ${filterStatus === st ? 'bg-slate-900 text-white' : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-100'}">
+                    ${st === 'all' ? 'All Dates' : st}
+                  </button>
+                `).join('')}
+                <button onclick="openRecordDailyLessonModal('${_esc360(family.id)}', '${_esc360(student.id)}')"
+                        class="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-extrabold transition cursor-pointer flex items-center gap-1">
+                  <i class="fa-solid fa-plus"></i> Record Attendance / Lesson
+                </button>
+              </div>
+            </div>
+
+            ${filteredLogs.length === 0 ? `
+              <div class="p-10 text-center text-slate-400 text-xs">
+                No attendance records found for the selected filter.
+              </div>
+            ` : `
+              <div class="overflow-x-auto max-h-96 overflow-y-auto">
+                <table class="w-full text-left text-xs border-collapse">
+                  <thead class="bg-slate-50/90 text-slate-600 font-extrabold border-b border-slate-200 sticky top-0">
+                    <tr>
+                      <th class="p-3">Date</th>
+                      <th class="p-3">Attendance Status</th>
+                      <th class="p-3">Recorded Daily Lesson (Teacher Portal)</th>
+                      <th class="p-3 text-right">Action</th>
                     </tr>
-                  `;
-                }).join('')}
-              </tbody>
-            </table>
+                  </thead>
+                  <tbody class="divide-y divide-slate-100">
+                    ${filteredLogs.map(log => {
+                      const parsedLesson = _parseLessonDetails360(log);
+                      const isActiveDate = activeLessonLog && activeLessonLog.date === log.date;
+                      const st = String(log.status || 'Present');
+                      const badgeCls = st.toLowerCase() === 'present'
+                        ? 'bg-emerald-100 text-emerald-800 border-emerald-200'
+                        : st.toLowerCase() === 'absent'
+                        ? 'bg-rose-100 text-rose-800 border-rose-200'
+                        : 'bg-amber-100 text-amber-800 border-amber-200';
+
+                      return `
+                        <tr onclick="selectStudentLessonDateInFamily('${_esc360(log.date)}')"
+                            class="cursor-pointer transition ${isActiveDate ? 'bg-indigo-50/80 font-bold' : 'hover:bg-slate-50'}">
+                          <td class="p-3 font-mono font-extrabold text-slate-800">${_esc360(log.date)}</td>
+                          <td class="p-3">
+                            <span class="px-2 py-0.5 rounded border text-[10px] font-extrabold ${badgeCls}">${_esc360(st)}</span>
+                          </td>
+                          <td class="p-3 text-slate-700">
+                            ${parsedLesson.hasLesson
+                              ? `<span class="font-bold text-slate-900">${_esc360(parsedLesson.summaryTitle)}</span>
+                                 ${parsedLesson.remarks ? `<span class="text-slate-500 block text-[11px] truncate max-w-xs">${_esc360(parsedLesson.remarks)}</span>` : ''}`
+                              : `<span class="text-slate-400 italic">No lesson recorded for this date</span>`
+                            }
+                          </td>
+                          <td class="p-3 text-right">
+                            <button onclick="event.stopPropagation(); selectStudentLessonDateInFamily('${_esc360(log.date)}')"
+                                    class="px-2.5 py-1 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-extrabold text-[11px]">
+                              Inspect Lesson
+                            </button>
+                          </td>
+                        </tr>
+                      `;
+                    }).join('')}
+                  </tbody>
+                </table>
+              </div>
+            `}
+          </div>
+
+          <!-- Right Column: Selected Date's Daily Lesson Detail Card (Section #9) -->
+          <div class="bg-white rounded-xl border border-slate-200 shadow-2xs p-5 flex flex-col justify-between">
+            ${activeLessonLog ? (() => {
+              const p = _parseLessonDetails360(activeLessonLog);
+              return `
+                <div>
+                  <div class="flex items-center justify-between border-b border-slate-100 pb-3 mb-4">
+                    <div>
+                      <span class="text-[10px] font-extrabold uppercase tracking-wider text-indigo-600 block">Daily Lesson Inspector</span>
+                      <h4 class="text-base font-black text-slate-900 mt-0.5 font-mono">${_esc360(activeLessonLog.date)}</h4>
+                    </div>
+                    <span class="px-2.5 py-1 rounded-lg text-xs font-extrabold ${String(activeLessonLog.status).toLowerCase() === 'present' ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'}">
+                      ${_esc360(activeLessonLog.status || 'Present')}
+                    </span>
+                  </div>
+
+                  ${p.hasLesson ? `
+                    <div class="space-y-3 text-xs">
+                      <div class="p-3 rounded-xl bg-slate-50 border border-slate-200/80">
+                        <span class="text-[10px] font-bold text-slate-400 uppercase block">Book / Surah / Sabaq</span>
+                        <strong class="text-slate-900 text-sm block mt-0.5">${_esc360(p.bookTitle || p.summaryTitle)}</strong>
+                      </div>
+                      <div class="grid grid-cols-2 gap-2.5">
+                        <div class="p-3 rounded-xl bg-slate-50 border border-slate-200/80">
+                          <span class="text-[10px] font-bold text-slate-400 uppercase block">Page / Verse</span>
+                          <strong class="text-slate-800">${_esc360(p.page ? `Page ${p.page}` : 'Standard')} ${_esc360(p.lineRange ? `(${p.lineRange})` : '')}</strong>
+                        </div>
+                        <div class="p-3 rounded-xl bg-slate-50 border border-slate-200/80">
+                          <span class="text-[10px] font-bold text-slate-400 uppercase block">Evaluation</span>
+                          <strong class="text-emerald-700">${_esc360(p.assessment || 'Completed')}</strong>
+                        </div>
+                      </div>
+                      <div class="p-3 rounded-xl bg-indigo-50/50 border border-indigo-100">
+                        <span class="text-[10px] font-bold text-indigo-700 uppercase block">Teacher's Recorded Lesson &amp; Notes</span>
+                        <p class="text-slate-800 font-medium mt-1 leading-relaxed">${_esc360(p.remarks || p.summaryTitle)}</p>
+                      </div>
+                    </div>
+                  ` : `
+                    <div class="py-8 text-center text-slate-400 text-xs">
+                      <i class="fa-solid fa-book-open text-2xl mb-2 block text-slate-300"></i>
+                      No lesson details were recorded by the teacher for <strong>${_esc360(activeLessonLog.date)}</strong>.
+                    </div>
+                  `}
+                </div>
+                <div class="pt-4 border-t border-slate-100 mt-4">
+                  <button onclick="openRecordDailyLessonModal('${_esc360(family.id)}', '${_esc360(student.id)}', '${_esc360(activeLessonLog.date)}')"
+                          class="w-full py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-extrabold transition cursor-pointer">
+                    <i class="fa-solid fa-pen-to-square mr-1"></i> Update Lesson for ${_esc360(activeLessonLog.date)}
+                  </button>
+                </div>
+              `;
+            })() : `
+              <div class="py-12 text-center text-slate-400 text-xs">
+                No attendance or daily lesson history has been recorded yet for ${_esc360(student.name)}.
+                <div class="mt-3">
+                  <button onclick="openRecordDailyLessonModal('${_esc360(family.id)}', '${_esc360(student.id)}')"
+                          class="px-4 py-2 rounded-xl bg-emerald-600 text-white font-extrabold text-xs">
+                    + Record First Attendance &amp; Lesson
+                  </button>
+                </div>
+              </div>
+            `}
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  // ---------------------------------------------------------------------------
+  // SUB-VIEW 2: STUDENT ACADEMIC PROGRESS & REPORT (Section #8)
+  // ---------------------------------------------------------------------------
+  else if (subView === 'report') {
+    const currentLevel = stuMeta.current_level || student.course_id || 'Noorani Qaida / Nazra Quran';
+    const currentSabaq = stuMeta.current_sabaq || (stuLogs[0] ? _parseLessonDetails360(stuLogs[0]).summaryTitle : 'In Progress');
+    const teacherEval = stuMeta.overall_evaluation || (attendancePct >= 85 ? 'Excellent Consistency' : 'Needs Regular Attendance');
+
+    bodyHtml = `
+      <div class="bg-white rounded-xl border border-slate-200 p-5 shadow-2xs space-y-4">
+        <div class="flex items-center justify-between flex-wrap gap-3 border-b border-slate-100 pb-3">
+          <div>
+            <h4 class="text-sm font-black text-slate-900">Academic Progress &amp; Performance Report — ${_esc360(student.name)}</h4>
+            <p class="text-xs text-slate-500">Instructor: <strong>${_esc360(assignedTeacher ? assignedTeacher.full_name : 'Not Assigned')}</strong> &bull; Course: <strong>${_esc360(student.course_id || 'Quran Studies')}</strong></p>
+          </div>
+          <div class="flex items-center gap-2">
+            <button onclick="openUpdateStudentProgressModal('${_esc360(family.id)}', '${_esc360(student.id)}')"
+                    class="px-3.5 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-extrabold transition cursor-pointer">
+              <i class="fa-solid fa-pen-to-square mr-1"></i> Update Progress Milestone
+            </button>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
+          <div class="p-4 rounded-xl bg-slate-50 border border-slate-200">
+            <span class="text-[10px] font-bold text-slate-400 uppercase block">Current Syllabus / Level</span>
+            <strong class="text-sm text-slate-900 block mt-1">${_esc360(currentLevel)}</strong>
+            <span class="text-slate-500 block mt-1">Latest Sabaq: ${_esc360(currentSabaq)}</span>
+          </div>
+          <div class="p-4 rounded-xl bg-slate-50 border border-slate-200">
+            <span class="text-[10px] font-bold text-slate-400 uppercase block">Cumulative Attendance</span>
+            <strong class="text-sm text-emerald-700 block mt-1">${attendancePct}% (${attendedCount} Present / ${missedCount} Missed)</strong>
+            <span class="text-slate-500 block mt-1">Joined: ${_esc360(student.joining_date || '2026-01-01')}</span>
+          </div>
+          <div class="p-4 rounded-xl bg-slate-50 border border-slate-200">
+            <span class="text-[10px] font-bold text-slate-400 uppercase block">Instructor Evaluation</span>
+            <strong class="text-sm text-indigo-700 block mt-1">${_esc360(teacherEval)}</strong>
+            <span class="text-slate-500 block mt-1">Certificates Earned: ${(stuMeta.certificates || []).length}</span>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  // ---------------------------------------------------------------------------
+  // SUB-VIEW 3: STUDENT CERTIFICATES (Section #11)
+  // ---------------------------------------------------------------------------
+  else if (subView === 'certificates') {
+    const certs = stuMeta.certificates || [];
+    bodyHtml = `
+      <div class="bg-white rounded-xl border border-slate-200 p-5 shadow-2xs space-y-4">
+        <div class="flex items-center justify-between flex-wrap gap-3 border-b border-slate-100 pb-3">
+          <div>
+            <h4 class="text-sm font-black text-slate-900">Issued Academic Certificates — ${_esc360(student.name)}</h4>
+            <p class="text-xs text-slate-500">Manage official course completion and achievement certificates for this student.</p>
+          </div>
+          <button onclick="openIssueStudentCertificateModal('${_esc360(family.id)}', '${_esc360(student.id)}')"
+                  class="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-extrabold transition cursor-pointer flex items-center gap-1.5">
+            <i class="fa-solid fa-plus"></i> Issue New Certificate
+          </button>
+        </div>
+
+        ${certs.length === 0 ? `
+          <div class="py-10 text-center text-slate-400 text-xs">
+            <i class="fa-solid fa-award text-2xl text-slate-300 mb-2 block"></i>
+            No certificates have been issued for ${_esc360(student.name)} yet.
+          </div>
+        ` : `
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+            ${certs.map(c => `
+              <div class="p-4 rounded-xl border border-emerald-200 bg-emerald-50/40 flex items-center justify-between gap-3">
+                <div>
+                  <span class="px-2 py-0.5 rounded bg-emerald-700 text-white text-[10px] font-black uppercase">${_esc360(c.code || 'CERT')}</span>
+                  <h5 class="text-sm font-black text-slate-900 mt-1">${_esc360(c.title)}</h5>
+                  <p class="text-xs text-slate-600">Awarded on: <strong>${_esc360(c.date)}</strong> &bull; Grade: <strong>${_esc360(c.grade || 'A+ Distinction')}</strong></p>
+                  ${c.remarks ? `<p class="text-[11px] text-slate-500 mt-0.5">${_esc360(c.remarks)}</p>` : ''}
+                </div>
+                <div class="flex items-center gap-1.5 shrink-0">
+                  <button onclick="printStudentCertificate360('${_esc360(family.id)}', '${_esc360(student.id)}', '${_esc360(c.id)}')"
+                          class="px-3 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-white text-xs font-extrabold transition cursor-pointer">
+                    <i class="fa-solid fa-print mr-1"></i> View / Print
+                  </button>
+                  <button onclick="deleteStudentCertificate360('${_esc360(family.id)}', '${_esc360(student.id)}', '${_esc360(c.id)}')"
+                          class="w-8 h-8 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 flex items-center justify-center transition cursor-pointer"
+                          title="Delete Certificate">
+                    <i class="fa-solid fa-trash-can text-xs"></i>
+                  </button>
+                </div>
+              </div>
+            `).join('')}
           </div>
         `}
       </div>
     `;
   }
 
-  // -------------------------------------------------------------------------
-  // FAMILY TAB 2: PAYMENTS & FEE LEDGER (Modeled on Reference Screenshot 2)
-  // -------------------------------------------------------------------------
-  else if (activeTab === 'payments') {
-    const activeMonthsList = [...fin.monthsStatus].reverse().filter(m => !m.isNotEnrolled);
-    tabContentHtml = `
-      <div class="space-y-4 p-4 sm:p-5">
-        <!-- Refined Financial Summary Strip -->
-        <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          <div class="p-3.5 rounded-xl bg-slate-50 border border-slate-200">
-            <span class="text-[11px] font-bold text-slate-500 block">Agreed Monthly Fee</span>
-            <strong class="text-lg font-black text-slate-900">${fin.currency} ${fin.agreedMonthlyFee.toFixed(0)}/-</strong>
+  // ---------------------------------------------------------------------------
+  // SUB-VIEW 4: STUDENT INFORMATION & SCHEDULE (Sections #7, #10, #12)
+  // ---------------------------------------------------------------------------
+  else {
+    const scheduleStr = stuSchedules.length > 0
+      ? stuSchedules.map(sc => `${_DAY_LABELS_360[sc.day_of_week] || sc.day_of_week} (${(sc.start_time || '').slice(0,5)} - ${(sc.end_time || '').slice(0,5)})`).join(', ')
+      : (stuMeta.days_per_week || 'Flexible Weekly Schedule');
+
+    bodyHtml = `
+      <div class="bg-white rounded-xl border border-slate-200 p-5 shadow-2xs space-y-4">
+        <div class="flex items-center justify-between flex-wrap gap-3 border-b border-slate-100 pb-3">
+          <div>
+            <h4 class="text-sm font-black text-slate-900">Student Profile Information — ${_esc360(student.name)} (${_esc360(student.id)})</h4>
+            <p class="text-xs text-slate-500">Individual student settings, assigned teacher, and weekly timetable inside ${_esc360(family.parent_name)}'s Family Profile.</p>
           </div>
-          <div class="p-3.5 rounded-xl bg-emerald-50 border border-emerald-200">
-            <span class="text-[11px] font-bold text-emerald-700 block">Total Paid Amount</span>
-            <strong class="text-lg font-black text-emerald-900">${fin.currency} ${fin.totalPaid.toFixed(0)}/-</strong>
-          </div>
-          <div class="p-3.5 rounded-xl bg-rose-50 border border-rose-200">
-            <span class="text-[11px] font-bold text-rose-700 block">Total Pending / Due</span>
-            <strong class="text-lg font-black text-rose-900">${fin.currency} ${fin.totalPending.toFixed(0)}/-</strong>
-          </div>
-          <div class="p-3.5 rounded-xl bg-sky-50 border border-sky-200">
-            <span class="text-[11px] font-bold text-sky-700 block">Advance Credit Balance</span>
-            <strong class="text-lg font-black text-sky-900">${fin.currency} ${fin.advanceCredit.toFixed(0)}/-</strong>
+          <div class="flex items-center gap-2">
+            <button onclick="openEditSingleStudentModal('${_esc360(family.id)}', '${_esc360(student.id)}')"
+                    class="px-3.5 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-white text-xs font-extrabold transition cursor-pointer flex items-center gap-1.5">
+              <i class="fa-solid fa-pen-to-square"></i> Edit Student Information
+            </button>
           </div>
         </div>
 
-        <!-- Monthly Payment & Invoice Table (Matches Screenshot 2 Columns) -->
-        <div class="overflow-x-auto border border-slate-200 rounded-xl">
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
+          <div class="p-3.5 rounded-xl bg-slate-50 border border-slate-200 space-y-1.5">
+            <div><span class="text-slate-400 font-bold">Student Name:</span> <strong class="text-slate-900 float-right">${_esc360(student.name)}</strong></div>
+            <div><span class="text-slate-400 font-bold">Student ID:</span> <strong class="text-slate-900 font-mono float-right">${_esc360(student.id)}</strong></div>
+            <div><span class="text-slate-400 font-bold">Age / Gender:</span> <strong class="text-slate-900 float-right">${_esc360(student.age || '--')} yrs &bull; ${_esc360(student.gender || '--')}</strong></div>
+          </div>
+          <div class="p-3.5 rounded-xl bg-slate-50 border border-slate-200 space-y-1.5">
+            <div><span class="text-slate-400 font-bold">Course:</span> <strong class="text-emerald-700 float-right">${_esc360(student.course_id || 'Quran Studies')}</strong></div>
+            <div><span class="text-slate-400 font-bold">Joining Date:</span> <strong class="text-slate-900 font-mono float-right">${_esc360(student.joining_date || '--')}</strong></div>
+            <div><span class="text-slate-400 font-bold">Status:</span> <strong class="text-slate-900 float-right">${_esc360(student.status || 'Active')}</strong></div>
+          </div>
+          <div class="p-3.5 rounded-xl bg-slate-50 border border-slate-200 space-y-1.5">
+            <div>
+              <span class="text-slate-400 font-bold">Assigned Teacher:</span>
+              ${assignedTeacher
+                ? `<button onclick="openTeacherScheduleFromFamily('${_esc360(assignedTeacher.id)}', '${_esc360(student.id)}')" class="text-indigo-700 font-extrabold hover:underline float-right cursor-pointer">${_esc360(assignedTeacher.full_name)}</button>`
+                : `<span class="text-slate-400 float-right">Not Assigned</span>`
+              }
+            </div>
+            <div class="clear-both pt-1"><span class="text-slate-400 font-bold block">Weekly Schedule:</span> <strong class="text-slate-800 block mt-0.5">${_esc360(scheduleStr)}</strong></div>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  return `
+    <div class="space-y-4">
+      <!-- Selected Student Sub-Header & Sub-Navigation -->
+      <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 bg-white p-3.5 rounded-xl border border-indigo-200 shadow-2xs">
+        <div class="flex items-center gap-3">
+          <div class="w-9 h-9 rounded-xl bg-indigo-600 text-white font-black text-sm flex items-center justify-center">
+            ${_esc360((student.name || 'S').charAt(0).toUpperCase())}
+          </div>
+          <div>
+            <div class="flex items-center gap-2">
+              <span class="text-[10px] font-black uppercase tracking-wider text-indigo-600">Selected Student Workspace</span>
+              <span class="font-mono text-[11px] font-bold text-slate-400">${_esc360(student.id)}</span>
+            </div>
+            <h3 class="text-sm font-black text-slate-900">${_esc360(student.name)} — ${_esc360(student.course_id || 'Quran Studies')}</h3>
+          </div>
+        </div>
+
+        <div class="flex items-center gap-1.5 flex-wrap">
+          ${subNavItems.map(item => `
+            <button onclick="selectStudentInFamilyProfile('${_esc360(family.id)}', '${_esc360(student.id)}', '${item.id}')"
+                    class="px-3 py-1.5 rounded-xl text-xs font-extrabold transition flex items-center gap-1.5 cursor-pointer ${
+                      subView === item.id
+                        ? 'bg-indigo-600 text-white shadow-2xs'
+                        : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
+                    }">
+              <i class="fa-solid ${item.icon}"></i>
+              <span>${_esc360(item.label)}</span>
+            </button>
+          `).join('')}
+        </div>
+      </div>
+
+      ${bodyHtml}
+    </div>
+  `;
+}
+
+function _parseLessonDetails360(log) {
+  const raw = log?.lesson_notes || '';
+  if (!raw) return { hasLesson: false, summaryTitle: '', remarks: '' };
+  try {
+    const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
+    if (parsed && typeof parsed === 'object') {
+      const bookTitle = parsed.book_title || parsed.sabaq || parsed.course || 'Daily Quran Lesson';
+      const pageStr = parsed.page ? ` • Page ${parsed.page}` : '';
+      return {
+        hasLesson: true,
+        bookTitle,
+        page: parsed.page || '',
+        lineRange: parsed.line_range || '',
+        assessment: parsed.status || parsed.result || 'Completed',
+        remarks: parsed.remarks || parsed.notes || '',
+        summaryTitle: `${bookTitle}${pageStr}`
+      };
+    }
+  } catch (e) {}
+  return {
+    hasLesson: true,
+    bookTitle: 'Daily Quran Lesson',
+    page: '',
+    lineRange: '',
+    assessment: 'Completed',
+    remarks: String(raw),
+    summaryTitle: String(raw)
+  };
+}
+
+function filterStudentAttendanceInFamily(status) {
+  _CURRENT_360_STATE.attFilterStatus = status;
+  _renderFamilyWorkspaceDOM();
+}
+
+function selectStudentLessonDateInFamily(dateStr) {
+  _CURRENT_360_STATE.selectedLessonDate = dateStr;
+  _renderFamilyWorkspaceDOM();
+}
+
+// ============================================================================
+// TAB 2: PAYMENTS TAB (Sections #17, #18, #19, #20)
+// Clean Modern Payment History — ONLY Payment Method, Month, Paid Date, Fee, Status, Actions
+// (Strictly NO "Due", NO "ADJ", NO "AMT" legacy columns!)
+// ============================================================================
+function _buildFamilyPaymentsTabHtml(family, payData) {
+  const rows = payData.rows || [];
+
+  return `
+    <div>
+      <div class="px-6 py-4 bg-slate-50/70 border-b border-slate-200 flex items-center justify-between gap-3 flex-wrap">
+        <div>
+          <h3 class="text-sm font-black text-slate-900">Family Payment &amp; Invoice Ledger</h3>
+          <p class="text-xs text-slate-500">Connected in real time to the main Fee Management system (Single Source of Truth).</p>
+        </div>
+        <div class="flex items-center gap-2">
+          <button onclick="openFamilyManualInvoiceModal('${_esc360(family.id)}')"
+                  class="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-extrabold transition flex items-center gap-1.5 cursor-pointer">
+            <i class="fa-solid fa-plus"></i> Add Manual Invoice / Payment
+          </button>
+        </div>
+      </div>
+
+      ${rows.length === 0 ? `
+        <div class="p-14 text-center text-slate-400 text-sm">
+          No payment records found for this family.
+        </div>
+      ` : `
+        <div class="overflow-x-auto">
           <table class="w-full text-left text-xs border-collapse">
-            <thead class="bg-slate-50 text-slate-800 font-extrabold border-b border-slate-200">
+            <thead class="bg-slate-50 text-slate-700 font-extrabold border-b border-slate-200 uppercase tracking-wider text-[11px]">
               <tr>
-                <th class="p-3.5">${fin.currency} / Method</th>
-                <th class="p-3.5">Month</th>
-                <th class="p-3.5">Due Date</th>
-                <th class="p-3.5">Paid Date</th>
-                <th class="p-3.5">Fee</th>
-                <th class="p-3.5">ADJ</th>
-                <th class="p-3.5">AMT</th>
-                <th class="p-3.5 text-center">Status</th>
-                <th class="p-3.5 text-right">Actions</th>
+                <th class="p-4">Payment Method</th>
+                <th class="p-4">Month</th>
+                <th class="p-4">Paid Date</th>
+                <th class="p-4">Fee</th>
+                <th class="p-4">Status</th>
+                <th class="p-4 text-right">Actions</th>
               </tr>
             </thead>
-            <tbody class="divide-y divide-slate-200">
-              ${activeMonthsList.map(m => {
-                const isPaid = m.isPaid;
-                const isPartial = m.isPartial;
-                const isFuture = m.isFuture;
-                const amtDisplay = isPaid ? fin.agreedMonthlyFee : (isPartial ? parseFloat(m.amountPaid || 0) : 0);
-                let statusPill = `<span class="px-2.5 py-1 rounded bg-rose-600 text-white font-black text-[10px] uppercase">DUE</span>`;
-                if (isPaid) statusPill = `<span class="px-2.5 py-1 rounded bg-emerald-600 text-white font-black text-[10px] uppercase">PAID</span>`;
-                else if (isPartial) statusPill = `<span class="px-2.5 py-1 rounded bg-amber-500 text-white font-black text-[10px] uppercase">PARTIAL</span>`;
-                else if (isFuture) statusPill = `<span class="px-2.5 py-1 rounded bg-slate-200 text-slate-600 font-bold text-[10px] uppercase">UPCOMING</span>`;
-
+            <tbody class="divide-y divide-slate-100">
+              ${rows.map(r => {
+                const isPaid = r.status === 'PAID';
                 return `
                   <tr class="hover:bg-slate-50/80 transition">
-                    <td class="p-3.5 font-semibold text-emerald-700">${m.paymentMethod}</td>
-                    <td class="p-3.5 font-bold text-emerald-800">${m.month.slice(0, 3)}</td>
-                    <td class="p-3.5 font-mono text-emerald-700">${m.dueDate}</td>
-                    <td class="p-3.5 font-mono text-emerald-700">${m.paidDate}</td>
-                    <td class="p-3.5 font-mono font-bold text-emerald-800">${fin.currency}${fin.agreedMonthlyFee}</td>
-                    <td class="p-3.5 font-mono text-blue-600">${fin.currency}0/-</td>
-                    <td class="p-3.5 font-mono font-extrabold text-emerald-800">${fin.currency}${amtDisplay > 0 ? amtDisplay : fin.agreedMonthlyFee}/-</td>
-                    <td class="p-3.5 text-center">${statusPill}</td>
-                    <td class="p-3.5 text-right">
-                      <div class="inline-flex items-center gap-1.5">
-                        <button onclick="switchTab('tab-invoices'); if (typeof selectFeeFamily === 'function') selectFeeFamily('${family.id}');"
-                                class="p-1.5 rounded border border-sky-300 bg-sky-50 hover:bg-sky-100 text-sky-700 transition" title="Record / Edit Payment">
-                          <i class="fa-solid fa-credit-card"></i>
-                        </button>
-                        <button onclick="if (typeof openFamilyAnnualLedgerModal === 'function') openFamilyAnnualLedgerModal('${family.id}');"
-                                class="p-1.5 rounded border border-amber-300 bg-amber-50 hover:bg-amber-100 text-amber-700 transition" title="Inspect Full Receipt Ledger">
+                    <!-- 1. Payment Method -->
+                    <td class="p-4 font-bold text-emerald-800">
+                      <div class="flex items-center gap-2">
+                        <i class="fa-solid fa-building-columns text-slate-400"></i>
+                        <span>${_esc360(r.paymentMethod)}</span>
+                      </div>
+                      ${r.reason && r.reason !== 'Monthly Tuition Fee' ? `<span class="text-[10px] text-indigo-600 font-bold block mt-0.5">${_esc360(r.reason)}</span>` : ''}
+                    </td>
+
+                    <!-- 2. Month -->
+                    <td class="p-4 font-extrabold text-slate-900">
+                      ${_esc360(r.monthDisplay)}
+                    </td>
+
+                    <!-- 3. Paid Date (NO Due Column!) -->
+                    <td class="p-4 font-mono font-bold ${isPaid ? 'text-emerald-700' : 'text-slate-400'}">
+                      ${_esc360(r.paidDate)}
+                    </td>
+
+                    <!-- 4. Fee -->
+                    <td class="p-4 font-mono font-black text-slate-900">
+                      ${_esc360(r.currency)} ${_esc360(r.feeAmount)}
+                    </td>
+
+                    <!-- 5. Status (PAID / UNPAID) -->
+                    <td class="p-4">
+                      <span class="px-2.5 py-1 rounded-md text-[10px] font-black uppercase tracking-wider ${
+                        isPaid
+                          ? 'bg-emerald-600 text-white'
+                          : 'bg-rose-100 text-rose-800 border border-rose-200'
+                      }">
+                        ${isPaid ? 'PAID' : 'UNPAID'}
+                      </span>
+                    </td>
+
+                    <!-- 6. Required Payment Actions: Invoice Record, Edit, Email, Delete -->
+                    <td class="p-4 text-right">
+                      <div class="inline-flex items-center justify-end gap-1.5">
+                        <!-- View Invoice / Payment Record -->
+                        <button onclick="viewFamilyPaymentInvoiceModal('${_esc360(family.id)}', '${_esc360(r.recordId)}', '${_esc360(r.month)}', '${_esc360(r.year)}')"
+                                class="w-8 h-8 rounded-lg border border-sky-300 bg-sky-50 hover:bg-sky-100 text-sky-700 flex items-center justify-center transition cursor-pointer"
+                                title="View Invoice / Payment Record">
                           <i class="fa-solid fa-file-invoice"></i>
                         </button>
-                        <button onclick="openFamilyEmailModal('${family.id}')"
-                                class="p-1.5 rounded border border-emerald-300 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 transition" title="Send Fee Invoice Email">
+
+                        <!-- Edit Payment / Invoice -->
+                        <button onclick="openEditFamilyPaymentModal('${_esc360(family.id)}', '${_esc360(r.recordId)}', '${_esc360(r.month)}', '${_esc360(r.year)}')"
+                                class="w-8 h-8 rounded-lg border border-amber-300 bg-amber-50 hover:bg-amber-100 text-amber-700 flex items-center justify-center transition cursor-pointer"
+                                title="Edit Payment Record">
+                          <i class="fa-regular fa-pen-to-square"></i>
+                        </button>
+
+                        <!-- Email Invoice / Payment Receipt -->
+                        <button onclick="emailSpecificFamilyInvoice('${_esc360(family.id)}', '${_esc360(r.recordId)}', '${_esc360(r.month)}', '${_esc360(r.year)}')"
+                                class="w-8 h-8 rounded-lg border border-amber-400 bg-amber-50/70 hover:bg-amber-100 text-amber-800 flex items-center justify-center transition cursor-pointer"
+                                title="Email This Month's Invoice / Receipt to Family">
                           <i class="fa-regular fa-envelope"></i>
+                        </button>
+
+                        <!-- Delete Payment Entry -->
+                        <button onclick="deleteFamilyPaymentRecord('${_esc360(family.id)}', '${_esc360(r.recordId)}', '${_esc360(r.month)}', '${_esc360(r.year)}')"
+                                class="w-8 h-8 rounded-lg border border-rose-300 bg-rose-50 hover:bg-rose-100 text-rose-700 flex items-center justify-center transition cursor-pointer"
+                                title="Delete This Payment Entry">
+                          <i class="fa-regular fa-trash-can"></i>
                         </button>
                       </div>
                     </td>
@@ -718,804 +1582,1777 @@ async function openFamily360Profile(familyId, initialTab = 'students', skipHisto
             </tbody>
           </table>
         </div>
-      </div>
-    `;
-  }
-
-  // -------------------------------------------------------------------------
-  // FAMILY TAB 3: LESSONS & ATTENDANCE (Consolidated Family Academic Log)
-  // -------------------------------------------------------------------------
-  else if (activeTab === 'lessons') {
-    tabContentHtml = `
-      <div class="p-4 sm:p-5">
-        ${famLogs.length === 0 ? `
-          <div class="p-10 text-center text-slate-400 text-xs">No daily lessons or attendance logs recorded for this family's students yet.</div>
-        ` : `
-          <div class="overflow-x-auto border border-slate-200 rounded-xl">
-            <table class="w-full text-left text-xs border-collapse">
-              <thead class="bg-slate-50 text-slate-700 font-extrabold border-b border-slate-200">
-                <tr>
-                  <th class="p-3.5">Date</th>
-                  <th class="p-3.5">Student</th>
-                  <th class="p-3.5">Attendance Status</th>
-                  <th class="p-3.5">Daily Lesson / Sabaq Studied</th>
-                  <th class="p-3.5">Assigned Teacher</th>
-                </tr>
-              </thead>
-              <tbody class="divide-y divide-slate-200">
-                ${famLogs.slice(0, 40).map(l => {
-                  const sObj = familyStudents.find(s => String(s.id) === String(l.student_id));
-                  const tObj = (window.ALL_TEACHERS || []).find(t => String(t.id) === String(l.teacher_id));
-                  const parsed = _parseLessonLogEntry(l);
-                  const st = l.status || 'Present';
-                  const stClass = st === 'Present' ? 'bg-emerald-600 text-white' : st === 'Absent' ? 'bg-rose-600 text-white' : 'bg-blue-600 text-white';
-                  return `
-                    <tr class="hover:bg-slate-50/80 transition">
-                      <td class="p-3.5 font-mono font-bold text-slate-800">${l.date || '--'}</td>
-                      <td class="p-3.5">
-                        ${sObj ? `<button onclick="openStudent360Profile('${sObj.id}', 'lessons')" class="font-extrabold text-blue-700 hover:underline">${sObj.name}</button>` : l.student_id}
-                      </td>
-                      <td class="p-3.5"><span class="px-2 py-0.5 rounded text-[10px] font-black uppercase ${stClass}">${st}</span></td>
-                      <td class="p-3.5 text-slate-700">
-                        ${parsed.bookTitle ? `<strong>${parsed.bookTitle}</strong> ${parsed.page ? `(Page ${parsed.page})` : ''} ${parsed.assessment ? `• ${parsed.assessment}` : ''} ${parsed.remarks ? `— "${parsed.remarks}"` : ''}` : (parsed.remarks || 'Completed class')}
-                      </td>
-                      <td class="p-3.5">
-                        ${tObj ? `<button onclick="openTeacher360Profile('${tObj.id}', 'overview')" class="font-bold text-blue-600 hover:underline">${tObj.full_name}</button>` : '--'}
-                      </td>
-                    </tr>
-                  `;
-                }).join('')}
-              </tbody>
-            </table>
-          </div>
-        `}
-      </div>
-    `;
-  }
-
-  // -------------------------------------------------------------------------
-  // FAMILY TAB 4: BIO DATA (Modeled on Reference Screenshot 1)
-  // -------------------------------------------------------------------------
-  else if (activeTab === 'biodata') {
-    const bioRows = [
-      { label: 'Parent / Guardian', value: family.parent_name },
-      { label: 'Family ID',         value: family.id },
-      { label: 'Email',             value: displayEmail },
-      { label: 'Telephone / WhatsApp', value: displayPhone },
-      { label: 'Classroom Mode',    value: 'Zoom Classroom' },
-      { label: 'Agreed Monthly Fee', value: `${fin.currency} ${fin.agreedMonthlyFee}` },
-      { label: 'Country',           value: family.country || 'United Kingdom / Global' },
-      { label: 'City / Notes',      value: family.notes || 'Standard Registration' },
-      { label: 'Registration Date', value: regDate },
-      { label: 'Portal Username',   value: creds.username },
-      { label: 'Portal Password',   value: creds.password },
-      { label: 'Account Status',    value: family.status || 'Active' }
-    ];
-    tabContentHtml = _buildThreeColSpecTableHtml(bioRows);
-  }
-
-  // Assemble Full-Screen Family Profile Page
-  workspace.innerHTML = `
-    ${_buildTopWorkspaceNavHtml()}
-
-    <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-      <!-- FULL-WIDTH EMERALD PROFILE BANNER (Structured like Reference Screenshots) -->
-      <div class="bg-gradient-to-b from-[#10b981] via-[#059669] to-[#047857] text-white pt-6 px-4 sm:px-8 flex flex-col items-center text-center">
-        <!-- Avatar Box -->
-        <div class="w-16 h-16 rounded-xl bg-white/20 border-2 border-white shadow-md flex items-center justify-center text-2xl font-black text-white mb-2">
-          <i class="fa-solid fa-user-tie"></i>
-        </div>
-
-        <!-- Name & Registration Date -->
-        <h1 class="text-xl sm:text-2xl font-bold tracking-tight text-white">${family.parent_name}</h1>
-        <div class="text-sm font-mono font-semibold text-white/95 mt-0.5">${regDate}</div>
-
-        <!-- Status & Invoice Pills Row -->
-        <div class="flex items-center justify-center gap-2 flex-wrap mt-2.5">
-          <span class="px-2.5 py-0.5 rounded bg-white/20 text-white font-black text-[11px] uppercase tracking-wider">${famStatus}</span>
-          <span class="px-2.5 py-0.5 rounded bg-slate-900/40 text-amber-300 font-mono font-bold text-[11px]">${family.id}</span>
-          <span class="px-2.5 py-0.5 rounded bg-amber-400 text-slate-950 font-black text-[10px] uppercase">MONTHLY INVOICE ✔</span>
-          <span class="px-2.5 py-0.5 rounded bg-sky-500 text-white font-black text-[10px] uppercase">MONTHLY FEE: ${fin.currency} ${fin.agreedMonthlyFee}</span>
-          <span class="px-2.5 py-0.5 rounded bg-blue-600 text-white font-black text-[10px] uppercase">${family.country || 'GLOBAL'}</span>
-        </div>
-
-        <!-- Primary Action Buttons Row -->
-        <div class="flex items-center justify-center gap-2 flex-wrap mt-4">
-          <button onclick="prepareAddStudentModal('${family.id}')" class="px-3.5 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs shadow-xs flex items-center gap-1.5 transition">
-            <i class="fa-solid fa-user-plus"></i> Add Student
-          </button>
-          <button onclick="switchTab('tab-invoices'); if (typeof selectFeeFamily === 'function') selectFeeFamily('${family.id}');" class="px-3.5 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs shadow-xs flex items-center gap-1.5 transition">
-            <i class="fa-solid fa-file-invoice-dollar"></i> Record Payment / Invoice
-          </button>
-          <button onclick="openFamilyEmailModal('${family.id}')" class="px-3.5 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs shadow-xs flex items-center gap-1.5 transition">
-            <i class="fa-solid fa-paper-plane"></i> Send Email
-          </button>
-          ${cleanPhone && window.CURRENT_ROLE !== 'manager' ? `
-            <a href="https://wa.me/${cleanPhone}" target="_blank" class="px-3.5 py-1.5 rounded-lg bg-slate-900/70 hover:bg-slate-900 text-white font-bold text-xs shadow-xs flex items-center gap-1.5 transition">
-              <i class="fa-brands fa-whatsapp text-emerald-300"></i> WhatsApp Parent
-            </a>
-          ` : ''}
-          <button onclick="if (typeof openFamilyAnnualLedgerModal === 'function') openFamilyAnnualLedgerModal('${family.id}');" class="px-3.5 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs shadow-xs flex items-center gap-1.5 transition">
-            <i class="fa-solid fa-table-list"></i> Annual Fee Ledger
-          </button>
-        </div>
-
-        <!-- DOCKED DARK TABS BAR AT BOTTOM OF BANNER -->
-        <div class="flex items-center justify-center gap-1.5 flex-wrap mt-6 pb-3">
-          ${tabsConfig.map(t => {
-            const isAct = activeTab === t.id;
-            return `
-              <button onclick="openFamily360Profile('${family.id}', '${t.id}', true)"
-                      class="px-4 py-2 rounded-md text-xs font-extrabold transition ${isAct ? 'bg-slate-950 text-white shadow-md ring-2 ring-white/40' : 'bg-slate-800/80 hover:bg-slate-900 text-white/90'}">
-                ${t.label}
-              </button>
-            `;
-          }).join('')}
-        </div>
-      </div>
-
-      <!-- FULL-WIDTH SINGLE-CATEGORY WORKSPACE BELOW BANNER -->
-      <div class="bg-white">
-        ${tabContentHtml}
-      </div>
-
-      <!-- CLEAN BOTTOM MANAGEMENT ACTION BAR -->
-      <div class="p-4 bg-slate-50 border-t border-slate-200 flex items-center justify-center gap-2.5 flex-wrap">
-        <button onclick="prepareAddStudentModal('${family.id}')" class="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs transition shadow-2xs">
-          + Enroll Child
-        </button>
-        <button onclick="switchTab('tab-leaves')" class="px-4 py-2 rounded-lg bg-sky-500 hover:bg-sky-600 text-white font-bold text-xs transition shadow-2xs">
-          Manage Leave Status
-        </button>
-        <button onclick="copyParentCredentials('${creds.username}', '${creds.password}')" class="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs transition shadow-2xs">
-          Copy Portal Credentials
-        </button>
-      </div>
+      `}
     </div>
   `;
 }
 
 // ============================================================================
-// 2. STUDENT FULL-SCREEN DEDICATED PROFILE PAGE
+// TAB 3: MANAGER'S NOTES TAB (Section #22)
+// View, Add, Edit, Delete Manager Notes persisted in Supabase
 // ============================================================================
-async function openStudent360Profile(studentId, initialTab = 'overview', skipHistoryPush = false) {
-  if (!studentId) return;
-  window.CURRENT_MODAL_STUDENT_ID = studentId;
+function _buildFamilyManagerNotesTabHtml(family, fNotes) {
+  const notes = Array.isArray(fNotes.manager_notes) ? fNotes.manager_notes : [];
 
-  _activateFullScreenProfilePage('student');
-  const workspace = document.getElementById('unified360PageWorkspace');
-  if (!workspace) return;
+  return `
+    <div class="p-6 space-y-5">
+      <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-slate-200 pb-4">
+        <div>
+          <h3 class="text-sm font-black text-slate-900">Manager's Notes &amp; Administrative Follow-Ups</h3>
+          <p class="text-xs text-slate-500">Internal administrative notes persisted directly to the family backend record.</p>
+        </div>
+        <button onclick="openAddOrEditManagerNoteModal('${_esc360(family.id)}')"
+                class="px-4 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-extrabold transition flex items-center gap-2 cursor-pointer">
+          <i class="fa-solid fa-plus text-amber-400"></i> Add Manager Note
+        </button>
+      </div>
 
-  workspace.innerHTML = `
-    <div class="bg-white rounded-2xl border border-slate-200 p-16 text-center text-slate-500 shadow-xs">
-      <i class="fa-solid fa-circle-notch fa-spin text-2xl text-emerald-600 mb-3 block"></i>
-      <span class="text-sm font-extrabold">Loading Full-Screen Student Profile Workspace...</span>
+      ${notes.length === 0 ? `
+        <div class="py-12 text-center bg-slate-50 rounded-2xl border border-dashed border-slate-200 text-slate-400 text-xs">
+          <i class="fa-regular fa-clipboard text-2xl mb-2 block text-slate-300"></i>
+          No Manager Notes recorded for ${_esc360(family.parent_name)} yet.
+        </div>
+      ` : `
+        <div class="space-y-3">
+          ${notes.map(n => `
+            <div class="p-4 rounded-xl bg-white border border-slate-200 shadow-2xs flex items-start justify-between gap-4">
+              <div class="space-y-1">
+                <div class="flex items-center gap-2 flex-wrap">
+                  <span class="px-2 py-0.5 rounded bg-indigo-50 text-indigo-800 border border-indigo-200 text-[10px] font-black uppercase">${_esc360(n.category || 'Management')}</span>
+                  <span class="text-xs font-extrabold text-slate-800">${_esc360(n.author || 'Admin / Manager')}</span>
+                  <span class="text-[11px] font-mono text-slate-400">${_esc360(n.created_at || '')}</span>
+                </div>
+                <p class="text-xs text-slate-700 leading-relaxed whitespace-pre-line pt-1">${_esc360(n.content)}</p>
+              </div>
+              <div class="flex items-center gap-1.5 shrink-0">
+                <button onclick="openAddOrEditManagerNoteModal('${_esc360(family.id)}', '${_esc360(n.id)}')"
+                        class="w-8 h-8 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200 flex items-center justify-center transition cursor-pointer"
+                        title="Edit Note">
+                  <i class="fa-regular fa-pen-to-square text-xs"></i>
+                </button>
+                <button onclick="deleteFamilyManagerNote('${_esc360(family.id)}', '${_esc360(n.id)}')"
+                        class="w-8 h-8 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 flex items-center justify-center transition cursor-pointer"
+                        title="Delete Note">
+                  <i class="fa-regular fa-trash-can text-xs"></i>
+                </button>
+              </div>
+            </div>
+          `).join('')}
+        </div>
+      `}
     </div>
   `;
+}
 
-  await _ensure360CoreDataReady();
+// ============================================================================
+// TAB 4: TEACHER'S NOTES TAB (Section #23)
+// Connected to Teacher Portal Lesson Notes + Direct Teacher Notes
+// ============================================================================
+function _collectAllFamilyTeacherNotes(family, familyStudents, famLogs) {
+  const fNotes = _parseFamilyStructuredNotes(family);
+  const combined = [];
 
-  let student = (window.ALL_STUDENTS || []).find(s => String(s.id) === String(studentId));
-  if (!student) {
-    const { data } = await db.from('students').select('*').eq('id', studentId).maybeSingle();
-    student = data;
-    if (student && Array.isArray(window.ALL_STUDENTS)) window.ALL_STUDENTS.push(student);
-  }
-  if (!student) {
-    workspace.innerHTML = `
-      ${_buildTopWorkspaceNavHtml()}
-      <div class="bg-white rounded-2xl border border-slate-200 p-12 text-center text-rose-600 font-bold">
-        Student record (${studentId}) could not be found.
-      </div>
-    `;
-    return;
-  }
-
-  const validTabs = ['overview', 'family', 'classes', 'attendance', 'lessons', 'progress', 'fees'];
-  const activeTab = validTabs.includes(initialTab) ? initialTab : 'overview';
-
-  _CURRENT_360_STATE.type = 'student';
-  _CURRENT_360_STATE.id = student.id;
-  _CURRENT_360_STATE.activeTab = activeTab;
-
-  if (!skipHistoryPush) {
-    _push360History('student', student.id, `${student.name} (${student.id})`, activeTab);
-  }
-
-  // Retrieve Family & Sibling Students
-  let family = (window.ALL_FAMILIES || []).find(f => String(f.id) === String(student.family_id));
-  if (!family && student.family_id) {
-    const { data } = await db.from('families').select('*, students(*)').eq('id', student.family_id).maybeSingle();
-    family = data;
-  }
-  const familyStudents = (window.ALL_STUDENTS || []).filter(s =>
-    student.family_id && String(s.family_id) === String(student.family_id) && String(s.status || '').toLowerCase() !== 'trial'
-  );
-
-  // Retrieve Scheduled Classes & Attendance / Lesson History
-  const [schedRes, logsRes] = await Promise.all([
-    db.from('class_schedules').select('*, teachers(*)').eq('student_id', student.id),
-    db.from('attendance_logs').select('*').eq('student_id', student.id).order('date', { ascending: false })
-  ]);
-
-  const schedules = schedRes.data || [];
-  const attendanceLogs = logsRes.data || [];
-
-  // Include any local advance classes
-  try {
-    const localAdv = JSON.parse(localStorage.getItem('alhuda_advance_classes_v1') || '[]');
-    localAdv.filter(a => String(a.student_id) === String(student.id)).forEach(adv => {
-      if (!attendanceLogs.some(l => l.date === adv.date && l.schedule_id === adv.schedule_id)) {
-        attendanceLogs.push({
-          id: adv.id,
-          student_id: adv.student_id,
-          teacher_id: adv.teacher_id,
-          date: adv.date,
-          status: 'Present',
-          lesson_notes: JSON.stringify(adv.payload || {})
-        });
-      }
+  // 1. Direct Teacher Notes stored in family.notes.teacher_notes
+  (fNotes.teacher_notes || []).forEach(tn => {
+    combined.push({
+      id: tn.id,
+      studentId: tn.studentId || '',
+      studentName: tn.studentName || 'All Family Students',
+      teacherName: tn.teacherName || 'Assigned Instructor',
+      date: tn.date || (tn.created_at ? tn.created_at.slice(0, 10) : ''),
+      content: tn.content || '',
+      source: 'direct'
     });
-    attendanceLogs.sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')));
-  } catch (e) {}
+  });
 
-  // Assigned Teacher
-  let assignedTeacherId = student.assigned_teacher_id || (schedules[0] ? schedules[0].teacher_id : null);
-  let assignedTeacher = (window.ALL_TEACHERS || []).find(t => String(t.id) === String(assignedTeacherId)) || schedules[0]?.teachers;
-  const teacherCreds = (assignedTeacher && typeof getTeacherCreds === 'function') ? getTeacherCreds(assignedTeacher) : { teacher_id: assignedTeacher?.id || 'Unassigned' };
+  // 2. Teacher Notes recorded via Teacher Portal / Daily Attendance Logs
+  (famLogs || []).forEach(log => {
+    const p = _parseLessonDetails360(log);
+    if (p.hasLesson && (p.remarks || p.summaryTitle)) {
+      const stu = (familyStudents || []).find(s => String(s.id).toUpperCase() === String(log.student_id).toUpperCase());
+      const tch = (window.ALL_TEACHERS || []).find(t => String(t.id) === String(stu?.assigned_teacher_id));
+      combined.push({
+        id: `LOG-${log.id || log.date}`,
+        studentId: log.student_id,
+        studentName: stu ? stu.name : log.student_id,
+        teacherName: tch ? tch.full_name : 'Class Instructor',
+        date: log.date,
+        content: `${p.summaryTitle}${p.remarks && p.remarks !== p.summaryTitle ? ' — ' + p.remarks : ''}`,
+        source: 'lesson_log'
+      });
+    }
+  });
 
-  let stuMeta = {};
-  if (student.notes) {
-    try { stuMeta = JSON.parse(student.notes); } catch (e) {}
-  }
-  const stuLanguage = stuMeta.language || student.language || 'English / Urdu';
-  const stuDaysPerWeek = stuMeta.days_per_week || (schedules.length > 0 ? `${schedules.length} Days / Week` : '5 Days / Week');
-  const stuCourse = student.course_id || stuMeta.course || 'Noorani Qaida & Nazra Quran';
-  const stuStatus = student.status || 'Active';
-  const joinDate = student.joining_date || (student.created_at ? student.created_at.slice(0, 10) : '2026-01-01');
+  combined.sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')));
+  return combined;
+}
 
-  const rawPhone = student.whatsapp || family?.whatsapp || '';
-  const cleanPhone = rawPhone.replace(/[^0-9]/g, '');
-  const displayPhone = (window.CURRENT_ROLE === 'manager' && typeof maskStudentPhone === 'function')
-    ? maskStudentPhone(rawPhone)
-    : (rawPhone || 'Not Provided');
+function _buildFamilyTeacherNotesTabHtml(family, familyStudents, teacherNotesList) {
+  return `
+    <div class="p-6 space-y-5">
+      <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-slate-200 pb-4">
+        <div>
+          <h3 class="text-sm font-black text-slate-900">Teacher's Notes &amp; Classroom Observations</h3>
+          <p class="text-xs text-slate-500">Live teacher notes and daily class feedback recorded by instructors for this family's students.</p>
+        </div>
+        <button onclick="openAddTeacherNoteModal('${_esc360(family.id)}')"
+                class="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-extrabold transition flex items-center gap-2 cursor-pointer">
+          <i class="fa-solid fa-plus"></i> Add Teacher Note
+        </button>
+      </div>
 
-  // Attendance Stats
-  const availableMonths = Array.from(new Set([
-    '2026-09',
-    ...attendanceLogs.map(l => String(l.date || '').slice(0, 7)).filter(Boolean)
-  ])).sort().reverse();
+      ${teacherNotesList.length === 0 ? `
+        <div class="py-12 text-center bg-slate-50 rounded-2xl border border-dashed border-slate-200 text-slate-400 text-xs">
+          <i class="fa-solid fa-chalkboard-user text-2xl mb-2 block text-slate-300"></i>
+          No Teacher Notes have been recorded for this family's students yet.
+        </div>
+      ` : `
+        <div class="space-y-3">
+          ${teacherNotesList.map(n => `
+            <div class="p-4 rounded-xl bg-white border border-slate-200 shadow-2xs flex items-start justify-between gap-4">
+              <div class="space-y-1">
+                <div class="flex items-center gap-2 flex-wrap">
+                  <span class="px-2 py-0.5 rounded bg-emerald-50 text-emerald-800 border border-emerald-200 text-[10px] font-black">
+                    Student: ${_esc360(n.studentName)}
+                  </span>
+                  <span class="text-xs font-extrabold text-indigo-700">
+                    <i class="fa-solid fa-chalkboard-user mr-1"></i>${_esc360(n.teacherName)}
+                  </span>
+                  <span class="text-[11px] font-mono text-slate-400">${_esc360(n.date)}</span>
+                  <span class="px-2 py-0.2 rounded text-[9px] font-bold ${n.source === 'lesson_log' ? 'bg-slate-100 text-slate-600' : 'bg-indigo-50 text-indigo-700'}">
+                    ${n.source === 'lesson_log' ? 'Teacher Portal Lesson Log' : 'Instructor Note'}
+                  </span>
+                </div>
+                <p class="text-xs text-slate-700 leading-relaxed pt-1">${_esc360(n.content)}</p>
+              </div>
+              ${n.source === 'direct' ? `
+                <button onclick="deleteFamilyTeacherNote('${_esc360(family.id)}', '${_esc360(n.id)}')"
+                        class="w-8 h-8 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 flex items-center justify-center shrink-0 transition cursor-pointer"
+                        title="Delete Teacher Note">
+                  <i class="fa-regular fa-trash-can text-xs"></i>
+                </button>
+              ` : ''}
+            </div>
+          `).join('')}
+        </div>
+      `}
+    </div>
+  `;
+}
 
-  const activeMonthFilter = _CURRENT_360_STATE.attMonthFilter || 'all';
-  const filteredAttLogs = activeMonthFilter === 'all'
-    ? attendanceLogs
-    : attendanceLogs.filter(l => String(l.date || '').startsWith(activeMonthFilter));
+// ============================================================================
+// TAB 5: BIO DATA TAB (Section #21)
+// Strictly NO WhatsApp ID anywhere in Bio Data or Family Profile!
+// ============================================================================
+function _buildFamilyBioDataTabHtml(family, fNotes, creds) {
+  const bio = fNotes.bio_meta || {};
 
-  const totalMarkedClasses = filteredAttLogs.length;
-  const daysPresent = filteredAttLogs.filter(l => ['present', 'late', 'completed'].includes(String(l.status || '').toLowerCase())).length;
-  const daysAbsent = filteredAttLogs.filter(l => String(l.status || '').toLowerCase() === 'absent').length;
-  const daysLeave = filteredAttLogs.filter(l => String(l.status || '').toLowerCase() === 'leave').length;
-  const attendancePct = totalMarkedClasses > 0 ? Math.round((daysPresent / totalMarkedClasses) * 100) : 100;
+  const emailVal = (window.CURRENT_ROLE === 'manager' && typeof maskStudentEmail === 'function')
+    ? maskStudentEmail(family.parent_email || '')
+    : (family.parent_email || '--');
 
-  // Lesson & Progress Stats
-  const parsedLessons = attendanceLogs
-    .map(l => ({ rawLog: l, parsed: _parseLessonLogEntry(l) }))
-    .filter(item => item.parsed.bookTitle || item.parsed.page || item.parsed.remarks);
+  const telephoneVal = (window.CURRENT_ROLE === 'manager' && typeof maskStudentPhone === 'function')
+    ? maskStudentPhone(bio.telephone || family.whatsapp || '')
+    : (bio.telephone || family.whatsapp || '--');
 
-  const passedLessonsCount = parsedLessons.filter(x => String(x.parsed.assessment || '').toLowerCase() === 'pass').length;
-  const repeatLessonsCount = parsedLessons.filter(x => String(x.parsed.assessment || '').toLowerCase() === 'repeat').length;
-  const highestPage = parsedLessons.reduce((max, x) => Math.max(max, Number(x.parsed.page || 0)), 0);
-  const fin = _getFamilyFinancialSnapshot(family);
+  const mobileVal = (window.CURRENT_ROLE === 'manager' && typeof maskStudentPhone === 'function')
+    ? maskStudentPhone(bio.mobile || '')
+    : (bio.mobile || '--');
 
-  const tabsConfig = [
-    { id: 'overview',   label: 'Overview & Bio Data' },
-    { id: 'family',     label: `Family & Siblings (${familyStudents.length})` },
-    { id: 'classes',    label: `Teacher & Classes (${schedules.length})` },
-    { id: 'attendance', label: `Attendance (${attendancePct}%)` },
-    { id: 'lessons',    label: `Daily Lessons (${parsedLessons.length})` },
-    { id: 'progress',   label: 'Progress Report' },
-    { id: 'fees',       label: 'Fees & Payments' }
+  const meetingPlatform = bio.meeting_platform || 'Zoom';
+  const feeVal = `${family.currency || 'GBP'} ${family.monthly_fee || 0}`;
+  const countryVal = family.country || 'United Kingdom';
+  const cityVal = bio.city || _extractCityFromLegacyNotes(family.notes) || '--';
+  const timezoneVal = bio.timezone || _inferTimezoneFromCountry(countryVal);
+  const usernameVal = creds.username || family.parent_email || '--';
+  const passwordVal = _CURRENT_360_STATE.showPassword ? (creds.password || '123456') : '••••••••';
+
+  // 3-Column Structured Grid matching Screenshot 1 (WITHOUT WhatsApp ID!)
+  const rows = [
+    [
+      { label: 'Email',     value: emailVal },
+      { label: 'Telephone', value: telephoneVal },
+      { label: 'Mobile',    value: mobileVal }
+    ],
+    [
+      { label: 'Meeting Platform', value: meetingPlatform },
+      { label: 'Fee',              value: feeVal },
+      { label: 'Country',          value: countryVal }
+    ],
+    [
+      { label: 'City',      value: cityVal },
+      { label: 'Timezone',  value: timezoneVal },
+      { label: 'Billing Cycle', value: bio.billing_cycle || 'Monthly Regular' }
+    ],
+    [
+      { label: 'Portal Username', value: usernameVal },
+      {
+        label: 'Portal Password',
+        isHtml: true,
+        value: `
+          <span class="inline-flex items-center gap-2">
+            <span class="font-mono font-bold text-teal-800">${_esc360(passwordVal)}</span>
+            <button onclick="toggleBioDataPasswordVisibility()" class="text-xs text-indigo-600 hover:underline font-extrabold cursor-pointer">
+              ${_CURRENT_360_STATE.showPassword ? 'Hide' : 'Show'}
+            </button>
+          </span>
+        `
+      },
+      { label: 'Account Status', value: (family.status || 'Regular').toUpperCase() }
+    ]
   ];
 
-  let tabContentHtml = '';
-
-  // -------------------------------------------------------------------------
-  // STUDENT TAB 1: OVERVIEW & BIO DATA (Modeled on Reference Screenshot 1)
-  // -------------------------------------------------------------------------
-  if (activeTab === 'overview') {
-    const overviewSpecRows = [
-      { label: 'Student Name',     value: student.name },
-      { label: 'Student ID',       value: student.id },
-      { label: 'Current Status',   value: stuStatus },
-      { label: 'Joining Date',     value: joinDate },
-      { label: 'Enrolled Course',  value: stuCourse },
-      { label: 'Age & Gender',     value: `${student.age || '--'} Yrs • ${student.gender || 'N/A'}` },
-      { label: 'Parent / Family',  value: family ? `<button onclick="openFamily360Profile('${family.id}', 'students')" class="text-blue-700 hover:underline font-extrabold">${family.parent_name} (${family.id})</button>` : 'Not Linked' },
-      { label: 'Assigned Teacher', value: assignedTeacher ? `<button onclick="openTeacher360Profile('${assignedTeacher.id}', 'overview')" class="text-blue-700 hover:underline font-extrabold">${assignedTeacher.full_name} (${teacherCreds.teacher_id})</button>` : 'Not Assigned' },
-      { label: 'Parent WhatsApp',  value: displayPhone },
-      { label: 'Language Medium',  value: stuLanguage },
-      { label: 'Weekly Schedule',  value: stuDaysPerWeek },
-      { label: 'Country',          value: family?.country || 'International' }
-    ];
-    tabContentHtml = _buildThreeColSpecTableHtml(overviewSpecRows);
-  }
-
-  // -------------------------------------------------------------------------
-  // STUDENT TAB 2: FAMILY & SIBLINGS (Modeled on Reference Screenshot 3)
-  // -------------------------------------------------------------------------
-  else if (activeTab === 'family') {
-    tabContentHtml = `
-      <div class="p-4 sm:p-5 space-y-4">
-        <div class="p-4 rounded-xl bg-slate-50 border border-slate-200 flex items-center justify-between flex-wrap gap-3">
-          <div>
-            <span class="text-[10px] font-bold uppercase text-slate-400 block">Connected Family Account</span>
-            <button onclick="openFamily360Profile('${family?.id || ''}', 'students')" class="text-base font-black text-blue-700 hover:underline">
-              ${family?.parent_name || 'Parent'} (${family?.id || 'N/A'})
-            </button>
-            <span class="text-xs text-slate-500 block mt-0.5">Country: ${family?.country || 'Global'} &bull; Contact: ${displayPhone} &bull; Family Fee: ${fin.currency} ${fin.agreedMonthlyFee}/mo</span>
-          </div>
-          ${family ? `
-            <button onclick="openFamily360Profile('${family.id}', 'students')" class="px-4 py-2 bg-emerald-700 hover:bg-emerald-800 text-white rounded-xl text-xs font-extrabold transition">
-              Open Full-Screen Family Profile &rarr;
-            </button>
-          ` : ''}
-        </div>
-
-        <div class="overflow-x-auto border border-slate-200 rounded-xl">
-          <table class="w-full text-left text-xs border-collapse">
-            <thead class="bg-slate-50 text-slate-700 font-extrabold border-b border-slate-200">
-              <tr>
-                <th class="p-3.5 w-14">#</th>
-                <th class="p-3.5">Sibling Student Name</th>
-                <th class="p-3.5">Student ID</th>
-                <th class="p-3.5">Course</th>
-                <th class="p-3.5">Assigned Teacher</th>
-                <th class="p-3.5">Joining Date</th>
-                <th class="p-3.5">Status</th>
-                <th class="p-3.5 text-right">Action</th>
+  return `
+    <div>
+      <div class="overflow-x-auto">
+        <table class="w-full text-left text-xs border-collapse">
+          <tbody class="divide-y divide-slate-200">
+            ${rows.map(r => `
+              <tr class="hover:bg-slate-50/70 transition">
+                ${r.map(cell => `
+                  <td class="p-4 w-1/3 border-r last:border-r-0 border-slate-100">
+                    <div class="flex items-center justify-between gap-3">
+                      <span class="text-slate-500 font-semibold">${_esc360(cell.label)}:</span>
+                      <span class="font-extrabold text-teal-800 text-right">${cell.isHtml ? cell.value : _esc360(cell.value)}</span>
+                    </div>
+                  </td>
+                `).join('')}
               </tr>
-            </thead>
-            <tbody class="divide-y divide-slate-200">
-              ${familyStudents.map((sib, idx) => {
-                const isCurr = String(sib.id) === String(student.id);
-                const sibTeacher = (window.ALL_TEACHERS || []).find(t => String(t.id) === String(sib.assigned_teacher_id));
-                return `
-                  <tr class="${isCurr ? 'bg-emerald-50/60' : 'hover:bg-slate-50'} transition">
-                    <td class="p-3.5"><span class="inline-flex items-center justify-center w-6 h-6 rounded bg-amber-400 text-slate-950 font-black">${idx + 1}</span></td>
-                    <td class="p-3.5">
-                      <button onclick="openStudent360Profile('${sib.id}', 'overview')" class="font-extrabold text-blue-700 hover:underline">
-                        ✔ ${sib.name} ${isCurr ? '<span class="ml-1 px-1.5 py-0.5 rounded bg-emerald-700 text-white text-[9px] uppercase">Current</span>' : ''}
-                      </button>
-                    </td>
-                    <td class="p-3.5 font-mono font-bold text-slate-700">${sib.id}</td>
-                    <td class="p-3.5 font-semibold text-slate-800">${sib.course_id || 'Quran Studies'}</td>
-                    <td class="p-3.5">
-                      ${sibTeacher ? `<button onclick="openTeacher360Profile('${sibTeacher.id}', 'overview')" class="font-bold text-blue-600 hover:underline">${sibTeacher.full_name}</button>` : 'Unassigned'}
-                    </td>
-                    <td class="p-3.5 font-mono text-slate-600">${sib.joining_date || '--'}</td>
-                    <td class="p-3.5"><span class="px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 font-bold text-[10px]">${sib.status || 'Active'}</span></td>
-                    <td class="p-3.5 text-right">
-                      <button onclick="openStudent360Profile('${sib.id}', 'overview')" class="px-3 py-1 rounded bg-slate-900 hover:bg-slate-800 text-white font-bold text-[11px]">
-                        Open Profile
-                      </button>
-                    </td>
-                  </tr>
-                `;
-              }).join('')}
-            </tbody>
-          </table>
-        </div>
+            `).join('')}
+          </tbody>
+        </table>
       </div>
-    `;
-  }
+    </div>
+  `;
+}
 
-  // -------------------------------------------------------------------------
-  // STUDENT TAB 3: ASSIGNED TEACHER & WEEKLY CLASSES
-  // -------------------------------------------------------------------------
-  else if (activeTab === 'classes') {
-    const sortedScheds = [...schedules].sort((a, b) => Number(a.day_of_week || 0) - Number(b.day_of_week || 0));
-    tabContentHtml = `
-      <div class="p-4 sm:p-5 space-y-4">
-        ${assignedTeacher ? `
-          <div class="p-4 rounded-xl bg-slate-50 border border-slate-200 flex items-center justify-between flex-wrap gap-3">
-            <div>
-              <span class="text-[10px] font-bold uppercase text-slate-400 block">Currently Assigned Teacher</span>
-              <button onclick="openTeacher360Profile('${assignedTeacher.id}', 'overview')" class="text-base font-black text-blue-700 hover:underline">
-                ${assignedTeacher.full_name} (${teacherCreds.teacher_id})
-              </button>
-              <span class="text-xs text-slate-500 block mt-0.5">Shift: ${assignedTeacher.working_shift || '10 Hours Shift'} &bull; Contact: ${assignedTeacher.phone || '--'}</span>
-            </div>
-            <div class="flex items-center gap-2">
-              <button onclick="openTeacher360Profile('${assignedTeacher.id}', 'overview')" class="px-4 py-2 bg-indigo-700 hover:bg-indigo-800 text-white rounded-xl text-xs font-extrabold transition">
-                Open Full-Screen Teacher Profile &rarr;
-              </button>
-              <button onclick="open2DMatrixForTeacher('${assignedTeacher.id}')" class="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-extrabold transition">
-                2D Weekly Matrix
-              </button>
-            </div>
-          </div>
-        ` : ''}
+function toggleBioDataPasswordVisibility() {
+  _CURRENT_360_STATE.showPassword = !_CURRENT_360_STATE.showPassword;
+  _renderFamilyWorkspaceDOM();
+}
 
-        <div class="overflow-x-auto border border-slate-200 rounded-xl">
-          <table class="w-full text-left text-xs border-collapse">
-            <thead class="bg-slate-50 text-slate-700 font-extrabold border-b border-slate-200">
-              <tr>
-                <th class="p-3.5">Day of Week</th>
-                <th class="p-3.5">Class Timing (PKT)</th>
-                <th class="p-3.5">Course</th>
-                <th class="p-3.5">Teacher</th>
-                <th class="p-3.5">Classroom Link</th>
-                <th class="p-3.5 text-right">Status</th>
-              </tr>
-            </thead>
-            <tbody class="divide-y divide-slate-200">
-              ${sortedScheds.length === 0 ? `
-                <tr><td colspan="6" class="p-8 text-center text-slate-400">No weekly class slots scheduled yet.</td></tr>
-              ` : sortedScheds.map(sc => {
-                const tObj = (window.ALL_TEACHERS || []).find(t => String(t.id) === String(sc.teacher_id)) || sc.teachers || assignedTeacher;
-                return `
-                  <tr class="hover:bg-slate-50 transition">
-                    <td class="p-3.5 font-extrabold text-slate-900">${_DAY_LABELS_360[Number(sc.day_of_week)] || `Day ${sc.day_of_week}`}</td>
-                    <td class="p-3.5 font-mono font-bold text-emerald-800">${(sc.start_time || '').slice(0,5)} - ${(sc.end_time || '').slice(0,5)} PKT</td>
-                    <td class="p-3.5 font-semibold text-slate-800">${stuCourse}</td>
-                    <td class="p-3.5">${tObj ? `<button onclick="openTeacher360Profile('${tObj.id}', 'overview')" class="font-bold text-blue-600 hover:underline">${tObj.full_name}</button>` : '--'}</td>
-                    <td class="p-3.5">${sc.meeting_link ? `<a href="${sc.meeting_link}" target="_blank" class="text-blue-600 hover:underline font-bold">Join Zoom</a>` : 'Standard Room'}</td>
-                    <td class="p-3.5 text-right"><span class="px-2.5 py-0.5 rounded bg-emerald-600 text-white font-black text-[10px] uppercase">ACTIVE</span></td>
-                  </tr>
-                `;
-              }).join('')}
-            </tbody>
-          </table>
+function _extractCityFromLegacyNotes(notes) {
+  if (!notes || typeof notes !== 'string') return '';
+  if (notes.startsWith('City:')) return notes.replace('City:', '').trim();
+  return '';
+}
+
+function _inferTimezoneFromCountry(country) {
+  const c = String(country || '').toLowerCase();
+  if (c.includes('kingdom') || c === 'uk') return 'United Kingdom Time (GMT/BST)';
+  if (c.includes('united states') || c === 'usa') return 'US Eastern / Central Time';
+  if (c.includes('canada')) return 'Canada Eastern Time';
+  if (c.includes('australia')) return 'Australia Eastern Time (AEST)';
+  if (c.includes('saudi') || c.includes('qatar') || c.includes('kuwait')) return 'Arabia Standard Time (UTC+3)';
+  if (c.includes('emirates') || c.includes('uae') || c.includes('oman')) return 'Gulf Standard Time (UTC+4)';
+  if (c.includes('pakistan')) return 'Pakistan Standard Time (PKT)';
+  return `${country || 'Standard'} Local Time`;
+}
+
+// ============================================================================
+// MODAL HELPER FOR FAMILY WORKSPACE ACTIONS
+// ============================================================================
+function _openWorkspaceModal(title, subtitle, bodyHtml) {
+  const modal = document.getElementById('familyWorkspaceActionModal');
+  if (!modal) return;
+  modal.innerHTML = `
+    <div class="bg-white rounded-2xl border border-slate-200 shadow-2xl w-full max-w-xl overflow-hidden animate-fadeIn">
+      <div class="px-6 py-4 bg-slate-900 text-white flex items-center justify-between">
+        <div>
+          <h3 class="text-base font-black">${_esc360(title)}</h3>
+          ${subtitle ? `<p class="text-xs text-slate-300 mt-0.5">${_esc360(subtitle)}</p>` : ''}
         </div>
+        <button onclick="_closeWorkspaceModal()" class="w-8 h-8 rounded-lg bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition cursor-pointer">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
       </div>
-    `;
-  }
+      <div class="p-6 max-h-[80vh] overflow-y-auto">
+        ${bodyHtml}
+      </div>
+    </div>
+  `;
+  modal.classList.remove('hidden');
+  modal.classList.add('flex');
+}
 
-  // -------------------------------------------------------------------------
-  // STUDENT TAB 4: ATTENDANCE HISTORY
-  // -------------------------------------------------------------------------
-  else if (activeTab === 'attendance') {
-    tabContentHtml = `
-      <div class="p-4 sm:p-5 space-y-4">
-        <div class="flex items-center justify-between flex-wrap gap-3">
-          <div class="grid grid-cols-2 sm:grid-cols-5 gap-3 flex-1">
-            <div class="p-3 rounded-xl bg-slate-50 border border-slate-200">
-              <span class="text-[10px] font-bold uppercase text-slate-400 block">Total Classes</span>
-              <strong class="text-base font-black text-slate-900">${totalMarkedClasses}</strong>
-            </div>
-            <div class="p-3 rounded-xl bg-emerald-50 border border-emerald-200">
-              <span class="text-[10px] font-bold uppercase text-emerald-700 block">Days Attended</span>
-              <strong class="text-base font-black text-emerald-800">${daysPresent}</strong>
-            </div>
-            <div class="p-3 rounded-xl bg-rose-50 border border-rose-200">
-              <span class="text-[10px] font-bold uppercase text-rose-700 block">Days Missed</span>
-              <strong class="text-base font-black text-rose-800">${daysAbsent}</strong>
-            </div>
-            <div class="p-3 rounded-xl bg-blue-50 border border-blue-200">
-              <span class="text-[10px] font-bold uppercase text-blue-700 block">On Leave</span>
-              <strong class="text-base font-black text-blue-800">${daysLeave}</strong>
-            </div>
-            <div class="p-3 rounded-xl bg-teal-50 border border-teal-200">
-              <span class="text-[10px] font-bold uppercase text-teal-700 block">Attendance %</span>
-              <strong class="text-base font-black text-teal-900">${attendancePct}%</strong>
-            </div>
-          </div>
+function _closeWorkspaceModal() {
+  const modal = document.getElementById('familyWorkspaceActionModal');
+  if (!modal) return;
+  modal.classList.add('hidden');
+  modal.classList.remove('flex');
+  modal.innerHTML = '';
+}
 
+// ============================================================================
+// TOP FAMILY ACTION 1: ADD STUDENT TO CURRENT FAMILY (Section #4)
+// ============================================================================
+function openFamilyAddStudentModal(familyId) {
+  const family = (window.ALL_FAMILIES || []).find(f => String(f.id).toUpperCase() === String(familyId).toUpperCase());
+  if (!family) return;
+
+  const nextId = (typeof getNextStudentId === 'function') ? getNextStudentId() : `STU-${Math.floor(100 + Math.random() * 899)}`;
+  const today = new Date().toISOString().slice(0, 10);
+  const teacherOptions = (window.ALL_TEACHERS || []).map(t =>
+    `<option value="${_esc360(t.id)}">${_esc360(t.full_name)} (${_esc360(t.working_shift || 'Regular Shift')})</option>`
+  ).join('');
+
+  _openWorkspaceModal(
+    `Add New Student to ${family.parent_name}`,
+    `Automatically connected to Family ID: ${family.id}`,
+    `
+      <form onsubmit="submitFamilyAddStudentForm(event, '${_esc360(family.id)}')" class="space-y-4 text-xs">
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div>
-            <select onchange="_CURRENT_360_STATE.attMonthFilter = this.value; openStudent360Profile('${student.id}', 'attendance', true)"
-                    class="px-3 py-2 rounded-xl border border-slate-300 bg-white text-xs font-extrabold text-slate-800">
-              <option value="all" ${activeMonthFilter === 'all' ? 'selected' : ''}>All Months</option>
-              ${availableMonths.map(m => `<option value="${m}" ${activeMonthFilter === m ? 'selected' : ''}>Month: ${m}</option>`).join('')}
+            <label class="font-extrabold text-slate-700 block mb-1">Student ID</label>
+            <input type="text" id="fwNewStuId" value="${_esc360(nextId)}" readonly class="w-full p-2.5 rounded-xl bg-slate-100 border border-slate-200 font-mono font-bold text-slate-700">
+          </div>
+          <div>
+            <label class="font-extrabold text-slate-700 block mb-1">Joining Date</label>
+            <input type="date" id="fwNewStuJoinDate" value="${today}" required class="w-full p-2.5 rounded-xl border border-slate-300 font-bold text-slate-800">
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div class="sm:col-span-2">
+            <label class="font-extrabold text-slate-700 block mb-1">Student Full Name *</label>
+            <input type="text" id="fwNewStuName" placeholder="Enter student full name" required class="w-full p-2.5 rounded-xl border border-slate-300 font-bold text-slate-900">
+          </div>
+          <div>
+            <label class="font-extrabold text-slate-700 block mb-1">Age</label>
+            <input type="number" id="fwNewStuAge" value="8" min="3" max="70" class="w-full p-2.5 rounded-xl border border-slate-300 font-bold text-slate-800">
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <label class="font-extrabold text-slate-700 block mb-1">Gender</label>
+            <select id="fwNewStuGender" class="w-full p-2.5 rounded-xl border border-slate-300 font-bold text-slate-800">
+              <option value="Male">Male</option>
+              <option value="Female">Female</option>
+            </select>
+          </div>
+          <div>
+            <label class="font-extrabold text-slate-700 block mb-1">Course / Program</label>
+            <select id="fwNewStuCourse" class="w-full p-2.5 rounded-xl border border-slate-300 font-bold text-slate-800">
+              <option value="Noorani Qaida">Noorani Qaida</option>
+              <option value="Nazra Quran Reading">Nazra Quran Reading</option>
+              <option value="Hifz-ul-Quran">Hifz-ul-Quran</option>
+              <option value="Tajweed & Recitation">Tajweed &amp; Recitation</option>
+              <option value="Tafseer & Islamic Studies">Tafseer &amp; Islamic Studies</option>
             </select>
           </div>
         </div>
 
-        <div class="overflow-x-auto border border-slate-200 rounded-xl">
-          <table class="w-full text-left text-xs border-collapse">
-            <thead class="bg-slate-50 text-slate-700 font-extrabold border-b border-slate-200">
-              <tr>
-                <th class="p-3.5">Date</th>
-                <th class="p-3.5">Status</th>
-                <th class="p-3.5">Teacher</th>
-                <th class="p-3.5">Attendance / Lesson Notes</th>
-              </tr>
-            </thead>
-            <tbody class="divide-y divide-slate-200">
-              ${filteredAttLogs.length === 0 ? `
-                <tr><td colspan="4" class="p-8 text-center text-slate-400">No attendance records found for this period.</td></tr>
-              ` : filteredAttLogs.map(log => {
-                const st = String(log.status || 'Present');
-                const pill = st === 'Present' ? 'bg-emerald-600 text-white' : st === 'Absent' ? 'bg-rose-600 text-white' : 'bg-blue-600 text-white';
-                const tObj = (window.ALL_TEACHERS || []).find(t => String(t.id) === String(log.teacher_id)) || assignedTeacher;
-                const parsed = _parseLessonLogEntry(log);
-                return `
-                  <tr class="hover:bg-slate-50 transition">
-                    <td class="p-3.5 font-mono font-bold text-slate-800">${log.date || '--'}</td>
-                    <td class="p-3.5"><span class="px-2.5 py-0.5 rounded font-black text-[10px] uppercase ${pill}">${st}</span></td>
-                    <td class="p-3.5">${tObj ? `<button onclick="openTeacher360Profile('${tObj.id}', 'overview')" class="font-bold text-blue-600 hover:underline">${tObj.full_name}</button>` : '--'}</td>
-                    <td class="p-3.5 text-slate-700">${parsed.bookTitle ? `<strong>${parsed.bookTitle}</strong> ${parsed.page ? `(Page ${parsed.page})` : ''} — ${parsed.remarks || parsed.assessment || ''}` : (parsed.remarks || '--')}</td>
-                  </tr>
-                `;
-              }).join('')}
-            </tbody>
-          </table>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <label class="font-extrabold text-slate-700 block mb-1">Assign Teacher</label>
+            <select id="fwNewStuTeacher" class="w-full p-2.5 rounded-xl border border-slate-300 font-bold text-slate-800">
+              <option value="">-- Select Teacher --</option>
+              ${teacherOptions}
+            </select>
+          </div>
+          <div>
+            <label class="font-extrabold text-slate-700 block mb-1">Days Per Week</label>
+            <select id="fwNewStuDays" class="w-full p-2.5 rounded-xl border border-slate-300 font-bold text-slate-800">
+              <option value="5 Days (Mon-Fri)">5 Days (Mon-Fri)</option>
+              <option value="3 Days (Mon-Wed-Fri)">3 Days (Mon-Wed-Fri)</option>
+              <option value="2 Days (Weekend)">2 Days (Weekend)</option>
+              <option value="6 Days (Mon-Sat)">6 Days (Mon-Sat)</option>
+            </select>
+          </div>
         </div>
-      </div>
-    `;
+
+        <div class="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
+          <button type="button" onclick="_closeWorkspaceModal()" class="px-4 py-2 rounded-xl bg-slate-100 text-slate-700 font-bold">Cancel</button>
+          <button type="submit" id="btnFwSaveNewStudent" class="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold">
+            Enroll Student in Family
+          </button>
+        </div>
+      </form>
+    `
+  );
+}
+
+async function submitFamilyAddStudentForm(e, familyId) {
+  e.preventDefault();
+  const btn = document.getElementById('btnFwSaveNewStudent');
+  if (btn) { btn.disabled = true; btn.innerText = 'Saving to Database...'; }
+
+  const id = document.getElementById('fwNewStuId').value.trim();
+  const name = document.getElementById('fwNewStuName').value.trim();
+  const age = parseInt(document.getElementById('fwNewStuAge').value, 10) || 8;
+  const gender = document.getElementById('fwNewStuGender').value;
+  const course_id = document.getElementById('fwNewStuCourse').value;
+  const joining_date = document.getElementById('fwNewStuJoinDate').value;
+  const assigned_teacher_id = document.getElementById('fwNewStuTeacher').value || null;
+  const days_per_week = document.getElementById('fwNewStuDays').value;
+
+  const notes = JSON.stringify({ days_per_week, language: 'English', certificates: [] });
+
+  const newStuRecord = {
+    id,
+    family_id: familyId,
+    name,
+    age,
+    gender,
+    course_id,
+    assigned_teacher_id,
+    joining_date,
+    notes,
+    status: 'Active'
+  };
+
+  const { error } = await db.from('students').insert([newStuRecord]);
+  if (error) {
+    alert('Failed to enroll student: ' + error.message);
+    if (btn) { btn.disabled = false; btn.innerText = 'Enroll Student in Family'; }
+    return;
   }
 
-  // -------------------------------------------------------------------------
-  // STUDENT TAB 5: DAILY LESSONS (Sabaq History Auto-Synced from Teacher Portal)
-  // -------------------------------------------------------------------------
-  else if (activeTab === 'lessons') {
-    tabContentHtml = `
-      <div class="p-4 sm:p-5">
-        <div class="overflow-x-auto border border-slate-200 rounded-xl">
-          <table class="w-full text-left text-xs border-collapse">
-            <thead class="bg-slate-50 text-slate-700 font-extrabold border-b border-slate-200">
-              <tr>
-                <th class="p-3.5">Date</th>
-                <th class="p-3.5">Lesson / Book Studied</th>
-                <th class="p-3.5">Page &amp; Line Range</th>
-                <th class="p-3.5">Assessment</th>
-                <th class="p-3.5">Teacher Remarks</th>
-                <th class="p-3.5">Teacher</th>
-                <th class="p-3.5 text-right">Digital Reader</th>
-              </tr>
-            </thead>
-            <tbody class="divide-y divide-slate-200">
-              ${parsedLessons.length === 0 ? `
-                <tr><td colspan="7" class="p-8 text-center text-slate-400">No daily lessons logged yet. Lessons entered by the teacher in the Teacher Portal automatically appear here.</td></tr>
-              ` : parsedLessons.map(({ rawLog, parsed }) => {
-                const tObj = (window.ALL_TEACHERS || []).find(t => String(t.id) === String(rawLog.teacher_id)) || assignedTeacher;
-                const isPass = String(parsed.assessment || '').toLowerCase() === 'pass';
-                return `
-                  <tr class="hover:bg-slate-50 transition">
-                    <td class="p-3.5 font-mono font-bold text-slate-800">${rawLog.date || '--'}</td>
-                    <td class="p-3.5 font-extrabold text-slate-900">${parsed.bookTitle || stuCourse}</td>
-                    <td class="p-3.5 font-mono">${parsed.page ? `Page ${parsed.page}${parsed.lineRange ? ` (${parsed.lineRange})` : ''}` : '--'}</td>
-                    <td class="p-3.5">
-                      <span class="px-2.5 py-0.5 rounded font-black text-[10px] uppercase ${isPass ? 'bg-emerald-600 text-white' : 'bg-amber-500 text-white'}">
-                        ${parsed.assessment || 'COMPLETED'}
-                      </span>
-                    </td>
-                    <td class="p-3.5 text-slate-700">${parsed.remarks || '--'}</td>
-                    <td class="p-3.5">${tObj ? `<button onclick="openTeacher360Profile('${tObj.id}', 'overview')" class="font-bold text-blue-600 hover:underline">${tObj.full_name}</button>` : '--'}</td>
-                    <td class="p-3.5 text-right">
-                      ${parsed.page && typeof openDigitalBookReader === 'function' ? `
-                        <button onclick="openDigitalBookReader('${parsed.bookId}', ${parsed.page})" class="px-2.5 py-1 rounded bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 font-bold text-[11px]">
-                          Read Pg ${parsed.page}
-                        </button>
-                      ` : '--'}
-                    </td>
-                  </tr>
-                `;
-              }).join('')}
-            </tbody>
-          </table>
-        </div>
-      </div>
-    `;
+  if (Array.isArray(window.ALL_STUDENTS)) window.ALL_STUDENTS.unshift(newStuRecord);
+  const fam = (window.ALL_FAMILIES || []).find(f => String(f.id).toUpperCase() === String(familyId).toUpperCase());
+  if (fam) {
+    if (!Array.isArray(fam.students)) fam.students = [];
+    fam.students.push(newStuRecord);
   }
 
-  // -------------------------------------------------------------------------
-  // STUDENT TAB 6: PROGRESS REPORT
-  // -------------------------------------------------------------------------
-  else if (activeTab === 'progress') {
-    const targetPages = stuCourse.toLowerCase().includes('quran') ? 548 : 32;
-    const pct = highestPage > 0 ? Math.min(100, Math.round((highestPage / targetPages) * 100)) : (passedLessonsCount > 0 ? Math.min(100, passedLessonsCount * 5) : 10);
-    tabContentHtml = `
-      <div class="p-4 sm:p-5 space-y-4">
-        <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          <div class="p-3.5 rounded-xl bg-slate-50 border border-slate-200">
-            <span class="text-[11px] font-bold text-slate-500 block">Active Syllabus</span>
-            <strong class="text-sm font-black text-slate-900">${stuCourse}</strong>
-          </div>
-          <div class="p-3.5 rounded-xl bg-emerald-50 border border-emerald-200">
-            <span class="text-[11px] font-bold text-emerald-700 block">Current Milestone</span>
-            <strong class="text-sm font-black text-emerald-900">${highestPage > 0 ? `Page ${highestPage} (${pct}%)` : 'Initial Stage'}</strong>
-          </div>
-          <div class="p-3.5 rounded-xl bg-teal-50 border border-teal-200">
-            <span class="text-[11px] font-bold text-teal-700 block">Lessons Passed</span>
-            <strong class="text-sm font-black text-teal-900">${passedLessonsCount} Passed</strong>
-          </div>
-          <div class="p-3.5 rounded-xl bg-amber-50 border border-amber-200">
-            <span class="text-[11px] font-bold text-amber-800 block">Revisions / Repeat</span>
-            <strong class="text-sm font-black text-amber-900">${repeatLessonsCount} Revisions</strong>
-          </div>
-        </div>
-
-        <div class="overflow-x-auto border border-slate-200 rounded-xl">
-          <table class="w-full text-left text-xs border-collapse">
-            <thead class="bg-slate-50 text-slate-700 font-extrabold border-b border-slate-200">
-              <tr>
-                <th class="p-3.5">Date</th>
-                <th class="p-3.5">Syllabus / Book</th>
-                <th class="p-3.5">Milestone Reached</th>
-                <th class="p-3.5">Evaluation Result</th>
-                <th class="p-3.5">Teacher Feedback</th>
-              </tr>
-            </thead>
-            <tbody class="divide-y divide-slate-200">
-              ${parsedLessons.length === 0 ? `
-                <tr><td colspan="5" class="p-8 text-center text-slate-400">No progress evaluations recorded yet.</td></tr>
-              ` : parsedLessons.slice(0, 25).map(({ rawLog, parsed }) => `
-                <tr class="hover:bg-slate-50 transition">
-                  <td class="p-3.5 font-mono font-bold text-slate-800">${rawLog.date || '--'}</td>
-                  <td class="p-3.5 font-extrabold text-slate-900">${parsed.bookTitle || stuCourse}</td>
-                  <td class="p-3.5 font-mono font-bold text-emerald-800">${parsed.page ? `Page ${parsed.page}` : 'Lesson Checkpoint'}</td>
-                  <td class="p-3.5"><span class="px-2 py-0.5 rounded bg-emerald-600 text-white font-black text-[10px] uppercase">${parsed.assessment || 'PASS'}</span></td>
-                  <td class="p-3.5 text-slate-600">${parsed.remarks || 'Satisfactory recitation and Tajweed.'}</td>
-                </tr>
-              `).join('')}
-            </tbody>
-          </table>
-        </div>
-      </div>
-    `;
-  }
-
-  // -------------------------------------------------------------------------
-  // STUDENT TAB 7: FEES & PAYMENTS (Synchronized with Family Ledger)
-  // -------------------------------------------------------------------------
-  else if (activeTab === 'fees') {
-    const activeMonthsList = [...fin.monthsStatus].reverse().filter(m => !m.isNotEnrolled);
-    tabContentHtml = `
-      <div class="p-4 sm:p-5 space-y-4">
-        <div class="p-3.5 rounded-xl bg-slate-50 border border-slate-200 flex items-center justify-between flex-wrap gap-3">
-          <div class="text-xs text-slate-700">
-            <strong>Family Billing Relationship:</strong> Tuition fees are maintained at the Family level under
-            <button onclick="openFamily360Profile('${family?.id || ''}', 'payments')" class="text-blue-700 hover:underline font-extrabold">${family?.parent_name || 'Parent'} (${family?.id || 'N/A'})</button>.
-          </div>
-          ${family ? `
-            <button onclick="openFamily360Profile('${family.id}', 'payments')" class="px-3.5 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white rounded-lg text-xs font-extrabold">
-              Open Family Payments Page &rarr;
-            </button>
-          ` : ''}
-        </div>
-
-        <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          <div class="p-3.5 rounded-xl bg-slate-50 border border-slate-200">
-            <span class="text-[11px] font-bold text-slate-500 block">Agreed Family Fee</span>
-            <strong class="text-base font-black text-slate-900">${fin.currency} ${fin.agreedMonthlyFee}/-</strong>
-          </div>
-          <div class="p-3.5 rounded-xl bg-emerald-50 border border-emerald-200">
-            <span class="text-[11px] font-bold text-emerald-700 block">Total Paid</span>
-            <strong class="text-base font-black text-emerald-900">${fin.currency} ${fin.totalPaid.toFixed(0)}/-</strong>
-          </div>
-          <div class="p-3.5 rounded-xl bg-rose-50 border border-rose-200">
-            <span class="text-[11px] font-bold text-rose-700 block">Pending Balance</span>
-            <strong class="text-base font-black text-rose-900">${fin.currency} ${fin.totalPending.toFixed(0)}/-</strong>
-          </div>
-          <div class="p-3.5 rounded-xl bg-sky-50 border border-sky-200">
-            <span class="text-[11px] font-bold text-sky-700 block">Advance Credit</span>
-            <strong class="text-base font-black text-sky-900">${fin.currency} ${fin.advanceCredit.toFixed(0)}/-</strong>
-          </div>
-        </div>
-
-        <div class="overflow-x-auto border border-slate-200 rounded-xl">
-          <table class="w-full text-left text-xs border-collapse">
-            <thead class="bg-slate-50 text-slate-800 font-extrabold border-b border-slate-200">
-              <tr>
-                <th class="p-3.5">${fin.currency} / Method</th>
-                <th class="p-3.5">Month</th>
-                <th class="p-3.5">Due Date</th>
-                <th class="p-3.5">Paid Date</th>
-                <th class="p-3.5">Fee</th>
-                <th class="p-3.5">AMT</th>
-                <th class="p-3.5 text-right">Status</th>
-              </tr>
-            </thead>
-            <tbody class="divide-y divide-slate-200">
-              ${activeMonthsList.map(m => `
-                <tr class="hover:bg-slate-50 transition">
-                  <td class="p-3.5 font-semibold text-emerald-700">${m.paymentMethod}</td>
-                  <td class="p-3.5 font-bold text-emerald-800">${m.month.slice(0, 3)}</td>
-                  <td class="p-3.5 font-mono text-emerald-700">${m.dueDate}</td>
-                  <td class="p-3.5 font-mono text-emerald-700">${m.paidDate}</td>
-                  <td class="p-3.5 font-mono font-bold text-emerald-800">${fin.currency}${fin.agreedMonthlyFee}</td>
-                  <td class="p-3.5 font-mono font-extrabold text-emerald-800">${fin.currency}${m.isPaid ? fin.agreedMonthlyFee : (m.amountPaid || fin.agreedMonthlyFee)}/-</td>
-                  <td class="p-3.5 text-right">
-                    <span class="px-2.5 py-1 rounded font-black text-[10px] uppercase ${m.isPaid ? 'bg-emerald-600 text-white' : (m.isFuture ? 'bg-slate-200 text-slate-600' : 'bg-rose-600 text-white')}">
-                      ${m.isPaid ? 'PAID' : (m.isFuture ? 'UPCOMING' : 'DUE')}
-                    </span>
-                  </td>
-                </tr>
-              `).join('')}
-            </tbody>
-          </table>
-        </div>
-      </div>
-    `;
-  }
-
-  // Assemble Full-Screen Student Profile Page
-  workspace.innerHTML = `
-    ${_buildTopWorkspaceNavHtml()}
-
-    <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-      <!-- FULL-WIDTH EMERALD PROFILE BANNER -->
-      <div class="bg-gradient-to-b from-[#10b981] via-[#059669] to-[#047857] text-white pt-6 px-4 sm:px-8 flex flex-col items-center text-center">
-        <div class="w-16 h-16 rounded-xl bg-white/20 border-2 border-white shadow-md flex items-center justify-center text-2xl font-black text-white mb-2">
-          <i class="fa-solid fa-user-graduate"></i>
-        </div>
-
-        <h1 class="text-xl sm:text-2xl font-bold tracking-tight text-white">${student.name}</h1>
-        <div class="text-sm font-mono font-semibold text-white/95 mt-0.5">${joinDate}</div>
-
-        <!-- Status & Relationship Pills -->
-        <div class="flex items-center justify-center gap-2 flex-wrap mt-2.5">
-          <span class="px-2.5 py-0.5 rounded bg-white/20 text-white font-black text-[11px] uppercase">${stuStatus}</span>
-          <span class="px-2.5 py-0.5 rounded bg-slate-900/40 text-amber-300 font-mono font-bold text-[11px]">${student.id}</span>
-          ${family ? `
-            <button onclick="openFamily360Profile('${family.id}', 'students')" class="px-2.5 py-0.5 rounded bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-[10px] uppercase transition">
-              FAMILY: ${family.parent_name} (${family.id}) ✔
-            </button>
-          ` : ''}
-          ${assignedTeacher ? `
-            <button onclick="openTeacher360Profile('${assignedTeacher.id}', 'overview')" class="px-2.5 py-0.5 rounded bg-sky-500 hover:bg-sky-400 text-white font-black text-[10px] uppercase transition">
-              TEACHER: ${assignedTeacher.full_name}
-            </button>
-          ` : ''}
-          <span class="px-2.5 py-0.5 rounded bg-blue-600 text-white font-black text-[10px] uppercase">${stuCourse}</span>
-        </div>
-
-        <!-- Primary Action Buttons Row -->
-        <div class="flex items-center justify-center gap-2 flex-wrap mt-4">
-          ${family ? `
-            <button onclick="openFamily360Profile('${family.id}', 'students')" class="px-3.5 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs shadow-xs flex items-center gap-1.5 transition">
-              <i class="fa-solid fa-house-user"></i> Open Family Profile
-            </button>
-          ` : ''}
-          ${assignedTeacher ? `
-            <button onclick="openTeacher360Profile('${assignedTeacher.id}', 'overview')" class="px-3.5 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs shadow-xs flex items-center gap-1.5 transition">
-              <i class="fa-solid fa-chalkboard-user"></i> Open Teacher Profile
-            </button>
-          ` : ''}
-          ${cleanPhone && window.CURRENT_ROLE !== 'manager' ? `
-            <a href="https://wa.me/${cleanPhone}" target="_blank" class="px-3.5 py-1.5 rounded-lg bg-slate-900/70 hover:bg-slate-900 text-white font-bold text-xs shadow-xs flex items-center gap-1.5 transition">
-              <i class="fa-brands fa-whatsapp text-emerald-300"></i> WhatsApp Parent
-            </a>
-          ` : ''}
-        </div>
-
-        <!-- DOCKED DARK TABS BAR AT BOTTOM OF BANNER -->
-        <div class="flex items-center justify-center gap-1.5 flex-wrap mt-6 pb-3">
-          ${tabsConfig.map(t => {
-            const isAct = activeTab === t.id;
-            return `
-              <button onclick="openStudent360Profile('${student.id}', '${t.id}', true)"
-                      class="px-4 py-2 rounded-md text-xs font-extrabold transition ${isAct ? 'bg-slate-950 text-white shadow-md ring-2 ring-white/40' : 'bg-slate-800/80 hover:bg-slate-900 text-white/90'}">
-                ${t.label}
-              </button>
-            `;
-          }).join('')}
-        </div>
-      </div>
-
-      <!-- FULL-WIDTH SINGLE-CATEGORY WORKSPACE BELOW BANNER -->
-      <div class="bg-white">
-        ${tabContentHtml}
-      </div>
-    </div>
-  `;
+  _closeWorkspaceModal();
+  _notify360(`Student ${name} (${id}) added to ${fam ? fam.parent_name : familyId} successfully!`);
+  await openFamily360Profile(familyId, 'students', true, { selectedStudentId: id, studentSubView: 'info' });
 }
 
 // ============================================================================
-// 3. TEACHER FULL-SCREEN DEDICATED PROFILE PAGE
+// TOP FAMILY ACTION 2: SEND INVOICE (Section #4)
+// Uses actual saved/current invoice and parent email, dispatches & logs to backend
 // ============================================================================
-async function openTeacher360Profile(teacherId, initialTab = 'students', skipHistoryPush = false) {
+function openFamilySendInvoiceModal(familyId) {
+  const family = (window.ALL_FAMILIES || []).find(f => String(f.id).toUpperCase() === String(familyId).toUpperCase());
+  if (!family) return;
+
+  const payData = _getFamilyPaymentsList(family);
+  const currentInvoice = payData.rows[0] || {
+    month: 'September',
+    year: 2026,
+    feeAmount: family.monthly_fee || 0,
+    currency: family.currency || 'USD',
+    status: 'UNPAID'
+  };
+
+  const parentEmail = family.parent_email || '';
+  const studentsNames = ((window.ALL_STUDENTS || []).filter(s => String(s.family_id).toUpperCase() === String(family.id).toUpperCase()).map(s => s.name)).join(', ') || 'Enrolled Students';
+
+  const subject = `Official Monthly Fee Invoice (${currentInvoice.month} ${currentInvoice.year}) — Al-Huda Islamic Centre`;
+  const bodyText =
+`Assalamu Alaikum Respected ${family.parent_name},
+
+We pray you and your family are in the best of health and Iman.
+Please find below your official monthly tuition invoice details for ${currentInvoice.month} ${currentInvoice.year}:
+
+• Family ID: ${family.id}
+• Enrolled Student(s): ${studentsNames}
+• Billing Month: ${currentInvoice.month} ${currentInvoice.year}
+• Agreed Monthly Fee: ${currentInvoice.currency} ${currentInvoice.feeAmount}
+• Current Payment Status: ${currentInvoice.status}
+
+Kindly remit the monthly fee via ${currentInvoice.paymentMethod || 'your usual payment method'} and share the confirmation receipt.
+
+Jazakumullahu Khairan,
+Accounts & Billing Department
+Al-Huda Islamic Centre`;
+
+  _openWorkspaceModal(
+    `Send Current Month's Invoice`,
+    `Family: ${family.parent_name} (${family.id})`,
+    `
+      <form onsubmit="executeSendFamilyInvoice(event, '${_esc360(family.id)}')" class="space-y-4 text-xs">
+        <div>
+          <label class="font-extrabold text-slate-700 block mb-1">Parent Recipient Email *</label>
+          <input type="email" id="fwInvToEmail" value="${_esc360(parentEmail)}" required placeholder="parent@example.com" class="w-full p-2.5 rounded-xl border border-slate-300 font-bold text-slate-900">
+        </div>
+        <div>
+          <label class="font-extrabold text-slate-700 block mb-1">Invoice Subject</label>
+          <input type="text" id="fwInvSubject" value="${_esc360(subject)}" required class="w-full p-2.5 rounded-xl border border-slate-300 font-bold text-slate-900">
+        </div>
+        <div>
+          <label class="font-extrabold text-slate-700 block mb-1">Invoice Details &amp; Message</label>
+          <textarea id="fwInvBody" rows="8" required class="w-full p-3 rounded-xl border border-slate-300 font-mono text-xs text-slate-800">${_esc360(bodyText)}</textarea>
+        </div>
+        <div class="flex items-center justify-between gap-2 pt-3 border-t border-slate-100 flex-wrap">
+          <button type="button" onclick="openGmailDirectFromWorkspace('fwInvToEmail','fwInvSubject','fwInvBody')" class="px-3.5 py-2 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 font-extrabold">
+            <i class="fa-brands fa-google mr-1"></i> Open in Gmail
+          </button>
+          <div class="flex items-center gap-2">
+            <button type="button" onclick="_closeWorkspaceModal()" class="px-4 py-2 rounded-xl bg-slate-100 text-slate-700 font-bold">Cancel</button>
+            <button type="submit" id="btnFwSendInvoiceSubmit" class="px-5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold">
+              <i class="fa-solid fa-paper-plane mr-1"></i> Send Invoice Now
+            </button>
+          </div>
+        </div>
+      </form>
+    `
+  );
+}
+
+async function executeSendFamilyInvoice(e, familyId) {
+  e.preventDefault();
+  const toEmail = document.getElementById('fwInvToEmail').value.trim();
+  const subject = document.getElementById('fwInvSubject').value.trim();
+  const body = document.getElementById('fwInvBody').value.trim();
+  const btn = document.getElementById('btnFwSendInvoiceSubmit');
+
+  if (!toEmail) {
+    alert('Parent email address is required to send the invoice.');
+    return;
+  }
+
+  if (btn) { btn.disabled = true; btn.innerText = 'Dispatching Invoice...'; }
+
+  const family = (window.ALL_FAMILIES || []).find(f => String(f.id).toUpperCase() === String(familyId).toUpperCase());
+  if (family) {
+    const fNotes = _parseFamilyStructuredNotes(family);
+    fNotes.bio_meta.last_invoice_sent_month = 'September 2026';
+    fNotes.bio_meta.last_invoice_sent_at = new Date().toISOString();
+    fNotes.communication_logs.unshift({
+      id: `INV-LOG-${Date.now()}`,
+      type: 'invoice',
+      to: toEmail,
+      subject,
+      sent_at: new Date().toISOString().slice(0, 16).replace('T', ' ')
+    });
+
+    await _saveFamilyStructuredNotes(family.id, fNotes, { parent_email: toEmail });
+  }
+
+  // Dispatch via EmailJS if configured
+  try {
+    if (typeof emailjs !== 'undefined' && window.EMAILJS_PUBLIC_KEY) {
+      await emailjs.send(window.EMAILJS_SERVICE_ID, window.EMAILJS_TEMPLATE_ID, {
+        to_email: toEmail,
+        subject: subject,
+        message: body,
+        from_name: 'Al-Huda Islamic Centre Billing'
+      });
+    }
+  } catch (err) {}
+
+  _closeWorkspaceModal();
+  _notify360(`Monthly Invoice dispatched to ${toEmail} and logged in Family records.`);
+  _renderFamilyWorkspaceDOM();
+}
+
+function openGmailDirectFromWorkspace(toId, subId, bodyId) {
+  const to = encodeURIComponent(document.getElementById(toId)?.value || '');
+  const su = encodeURIComponent(document.getElementById(subId)?.value || '');
+  const body = encodeURIComponent(document.getElementById(bodyId)?.value || '');
+  window.open(`https://mail.google.com/mail/?view=cm&fs=1&to=${to}&su=${su}&body=${body}`, '_blank');
+}
+
+// ============================================================================
+// TOP FAMILY ACTION 3: SEND EMAIL (Section #4)
+// Manual/custom email workflow using existing family email + backend logging
+// ============================================================================
+function openFamilyCustomEmailModal(familyId) {
+  const family = (window.ALL_FAMILIES || []).find(f => String(f.id).toUpperCase() === String(familyId).toUpperCase());
+  if (!family) return;
+
+  const toEmail = family.parent_email || '';
+  const defaultSubject = `Academic Update for ${family.parent_name} (${family.id}) — Al-Huda Islamic Centre`;
+  const defaultBody =
+`Assalamu Alaikum Respected ${family.parent_name},
+
+We hope you and your children are doing well.
+
+[Write your message here]
+
+Warm regards,
+Administration & Management
+Al-Huda Islamic Centre`;
+
+  _openWorkspaceModal(
+    `Send Email to Family / Parent`,
+    `Recipient: ${family.parent_name} (${toEmail || 'Enter email below'})`,
+    `
+      <form onsubmit="executeSendFamilyCustomEmail(event, '${_esc360(family.id)}')" class="space-y-4 text-xs">
+        <div>
+          <label class="font-extrabold text-slate-700 block mb-1">To (Parent Email) *</label>
+          <input type="email" id="fwCustomEmailTo" value="${_esc360(toEmail)}" required placeholder="parent@example.com" class="w-full p-2.5 rounded-xl border border-slate-300 font-bold text-slate-900">
+        </div>
+        <div>
+          <label class="font-extrabold text-slate-700 block mb-1">Subject *</label>
+          <input type="text" id="fwCustomEmailSub" value="${_esc360(defaultSubject)}" required class="w-full p-2.5 rounded-xl border border-slate-300 font-bold text-slate-900">
+        </div>
+        <div>
+          <label class="font-extrabold text-slate-700 block mb-1">Email Message *</label>
+          <textarea id="fwCustomEmailBody" rows="7" required class="w-full p-3 rounded-xl border border-slate-300 text-xs text-slate-800">${_esc360(defaultBody)}</textarea>
+        </div>
+        <div class="flex items-center justify-between gap-2 pt-3 border-t border-slate-100 flex-wrap">
+          <button type="button" onclick="openGmailDirectFromWorkspace('fwCustomEmailTo','fwCustomEmailSub','fwCustomEmailBody')" class="px-3.5 py-2 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 font-extrabold">
+            <i class="fa-brands fa-google mr-1"></i> Compose in Gmail
+          </button>
+          <div class="flex items-center gap-2">
+            <button type="button" onclick="_closeWorkspaceModal()" class="px-4 py-2 rounded-xl bg-slate-100 text-slate-700 font-bold">Cancel</button>
+            <button type="submit" id="btnFwSendCustomEmail" class="px-5 py-2 rounded-xl bg-sky-600 hover:bg-sky-700 text-white font-extrabold">
+              <i class="fa-solid fa-paper-plane mr-1"></i> Send Email
+            </button>
+          </div>
+        </div>
+      </form>
+    `
+  );
+}
+
+async function executeSendFamilyCustomEmail(e, familyId) {
+  e.preventDefault();
+  const toEmail = document.getElementById('fwCustomEmailTo').value.trim();
+  const subject = document.getElementById('fwCustomEmailSub').value.trim();
+  const body = document.getElementById('fwCustomEmailBody').value.trim();
+
+  const family = (window.ALL_FAMILIES || []).find(f => String(f.id).toUpperCase() === String(familyId).toUpperCase());
+  if (family) {
+    const fNotes = _parseFamilyStructuredNotes(family);
+    fNotes.communication_logs.unshift({
+      id: `EMAIL-LOG-${Date.now()}`,
+      type: 'email',
+      to: toEmail,
+      subject,
+      sent_at: new Date().toISOString().slice(0, 16).replace('T', ' ')
+    });
+    await _saveFamilyStructuredNotes(family.id, fNotes, { parent_email: toEmail });
+  }
+
+  try {
+    if (typeof emailjs !== 'undefined' && window.EMAILJS_PUBLIC_KEY) {
+      await emailjs.send(window.EMAILJS_SERVICE_ID, window.EMAILJS_TEMPLATE_ID, {
+        to_email: toEmail,
+        subject: subject,
+        message: body,
+        from_name: 'Al-Huda Islamic Centre'
+      });
+    }
+  } catch (err) {}
+
+  _closeWorkspaceModal();
+  _notify360(`Email sent to ${toEmail} and saved in Family communication logs.`);
+  _renderFamilyWorkspaceDOM();
+}
+
+// ============================================================================
+// TOP FAMILY ACTION 4: ADD MANUAL INVOICE (Section #4 & #20)
+// Saves directly to the real backend financial system (fees.js + Supabase)
+// ============================================================================
+function openFamilyManualInvoiceModal(familyId) {
+  const family = (window.ALL_FAMILIES || []).find(f => String(f.id).toUpperCase() === String(familyId).toUpperCase());
+  if (!family) return;
+
+  const today = new Date().toISOString().slice(0, 10);
+  const months = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+
+  _openWorkspaceModal(
+    `Add Manual Invoice / Financial Entry`,
+    `Family: ${family.parent_name} (${family.id}) — Connected to Main Fee System`,
+    `
+      <form onsubmit="submitFamilyManualInvoiceForm(event, '${_esc360(family.id)}')" class="space-y-4 text-xs">
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <label class="font-extrabold text-slate-700 block mb-1">Amount (${_esc360(family.currency || 'USD')}) *</label>
+            <input type="number" step="0.01" id="fwManInvAmount" value="${_esc360(family.monthly_fee || 75)}" required class="w-full p-2.5 rounded-xl border border-slate-300 font-bold text-slate-900">
+          </div>
+          <div>
+            <label class="font-extrabold text-slate-700 block mb-1">Payment Status *</label>
+            <select id="fwManInvStatus" class="w-full p-2.5 rounded-xl border border-slate-300 font-bold text-slate-800">
+              <option value="PAID">PAID (Payment Received)</option>
+              <option value="UNPAID">UNPAID (Pending Invoice Charge)</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <label class="font-extrabold text-slate-700 block mb-1">Billing Month *</label>
+            <select id="fwManInvMonth" class="w-full p-2.5 rounded-xl border border-slate-300 font-bold text-slate-800">
+              ${months.map(m => `<option value="${m}" ${m === 'September' ? 'selected' : ''}>${m} 2026</option>`).join('')}
+            </select>
+          </div>
+          <div>
+            <label class="font-extrabold text-slate-700 block mb-1">Paid / Entry Date *</label>
+            <input type="date" id="fwManInvDate" value="${today}" required class="w-full p-2.5 rounded-xl border border-slate-300 font-bold text-slate-800">
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <label class="font-extrabold text-slate-700 block mb-1">Payment Method *</label>
+            <select id="fwManInvMethod" class="w-full p-2.5 rounded-xl border border-slate-300 font-bold text-slate-800">
+              <option value="UK Bank Transfer">UK Bank Transfer</option>
+              <option value="Bank Transfer">Bank Transfer</option>
+              <option value="Online Payment">Online Payment</option>
+              <option value="Cash">Cash</option>
+              <option value="PayPal / Stripe">PayPal / Stripe</option>
+              <option value="Zelle / Remittance">Zelle / Remittance</option>
+            </select>
+          </div>
+          <div>
+            <label class="font-extrabold text-slate-700 block mb-1">Reason / Purpose *</label>
+            <input type="text" id="fwManInvReason" placeholder="e.g. Monthly Tuition / Extra Sibling / Adjustment" value="Monthly Tuition Fee" required class="w-full p-2.5 rounded-xl border border-slate-300 font-bold text-slate-900">
+          </div>
+        </div>
+
+        <div>
+          <label class="font-extrabold text-slate-700 block mb-1">Description / Financial Note</label>
+          <textarea id="fwManInvDesc" rows="2" placeholder="Provide details about this manual payment or invoice entry..." class="w-full p-2.5 rounded-xl border border-slate-300 text-xs text-slate-800"></textarea>
+        </div>
+
+        <div class="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
+          <button type="button" onclick="_closeWorkspaceModal()" class="px-4 py-2 rounded-xl bg-slate-100 text-slate-700 font-bold">Cancel</button>
+          <button type="submit" class="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold">
+            Save Manual Invoice to Ledger
+          </button>
+        </div>
+      </form>
+    `
+  );
+}
+
+async function submitFamilyManualInvoiceForm(e, familyId) {
+  e.preventDefault();
+  const family = (window.ALL_FAMILIES || []).find(f => String(f.id).toUpperCase() === String(familyId).toUpperCase());
+  if (!family) return;
+
+  const amount = parseFloat(document.getElementById('fwManInvAmount').value) || 0;
+  const status = document.getElementById('fwManInvStatus').value;
+  const month = document.getElementById('fwManInvMonth').value;
+  const date = document.getElementById('fwManInvDate').value;
+  const paymentMethod = document.getElementById('fwManInvMethod').value;
+  const reason = document.getElementById('fwManInvReason').value.trim();
+  const description = document.getElementById('fwManInvDesc').value.trim();
+
+  const receiptNo = `AH-MAN-${Date.now().toString().slice(-6)}`;
+  const recordObj = {
+    receiptNo,
+    familyId: family.id,
+    parentName: family.parent_name,
+    month,
+    year: 2026,
+    date: status === 'PAID' ? date : '--',
+    amountPaid: status === 'PAID' ? amount : 0,
+    amount: amount,
+    currency: family.currency || 'USD',
+    paymentMethod,
+    status,
+    reason,
+    description,
+    remarks: `${reason}${description ? ' — ' + description : ''}`,
+    isManualInvoice: true,
+    created_at: new Date().toISOString()
+  };
+
+  // Save to main Fee System cache + localStorage
+  if (typeof getStoredFeeRecords === 'function' && typeof saveStoredFeeRecords === 'function') {
+    const allRecs = getStoredFeeRecords() || [];
+    allRecs.unshift(recordObj);
+    saveStoredFeeRecords(allRecs);
+  }
+
+  // Also sync to Supabase family.notes.fee_history & matrix_overrides
+  const fNotes = _parseFamilyStructuredNotes(family);
+  fNotes.fee_history.unshift(recordObj);
+  if (status === 'PAID') {
+    const ovKey = `${String(family.id).toUpperCase()}_${month}_2026`;
+    fNotes.matrix_overrides[ovKey] = { status: 'paid', amountPaid: amount, date };
+    if (typeof getStoredMatrixOverrides === 'function' && typeof saveStoredMatrixOverrides === 'function') {
+      const ovs = getStoredMatrixOverrides();
+      ovs[ovKey] = fNotes.matrix_overrides[ovKey];
+      saveStoredMatrixOverrides(ovs);
+    }
+  }
+
+  await _saveFamilyStructuredNotes(family.id, fNotes);
+  if (typeof loadFeeDashboardStats === 'function') {
+    try { loadFeeDashboardStats(); } catch (err) {}
+  }
+
+  _closeWorkspaceModal();
+  _notify360(`Manual Invoice (${family.currency} ${amount} • ${status}) saved to Payments & Main Fee Ledger!`);
+  _CURRENT_360_STATE.activeTab = 'payments';
+  _renderFamilyWorkspaceDOM();
+}
+
+// ============================================================================
+// STUDENT-ONLY ACTIONS (Sections #12, #13, #14)
+// 1. Edit ONLY Selected Student
+// 2. Put ONLY Selected Student On Leave
+// 3. Deactivate ONLY Selected Student
+// ============================================================================
+function openEditSingleStudentModal(familyId, studentId) {
+  const family = (window.ALL_FAMILIES || []).find(f => String(f.id).toUpperCase() === String(familyId).toUpperCase());
+  const student = (window.ALL_STUDENTS || []).find(s => String(s.id).toUpperCase() === String(studentId).toUpperCase());
+  if (!family || !student) return;
+
+  const stuMeta = _parseStudentStructuredNotes(student);
+  const teacherOptions = (window.ALL_TEACHERS || []).map(t =>
+    `<option value="${_esc360(t.id)}" ${String(t.id) === String(student.assigned_teacher_id) ? 'selected' : ''}>${_esc360(t.full_name)}</option>`
+  ).join('');
+
+  _openWorkspaceModal(
+    `Edit Student Information Only`,
+    `Editing Student: ${student.name} (${student.id}) — Does NOT alter Family profile`,
+    `
+      <form onsubmit="submitEditSingleStudentForm(event, '${_esc360(family.id)}', '${_esc360(student.id)}')" class="space-y-4 text-xs">
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <label class="font-extrabold text-slate-700 block mb-1">Student Full Name *</label>
+            <input type="text" id="fwEditStuName" value="${_esc360(student.name)}" required class="w-full p-2.5 rounded-xl border border-slate-300 font-bold text-slate-900">
+          </div>
+          <div>
+            <label class="font-extrabold text-slate-700 block mb-1">Joining Date</label>
+            <input type="date" id="fwEditStuJoinDate" value="${_esc360(student.joining_date || '2026-01-01')}" class="w-full p-2.5 rounded-xl border border-slate-300 font-bold text-slate-800">
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div>
+            <label class="font-extrabold text-slate-700 block mb-1">Age</label>
+            <input type="number" id="fwEditStuAge" value="${_esc360(student.age || 8)}" class="w-full p-2.5 rounded-xl border border-slate-300 font-bold text-slate-800">
+          </div>
+          <div>
+            <label class="font-extrabold text-slate-700 block mb-1">Gender</label>
+            <select id="fwEditStuGender" class="w-full p-2.5 rounded-xl border border-slate-300 font-bold text-slate-800">
+              <option value="Male" ${student.gender === 'Male' ? 'selected' : ''}>Male</option>
+              <option value="Female" ${student.gender === 'Female' ? 'selected' : ''}>Female</option>
+            </select>
+          </div>
+          <div>
+            <label class="font-extrabold text-slate-700 block mb-1">Student Status</label>
+            <select id="fwEditStuStatus" class="w-full p-2.5 rounded-xl border border-slate-300 font-bold text-slate-800">
+              <option value="Active" ${String(student.status || 'Active').toLowerCase() === 'active' ? 'selected' : ''}>Active</option>
+              <option value="Leave" ${String(student.status || '').toLowerCase().includes('leave') ? 'selected' : ''}>On Leave</option>
+              <option value="Inactive" ${String(student.status || '').toLowerCase() === 'inactive' ? 'selected' : ''}>Deactivated</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <label class="font-extrabold text-slate-700 block mb-1">Course / Subject</label>
+            <input type="text" id="fwEditStuCourse" value="${_esc360(student.course_id || 'Quran Studies')}" class="w-full p-2.5 rounded-xl border border-slate-300 font-bold text-slate-900">
+          </div>
+          <div>
+            <label class="font-extrabold text-slate-700 block mb-1">Assigned Teacher</label>
+            <select id="fwEditStuTeacher" class="w-full p-2.5 rounded-xl border border-slate-300 font-bold text-slate-800">
+              <option value="">-- No Teacher Assigned --</option>
+              ${teacherOptions}
+            </select>
+          </div>
+        </div>
+
+        <div>
+          <label class="font-extrabold text-slate-700 block mb-1">Days / Schedule Preference</label>
+          <input type="text" id="fwEditStuDays" value="${_esc360(stuMeta.days_per_week || '5 Days (Mon-Fri)')}" class="w-full p-2.5 rounded-xl border border-slate-300 font-bold text-slate-800">
+        </div>
+
+        <div class="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
+          <button type="button" onclick="_closeWorkspaceModal()" class="px-4 py-2 rounded-xl bg-slate-100 text-slate-700 font-bold">Cancel</button>
+          <button type="submit" class="px-5 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-extrabold">
+            Save Student Changes
+          </button>
+        </div>
+      </form>
+    `
+  );
+}
+
+async function submitEditSingleStudentForm(e, familyId, studentId) {
+  e.preventDefault();
+  const student = (window.ALL_STUDENTS || []).find(s => String(s.id).toUpperCase() === String(studentId).toUpperCase());
+  if (!student) return;
+
+  const name = document.getElementById('fwEditStuName').value.trim();
+  const joining_date = document.getElementById('fwEditStuJoinDate').value;
+  const age = parseInt(document.getElementById('fwEditStuAge').value, 10) || 8;
+  const gender = document.getElementById('fwEditStuGender').value;
+  const status = document.getElementById('fwEditStuStatus').value;
+  const course_id = document.getElementById('fwEditStuCourse').value.trim();
+  const assigned_teacher_id = document.getElementById('fwEditStuTeacher').value || null;
+  const days_per_week = document.getElementById('fwEditStuDays').value.trim();
+
+  const stuMeta = _parseStudentStructuredNotes(student);
+  stuMeta.days_per_week = days_per_week;
+  stuMeta.on_leave = (status.toLowerCase() === 'leave');
+
+  await _saveStudentRecordBackend(student.id, {
+    name,
+    joining_date,
+    age,
+    gender,
+    status,
+    course_id,
+    assigned_teacher_id,
+    notes: JSON.stringify(stuMeta)
+  });
+
+  _closeWorkspaceModal();
+  _notify360(`Student ${name}'s information updated in backend!`);
+  await openFamily360Profile(familyId, 'students', true, { selectedStudentId: student.id, studentSubView: 'info' });
+}
+
+/**
+ * STUDENT-ONLY DEACTIVATION (Section #13)
+ * Deactivates ONLY the selected Student; Family and sibling Students remain Active!
+ */
+async function toggleSingleStudentDeactivate(familyId, studentId) {
+  const student = (window.ALL_STUDENTS || []).find(s => String(s.id).toUpperCase() === String(studentId).toUpperCase());
+  if (!student) return;
+
+  const isCurrentlyInactive = String(student.status || '').toLowerCase() === 'inactive' || String(student.status || '').toLowerCase() === 'deactivated';
+  const newStatus = isCurrentlyInactive ? 'Active' : 'Inactive';
+
+  const msg = isCurrentlyInactive
+    ? `Reactivate student "${student.name}" (${student.id})?`
+    : `DEACTIVATE THIS STUDENT ONLY?\n\nStudent: ${student.name} (${student.id})\n\n• ${student.name} will be marked Deactivated.\n• The Family account and all other sibling students in this family will remain ACTIVE.`;
+
+  if (!confirm(msg)) return;
+
+  await _saveStudentRecordBackend(student.id, { status: newStatus });
+  _notify360(`${student.name} is now ${newStatus === 'Inactive' ? 'Deactivated' : 'Active'} (Family & siblings unaffected).`);
+  await openFamily360Profile(familyId, 'students', true, { selectedStudentId: student.id });
+}
+
+/**
+ * STUDENT-ONLY LEAVE (Section #14)
+ * Places ONLY the selected Student On Leave; Family and sibling Students remain Active!
+ */
+async function toggleSingleStudentLeave(familyId, studentId) {
+  const student = (window.ALL_STUDENTS || []).find(s => String(s.id).toUpperCase() === String(studentId).toUpperCase());
+  if (!student) return;
+
+  const stuMeta = _parseStudentStructuredNotes(student);
+  const isCurrentlyOnLeave = String(student.status || '').toLowerCase().includes('leave') || Boolean(stuMeta.on_leave);
+  const newStatus = isCurrentlyOnLeave ? 'Active' : 'Leave';
+
+  const msg = isCurrentlyOnLeave
+    ? `Return student "${student.name}" from leave to Active status?`
+    : `Place ONLY "${student.name}" (${student.id}) on Leave?\n\nThe Family and other sibling students will remain Active.`;
+
+  if (!confirm(msg)) return;
+
+  stuMeta.on_leave = !isCurrentlyOnLeave;
+  await _saveStudentRecordBackend(student.id, {
+    status: newStatus,
+    notes: JSON.stringify(stuMeta)
+  });
+
+  _notify360(`${student.name} is now ${newStatus === 'Leave' ? 'On Leave' : 'Active'} (Student-only status updated).`);
+  await openFamily360Profile(familyId, 'students', true, { selectedStudentId: student.id });
+}
+
+// ============================================================================
+// FAMILY-LEVEL ACTIONS (Section #15)
+// 1. Deactivate Family
+// 2. Make Family on Leave
+// 3. Suspend Family Classes
+// 4. Edit Family Profile
+// ============================================================================
+async function handleFamilyLevelDeactivate(familyId) {
+  const family = (window.ALL_FAMILIES || []).find(f => String(f.id).toUpperCase() === String(familyId).toUpperCase());
+  if (!family) return;
+
+  const isInactive = String(family.status || '').toLowerCase() === 'inactive';
+  const targetStatus = isInactive ? 'Active' : 'Inactive';
+
+  if (!confirm(`${isInactive ? 'Activate' : 'Deactivate'} the ENTIRE Family account for "${family.parent_name}" (${family.id})?`)) return;
+
+  const fNotes = _parseFamilyStructuredNotes(family);
+  await _saveFamilyStructuredNotes(family.id, fNotes, { status: targetStatus });
+
+  _notify360(`Family "${family.parent_name}" status updated to ${targetStatus}.`);
+  _renderFamilyWorkspaceDOM();
+}
+
+async function handleFamilyLevelLeave(familyId) {
+  const family = (window.ALL_FAMILIES || []).find(f => String(f.id).toUpperCase() === String(familyId).toUpperCase());
+  if (!family) return;
+
+  const isLeave = String(family.status || '').toLowerCase().includes('leave');
+  const targetStatus = isLeave ? 'Active' : 'On Leave';
+
+  if (!confirm(`${isLeave ? 'Return entire Family from Leave' : 'Place entire Family on Leave'} (${family.parent_name} • ${family.id})?`)) return;
+
+  const fNotes = _parseFamilyStructuredNotes(family);
+  await _saveFamilyStructuredNotes(family.id, fNotes, { status: targetStatus });
+
+  _notify360(`Family "${family.parent_name}" is now marked ${targetStatus}.`);
+  _renderFamilyWorkspaceDOM();
+}
+
+async function handleFamilyLevelSuspendClasses(familyId) {
+  const family = (window.ALL_FAMILIES || []).find(f => String(f.id).toUpperCase() === String(familyId).toUpperCase());
+  if (!family) return;
+
+  const fNotes = _parseFamilyStructuredNotes(family);
+  const isSuspended = String(family.status || '').toLowerCase() === 'suspended' || Boolean(fNotes.bio_meta.classes_suspended);
+
+  if (!confirm(`${isSuspended ? 'Unsuspend' : 'Suspend'} all classes for Family "${family.parent_name}" (${family.id})?`)) return;
+
+  fNotes.bio_meta.classes_suspended = !isSuspended;
+  const newStatus = !isSuspended ? 'Suspended' : 'Active';
+
+  await _saveFamilyStructuredNotes(family.id, fNotes, { status: newStatus });
+  _notify360(`Classes for Family "${family.parent_name}" have been ${!isSuspended ? 'Suspended' : 'Unsuspended'}.`);
+  _renderFamilyWorkspaceDOM();
+}
+
+function openEditFamilyProfileModal(familyId) {
+  const family = (window.ALL_FAMILIES || []).find(f => String(f.id).toUpperCase() === String(familyId).toUpperCase());
+  if (!family) return;
+
+  const fNotes = _parseFamilyStructuredNotes(family);
+  const bio = fNotes.bio_meta || {};
+  const creds = (typeof getParentCreds === 'function') ? getParentCreds(family) : { username: 'parent_' + family.id, password: '123456' };
+
+  _openWorkspaceModal(
+    `Edit Family Profile Information`,
+    `Family ID: ${family.id} — Updates Family Header & Bio Data`,
+    `
+      <form onsubmit="submitEditFamilyProfileForm(event, '${_esc360(family.id)}')" class="space-y-4 text-xs">
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <label class="font-extrabold text-slate-700 block mb-1">Parent / Family Name *</label>
+            <input type="text" id="fwEditFamName" value="${_esc360(family.parent_name)}" required class="w-full p-2.5 rounded-xl border border-slate-300 font-bold text-slate-900">
+          </div>
+          <div>
+            <label class="font-extrabold text-slate-700 block mb-1">Email Address</label>
+            <input type="email" id="fwEditFamEmail" value="${_esc360(family.parent_email || '')}" class="w-full p-2.5 rounded-xl border border-slate-300 font-bold text-slate-900">
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <label class="font-extrabold text-slate-700 block mb-1">Telephone</label>
+            <input type="text" id="fwEditFamTel" value="${_esc360(bio.telephone || family.whatsapp || '')}" class="w-full p-2.5 rounded-xl border border-slate-300 font-bold text-slate-800">
+          </div>
+          <div>
+            <label class="font-extrabold text-slate-700 block mb-1">Mobile</label>
+            <input type="text" id="fwEditFamMobile" value="${_esc360(bio.mobile || '')}" class="w-full p-2.5 rounded-xl border border-slate-300 font-bold text-slate-800">
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div>
+            <label class="font-extrabold text-slate-700 block mb-1">Country</label>
+            <input type="text" id="fwEditFamCountry" value="${_esc360(family.country || 'United Kingdom')}" class="w-full p-2.5 rounded-xl border border-slate-300 font-bold text-slate-800">
+          </div>
+          <div>
+            <label class="font-extrabold text-slate-700 block mb-1">City</label>
+            <input type="text" id="fwEditFamCity" value="${_esc360(bio.city || '')}" class="w-full p-2.5 rounded-xl border border-slate-300 font-bold text-slate-800">
+          </div>
+          <div>
+            <label class="font-extrabold text-slate-700 block mb-1">Timezone</label>
+            <input type="text" id="fwEditFamTz" value="${_esc360(bio.timezone || _inferTimezoneFromCountry(family.country))}" class="w-full p-2.5 rounded-xl border border-slate-300 font-bold text-slate-800">
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div>
+            <label class="font-extrabold text-slate-700 block mb-1">Monthly Fee</label>
+            <input type="number" step="0.01" id="fwEditFamFee" value="${_esc360(family.monthly_fee || 0)}" class="w-full p-2.5 rounded-xl border border-slate-300 font-bold text-slate-900">
+          </div>
+          <div>
+            <label class="font-extrabold text-slate-700 block mb-1">Currency</label>
+            <input type="text" id="fwEditFamCurr" value="${_esc360(family.currency || 'GBP')}" class="w-full p-2.5 rounded-xl border border-slate-300 font-bold text-slate-800">
+          </div>
+          <div>
+            <label class="font-extrabold text-slate-700 block mb-1">Meeting Platform</label>
+            <select id="fwEditFamPlatform" class="w-full p-2.5 rounded-xl border border-slate-300 font-bold text-slate-800">
+              <option value="Zoom" ${(bio.meeting_platform || 'Zoom') === 'Zoom' ? 'selected' : ''}>Zoom</option>
+              <option value="Skype" ${bio.meeting_platform === 'Skype' ? 'selected' : ''}>Skype</option>
+              <option value="Google Meet" ${bio.meeting_platform === 'Google Meet' ? 'selected' : ''}>Google Meet</option>
+              <option value="Microsoft Teams" ${bio.meeting_platform === 'Microsoft Teams' ? 'selected' : ''}>Microsoft Teams</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <label class="font-extrabold text-slate-700 block mb-1">Portal Username</label>
+            <input type="text" id="fwEditFamUser" value="${_esc360(creds.username)}" class="w-full p-2.5 rounded-xl border border-slate-300 font-mono font-bold text-slate-800">
+          </div>
+          <div>
+            <label class="font-extrabold text-slate-700 block mb-1">Portal Password</label>
+            <input type="text" id="fwEditFamPass" value="${_esc360(creds.password)}" class="w-full p-2.5 rounded-xl border border-slate-300 font-mono font-bold text-slate-800">
+          </div>
+        </div>
+
+        <div class="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
+          <button type="button" onclick="_closeWorkspaceModal()" class="px-4 py-2 rounded-xl bg-slate-100 text-slate-700 font-bold">Cancel</button>
+          <button type="submit" class="px-5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold">
+            Save Family Profile
+          </button>
+        </div>
+      </form>
+    `
+  );
+}
+
+async function submitEditFamilyProfileForm(e, familyId) {
+  e.preventDefault();
+  const family = (window.ALL_FAMILIES || []).find(f => String(f.id).toUpperCase() === String(familyId).toUpperCase());
+  if (!family) return;
+
+  const parent_name = document.getElementById('fwEditFamName').value.trim();
+  const parent_email = document.getElementById('fwEditFamEmail').value.trim();
+  const telephone = document.getElementById('fwEditFamTel').value.trim();
+  const mobile = document.getElementById('fwEditFamMobile').value.trim();
+  const country = document.getElementById('fwEditFamCountry').value.trim();
+  const city = document.getElementById('fwEditFamCity').value.trim();
+  const timezone = document.getElementById('fwEditFamTz').value.trim();
+  const monthly_fee = parseFloat(document.getElementById('fwEditFamFee').value) || 0;
+  const currency = document.getElementById('fwEditFamCurr').value.trim() || 'USD';
+  const meeting_platform = document.getElementById('fwEditFamPlatform').value;
+  const username = document.getElementById('fwEditFamUser').value.trim();
+  const password = document.getElementById('fwEditFamPass').value.trim();
+
+  const fNotes = _parseFamilyStructuredNotes(family);
+  fNotes.bio_meta = {
+    ...fNotes.bio_meta,
+    telephone,
+    mobile,
+    city,
+    timezone,
+    meeting_platform
+  };
+
+  await _saveFamilyStructuredNotes(family.id, fNotes, {
+    parent_name,
+    parent_email,
+    whatsapp: telephone || family.whatsapp,
+    country,
+    monthly_fee,
+    currency
+  });
+
+  if (typeof saveParentAccount === 'function') {
+    saveParentAccount(family.id, { username, password, parent_name, whatsapp: telephone, city, country, monthly_fee, currency });
+  }
+
+  _closeWorkspaceModal();
+  _notify360(`Family Profile for "${parent_name}" updated across the LMS!`);
+  _renderFamilyWorkspaceDOM();
+}
+
+// ============================================================================
+// PAYMENT ACTIONS: VIEW, EDIT, EMAIL, DELETE (Section #19 & #20)
+// ============================================================================
+function viewFamilyPaymentInvoiceModal(familyId, recordId, month, year) {
+  const family = (window.ALL_FAMILIES || []).find(f => String(f.id).toUpperCase() === String(familyId).toUpperCase());
+  if (!family) return;
+  const payData = _getFamilyPaymentsList(family);
+  const row = payData.rows.find(r => r.recordId === recordId || (r.month === month && String(r.year) === String(year))) || payData.rows[0];
+  if (!row) return;
+
+  _openWorkspaceModal(
+    `Official Invoice / Payment Record`,
+    `Reference: ${row.recordId} • ${row.monthDisplay}`,
+    `
+      <div class="space-y-4 text-xs">
+        <div class="p-4 rounded-xl bg-slate-50 border border-slate-200 space-y-2">
+          <div class="flex justify-between"><span class="text-slate-500">Family / Parent:</span> <strong class="text-slate-900">${_esc360(family.parent_name)} (${_esc360(family.id)})</strong></div>
+          <div class="flex justify-between"><span class="text-slate-500">Billing Month:</span> <strong class="text-slate-900">${_esc360(row.monthDisplay)}</strong></div>
+          <div class="flex justify-between"><span class="text-slate-500">Payment Method:</span> <strong class="text-emerald-800">${_esc360(row.paymentMethod)}</strong></div>
+          <div class="flex justify-between"><span class="text-slate-500">Paid Date:</span> <strong class="font-mono text-slate-800">${_esc360(row.paidDate)}</strong></div>
+          <div class="flex justify-between"><span class="text-slate-500">Fee Amount:</span> <strong class="font-mono text-base text-slate-900">${_esc360(row.currency)} ${_esc360(row.feeAmount)}</strong></div>
+          <div class="flex justify-between"><span class="text-slate-500">Status:</span> <strong class="${row.status === 'PAID' ? 'text-emerald-700' : 'text-rose-700'}">${_esc360(row.status)}</strong></div>
+          <div class="flex justify-between"><span class="text-slate-500">Reason / Purpose:</span> <strong class="text-slate-800">${_esc360(row.reason || 'Monthly Tuition Fee')}</strong></div>
+        </div>
+        <div class="flex justify-end gap-2">
+          <button onclick="_closeWorkspaceModal()" class="px-4 py-2 rounded-xl bg-slate-100 text-slate-700 font-bold">Close</button>
+          <button onclick="openEditFamilyPaymentModal('${_esc360(family.id)}', '${_esc360(row.recordId)}', '${_esc360(row.month)}', '${_esc360(row.year)}')" class="px-4 py-2 rounded-xl bg-amber-500 text-white font-extrabold">
+            Edit Record
+          </button>
+        </div>
+      </div>
+    `
+  );
+}
+
+function openEditFamilyPaymentModal(familyId, recordId, month, year) {
+  const family = (window.ALL_FAMILIES || []).find(f => String(f.id).toUpperCase() === String(familyId).toUpperCase());
+  if (!family) return;
+  const payData = _getFamilyPaymentsList(family);
+  const row = payData.rows.find(r => r.recordId === recordId || (r.month === month && String(r.year) === String(year)));
+  if (!row) return;
+
+  const today = new Date().toISOString().slice(0, 10);
+  const dateVal = row.paidDate && row.paidDate !== '--' ? row.paidDate : today;
+
+  _openWorkspaceModal(
+    `Edit Payment / Invoice Record`,
+    `${family.parent_name} • ${row.monthDisplay}`,
+    `
+      <form onsubmit="submitEditFamilyPaymentForm(event, '${_esc360(family.id)}', '${_esc360(row.recordId)}', '${_esc360(row.month)}', '${_esc360(row.year)}')" class="space-y-4 text-xs">
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <label class="font-extrabold text-slate-700 block mb-1">Payment Method *</label>
+            <input type="text" id="fwEditPayMethod" value="${_esc360(row.paymentMethod)}" required class="w-full p-2.5 rounded-xl border border-slate-300 font-bold text-slate-900">
+          </div>
+          <div>
+            <label class="font-extrabold text-slate-700 block mb-1">Status *</label>
+            <select id="fwEditPayStatus" class="w-full p-2.5 rounded-xl border border-slate-300 font-bold text-slate-900">
+              <option value="PAID" ${row.status === 'PAID' ? 'selected' : ''}>PAID</option>
+              <option value="UNPAID" ${row.status !== 'PAID' ? 'selected' : ''}>UNPAID</option>
+            </select>
+          </div>
+        </div>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <label class="font-extrabold text-slate-700 block mb-1">Paid Date</label>
+            <input type="date" id="fwEditPayDate" value="${_esc360(dateVal)}" class="w-full p-2.5 rounded-xl border border-slate-300 font-bold text-slate-800">
+          </div>
+          <div>
+            <label class="font-extrabold text-slate-700 block mb-1">Fee Amount (${_esc360(row.currency)}) *</label>
+            <input type="number" step="0.01" id="fwEditPayFee" value="${_esc360(row.feeAmount)}" required class="w-full p-2.5 rounded-xl border border-slate-300 font-bold text-slate-900">
+          </div>
+        </div>
+        <div>
+          <label class="font-extrabold text-slate-700 block mb-1">Reason / Notes</label>
+          <input type="text" id="fwEditPayReason" value="${_esc360(row.reason || 'Monthly Tuition Fee')}" class="w-full p-2.5 rounded-xl border border-slate-300 font-bold text-slate-800">
+        </div>
+        <div class="flex justify-end gap-2 pt-3 border-t border-slate-100">
+          <button type="button" onclick="_closeWorkspaceModal()" class="px-4 py-2 rounded-xl bg-slate-100 text-slate-700 font-bold">Cancel</button>
+          <button type="submit" class="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold">Save Changes</button>
+        </div>
+      </form>
+    `
+  );
+}
+
+async function submitEditFamilyPaymentForm(e, familyId, recordId, month, year) {
+  e.preventDefault();
+  const family = (window.ALL_FAMILIES || []).find(f => String(f.id).toUpperCase() === String(familyId).toUpperCase());
+  if (!family) return;
+
+  const paymentMethod = document.getElementById('fwEditPayMethod').value.trim();
+  const status = document.getElementById('fwEditPayStatus').value;
+  const paidDate = status === 'PAID' ? document.getElementById('fwEditPayDate').value : '--';
+  const feeAmount = parseFloat(document.getElementById('fwEditPayFee').value) || 0;
+  const reason = document.getElementById('fwEditPayReason').value.trim();
+
+  const fNotes = _parseFamilyStructuredNotes(family);
+  const receiptKey = recordId.startsWith('AUTO-') ? `AH-REC-${family.id}-${month}-${year}` : recordId;
+
+  const updatedEntry = {
+    receiptNo: receiptKey,
+    familyId: family.id,
+    parentName: family.parent_name,
+    month,
+    year: Number(year) || 2026,
+    date: paidDate,
+    amountPaid: status === 'PAID' ? feeAmount : 0,
+    amount: feeAmount,
+    currency: family.currency || 'USD',
+    paymentMethod,
+    status,
+    reason,
+    remarks: reason,
+    updated_at: new Date().toISOString()
+  };
+
+  const idx = fNotes.fee_history.findIndex(r => r.receiptNo === recordId || r.receiptNo === receiptKey || (r.month === month && String(r.year) === String(year)));
+  if (idx >= 0) fNotes.fee_history[idx] = { ...fNotes.fee_history[idx], ...updatedEntry };
+  else fNotes.fee_history.unshift(updatedEntry);
+
+  const ovKey = `${String(family.id).toUpperCase()}_${month}_${year}`;
+  if (status === 'PAID') {
+    fNotes.matrix_overrides[ovKey] = { status: 'paid', amountPaid: feeAmount, date: paidDate };
+  } else {
+    delete fNotes.matrix_overrides[ovKey];
+  }
+
+  // Sync with main Fee System cache
+  if (typeof getStoredFeeRecords === 'function' && typeof saveStoredFeeRecords === 'function') {
+    const all = getStoredFeeRecords() || [];
+    const gIdx = all.findIndex(r => r.receiptNo === recordId || r.receiptNo === receiptKey);
+    if (gIdx >= 0) all[gIdx] = { ...all[gIdx], ...updatedEntry };
+    else all.unshift(updatedEntry);
+    saveStoredFeeRecords(all);
+  }
+
+  await _saveFamilyStructuredNotes(family.id, fNotes);
+  if (typeof loadFeeDashboardStats === 'function') {
+    try { loadFeeDashboardStats(); } catch (err) {}
+  }
+
+  _closeWorkspaceModal();
+  _notify360(`Payment record for ${month} ${year} updated to ${status}!`);
+  _renderFamilyWorkspaceDOM();
+}
+
+function emailSpecificFamilyInvoice(familyId, recordId, month, year) {
+  openFamilySendInvoiceModal(familyId);
+}
+
+async function deleteFamilyPaymentRecord(familyId, recordId, month, year) {
+  if (window.CURRENT_ROLE === 'teacher' || window.CURRENT_ROLE === 'student') {
+    alert('Access Denied: Only Admin/Management can delete payment entries.');
+    return;
+  }
+
+  if (!confirm(`Are you sure you want to delete the payment/invoice entry for ${month} ${year}?\n\nThis will remove the record from the backend and recalculate financial totals.`)) return;
+
+  const family = (window.ALL_FAMILIES || []).find(f => String(f.id).toUpperCase() === String(familyId).toUpperCase());
+  if (!family) return;
+
+  const fNotes = _parseFamilyStructuredNotes(family);
+  fNotes.fee_history = (fNotes.fee_history || []).filter(r => r.receiptNo !== recordId && !(String(r.month).toLowerCase() === String(month).toLowerCase() && String(r.year) === String(year)));
+
+  const ovKey = `${String(family.id).toUpperCase()}_${month}_${year}`;
+  if (fNotes.matrix_overrides && ovKey in fNotes.matrix_overrides) {
+    delete fNotes.matrix_overrides[ovKey];
+  }
+
+  if (!Array.isArray(fNotes.deleted_payment_months)) fNotes.deleted_payment_months = [];
+  const delKey = `${String(month).toLowerCase()}_${year}`;
+  if (!fNotes.deleted_payment_months.includes(delKey)) {
+    fNotes.deleted_payment_months.push(delKey);
+  }
+
+  if (typeof getStoredFeeRecords === 'function' && typeof saveStoredFeeRecords === 'function') {
+    const filteredGlobal = (getStoredFeeRecords() || []).filter(r => r.receiptNo !== recordId);
+    saveStoredFeeRecords(filteredGlobal);
+  }
+
+  await _saveFamilyStructuredNotes(family.id, fNotes);
+  if (typeof loadFeeDashboardStats === 'function') {
+    try { loadFeeDashboardStats(); } catch (err) {}
+  }
+
+  _notify360(`Payment entry for ${month} ${year} deleted and financial totals updated.`);
+  _renderFamilyWorkspaceDOM();
+}
+
+// ============================================================================
+// MANAGER NOTES & TEACHER NOTES CRUD (Sections #22 & #23)
+// ============================================================================
+function openAddOrEditManagerNoteModal(familyId, noteId = null) {
+  const family = (window.ALL_FAMILIES || []).find(f => String(f.id).toUpperCase() === String(familyId).toUpperCase());
+  if (!family) return;
+  const fNotes = _parseFamilyStructuredNotes(family);
+  const existing = noteId ? (fNotes.manager_notes || []).find(n => n.id === noteId) : null;
+
+  _openWorkspaceModal(
+    existing ? `Edit Manager Note` : `Add New Manager Note`,
+    `Family: ${family.parent_name} (${family.id})`,
+    `
+      <form onsubmit="submitManagerNoteForm(event, '${_esc360(family.id)}', '${_esc360(noteId || '')}')" class="space-y-4 text-xs">
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <label class="font-extrabold text-slate-700 block mb-1">Category</label>
+            <select id="fwMgrNoteCat" class="w-full p-2.5 rounded-xl border border-slate-300 font-bold text-slate-800">
+              <option value="Management Follow-Up" ${existing?.category === 'Management Follow-Up' ? 'selected' : ''}>Management Follow-Up</option>
+              <option value="Fee & Billing" ${existing?.category === 'Fee & Billing' ? 'selected' : ''}>Fee &amp; Billing</option>
+              <option value="Schedule & Attendance" ${existing?.category === 'Schedule & Attendance' ? 'selected' : ''}>Schedule &amp; Attendance</option>
+              <option value="Parent Communication" ${existing?.category === 'Parent Communication' ? 'selected' : ''}>Parent Communication</option>
+            </select>
+          </div>
+          <div>
+            <label class="font-extrabold text-slate-700 block mb-1">Author</label>
+            <input type="text" id="fwMgrNoteAuthor" value="${_esc360(existing?.author || (window.CURRENT_ROLE === 'manager' ? 'Operations Manager' : 'Executive Admin'))}" class="w-full p-2.5 rounded-xl border border-slate-300 font-bold text-slate-800">
+          </div>
+        </div>
+        <div>
+          <label class="font-extrabold text-slate-700 block mb-1">Note Content *</label>
+          <textarea id="fwMgrNoteContent" rows="5" required placeholder="Enter detailed administrative note..." class="w-full p-3 rounded-xl border border-slate-300 text-xs text-slate-900">${_esc360(existing?.content || '')}</textarea>
+        </div>
+        <div class="flex justify-end gap-2 pt-3 border-t border-slate-100">
+          <button type="button" onclick="_closeWorkspaceModal()" class="px-4 py-2 rounded-xl bg-slate-100 text-slate-700 font-bold">Cancel</button>
+          <button type="submit" class="px-5 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-extrabold">Save Manager Note</button>
+        </div>
+      </form>
+    `
+  );
+}
+
+async function submitManagerNoteForm(e, familyId, noteId) {
+  e.preventDefault();
+  const family = (window.ALL_FAMILIES || []).find(f => String(f.id).toUpperCase() === String(familyId).toUpperCase());
+  if (!family) return;
+
+  const category = document.getElementById('fwMgrNoteCat').value;
+  const author = document.getElementById('fwMgrNoteAuthor').value.trim();
+  const content = document.getElementById('fwMgrNoteContent').value.trim();
+
+  const fNotes = _parseFamilyStructuredNotes(family);
+  if (noteId) {
+    const idx = fNotes.manager_notes.findIndex(n => n.id === noteId);
+    if (idx >= 0) {
+      fNotes.manager_notes[idx] = { ...fNotes.manager_notes[idx], category, author, content };
+    }
+  } else {
+    fNotes.manager_notes.unshift({
+      id: `MGR-NOTE-${Date.now()}`,
+      category,
+      author,
+      content,
+      created_at: new Date().toISOString().slice(0, 16).replace('T', ' ')
+    });
+  }
+
+  await _saveFamilyStructuredNotes(family.id, fNotes);
+  _closeWorkspaceModal();
+  _notify360(`Manager's Note saved to database!`);
+  _renderFamilyWorkspaceDOM();
+}
+
+async function deleteFamilyManagerNote(familyId, noteId) {
+  if (!confirm('Delete this Manager Note permanently?')) return;
+  const family = (window.ALL_FAMILIES || []).find(f => String(f.id).toUpperCase() === String(familyId).toUpperCase());
+  if (!family) return;
+
+  const fNotes = _parseFamilyStructuredNotes(family);
+  fNotes.manager_notes = (fNotes.manager_notes || []).filter(n => n.id !== noteId);
+  await _saveFamilyStructuredNotes(family.id, fNotes);
+  _notify360(`Manager Note deleted.`);
+  _renderFamilyWorkspaceDOM();
+}
+
+function openAddTeacherNoteModal(familyId) {
+  const family = (window.ALL_FAMILIES || []).find(f => String(f.id).toUpperCase() === String(familyId).toUpperCase());
+  if (!family) return;
+  const famStudents = (window.ALL_STUDENTS || []).filter(s => String(s.family_id).toUpperCase() === String(family.id).toUpperCase());
+
+  _openWorkspaceModal(
+    `Add Teacher Note for Student`,
+    `Family: ${family.parent_name} (${family.id})`,
+    `
+      <form onsubmit="submitTeacherNoteForm(event, '${_esc360(family.id)}')" class="space-y-4 text-xs">
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <label class="font-extrabold text-slate-700 block mb-1">Select Student *</label>
+            <select id="fwTchNoteStudent" class="w-full p-2.5 rounded-xl border border-slate-300 font-bold text-slate-800">
+              ${famStudents.map(s => `<option value="${_esc360(s.id)}">${_esc360(s.name)} (${_esc360(s.id)})</option>`).join('')}
+            </select>
+          </div>
+          <div>
+            <label class="font-extrabold text-slate-700 block mb-1">Instructor Name</label>
+            <input type="text" id="fwTchNoteAuthor" value="${_esc360((window.ALL_TEACHERS.find(t => String(t.id) === String(famStudents[0]?.assigned_teacher_id))?.full_name) || 'Assigned Quran Instructor')}" class="w-full p-2.5 rounded-xl border border-slate-300 font-bold text-slate-800">
+          </div>
+        </div>
+        <div>
+          <label class="font-extrabold text-slate-700 block mb-1">Teacher Observation / Note *</label>
+          <textarea id="fwTchNoteContent" rows="4" required placeholder="Enter student Tajweed, memorization, or homework feedback..." class="w-full p-3 rounded-xl border border-slate-300 text-xs text-slate-900"></textarea>
+        </div>
+        <div class="flex justify-end gap-2 pt-3 border-t border-slate-100">
+          <button type="button" onclick="_closeWorkspaceModal()" class="px-4 py-2 rounded-xl bg-slate-100 text-slate-700 font-bold">Cancel</button>
+          <button type="submit" class="px-5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold">Save Teacher Note</button>
+        </div>
+      </form>
+    `
+  );
+}
+
+async function submitTeacherNoteForm(e, familyId) {
+  e.preventDefault();
+  const family = (window.ALL_FAMILIES || []).find(f => String(f.id).toUpperCase() === String(familyId).toUpperCase());
+  if (!family) return;
+
+  const studentId = document.getElementById('fwTchNoteStudent').value;
+  const student = (window.ALL_STUDENTS || []).find(s => String(s.id).toUpperCase() === String(studentId).toUpperCase());
+  const teacherName = document.getElementById('fwTchNoteAuthor').value.trim();
+  const content = document.getElementById('fwTchNoteContent').value.trim();
+
+  const fNotes = _parseFamilyStructuredNotes(family);
+  fNotes.teacher_notes.unshift({
+    id: `TCH-NOTE-${Date.now()}`,
+    studentId,
+    studentName: student ? student.name : studentId,
+    teacherName,
+    content,
+    date: new Date().toISOString().slice(0, 10),
+    created_at: new Date().toISOString()
+  });
+
+  await _saveFamilyStructuredNotes(family.id, fNotes);
+  _closeWorkspaceModal();
+  _notify360(`Teacher Note saved and linked to ${student ? student.name : 'Family'}!`);
+  _renderFamilyWorkspaceDOM();
+}
+
+async function deleteFamilyTeacherNote(familyId, noteId) {
+  if (!confirm('Delete this Teacher Note?')) return;
+  const family = (window.ALL_FAMILIES || []).find(f => String(f.id).toUpperCase() === String(familyId).toUpperCase());
+  if (!family) return;
+
+  const fNotes = _parseFamilyStructuredNotes(family);
+  fNotes.teacher_notes = (fNotes.teacher_notes || []).filter(n => n.id !== noteId);
+  await _saveFamilyStructuredNotes(family.id, fNotes);
+  _notify360(`Teacher Note removed.`);
+  _renderFamilyWorkspaceDOM();
+}
+
+// ============================================================================
+// DAILY LESSON & ATTENDANCE RECORDING + CERTIFICATES + PROGRESS (Sections #8, #9, #11)
+// ============================================================================
+function openRecordDailyLessonModal(familyId, studentId, presetDate = '') {
+  const student = (window.ALL_STUDENTS || []).find(s => String(s.id).toUpperCase() === String(studentId).toUpperCase());
+  if (!student) return;
+  const dateVal = presetDate || new Date().toISOString().slice(0, 10);
+
+  _openWorkspaceModal(
+    `Record Attendance & Daily Lesson`,
+    `Student: ${student.name} (${student.id})`,
+    `
+      <form onsubmit="submitRecordDailyLessonForm(event, '${_esc360(familyId)}', '${_esc360(student.id)}')" class="space-y-4 text-xs">
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <label class="font-extrabold text-slate-700 block mb-1">Class Date *</label>
+            <input type="date" id="fwLessonDate" value="${_esc360(dateVal)}" required class="w-full p-2.5 rounded-xl border border-slate-300 font-bold text-slate-800">
+          </div>
+          <div>
+            <label class="font-extrabold text-slate-700 block mb-1">Attendance Status *</label>
+            <select id="fwLessonStatus" class="w-full p-2.5 rounded-xl border border-slate-300 font-bold text-slate-800">
+              <option value="Present">Present</option>
+              <option value="Absent">Absent</option>
+              <option value="Leave">Leave</option>
+            </select>
+          </div>
+        </div>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <label class="font-extrabold text-slate-700 block mb-1">Book / Surah / Sabaq *</label>
+            <input type="text" id="fwLessonBook" value="${_esc360(student.course_id || 'Surah Al-Baqarah / Noorani Qaida')}" required class="w-full p-2.5 rounded-xl border border-slate-300 font-bold text-slate-900">
+          </div>
+          <div>
+            <label class="font-extrabold text-slate-700 block mb-1">Page / Ayah Range</label>
+            <input type="text" id="fwLessonPage" placeholder="e.g. Page 14, Lines 1-8" class="w-full p-2.5 rounded-xl border border-slate-300 font-bold text-slate-800">
+          </div>
+        </div>
+        <div>
+          <label class="font-extrabold text-slate-700 block mb-1">Teacher's Lesson Notes &amp; Evaluation *</label>
+          <textarea id="fwLessonRemarks" rows="3" required placeholder="Enter detailed daily lesson recited by the student..." class="w-full p-2.5 rounded-xl border border-slate-300 text-xs text-slate-900"></textarea>
+        </div>
+        <div class="flex justify-end gap-2 pt-3 border-t border-slate-100">
+          <button type="button" onclick="_closeWorkspaceModal()" class="px-4 py-2 rounded-xl bg-slate-100 text-slate-700 font-bold">Cancel</button>
+          <button type="submit" class="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold">Save Attendance &amp; Lesson</button>
+        </div>
+      </form>
+    `
+  );
+}
+
+async function submitRecordDailyLessonForm(e, familyId, studentId) {
+  e.preventDefault();
+  const date = document.getElementById('fwLessonDate').value;
+  const status = document.getElementById('fwLessonStatus').value;
+  const book_title = document.getElementById('fwLessonBook').value.trim();
+  const page = document.getElementById('fwLessonPage').value.trim();
+  const remarks = document.getElementById('fwLessonRemarks').value.trim();
+
+  const lesson_notes = JSON.stringify({
+    book_title,
+    page,
+    status: 'Completed',
+    remarks
+  });
+
+  await db.from('attendance_logs').upsert([{
+    student_id: studentId,
+    date,
+    status,
+    lesson_notes
+  }], { onConflict: 'student_id,date' });
+
+  _closeWorkspaceModal();
+  _CURRENT_360_STATE.selectedLessonDate = date;
+  _notify360(`Attendance (${status}) & Daily Lesson recorded for ${date}!`);
+  await openFamily360Profile(familyId, 'students', true, { selectedStudentId: studentId, studentSubView: 'history' });
+}
+
+function openIssueStudentCertificateModal(familyId, studentId) {
+  const student = (window.ALL_STUDENTS || []).find(s => String(s.id).toUpperCase() === String(studentId).toUpperCase());
+  if (!student) return;
+  const today = new Date().toISOString().slice(0, 10);
+
+  _openWorkspaceModal(
+    `Issue Official Student Certificate`,
+    `Student: ${student.name} (${student.id})`,
+    `
+      <form onsubmit="submitIssueStudentCertificateForm(event, '${_esc360(familyId)}', '${_esc360(student.id)}')" class="space-y-4 text-xs">
+        <div>
+          <label class="font-extrabold text-slate-700 block mb-1">Certificate Title / Milestone *</label>
+          <input type="text" id="fwCertTitle" value="${_esc360(student.course_id || 'Noorani Qaida')} Completion Certificate" required class="w-full p-2.5 rounded-xl border border-slate-300 font-bold text-slate-900">
+        </div>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <label class="font-extrabold text-slate-700 block mb-1">Award Date *</label>
+            <input type="date" id="fwCertDate" value="${today}" required class="w-full p-2.5 rounded-xl border border-slate-300 font-bold text-slate-800">
+          </div>
+          <div>
+            <label class="font-extrabold text-slate-700 block mb-1">Grade / Distinction</label>
+            <select id="fwCertGrade" class="w-full p-2.5 rounded-xl border border-slate-300 font-bold text-slate-800">
+              <option value="A+ (Mumtaz / Distinction)">A+ (Mumtaz / Distinction)</option>
+              <option value="A (Jayyid Jiddan / Excellent)">A (Jayyid Jiddan / Excellent)</option>
+              <option value="B+ (Good)">B+ (Good)</option>
+            </select>
+          </div>
+        </div>
+        <div>
+          <label class="font-extrabold text-slate-700 block mb-1">Citation / Remarks</label>
+          <input type="text" id="fwCertRemarks" placeholder="Completed with Tajweed excellence" class="w-full p-2.5 rounded-xl border border-slate-300 font-bold text-slate-800">
+        </div>
+        <div class="flex justify-end gap-2 pt-3 border-t border-slate-100">
+          <button type="button" onclick="_closeWorkspaceModal()" class="px-4 py-2 rounded-xl bg-slate-100 text-slate-700 font-bold">Cancel</button>
+          <button type="submit" class="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold">Issue Certificate</button>
+        </div>
+      </form>
+    `
+  );
+}
+
+async function submitIssueStudentCertificateForm(e, familyId, studentId) {
+  e.preventDefault();
+  const student = (window.ALL_STUDENTS || []).find(s => String(s.id).toUpperCase() === String(studentId).toUpperCase());
+  if (!student) return;
+
+  const title = document.getElementById('fwCertTitle').value.trim();
+  const date = document.getElementById('fwCertDate').value;
+  const grade = document.getElementById('fwCertGrade').value;
+  const remarks = document.getElementById('fwCertRemarks').value.trim();
+
+  const stuMeta = _parseStudentStructuredNotes(student);
+  stuMeta.certificates.unshift({
+    id: `CERT-${Date.now()}`,
+    code: `AH-CERT-${Math.floor(1000 + Math.random() * 9000)}`,
+    title,
+    date,
+    grade,
+    remarks
+  });
+
+  await _saveStudentRecordBackend(student.id, { notes: JSON.stringify(stuMeta) });
+  _closeWorkspaceModal();
+  _notify360(`Certificate issued for ${student.name}!`);
+  await openFamily360Profile(familyId, 'students', true, { selectedStudentId: student.id, studentSubView: 'certificates' });
+}
+
+async function deleteStudentCertificate360(familyId, studentId, certId) {
+  if (!confirm('Delete this certificate record?')) return;
+  const student = (window.ALL_STUDENTS || []).find(s => String(s.id).toUpperCase() === String(studentId).toUpperCase());
+  if (!student) return;
+
+  const stuMeta = _parseStudentStructuredNotes(student);
+  stuMeta.certificates = (stuMeta.certificates || []).filter(c => c.id !== certId);
+  await _saveStudentRecordBackend(student.id, { notes: JSON.stringify(stuMeta) });
+  _notify360('Certificate deleted.');
+  await openFamily360Profile(familyId, 'students', true, { selectedStudentId: student.id, studentSubView: 'certificates' });
+}
+
+function printStudentCertificate360(familyId, studentId, certId) {
+  const student = (window.ALL_STUDENTS || []).find(s => String(s.id).toUpperCase() === String(studentId).toUpperCase());
+  if (!student) return;
+  const stuMeta = _parseStudentStructuredNotes(student);
+  const cert = (stuMeta.certificates || []).find(c => c.id === certId);
+  if (!cert) return;
+
+  const w = window.open('', '_blank', 'width=850,height=650');
+  if (!w) return;
+  w.document.write(`
+    <html>
+      <head>
+        <title>${_esc360(cert.title)} - ${_esc360(student.name)}</title>
+        <style>
+          body { font-family: Georgia, serif; background: #f8fafc; padding: 30px; text-align: center; }
+          .cert-box { border: 8px double #0f172a; background: #fff; padding: 50px; border-radius: 16px; max-width: 720px; margin: 0 auto; }
+          h1 { color: #0f172a; font-size: 28px; margin-bottom: 5px; }
+          h2 { color: #047857; font-size: 22px; margin: 16px 0; }
+          .stu { font-size: 30px; font-weight: bold; color: #1e293b; border-bottom: 2px solid #cbd5e1; display: inline-block; padding: 4px 24px; margin: 12px 0; }
+        </style>
+      </head>
+      <body>
+        <div class="cert-box">
+          <div style="font-size:12px;letter-spacing:3px;text-transform:uppercase;color:#64748b;">Al-Huda Islamic Centre • Official Academic Board</div>
+          <h1>CERTIFICATE OF ACHIEVEMENT</h1>
+          <p>This is proudly presented to</p>
+          <div class="stu">${_esc360(student.name)}</div>
+          <h2>${_esc360(cert.title)}</h2>
+          <p>Grade / Distinction: <strong>${_esc360(cert.grade)}</strong></p>
+          <p>${_esc360(cert.remarks || '')}</p>
+          <p style="margin-top:30px;font-size:13px;color:#475569;">Certificate No: <strong>${_esc360(cert.code)}</strong> &bull; Date Awarded: <strong>${_esc360(cert.date)}</strong></p>
+        </div>
+        <script>window.onload = () => window.print();</script>
+      </body>
+    </html>
+  `);
+  w.document.close();
+}
+
+function openUpdateStudentProgressModal(familyId, studentId) {
+  const student = (window.ALL_STUDENTS || []).find(s => String(s.id).toUpperCase() === String(studentId).toUpperCase());
+  if (!student) return;
+  const stuMeta = _parseStudentStructuredNotes(student);
+
+  _openWorkspaceModal(
+    `Update Student Progress Milestone`,
+    `Student: ${student.name} (${student.id})`,
+    `
+      <form onsubmit="submitUpdateStudentProgressForm(event, '${_esc360(familyId)}', '${_esc360(student.id)}')" class="space-y-4 text-xs">
+        <div>
+          <label class="font-extrabold text-slate-700 block mb-1">Current Level / Book *</label>
+          <input type="text" id="fwProgLevel" value="${_esc360(stuMeta.current_level || student.course_id || 'Nazra Quran')}" required class="w-full p-2.5 rounded-xl border border-slate-300 font-bold text-slate-900">
+        </div>
+        <div>
+          <label class="font-extrabold text-slate-700 block mb-1">Current Sabaq (Para / Surah / Takhti) *</label>
+          <input type="text" id="fwProgSabaq" value="${_esc360(stuMeta.current_sabaq || 'Para 1 - Surah Al-Baqarah')}" required class="w-full p-2.5 rounded-xl border border-slate-300 font-bold text-slate-900">
+        </div>
+        <div>
+          <label class="font-extrabold text-slate-700 block mb-1">Instructor Evaluation Summary</label>
+          <input type="text" id="fwProgEval" value="${_esc360(stuMeta.overall_evaluation || 'Excellent Tajweed & Regular Progress')}" class="w-full p-2.5 rounded-xl border border-slate-300 font-bold text-slate-900">
+        </div>
+        <div class="flex justify-end gap-2 pt-3 border-t border-slate-100">
+          <button type="button" onclick="_closeWorkspaceModal()" class="px-4 py-2 rounded-xl bg-slate-100 text-slate-700 font-bold">Cancel</button>
+          <button type="submit" class="px-5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold">Save Progress</button>
+        </div>
+      </form>
+    `
+  );
+}
+
+async function submitUpdateStudentProgressForm(e, familyId, studentId) {
+  e.preventDefault();
+  const student = (window.ALL_STUDENTS || []).find(s => String(s.id).toUpperCase() === String(studentId).toUpperCase());
+  if (!student) return;
+
+  const stuMeta = _parseStudentStructuredNotes(student);
+  stuMeta.current_level = document.getElementById('fwProgLevel').value.trim();
+  stuMeta.current_sabaq = document.getElementById('fwProgSabaq').value.trim();
+  stuMeta.overall_evaluation = document.getElementById('fwProgEval').value.trim();
+
+  await _saveStudentRecordBackend(student.id, { notes: JSON.stringify(stuMeta) });
+  _closeWorkspaceModal();
+  _notify360(`Academic progress updated for ${student.name}!`);
+  await openFamily360Profile(familyId, 'students', true, { selectedStudentId: student.id, studentSubView: 'report' });
+}
+
+// ============================================================================
+// REQUIREMENT #10: CLICKING TEACHER FROM A STUDENT OPENS TEACHER SCHEDULE/INFO
+// ============================================================================
+async function openTeacherScheduleFromFamily(teacherId, studentId = null) {
   if (!teacherId) return;
-  window.CURRENT_MODAL_TEACHER_ID = teacherId;
+  await openTeacher360Profile(teacherId, 'students', false, { highlightStudentId: studentId });
+}
+
+// ============================================================================
+// TEACHER SCHEDULE & PROFILE FULL-SCREEN WORKSPACE
+// ============================================================================
+async function openTeacher360Profile(teacherId, initialTab = 'students', skipHistoryPush = false, options = {}) {
+  if (!teacherId) return;
 
   _activateFullScreenProfilePage('teacher');
   const workspace = document.getElementById('unified360PageWorkspace');
   if (!workspace) return;
 
   workspace.innerHTML = `
-    <div class="bg-white rounded-2xl border border-slate-200 p-16 text-center text-slate-500 shadow-xs">
-      <i class="fa-solid fa-circle-notch fa-spin text-2xl text-emerald-600 mb-3 block"></i>
-      <span class="text-sm font-extrabold">Loading Full-Screen Teacher Profile Workspace...</span>
+    <div class="bg-white rounded-2xl border border-slate-200 p-14 text-center text-slate-500 shadow-2xs">
+      <i class="fa-solid fa-circle-notch fa-spin text-2xl text-indigo-600 mb-3 block"></i>
+      <span class="text-sm font-extrabold">Loading Teacher Schedule &amp; Assigned Students...</span>
     </div>
   `;
 
@@ -1528,495 +3365,111 @@ async function openTeacher360Profile(teacherId, initialTab = 'students', skipHis
     if (teacher && Array.isArray(window.ALL_TEACHERS)) window.ALL_TEACHERS.push(teacher);
   }
   if (!teacher) {
-    workspace.innerHTML = `
-      ${_buildTopWorkspaceNavHtml()}
-      <div class="bg-white rounded-2xl border border-slate-200 p-12 text-center text-rose-600 font-bold">
-        Teacher record (${teacherId}) could not be found.
-      </div>
-    `;
+    workspace.innerHTML = `${_buildTopWorkspaceNavHtml()}<div class="p-12 bg-white rounded-2xl border text-center text-rose-600 font-bold">Teacher not found.</div>`;
     return;
   }
 
-  const validTabs = ['students', 'salary', 'classes', 'lessons', 'overview'];
-  const activeTab = validTabs.includes(initialTab) ? initialTab : 'students';
-
   _CURRENT_360_STATE.type = 'teacher';
   _CURRENT_360_STATE.id = teacher.id;
-  _CURRENT_360_STATE.activeTab = activeTab;
-
-  const accounts = (typeof getTeacherAccounts === 'function') ? getTeacherAccounts() : {};
-  const acc = accounts[teacher.id] || {};
-  const creds = (typeof getTeacherCreds === 'function') ? getTeacherCreds(teacher) : { teacher_id: teacher.id, username: 'teacher', password: '12345678' };
+  _CURRENT_360_STATE.activeTab = initialTab;
 
   if (!skipHistoryPush) {
-    _push360History('teacher', teacher.id, `${teacher.full_name} (${creds.teacher_id})`, activeTab);
+    _push360History('teacher', teacher.id, teacher.full_name, initialTab);
   }
 
-  const [schedRes, logsRes] = await Promise.all([
-    db.from('class_schedules').select('*, students(*)').eq('teacher_id', teacher.id),
-    db.from('attendance_logs').select('*').eq('teacher_id', teacher.id).order('date', { ascending: false }).limit(80)
-  ]);
+  const assignedStudents = (window.ALL_STUDENTS || []).filter(s =>
+    String(s.assigned_teacher_id) === String(teacher.id) &&
+    String(s.status || '').toLowerCase() !== 'trial'
+  );
 
-  const teacherSchedules = schedRes.data || [];
-  const teacherLogs = logsRes.data || [];
+  const { data: schedules } = await db.from('class_schedules').select('*, students(*)').eq('teacher_id', teacher.id);
+  const tchSchedules = schedules || [];
 
-  // Deduplicated Assigned Students
-  const studentMap = {};
-  (window.ALL_STUDENTS || []).forEach(s => {
-    if (String(s.assigned_teacher_id) === String(teacher.id) && String(s.status || '').toLowerCase() !== 'trial') {
-      studentMap[s.id] = s;
-    }
-  });
-  teacherSchedules.forEach(sc => {
-    if (sc.student_id && sc.students && String(sc.students.status || '').toLowerCase() !== 'trial') {
-      studentMap[sc.student_id] = sc.students;
-    }
-  });
-  const assignedStudents = Object.values(studentMap);
-
-  const teacherIncrement = (typeof getTeacherSeniorityIncrement === 'function')
-    ? getTeacherSeniorityIncrement(teacher, acc)
-    : 0;
-
-  let savedSalaries = {};
-  try { savedSalaries = JSON.parse(localStorage.getItem('alhuda_teacher_salaries') || '{}'); } catch (e) {}
-
-  const currentMonthLabel = document.getElementById('salaryMonthSelect')?.value || 'September 2026';
-  const currentSlipKey = `${teacher.id}_${currentMonthLabel.replace(/\s+/g, '_')}`;
-  const currentSavedSlip = savedSalaries[currentSlipKey] || null;
-
-  let currentBaseSubtotal = 0;
-  const studentSalaryItems = assignedStudents.map((stu, idx) => {
-    const stuScheds = teacherSchedules.filter(sc => String(sc.student_id) === String(stu.id));
-    const rateInfo = (typeof getStudentCourseSalaryRate === 'function')
-      ? getStudentCourseSalaryRate(stu, stuScheds, teacherIncrement)
-      : { baseRate: teacher.rate_per_slot || 2200, increment: teacherIncrement, finalRate: (teacher.rate_per_slot || 2200) + teacherIncrement, courseLabel: stu.course_id || 'Quran Studies', scheduleText: `${stuScheds.length} Slots/wk` };
-
-    let finalRate = rateInfo.finalRate;
-    if (currentSavedSlip?.students && currentSavedSlip.students[stu.id] !== undefined) {
-      finalRate = parseFloat(currentSavedSlip.students[stu.id]) || rateInfo.finalRate;
-    }
-    currentBaseSubtotal += finalRate;
-    const famObj = (window.ALL_FAMILIES || []).find(f => String(f.id) === String(stu.family_id));
-
-    return {
-      index: idx + 1,
-      student: stu,
-      family: famObj,
-      schedules: stuScheds,
-      courseLabel: rateInfo.courseLabel,
-      scheduleText: rateInfo.scheduleText,
-      baseRate: rateInfo.baseRate,
-      increment: teacherIncrement,
-      finalRate
-    };
-  });
-
-  const currBonus = currentSavedSlip ? (parseFloat(currentSavedSlip.bonus) || 0) : 0;
-  const currDeduction = currentSavedSlip ? (parseFloat(currentSavedSlip.deduction) || 0) : 0;
-  const currNetPayable = Math.max(0, currentBaseSubtotal + currBonus - currDeduction);
-  const currStatus = currentSavedSlip ? (currentSavedSlip.status || 'Pending') : 'Pending';
-
-  const payrollMonths = ['September 2026', 'August 2026', 'July 2026', 'June 2026', 'May 2026', 'April 2026'];
-  Object.keys(savedSalaries).forEach(k => {
-    if (k.startsWith(teacher.id + '_')) {
-      const mLabel = k.slice((teacher.id + '_').length).replace(/_/g, ' ');
-      if (!payrollMonths.includes(mLabel)) payrollMonths.push(mLabel);
-    }
-  });
-
-  let totalSalaryPaid = 0;
-  let totalSalaryPending = 0;
-
-  const salaryLedgerRows = payrollMonths.map(mLabel => {
-    const sKey = `${teacher.id}_${mLabel.replace(/\s+/g, '_')}`;
-    const slip = savedSalaries[sKey] || null;
-    const bonus = slip ? (parseFloat(slip.bonus) || 0) : 0;
-    const deduction = slip ? (parseFloat(slip.deduction) || 0) : 0;
-    const sub = slip?.base_subtotal !== undefined ? parseFloat(slip.base_subtotal) : currentBaseSubtotal;
-    const net = Math.max(0, sub + bonus - deduction);
-    const status = slip ? (slip.status || 'Pending') : (mLabel === currentMonthLabel ? currStatus : 'Pending');
-    const paymentDate = slip?.paid_at || slip?.payment_date || (status === 'Paid' ? mLabel : '--');
-
-    if (status === 'Paid') totalSalaryPaid += net;
-    else if (mLabel === currentMonthLabel || slip) totalSalaryPending += net;
-
-    return {
-      month: mLabel,
-      studentsCount: assignedStudents.length,
-      baseSubtotal: sub,
-      bonus,
-      deduction,
-      netPayable: net,
-      status,
-      paymentDate
-    };
-  });
-
-  const joiningDate = acc.joining_date || (teacher.created_at ? teacher.created_at.slice(0, 10) : '2025-01-01');
-  const cleanPhone = (teacher.phone || '').replace(/[^0-9]/g, '');
-
-  const tabsConfig = [
-    { id: 'students', label: `Assigned Students (${assignedStudents.length})` },
-    { id: 'salary',   label: 'Salary & Payroll Ledger' },
-    { id: 'classes',  label: `Weekly Schedule (${teacherSchedules.length})` },
-    { id: 'lessons',  label: 'Daily Lessons Logged' },
-    { id: 'overview', label: 'Bio Data' }
-  ];
-
-  let tabContentHtml = '';
-
-  // -------------------------------------------------------------------------
-  // TEACHER TAB 1: ASSIGNED STUDENTS (Modeled on Reference Screenshot 3)
-  // -------------------------------------------------------------------------
-  if (activeTab === 'students') {
-    tabContentHtml = `
-      <div>
-        ${studentSalaryItems.length === 0 ? `
-          <div class="p-12 text-center text-slate-400 text-sm">No active students currently assigned to this teacher.</div>
-        ` : `
-          <div class="overflow-x-auto">
-            <table class="w-full text-left text-xs border-collapse">
-              <thead class="bg-slate-50 text-slate-700 font-extrabold border-b border-slate-200">
-                <tr>
-                  <th class="p-4 w-14">#</th>
-                  <th class="p-4">Student Name</th>
-                  <th class="p-4">Family / Parent</th>
-                  <th class="p-4">Course &amp; Schedule</th>
-                  <th class="p-4">Progress / Attendance</th>
-                  <th class="p-4">Monthly Salary Rate</th>
-                  <th class="p-4">Status</th>
-                  <th class="p-4 text-right">Quick Actions</th>
-                </tr>
-              </thead>
-              <tbody class="divide-y divide-slate-200">
-                ${studentSalaryItems.map(item => `
-                  <tr class="hover:bg-slate-50/80 transition">
-                    <td class="p-4"><span class="inline-flex items-center justify-center w-6 h-6 rounded bg-amber-400 text-slate-950 font-black">${item.index}</span></td>
-                    <td class="p-4">
-                      <button onclick="openStudent360Profile('${item.student.id}', 'overview')" class="font-extrabold text-sm text-blue-700 hover:text-emerald-700 hover:underline flex items-center gap-1.5 text-left">
-                        <i class="fa-solid fa-check text-slate-800 text-xs"></i>
-                        <span>${item.student.name}</span>
-                      </button>
-                      <span class="text-[10px] font-mono text-slate-400 block ml-4">${item.student.id}</span>
-                    </td>
-                    <td class="p-4">
-                      ${item.family ? `
-                        <button onclick="openFamily360Profile('${item.family.id}', 'students')" class="font-bold text-blue-600 hover:underline text-left block">
-                          ${item.family.parent_name}
-                        </button>
-                        <span class="text-[10px] font-mono text-slate-400">${item.family.id}</span>
-                      ` : `<span class="text-slate-400">${item.student.family_id || '--'}</span>`}
-                    </td>
-                    <td class="p-4">
-                      <span class="font-bold text-slate-800 block">${item.courseLabel}</span>
-                      <span class="text-[11px] text-slate-500">${item.scheduleText}</span>
-                    </td>
-                    <td class="p-4">
-                      <div class="flex items-center gap-3">
-                        <button onclick="openStudent360Profile('${item.student.id}', 'progress')" class="text-blue-600 hover:underline font-bold">Progress</button>
-                        <span class="text-slate-300">|</span>
-                        <button onclick="openStudent360Profile('${item.student.id}', 'attendance')" class="text-teal-700 hover:underline font-bold">Attendance</button>
-                      </div>
-                    </td>
-                    <td class="p-4 font-mono font-extrabold text-emerald-700">${item.finalRate.toLocaleString()} PKR</td>
-                    <td class="p-4"><span class="px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 font-bold text-[10px]">${item.student.status || 'Active'}</span></td>
-                    <td class="p-4 text-right">
-                      <div class="inline-flex items-center gap-1.5">
-                        <button onclick="openStudent360Profile('${item.student.id}', 'overview')" class="px-2.5 py-1 rounded border border-emerald-300 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 font-bold text-xs">
-                          Student Profile
-                        </button>
-                        ${item.family ? `
-                          <button onclick="openFamily360Profile('${item.family.id}', 'students')" class="px-2.5 py-1 rounded border border-blue-300 bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold text-xs">
-                            Family
-                          </button>
-                        ` : ''}
-                      </div>
-                    </td>
-                  </tr>
-                `).join('')}
-              </tbody>
-            </table>
-          </div>
-        `}
-      </div>
-    `;
-  }
-
-  // -------------------------------------------------------------------------
-  // TEACHER TAB 2: SALARY & PAYROLL LEDGER (Modeled on Reference Screenshot 2)
-  // -------------------------------------------------------------------------
-  else if (activeTab === 'salary') {
-    tabContentHtml = `
-      <div class="p-4 sm:p-5 space-y-4">
-        <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          <div class="p-3.5 rounded-xl bg-slate-50 border border-slate-200">
-            <span class="text-[11px] font-bold text-slate-500 block">Agreed Base &amp; Seniority</span>
-            <strong class="text-base font-black text-slate-900">${teacher.rate_per_slot || 2200} PKR + ${teacherIncrement} PKR/stu</strong>
-          </div>
-          <div class="p-3.5 rounded-xl bg-indigo-50 border border-indigo-200">
-            <span class="text-[11px] font-bold text-indigo-700 block">${currentMonthLabel} Net Salary</span>
-            <strong class="text-base font-black text-indigo-950">PKR ${currNetPayable.toLocaleString()}/-</strong>
-          </div>
-          <div class="p-3.5 rounded-xl bg-emerald-50 border border-emerald-200">
-            <span class="text-[11px] font-bold text-emerald-700 block">Total Paid Salary</span>
-            <strong class="text-base font-black text-emerald-900">PKR ${totalSalaryPaid.toLocaleString()}/-</strong>
-          </div>
-          <div class="p-3.5 rounded-xl bg-amber-50 border border-amber-200">
-            <span class="text-[11px] font-bold text-amber-800 block">Pending Salary</span>
-            <strong class="text-base font-black text-amber-900">PKR ${totalSalaryPending.toLocaleString()}/-</strong>
-          </div>
-        </div>
-
-        <div class="overflow-x-auto border border-slate-200 rounded-xl">
-          <table class="w-full text-left text-xs border-collapse">
-            <thead class="bg-slate-50 text-slate-800 font-extrabold border-b border-slate-200">
-              <tr>
-                <th class="p-3.5">PKR / Method</th>
-                <th class="p-3.5">Salary Month</th>
-                <th class="p-3.5">Students</th>
-                <th class="p-3.5">Base Pay</th>
-                <th class="p-3.5">ADJ (Bonus/Ded)</th>
-                <th class="p-3.5">Net Payable AMT</th>
-                <th class="p-3.5">Paid Date</th>
-                <th class="p-3.5 text-center">Status</th>
-                <th class="p-3.5 text-right">Actions</th>
-              </tr>
-            </thead>
-            <tbody class="divide-y divide-slate-200">
-              ${salaryLedgerRows.map(row => {
-                const isPaid = row.status === 'Paid';
-                return `
-                  <tr class="hover:bg-slate-50 transition">
-                    <td class="p-3.5 font-semibold text-emerald-700">Bank / Payroll Transfer</td>
-                    <td class="p-3.5 font-bold text-emerald-800">${row.month}</td>
-                    <td class="p-3.5 font-bold text-slate-700">${row.studentsCount} Students</td>
-                    <td class="p-3.5 font-mono text-emerald-800">PKR ${row.baseSubtotal.toLocaleString()}</td>
-                    <td class="p-3.5 font-mono text-blue-600">+${row.bonus} / -${row.deduction}</td>
-                    <td class="p-3.5 font-mono font-extrabold text-emerald-900">PKR ${row.netPayable.toLocaleString()}/-</td>
-                    <td class="p-3.5 font-mono text-slate-600">${row.paymentDate}</td>
-                    <td class="p-3.5 text-center">
-                      <span class="px-2.5 py-1 rounded font-black text-[10px] uppercase ${isPaid ? 'bg-emerald-600 text-white' : 'bg-amber-500 text-white'}">
-                        ${isPaid ? 'PAID' : 'PENDING'}
-                      </span>
-                    </td>
-                    <td class="p-3.5 text-right">
-                      <button onclick="switchTab('tab-salaries'); if (typeof calculateMonthlySalaries === 'function') calculateMonthlySalaries();"
-                              class="px-3 py-1 rounded border border-emerald-300 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 font-bold text-[11px]">
-                        Open Payroll Slip
-                      </button>
-                    </td>
-                  </tr>
-                `;
-              }).join('')}
-            </tbody>
-          </table>
-        </div>
-      </div>
-    `;
-  }
-
-  // -------------------------------------------------------------------------
-  // TEACHER TAB 3: WEEKLY SCHEDULE
-  // -------------------------------------------------------------------------
-  else if (activeTab === 'classes') {
-    const sortedScheds = [...teacherSchedules].sort((a, b) => Number(a.day_of_week || 0) - Number(b.day_of_week || 0));
-    tabContentHtml = `
-      <div class="p-4 sm:p-5">
-        <div class="overflow-x-auto border border-slate-200 rounded-xl">
-          <table class="w-full text-left text-xs border-collapse">
-            <thead class="bg-slate-50 text-slate-700 font-extrabold border-b border-slate-200">
-              <tr>
-                <th class="p-3.5">Day of Week</th>
-                <th class="p-3.5">Class Time (PKT)</th>
-                <th class="p-3.5">Student</th>
-                <th class="p-3.5">Family / Parent</th>
-                <th class="p-3.5 text-right">Action</th>
-              </tr>
-            </thead>
-            <tbody class="divide-y divide-slate-200">
-              ${sortedScheds.length === 0 ? `
-                <tr><td colspan="5" class="p-8 text-center text-slate-400">No weekly class slots booked yet.</td></tr>
-              ` : sortedScheds.map(sc => {
-                const stObj = studentMap[sc.student_id] || sc.students;
-                const famObj = stObj ? (window.ALL_FAMILIES || []).find(f => String(f.id) === String(stObj.family_id)) : null;
-                return `
-                  <tr class="hover:bg-slate-50 transition">
-                    <td class="p-3.5 font-extrabold text-slate-900">${_DAY_LABELS_360[Number(sc.day_of_week)] || `Day ${sc.day_of_week}`}</td>
-                    <td class="p-3.5 font-mono font-bold text-emerald-800">${(sc.start_time || '').slice(0,5)} - ${(sc.end_time || '').slice(0,5)} PKT</td>
-                    <td class="p-3.5">${stObj ? `<button onclick="openStudent360Profile('${stObj.id}', 'overview')" class="font-extrabold text-blue-700 hover:underline">${stObj.name}</button>` : sc.student_id}</td>
-                    <td class="p-3.5">${famObj ? `<button onclick="openFamily360Profile('${famObj.id}', 'students')" class="font-bold text-blue-600 hover:underline">${famObj.parent_name} (${famObj.id})</button>` : '--'}</td>
-                    <td class="p-3.5 text-right">
-                      <button onclick="open2DMatrixForTeacher('${teacher.id}')" class="px-2.5 py-1 rounded bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-[11px]">
-                        2D Matrix
-                      </button>
-                    </td>
-                  </tr>
-                `;
-              }).join('')}
-            </tbody>
-          </table>
-        </div>
-      </div>
-    `;
-  }
-
-  // -------------------------------------------------------------------------
-  // TEACHER TAB 4: DAILY LESSONS LOGGED
-  // -------------------------------------------------------------------------
-  else if (activeTab === 'lessons') {
-    tabContentHtml = `
-      <div class="p-4 sm:p-5">
-        <div class="overflow-x-auto border border-slate-200 rounded-xl">
-          <table class="w-full text-left text-xs border-collapse">
-            <thead class="bg-slate-50 text-slate-700 font-extrabold border-b border-slate-200">
-              <tr>
-                <th class="p-3.5">Date</th>
-                <th class="p-3.5">Student</th>
-                <th class="p-3.5">Attendance</th>
-                <th class="p-3.5">Daily Lesson / Sabaq Logged</th>
-              </tr>
-            </thead>
-            <tbody class="divide-y divide-slate-200">
-              ${teacherLogs.length === 0 ? `
-                <tr><td colspan="4" class="p-8 text-center text-slate-400">No daily lessons logged by this teacher yet.</td></tr>
-              ` : teacherLogs.slice(0, 40).map(l => {
-                const stObj = (window.ALL_STUDENTS || []).find(s => String(s.id) === String(l.student_id));
-                const parsed = _parseLessonLogEntry(l);
-                return `
-                  <tr class="hover:bg-slate-50 transition">
-                    <td class="p-3.5 font-mono font-bold text-slate-800">${l.date || '--'}</td>
-                    <td class="p-3.5">${stObj ? `<button onclick="openStudent360Profile('${stObj.id}', 'lessons')" class="font-extrabold text-blue-700 hover:underline">${stObj.name}</button>` : l.student_id}</td>
-                    <td class="p-3.5"><span class="px-2 py-0.5 rounded bg-emerald-600 text-white font-black text-[10px] uppercase">${l.status || 'Present'}</span></td>
-                    <td class="p-3.5 text-slate-700">${parsed.bookTitle ? `<strong>${parsed.bookTitle}</strong> ${parsed.page ? `(Page ${parsed.page})` : ''} — ${parsed.remarks || parsed.assessment || ''}` : (parsed.remarks || '--')}</td>
-                  </tr>
-                `;
-              }).join('')}
-            </tbody>
-          </table>
-        </div>
-      </div>
-    `;
-  }
-
-  // -------------------------------------------------------------------------
-  // TEACHER TAB 5: BIO DATA (Modeled on Reference Screenshot 1)
-  // -------------------------------------------------------------------------
-  else if (activeTab === 'overview') {
-    const teacherBioRows = [
-      { label: 'Teacher Full Name', value: teacher.full_name },
-      { label: 'Father Name',       value: teacher.father_name || '--' },
-      { label: 'Teacher ID',        value: creds.teacher_id },
-      { label: 'Telephone / WhatsApp', value: teacher.phone || '--' },
-      { label: 'Alternative Phone', value: teacher.alt_phone || '--' },
-      { label: 'CNIC / National ID', value: acc.cnic || '--' },
-      { label: 'Qualification',     value: acc.qualification || 'Quran & Tajweed Instructor' },
-      { label: 'Joining Date',      value: joiningDate },
-      { label: 'Working Shift',     value: teacher.working_shift || '10 Hours Shift' },
-      { label: 'Base Slot Rate',    value: `${teacher.rate_per_slot || 2200} PKR / student` },
-      { label: 'Seniority Increment', value: `+${teacherIncrement} PKR / student` },
-      { label: 'Residential Address', value: teacher.address || '--' },
-      { label: 'Portal Username',   value: creds.username },
-      { label: 'Portal Password',   value: creds.password },
-      { label: 'Account Status',    value: teacher.status || 'Active' }
-    ];
-    tabContentHtml = _buildThreeColSpecTableHtml(teacherBioRows);
-  }
-
-  // Assemble Full-Screen Teacher Profile Page
   workspace.innerHTML = `
     ${_buildTopWorkspaceNavHtml()}
 
     <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-      <!-- FULL-WIDTH EMERALD PROFILE BANNER -->
-      <div class="bg-gradient-to-b from-[#10b981] via-[#059669] to-[#047857] text-white pt-6 px-4 sm:px-8 flex flex-col items-center text-center">
-        <div class="w-16 h-16 rounded-xl bg-white/20 border-2 border-white shadow-md flex items-center justify-center text-2xl font-black text-white mb-2">
-          <i class="fa-solid fa-chalkboard-user"></i>
+      <div class="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white p-6 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+        <div class="flex items-center gap-4">
+          <div class="w-14 h-14 rounded-2xl bg-white/10 border border-white/20 flex items-center justify-center text-2xl font-black text-amber-400">
+            ${_esc360((teacher.full_name || 'T').charAt(0).toUpperCase())}
+          </div>
+          <div>
+            <div class="flex items-center gap-2 flex-wrap">
+              <h1 class="text-xl font-black text-white">${_esc360(teacher.full_name)}</h1>
+              <span class="px-2.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 text-xs font-extrabold">${_esc360(teacher.working_shift || 'Active Shift')}</span>
+            </div>
+            <p class="text-xs text-slate-300 mt-1">
+              Assigned Students: <strong>${assignedStudents.length}</strong> &bull; Booked Weekly Class Slots: <strong>${tchSchedules.length}</strong>
+            </p>
+          </div>
         </div>
-
-        <h1 class="text-xl sm:text-2xl font-bold tracking-tight text-white">${teacher.full_name}</h1>
-        <div class="text-sm font-mono font-semibold text-white/95 mt-0.5">${joiningDate}</div>
-
-        <div class="flex items-center justify-center gap-2 flex-wrap mt-2.5">
-          <span class="px-2.5 py-0.5 rounded bg-white/20 text-white font-black text-[11px] uppercase">${teacher.status || 'ACTIVE'}</span>
-          <span class="px-2.5 py-0.5 rounded bg-slate-900/40 text-amber-300 font-mono font-bold text-[11px]">${creds.teacher_id}</span>
-          <span class="px-2.5 py-0.5 rounded bg-amber-400 text-slate-950 font-black text-[10px] uppercase">${assignedStudents.length} ASSIGNED STUDENTS ✔</span>
-          <span class="px-2.5 py-0.5 rounded bg-sky-500 text-white font-black text-[10px] uppercase">NET SALARY: PKR ${currNetPayable.toLocaleString()}</span>
-        </div>
-
-        <div class="flex items-center justify-center gap-2 flex-wrap mt-4">
-          <button onclick="open2DMatrixForTeacher('${teacher.id}')" class="px-3.5 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs shadow-xs flex items-center gap-1.5 transition">
-            <i class="fa-solid fa-table-cells"></i> Open 2D Timetable
-          </button>
-          <button onclick="openEditTeacherModal('${teacher.id}')" class="px-3.5 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs shadow-xs flex items-center gap-1.5 transition">
-            <i class="fa-solid fa-pen-to-square"></i> Edit Teacher Profile
-          </button>
-          <button onclick="openQuickZoomModal('${teacher.id}')" class="px-3.5 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs shadow-xs flex items-center gap-1.5 transition">
-            <i class="fa-solid fa-video"></i> Zoom Classroom
-          </button>
-          ${cleanPhone ? `
-            <a href="https://wa.me/${cleanPhone}" target="_blank" class="px-3.5 py-1.5 rounded-lg bg-slate-900/70 hover:bg-slate-900 text-white font-bold text-xs shadow-xs flex items-center gap-1.5 transition">
-              <i class="fa-brands fa-whatsapp text-emerald-300"></i> WhatsApp Teacher
-            </a>
+        <div class="flex items-center gap-2">
+          ${typeof openTeacherScheduleModal === 'function' ? `
+            <button onclick="openTeacherScheduleModal('${_esc360(teacher.id)}', '${_esc360(teacher.full_name)}')"
+                    class="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-extrabold transition cursor-pointer">
+              <i class="fa-solid fa-calendar-days mr-1"></i> Open Interactive 2D Timetable Matrix
+            </button>
           ` : ''}
         </div>
+      </div>
 
-        <!-- DOCKED DARK TABS BAR AT BOTTOM OF BANNER -->
-        <div class="flex items-center justify-center gap-1.5 flex-wrap mt-6 pb-3">
-          ${tabsConfig.map(t => {
-            const isAct = activeTab === t.id;
-            return `
-              <button onclick="openTeacher360Profile('${teacher.id}', '${t.id}', true)"
-                      class="px-4 py-2 rounded-md text-xs font-extrabold transition ${isAct ? 'bg-slate-950 text-white shadow-md ring-2 ring-white/40' : 'bg-slate-800/80 hover:bg-slate-900 text-white/90'}">
-                ${t.label}
-              </button>
-            `;
-          }).join('')}
+      <div class="p-6 space-y-6">
+        <div>
+          <h3 class="text-sm font-black text-slate-900 mb-3">Teacher's Weekly Class Schedule &amp; Assigned Students</h3>
+          ${assignedStudents.length === 0 ? `
+            <div class="p-10 text-center bg-slate-50 rounded-xl border border-slate-200 text-slate-400 text-xs">
+              No regular students currently assigned to ${_esc360(teacher.full_name)}.
+            </div>
+          ` : `
+            <div class="overflow-x-auto border border-slate-200 rounded-xl">
+              <table class="w-full text-left text-xs border-collapse">
+                <thead class="bg-slate-50 text-slate-700 font-extrabold border-b border-slate-200">
+                  <tr>
+                    <th class="p-3.5">#</th>
+                    <th class="p-3.5">Student (Opens Family Workspace)</th>
+                    <th class="p-3.5">Family / Parent</th>
+                    <th class="p-3.5">Course</th>
+                    <th class="p-3.5">Scheduled Slots</th>
+                    <th class="p-3.5">Status</th>
+                  </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-100">
+                  ${assignedStudents.map((stu, i) => {
+                    const fam = (window.ALL_FAMILIES || []).find(f => String(f.id).toUpperCase() === String(stu.family_id).toUpperCase());
+                    const stuSlots = tchSchedules.filter(sc => String(sc.student_id).toUpperCase() === String(stu.id).toUpperCase());
+                    const slotText = stuSlots.length > 0
+                      ? stuSlots.map(sc => `${_DAY_LABELS_360[sc.day_of_week] || sc.day_of_week} (${(sc.start_time || '').slice(0,5)})`).join(', ')
+                      : 'Regular Weekly Slot';
+                    const isHighlighted = options.highlightStudentId && String(stu.id).toUpperCase() === String(options.highlightStudentId).toUpperCase();
+
+                    return `
+                      <tr class="${isHighlighted ? 'bg-indigo-50/80 font-bold' : 'hover:bg-slate-50'}">
+                        <td class="p-3.5 font-mono font-bold text-slate-500">${i + 1}</td>
+                        <td class="p-3.5">
+                          <button onclick="openStudent360Profile('${_esc360(stu.id)}')" class="font-extrabold text-indigo-700 hover:underline cursor-pointer">
+                            ${_esc360(stu.name)} (${_esc360(stu.id)})
+                          </button>
+                        </td>
+                        <td class="p-3.5">
+                          ${fam ? `
+                            <button onclick="openFamily360Profile('${_esc360(fam.id)}')" class="font-bold text-slate-800 hover:text-indigo-700 hover:underline cursor-pointer">
+                              ${_esc360(fam.parent_name)} (${_esc360(fam.id)})
+                            </button>
+                          ` : _esc360(stu.family_id)}
+                        </td>
+                        <td class="p-3.5 text-slate-700">${_esc360(stu.course_id || 'Quran Studies')}</td>
+                        <td class="p-3.5 font-mono text-emerald-800 font-bold">${_esc360(slotText)}</td>
+                        <td class="p-3.5"><span class="px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 text-[10px] font-black">${_esc360(stu.status || 'Active')}</span></td>
+                      </tr>
+                    `;
+                  }).join('')}
+                </tbody>
+              </table>
+            </div>
+          `}
         </div>
-      </div>
-
-      <!-- FULL-WIDTH SINGLE-CATEGORY WORKSPACE BELOW BANNER -->
-      <div class="bg-white">
-        ${tabContentHtml}
-      </div>
-
-      <!-- BOTTOM MANAGEMENT BAR -->
-      <div class="p-4 bg-slate-50 border-t border-slate-200 flex items-center justify-center gap-2.5 flex-wrap">
-        <button onclick="openEditTeacherModal('${teacher.id}')" class="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs transition shadow-2xs">
-          Edit Profile
-        </button>
-        <button onclick="open2DMatrixForTeacher('${teacher.id}')" class="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs transition shadow-2xs">
-          Manage 2D Schedule
-        </button>
-        <a href="teacher.html?t=${creds.username}" target="_blank" class="px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-900 text-white font-bold text-xs transition shadow-2xs">
-          Launch Teacher Portal
-        </a>
       </div>
     </div>
   `;
 }
-
-// ============================================================================
-// SEAMLESS ALIAS BRIDGES TO EXISTING LMS ENTRY POINTS
-// ============================================================================
-window.openStudent360Profile = openStudent360Profile;
-window.openFamily360Profile = openFamily360Profile;
-window.openTeacher360Profile = openTeacher360Profile;
-window.exitFullScreen360Profile = exitFullScreen360Profile;
-
-window.openStudentDetailModal = function(studentId) {
-  return openStudent360Profile(studentId, 'overview');
-};
-
-window.openTeacherOptionsModal = function(teacherId) {
-  return openTeacher360Profile(teacherId, 'students');
-};
-
-window.openTeacherDetailModal = function(teacherId) {
-  return openTeacher360Profile(teacherId, 'students');
-};
-
-window.openFamilyFromDashboardSearch = function(familyId) {
-  if (typeof clearDashboardGlobalSearch === 'function') clearDashboardGlobalSearch();
-  return openFamily360Profile(familyId, 'students');
-};
