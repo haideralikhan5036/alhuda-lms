@@ -134,12 +134,12 @@
         const dotColor = series.borderColor || '#059669';
         const isHovered = idx === dsIdx;
         return `
-          <div class="flex items-center justify-between py-1 px-2 rounded-lg ${isHovered ? 'bg-slate-100/90 font-extrabold' : 'text-slate-600'}">
-            <span class="flex items-center gap-1.5 text-[11.5px]">
-              <span style="background:${dotColor}" class="w-2.5 h-2.5 rounded-sm inline-block shrink-0"></span>
+          <div class="flex items-center justify-between py-1.5 px-2.5 rounded-lg ${isHovered ? 'bg-slate-100 font-bold text-slate-950' : 'text-slate-600'}">
+            <span class="flex items-center gap-2 text-xs">
+              <span style="background:${dotColor}" class="w-2.5 h-2.5 rounded-xs inline-block shrink-0"></span>
               <span>${series.label.replace(' ($)', '')}</span>
             </span>
-            <span class="font-num font-bold text-slate-900 text-[12px]">${fmtVal(val)}</span>
+            <span class="lms-num-table font-bold text-slate-900 text-[13.5px]">${fmtVal(val)}</span>
           </div>
         `;
       }).join('');
@@ -150,9 +150,9 @@
         const rec = Number(chart.data.datasets[1]?.data[mIdx] || 0);
         const ratio = tgt > 0 ? Math.min(100, Math.round((rec / tgt) * 100)) : 0;
         extraRatioHtml = `
-          <div class="mt-2 pt-2 border-t border-slate-100 flex items-center justify-between text-[11px]">
+          <div class="mt-2.5 pt-2 border-t border-slate-100 flex items-center justify-between text-xs">
             <span class="text-slate-500 font-semibold">Collection Ratio</span>
-            <span class="font-num font-extrabold text-emerald-700">${ratio}% Collected</span>
+            <span class="lms-num-percent font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200">${ratio}% Collected</span>
           </div>
         `;
       } else {
@@ -160,42 +160,43 @@
         const reg = Number(chart.data.datasets[1]?.data[mIdx] || 0);
         const convRatio = tr > 0 ? Math.min(100, Math.round((reg / tr) * 100)) : 0;
         extraRatioHtml = `
-          <div class="mt-2 pt-2 border-t border-slate-100 flex items-center justify-between text-[11px]">
+          <div class="mt-2.5 pt-2 border-t border-slate-100 flex items-center justify-between text-xs">
             <span class="text-slate-500 font-semibold">Regular vs Trial Ratio</span>
-            <span class="font-num font-extrabold text-teal-700">${convRatio}%</span>
+            <span class="lms-num-percent font-bold text-teal-700 bg-teal-50 px-2 py-0.5 rounded-md border border-teal-200">${convRatio}%</span>
           </div>
         `;
       }
 
       tooltipEl.innerHTML = `
-        <div class="bg-white/98 backdrop-blur-md rounded-2xl border border-slate-200/95 shadow-2xl p-3.5 w-[275px] text-slate-800">
+        <div class="bg-white/98 backdrop-blur-md rounded-2xl border border-slate-200/95 shadow-2xl p-4 w-[295px] text-slate-800">
           <!-- Top Header: Category & Period -->
-          <div class="flex items-center justify-between gap-2 pb-2.5 mb-2.5 border-b border-slate-100">
+          <div class="flex items-center justify-between gap-2 pb-2.5 mb-3 border-b border-slate-100">
             <div class="flex items-center gap-2 min-w-0">
               <span style="background:${ds.borderColor || '#059669'}" class="w-3 h-3 rounded-md shrink-0 shadow-2xs"></span>
               <span class="text-xs font-extrabold text-slate-900 truncate">${ds.label.replace(' ($)', '')}</span>
             </div>
-            <span class="px-2 py-0.5 rounded-md bg-slate-900 text-white font-num text-[11px] font-bold shrink-0">${mLabel}</span>
+            <span class="px-2.5 py-0.5 rounded-md bg-slate-900 text-white lms-num-id text-xs font-bold shrink-0">${mLabel}</span>
           </div>
 
           <!-- Separated Current vs Previous vs Change Grid -->
-          <div class="grid grid-cols-2 gap-2 mb-2.5">
-            <div class="bg-slate-50 rounded-xl p-2 border border-slate-200/70">
-              <span class="text-[10px] font-extrabold uppercase tracking-wider text-slate-400 block">Current (${mLabel.slice(0, 3)})</span>
-              <span class="font-num text-base font-extrabold text-slate-900 mt-0.5 block">${fmtVal(currentVal)}</span>
+          <div class="grid grid-cols-2 gap-2.5 mb-2.5">
+            <div class="bg-slate-50 rounded-xl p-2.5 border border-slate-200/80">
+              <span class="text-[10.5px] font-bold uppercase tracking-wider text-slate-500 block">Current (${mLabel.slice(0, 3)})</span>
+              <span class="lms-num-stat text-xl font-bold text-slate-950 mt-1 block">${fmtVal(currentVal)}</span>
             </div>
-            <div class="bg-slate-50 rounded-xl p-2 border border-slate-200/70">
-              <span class="text-[10px] font-extrabold uppercase tracking-wider text-slate-400 block">Previous (${prevMLabel.slice(0, 3)})</span>
-              <span class="font-num text-base font-bold text-slate-600 mt-0.5 block">${fmtVal(prevVal)}</span>
+            <div class="bg-slate-50 rounded-xl p-2.5 border border-slate-200/80">
+              <span class="text-[10.5px] font-bold uppercase tracking-wider text-slate-500 block">Previous (${prevMLabel.slice(0, 3)})</span>
+              <span class="lms-num-stat text-xl font-bold text-slate-600 mt-1 block">${fmtVal(prevVal)}</span>
             </div>
           </div>
 
           <!-- Period Change Pill Row -->
-          <div class="flex items-center justify-between px-2.5 py-1.5 rounded-xl border ${changeBadgeClass} mb-2.5">
-            <span class="text-[10.5px] font-bold uppercase tracking-wide">Period Change</span>
-            <span class="font-num text-xs font-extrabold flex items-center gap-1">
-              <i class="fa-solid ${changeIcon} text-[10px]"></i>
-              <span>${fmtDiff(diffVal)} (${diffVal >= 0 ? '+' : ''}${pctChange}%)</span>
+          <div class="flex items-center justify-between px-3 py-2 rounded-xl border ${changeBadgeClass} mb-3">
+            <span class="text-[11px] font-bold uppercase tracking-wider">Change</span>
+            <span class="lms-num-table text-sm font-bold flex items-center gap-1.5">
+              <i class="fa-solid ${changeIcon} text-xs"></i>
+              <span>${fmtDiff(diffVal)}</span>
+              <span class="px-1.5 py-0.2 rounded bg-white/80 text-[11px] font-bold">(${diffVal >= 0 ? '+' : ''}${pctChange}%)</span>
             </span>
           </div>
 
@@ -207,7 +208,7 @@
           ${extraRatioHtml}
 
           <!-- Drilldown Hint -->
-          <div class="mt-2 pt-1.5 border-t border-slate-100 text-[10.5px] font-bold text-indigo-600 flex items-center justify-between">
+          <div class="mt-2.5 pt-2 border-t border-slate-100 text-[11px] font-bold text-indigo-600 flex items-center justify-between">
             <span>Click bar to inspect details</span>
             <i class="fa-solid fa-arrow-right text-[10px]"></i>
           </div>
@@ -218,8 +219,8 @@
       let left = rect.left + tooltip.caretX;
       let top = rect.top + tooltip.caretY - 12;
 
-      const cardW = 285;
-      const cardH = 310;
+      const cardW = 295;
+      const cardH = 330;
       if (left - cardW / 2 < 12) left = cardW / 2 + 12;
       if (left + cardW / 2 > window.innerWidth - 12) left = window.innerWidth - cardW / 2 - 12;
 
@@ -234,8 +235,40 @@
       tooltipEl.style.opacity = '1';
     }
 
+    // Custom Chart.js Plugin: Render clean tabular numbers above bars
+    const lmsBarValueLabelsPlugin = {
+      id: 'lmsBarValueLabels',
+      afterDatasetsDraw(chart) {
+        const { ctx } = chart;
+        const isRevenue = chart.canvas?.id === 'chartFeeRevenue';
+        ctx.save();
+        ctx.font = "600 11px 'Plus Jakarta Sans', 'Inter', system-ui, sans-serif";
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'bottom';
+
+        chart.data.datasets.forEach((dataset, dsIndex) => {
+          const meta = chart.getDatasetMeta(dsIndex);
+          if (meta.hidden) return;
+          meta.data.forEach((bar, index) => {
+            const rawVal = Number(dataset.data[index] || 0);
+            if (rawVal <= 0) return;
+            let labelText = '';
+            if (isRevenue) {
+              labelText = rawVal >= 1000 ? '$' + (rawVal / 1000).toFixed(rawVal % 1000 === 0 ? 0 : 1) + 'k' : '$' + rawVal;
+            } else {
+              labelText = String(rawVal);
+            }
+            ctx.fillStyle = dataset.borderColor || '#334155';
+            ctx.fillText(labelText, bar.x, bar.y - 3);
+          });
+        });
+        ctx.restore();
+      }
+    };
+
     function initDashboardCharts() {
       if (typeof Chart === 'undefined') return;
+      Chart.defaults.font.family = "'Plus Jakarta Sans', 'Inter', 'Segoe UI', system-ui, sans-serif";
 
       // 1. GRAPH 1 (TOP FULL-WIDTH): NEW SIGN-UPS REPORT (Refined Violet-Indigo / Emerald-Teal / Coral-Rose)
       const ctxGrowth = document.getElementById('chartStudentGrowth')?.getContext('2d');
@@ -243,6 +276,7 @@
         _dashGraphEntranceAnimatingUntil = Date.now() + 2200;
         DASH_STUDENT_CHART = new Chart(ctxGrowth, {
           type: 'bar',
+          plugins: [lmsBarValueLabelsPlugin],
           data: {
             labels: GRAPH_MONTH_LABELS,
             datasets: [
@@ -254,8 +288,8 @@
                 borderColor: '#4f46e5',
                 borderWidth: 1.5,
                 borderRadius: 6,
-                barPercentage: 0.76,
-                categoryPercentage: 0.68
+                barPercentage: 0.78,
+                categoryPercentage: 0.72
               },
               {
                 label: 'Regular Enrolled',
@@ -265,8 +299,8 @@
                 borderColor: '#0d9488',
                 borderWidth: 1.5,
                 borderRadius: 6,
-                barPercentage: 0.76,
-                categoryPercentage: 0.68
+                barPercentage: 0.78,
+                categoryPercentage: 0.72
               },
               {
                 label: 'Left / Discontinued',
@@ -276,8 +310,8 @@
                 borderColor: '#e11d48',
                 borderWidth: 1.5,
                 borderRadius: 6,
-                barPercentage: 0.76,
-                categoryPercentage: 0.68
+                barPercentage: 0.78,
+                categoryPercentage: 0.72
               }
             ]
           },
@@ -328,7 +362,7 @@
               legend: {
                 position: 'top',
                 align: 'end',
-                labels: { boxWidth: 14, usePointStyle: true, pointStyle: 'rectRounded', font: { size: 12, family: 'Inter, Plus Jakarta Sans', weight: '700' } }
+                labels: { boxWidth: 14, usePointStyle: true, pointStyle: 'rectRounded', font: { size: 12.5, family: "'Plus Jakarta Sans', 'Inter', sans-serif", weight: '700' } }
               },
               tooltip: {
                 enabled: false,
@@ -338,12 +372,13 @@
             scales: {
               x: {
                 grid: { display: false },
-                ticks: { font: { size: 12, family: 'Outfit, Inter', weight: '600' }, color: '#334155' }
+                ticks: { font: { size: 12.5, family: "'Plus Jakarta Sans', 'Inter', sans-serif", weight: '600' }, color: '#1e293b' }
               },
               y: {
                 beginAtZero: true,
+                grace: '15%',
                 grid: { color: '#f1f5f9', borderDash: [3, 3] },
-                ticks: { font: { size: 12, family: 'Outfit, Inter', weight: '600' }, color: '#475569' }
+                ticks: { font: { size: 12.5, family: "'Plus Jakarta Sans', 'Inter', sans-serif", weight: '600' }, color: '#334155' }
               }
             }
           }
@@ -356,6 +391,7 @@
       if (ctxRevenue && !DASH_REVENUE_CHART) {
         DASH_REVENUE_CHART = new Chart(ctxRevenue, {
           type: 'bar',
+          plugins: [lmsBarValueLabelsPlugin],
           data: {
             labels: GRAPH_MONTH_LABELS,
             datasets: [
@@ -367,8 +403,8 @@
                 borderColor: '#2563eb',
                 borderWidth: 1.5,
                 borderRadius: 6,
-                barPercentage: 0.76,
-                categoryPercentage: 0.68
+                barPercentage: 0.78,
+                categoryPercentage: 0.72
               },
               {
                 label: 'Fee Received ($)',
@@ -378,8 +414,8 @@
                 borderColor: '#059669',
                 borderWidth: 1.5,
                 borderRadius: 6,
-                barPercentage: 0.76,
-                categoryPercentage: 0.68
+                barPercentage: 0.78,
+                categoryPercentage: 0.72
               },
               {
                 label: 'Pending Fee ($)',
@@ -389,8 +425,8 @@
                 borderColor: '#d97706',
                 borderWidth: 1.5,
                 borderRadius: 6,
-                barPercentage: 0.76,
-                categoryPercentage: 0.68
+                barPercentage: 0.78,
+                categoryPercentage: 0.72
               }
             ]
           },
@@ -441,7 +477,7 @@
               legend: {
                 position: 'top',
                 align: 'end',
-                labels: { boxWidth: 14, usePointStyle: true, pointStyle: 'rectRounded', font: { size: 12, family: 'Inter, Plus Jakarta Sans', weight: '700' } }
+                labels: { boxWidth: 14, usePointStyle: true, pointStyle: 'rectRounded', font: { size: 12.5, family: "'Plus Jakarta Sans', 'Inter', sans-serif", weight: '700' } }
               },
               tooltip: {
                 enabled: false,
@@ -451,12 +487,13 @@
             scales: {
               x: {
                 grid: { display: true, drawOnChartArea: false, color: '#94a3b8' },
-                ticks: { font: { size: 12, family: 'Outfit, Inter', weight: '600' }, color: '#334155' }
+                ticks: { font: { size: 12.5, family: "'Plus Jakarta Sans', 'Inter', sans-serif", weight: '600' }, color: '#1e293b' }
               },
               y: {
                 beginAtZero: true,
+                grace: '15%',
                 grid: { color: '#e2e8f0', borderDash: [3, 3] },
-                ticks: { callback: function(v) { return '$' + Number(v).toLocaleString(); }, font: { size: 12, family: 'Outfit, Inter', weight: '600' }, color: '#475569' }
+                ticks: { callback: function(v) { return '$' + Number(v).toLocaleString(); }, font: { size: 12.5, family: "'Plus Jakarta Sans', 'Inter', sans-serif", weight: '600' }, color: '#334155' }
               }
             }
           }

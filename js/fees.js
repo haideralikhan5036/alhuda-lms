@@ -773,23 +773,33 @@
         hasData = true;
 
         const pct = data.expected > 0 ? Math.min(100, Math.round((data.received / data.expected) * 100)) : 0;
+        const pendingAmt = Math.max(0, data.expected - data.received);
+        const fmtAmt = (val) => typeof formatLmsCurrencyHtml === 'function'
+          ? formatLmsCurrencyHtml(val, cur)
+          : `${cur} ${Number(val || 0).toLocaleString()}`;
 
         const card = document.createElement('div');
-        card.className = 'p-3.5 bg-slate-50 border border-slate-200 rounded-xl space-y-2';
+        card.className = 'p-4 bg-white border border-slate-200/90 rounded-2xl shadow-2xs hover:shadow-md transition space-y-3';
         card.innerHTML = `
-          <div class="flex justify-between items-center text-xs font-bold">
-            <span class="text-brandDark font-black font-mono text-sm">${cur}</span>
-            <span class="text-emerald-700 font-bold font-num">${pct}% Paid</span>
+          <div class="flex justify-between items-center border-b border-slate-100 pb-2.5">
+            <span class="px-2.5 py-1 rounded-lg bg-slate-900 text-white lms-num-id font-bold text-xs tracking-wide">${cur}</span>
+            <span class="px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200 lms-num-percent text-xs font-bold">${pct}% Paid</span>
           </div>
-          <div class="flex justify-between text-[11px] text-slate-500">
-            <span>Expected:</span>
-            <strong class="text-slate-800 font-num">${cur} ${data.expected.toLocaleString()}</strong>
+          <div>
+            <span class="text-[11px] font-bold uppercase tracking-wider text-slate-400 block">Received Revenue</span>
+            <div class="text-2xl font-bold text-emerald-700 mt-0.5 lms-num-financial">${fmtAmt(data.received)}</div>
           </div>
-          <div class="flex justify-between text-[11px] text-slate-500">
-            <span>Received:</span>
-            <strong class="text-emerald-700 font-num font-bold">${cur} ${data.received.toLocaleString()}</strong>
+          <div class="grid grid-cols-2 gap-2 pt-1">
+            <div class="p-2 rounded-xl bg-slate-50 border border-slate-200/70">
+              <span class="text-[10.5px] font-bold uppercase tracking-wider text-slate-400 block">Expected</span>
+              <div class="text-sm font-bold text-slate-800 mt-0.5 lms-num-financial">${fmtAmt(data.expected)}</div>
+            </div>
+            <div class="p-2 rounded-xl ${pendingAmt > 0 ? 'bg-rose-50/70 border-rose-200/80' : 'bg-emerald-50/60 border-emerald-200/70'} border">
+              <span class="text-[10.5px] font-bold uppercase tracking-wider ${pendingAmt > 0 ? 'text-rose-600' : 'text-emerald-700'} block">Pending</span>
+              <div class="text-sm font-bold ${pendingAmt > 0 ? 'text-rose-700' : 'text-emerald-700'} mt-0.5 lms-num-financial">${fmtAmt(pendingAmt)}</div>
+            </div>
           </div>
-          <div class="w-full h-2 bg-slate-200 rounded-full overflow-hidden">
+          <div class="w-full h-2.5 bg-slate-100 rounded-full overflow-hidden">
             <div class="h-full bg-emerald-600 transition-all duration-300" style="width: ${pct}%;"></div>
           </div>
         `;

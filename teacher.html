@@ -34,9 +34,9 @@
       theme: {
         extend: {
           fontFamily: {
-            sans: ['"Inter"', '"Plus Jakarta Sans"', 'system-ui', '-apple-system', 'sans-serif'],
-            mono: ['"Inter"', '"Outfit"', 'system-ui', 'sans-serif'],
-            num: ['"Outfit"', '"Inter"', 'system-ui', 'sans-serif']
+            sans: ['"Inter"', '"Plus Jakarta Sans"', '"Segoe UI"', 'system-ui', '-apple-system', 'sans-serif'],
+            mono: ['"Plus Jakarta Sans"', '"Inter"', '"Segoe UI"', 'system-ui', 'sans-serif'],
+            num: ['"Plus Jakarta Sans"', '"Inter"', '"Segoe UI"', 'system-ui', 'sans-serif']
           },
           colors: {
             brandDark: '#064e3b',
@@ -50,51 +50,89 @@
   </script>
 
   <style>
+    :root {
+      --font-ui: 'Inter', 'Plus Jakarta Sans', 'Segoe UI', system-ui, -apple-system, sans-serif;
+      --font-num: 'Plus Jakarta Sans', 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;
+    }
+
     body {
-      font-family: 'Inter', 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+      font-family: var(--font-ui);
       font-size: 14.5px;
       line-height: 1.55;
       color: #0f172a;
-      font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11', 'tnum' 1, 'lnum' 1, 'zero' 0;
+      font-feature-settings: 'cv01' 1, 'cv02' 1, 'cv03' 1, 'cv04' 1, 'cv11' 1, 'tnum' 1, 'lnum' 1, 'zero' 0;
       font-variant-numeric: tabular-nums lining-nums;
       -webkit-font-smoothing: antialiased;
       -moz-osx-font-smoothing: grayscale;
     }
 
-    /* Dedicated Number & Financial Typography System */
-    .font-num,
-    .font-mono,
-    .lms-num,
-    td[class*="font-bold"],
-    td[class*="font-extrabold"],
-    td[class*="font-black"],
-    span[id*="stat"],
-    span[id*="kpi"],
-    span[id*="salary"],
-    span[id*="Salary"],
-    h2[id*="stat"],
-    h3[id*="stat"] {
-      font-family: 'Outfit', 'Inter', system-ui, -apple-system, sans-serif !important;
+    select, option, optgroup, input, textarea {
+      font-family: 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif !important;
       font-variant-numeric: tabular-nums lining-nums !important;
       font-feature-settings: 'tnum' 1, 'lnum' 1, 'zero' 0 !important;
-      letter-spacing: -0.015em;
+    }
+
+    .font-mono,
+    .font-num,
+    .lms-num,
+    .lms-num-kpi,
+    .lms-num-stat,
+    .lms-num-financial,
+    .lms-num-percent,
+    .lms-num-table,
+    .lms-num-time,
+    .lms-num-id,
+    #statAssignedStudents,
+    #statTodayClasses,
+    #statCompleted,
+    #statRemaining {
+      font-family: var(--font-num) !important;
+      font-variant-numeric: tabular-nums lining-nums !important;
+      font-feature-settings: 'tnum' 1, 'lnum' 1, 'cv01' 1, 'cv02' 1, 'zero' 0 !important;
+    }
+
+    .lms-num-kpi,
+    #statAssignedStudents,
+    #statTodayClasses,
+    #statCompleted,
+    #statRemaining {
+      font-size: clamp(1.85rem, 2.2vw, 2.25rem) !important;
+      font-weight: 700 !important;
+      line-height: 1.1 !important;
+      letter-spacing: -0.025em !important;
+      white-space: nowrap !important;
+    }
+
+    .lms-num-time,
+    .lms-num-table {
+      font-size: 0.875rem !important;
+      font-weight: 600 !important;
+      letter-spacing: -0.01em !important;
+      white-space: nowrap !important;
+    }
+
+    .lms-num-id {
+      font-size: 0.78rem !important;
+      font-weight: 600 !important;
+      letter-spacing: 0.01em !important;
+      white-space: nowrap !important;
     }
 
     /* Global Typography Readability & Anti-Eye-Strain Scale */
     .text-\[8\.5px\], .text-\[9px\], .text-\[9\.5px\] {
-      font-size: 11px !important;
+      font-size: 11.25px !important;
       line-height: 1.4 !important;
     }
     .text-\[10px\], .text-\[10\.5px\] {
-      font-size: 11.75px !important;
+      font-size: 12px !important;
       line-height: 1.45 !important;
     }
     .text-\[11px\] {
-      font-size: 12.25px !important;
+      font-size: 12.5px !important;
       line-height: 1.45 !important;
     }
     .text-xs {
-      font-size: 12.75px !important;
+      font-size: 13px !important;
       line-height: 1.5 !important;
     }
 
@@ -391,43 +429,51 @@
       <!-- KEY METRICS STATS CARDS -->
       <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
         <!-- 1. Assigned Students -->
-        <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
-          <div class="flex items-center justify-between text-slate-500 mb-1">
-            <span class="text-[11px] font-black uppercase tracking-wider">My Students</span>
-            <i class="fa-solid fa-user-graduate text-emerald-600 text-sm"></i>
+        <div class="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-sm flex flex-col justify-between">
+          <div class="flex items-center justify-between text-slate-500 mb-1.5">
+            <span class="text-xs font-bold uppercase tracking-wider text-slate-600">My Students</span>
+            <span class="w-8 h-8 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-700 flex items-center justify-center text-sm">
+              <i class="fa-solid fa-user-graduate"></i>
+            </span>
           </div>
-          <div class="text-2xl sm:text-3xl font-black text-slate-900" id="statAssignedStudents">0</div>
-          <div class="text-[10px] text-slate-500 mt-0.5">Enrolled Quran Learners</div>
+          <div class="lms-num-kpi text-slate-900 my-1" id="statAssignedStudents">0</div>
+          <div class="text-xs text-slate-500 font-semibold">Enrolled Quran Learners</div>
         </div>
 
         <!-- 2. Today's Classes -->
-        <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
-          <div class="flex items-center justify-between text-slate-500 mb-1">
-            <span class="text-[11px] font-black uppercase tracking-wider">Today's Classes</span>
-            <i class="fa-solid fa-calendar-day text-brandDark text-sm"></i>
+        <div class="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-sm flex flex-col justify-between">
+          <div class="flex items-center justify-between text-slate-500 mb-1.5">
+            <span class="text-xs font-bold uppercase tracking-wider text-slate-600">Today's Classes</span>
+            <span class="w-8 h-8 rounded-xl bg-slate-100 border border-slate-200 text-brandDark flex items-center justify-center text-sm">
+              <i class="fa-solid fa-calendar-day"></i>
+            </span>
           </div>
-          <div class="text-2xl sm:text-3xl font-black text-slate-900" id="statTodayClasses">0</div>
-          <div class="text-[10px] text-slate-500 mt-0.5">12:00 AM - 12:00 AM</div>
+          <div class="lms-num-kpi text-slate-900 my-1" id="statTodayClasses">0</div>
+          <div class="text-xs text-slate-500 font-semibold">Scheduled Sessions Today</div>
         </div>
 
         <!-- 3. Completed Today -->
-        <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
-          <div class="flex items-center justify-between text-slate-500 mb-1">
-            <span class="text-[11px] font-black uppercase tracking-wider">Completed</span>
-            <i class="fa-solid fa-circle-check text-teal-600 text-sm"></i>
+        <div class="bg-white p-4 sm:p-5 rounded-2xl border border-teal-200 shadow-sm flex flex-col justify-between">
+          <div class="flex items-center justify-between text-teal-800 mb-1.5">
+            <span class="text-xs font-bold uppercase tracking-wider">Completed</span>
+            <span class="w-8 h-8 rounded-xl bg-teal-50 border border-teal-200 text-teal-700 flex items-center justify-center text-sm">
+              <i class="fa-solid fa-circle-check"></i>
+            </span>
           </div>
-          <div class="text-2xl sm:text-3xl font-black text-teal-700" id="statCompleted">0</div>
-          <div class="text-[10px] text-teal-600 mt-0.5">Marked Present</div>
+          <div class="lms-num-kpi text-teal-700 my-1" id="statCompleted">0</div>
+          <div class="text-xs text-teal-700 font-semibold">Marked Present Today</div>
         </div>
 
         <!-- 4. Remaining Slots -->
-        <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
-          <div class="flex items-center justify-between text-slate-500 mb-1">
-            <span class="text-[11px] font-black uppercase tracking-wider">Remaining</span>
-            <i class="fa-solid fa-hourglass-half text-amber-600 text-sm"></i>
+        <div class="bg-white p-4 sm:p-5 rounded-2xl border border-amber-200 shadow-sm flex flex-col justify-between">
+          <div class="flex items-center justify-between text-amber-800 mb-1.5">
+            <span class="text-xs font-bold uppercase tracking-wider">Remaining</span>
+            <span class="w-8 h-8 rounded-xl bg-amber-50 border border-amber-200 text-amber-700 flex items-center justify-center text-sm">
+              <i class="fa-solid fa-hourglass-half"></i>
+            </span>
           </div>
-          <div class="text-2xl sm:text-3xl font-black text-amber-600" id="statRemaining">0</div>
-          <div class="text-[10px] text-slate-500 mt-0.5">Upcoming Slots Today</div>
+          <div class="lms-num-kpi text-amber-600 my-1" id="statRemaining">0</div>
+          <div class="text-xs text-amber-700 font-semibold">Upcoming Slots Today</div>
         </div>
       </div>
 
@@ -1081,13 +1127,13 @@
             </div>
             <div>
               <span class="text-[10px] font-bold text-slate-400 uppercase block">Current Scheduled Time</span>
-              <span id="timeChangeCurrentSlotDisplay" class="font-mono font-black text-rose-700 text-sm">--</span>
+              <span id="timeChangeCurrentSlotDisplay" class="lms-num-time font-bold text-rose-700 text-sm">--</span>
             </div>
           </div>
 
           <div>
             <label class="block font-bold text-slate-700 mb-1">Select New Proposed Time Slot (30-Min PKT) *:</label>
-            <select id="timeChangeNewSlotSelect" required class="w-full p-2.5 border border-indigo-300 rounded-xl font-mono font-bold text-slate-900 bg-white">
+            <select id="timeChangeNewSlotSelect" required class="w-full p-2.5 border border-indigo-300 rounded-xl font-bold text-slate-900 bg-white">
               <!-- Populated dynamically with Free vs Occupied status -->
             </select>
             <p class="text-[10px] text-emerald-700 font-semibold mt-1 flex items-center gap-1">
@@ -1865,15 +1911,24 @@
         }
 
         let courseTitle = 'Quran Studies & Tajweed';
+        const isUuidLike = (str) => /^[0-9a-f]{8}-[0-9a-f]{4}/i.test(String(str || '').trim());
         if (isTrialClass) {
           courseTitle = '3-Day Free Trial Evaluation';
-        } else if (c.students?.course_id) {
-          courseTitle = c.students.course_id;
-        } else if (c.students?.notes) {
-          try {
-            const pNotes = JSON.parse(c.students.notes);
-            if (pNotes.course) courseTitle = pNotes.course;
-          } catch(e) {}
+        } else {
+          let parsedCourse = '';
+          if (c.students?.notes) {
+            try {
+              const pNotes = JSON.parse(c.students.notes);
+              if (pNotes.course && !isUuidLike(pNotes.course)) parsedCourse = pNotes.course;
+            } catch(e) {}
+          }
+          if (parsedCourse) {
+            courseTitle = parsedCourse;
+          } else if (c.students?.course && !isUuidLike(c.students.course)) {
+            courseTitle = c.students.course;
+          } else if (c.students?.course_id && !isUuidLike(c.students.course_id)) {
+            courseTitle = c.students.course_id;
+          }
         }
 
         let rowClass = 'hover:bg-slate-50 transition';
@@ -1949,22 +2004,22 @@
 
         return `
           <tr class="${rowClass}">
-            <td class="p-3.5 font-mono">
-              <div class="font-extrabold text-slate-900 text-xs">${c.start_time.slice(0,5)} - ${c.end_time.slice(0,5)}</div>
-              ${timingBadge}
+            <td class="p-3.5 whitespace-nowrap">
+              <div class="lms-num-time font-bold text-slate-900 bg-slate-100/90 border border-slate-200 px-2.5 py-1 rounded-lg inline-block whitespace-nowrap">${c.start_time.slice(0,5)} – ${c.end_time.slice(0,5)}</div>
+              <div class="mt-1">${timingBadge}</div>
             </td>
             <td class="p-3.5">
               <div class="flex items-center gap-1.5 flex-wrap">
-                <span class="font-bold text-slate-900 text-xs">${c.students?.name || 'Student'}</span>
+                <span class="font-bold text-slate-900 text-[13.5px]">${c.students?.name || 'Student'}</span>
                 ${isTrialClass 
                   ? '<span class="px-2 py-0.5 rounded text-[10px] font-extrabold bg-purple-100 text-purple-800 border border-purple-200">✨ Trial Class</span>' 
                   : '<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">🎓 Regular</span>'}
                 ${reqBadge}
               </div>
-              <div class="text-[10px] text-slate-500 font-mono">ID: ${c.students?.id || 'STU'}</div>
+              <div class="lms-num-id text-slate-600 bg-slate-100 border border-slate-200/80 px-2 py-0.5 rounded inline-block mt-1">ID: ${c.students?.id || 'STU'}</div>
             </td>
             <td class="p-3.5">
-              <span class="px-2 py-0.5 rounded ${isTrialClass ? 'bg-purple-50 text-purple-900 border-purple-200' : 'bg-emerald-50 text-brandEmerald border-emerald-200'} font-bold text-[11px] border">
+              <span class="px-2.5 py-1 rounded-lg ${isTrialClass ? 'bg-purple-50 text-purple-900 border-purple-200' : 'bg-emerald-50 text-brandEmerald border-emerald-200'} font-bold text-xs border inline-block">
                 ${courseTitle}
               </span>
             </td>

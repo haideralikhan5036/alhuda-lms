@@ -543,9 +543,11 @@
                     </p>
                   </div>
                 </div>
-                <div class="text-right">
-                  <span class="font-black text-base text-brandDark block leading-none">${f.currency} ${f.monthly_fee}</span>
-                  <span class="text-[10px] text-slate-400 font-semibold">Monthly Agreed</span>
+                <div class="bg-emerald-50/80 border border-emerald-200/90 px-3 py-1.5 rounded-xl text-right shrink-0">
+                  <span class="text-[10px] uppercase tracking-wider text-emerald-800 font-bold block leading-tight">Monthly Fee</span>
+                  <div class="text-lg font-bold text-brandDark leading-tight mt-0.5">
+                    ${typeof formatLmsCurrencyHtml === 'function' ? formatLmsCurrencyHtml(f.monthly_fee, f.currency, 'text-lg text-brandDark') : `<span class="lms-num-financial">${f.currency} ${Number(f.monthly_fee || 0).toLocaleString()}</span>`}
+                  </div>
                 </div>
               </div>
 
@@ -674,15 +676,15 @@
 
         return `
           <tr class="hover:bg-slate-50 transition text-xs">
-            <td class="p-3 text-center font-mono font-bold text-slate-500">${idx + 1}</td>
-            <td class="p-3 font-mono font-black text-brandDark">
-              <button onclick="openFamily360Profile('${f.id}')" class="hover:underline text-brandDark">${f.id}</button>
+            <td class="p-3 text-center lms-num-table font-bold text-slate-600">${idx + 1}</td>
+            <td class="p-3 lms-num-id font-bold text-brandDark">
+              <button onclick="openFamily360Profile('${f.id}')" class="px-2 py-0.5 rounded-md bg-emerald-50 border border-emerald-200 hover:bg-emerald-100 text-brandDark transition">${f.id}</button>
             </td>
             <td class="p-3 font-bold text-slate-900">
               <button onclick="openFamily360Profile('${f.id}')" class="hover:text-brandEmerald hover:underline text-left font-extrabold">${f.parent_name}</button>
             </td>
             <td class="p-3 text-slate-600">${f.country || '--'}</td>
-            <td class="p-3 font-mono">
+            <td class="p-3 lms-num-table">
               ${CURRENT_ROLE === 'manager' ? `
                 <span class="text-slate-600 flex items-center gap-1 font-bold" title="Protected Contact for Manager">
                   <i class="fa-solid fa-lock text-amber-500 text-[10px]"></i> ${maskStudentPhone(f.whatsapp)}
@@ -693,9 +695,11 @@
                 </a>
               `}
             </td>
-            <td class="p-3 font-mono font-extrabold text-brandEmerald">${f.currency} ${f.monthly_fee}</td>
+            <td class="p-3">
+              ${typeof formatLmsCurrencyHtml === 'function' ? formatLmsCurrencyHtml(f.monthly_fee, f.currency, 'text-[15px] text-emerald-800') : `<span class="lms-num-financial text-[15px] text-emerald-800">${f.currency} ${Number(f.monthly_fee || 0).toLocaleString()}</span>`}
+            </td>
             <td class="p-3 font-bold text-slate-700">
-              <button onclick="openFamily360Profile('${f.id}', 'students')" class="px-2 py-0.5 rounded-full bg-slate-100 hover:bg-emerald-100 border border-slate-200 text-xs transition">${childrenCount} Sibling(s)</button>
+              <button onclick="openFamily360Profile('${f.id}', 'students')" class="px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-emerald-100 border border-slate-200 text-xs font-bold lms-num-table transition">${childrenCount} Sibling${childrenCount === 1 ? '' : 's'}</button>
             </td>
             <td class="p-3 font-mono text-[11px]">
               <span class="text-slate-500">U:</span> <strong>${creds.username}</strong>

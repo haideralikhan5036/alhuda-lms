@@ -278,16 +278,17 @@
 
             <!-- 2. ASSIGNED STUDENTS -->
             <td class="p-3.5 max-w-xs">
-              <button onclick="openTeacher360Profile('${t.id}', 'students')" class="font-black text-xs text-brandDark hover:text-brandEmerald hover:underline mb-1 block text-left">
-                <i class="fa-solid fa-user-graduate text-emerald-600"></i> ${studentRateItems.length} Enrolled Students
+              <button onclick="openTeacher360Profile('${t.id}', 'students')" class="font-bold text-sm text-brandDark hover:text-brandEmerald hover:underline mb-1.5 flex items-center gap-1.5 text-left">
+                <span class="px-2 py-0.5 rounded-md bg-emerald-50 border border-emerald-200 text-emerald-800 lms-num-table font-bold">${studentRateItems.length}</span>
+                <span>Enrolled Students</span>
               </button>
               <div class="flex flex-wrap">${courseSummaryPills}</div>
             </td>
 
             <!-- 3. BASE COURSE TOTAL -->
-            <td class="p-3.5 font-mono">
-              <div class="font-bold text-slate-800 text-xs">${baseSubtotal.toLocaleString()} PKR</div>
-              <span class="text-[10px] text-slate-400 block">From Course Rates</span>
+            <td class="p-3.5">
+              <div class="lms-num-financial font-bold text-slate-900 text-[15px]">PKR ${baseSubtotal.toLocaleString()}</div>
+              <span class="text-[11px] text-slate-500 block mt-0.5">From Course Rates</span>
             </td>
 
             <!-- 4. BONUS / ADJUSTMENTS -->
@@ -296,9 +297,9 @@
             </td>
 
             <!-- 5. NET PAYABLE SALARY -->
-            <td class="p-3.5 font-mono">
-              <div class="text-sm font-black text-brandDarkest bg-amber-50 px-2.5 py-1 rounded-lg border border-amber-200 inline-block">
-                ${netPayable.toLocaleString()} PKR
+            <td class="p-3.5">
+              <div class="lms-num-financial text-base font-bold text-brandDarkest bg-amber-50/90 px-3 py-1.5 rounded-xl border border-amber-300 inline-block shadow-2xs">
+                PKR ${netPayable.toLocaleString()}
               </div>
             </td>
 
