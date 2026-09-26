@@ -480,7 +480,6 @@
 
         /* Tier 1: Dashboard KPI Hero Numbers */
         .lms-num-kpi,
-        [id^="kpiDash"]:not([id*="Badge"]):not([id*="Box"]),
         #statFamilies, #statStudents, #statRevenue, #statSalaries, #statTrials,
         #trialsKpiActive, #trialsKpiCompleted, #trialsKpiConverted, #trialsKpiTotal,
         #payrollKpiTotal, #payrollKpiTeachers, #payrollKpiStudents, #payrollKpiDisbursed,
@@ -492,6 +491,18 @@
           font-weight: 700 !important;
           line-height: 1.1 !important;
           letter-spacing: -0.025em !important;
+          font-variant-numeric: tabular-nums lining-nums !important;
+          font-feature-settings: 'tnum' 1, 'lnum' 1, 'zero' 0 !important;
+          white-space: nowrap !important;
+        }
+
+        /* Compact 2x2 Dashboard Header Boxes (4 on Left + 4 on Right) */
+        [id^="kpiDash"]:not([id*="Badge"]):not([id*="Box"]) {
+          font-family: var(--font-num) !important;
+          font-size: 1.25rem !important;
+          font-weight: 800 !important;
+          line-height: 1.1 !important;
+          letter-spacing: -0.02em !important;
           font-variant-numeric: tabular-nums lining-nums !important;
           font-feature-settings: 'tnum' 1, 'lnum' 1, 'zero' 0 !important;
           white-space: nowrap !important;
