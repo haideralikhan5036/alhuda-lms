@@ -677,6 +677,65 @@
       lmsNotify(msg);
     };
 
+    function isValidUuidString(val) {
+      return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(val || '').trim());
+    }
+
+    function normalizeStudentCourseRecord(s) {
+      if (!s || typeof s !== 'object') return s;
+      let meta = {};
+      if (s.notes) {
+        try {
+          meta = typeof s.notes === 'string' ? JSON.parse(s.notes) : { ...s.notes };
+        } catch (e) {}
+      }
+      const savedCourseName = meta.course_name || meta.course || meta.trial_course || '';
+      if (savedCourseName && (!s.course_id || isValidUuidString(s.course_id))) {
+        s.course_id = savedCourseName;
+      }
+      return s;
+    }
+
+    function buildStudentDatabasePayload(rawRecord, existingStudent = null) {
+      const dbPayload = { ...rawRecord };
+      const memRecord = { ...rawRecord };
+
+      let meta = {};
+      if (existingStudent && existingStudent.notes) {
+        try {
+          const parsed = typeof existingStudent.notes === 'string' ? JSON.parse(existingStudent.notes) : existingStudent.notes;
+          if (parsed && typeof parsed === 'object') meta = { ...parsed };
+        } catch (e) {}
+      }
+      if (dbPayload.notes) {
+        try {
+          const parsed = typeof dbPayload.notes === 'string' ? JSON.parse(dbPayload.notes) : dbPayload.notes;
+          if (parsed && typeof parsed === 'object') meta = { ...meta, ...parsed };
+        } catch (e) {}
+      }
+
+      if ('course_id' in dbPayload) {
+        const rawCourse = String(dbPayload.course_id || '').trim();
+        if (rawCourse && !isValidUuidString(rawCourse)) {
+          meta.course_name = rawCourse;
+          meta.course = rawCourse;
+          dbPayload.course_id = null;
+          memRecord.course_id = rawCourse;
+        } else if (!rawCourse) {
+          dbPayload.course_id = null;
+        }
+      }
+
+      const notesStr = JSON.stringify(meta);
+      dbPayload.notes = notesStr;
+      memRecord.notes = notesStr;
+      return { dbPayload, memRecord };
+    }
+
+    window.isValidUuidString = isValidUuidString;
+    window.normalizeStudentCourseRecord = normalizeStudentCourseRecord;
+    window.buildStudentDatabasePayload = buildStudentDatabasePayload;
+
     let _CORE_DATA_INFLIGHT_PROMISE = null;
     let _LAST_CORE_DATA_LOAD_TS = 0;
     const CORE_DATA_TTL_MS = 60000;
@@ -713,16 +772,23 @@
             db.from('class_schedules').select('*, teachers(*), students(*)')
           ]);
 
-          const rawFamilies = famRes.data || [];
+          const rawFamilies = (famRes.data || []).map(f => {
+            if (Array.isArray(f.students)) {
+              f.students = f.students.map(s => normalizeStudentCourseRecord(s));
+            }
+            return f;
+          });
           RAW_ALL_FAMILIES = rawFamilies;
 
           if (stdRes.data && stdRes.data.length > 0) {
-            ALL_STUDENTS = stdRes.data.filter(s => isRegularStudentRecord(s));
+            ALL_STUDENTS = stdRes.data
+              .map(s => normalizeStudentCourseRecord(s))
+              .filter(s => isRegularStudentRecord(s));
           } else {
             const flatStu = [];
             rawFamilies.forEach(f => {
               if (f.students) {
-                f.students.filter(s => isRegularStudentRecord(s)).forEach(s => flatStu.push(s));
+                f.students.filter(s => isRegularStudentRecord(s)).forEach(s => flatStu.push(normalizeStudentCourseRecord(s)));
               }
             });
             ALL_STUDENTS = flatStu;

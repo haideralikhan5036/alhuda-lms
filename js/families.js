@@ -359,11 +359,21 @@
         }
       }
 
-      const notesMeta = JSON.stringify({ language, days_per_week });
-
-      await db.from('students').insert([{
+      const notesMeta = JSON.stringify({ language, days_per_week, course_name: course_id, course: course_id });
+      const rawStudentRecord = {
         id, family_id, name, age, gender, course_id, assigned_teacher_id, joining_date, notes: notesMeta, status: 'Active'
-      }]);
+      };
+      const { dbPayload } = (typeof buildStudentDatabasePayload === 'function')
+        ? buildStudentDatabasePayload(rawStudentRecord)
+        : { dbPayload: { ...rawStudentRecord, course_id: null } };
+
+      const { error: stuInsertErr } = await db.from('students').insert([dbPayload]);
+      if (stuInsertErr) {
+        lmsNotify('Failed to enroll student: ' + stuInsertErr.message, { type: 'error' });
+        btn.disabled = false;
+        btn.innerText = 'Enroll Student';
+        return;
+      }
 
       // Cache student profile in localStorage
       const profiles = JSON.parse(localStorage.getItem('alhuda_student_profiles') || '{}');

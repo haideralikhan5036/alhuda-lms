@@ -165,6 +165,10 @@ function _parseStudentStructuredNotes(student) {
   if (!Array.isArray(meta.certificates)) meta.certificates = [];
   if (!Array.isArray(meta.progress_reports)) meta.progress_reports = [];
   if (!Array.isArray(meta.teacher_notes)) meta.teacher_notes = [];
+  if (student && (!student.course_id || (typeof isValidUuidString === 'function' && isValidUuidString(student.course_id)))) {
+    const savedCourse = meta.course_name || meta.course || meta.trial_course || '';
+    if (savedCourse) student.course_id = savedCourse;
+  }
   return meta;
 }
 
@@ -172,7 +176,12 @@ function _parseStudentStructuredNotes(student) {
  * Save updated student record to Supabase students + in-memory ALL_STUDENTS & ALL_FAMILIES
  */
 async function _saveStudentRecordBackend(studentId, updateFields) {
-  const { error } = await db.from('students').update(updateFields).eq('id', studentId);
+  const existingStu = (window.ALL_STUDENTS || []).find(s => String(s.id).toUpperCase() === String(studentId).toUpperCase());
+  const { dbPayload, memRecord } = (typeof buildStudentDatabasePayload === 'function')
+    ? buildStudentDatabasePayload(updateFields, existingStu)
+    : { dbPayload: updateFields, memRecord: updateFields };
+
+  const { error } = await db.from('students').update(dbPayload).eq('id', studentId);
   if (error) {
     console.error('[Student Update] Supabase error:', error);
     throw error;
@@ -181,7 +190,7 @@ async function _saveStudentRecordBackend(studentId, updateFields) {
   // Update ALL_STUDENTS
   const sIdx = (window.ALL_STUDENTS || []).findIndex(s => String(s.id).toUpperCase() === String(studentId).toUpperCase());
   if (sIdx >= 0) {
-    window.ALL_STUDENTS[sIdx] = { ...window.ALL_STUDENTS[sIdx], ...updateFields };
+    window.ALL_STUDENTS[sIdx] = { ...window.ALL_STUDENTS[sIdx], ...memRecord };
   }
 
   // Update nested student inside ALL_FAMILIES
@@ -189,7 +198,7 @@ async function _saveStudentRecordBackend(studentId, updateFields) {
     if (Array.isArray(fam.students)) {
       const fStuIdx = fam.students.findIndex(s => String(s.id).toUpperCase() === String(studentId).toUpperCase());
       if (fStuIdx >= 0) {
-        fam.students[fStuIdx] = { ...fam.students[fStuIdx], ...updateFields };
+        fam.students[fStuIdx] = { ...fam.students[fStuIdx], ...memRecord };
       }
     }
   });
@@ -2063,9 +2072,15 @@ async function submitFamilyAddStudentForm(e, familyId) {
     }
   }
 
-  const notes = JSON.stringify({ days_per_week, language: 'English', certificates: [] });
+  const notes = JSON.stringify({
+    days_per_week,
+    language: 'English',
+    course_name: course_id,
+    course: course_id,
+    certificates: []
+  });
 
-  const newStuRecord = {
+  const rawStuRecord = {
     id,
     family_id: familyId,
     name,
@@ -2078,7 +2093,11 @@ async function submitFamilyAddStudentForm(e, familyId) {
     status: 'Active'
   };
 
-  const { error } = await db.from('students').insert([newStuRecord]);
+  const { dbPayload, memRecord: newStuRecord } = (typeof buildStudentDatabasePayload === 'function')
+    ? buildStudentDatabasePayload(rawStuRecord)
+    : { dbPayload: { ...rawStuRecord, course_id: null }, memRecord: rawStuRecord };
+
+  const { error } = await db.from('students').insert([dbPayload]);
   if (error) {
     alert('Failed to enroll student: ' + error.message);
     if (btn) { btn.disabled = false; btn.innerText = 'Enroll Student in Family'; }
@@ -2086,11 +2105,17 @@ async function submitFamilyAddStudentForm(e, familyId) {
   }
 
   if (Array.isArray(window.ALL_STUDENTS)) window.ALL_STUDENTS.unshift(newStuRecord);
-  const fam = (window.ALL_FAMILIES || []).find(f => String(f.id).toUpperCase() === String(familyId).toUpperCase());
+  const fam = (window.ALL_FAMILIES || []).find(f => String(f.id).toUpperCase() === String(familyId).toUpperCase())
+           || (window.RAW_ALL_FAMILIES || []).find(f => String(f.id).toUpperCase() === String(familyId).toUpperCase());
   if (fam) {
     if (!Array.isArray(fam.students)) fam.students = [];
     fam.students.push(newStuRecord);
   }
+
+  if (typeof syncFamilyStatusFromStudentsBackend === 'function') {
+    await syncFamilyStatusFromStudentsBackend(familyId);
+  }
+  if (typeof invalidateCoreLmsDataCache === 'function') invalidateCoreLmsDataCache();
 
   _closeWorkspaceModal();
   _notify360(`Student ${name} (${id}) added to ${fam ? fam.parent_name : familyId} successfully!`);
@@ -2631,7 +2656,9 @@ async function syncFamilyStatusFromStudentsBackend(familyId, extraFamilyColumns 
   try {
     const { data: dbStus, error: stuErr } = await db.from('students').select('*').eq('family_id', family.id);
     if (!stuErr && Array.isArray(dbStus) && dbStus.length > 0) {
-      famStudents = dbStus.filter(s => typeof isRegularStudentRecord === 'function' ? isRegularStudentRecord(s) : String(s.status || '').toLowerCase() !== 'trial');
+      famStudents = dbStus
+        .map(s => (typeof normalizeStudentCourseRecord === 'function' ? normalizeStudentCourseRecord(s) : s))
+        .filter(s => typeof isRegularStudentRecord === 'function' ? isRegularStudentRecord(s) : String(s.status || '').toLowerCase() !== 'trial');
     }
   } catch (e) {}
 
