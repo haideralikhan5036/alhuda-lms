@@ -553,7 +553,10 @@
 
     async function handleDeclineTeacherRequest(studentId, requestType) {
       const rType = requestType || 'leave';
-      const reason = prompt("Enter reason for declining this request (will be saved in audit notes):", "Request cannot be approved at this time");
+      const reason = await lmsPrompt("Enter reason for declining this request (will be saved in audit notes):", "Request cannot be approved at this time", {
+        title: 'Decline Request',
+        confirmText: 'Confirm Decline'
+      });
       if (reason === null) return;
 
       try {
@@ -610,7 +613,7 @@
     }
 
     async function reactivateStudentFromLeave(studentId) {
-      if (!confirm("Reactivate this student now? This will restore their active weekly class schedule slots.")) return;
+      if (!(await lmsConfirm("Reactivate this student now? This will restore their active weekly class schedule slots."))) return;
 
       try {
         const { data: st } = await db.from('students').select('*').eq('id', studentId).single();
@@ -654,7 +657,11 @@
         try { meta = JSON.parse(st.notes || '{}'); } catch(e) { meta = { text: st.notes || '' }; }
 
         const currentReturn = meta.return_date || new Date().toISOString().slice(0, 10);
-        const newReturnDate = prompt(`Enter new Return Date (YYYY-MM-DD) for ${st.name}:`, currentReturn);
+        const newReturnDate = await lmsPrompt(`Enter new Return Date (YYYY-MM-DD) for ${st.name}:`, currentReturn, {
+          title: 'Extend Student Leave',
+          subtitle: `Student: ${st.name} • Current Return Date: ${currentReturn}`,
+          confirmText: 'Extend Leave'
+        });
         if (!newReturnDate || newReturnDate === currentReturn) return;
 
         meta.return_date = newReturnDate;

@@ -1741,9 +1741,13 @@
       return localStorage.getItem('alhuda_fee_official_email') || 'ceoislamiccentre@gmail.com';
     }
 
-    function promptChangeOfficialEmail() {
+    async function promptChangeOfficialEmail() {
       const current = getOfficialAcademyEmail();
-      const entered = prompt("Enter Official Academy Email Address (used for invoice sender & CC):", current);
+      const entered = await lmsPrompt("Enter Official Academy Email Address (used for invoice sender & CC):", current, {
+        title: 'Official Academy Email Address',
+        subtitle: 'Used as sender & CC for official invoices and fee reminders',
+        confirmText: 'Save Email'
+      });
       if (entered !== null && entered.trim() !== '') {
         const clean = entered.trim().toLowerCase();
         localStorage.setItem('alhuda_fee_official_email', clean);
@@ -1775,7 +1779,11 @@
       }
 
       if (!targetEmail && !isSilent) {
-        const promptEmail = prompt(`Please enter parent email address for ${r.parentName} (${r.familyId}):`, "");
+        const promptEmail = await lmsPrompt(`Please enter parent email address for ${r.parentName} (${r.familyId}):`, "", {
+          title: 'Parent Email Required',
+          subtitle: `${r.parentName} (${r.familyId})`,
+          confirmText: 'Send Invoice'
+        });
         if (promptEmail && promptEmail.includes('@')) {
           targetEmail = promptEmail.trim();
           r.email = targetEmail;
@@ -2147,7 +2155,7 @@ Official Email: ${offEmail}`;
 
       if (!isAuto4thTrigger) {
         const confirmMsg = `Remind All Parents — ${periodStr}\n\nTotal Pending Families: ${list.length}\nFamilies with Valid Email: ${recipientsWithEmail.length}\n\nDo you want to automatically dispatch the official ${periodStr} Pending Fee & Receipt Request email to all pending parents?`;
-        if (!confirm(confirmMsg)) return;
+        if (!(await lmsConfirm(confirmMsg))) return;
       }
 
       const btn = document.getElementById('btnRemindAllPendingMonth');
@@ -2549,7 +2557,7 @@ Official Email: ${offEmail}`;
       }
 
       const withEmail = list.filter(i => i.email && i.email.includes('@'));
-      if (!confirm(`Remind All 3+ Month Defaulters\n\nTotal 3+ Month Defaulter Families: ${list.length}\nFamilies with Valid Email: ${withEmail.length}\n\nDo you want to automatically send the urgent 3+ Months Overdue Fee Reminder email to all defaulters?`)) {
+      if (!(await lmsConfirm(`Remind All 3+ Month Defaulters\n\nTotal 3+ Month Defaulter Families: ${list.length}\nFamilies with Valid Email: ${withEmail.length}\n\nDo you want to automatically send the urgent 3+ Months Overdue Fee Reminder email to all defaulters?`))) {
         return;
       }
 
@@ -3117,6 +3125,10 @@ Official Email: ${offEmail}`;
 
     // Generic Toast notification helper for fee engine
     function showToastNotification(message) {
+      if (typeof window.lmsNotify === 'function') {
+        window.lmsNotify(message);
+        return;
+      }
       if (typeof showAttendanceToast === 'function') {
         showAttendanceToast(message);
       } else {

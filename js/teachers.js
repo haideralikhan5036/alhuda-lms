@@ -229,7 +229,7 @@
       const acc = accounts[teacherId] || {};
       const zoomLink = acc.zoom_link || `https://zoom.us/j/${teacher.phone ? teacher.phone.replace(/[^0-9]/g, '') : '9876543210'}?pwd=alhuda_${(teacher.full_name||'').toLowerCase().replace(/[^a-z]/g, '')}`;
 
-      if (confirm(`Cascade & sync Zoom link for "${teacher.full_name}" to all assigned students and weekly schedules now?\n\nLink: ${zoomLink}`)) {
+      if (await lmsConfirm(`Cascade & sync Zoom link for "${teacher.full_name}" to all assigned students and weekly schedules now?\n\nLink: ${zoomLink}`)) {
         const res = await syncTeacherZoomToAllStudents(teacherId, zoomLink);
         alert(`✅ Auto-Sync Completed!\n\nUpdated ${res.schedulesCount} schedule slots and ${res.trialsCount} trial classes for ${teacher.full_name}.`);
         await loadTeachers();
@@ -683,7 +683,7 @@
       try { meta = JSON.parse(teacher?.notes || '{}'); } catch(e){}
       const roleLabel = meta.employee_type === 'manager' ? 'Manager' : (meta.employee_type === 'other_staff' ? 'Staff Member' : 'Teacher');
 
-      if (!confirm(`Are you sure you want to delete ${roleLabel} "${tName}"?\n\nThis will remove their profile and records.`)) {
+      if (!(await lmsConfirm(`Are you sure you want to delete ${roleLabel} "${tName}"?\n\nThis will remove their profile and records.`))) {
         return;
       }
 
@@ -738,16 +738,18 @@
       // In student enrollment modal, only list actual teaching staff (exclude managers/non-teaching staff)
       const sTeacherSelect = document.getElementById('stuTeacherId');
       if (sTeacherSelect) {
-        const teachingOnly = (teachers || []).filter(t => {
-          let m = {};
-          try {
-            if (t.address && t.address.startsWith('{')) m = JSON.parse(t.address);
-            else if (t.witness_name && t.witness_name.startsWith('{')) m = JSON.parse(t.witness_name);
-            else if (t.notes && t.notes.startsWith('{')) m = JSON.parse(t.notes);
-          } catch(e){}
-          const acc = accounts[t.id] || {};
-          return m.employee_type !== 'manager' && m.employee_type !== 'other_staff' && acc.employee_type !== 'manager' && acc.employee_type !== 'other_staff' && t.working_shift !== 'Manager' && !String(t.id).startsWith('MGR-') && !String(t.id).startsWith('STF-') && !String(m.emp_id || '').startsWith('MGR-') && !String(acc.teacher_id || '').startsWith('MGR-') && !String(t.witness_name || '').startsWith('MGR-') && !String(t.witness_name || '').startsWith('STF-');
-        });
+        const teachingOnly = (typeof getEligibleTeachers === 'function')
+          ? getEligibleTeachers(teachers)
+          : (teachers || []).filter(t => {
+              let m = {};
+              try {
+                if (t.address && t.address.startsWith('{')) m = JSON.parse(t.address);
+                else if (t.witness_name && t.witness_name.startsWith('{')) m = JSON.parse(t.witness_name);
+                else if (t.notes && t.notes.startsWith('{')) m = JSON.parse(t.notes);
+              } catch(e){}
+              const acc = accounts[t.id] || {};
+              return m.employee_type !== 'manager' && m.employee_type !== 'other_staff' && acc.employee_type !== 'manager' && acc.employee_type !== 'other_staff' && t.working_shift !== 'Manager' && !String(t.id).startsWith('MGR-') && !String(t.id).startsWith('STF-') && !String(m.emp_id || '').startsWith('MGR-') && !String(acc.teacher_id || '').startsWith('MGR-') && !String(t.witness_name || '').startsWith('MGR-') && !String(t.witness_name || '').startsWith('STF-');
+            });
         sTeacherSelect.innerHTML = teachingOnly.map(t => `<option value="${t.id}">${t.full_name} (${t.rate_per_slot || 2200} PKR)</option>`).join('');
       }
 

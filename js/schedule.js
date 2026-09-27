@@ -12,6 +12,18 @@
       CURRENT_MATRIX_TEACHER = ALL_TEACHERS.find(t => t.id === teacherId);
       if (!CURRENT_MATRIX_TEACHER) return;
 
+      if (typeof isEligibleTeacherRecord === 'function' && !isEligibleTeacherRecord(CURRENT_MATRIX_TEACHER)) {
+        const roleInfo = (typeof getEmployeeRoleClassification === 'function') ? getEmployeeRoleClassification(CURRENT_MATRIX_TEACHER) : { roleLabel: 'Manager' };
+        if (typeof lmsNotify === 'function') {
+          lmsNotify(`${CURRENT_MATRIX_TEACHER.full_name} is registered as ${roleInfo.roleLabel} (Non-Teaching Management). Managers do not have a weekly teaching timetable.`, {
+            type: 'error',
+            title: 'Teaching Schedule Restricted'
+          });
+        }
+        CURRENT_MATRIX_TEACHER = null;
+        return;
+      }
+
       const creds = getTeacherCreds(CURRENT_MATRIX_TEACHER);
       document.getElementById('matrixTeacherName').innerText = `${CURRENT_MATRIX_TEACHER.full_name}'s Weekly Timetable (${creds.teacher_id})`;
       document.getElementById('matrixTeacherSubtitle').innerText = `Rate: ${CURRENT_MATRIX_TEACHER.rate_per_slot || 200} PKR / slot • Configured Shift: ${CURRENT_MATRIX_TEACHER.working_shift || '10 Hours Shift (02:00 PM - 12:00 AM PKT)'}`;
@@ -380,6 +392,14 @@
         return;
       }
 
+      if (typeof validateEligibleTeacherBackend === 'function') {
+        const check = await validateEligibleTeacherBackend(CURRENT_MATRIX_TEACHER.id);
+        if (!check.valid) {
+          alert(check.error);
+          return;
+        }
+      }
+
       // Backend validation: ensure selected student belongs to this teacher's roster and is active
       const { data: stuRecord, error: stuErr } = await db.from('students')
         .select('id, name, status, assigned_teacher_id, family_id, families(id, status)')
@@ -614,9 +634,10 @@
     }
 
     async function requestTimeChangeFromIndex(scheduleId, studentId, teacherId, oldStart, oldEnd, studentName, teacherName) {
-      const newStartInput = prompt(
-        `🕒 Request Schedule Time Change for ${studentName}\n\nCurrent Scheduled Time: ${oldStart} - ${oldEnd} PKT\nEnter New Start Time (24-hour format HH:MM, e.g. 18:30 for 6:30 PM PKT):`,
-        "18:00"
+      const newStartInput = await lmsPrompt(
+        `Request Schedule Time Change for ${studentName}\n\nCurrent Scheduled Time: ${oldStart} - ${oldEnd} PKT\nEnter New Start Time (24-hour format HH:MM, e.g. 18:30 for 6:30 PM PKT):`,
+        "18:00",
+        { title: 'Request Schedule Time Change', subtitle: `${studentName} • Current: ${oldStart} - ${oldEnd} PKT`, confirmText: 'Next' }
       );
       if (!newStartInput) return;
 
@@ -638,7 +659,7 @@
       const newStart24 = `${String(sH).padStart(2, '0')}:${String(sM).padStart(2, '0')}`;
       const newEnd24 = `${String(eH).padStart(2, '0')}:${String(eM).padStart(2, '0')}`;
 
-      const reason = prompt("Enter reason for requesting this schedule time change:", "Parent / Student requested new class timing") || "Schedule adjustment";
+      const reason = (await lmsPrompt("Enter reason for requesting this schedule time change:", "Parent / Student requested new class timing", { title: 'Schedule Change Reason', confirmText: 'Submit Request' })) || "Schedule adjustment";
 
       try {
         const { data: st, error } = await db.from('students').select('*').eq('id', studentId).single();

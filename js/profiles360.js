@@ -61,6 +61,10 @@ function _esc360(str) {
 }
 
 function _notify360(message, type = 'success') {
+  if (typeof window.lmsNotify === 'function') {
+    window.lmsNotify(message, { type });
+    return;
+  }
   if (typeof showToastNotification === 'function') {
     try {
       showToastNotification(message);
@@ -1952,7 +1956,10 @@ function openFamilyAddStudentModal(familyId) {
 
   const nextId = (typeof getNextStudentId === 'function') ? getNextStudentId() : `STU-${Math.floor(100 + Math.random() * 899)}`;
   const today = new Date().toISOString().slice(0, 10);
-  const teacherOptions = (window.ALL_TEACHERS || []).map(t =>
+  const eligibleTeachers = (typeof getEligibleTeachers === 'function')
+    ? getEligibleTeachers(window.ALL_TEACHERS)
+    : (window.ALL_TEACHERS || []);
+  const teacherOptions = eligibleTeachers.map(t =>
     `<option value="${_esc360(t.id)}">${_esc360(t.full_name)} (${_esc360(t.working_shift || 'Regular Shift')})</option>`
   ).join('');
 
@@ -2046,6 +2053,15 @@ async function submitFamilyAddStudentForm(e, familyId) {
   const joining_date = document.getElementById('fwNewStuJoinDate').value;
   const assigned_teacher_id = document.getElementById('fwNewStuTeacher').value || null;
   const days_per_week = document.getElementById('fwNewStuDays').value;
+
+  if (assigned_teacher_id && typeof validateEligibleTeacherBackend === 'function') {
+    const check = await validateEligibleTeacherBackend(assigned_teacher_id);
+    if (!check.valid) {
+      if (btn) { btn.disabled = false; btn.innerText = 'Enroll Student in Family'; }
+      _notify360(check.error, 'error');
+      return;
+    }
+  }
 
   const notes = JSON.stringify({ days_per_week, language: 'English', certificates: [] });
 
@@ -2449,7 +2465,10 @@ function openEditSingleStudentModal(familyId, studentId) {
   if (!family || !student) return;
 
   const stuMeta = _parseStudentStructuredNotes(student);
-  const teacherOptions = (window.ALL_TEACHERS || []).map(t =>
+  const eligibleTeachers = (typeof getEligibleTeachers === 'function')
+    ? getEligibleTeachers(window.ALL_TEACHERS)
+    : (window.ALL_TEACHERS || []);
+  const teacherOptions = eligibleTeachers.map(t =>
     `<option value="${_esc360(t.id)}" ${String(t.id) === String(student.assigned_teacher_id) ? 'selected' : ''}>${_esc360(t.full_name)}</option>`
   ).join('');
 
@@ -2534,6 +2553,14 @@ async function submitEditSingleStudentForm(e, familyId, studentId) {
   const course_id = document.getElementById('fwEditStuCourse').value.trim();
   const assigned_teacher_id = document.getElementById('fwEditStuTeacher').value || null;
   const days_per_week = document.getElementById('fwEditStuDays').value.trim();
+
+  if (assigned_teacher_id && typeof validateEligibleTeacherBackend === 'function') {
+    const check = await validateEligibleTeacherBackend(assigned_teacher_id);
+    if (!check.valid) {
+      _notify360(check.error, 'error');
+      return;
+    }
+  }
 
   const stuMeta = _parseStudentStructuredNotes(student);
   stuMeta.days_per_week = days_per_week;
@@ -2744,7 +2771,7 @@ async function toggleSingleStudentDeactivate(familyId, studentId) {
     ? `Reactivate student "${student.name}" (${student.id})?\n\n• ${student.name} will become ACTIVE.\n• Because this family currently has 0 active students, Family "${family?.parent_name || familyId}" will automatically become ACTIVE.`
     : `Reactivate student "${student.name}" (${student.id})?\n\n• ${student.name} will become ACTIVE.\n• Family "${family?.parent_name || familyId}" will remain ACTIVE.`;
 
-  if (!confirm(confirmMsg)) return;
+  if (!(await lmsConfirm(confirmMsg))) return;
 
   const stuMeta = _parseStudentStructuredNotes(student);
   delete stuMeta.family_deactivated;
@@ -2991,7 +3018,7 @@ async function toggleSingleStudentLeave(familyId, studentId) {
     ? `Return student "${student.name}" from leave to Active status?`
     : `Place ONLY "${student.name}" (${student.id}) on Leave?\n\nThe Family and other sibling students will remain Active.`;
 
-  if (!confirm(msg)) return;
+  if (!(await lmsConfirm(msg))) return;
 
   stuMeta.on_leave = !isCurrentlyOnLeave;
   await _saveStudentRecordBackend(student.id, {
@@ -3023,7 +3050,7 @@ async function handleFamilyLevelDeactivate(familyId) {
     : (['inactive', 'deactivated'].includes(String(family.status || '').trim().toLowerCase()) || family.is_active === false);
   const targetStatus = isInactive ? 'Active' : 'Inactive';
 
-  if (!confirm(`${isInactive ? 'Reactivate' : 'Deactivate'} the ENTIRE Family account for "${family.parent_name}" (${family.id})?\n\n${isInactive ? 'This family and its students will return to the Active Families list and active counts.' : 'ALL students belonging to this family will be marked DEACTIVATED, and this family will move to Deactivated Families. All student, fee, invoice, payment, attendance, and lesson history will remain 100% intact.'}`)) return;
+  if (!(await lmsConfirm(`${isInactive ? 'Reactivate' : 'Deactivate'} the ENTIRE Family account for "${family.parent_name}" (${family.id})?\n\n${isInactive ? 'This family and its students will return to the Active Families list and active counts.' : 'ALL students belonging to this family will be marked DEACTIVATED, and this family will move to Deactivated Families. All student, fee, invoice, payment, attendance, and lesson history will remain 100% intact.'}`))) return;
 
   // Fetch all students belonging to this family from DB/memory so none are missed
   let famStudents = [];
@@ -3073,7 +3100,7 @@ async function handleFamilyLevelLeave(familyId) {
   const isLeave = String(family.status || '').toLowerCase().includes('leave');
   const targetStatus = isLeave ? 'Active' : 'On Leave';
 
-  if (!confirm(`${isLeave ? 'Return entire Family from Leave' : 'Place entire Family on Leave'} (${family.parent_name} • ${family.id})?`)) return;
+  if (!(await lmsConfirm(`${isLeave ? 'Return entire Family from Leave' : 'Place entire Family on Leave'} (${family.parent_name} • ${family.id})?`))) return;
 
   const fNotes = _parseFamilyStructuredNotes(family);
   await _saveFamilyStructuredNotes(family.id, fNotes, { status: targetStatus });
@@ -3089,7 +3116,7 @@ async function handleFamilyLevelSuspendClasses(familyId) {
   const fNotes = _parseFamilyStructuredNotes(family);
   const isSuspended = String(family.status || '').toLowerCase() === 'suspended' || Boolean(fNotes.bio_meta.classes_suspended);
 
-  if (!confirm(`${isSuspended ? 'Unsuspend' : 'Suspend'} all classes for Family "${family.parent_name}" (${family.id})?`)) return;
+  if (!(await lmsConfirm(`${isSuspended ? 'Unsuspend' : 'Suspend'} all classes for Family "${family.parent_name}" (${family.id})?`))) return;
 
   fNotes.bio_meta.classes_suspended = !isSuspended;
   const newStatus = !isSuspended ? 'Suspended' : 'Active';
@@ -3394,7 +3421,7 @@ async function deleteFamilyPaymentRecord(familyId, recordId, month, year) {
     return;
   }
 
-  if (!confirm(`Are you sure you want to delete the payment/invoice entry for ${month} ${year}?\n\nThis will remove the record from the backend and recalculate financial totals.`)) return;
+  if (!(await lmsConfirm(`Are you sure you want to delete the payment/invoice entry for ${month} ${year}?\n\nThis will remove the record from the backend and recalculate financial totals.`))) return;
 
   const family = (window.ALL_FAMILIES || []).find(f => String(f.id).toUpperCase() === String(familyId).toUpperCase());
   if (!family) return;
@@ -3501,7 +3528,7 @@ async function submitManagerNoteForm(e, familyId, noteId) {
 }
 
 async function deleteFamilyManagerNote(familyId, noteId) {
-  if (!confirm('Delete this Manager Note permanently?')) return;
+  if (!(await lmsConfirm('Delete this Manager Note permanently?'))) return;
   const family = (window.ALL_FAMILIES || []).find(f => String(f.id).toUpperCase() === String(familyId).toUpperCase());
   if (!family) return;
 
@@ -3575,7 +3602,7 @@ async function submitTeacherNoteForm(e, familyId) {
 }
 
 async function deleteFamilyTeacherNote(familyId, noteId) {
-  if (!confirm('Delete this Teacher Note?')) return;
+  if (!(await lmsConfirm('Delete this Teacher Note?'))) return;
   const family = (window.ALL_FAMILIES || []).find(f => String(f.id).toUpperCase() === String(familyId).toUpperCase());
   if (!family) return;
 
@@ -3733,7 +3760,7 @@ async function submitIssueStudentCertificateForm(e, familyId, studentId) {
 }
 
 async function deleteStudentCertificate360(familyId, studentId, certId) {
-  if (!confirm('Delete this certificate record?')) return;
+  if (!(await lmsConfirm('Delete this certificate record?'))) return;
   const student = (window.ALL_STUDENTS || []).find(s => String(s.id).toUpperCase() === String(studentId).toUpperCase());
   if (!student) return;
 
@@ -5028,6 +5055,14 @@ async function submitTeacherAssignStudent360(e, teacherId) {
   const stuId = document.getElementById('t360AssignStudentSelect')?.value;
   if (!stuId) return;
 
+  if (typeof validateEligibleTeacherBackend === 'function') {
+    const check = await validateEligibleTeacherBackend(teacherId);
+    if (!check.valid) {
+      _notify360(check.error, 'error');
+      return;
+    }
+  }
+
   try {
     await db.from('students').update({ assigned_teacher_id: teacherId }).eq('id', stuId);
   } catch (err) {
@@ -5043,7 +5078,7 @@ async function submitTeacherAssignStudent360(e, teacherId) {
 }
 
 async function unassignStudentFromTeacher360(teacherId, stuId) {
-  if (!confirm('Unassign this student from this teacher? (Student record will remain safe in the LMS)')) return;
+  if (!(await lmsConfirm('Unassign this student from this teacher? (Student record will remain safe in the LMS)'))) return;
   try {
     await db.from('students').update({ assigned_teacher_id: null }).eq('id', stuId);
   } catch (err) {
@@ -5249,7 +5284,7 @@ async function deleteTeacherSalaryMonthRecord360(teacherId, monthRaw, slipKey) {
     alert('Access Denied: Only the System Owner can delete salary records.');
     return;
   }
-  if (!confirm(`Are you sure you want to delete the salary record for ${monthRaw}?`)) return;
+  if (!(await lmsConfirm(`Are you sure you want to delete the salary record for ${monthRaw}?`))) return;
 
   try {
     const savedSalaries = JSON.parse(localStorage.getItem('alhuda_teacher_salaries') || '{}');
@@ -5648,7 +5683,7 @@ async function submitTeacherSalaryAdjustment360(e, teacherId) {
 }
 
 async function deleteTeacherDeductionRecord360(teacherId, deductionId) {
-  if (!confirm('Remove this deduction record and recalculate monthly salary?')) return;
+  if (!(await lmsConfirm('Remove this deduction record and recalculate monthly salary?'))) return;
   const teacher = (window.ALL_TEACHERS || []).find(t => String(t.id) === String(teacherId));
   if (!teacher) return;
   const meta = _resolveTeacherCustomMeta(teacher);
@@ -5745,7 +5780,7 @@ async function submitTeacherRecordLeave360(e, teacherId) {
 }
 
 async function deleteTeacherLeaveRecord360(teacherId, leaveId) {
-  if (!confirm('Delete this leave record?')) return;
+  if (!(await lmsConfirm('Delete this leave record?'))) return;
   const teacher = (window.ALL_TEACHERS || []).find(t => String(t.id) === String(teacherId));
   if (!teacher) return;
   const meta = _resolveTeacherCustomMeta(teacher);
@@ -5839,7 +5874,7 @@ async function submitTeacherUploadDoc360(e, teacherId) {
 }
 
 async function deleteTeacherDocument360(teacherId, docId) {
-  if (!confirm('Delete this document from Teacher 360 Profile?')) return;
+  if (!(await lmsConfirm('Delete this document from Teacher 360 Profile?'))) return;
   const teacher = (window.ALL_TEACHERS || []).find(t => String(t.id) === String(teacherId));
   if (!teacher) return;
   const meta = _resolveTeacherCustomMeta(teacher);
@@ -5906,7 +5941,7 @@ async function handleTeacher360ToggleAccountStatus(teacherId) {
   const isCurrentlyActive = String(teacher.status || 'Active').toLowerCase() === 'active';
   const nextStatus = isCurrentlyActive ? 'Inactive' : 'Active';
 
-  if (!confirm(`Are you sure you want to ${isCurrentlyActive ? 'DEACTIVATE' : 'ACTIVATE'} the account for "${teacher.full_name}"?\n\nAll historical salary, attendance, schedule, and student records will be safely preserved.`)) {
+  if (!(await lmsConfirm(`Are you sure you want to ${isCurrentlyActive ? 'DEACTIVATE' : 'ACTIVATE'} the account for "${teacher.full_name}"?\n\nAll historical salary, attendance, schedule, and student records will be safely preserved.`))) {
     return;
   }
 

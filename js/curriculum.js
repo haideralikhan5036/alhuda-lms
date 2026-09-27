@@ -1072,10 +1072,10 @@
       }
     }
 
-    function clearCurrentPageAnnotations() {
+    async function clearCurrentPageAnnotations() {
       const pageKey = getCurrentPageKey();
       if (!TEACHING_PAGE_MARKS[pageKey] || TEACHING_PAGE_MARKS[pageKey].length === 0) return;
-      if (confirm("Clear all marks on this page?")) {
+      if (await lmsConfirm("Clear all marks on this page?")) {
         TEACHING_PAGE_MARKS[pageKey] = [];
         redrawCurrentPageAnnotations();
       }
@@ -1453,12 +1453,12 @@
       }
     }
 
-    function handleDeleteCurriculumBook(bookId, bookTitle) {
+    async function handleDeleteCurriculumBook(bookId, bookTitle) {
       if (CURRENT_ROLE === 'manager') {
         alert("Access Denied: Managers are not authorized to delete course material books. Only the System Owner can delete books.");
         return;
       }
-      if (!confirm(`Are you sure you want to delete course material "${bookTitle || 'this book'}" from the library?`)) {
+      if (!(await lmsConfirm(`Are you sure you want to delete course material "${bookTitle || 'this book'}" from the library?`))) {
         return;
       }
 

@@ -2546,7 +2546,7 @@
       }
 
       if (tchSel) {
-        const tchs = ALL_TEACHERS || [];
+        const tchs = (typeof getEligibleTeachers === 'function') ? getEligibleTeachers(ALL_TEACHERS) : (ALL_TEACHERS || []);
         tchSel.innerHTML = `<option value="">-- Select Teacher --</option>` +
           tchs.map(t => `<option value="${t.id}">${t.full_name}</option>`).join('') +
           `<option value="TCH-DEMO">Assigned Course Instructor</option>`;

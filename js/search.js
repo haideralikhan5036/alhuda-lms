@@ -256,12 +256,14 @@
       }
 
       // Filter only Teaching Staff (exclude Managers and other non-teaching staff)
-      const teachingStaff = (ALL_TEACHERS || []).filter(t => {
-        let m = {};
-        try { m = JSON.parse(t.notes || '{}'); } catch(e){}
-        const isExcluded = m.employee_type === 'manager' || m.employee_type === 'other_staff' || String(t.id).startsWith('MGR-') || String(t.id).startsWith('STF-');
-        return !isExcluded && t.status !== 'Inactive' && t.status !== 'Terminated';
-      });
+      const teachingStaff = (typeof getEligibleTeachers === 'function')
+        ? getEligibleTeachers(ALL_TEACHERS)
+        : (ALL_TEACHERS || []).filter(t => {
+            let m = {};
+            try { m = JSON.parse(t.notes || '{}'); } catch(e){}
+            const isExcluded = m.employee_type === 'manager' || m.employee_type === 'other_staff' || String(t.id).startsWith('MGR-') || String(t.id).startsWith('STF-');
+            return !isExcluded && t.status !== 'Inactive' && t.status !== 'Terminated';
+          });
 
       // Filter by Teacher Gender and Query
       const matchedTeachers = teachingStaff.filter(t => {

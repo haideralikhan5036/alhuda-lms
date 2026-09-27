@@ -102,7 +102,8 @@
 
       const quickList = document.getElementById('quickTeacherLoginsList');
       if (quickList) {
-        quickList.innerHTML = ALL_TEACHERS.map(t => {
+        const eligibleTeachers = (typeof getEligibleTeachers === 'function') ? getEligibleTeachers(ALL_TEACHERS) : (ALL_TEACHERS || []);
+        quickList.innerHTML = eligibleTeachers.map(t => {
           const creds = getTeacherCreds(t);
           return `
             <div onclick="fillTeacherLogin('${creds.username}', '${creds.password}')" class="p-1.5 bg-slate-50 hover:bg-emerald-50 rounded border border-slate-200 cursor-pointer flex justify-between items-center transition">

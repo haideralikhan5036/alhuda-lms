@@ -140,6 +140,543 @@
     window.isStudentDeactivatedOrParentDeactivated = isStudentDeactivatedOrParentDeactivated;
     window.isActiveStudentRecord = isActiveStudentRecord;
 
+    // =========================================================================
+    // CENTRALIZED EMPLOYEE ROLE & TEACHER ELIGIBILITY ENGINE (MANAGER != TEACHER)
+    // =========================================================================
+    function getEmployeeRoleClassification(emp) {
+      if (!emp || typeof emp !== 'object') return 'unknown';
+
+      const tryParse = (str) => {
+        if (typeof str === 'string' && str.trim().startsWith('{')) {
+          try { return JSON.parse(str); } catch (e) {}
+        } else if (str && typeof str === 'object') {
+          return str;
+        }
+        return null;
+      };
+
+      const meta = tryParse(emp.address) || tryParse(emp.notes) || tryParse(emp.witness_name) || {};
+      let acc = {};
+      try {
+        const accounts = typeof getTeacherAccounts === 'function'
+          ? getTeacherAccounts()
+          : JSON.parse(localStorage.getItem('alhuda_teacher_accounts') || localStorage.getItem('bqi_teacher_accounts') || '{}');
+        if (emp.id && accounts[emp.id]) acc = accounts[emp.id];
+      } catch (e) {}
+
+      const empType = String(
+        emp.employee_type || emp.employeeType || emp.role ||
+        meta.employee_type || meta.employeeType || meta.role ||
+        acc.employee_type || acc.employeeType || acc.role || ''
+      ).trim().toLowerCase();
+
+      const designation = String(
+        emp.designation || meta.designation || acc.designation ||
+        meta.role_title || acc.role_title || ''
+      ).trim().toLowerCase();
+
+      const shift = String(emp.working_shift || meta.working_shift || '').trim().toLowerCase();
+      const codeIds = [
+        String(emp.id || ''),
+        String(emp.witness_name || ''),
+        String(meta.emp_id || ''),
+        String(meta.teacher_id || ''),
+        String(acc.emp_id || ''),
+        String(acc.teacher_id || '')
+      ].map(s => s.trim().toUpperCase());
+
+      if (
+        empType === 'manager' ||
+        designation === 'manager' ||
+        shift === 'manager' ||
+        codeIds.some(c => c.startsWith('MGR-'))
+      ) {
+        return 'manager';
+      }
+
+      if (
+        empType === 'other_staff' ||
+        empType === 'staff' ||
+        designation === 'other staff' ||
+        shift === 'other staff' ||
+        codeIds.some(c => c.startsWith('STF-'))
+      ) {
+        return 'other_staff';
+      }
+
+      return 'teacher';
+    }
+
+    function isEligibleTeacherRecord(emp) {
+      if (!emp || typeof emp !== 'object') return false;
+      const st = String(emp.status || 'Active').trim().toLowerCase();
+      if (st === 'inactive' || st === 'deactivated' || st === 'terminated' || st === 'deleted') return false;
+      return getEmployeeRoleClassification(emp) === 'teacher';
+    }
+
+    function getEligibleTeachers(sourceList = null) {
+      const list = Array.isArray(sourceList)
+        ? sourceList
+        : (Array.isArray(window.ALL_TEACHERS) ? window.ALL_TEACHERS : []);
+      return list.filter(emp => isEligibleTeacherRecord(emp));
+    }
+
+    async function validateEligibleTeacherBackend(teacherId) {
+      if (!teacherId) return { valid: true, teacher: null };
+      const targetId = String(teacherId).trim();
+
+      let emp = (window.ALL_TEACHERS || []).find(t => String(t.id) === targetId);
+      if (!emp) {
+        try {
+          const { data } = await db.from('teachers').select('*').eq('id', targetId).maybeSingle();
+          emp = data;
+        } catch (e) {}
+      }
+
+      if (!emp) {
+        return { valid: false, reason: 'Selected teacher record was not found in the database.' };
+      }
+
+      const roleClass = getEmployeeRoleClassification(emp);
+      if (roleClass === 'manager') {
+        return {
+          valid: false,
+          roleClass: 'manager',
+          reason: `Role Validation Failed: "${emp.full_name}" is a Manager account. Managers cannot be assigned as teachers or receive teaching schedules.`
+        };
+      }
+      if (roleClass !== 'teacher' || !isEligibleTeacherRecord(emp)) {
+        return {
+          valid: false,
+          roleClass,
+          reason: `Role Validation Failed: "${emp.full_name}" is not an active eligible teacher.`
+        };
+      }
+
+      return { valid: true, teacher: emp };
+    }
+
+    window.getEmployeeRoleClassification = getEmployeeRoleClassification;
+    window.isEligibleTeacherRecord = isEligibleTeacherRecord;
+    window.getEligibleTeachers = getEligibleTeachers;
+    window.validateEligibleTeacherBackend = validateEligibleTeacherBackend;
+
+    // =========================================================================
+    // ONE GLOBAL LMS-NATIVE NOTIFICATION & CONFIRMATION SYSTEM
+    // Replaces browser-native alert(), confirm(), and prompt() across the LMS
+    // =========================================================================
+    function _escLmsDialog(str) {
+      return String(str ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    }
+
+    function _inferLmsNotificationType(msg, explicitType) {
+      if (explicitType && ['success', 'error', 'warning', 'info'].includes(explicitType)) return explicitType;
+      const lower = String(msg || '').toLowerCase();
+      if (
+        lower.includes('error') ||
+        lower.includes('failed') ||
+        lower.includes('access denied') ||
+        lower.includes('unable to') ||
+        lower.includes('invalid') ||
+        lower.includes('not found') ||
+        lower.includes('❌')
+      ) {
+        return 'error';
+      }
+      if (
+        lower.includes('please ') ||
+        lower.includes('warning') ||
+        lower.includes('already occupied') ||
+        lower.includes('⚠️')
+      ) {
+        return 'warning';
+      }
+      if (
+        lower.includes('✅') ||
+        lower.includes('🎉') ||
+        lower.includes('🎓') ||
+        lower.includes('successfully') ||
+        lower.includes('copied') ||
+        lower.includes('completed') ||
+        lower.includes('reactivated') ||
+        lower.includes('enrolled') ||
+        lower.includes('updated') ||
+        lower.includes('saved') ||
+        lower.includes('dispatched') ||
+        lower.includes('sent')
+      ) {
+        return 'success';
+      }
+      return 'info';
+    }
+
+    function lmsNotify(message, options = {}) {
+      if (message === undefined || message === null) return;
+      const rawText = String(message).trim();
+      if (!rawText) return;
+
+      const opts = typeof options === 'string' ? { type: options } : (options || {});
+      const variant = _inferLmsNotificationType(rawText, opts.type);
+
+      let stack = document.getElementById('lmsGlobalToastStack');
+      if (!stack) {
+        stack = document.createElement('div');
+        stack.id = 'lmsGlobalToastStack';
+        stack.setAttribute('role', 'region');
+        stack.setAttribute('aria-label', 'LMS Notifications');
+        stack.className = 'fixed top-4 right-4 z-[10050] flex flex-col gap-2.5 w-[calc(100vw-2rem)] max-w-md pointer-events-none';
+        document.body.appendChild(stack);
+      }
+
+      const lines = rawText.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+      const rawHeading = opts.title || lines[0] || 'Notification';
+      const cleanHeading = rawHeading.replace(/^[✅🎉🎓❌⚠️📅🕒]+\s*/, '').trim() || rawHeading;
+      const bodyLines = opts.title ? lines : lines.slice(1);
+      const hasMultiLineDetails = bodyLines.length > 0;
+
+      const themeMap = {
+        success: {
+          border: 'border-emerald-500/90',
+          bg: 'bg-white',
+          iconWrap: 'bg-emerald-100 text-emerald-700 border-emerald-300',
+          icon: 'fa-solid fa-circle-check',
+          badge: 'bg-emerald-50 text-emerald-800 border-emerald-200',
+          bar: 'bg-emerald-500'
+        },
+        error: {
+          border: 'border-rose-500/90',
+          bg: 'bg-white',
+          iconWrap: 'bg-rose-100 text-rose-700 border-rose-300',
+          icon: 'fa-solid fa-circle-exclamation',
+          badge: 'bg-rose-50 text-rose-800 border-rose-200',
+          bar: 'bg-rose-500'
+        },
+        warning: {
+          border: 'border-amber-500/90',
+          bg: 'bg-white',
+          iconWrap: 'bg-amber-100 text-amber-700 border-amber-300',
+          icon: 'fa-solid fa-triangle-exclamation',
+          badge: 'bg-amber-50 text-amber-800 border-amber-200',
+          bar: 'bg-amber-500'
+        },
+        info: {
+          border: 'border-teal-600/90',
+          bg: 'bg-white',
+          iconWrap: 'bg-teal-100 text-teal-800 border-teal-300',
+          icon: 'fa-solid fa-bell',
+          badge: 'bg-teal-50 text-teal-800 border-teal-200',
+          bar: 'bg-teal-600'
+        }
+      };
+      const th = themeMap[variant] || themeMap.info;
+      const durationMs = opts.duration || (hasMultiLineDetails ? 6500 : 4200);
+
+      const card = document.createElement('div');
+      card.setAttribute('role', variant === 'error' ? 'alert' : 'status');
+      card.className = `pointer-events-auto relative overflow-hidden rounded-2xl ${th.bg} border-l-4 ${th.border} border border-slate-200 shadow-2xl p-3.5 transition-all duration-200 opacity-0 translate-y-[-8px]`;
+
+      const detailsHtml = hasMultiLineDetails
+        ? `<div class="mt-1.5 pt-1.5 border-t border-slate-100 text-[11px] text-slate-600 space-y-0.5 leading-relaxed max-h-48 overflow-y-auto">${bodyLines.map(l => `<div>${_escLmsDialog(l)}</div>`).join('')}</div>`
+        : '';
+
+      card.innerHTML = `
+        <div class="flex items-start gap-3">
+          <div class="w-8 h-8 rounded-xl border ${th.iconWrap} flex items-center justify-center shrink-0 mt-0.5">
+            <i class="${th.icon} text-sm"></i>
+          </div>
+          <div class="flex-1 min-w-0">
+            <div class="font-extrabold text-xs text-slate-900 leading-snug break-words">${_escLmsDialog(cleanHeading)}</div>
+            ${detailsHtml}
+          </div>
+          <button type="button" aria-label="Dismiss notification" class="w-6 h-6 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 flex items-center justify-center text-sm font-bold shrink-0 cursor-pointer">&times;</button>
+        </div>
+      `;
+
+      const closeBtn = card.querySelector('button');
+      const dismiss = () => {
+        card.style.opacity = '0';
+        card.style.transform = 'translateY(-8px)';
+        setTimeout(() => { if (card.parentNode) card.parentNode.removeChild(card); }, 180);
+      };
+      if (closeBtn) closeBtn.onclick = dismiss;
+
+      stack.appendChild(card);
+      requestAnimationFrame(() => {
+        card.style.opacity = '1';
+        card.style.transform = 'translateY(0)';
+      });
+
+      setTimeout(dismiss, durationMs);
+    }
+
+    function _parseConfirmInput(optionsOrMessage) {
+      if (optionsOrMessage && typeof optionsOrMessage === 'object') {
+        return {
+          title: optionsOrMessage.title || 'Confirm Action',
+          message: optionsOrMessage.message || '',
+          details: Array.isArray(optionsOrMessage.details) ? optionsOrMessage.details : [],
+          confirmText: optionsOrMessage.confirmText || 'Confirm',
+          cancelText: optionsOrMessage.cancelText || 'Cancel',
+          variant: optionsOrMessage.variant || 'danger'
+        };
+      }
+
+      const raw = String(optionsOrMessage || 'Are you sure you want to proceed?').trim();
+      const lines = raw.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+      const firstLine = lines[0] || 'Confirm Action';
+      const restLines = lines.slice(1);
+      const lower = raw.toLowerCase();
+
+      let variant = 'info';
+      let confirmText = 'Confirm';
+
+      if (lower.includes('deactivate the entire family') || lower.includes('deactivate family')) {
+        variant = 'danger';
+        confirmText = 'Deactivate Family';
+      } else if (lower.includes('reactivate the entire family') || lower.includes('reactivate family')) {
+        variant = 'success';
+        confirmText = 'Reactivate Family';
+      } else if (lower.includes('reactivate')) {
+        variant = 'success';
+        confirmText = 'Reactivate';
+      } else if (lower.includes('deactivate')) {
+        variant = 'danger';
+        confirmText = 'Deactivate';
+      } else if (lower.includes('delete') || lower.includes('remove') || lower.includes('discontinue')) {
+        variant = 'danger';
+        confirmText = lower.includes('discontinue') ? 'Discontinue Trial' : 'Delete';
+      } else if (lower.includes('unassign')) {
+        variant = 'danger';
+        confirmText = 'Unassign';
+      } else if (lower.includes('unsuspend')) {
+        variant = 'success';
+        confirmText = 'Unsuspend Classes';
+      } else if (lower.includes('suspend')) {
+        variant = 'warning';
+        confirmText = 'Suspend Classes';
+      } else if (lower.includes('leave')) {
+        variant = lower.includes('return') ? 'success' : 'warning';
+        confirmText = lower.includes('return') ? 'Return to Active' : 'Confirm Leave';
+      } else if (lower.includes('remind all')) {
+        variant = 'info';
+        confirmText = 'Send Reminders';
+      } else if (lower.includes('sync') || lower.includes('cascade')) {
+        variant = 'info';
+        confirmText = 'Sync Now';
+      }
+
+      return {
+        title: firstLine,
+        message: restLines.join('\n'),
+        details: [],
+        confirmText,
+        cancelText: 'Cancel',
+        variant
+      };
+    }
+
+    function lmsConfirm(optionsOrMessage) {
+      return new Promise((resolve) => {
+        const cfg = _parseConfirmInput(optionsOrMessage);
+        const prevActiveEl = document.activeElement;
+
+        const existing = document.getElementById('lmsGlobalDialogBackdrop');
+        if (existing && existing.parentNode) existing.parentNode.removeChild(existing);
+
+        const variantStyles = {
+          danger: {
+            iconWrap: 'bg-rose-100 text-rose-600 border-rose-200',
+            icon: 'fa-solid fa-triangle-exclamation',
+            btn: 'bg-rose-600 hover:bg-rose-700 focus:ring-rose-500 text-white',
+            headerBorder: 'border-rose-100'
+          },
+          warning: {
+            iconWrap: 'bg-amber-100 text-amber-700 border-amber-200',
+            icon: 'fa-solid fa-circle-exclamation',
+            btn: 'bg-amber-600 hover:bg-amber-700 focus:ring-amber-500 text-white',
+            headerBorder: 'border-amber-100'
+          },
+          success: {
+            iconWrap: 'bg-emerald-100 text-emerald-700 border-emerald-200',
+            icon: 'fa-solid fa-circle-check',
+            btn: 'bg-emerald-600 hover:bg-emerald-700 focus:ring-emerald-500 text-white',
+            headerBorder: 'border-emerald-100'
+          },
+          info: {
+            iconWrap: 'bg-teal-100 text-teal-800 border-teal-200',
+            icon: 'fa-solid fa-circle-question',
+            btn: 'bg-brandDark hover:bg-emerald-950 focus:ring-emerald-600 text-white',
+            headerBorder: 'border-slate-100'
+          }
+        };
+        const st = variantStyles[cfg.variant] || variantStyles.info;
+
+        const backdrop = document.createElement('div');
+        backdrop.id = 'lmsGlobalDialogBackdrop';
+        backdrop.setAttribute('role', 'dialog');
+        backdrop.setAttribute('aria-modal', 'true');
+        backdrop.setAttribute('aria-labelledby', 'lmsGlobalDialogTitle');
+        backdrop.className = 'fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-[10040] flex items-center justify-center p-4';
+
+        const bodyParagraphs = (cfg.message || '')
+          .split(/\r?\n/)
+          .map(l => l.trim())
+          .filter(Boolean)
+          .map(line => `<p class="text-xs text-slate-600 leading-relaxed">${_escLmsDialog(line)}</p>`)
+          .join('');
+
+        backdrop.innerHTML = `
+          <div class="bg-white rounded-2xl max-w-md w-full p-5 shadow-2xl border border-slate-200 transform transition-all">
+            <div class="flex items-start gap-3.5 pb-3.5 border-b ${st.headerBorder}">
+              <div class="w-10 h-10 rounded-xl border ${st.iconWrap} flex items-center justify-center shrink-0">
+                <i class="${st.icon} text-base"></i>
+              </div>
+              <div class="flex-1 min-w-0">
+                <h3 id="lmsGlobalDialogTitle" class="font-extrabold text-sm text-slate-900 leading-snug break-words">
+                  ${_escLmsDialog(cfg.title)}
+                </h3>
+                ${bodyParagraphs ? `<div class="mt-2 space-y-1.5">${bodyParagraphs}</div>` : ''}
+              </div>
+            </div>
+            <div class="flex items-center justify-end gap-2.5 pt-4">
+              <button type="button" id="btnLmsDialogCancel" class="px-4 py-2 rounded-xl border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 font-bold text-xs transition cursor-pointer focus:outline-none focus:ring-2 focus:ring-slate-400">
+                ${_escLmsDialog(cfg.cancelText)}
+              </button>
+              <button type="button" id="btnLmsDialogConfirm" class="px-5 py-2 rounded-xl ${st.btn} font-extrabold text-xs shadow-sm transition cursor-pointer focus:outline-none focus:ring-2">
+                ${_escLmsDialog(cfg.confirmText)}
+              </button>
+            </div>
+          </div>
+        `;
+
+        const cleanup = (result) => {
+          document.removeEventListener('keydown', onKey);
+          if (backdrop.parentNode) backdrop.parentNode.removeChild(backdrop);
+          if (prevActiveEl && typeof prevActiveEl.focus === 'function') {
+            try { prevActiveEl.focus(); } catch (e) {}
+          }
+          resolve(result);
+        };
+
+        const onKey = (ev) => {
+          if (ev.key === 'Escape') {
+            ev.preventDefault();
+            cleanup(false);
+          }
+        };
+        document.addEventListener('keydown', onKey);
+
+        backdrop.addEventListener('click', (ev) => {
+          if (ev.target === backdrop) cleanup(false);
+        });
+
+        document.body.appendChild(backdrop);
+
+        const btnCancel = document.getElementById('btnLmsDialogCancel');
+        const btnConfirm = document.getElementById('btnLmsDialogConfirm');
+        if (btnCancel) btnCancel.onclick = () => cleanup(false);
+        if (btnConfirm) {
+          btnConfirm.onclick = () => cleanup(true);
+          setTimeout(() => btnConfirm.focus(), 20);
+        }
+      });
+    }
+
+    function lmsPrompt(message, defaultValue = '', options = {}) {
+      return new Promise((resolve) => {
+        const prevActiveEl = document.activeElement;
+        const existing = document.getElementById('lmsGlobalDialogBackdrop');
+        if (existing && existing.parentNode) existing.parentNode.removeChild(existing);
+
+        const raw = String(message || 'Enter value:').trim();
+        const lines = raw.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+        const title = options.title || lines[0] || 'Input Required';
+        const desc = lines.slice(1).join('\n');
+
+        const backdrop = document.createElement('div');
+        backdrop.id = 'lmsGlobalDialogBackdrop';
+        backdrop.setAttribute('role', 'dialog');
+        backdrop.setAttribute('aria-modal', 'true');
+        backdrop.className = 'fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-[10040] flex items-center justify-center p-4';
+
+        backdrop.innerHTML = `
+          <form id="formLmsPromptDialog" class="bg-white rounded-2xl max-w-md w-full p-5 shadow-2xl border border-slate-200 space-y-4">
+            <div class="flex items-start gap-3 border-b border-slate-100 pb-3">
+              <div class="w-9 h-9 rounded-xl bg-emerald-100 text-emerald-700 border border-emerald-200 flex items-center justify-center shrink-0">
+                <i class="fa-solid fa-pen-to-square text-sm"></i>
+              </div>
+              <div class="flex-1 min-w-0">
+                <h3 class="font-extrabold text-sm text-slate-900 leading-snug">${_escLmsDialog(title)}</h3>
+                ${desc ? `<p class="text-xs text-slate-600 mt-1 whitespace-pre-line">${_escLmsDialog(desc)}</p>` : ''}
+              </div>
+            </div>
+            <div>
+              <input type="text" id="inputLmsPromptValue" value="${_escLmsDialog(defaultValue)}" class="w-full p-2.5 rounded-xl border border-slate-300 font-semibold text-xs text-slate-900 focus:outline-none focus:border-emerald-600">
+            </div>
+            <div class="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+              <button type="button" id="btnLmsPromptCancel" class="px-4 py-2 rounded-xl border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 font-bold text-xs cursor-pointer">
+                Cancel
+              </button>
+              <button type="submit" class="px-5 py-2 rounded-xl bg-brandEmerald hover:bg-emerald-700 text-white font-extrabold text-xs shadow-sm cursor-pointer">
+                Confirm
+              </button>
+            </div>
+          </form>
+        `;
+
+        const cleanup = (val) => {
+          document.removeEventListener('keydown', onKey);
+          if (backdrop.parentNode) backdrop.parentNode.removeChild(backdrop);
+          if (prevActiveEl && typeof prevActiveEl.focus === 'function') {
+            try { prevActiveEl.focus(); } catch (e) {}
+          }
+          resolve(val);
+        };
+
+        const onKey = (ev) => {
+          if (ev.key === 'Escape') {
+            ev.preventDefault();
+            cleanup(null);
+          }
+        };
+        document.addEventListener('keydown', onKey);
+
+        backdrop.addEventListener('click', (ev) => {
+          if (ev.target === backdrop) cleanup(null);
+        });
+
+        document.body.appendChild(backdrop);
+
+        const inputEl = document.getElementById('inputLmsPromptValue');
+        const btnCancel = document.getElementById('btnLmsPromptCancel');
+        const formEl = document.getElementById('formLmsPromptDialog');
+
+        if (btnCancel) btnCancel.onclick = () => cleanup(null);
+        if (formEl) {
+          formEl.onsubmit = (e) => {
+            e.preventDefault();
+            cleanup(inputEl ? inputEl.value : '');
+          };
+        }
+        if (inputEl) {
+          setTimeout(() => { inputEl.focus(); inputEl.select(); }, 20);
+        }
+      });
+    }
+
+    window.lmsNotify = lmsNotify;
+    window.lmsConfirm = lmsConfirm;
+    window.lmsPrompt = lmsPrompt;
+    // Override browser-native window.alert so no Chrome "website says..." alert popup ever appears
+    window.alert = function(msg) {
+      lmsNotify(msg);
+    };
+
     let _CORE_DATA_INFLIGHT_PROMISE = null;
     let _LAST_CORE_DATA_LOAD_TS = 0;
     const CORE_DATA_TTL_MS = 60000;

@@ -181,7 +181,8 @@
       });
 
       let html = `<option value="all">👨‍🏫 All Quran Instructors (${ALL_TRIALS.length})</option>`;
-      (ALL_TEACHERS || []).forEach(t => {
+      const eligibleTeachers = (typeof getEligibleTeachers === 'function') ? getEligibleTeachers(ALL_TEACHERS) : (ALL_TEACHERS || []);
+      eligibleTeachers.forEach(t => {
         const count = counts[t.id] || 0;
         const isSelected = t.id === currentVal ? 'selected' : '';
         html += `<option value="${t.id}" ${isSelected}>${t.full_name} (${count} Trials)</option>`;
@@ -586,11 +587,12 @@
       const today = new Date().toISOString().slice(0, 10);
       document.getElementById('trialStartDate').value = today;
 
-      // Populate teacher dropdown
+      // Populate teacher dropdown (only eligible teaching staff, exclude Managers)
       const tSelect = document.getElementById('trialTeacherSelect');
       if (tSelect) {
-        if (ALL_TEACHERS && ALL_TEACHERS.length > 0) {
-          tSelect.innerHTML = ALL_TEACHERS.map(t => 
+        const eligibleTeachers = (typeof getEligibleTeachers === 'function') ? getEligibleTeachers(ALL_TEACHERS) : (ALL_TEACHERS || []);
+        if (eligibleTeachers && eligibleTeachers.length > 0) {
+          tSelect.innerHTML = eligibleTeachers.map(t => 
             `<option value="${t.id}">${t.full_name} (${t.gender || 'Teacher'})</option>`
           ).join('');
         } else {
@@ -648,6 +650,18 @@
           btn.innerHTML = '<i class="fa-solid fa-check"></i> Book 3-Day Free Trial';
         }
         return;
+      }
+
+      if (typeof validateEligibleTeacherBackend === 'function') {
+        const check = await validateEligibleTeacherBackend(teacher_id);
+        if (!check.valid) {
+          alert(check.error);
+          if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fa-solid fa-check"></i> Book 3-Day Free Trial';
+          }
+          return;
+        }
       }
 
       const normalizePhone = (p) => String(p || '').replace(/[^0-9]/g, '').slice(-10);
@@ -1213,7 +1227,7 @@
       const trial = ALL_TRIALS.find(t => t.id === trialId);
       if (!trial) return;
 
-      if (confirm(`Are you sure you want to discontinue / remove the trial for "${trial.student_name}"?\n\nThis will release the assigned timetable slots for the teacher.`)) {
+      if (await lmsConfirm(`Are you sure you want to discontinue / remove the trial for "${trial.student_name}"?\n\nThis will release the assigned timetable slots for the teacher.`)) {
         try {
           if (trial.student_id) {
             await db.from('class_schedules').delete().eq('student_id', trial.student_id);

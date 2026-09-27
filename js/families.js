@@ -235,7 +235,10 @@
 
       const teacherSelect = document.getElementById('stuTeacherId');
       if (teacherSelect) {
-        teacherSelect.innerHTML = (ALL_TEACHERS || []).map(t => {
+        const eligibleTeachers = typeof getEligibleTeachers === 'function'
+          ? getEligibleTeachers(ALL_TEACHERS)
+          : (ALL_TEACHERS || []);
+        teacherSelect.innerHTML = eligibleTeachers.map(t => {
           const creds = getTeacherCreds(t);
           return `<option value="${t.id}">${t.full_name} (${creds.teacher_id} &bull; ${t.working_shift || '10 Hours'})</option>`;
         }).join('');
@@ -270,19 +273,19 @@
       const password = (document.getElementById('famPassword').value || '').trim();
 
       if (!parent_name) {
-        alert("Please enter Parent / Guardian Name.");
+        lmsNotify("Please enter Parent / Guardian Name.", { type: 'warning' });
         btn.disabled = false;
         btn.innerText = 'Save Family & Generate LMS Account';
         return;
       }
       if (!whatsapp) {
-        alert("Please enter WhatsApp Contact Number.");
+        lmsNotify("Please enter WhatsApp Contact Number.", { type: 'warning' });
         btn.disabled = false;
         btn.innerText = 'Save Family & Generate LMS Account';
         return;
       }
       if (!username || !password) {
-        alert("Parent Portal Username and Password are required.");
+        lmsNotify("Parent Portal Username and Password are required.", { type: 'warning' });
         btn.disabled = false;
         btn.innerText = 'Save Family & Generate LMS Account';
         return;
@@ -312,7 +315,7 @@
       await loadFamiliesAndStudents(true);
       loadFeeBillingLedger();
 
-      alert(`✅ Family Registered Successfully!\n\n👨‍👩‍👧 Family ID: ${id}\n👤 Parent Name: ${parent_name}\n🌍 Location: ${city ? city + ', ' : ''}${country}\n💰 Agreed Fee: ${currency} ${monthly_fee}\n\n🔑 Parent Portal Login Credentials:\nUsername: ${username}\nPassword: ${password}\n\nParent can now log in to track children classes.`);
+      lmsNotify(`✅ Family Registered Successfully!\n\n👨‍👩‍👧 Family ID: ${id}\n👤 Parent Name: ${parent_name}\n🌍 Location: ${city ? city + ', ' : ''}${country}\n💰 Agreed Fee: ${currency} ${monthly_fee}\n\n🔑 Parent Portal Login Credentials:\nUsername: ${username}\nPassword: ${password}\n\nParent can now log in to track children classes.`, { type: 'success' });
     }
 
     async function handleSaveStudent(e) {
@@ -333,17 +336,27 @@
       const id = document.getElementById('stuGeneratedIdVal').value || getNextStudentId();
 
       if (!name) {
-        alert("Please enter Student Full Name.");
+        lmsNotify("Please enter Student Full Name.", { type: 'warning' });
         btn.disabled = false;
         btn.innerText = 'Enroll Student';
         return;
       }
 
       if (!family_id) {
-        alert("Please select Family / Parent.");
+        lmsNotify("Please select Family / Parent.", { type: 'warning' });
         btn.disabled = false;
         btn.innerText = 'Enroll Student';
         return;
+      }
+
+      if (assigned_teacher_id && typeof validateEligibleTeacherBackend === 'function') {
+        const tchCheck = await validateEligibleTeacherBackend(assigned_teacher_id);
+        if (!tchCheck.valid) {
+          lmsNotify(tchCheck.reason, { type: 'error' });
+          btn.disabled = false;
+          btn.innerText = 'Enroll Student';
+          return;
+        }
       }
 
       const notesMeta = JSON.stringify({ language, days_per_week });
