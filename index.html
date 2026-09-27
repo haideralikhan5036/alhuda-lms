@@ -392,15 +392,60 @@
         overflow-x: hidden !important;
       }
       #mainAppSidebar.sidebar-collapsed {
-        width: 56px !important;
+        width: 60px !important;
+        padding: 0.25rem !important;
+      }
+      #mainAppSidebar.sidebar-collapsed nav {
+        padding: 0.35rem 0.15rem !important;
+        align-items: center !important;
+        overflow-x: hidden !important;
+        scrollbar-width: none !important;
+        -ms-overflow-style: none !important;
+      }
+      #mainAppSidebar.sidebar-collapsed nav::-webkit-scrollbar {
+        display: none !important;
+        width: 0 !important;
+        height: 0 !important;
+      }
+      #mainAppSidebar.sidebar-collapsed .sidebar-nav-btn {
+        width: 42px !important;
+        min-width: 42px !important;
+        max-width: 42px !important;
+        height: 40px !important;
+        padding: 0 !important;
+        margin: 0 auto !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        gap: 0 !important;
+      }
+      #mainAppSidebar.sidebar-collapsed .sidebar-nav-btn .sidebar-icon-box {
+        width: 2rem !important;
+        height: 2rem !important;
+        min-width: 2rem !important;
+        min-height: 2rem !important;
+        margin: 0 !important;
+        display: inline-flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        flex-shrink: 0 !important;
+        visibility: visible !important;
+        opacity: 1 !important;
+      }
+      #mainAppSidebar.sidebar-collapsed .sidebar-nav-btn .sidebar-icon-box i {
+        display: inline-block !important;
+        visibility: visible !important;
+        opacity: 1 !important;
+        font-size: 0.92rem !important;
+        line-height: 1 !important;
       }
       #mainAppSidebar.sidebar-collapsed .sidebar-label {
         display: none !important;
       }
       #mainContentArea.sidebar-collapsed {
-        margin-left: 56px !important;
-        width: calc(100% - 56px) !important;
-        max-width: calc(100% - 56px) !important;
+        margin-left: 60px !important;
+        width: calc(100% - 60px) !important;
+        max-width: calc(100% - 60px) !important;
         padding: 0.85rem 1.15rem 1.5rem 1.15rem !important;
       }
     }
@@ -476,31 +521,31 @@
     <!-- Primary & Secondary Nav Items -->
     <nav class="flex flex-col gap-1 p-2.5 flex-1 overflow-y-auto touch-scroll">
       <!-- 1. Main Dashboard -->
-      <button onclick="switchTab('tab-dashboard')" data-tab="tab-dashboard" class="sidebar-nav-btn nav-tab active w-full text-left px-2.5 py-2 flex items-center gap-2.5">
+      <button onclick="switchTab('tab-dashboard')" data-tab="tab-dashboard" class="sidebar-nav-btn nav-tab active w-full text-left px-2.5 py-2 flex items-center gap-2.5" title="Main Dashboard">
         <span class="sidebar-icon-box"><i class="fa-solid fa-chart-pie"></i></span>
         <span class="sidebar-label truncate">Main Dashboard</span>
       </button>
 
       <!-- 2. Families -->
-      <button onclick="switchTab('tab-families')" data-tab="tab-families" class="sidebar-nav-btn nav-tab role-admin w-full text-left px-2.5 py-2 flex items-center gap-2.5">
+      <button onclick="switchTab('tab-families')" data-tab="tab-families" class="sidebar-nav-btn nav-tab role-admin w-full text-left px-2.5 py-2 flex items-center gap-2.5" title="Families">
         <span class="sidebar-icon-box"><i class="fa-solid fa-people-roof"></i></span>
         <span class="sidebar-label truncate">Families</span>
       </button>
 
       <!-- 3. Employees -->
-      <button onclick="switchTab('tab-teachers')" data-tab="tab-teachers" class="sidebar-nav-btn nav-tab role-admin w-full text-left px-2.5 py-2 flex items-center gap-2.5">
+      <button onclick="switchTab('tab-teachers')" data-tab="tab-teachers" class="sidebar-nav-btn nav-tab role-admin w-full text-left px-2.5 py-2 flex items-center gap-2.5" title="Employees">
         <span class="sidebar-icon-box"><i class="fa-solid fa-user-tie"></i></span>
         <span class="sidebar-label truncate">Employees</span>
       </button>
 
       <!-- 4. Trials -->
-      <button onclick="switchTab('tab-trials')" data-tab="tab-trials" class="sidebar-nav-btn nav-tab role-admin w-full text-left px-2.5 py-2 flex items-center gap-2.5">
+      <button onclick="switchTab('tab-trials')" data-tab="tab-trials" class="sidebar-nav-btn nav-tab role-admin w-full text-left px-2.5 py-2 flex items-center gap-2.5" title="Trials">
         <span class="sidebar-icon-box"><i class="fa-solid fa-user-plus"></i></span>
         <span class="sidebar-label truncate">Trials</span>
       </button>
 
       <!-- 5. Fee Management -->
-      <button onclick="switchTab('tab-invoices')" data-tab="tab-invoices" class="sidebar-nav-btn nav-tab role-admin w-full text-left px-2.5 py-2 flex items-center gap-2.5">
+      <button onclick="switchTab('tab-invoices')" data-tab="tab-invoices" class="sidebar-nav-btn nav-tab role-admin w-full text-left px-2.5 py-2 flex items-center gap-2.5" title="Fee Management">
         <span class="sidebar-icon-box"><i class="fa-solid fa-wallet"></i></span>
         <span class="sidebar-label flex items-center justify-between flex-1 min-w-0">
           <span class="truncate">Fee Management</span>
@@ -515,7 +560,7 @@
       </button>
 
       <!-- 7. Leave -->
-      <button onclick="switchTab('tab-leaves')" data-tab="tab-leaves" class="sidebar-nav-btn nav-tab role-admin w-full text-left px-2.5 py-2 flex items-center gap-2.5">
+      <button onclick="switchTab('tab-leaves')" data-tab="tab-leaves" class="sidebar-nav-btn nav-tab role-admin w-full text-left px-2.5 py-2 flex items-center gap-2.5" title="Leave">
         <span class="sidebar-icon-box"><i class="fa-solid fa-calendar-minus"></i></span>
         <span class="sidebar-label flex items-center justify-between flex-1 min-w-0">
           <span class="truncate">Leave</span>
@@ -524,7 +569,7 @@
       </button>
 
       <!-- 8. Schedule Slot Finder -->
-      <button onclick="switchTab('tab-schedule-search')" data-tab="tab-schedule-search" class="sidebar-nav-btn nav-tab role-admin w-full text-left px-2.5 py-2 flex items-center gap-2.5">
+      <button onclick="switchTab('tab-schedule-search')" data-tab="tab-schedule-search" class="sidebar-nav-btn nav-tab role-admin w-full text-left px-2.5 py-2 flex items-center gap-2.5" title="Schedule Slot Finder">
         <span class="sidebar-icon-box"><i class="fa-solid fa-calendar-days"></i></span>
         <span class="sidebar-label truncate">Schedule Slot Finder</span>
       </button>
@@ -535,7 +580,7 @@
       </div>
 
       <!-- 9. Course Materials (Preserved with Book/Library Icon) -->
-      <button onclick="switchTab('tab-curriculum')" data-tab="tab-curriculum" class="sidebar-nav-btn nav-tab w-full text-left px-2.5 py-2 flex items-center gap-2.5">
+      <button onclick="switchTab('tab-curriculum')" data-tab="tab-curriculum" class="sidebar-nav-btn nav-tab w-full text-left px-2.5 py-2 flex items-center gap-2.5" title="Course Materials">
         <span class="sidebar-icon-box"><i class="fa-solid fa-book-open-reader"></i></span>
         <span class="sidebar-label flex items-center justify-between flex-1 min-w-0">
           <span class="truncate">Course Materials</span>
@@ -544,7 +589,7 @@
       </button>
 
       <!-- 10. Daily Attendance & Notes (Preserved) -->
-      <button onclick="switchTab('tab-attendance')" data-tab="tab-attendance" class="sidebar-nav-btn nav-tab w-full text-left px-2.5 py-2 flex items-center gap-2.5">
+      <button onclick="switchTab('tab-attendance')" data-tab="tab-attendance" class="sidebar-nav-btn nav-tab w-full text-left px-2.5 py-2 flex items-center gap-2.5" title="Daily Attendance &amp; Notes">
         <span class="sidebar-icon-box"><i class="fa-solid fa-clipboard-user"></i></span>
         <span class="sidebar-label truncate">Daily Attendance &amp; Notes</span>
       </button>
