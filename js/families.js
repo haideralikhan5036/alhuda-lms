@@ -221,7 +221,8 @@
 
       const famSelect = document.getElementById('stuFamilyId');
       if (famSelect) {
-        famSelect.innerHTML = (ALL_FAMILIES || []).map(f => `
+        const activeFamsOnly = (ALL_FAMILIES || []).filter(f => typeof isFamilyDeactivated === 'function' ? !isFamilyDeactivated(f) : !['inactive', 'deactivated'].includes(String(f.status || '').toLowerCase()));
+        famSelect.innerHTML = activeFamsOnly.map(f => `
           <option value="${f.id}" ${f.id === preselectedFamilyId ? 'selected' : ''}>
             ${f.parent_name} (${f.id} &bull; ${f.country})
           </option>
@@ -382,32 +383,45 @@
       const btnCards = document.getElementById('btnViewFamCards');
       const btnTable = document.getElementById('btnViewFamTable');
       const btnStudents = document.getElementById('btnViewStudentsList');
+      const btnDeact = document.getElementById('btnViewDeactivatedFams');
 
       const secCards = document.getElementById('familiesCardsContainer');
       const secTable = document.getElementById('familiesTableContainer');
       const secStudents = document.getElementById('studentsListContainer');
+      const secDeact = document.getElementById('deactivatedFamiliesContainer');
 
-      [btnCards, btnTable, btnStudents].forEach(b => {
-        if (b) b.className = 'px-3 py-1.5 rounded-lg text-slate-600 hover:text-slate-900 flex items-center gap-1.5 transition font-bold';
+      [btnCards, btnTable, btnStudents, btnDeact].forEach(b => {
+        if (b) b.className = 'px-3 py-1.5 rounded-lg text-slate-600 hover:text-slate-900 flex items-center gap-1.5 transition font-bold whitespace-nowrap';
       });
 
       if (mode === 'cards') {
-        if (btnCards) btnCards.className = 'px-3 py-1.5 rounded-lg bg-white text-slate-900 shadow-2xs flex items-center gap-1.5 transition font-extrabold';
+        if (btnCards) btnCards.className = 'px-3 py-1.5 rounded-lg bg-white text-slate-900 shadow-2xs flex items-center gap-1.5 transition font-extrabold whitespace-nowrap';
         if (secCards) secCards.classList.remove('hidden');
         if (secTable) secTable.classList.add('hidden');
         if (secStudents) secStudents.classList.add('hidden');
+        if (secDeact) secDeact.classList.add('hidden');
+        renderFamiliesCards();
       } else if (mode === 'famTable') {
-        if (btnTable) btnTable.className = 'px-3 py-1.5 rounded-lg bg-white text-slate-900 shadow-2xs flex items-center gap-1.5 transition font-extrabold';
+        if (btnTable) btnTable.className = 'px-3 py-1.5 rounded-lg bg-white text-slate-900 shadow-2xs flex items-center gap-1.5 transition font-extrabold whitespace-nowrap';
         if (secCards) secCards.classList.add('hidden');
         if (secTable) secTable.classList.remove('hidden');
         if (secStudents) secStudents.classList.add('hidden');
+        if (secDeact) secDeact.classList.add('hidden');
         renderFamiliesMasterTable();
       } else if (mode === 'studentsList') {
-        if (btnStudents) btnStudents.className = 'px-3 py-1.5 rounded-lg bg-white text-slate-900 shadow-2xs flex items-center gap-1.5 transition font-extrabold';
+        if (btnStudents) btnStudents.className = 'px-3 py-1.5 rounded-lg bg-white text-slate-900 shadow-2xs flex items-center gap-1.5 transition font-extrabold whitespace-nowrap';
         if (secCards) secCards.classList.add('hidden');
         if (secTable) secTable.classList.add('hidden');
         if (secStudents) secStudents.classList.remove('hidden');
+        if (secDeact) secDeact.classList.add('hidden');
         renderAllStudentsListTable();
+      } else if (mode === 'deactivatedFams') {
+        if (btnDeact) btnDeact.className = 'px-3 py-1.5 rounded-lg bg-white text-rose-800 shadow-2xs flex items-center gap-1.5 transition font-extrabold whitespace-nowrap';
+        if (secCards) secCards.classList.add('hidden');
+        if (secTable) secTable.classList.add('hidden');
+        if (secStudents) secStudents.classList.add('hidden');
+        if (secDeact) secDeact.classList.remove('hidden');
+        renderDeactivatedFamiliesView();
       }
     }
 
@@ -416,6 +430,7 @@
       renderFamiliesCards();
       renderFamiliesMasterTable();
       renderAllStudentsListTable();
+      renderDeactivatedFamiliesView();
     }
 
     async function loadFamiliesAndStudents(forceRefresh = false) {
@@ -474,34 +489,57 @@
         }
       }
 
+      const famMap = {};
+      regularFamilies.forEach(f => { famMap[String(f.id).toUpperCase()] = f; });
+
+      const activeFamiliesList = regularFamilies.filter(f =>
+        typeof isFamilyDeactivated === 'function' ? !isFamilyDeactivated(f) : !['inactive', 'deactivated'].includes(String(f.status || '').toLowerCase())
+      );
+      const deactivatedFamiliesList = regularFamilies.filter(f =>
+        typeof isFamilyDeactivated === 'function' ? isFamilyDeactivated(f) : ['inactive', 'deactivated'].includes(String(f.status || '').toLowerCase())
+      );
+
       const famSelect = document.getElementById('stuFamilyId');
       if (famSelect) {
-        famSelect.innerHTML = regularFamilies.map(f => `<option value="${f.id}">${f.parent_name} (${f.id} &bull; ${f.country})</option>`).join('');
+        famSelect.innerHTML = activeFamiliesList.map(f => `<option value="${f.id}">${f.parent_name} (${f.id} &bull; ${f.country})</option>`).join('');
       }
 
-      // Update Summary Badges
-      const totalFams = regularFamilies.length;
-      const activeFams = regularFamilies.filter(f => {
+      // Update Summary Badges (Exclude Deactivated Families & Students belonging to Deactivated Families from Active counts)
+      const activeFams = activeFamiliesList.filter(f => {
         const st = (f.status || 'Active').toLowerCase();
         return st === 'active' || st === 'regular';
       }).length;
-      const totalStus = allStu.length;
-      const activeStus = allStu.filter(s => {
+
+      const activeStudentsOnly = allStu.filter(s => {
+        if (typeof isActiveStudentRecord === 'function') return isActiveStudentRecord(s, famMap);
+        const st = (s.status || 'Active').toLowerCase();
+        if (st === 'inactive' || st === 'deactivated' || st === 'deleted' || st === 'left') return false;
+        const pFam = famMap[String(s.family_id || '').toUpperCase()];
+        if (pFam && ['inactive', 'deactivated'].includes(String(pFam.status || '').toLowerCase())) return false;
+        return true;
+      });
+
+      const activeStus = activeStudentsOnly.filter(s => {
         const st = (s.status || 'Active').toLowerCase();
         return st === 'active' || st === 'regular';
       }).length;
 
       const setFVal = (id, val) => { const el = document.getElementById(id); if (el) el.innerText = val; };
-      setFVal('famSummaryTotalFamilies', totalFams);
+      setFVal('famSummaryTotalFamilies', activeFamiliesList.length);
       setFVal('famSummaryActiveFamilies', activeFams);
-      setFVal('famSummaryTotalStudents', totalStus);
+      setFVal('famSummaryTotalStudents', activeStudentsOnly.length);
       setFVal('famSummaryActiveStudents', activeStus);
-      setFVal('badgeFamTableCount', `${totalFams} Families`);
-      setFVal('badgeStudentsListCount', `${totalStus} Students`);
+      setFVal('badgeFamTableCount', `${activeFamiliesList.length} Active Families`);
+      setFVal('badgeStudentsListCount', `${activeStudentsOnly.length} Active Students`);
+      setFVal('badgeDeactivatedFamCount', deactivatedFamiliesList.length);
+      setFVal('badgeDeactivatedFamiliesHeaderCount', `${deactivatedFamiliesList.length} Deactivated ${deactivatedFamiliesList.length === 1 ? 'Family' : 'Families'}`);
+      setFVal('sidebarActiveFamilies', activeFams);
+      setFVal('sidebarActiveStudents', activeStus);
 
       renderFamiliesCards();
       renderFamiliesMasterTable();
       renderAllStudentsListTable();
+      renderDeactivatedFamiliesView();
     }
 
     function renderFamiliesCards() {
@@ -509,7 +547,10 @@
       if (!container) return;
 
       const q = FAM_SEARCH_QUERY;
-      const filtered = (ALL_FAMILIES || []).filter(f => {
+      const activeFamilies = (ALL_FAMILIES || []).filter(f =>
+        typeof isFamilyDeactivated === 'function' ? !isFamilyDeactivated(f) : !['inactive', 'deactivated'].includes(String(f.status || '').toLowerCase())
+      );
+      const filtered = activeFamilies.filter(f => {
         if (!q) return true;
         const name = (f.parent_name || '').toLowerCase();
         const id = (f.id || '').toLowerCase();
@@ -520,7 +561,7 @@
       });
 
       if (filtered.length === 0) {
-        container.innerHTML = '<div class="col-span-full p-8 text-center bg-white rounded-xl border border-slate-200 text-slate-400">No families match the search criteria.</div>';
+        container.innerHTML = '<div class="col-span-full p-8 text-center bg-white rounded-xl border border-slate-200 text-slate-400">No active families match the search criteria.</div>';
         return;
       }
 
@@ -675,7 +716,10 @@
       if (!tbody) return;
 
       const q = FAM_SEARCH_QUERY;
-      const filtered = (ALL_FAMILIES || []).filter(f => {
+      const activeFamilies = (ALL_FAMILIES || []).filter(f =>
+        typeof isFamilyDeactivated === 'function' ? !isFamilyDeactivated(f) : !['inactive', 'deactivated'].includes(String(f.status || '').toLowerCase())
+      );
+      const filtered = activeFamilies.filter(f => {
         if (!q) return true;
         const name = (f.parent_name || '').toLowerCase();
         const id = (f.id || '').toLowerCase();
@@ -685,7 +729,7 @@
       });
 
       if (filtered.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="9" class="p-8 text-center text-slate-400">No families found matching search.</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="9" class="p-8 text-center text-slate-400">No active families found matching search.</td></tr>';
         return;
       }
 
@@ -743,8 +787,20 @@
       const tbody = document.getElementById('studentsListTableBody');
       if (!tbody) return;
 
+      const famMap = {};
+      (ALL_FAMILIES || []).forEach(f => { famMap[String(f.id).toUpperCase()] = f; });
+
       const q = FAM_SEARCH_QUERY;
-      const filtered = (ALL_STUDENTS || []).filter(s => {
+      const activeStudents = (ALL_STUDENTS || []).filter(s => {
+        if (typeof isActiveStudentRecord === 'function') return isActiveStudentRecord(s, famMap);
+        const st = (s.status || 'Active').toLowerCase();
+        if (st === 'inactive' || st === 'deactivated' || st === 'deleted' || st === 'left') return false;
+        const pFam = famMap[String(s.family_id || '').toUpperCase()];
+        if (pFam && ['inactive', 'deactivated'].includes(String(pFam.status || '').toLowerCase())) return false;
+        return true;
+      });
+
+      const filtered = activeStudents.filter(s => {
         if (!q) return true;
         const name = (s.name || '').toLowerCase();
         const id = (s.id || '').toLowerCase();
@@ -754,12 +810,12 @@
       });
 
       if (filtered.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="9" class="p-8 text-center text-slate-400">No students found matching search.</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="9" class="p-8 text-center text-slate-400">No active students found matching search.</td></tr>';
         return;
       }
 
       tbody.innerHTML = filtered.map((s, idx) => {
-        const parentFam = (ALL_FAMILIES || []).find(f => f.id === s.family_id);
+        const parentFam = famMap[String(s.family_id || '').toUpperCase()];
         const parentName = parentFam ? parentFam.parent_name : (s.family_id || '--');
         const assignedTeacher = (ALL_TEACHERS || []).find(t => t.id === s.assigned_teacher_id);
         const tName = assignedTeacher
@@ -770,8 +826,6 @@
         let statusBadge = '<span class="px-2 py-0.5 rounded text-[10px] font-extrabold bg-emerald-100 text-emerald-800 border border-emerald-200">Active</span>';
         if (status.toLowerCase() === 'leave') {
           statusBadge = '<span class="px-2 py-0.5 rounded text-[10px] font-extrabold bg-blue-100 text-blue-800 border border-blue-200">On Leave</span>';
-        } else if (status.toLowerCase() === 'inactive' || status.toLowerCase() === 'deactivated') {
-          statusBadge = '<span class="px-2 py-0.5 rounded text-[10px] font-extrabold bg-slate-100 text-slate-600 border border-slate-200">Inactive</span>';
         }
 
         return `
@@ -804,4 +858,84 @@
         `;
       }).join('');
     }
+
+    function renderDeactivatedFamiliesView() {
+      const tbody = document.getElementById('deactivatedFamiliesTableBody');
+      if (!tbody) return;
+
+      const q = FAM_SEARCH_QUERY;
+      const deactivatedFamilies = (ALL_FAMILIES || []).filter(f =>
+        typeof isFamilyDeactivated === 'function' ? isFamilyDeactivated(f) : ['inactive', 'deactivated'].includes(String(f.status || '').toLowerCase())
+      );
+
+      const filtered = deactivatedFamilies.filter(f => {
+        if (!q) return true;
+        const name = (f.parent_name || '').toLowerCase();
+        const id = (f.id || '').toLowerCase();
+        const phone = (f.whatsapp || '').toLowerCase();
+        const country = (f.country || '').toLowerCase();
+        const childMatch = (f.students || []).some(s => (s.name || '').toLowerCase().includes(q) || (s.id || '').toLowerCase().includes(q));
+        return name.includes(q) || id.includes(q) || phone.includes(q) || country.includes(q) || childMatch;
+      });
+
+      if (filtered.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="9" class="p-8 text-center text-slate-400">${q ? 'No deactivated families match your search.' : 'No deactivated families.'}</td></tr>`;
+        return;
+      }
+
+      tbody.innerHTML = filtered.map((f, idx) => {
+        const cleanPhone = (f.whatsapp || '').replace(/[^0-9]/g, '');
+        const famStudents = f.students || [];
+        const studentsBadgesHtml = famStudents.length > 0
+          ? famStudents.map(s => `
+              <div class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-rose-50 border border-rose-200 text-rose-900 text-[11px] font-bold mr-1 mb-1">
+                <span>${s.name} (${s.id})</span>
+                <span class="px-1.5 py-0.2 rounded bg-rose-200/80 text-rose-950 text-[9px] font-extrabold uppercase">DEACTIVATED — Family Inactive</span>
+              </div>
+            `).join('')
+          : '<span class="text-slate-400 italic">No students linked</span>';
+
+        return `
+          <tr class="hover:bg-rose-50/30 transition text-xs bg-slate-50/40">
+            <td class="p-3 text-center lms-num-table font-bold text-slate-500">${idx + 1}</td>
+            <td class="p-3 lms-num-id font-bold text-slate-700">
+              <button onclick="openFamily360Profile('${f.id}')" class="px-2 py-0.5 rounded-md bg-slate-100 border border-slate-300 hover:bg-slate-200 text-slate-800 transition">${f.id}</button>
+            </td>
+            <td class="p-3 font-bold text-slate-900">
+              <button onclick="openFamily360Profile('${f.id}')" class="hover:text-brandEmerald hover:underline text-left font-extrabold">${f.parent_name}</button>
+            </td>
+            <td class="p-3">
+              <span class="px-2 py-0.5 rounded-md bg-rose-100 text-rose-800 border border-rose-300 text-[10px] font-extrabold uppercase tracking-wider">DEACTIVATED</span>
+            </td>
+            <td class="p-3 text-slate-600">${f.country || '--'}</td>
+            <td class="p-3 lms-num-table">
+              ${CURRENT_ROLE === 'manager' ? `
+                <span class="text-slate-600 flex items-center gap-1 font-bold">
+                  <i class="fa-solid fa-lock text-amber-500 text-[10px]"></i> ${maskStudentPhone(f.whatsapp)}
+                </span>
+              ` : `
+                <a href="https://wa.me/${cleanPhone}" target="_blank" class="text-slate-600 hover:underline flex items-center gap-1">
+                  <i class="fa-brands fa-whatsapp text-slate-500"></i> ${f.whatsapp || '--'}
+                </a>
+              `}
+            </td>
+            <td class="p-3">
+              ${typeof formatLmsCurrencyHtml === 'function' ? formatLmsCurrencyHtml(f.monthly_fee, f.currency, 'text-[14px] text-slate-600') : `<span class="lms-num-financial text-[14px] text-slate-600">${f.currency} ${Number(f.monthly_fee || 0).toLocaleString()}</span>`}
+            </td>
+            <td class="p-3">${studentsBadgesHtml}</td>
+            <td class="p-3 text-right">
+              <div class="flex items-center justify-end gap-1.5">
+                <button onclick="openFamily360Profile('${f.id}')" class="px-2.5 py-1 bg-slate-800 hover:bg-slate-950 text-white rounded-lg font-bold text-[11px] transition" title="View complete intact historical records">
+                  Family 360°
+                </button>
+                <button onclick="handleFamilyLevelDeactivate('${f.id}')" class="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-bold text-[11px] transition flex items-center gap-1" title="Reactivate Family Account">
+                  <i class="fa-solid fa-rotate-left text-[10px]"></i> Reactivate
+                </button>
+              </div>
+            </td>
+          </tr>
+        `;
+      }).join('');
+    }
+
 

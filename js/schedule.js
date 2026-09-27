@@ -19,7 +19,12 @@
       // Populate Assigned Students & Active Trials Bar
       const studentsListEl = document.getElementById('matrixTeacherStudentsList');
       if (studentsListEl) {
-        const assignedStudents = (ALL_STUDENTS || []).filter(s => s.assigned_teacher_id === teacherId && s.status !== 'Trial' && s.status !== 'Converted');
+        const assignedStudents = (ALL_STUDENTS || []).filter(s =>
+          String(s.assigned_teacher_id || '') === String(teacherId || '') &&
+          s.status !== 'Trial' &&
+          s.status !== 'Converted' &&
+          (typeof isActiveStudentRecord === 'function' ? isActiveStudentRecord(s) : true)
+        );
         const assignedTrials = (ALL_TRIALS || []).filter(t => t.teacher_id === teacherId && t.status !== 'Discontinued');
 
         if (assignedStudents.length === 0 && assignedTrials.length === 0) {
@@ -172,7 +177,7 @@
               if (isTrialSlot) {
                 daysCells += `
                   <td class="p-1 text-center bg-purple-50/90 border border-purple-200">
-                    <div class="flex flex-col justify-between p-1.5 rounded-lg bg-white shadow-2xs border border-purple-300 gap-1">
+                    <div onclick="openMatrixSlotActionModal('${slot.id}')" class="flex flex-col justify-between p-1.5 rounded-lg bg-white shadow-2xs border border-purple-300 gap-1 cursor-pointer hover:border-purple-500 transition" title="Click to manage scheduled class">
                       <div class="flex items-center justify-between gap-1">
                         <span class="font-extrabold text-[11px] text-purple-950 truncate" title="${stuName}">
                           <i class="fa-solid fa-star text-amber-500"></i> ${stuName}
@@ -180,11 +185,11 @@
                         <span class="px-1 py-0.2 rounded text-[8px] font-black bg-purple-200 text-purple-900 border border-purple-300">TRIAL</span>
                       </div>
                       <div class="flex items-center justify-between gap-1 mt-0.5">
-                        <button onclick="convertTrialFromSchedule('${slot.student_id}')" class="px-1.5 py-0.5 bg-emerald-600 hover:bg-emerald-700 text-white text-[9px] font-black rounded shadow-2xs flex items-center gap-0.5 transition" title="Regularize Student">
+                        <button onclick="event.stopPropagation(); convertTrialFromSchedule('${slot.student_id}')" class="px-1.5 py-0.5 bg-emerald-600 hover:bg-emerald-700 text-white text-[9px] font-black rounded shadow-2xs flex items-center gap-0.5 transition" title="Regularize Student">
                           <i class="fa-solid fa-circle-check text-[8px]"></i> Regularize
                         </button>
                         ${CURRENT_ROLE !== 'manager' ? `
-                          <button onclick="handleDeleteSlot('${slot.id}')" class="text-rose-500 hover:text-rose-700 text-[10px] font-bold" title="Unassign">
+                          <button onclick="event.stopPropagation(); openMatrixSlotActionModal('${slot.id}')" class="text-rose-500 hover:text-rose-700 text-[10px] font-bold" title="Manage / Delete Scheduled Class">
                             <i class="fa-solid fa-trash-can"></i>
                           </button>
                         ` : ''}
@@ -195,7 +200,7 @@
               } else {
                 daysCells += `
                   <td class="p-1 text-center bg-emerald-50/50 border border-emerald-200">
-                    <div class="flex flex-col justify-between p-1.5 rounded-lg bg-white shadow-2xs border border-emerald-300 gap-1">
+                    <div onclick="openMatrixSlotActionModal('${slot.id}')" class="flex flex-col justify-between p-1.5 rounded-lg bg-white shadow-2xs border border-emerald-300 gap-1 cursor-pointer hover:border-emerald-500 transition" title="Click to manage scheduled class">
                       <div class="flex items-center justify-between gap-1">
                         <span class="font-extrabold text-[11px] text-slate-900 truncate" title="${stuName}">
                           <i class="fa-solid fa-graduation-cap text-emerald-600"></i> ${stuName}
@@ -205,7 +210,7 @@
                       <div class="flex items-center justify-between gap-1 mt-0.5">
                         <span class="text-[9px] text-slate-400 font-mono truncate max-w-[65px]">${slot.student_id || ''}</span>
                         ${CURRENT_ROLE !== 'manager' ? `
-                          <button onclick="handleDeleteSlot('${slot.id}')" class="text-rose-500 hover:text-rose-700 text-[10px] font-bold ml-auto" title="Unassign">
+                          <button onclick="event.stopPropagation(); openMatrixSlotActionModal('${slot.id}')" class="text-rose-500 hover:text-rose-700 text-[10px] font-bold ml-auto" title="Manage / Delete Scheduled Class">
                             <i class="fa-solid fa-trash-can"></i>
                           </button>
                         ` : ''}
@@ -234,54 +239,120 @@
     let ACTIVE_DAY = 1;
     let ACTIVE_START_TIME = '';
     let ACTIVE_END_TIME = '';
+    let ACTIVE_SLOT_ACTION_CONTEXT = null;
+
+    function updateBookingWeekdaySelectionUI() {
+      const checkboxes = Array.from(document.querySelectorAll('input[name="bookSlotWeekday"]'));
+      let selectedCount = 0;
+
+      checkboxes.forEach(cb => {
+        const card = document.querySelector(`[data-weekday-card="${cb.value}"]`);
+        if (cb.checked) {
+          selectedCount++;
+          if (card) {
+            card.className = 'flex items-center gap-1.5 p-2 rounded-lg border border-emerald-500 bg-emerald-50 ring-1 ring-emerald-400 cursor-pointer transition select-none shadow-2xs';
+          }
+        } else {
+          if (card) {
+            card.className = 'flex items-center gap-1.5 p-2 rounded-lg border border-slate-200 bg-white cursor-pointer transition select-none hover:border-emerald-400';
+          }
+        }
+      });
+
+      const counterEl = document.getElementById('bookSelectedDaysCounter');
+      if (counterEl) {
+        counterEl.textContent = `${selectedCount} ${selectedCount === 1 ? 'Day' : 'Days'} Selected`;
+        counterEl.className = selectedCount > 0
+          ? 'text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200'
+          : 'text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-rose-100 text-rose-800 border border-rose-200';
+      }
+    }
 
     async function loadStudentsForBooking() {
       const select = document.getElementById('bookStudentSelect');
       if (!select) return;
 
+      const teacherId = CURRENT_MATRIX_TEACHER?.id;
+      if (!teacherId) {
+        select.innerHTML = '<option value="">No teacher selected.</option>';
+        return;
+      }
+
       const cachedProfiles = JSON.parse(localStorage.getItem('alhuda_student_profiles') || '{}');
 
-      const teacherAssigned = (CURRENT_MATRIX_TEACHER && CURRENT_MATRIX_TEACHER.id) 
-        ? ALL_STUDENTS.filter(s => s.assigned_teacher_id === CURRENT_MATRIX_TEACHER.id)
-        : [];
-      const otherStudents = (CURRENT_MATRIX_TEACHER && CURRENT_MATRIX_TEACHER.id)
-        ? ALL_STUDENTS.filter(s => s.assigned_teacher_id !== CURRENT_MATRIX_TEACHER.id)
-        : ALL_STUDENTS;
+      // Authoritative query: fetch ONLY students assigned to this teacher's roster
+      let rosterCandidates = [];
+      try {
+        const { data: dbRoster, error } = await db.from('students')
+          .select('*, families(id, parent_name, status)')
+          .eq('assigned_teacher_id', teacherId);
+        if (!error && Array.isArray(dbRoster)) {
+          rosterCandidates = dbRoster;
+        } else {
+          rosterCandidates = (ALL_STUDENTS || []).filter(s => String(s.assigned_teacher_id || '') === String(teacherId));
+        }
+      } catch (err) {
+        rosterCandidates = (ALL_STUDENTS || []).filter(s => String(s.assigned_teacher_id || '') === String(teacherId));
+      }
+
+      // Filter strictly to active students belonging to active families
+      const teacherAssigned = rosterCandidates.filter(s =>
+        String(s.assigned_teacher_id || '') === String(teacherId) &&
+        (typeof isActiveStudentRecord === 'function' ? isActiveStudentRecord(s) : (String(s.status || '').toLowerCase() !== 'inactive' && String(s.status || '').toLowerCase() !== 'deactivated'))
+      );
 
       let html = '';
       if (teacherAssigned.length > 0) {
-        html += `<optgroup label="🎯 Assigned to ${CURRENT_MATRIX_TEACHER.full_name}">`;
+        html += `<optgroup label="🎯 Roster Students Assigned to ${CURRENT_MATRIX_TEACHER.full_name}">`;
         teacherAssigned.forEach(s => {
           const prof = cachedProfiles[s.id] || {};
-          const days = prof.days_per_week || s.days_per_week || 'Preferred Days';
+          const days = prof.days_per_week || s.days_per_week || 'Roster Student';
           html += `<option value="${s.id}">${s.name} (${s.id}) &bull; ${days}</option>`;
         });
         html += `</optgroup>`;
-      }
-
-      if (otherStudents.length > 0) {
-        html += `<optgroup label="All Other Enrolled Students">`;
-        otherStudents.forEach(s => {
-          html += `<option value="${s.id}">${s.name} (${s.id})</option>`;
-        });
-        html += `</optgroup>`;
-      }
-
-      if (ALL_STUDENTS.length === 0) {
-        html = '<option value="">No students enrolled yet. Enroll in Tab 2 first.</option>';
+      } else {
+        html = `<option value="">No active students on ${CURRENT_MATRIX_TEACHER.full_name}'s roster.</option>`;
       }
 
       select.innerHTML = html;
     }
 
     async function openSlotBookingModal(day, startTime, endTime) {
-      ACTIVE_DAY = day;
+      ACTIVE_DAY = Number(day) || 1;
       ACTIVE_START_TIME = startTime;
       ACTIVE_END_TIME = endTime;
 
       await loadStudentsForBooking();
-      document.getElementById('singleDayLabel').innerText = DAY_NAMES[day];
-      document.getElementById('bookSlotDisplay').value = `${DAY_NAMES[day]} • ${startTime} to ${endTime} (30 Mins)`;
+
+      const occupiedDays = new Set(
+        (CURRENT_TEACHER_SCHEDULES || [])
+          .filter(s => String(s.start_time || '').slice(0, 5) === startTime)
+          .map(s => Number(s.day_of_week))
+      );
+
+      const checkboxes = Array.from(document.querySelectorAll('input[name="bookSlotWeekday"]'));
+      checkboxes.forEach(cb => {
+        const dNum = Number(cb.value);
+        cb.checked = (dNum === ACTIVE_DAY);
+      });
+      updateBookingWeekdaySelectionUI();
+
+      const hintEl = document.getElementById('bookSlotOccupiedHint');
+      if (hintEl) {
+        if (occupiedDays.size > 0) {
+          const occupiedLabels = Array.from(occupiedDays).sort((a, b) => a - b).map(d => DAY_NAMES[d]).join(', ');
+          hintEl.textContent = `Note: ${startTime} is already booked on: ${occupiedLabels}.`;
+          hintEl.classList.remove('hidden');
+        } else {
+          hintEl.textContent = '';
+          hintEl.classList.add('hidden');
+        }
+      }
+
+      const displayEl = document.getElementById('bookSlotDisplay');
+      if (displayEl) {
+        displayEl.value = `${DAY_NAMES[ACTIVE_DAY]} • ${startTime} to ${endTime} (30 Mins)`;
+      }
       openModal('modalBookSlot');
     }
 
@@ -289,23 +360,65 @@
       e.preventDefault();
       const student_id = document.getElementById('bookStudentSelect').value;
       const meeting_link = document.getElementById('bookMeetingLink').value.trim();
-      const repeatOption = document.querySelector('input[name="slotRepeatOption"]:checked').value;
 
       if (!student_id) {
-        alert('Please enroll a student first in Tab 2 before assigning to schedule.');
+        alert('Please select an active student from this teacher\'s roster.');
         return;
       }
 
-      let targetDays = [ACTIVE_DAY];
-      if (repeatOption === 'mon_to_fri') {
-        targetDays = [1, 2, 3, 4, 5];
-      } else if (repeatOption === 'all_week') {
-        targetDays = [1, 2, 3, 4, 5, 6, 7];
-      } else if (repeatOption === 'weekend') {
-        targetDays = [6, 7];
+      const targetDays = Array.from(document.querySelectorAll('input[name="bookSlotWeekday"]:checked'))
+        .map(cb => Number(cb.value))
+        .filter(d => d >= 1 && d <= 7);
+
+      if (targetDays.length === 0) {
+        alert('Please select at least one weekday (Monday through Sunday) for this class.');
+        return;
       }
 
-      const rows = targetDays.map(d => ({
+      if (!CURRENT_MATRIX_TEACHER || !CURRENT_MATRIX_TEACHER.id) {
+        alert('No teacher selected for scheduling.');
+        return;
+      }
+
+      // Backend validation: ensure selected student belongs to this teacher's roster and is active
+      const { data: stuRecord, error: stuErr } = await db.from('students')
+        .select('id, name, status, assigned_teacher_id, family_id, families(id, status)')
+        .eq('id', student_id)
+        .single();
+
+      if (stuErr || !stuRecord) {
+        alert('Backend Validation Failed: Student record could not be verified.');
+        return;
+      }
+
+      if (String(stuRecord.assigned_teacher_id || '') !== String(CURRENT_MATRIX_TEACHER.id || '')) {
+        alert('Backend Validation Failed: This student does not belong to this teacher\'s roster. Only students assigned to this teacher can be scheduled.');
+        return;
+      }
+
+      const isStuActive = typeof isActiveStudentRecord === 'function'
+        ? isActiveStudentRecord(stuRecord)
+        : (String(stuRecord.status || '').toLowerCase() !== 'inactive' && String(stuRecord.status || '').toLowerCase() !== 'deactivated');
+
+      if (!isStuActive) {
+        alert('Backend Validation Failed: Deactivated students or students belonging to a deactivated family cannot be scheduled.');
+        return;
+      }
+
+      // Filter out any selected day where this exact teacher + day + start_time is already occupied
+      const existingOccupiedDays = new Set(
+        (CURRENT_TEACHER_SCHEDULES || [])
+          .filter(s => String(s.start_time || '').slice(0, 5) === ACTIVE_START_TIME)
+          .map(s => Number(s.day_of_week))
+      );
+
+      const daysToInsert = targetDays.filter(d => !existingOccupiedDays.has(d));
+      if (daysToInsert.length === 0) {
+        alert(`The ${ACTIVE_START_TIME} slot is already occupied on the selected day(s).`);
+        return;
+      }
+
+      const rows = daysToInsert.map(d => ({
         student_id,
         teacher_id: CURRENT_MATRIX_TEACHER.id,
         day_of_week: d,
@@ -334,24 +447,113 @@
       }
     }
 
-    async function handleDeleteSlot(scheduleId) {
+    function openMatrixSlotActionModal(scheduleId) {
       if (CURRENT_ROLE === 'manager') {
         alert("Access Denied: Managers are not authorized to permanently delete class schedule allocations. Only the System Owner can perform permanent deletions.");
         return;
       }
-      if (confirm('Unassign this student from this 30-minute slot?')) {
-        await db.from('class_schedules').delete().eq('id', scheduleId);
-        await fetchTeacherSchedules();
-        render2DMatrixTable();
-        if (typeof invalidateCoreLmsDataCache === 'function') invalidateCoreLmsDataCache();
-        if (typeof _TEACHER_360_MEM_CACHE === 'object' && CURRENT_MATRIX_TEACHER?.id) {
-          delete _TEACHER_360_MEM_CACHE[String(CURRENT_MATRIX_TEACHER.id).toUpperCase()];
-        }
-        loadTeachers();
-        if (document.getElementById('tab-schedule-search') && !document.getElementById('tab-schedule-search').classList.contains('hidden')) {
-          executeScheduleSearch();
-        }
+
+      const slot = (CURRENT_TEACHER_SCHEDULES || []).find(s => String(s.id) === String(scheduleId));
+      if (!slot) return;
+
+      const stuName = slot.students?.name || (ALL_STUDENTS || []).find(st => String(st.id) === String(slot.student_id))?.name || 'Student';
+      const dayLabel = DAY_NAMES[Number(slot.day_of_week)] || `Day ${slot.day_of_week}`;
+      const startTime = String(slot.start_time || '').slice(0, 5);
+      const endTime = String(slot.end_time || '').slice(0, 5);
+      const teacherName = CURRENT_MATRIX_TEACHER?.full_name || 'Assigned Teacher';
+
+      ACTIVE_SLOT_ACTION_CONTEXT = {
+        scheduleId: slot.id,
+        studentId: slot.student_id,
+        studentName: stuName,
+        teacherId: slot.teacher_id || CURRENT_MATRIX_TEACHER?.id,
+        dayOfWeek: slot.day_of_week,
+        dayLabel,
+        startTime,
+        endTime
+      };
+
+      const nameEl = document.getElementById('slotActionStudentName');
+      const idEl = document.getElementById('slotActionStudentId');
+      const timeEl = document.getElementById('slotActionDayAndTime');
+      const teacherEl = document.getElementById('slotActionTeacherName');
+      const singleDayLabelEl = document.getElementById('slotActionSingleDayLabel');
+      const confirmMsgEl = document.getElementById('slotActionConfirmMessage');
+
+      if (nameEl) nameEl.textContent = stuName;
+      if (idEl) idEl.textContent = slot.student_id || '';
+      if (timeEl) timeEl.textContent = `${dayLabel} • ${startTime}${endTime ? ' - ' + endTime : ''}`;
+      if (teacherEl) teacherEl.textContent = teacherName;
+      if (singleDayLabelEl) singleDayLabelEl.textContent = `${dayLabel} (${startTime})`;
+      if (confirmMsgEl) confirmMsgEl.textContent = `Delete all scheduled classes for ${stuName} with this teacher?`;
+
+      cancelDeleteAllClassesConfirm();
+      openModal('modalMatrixSlotActions');
+    }
+
+    function promptDeleteAllClassesConfirm() {
+      const primaryEl = document.getElementById('slotActionPrimaryOptions');
+      const confirmEl = document.getElementById('slotActionConfirmDeleteAll');
+      if (primaryEl) primaryEl.classList.add('hidden');
+      if (confirmEl) confirmEl.classList.remove('hidden');
+    }
+
+    function cancelDeleteAllClassesConfirm() {
+      const primaryEl = document.getElementById('slotActionPrimaryOptions');
+      const confirmEl = document.getElementById('slotActionConfirmDeleteAll');
+      if (primaryEl) primaryEl.classList.remove('hidden');
+      if (confirmEl) confirmEl.classList.add('hidden');
+    }
+
+    async function refreshMatrixAndSchedulesAfterDelete() {
+      await fetchTeacherSchedules();
+      render2DMatrixTable();
+      if (typeof invalidateCoreLmsDataCache === 'function') invalidateCoreLmsDataCache();
+      if (typeof _TEACHER_360_MEM_CACHE === 'object' && CURRENT_MATRIX_TEACHER?.id) {
+        delete _TEACHER_360_MEM_CACHE[String(CURRENT_MATRIX_TEACHER.id).toUpperCase()];
       }
+      loadTeachers();
+      if (document.getElementById('tab-schedule-search') && !document.getElementById('tab-schedule-search').classList.contains('hidden')) {
+        executeScheduleSearch();
+      }
+    }
+
+    async function executeDeleteSingleDayClass() {
+      if (!ACTIVE_SLOT_ACTION_CONTEXT || !ACTIVE_SLOT_ACTION_CONTEXT.scheduleId) return;
+      const { scheduleId } = ACTIVE_SLOT_ACTION_CONTEXT;
+
+      const { error } = await db.from('class_schedules').delete().eq('id', scheduleId);
+      if (error) {
+        alert('Error deleting this day\'s class: ' + error.message);
+        return;
+      }
+
+      closeModal('modalMatrixSlotActions');
+      ACTIVE_SLOT_ACTION_CONTEXT = null;
+      await refreshMatrixAndSchedulesAfterDelete();
+    }
+
+    async function executeDeleteAllClassesForStudent() {
+      if (!ACTIVE_SLOT_ACTION_CONTEXT || !ACTIVE_SLOT_ACTION_CONTEXT.studentId || !ACTIVE_SLOT_ACTION_CONTEXT.teacherId) return;
+      const { studentId, teacherId } = ACTIVE_SLOT_ACTION_CONTEXT;
+
+      const { error } = await db.from('class_schedules')
+        .delete()
+        .eq('teacher_id', teacherId)
+        .eq('student_id', studentId);
+
+      if (error) {
+        alert('Error deleting all scheduled classes for student: ' + error.message);
+        return;
+      }
+
+      closeModal('modalMatrixSlotActions');
+      ACTIVE_SLOT_ACTION_CONTEXT = null;
+      await refreshMatrixAndSchedulesAfterDelete();
+    }
+
+    async function handleDeleteSlot(scheduleId) {
+      openMatrixSlotActionModal(scheduleId);
     }
 
     async function loadAttendanceList() {

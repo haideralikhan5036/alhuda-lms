@@ -82,6 +82,53 @@
       return true;
     }
 
+    function isFamilyDeactivated(f) {
+      if (!f) return true;
+      if (f.is_active === false) return true;
+      const st = String(f.status || 'Active').trim().toLowerCase();
+      return st === 'inactive' || st === 'deactivated';
+    }
+
+    function isActiveFamilyRecord(f) {
+      return isRegularFamilyRecord(f) && !isFamilyDeactivated(f);
+    }
+
+    function isStudentDeactivatedOrParentDeactivated(s, familyLookup = null) {
+      if (!s) return true;
+      if (s.is_active === false) return true;
+      const st = String(s.status || 'Active').trim().toLowerCase();
+      if (st === 'inactive' || st === 'deactivated' || st === 'deleted' || st === 'left') return true;
+
+      const famId = String(s.family_id || '').trim();
+      if (famId) {
+        let parentFam = null;
+        if (familyLookup && typeof familyLookup === 'object') {
+          parentFam = familyLookup[famId] || familyLookup[famId.toUpperCase()] || null;
+        }
+        if (!parentFam && s.families && typeof s.families === 'object') {
+          parentFam = s.families;
+        }
+        if (!parentFam && Array.isArray(ALL_FAMILIES)) {
+          parentFam = ALL_FAMILIES.find(f => String(f.id || '').toUpperCase() === famId.toUpperCase()) || null;
+        }
+        if (!parentFam && Array.isArray(RAW_ALL_FAMILIES)) {
+          parentFam = RAW_ALL_FAMILIES.find(f => String(f.id || '').toUpperCase() === famId.toUpperCase()) || null;
+        }
+        if (parentFam && isFamilyDeactivated(parentFam)) {
+          return true;
+        }
+      }
+      return false;
+    }
+
+    function isActiveStudentRecord(s, familyLookup = null) {
+      return isRegularStudentRecord(s) && !isStudentDeactivatedOrParentDeactivated(s, familyLookup);
+    }
+    window.isFamilyDeactivated = isFamilyDeactivated;
+    window.isActiveFamilyRecord = isActiveFamilyRecord;
+    window.isStudentDeactivatedOrParentDeactivated = isStudentDeactivatedOrParentDeactivated;
+    window.isActiveStudentRecord = isActiveStudentRecord;
+
     let _CORE_DATA_INFLIGHT_PROMISE = null;
     let _LAST_CORE_DATA_LOAD_TS = 0;
     const CORE_DATA_TTL_MS = 60000;

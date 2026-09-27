@@ -2613,19 +2613,51 @@ async function toggleSingleStudentLeave(familyId, studentId) {
 // 4. Edit Family Profile
 // ============================================================================
 async function handleFamilyLevelDeactivate(familyId) {
-  const family = (window.ALL_FAMILIES || []).find(f => String(f.id).toUpperCase() === String(familyId).toUpperCase());
+  const family = (window.ALL_FAMILIES || []).find(f => String(f.id).toUpperCase() === String(familyId).toUpperCase())
+              || (window.RAW_ALL_FAMILIES || []).find(f => String(f.id).toUpperCase() === String(familyId).toUpperCase());
   if (!family) return;
 
-  const isInactive = String(family.status || '').toLowerCase() === 'inactive';
+  const stLower = String(family.status || '').trim().toLowerCase();
+  const isInactive = stLower === 'inactive' || stLower === 'deactivated' || family.is_active === false;
   const targetStatus = isInactive ? 'Active' : 'Inactive';
 
-  if (!confirm(`${isInactive ? 'Activate' : 'Deactivate'} the ENTIRE Family account for "${family.parent_name}" (${family.id})?`)) return;
+  if (!confirm(`${isInactive ? 'Reactivate' : 'Deactivate'} the ENTIRE Family account for "${family.parent_name}" (${family.id})?\n\n${isInactive ? 'This family and its students will return to the Active Families list and active counts.' : 'This family will move to Deactivated Families. All student, fee, attendance, and lesson history will remain 100% intact.'}`)) return;
 
   const fNotes = _parseFamilyStructuredNotes(family);
+  fNotes.bio_meta = fNotes.bio_meta || {};
+  fNotes.bio_meta.lifecycle_status = targetStatus === 'Inactive' ? 'DEACTIVATED' : 'ACTIVE';
+  fNotes.bio_meta.lifecycle_updated_at = new Date().toISOString();
   await _saveFamilyStructuredNotes(family.id, fNotes, { status: targetStatus });
 
-  _notify360(`Family "${family.parent_name}" status updated to ${targetStatus}.`);
-  _renderFamilyWorkspaceDOM();
+  // Synchronize child students belonging to this family while preserving their historical records
+  const famStudents = (window.ALL_STUDENTS || []).filter(s => String(s.family_id || '').toUpperCase() === String(family.id).toUpperCase());
+  for (const stu of famStudents) {
+    const stuMeta = _parseStudentStructuredNotes(stu);
+    let nextStuStatus = targetStatus;
+    if (!isInactive) {
+      stuMeta.prev_status_before_family_deactivation = stu.status || 'Active';
+      stuMeta.family_deactivated = true;
+      nextStuStatus = 'Inactive';
+    } else {
+      const prev = stuMeta.prev_status_before_family_deactivation;
+      nextStuStatus = (prev && !['inactive', 'deactivated'].includes(String(prev).toLowerCase())) ? prev : 'Active';
+      delete stuMeta.family_deactivated;
+    }
+    await _saveStudentRecordBackend(stu.id, {
+      status: nextStuStatus,
+      notes: JSON.stringify(stuMeta)
+    });
+  }
+
+  if (typeof invalidateCoreLmsDataCache === 'function') invalidateCoreLmsDataCache();
+  if (typeof loadFamiliesAndStudents === 'function') await loadFamiliesAndStudents(true);
+  if (typeof updateLiveActiveMetrics === 'function') updateLiveActiveMetrics();
+
+  _notify360(`Family "${family.parent_name}" is now ${targetStatus === 'Inactive' ? 'DEACTIVATED' : 'ACTIVE'}.`);
+  const profTab = document.getElementById('tab-profile-360');
+  if (profTab && !profTab.classList.contains('hidden')) {
+    _renderFamilyWorkspaceDOM();
+  }
 }
 
 async function handleFamilyLevelLeave(familyId) {

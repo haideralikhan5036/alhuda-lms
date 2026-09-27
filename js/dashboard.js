@@ -799,20 +799,30 @@
         const normalizeName = (n) => String(n || '').trim().toLowerCase().replace(/\s+/g, ' ');
 
         const seenFamKeys = new Set();
+        const activeFamIds = new Set();
         const activeFams = (fams || []).filter(f => {
           if (typeof isRegularFamilyRecord === 'function' && !isRegularFamilyRecord(f)) return false;
+          if (typeof isFamilyDeactivated === 'function' && isFamilyDeactivated(f)) return false;
           const s = (f.status || 'Active').toLowerCase();
           if (s !== 'active' && s !== 'regular') return false;
           const key = normalizePhone(f.whatsapp) || normalizeName(f.parent_name) || f.id;
           if (seenFamKeys.has(key)) return false;
           seenFamKeys.add(key);
+          activeFamIds.add(String(f.id || '').toUpperCase());
           return true;
         });
+
+        const famById = {};
+        (fams || []).forEach(f => { if (f && f.id) famById[String(f.id).toUpperCase()] = f; });
 
         const activeStus = (stus || []).filter(s => {
           if (typeof isRegularStudentRecord === 'function' && !isRegularStudentRecord(s)) return false;
           const st = (s.status || 'Active').toLowerCase();
           if (st === 'leave' || st === 'inactive' || st === 'deactivated' || st === 'deleted' || st === 'trial' || st === 'converted') {
+            return false;
+          }
+          const parentFam = famById[String(s.family_id || '').toUpperCase()];
+          if (parentFam && (typeof isFamilyDeactivated === 'function' ? isFamilyDeactivated(parentFam) : ['inactive', 'deactivated'].includes(String(parentFam.status || '').toLowerCase()))) {
             return false;
           }
           return true;
@@ -1795,15 +1805,28 @@
       const regularStudents = (ALL_STUDENTS || []).filter(s => typeof isRegularStudentRecord === 'function' ? isRegularStudentRecord(s) : s.status !== 'Trial');
 
       const familyMap = {};
-      regularFamilies.forEach(f => { familyMap[f.id] = f; });
+      regularFamilies.forEach(f => {
+        familyMap[f.id] = f;
+        familyMap[String(f.id || '').toUpperCase()] = f;
+      });
 
       const teacherMap = {};
       (ALL_TEACHERS || []).forEach(t => { teacherMap[t.id] = t; });
 
-      // 1. Match Regular Students (by Name, Student ID, Family ID, or Parent Phone)
+      const isFamDeact = (f) => typeof isFamilyDeactivated === 'function'
+        ? isFamilyDeactivated(f)
+        : ['inactive', 'deactivated'].includes(String(f?.status || '').toLowerCase());
+
+      const isStuDeact = (s) => {
+        const fam = familyMap[s.family_id] || familyMap[String(s.family_id || '').toUpperCase()];
+        if (fam && isFamDeact(fam)) return true;
+        return ['inactive', 'deactivated', 'deleted', 'left'].includes(String(s?.status || '').toLowerCase());
+      };
+
+      // 1. Match Regular Students (Active vs Deactivated)
       const seenStudentKeys = new Set();
-      const matchedStudents = regularStudents.filter(s => {
-        const fam = familyMap[s.family_id];
+      const allMatchedStudents = regularStudents.filter(s => {
+        const fam = familyMap[s.family_id] || familyMap[String(s.family_id || '').toUpperCase()];
         if (!fam && String(s.family_id || '').toUpperCase().startsWith('TRL-')) return false;
         const sName = String(s.name || '').toLowerCase();
         const sId = String(s.id || '').toLowerCase();
@@ -1816,11 +1839,14 @@
         if (seenStudentKeys.has(dedupKey)) return false;
         seenStudentKeys.add(dedupKey);
         return true;
-      }).slice(0, 6);
+      });
 
-      // 2. Match Regular Families (by Parent Name, Family ID, or Phone/WhatsApp)
+      const matchedStudents = allMatchedStudents.filter(s => !isStuDeact(s)).slice(0, 6);
+      const deactivatedMatchedStudents = allMatchedStudents.filter(s => isStuDeact(s)).slice(0, 4);
+
+      // 2. Match Regular Families (Active vs Deactivated)
       const seenFamilyKeys = new Set();
-      const matchedFamilies = regularFamilies.filter(f => {
+      const allMatchedFamilies = regularFamilies.filter(f => {
         const fName = String(f.parent_name || '').toLowerCase();
         const fId = String(f.id || '').toLowerCase();
         const fPhone = String(f.whatsapp || '').toLowerCase();
@@ -1830,7 +1856,10 @@
         if (seenFamilyKeys.has(dedupKey)) return false;
         seenFamilyKeys.add(dedupKey);
         return true;
-      }).slice(0, 5);
+      });
+
+      const matchedFamilies = allMatchedFamilies.filter(f => !isFamDeact(f)).slice(0, 5);
+      const deactivatedMatchedFamilies = allMatchedFamilies.filter(f => isFamDeact(f)).slice(0, 4);
 
       // 3. Match Active Trials (from ALL_TRIALS where status is not Converted/Discontinued)
       const matchedTrials = (ALL_TRIALS || []).filter(tr => {
@@ -1854,7 +1883,7 @@
         return tName.includes(q) || tId.includes(q) || credsId.includes(q) || tPhone.includes(q);
       }).slice(0, 5);
 
-      const totalCount = matchedStudents.length + matchedFamilies.length + matchedTrials.length + matchedTeachers.length;
+      const totalCount = matchedStudents.length + matchedFamilies.length + matchedTrials.length + matchedTeachers.length + deactivatedMatchedFamilies.length + deactivatedMatchedStudents.length;
 
       if (totalCount === 0) {
         panel.innerHTML = `
@@ -1869,7 +1898,7 @@
 
       let html = '';
 
-      // Render Students Section
+      // Render Active Students Section
       if (matchedStudents.length > 0) {
         html += `
           <div class="p-2.5">
@@ -1879,7 +1908,7 @@
             </div>
             <div class="space-y-1">
               ${matchedStudents.map(s => {
-                const fam = familyMap[s.family_id];
+                const fam = familyMap[s.family_id] || familyMap[String(s.family_id || '').toUpperCase()];
                 const parentName = fam ? fam.parent_name : (s.family_id || '--');
                 const rawPhone = fam ? (fam.whatsapp || '') : '';
                 const displayPhone = (typeof maskStudentPhone === 'function') ? maskStudentPhone(rawPhone) : (rawPhone || '--');
@@ -1903,7 +1932,7 @@
         `;
       }
 
-      // Render Families Section
+      // Render Active Families Section
       if (matchedFamilies.length > 0) {
         html += `
           <div class="p-2.5">
@@ -1927,6 +1956,59 @@
                       </div>
                     </div>
                     <span class="px-2.5 py-1 rounded-lg bg-emerald-700 text-white text-[11px] font-bold shrink-0">Family Profile</span>
+                  </div>
+                `;
+              }).join('')}
+            </div>
+          </div>
+        `;
+      }
+
+      // Render Explicitly Searched Deactivated Families / Students (with clear DEACTIVATED badges)
+      if (deactivatedMatchedFamilies.length > 0 || deactivatedMatchedStudents.length > 0) {
+        html += `
+          <div class="p-2.5 border-t border-rose-100 bg-rose-50/20">
+            <div class="px-2.5 py-1 text-[11px] font-extrabold uppercase tracking-wider text-rose-800 bg-rose-100/90 rounded-lg mb-1.5 flex items-center justify-between">
+              <span><i class="fa-solid fa-user-slash mr-1.5"></i> Deactivated Records (${deactivatedMatchedFamilies.length + deactivatedMatchedStudents.length})</span>
+              <span class="text-[10px] text-rose-800 font-extrabold uppercase">DEACTIVATED</span>
+            </div>
+            <div class="space-y-1">
+              ${deactivatedMatchedFamilies.map(f => {
+                const displayPhone = (typeof maskStudentPhone === 'function') ? maskStudentPhone(f.whatsapp) : (f.whatsapp || '--');
+                return `
+                  <div onclick="openFamilyFromDashboardSearch('${f.id}')" class="px-3 py-2 rounded-xl bg-rose-50/50 hover:bg-rose-100/70 cursor-pointer transition flex items-center justify-between gap-2 border border-rose-200">
+                    <div class="min-w-0">
+                      <div class="flex items-center gap-2 flex-wrap">
+                        <span class="text-[13px] font-extrabold text-slate-700 truncate">${f.parent_name}</span>
+                        <span class="px-2 py-0.5 rounded-md bg-slate-200 border border-slate-300 font-num text-[11px] font-bold text-slate-700 shrink-0">${f.id}</span>
+                        <span class="px-2 py-0.5 rounded-md bg-rose-600 text-white text-[10px] font-extrabold uppercase tracking-wider shrink-0">DEACTIVATED</span>
+                      </div>
+                      <div class="text-[11.5px] text-slate-500 truncate mt-0.5">
+                        Phone: <span class="font-num font-semibold text-slate-600">${displayPhone}</span> &bull; <span class="text-rose-700 font-bold">Deactivated Family Account</span>
+                      </div>
+                    </div>
+                    <span class="px-2.5 py-1 rounded-lg bg-rose-100 text-rose-800 border border-rose-300 text-[11px] font-extrabold shrink-0">DEACTIVATED</span>
+                  </div>
+                `;
+              }).join('')}
+              ${deactivatedMatchedStudents.map(s => {
+                const fam = familyMap[s.family_id] || familyMap[String(s.family_id || '').toUpperCase()];
+                const parentName = fam ? fam.parent_name : (s.family_id || '--');
+                const famInactive = fam && isFamDeact(fam);
+                const statusText = famInactive ? 'DEACTIVATED — Family Inactive' : 'DEACTIVATED';
+                return `
+                  <div onclick="clearDashboardGlobalSearch(); openStudent360Profile('${s.id}')" class="px-3 py-2 rounded-xl bg-rose-50/50 hover:bg-rose-100/70 cursor-pointer transition flex items-center justify-between gap-2 border border-rose-200">
+                    <div class="min-w-0">
+                      <div class="flex items-center gap-2 flex-wrap">
+                        <span class="text-[13px] font-extrabold text-slate-700 truncate">${s.name}</span>
+                        <span class="px-2 py-0.5 rounded-md bg-slate-200 border border-slate-300 font-num text-[11px] font-bold text-slate-700 shrink-0">${s.id}</span>
+                        <span class="px-2 py-0.5 rounded-md bg-rose-600 text-white text-[10px] font-extrabold uppercase tracking-wider shrink-0">${statusText}</span>
+                      </div>
+                      <div class="text-[11.5px] text-slate-500 truncate mt-0.5">
+                        Family: <strong class="text-slate-600">${parentName}</strong> (${s.family_id || '--'}) &bull; <span class="text-rose-700 font-bold">${statusText}</span>
+                      </div>
+                    </div>
+                    <span class="px-2.5 py-1 rounded-lg bg-rose-100 text-rose-800 border border-rose-300 text-[11px] font-extrabold shrink-0">DEACTIVATED</span>
                   </div>
                 `;
               }).join('')}

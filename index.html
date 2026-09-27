@@ -1105,6 +1105,10 @@
             <button id="btnViewStudentsList" onclick="switchFamiliesViewMode('studentsList')" class="px-3 py-1.5 rounded-lg text-slate-600 hover:text-slate-900 flex items-center gap-1.5 transition whitespace-nowrap">
               <i class="fa-solid fa-user-graduate text-teal-700"></i> All Enrolled Students
             </button>
+            <button id="btnViewDeactivatedFams" onclick="switchFamiliesViewMode('deactivatedFams')" class="px-3 py-1.5 rounded-lg text-slate-600 hover:text-slate-900 flex items-center gap-1.5 transition whitespace-nowrap">
+              <i class="fa-solid fa-user-slash text-rose-600"></i> Deactivated Families
+              <span id="badgeDeactivatedFamCount" class="px-1.5 py-0.2 rounded-full text-[10px] font-num bg-rose-100 text-rose-800 border border-rose-200 font-extrabold">0</span>
+            </button>
           </div>
         </div>
         </div>
@@ -1176,6 +1180,39 @@
             </thead>
             <tbody id="studentsListTableBody" class="divide-y divide-slate-100">
               <tr><td colspan="9" class="p-8 text-center text-slate-400">Loading students roster...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- VIEW 4: DEACTIVATED FAMILIES AREA -->
+      <div id="deactivatedFamiliesContainer" class="hidden bg-white rounded-2xl border border-rose-200 shadow-sm overflow-hidden">
+        <div class="p-4 border-b border-rose-200 flex justify-between items-center bg-rose-50/60">
+          <div>
+            <h3 class="font-extrabold text-slate-900 text-sm flex items-center gap-2">
+              <i class="fa-solid fa-user-slash text-rose-600"></i> Deactivated Families
+            </h3>
+            <p class="text-xs text-slate-500">Deactivated family accounts and their students. All historical invoices, payments, attendance, and lesson records remain intact.</p>
+          </div>
+          <span id="badgeDeactivatedFamiliesHeaderCount" class="px-2.5 py-0.5 rounded-full text-xs font-mono font-bold bg-rose-100 text-rose-800 border border-rose-200">0 Deactivated Families</span>
+        </div>
+        <div class="overflow-x-auto touch-scroll">
+          <table class="w-full text-left text-xs border-collapse min-w-[760px]">
+            <thead class="bg-slate-100 text-slate-700 font-bold border-b border-slate-200 uppercase tracking-wider text-[11px]">
+              <tr>
+                <th class="p-3 w-12 text-center">#</th>
+                <th class="p-3">Family ID</th>
+                <th class="p-3">Parent Name</th>
+                <th class="p-3">Status</th>
+                <th class="p-3">Country</th>
+                <th class="p-3">WhatsApp</th>
+                <th class="p-3">Agreed Fee</th>
+                <th class="p-3">Students (Deactivated)</th>
+                <th class="p-3 text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="deactivatedFamiliesTableBody" class="divide-y divide-slate-100">
+              <tr><td colspan="9" class="p-8 text-center text-slate-400">No deactivated families.</td></tr>
             </tbody>
           </table>
         </div>
@@ -2887,11 +2924,11 @@
     </div>
   </div>
 
-  <!-- MODAL: QUICK BOOK STUDENT (SINGLE DAY VS MON-TO-FRI REPEAT) -->
+  <!-- MODAL: QUICK BOOK STUDENT (EXPLICIT WEEKDAY CHECKBOXES MON-SUN) -->
   <div id="modalBookSlot" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-[60] hidden items-center justify-center p-4">
     <div class="bg-white rounded-2xl max-w-md w-full p-5 shadow-2xl border border-slate-200">
       <div class="flex justify-between items-center mb-3 border-b pb-2">
-        <h4 class="font-bold text-sm text-brandDark"><i class="fa-solid fa-calendar-check text-brandEmerald"></i> Book Student to Slot</h4>
+        <h4 class="font-bold text-sm text-brandDark"><i class="fa-solid fa-calendar-check text-brandEmerald"></i> Book Roster Student to Slot</h4>
         <button onclick="closeModal('modalBookSlot')" class="text-slate-400 hover:text-slate-600 font-bold">&times;</button>
       </div>
       <form onsubmit="handleConfirmSlotBooking(event)" class="space-y-3.5 text-xs">
@@ -2900,30 +2937,46 @@
           <input type="text" id="bookSlotDisplay" readonly class="w-full p-2 bg-slate-100 border rounded font-mono font-bold text-slate-700">
         </div>
         <div>
-          <label class="block font-bold mb-1">Select Student to Assign *:</label>
+          <label class="block font-bold mb-1">Select Roster Student *:</label>
           <select id="bookStudentSelect" required class="w-full p-2.5 border rounded-lg font-semibold"></select>
         </div>
 
         <div class="bg-slate-50 p-3 rounded-xl border border-slate-200 space-y-2">
-          <label class="block font-bold text-slate-700"><i class="fa-solid fa-repeat text-brandEmerald"></i> Weekly Repeat Schedule:</label>
-          <div class="space-y-1.5">
-            <label class="flex items-center gap-2 cursor-pointer">
-              <input type="radio" name="slotRepeatOption" value="single" checked class="text-brandEmerald">
-              <span><strong>Only this Day</strong> (<span id="singleDayLabel">Monday</span>)</span>
+          <div class="flex items-center justify-between">
+            <label class="block font-bold text-slate-700"><i class="fa-solid fa-calendar-week text-brandEmerald"></i> Select Weekdays *:</label>
+            <span id="bookSelectedDaysCounter" class="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200">1 Day Selected</span>
+          </div>
+          <div id="bookSlotWeekdaysGrid" class="grid grid-cols-2 sm:grid-cols-4 gap-1.5 pt-0.5">
+            <label data-weekday-card="1" class="flex items-center gap-1.5 p-2 rounded-lg border border-slate-200 bg-white cursor-pointer transition select-none hover:border-emerald-400">
+              <input type="checkbox" name="bookSlotWeekday" value="1" onchange="updateBookingWeekdaySelectionUI()" class="w-3.5 h-3.5 accent-emerald-600 rounded">
+              <span class="font-bold text-[11px] text-slate-700">Monday</span>
             </label>
-            <label class="flex items-center gap-2 cursor-pointer">
-              <input type="radio" name="slotRepeatOption" value="mon_to_fri" class="text-brandEmerald">
-              <span class="text-brandDark"><strong>Monday to Friday</strong> (5 Days a week - Standard Class)</span>
+            <label data-weekday-card="2" class="flex items-center gap-1.5 p-2 rounded-lg border border-slate-200 bg-white cursor-pointer transition select-none hover:border-emerald-400">
+              <input type="checkbox" name="bookSlotWeekday" value="2" onchange="updateBookingWeekdaySelectionUI()" class="w-3.5 h-3.5 accent-emerald-600 rounded">
+              <span class="font-bold text-[11px] text-slate-700">Tuesday</span>
             </label>
-            <label class="flex items-center gap-2 cursor-pointer">
-              <input type="radio" name="slotRepeatOption" value="all_week" class="text-brandEmerald">
-              <span><strong>All 7 Days</strong> (Full Week)</span>
+            <label data-weekday-card="3" class="flex items-center gap-1.5 p-2 rounded-lg border border-slate-200 bg-white cursor-pointer transition select-none hover:border-emerald-400">
+              <input type="checkbox" name="bookSlotWeekday" value="3" onchange="updateBookingWeekdaySelectionUI()" class="w-3.5 h-3.5 accent-emerald-600 rounded">
+              <span class="font-bold text-[11px] text-slate-700">Wednesday</span>
             </label>
-            <label class="flex items-center gap-2 cursor-pointer">
-              <input type="radio" name="slotRepeatOption" value="weekend" class="text-brandEmerald">
-              <span><strong>Weekend Only</strong> (Saturday & Sunday)</span>
+            <label data-weekday-card="4" class="flex items-center gap-1.5 p-2 rounded-lg border border-slate-200 bg-white cursor-pointer transition select-none hover:border-emerald-400">
+              <input type="checkbox" name="bookSlotWeekday" value="4" onchange="updateBookingWeekdaySelectionUI()" class="w-3.5 h-3.5 accent-emerald-600 rounded">
+              <span class="font-bold text-[11px] text-slate-700">Thursday</span>
+            </label>
+            <label data-weekday-card="5" class="flex items-center gap-1.5 p-2 rounded-lg border border-slate-200 bg-white cursor-pointer transition select-none hover:border-emerald-400">
+              <input type="checkbox" name="bookSlotWeekday" value="5" onchange="updateBookingWeekdaySelectionUI()" class="w-3.5 h-3.5 accent-emerald-600 rounded">
+              <span class="font-bold text-[11px] text-slate-700">Friday</span>
+            </label>
+            <label data-weekday-card="6" class="flex items-center gap-1.5 p-2 rounded-lg border border-slate-200 bg-white cursor-pointer transition select-none hover:border-emerald-400">
+              <input type="checkbox" name="bookSlotWeekday" value="6" onchange="updateBookingWeekdaySelectionUI()" class="w-3.5 h-3.5 accent-emerald-600 rounded">
+              <span class="font-bold text-[11px] text-slate-700">Saturday</span>
+            </label>
+            <label data-weekday-card="7" class="flex items-center gap-1.5 p-2 rounded-lg border border-slate-200 bg-white cursor-pointer transition select-none hover:border-emerald-400">
+              <input type="checkbox" name="bookSlotWeekday" value="7" onchange="updateBookingWeekdaySelectionUI()" class="w-3.5 h-3.5 accent-emerald-600 rounded">
+              <span class="font-bold text-[11px] text-slate-700">Sunday</span>
             </label>
           </div>
+          <p id="bookSlotOccupiedHint" class="text-[10px] text-slate-500 italic hidden"></p>
         </div>
 
         <div>
@@ -2935,6 +2988,79 @@
           <button type="submit" class="px-5 py-2 bg-brandEmerald text-white font-bold rounded hover:bg-emerald-700 shadow">Confirm Booking</button>
         </div>
       </form>
+    </div>
+  </div>
+
+  <!-- MODAL: SCHEDULED SLOT ACTIONS (DELETE THIS DAY'S CLASS vs DELETE ALL CLASSES) -->
+  <div id="modalMatrixSlotActions" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-[65] hidden items-center justify-center p-4">
+    <div class="bg-white rounded-2xl max-w-md w-full p-5 shadow-2xl border border-slate-200">
+      <div class="flex justify-between items-center mb-3 border-b pb-2.5">
+        <h4 class="font-bold text-sm text-brandDark flex items-center gap-2">
+          <i class="fa-solid fa-calendar-xmark text-rose-600"></i> Manage Scheduled Class
+        </h4>
+        <button onclick="closeModal('modalMatrixSlotActions')" class="text-slate-400 hover:text-slate-600 font-bold text-lg leading-none">&times;</button>
+      </div>
+
+      <!-- Slot Summary Banner -->
+      <div class="bg-slate-50 rounded-xl p-3 border border-slate-200 mb-4 space-y-1">
+        <div class="flex items-center justify-between">
+          <span id="slotActionStudentName" class="font-extrabold text-sm text-slate-900">Student Name</span>
+          <span id="slotActionStudentId" class="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-slate-200 text-slate-700">STU-ID</span>
+        </div>
+        <div class="text-xs text-slate-600 font-semibold">
+          <i class="fa-regular fa-clock text-brandEmerald mr-1"></i>
+          <span id="slotActionDayAndTime">Monday • 14:00 - 14:30</span>
+        </div>
+        <div class="text-[11px] text-slate-500">
+          Teacher: <strong id="slotActionTeacherName" class="text-slate-700">Teacher Name</strong>
+        </div>
+      </div>
+
+      <!-- Primary Two Action Options -->
+      <div id="slotActionPrimaryOptions" class="space-y-2.5">
+        <button type="button" onclick="executeDeleteSingleDayClass()" class="w-full p-3 rounded-xl border border-amber-300 bg-amber-50 hover:bg-amber-100/80 text-left transition flex items-start gap-3 shadow-2xs">
+          <div class="w-8 h-8 rounded-lg bg-amber-600 text-white flex items-center justify-center shrink-0 mt-0.5">
+            <i class="fa-solid fa-calendar-minus text-xs"></i>
+          </div>
+          <div>
+            <div class="font-extrabold text-xs text-amber-950">Delete This Day's Class</div>
+            <div class="text-[11px] text-amber-800 mt-0.5 leading-snug">Removes only this <span id="slotActionSingleDayLabel" class="font-bold">Monday</span> slot. Keeps other scheduled days and keeps student in teacher's roster.</div>
+          </div>
+        </button>
+
+        <button type="button" onclick="promptDeleteAllClassesConfirm()" class="w-full p-3 rounded-xl border border-rose-300 bg-rose-50 hover:bg-rose-100/80 text-left transition flex items-start gap-3 shadow-2xs">
+          <div class="w-8 h-8 rounded-lg bg-rose-600 text-white flex items-center justify-center shrink-0 mt-0.5">
+            <i class="fa-solid fa-calendar-xmark text-xs"></i>
+          </div>
+          <div>
+            <div class="font-extrabold text-xs text-rose-950">Delete All Classes</div>
+            <div class="text-[11px] text-rose-800 mt-0.5 leading-snug">Removes all scheduled classes for this student across this teacher's weekly matrix. Student remains in teacher's roster.</div>
+          </div>
+        </button>
+
+        <div class="flex justify-end pt-2 border-t border-slate-100">
+          <button type="button" onclick="closeModal('modalMatrixSlotActions')" class="px-4 py-1.5 border border-slate-300 rounded-lg text-xs font-bold text-slate-600 hover:bg-slate-50">Cancel</button>
+        </div>
+      </div>
+
+      <!-- Delete All Classes Confirmation Dialog View -->
+      <div id="slotActionConfirmDeleteAll" class="hidden space-y-3 bg-rose-50/90 border border-rose-300 rounded-xl p-3.5">
+        <div class="flex items-start gap-2.5">
+          <i class="fa-solid fa-triangle-exclamation text-rose-600 text-base mt-0.5"></i>
+          <div>
+            <p id="slotActionConfirmMessage" class="font-extrabold text-xs text-rose-950 leading-relaxed">
+              Delete all scheduled classes for Student with this teacher?
+            </p>
+            <p class="text-[11px] text-rose-800 mt-1">
+              This will remove every weekly schedule slot for this student with this teacher. The student record and teacher roster assignment will be preserved.
+            </p>
+          </div>
+        </div>
+        <div class="flex justify-end gap-2 pt-2 border-t border-rose-200">
+          <button type="button" onclick="cancelDeleteAllClassesConfirm()" class="px-3.5 py-1.5 bg-white border border-slate-300 rounded-lg text-xs font-bold text-slate-700 hover:bg-slate-100">Cancel</button>
+          <button type="button" onclick="executeDeleteAllClassesForStudent()" class="px-4 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-xs font-extrabold shadow-sm">Delete All Classes</button>
+        </div>
+      </div>
     </div>
   </div>
 
