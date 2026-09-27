@@ -314,7 +314,12 @@
       }
 
       if (targetId === 'tab-dashboard') {
-        if (typeof playDashboardGraphsEntranceAnimation === 'function') playDashboardGraphsEntranceAnimation();
+        if ((!DASH_STUDENT_CHART || !DASH_REVENUE_CHART) && typeof playDashboardGraphsEntranceAnimation === 'function') {
+          playDashboardGraphsEntranceAnimation();
+        } else {
+          try { if (DASH_STUDENT_CHART) DASH_STUDENT_CHART.resize(); } catch (e) {}
+          try { if (DASH_REVENUE_CHART) DASH_REVENUE_CHART.resize(); } catch (e) {}
+        }
         loadDashboardData();
       }
       if (tabId === 'tab-attendance') loadAttendanceList();

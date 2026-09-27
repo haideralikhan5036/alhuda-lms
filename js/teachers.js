@@ -698,24 +698,35 @@
           syncGlobalSharedStateToCloud();
         }
 
-        await loadTeachers();
+        if (typeof invalidateCoreLmsDataCache === 'function') invalidateCoreLmsDataCache();
+        await loadTeachers(true);
         alert(`${roleLabel} "${tName}" has been deleted successfully.`);
       } catch (err) {
         alert('Error deleting employee: ' + err.message);
       }
     }
 
-    async function loadTeachers() {
+    async function loadTeachers(forceRefresh = false) {
       const container = document.getElementById('teachersGrid');
       if (!container) return;
-      const { data: teachers } = await db.from('teachers').select('*').order('created_at', { ascending: false });
-      ALL_TEACHERS = teachers || [];
 
-      if (typeof hydrateGlobalSharedStateFromCloud === 'function') {
-        await hydrateGlobalSharedStateFromCloud(window.ALL_FAMILIES, ALL_TEACHERS);
+      let scheds = ALL_CLASS_SCHEDULES || [];
+      if (typeof ensureCoreLmsDataLoaded === 'function') {
+        const core = await ensureCoreLmsDataLoaded({ force: Boolean(forceRefresh) });
+        ALL_TEACHERS = core.teachers || [];
+        scheds = core.schedules || [];
+      } else {
+        const [{ data: teachers }, { data: scData }] = await Promise.all([
+          db.from('teachers').select('*').order('created_at', { ascending: false }),
+          db.from('class_schedules').select('teacher_id, student_id')
+        ]);
+        ALL_TEACHERS = teachers || [];
+        scheds = scData || [];
+        if (typeof hydrateGlobalSharedStateFromCloud === 'function') {
+          await hydrateGlobalSharedStateFromCloud(window.ALL_FAMILIES, ALL_TEACHERS);
+        }
       }
 
-      const { data: scheds } = await db.from('class_schedules').select('teacher_id, student_id');
       const countMap = {};
       (scheds || []).forEach(s => countMap[s.teacher_id] = (countMap[s.teacher_id] || 0) + 1);
 

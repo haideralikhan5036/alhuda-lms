@@ -307,7 +307,8 @@
       btn.disabled = false;
       btn.innerText = 'Save Family & Generate LMS Account';
       closeModal('modalAddFamily');
-      await loadFamiliesAndStudents();
+      if (typeof invalidateCoreLmsDataCache === 'function') invalidateCoreLmsDataCache();
+      await loadFamiliesAndStudents(true);
       loadFeeBillingLedger();
 
       alert(`✅ Family Registered Successfully!\n\n👨‍👩‍👧 Family ID: ${id}\n👤 Parent Name: ${parent_name}\n🌍 Location: ${city ? city + ', ' : ''}${country}\n💰 Agreed Fee: ${currency} ${monthly_fee}\n\n🔑 Parent Portal Login Credentials:\nUsername: ${username}\nPassword: ${password}\n\nParent can now log in to track children classes.`);
@@ -358,7 +359,8 @@
       btn.disabled = false;
       btn.innerText = 'Enroll Student';
       closeModal('modalAddStudent');
-      await loadFamiliesAndStudents();
+      if (typeof invalidateCoreLmsDataCache === 'function') invalidateCoreLmsDataCache();
+      await loadFamiliesAndStudents(true);
 
       const assignedTeacher = ALL_TEACHERS.find(t => t.id === assigned_teacher_id);
       const tName = assignedTeacher ? assignedTeacher.full_name : 'Assigned Teacher';
@@ -416,43 +418,46 @@
       renderAllStudentsListTable();
     }
 
-    async function loadFamiliesAndStudents() {
-      if (typeof consolidateDuplicateTrialAndRegularRecords === 'function') {
-        await consolidateDuplicateTrialAndRegularRecords();
+    async function loadFamiliesAndStudents(forceRefresh = false) {
+      let families = [];
+      let regularFamilies = [];
+      let allStu = [];
+
+      if (typeof ensureCoreLmsDataLoaded === 'function') {
+        const core = await ensureCoreLmsDataLoaded({ force: Boolean(forceRefresh) });
+        families = core.rawFamilies || [];
+        regularFamilies = core.families || [];
+        allStu = core.students || [];
+      } else {
+        const { data: fams } = await db.from('families').select('*, students(*)').order('created_at', { ascending: false });
+        families = fams || [];
+        const normalizePhone = (p) => String(p || '').replace(/[^0-9]/g, '').slice(-10);
+        const normalizeName = (n) => String(n || '').trim().toLowerCase().replace(/\s+/g, ' ');
+        const seenFamKeys = new Set();
+
+        regularFamilies = families.filter(f => {
+          if (typeof isRegularFamilyRecord === 'function' ? !isRegularFamilyRecord(f) : ((f.status || '').toLowerCase() === 'trial' || (f.status || '').toLowerCase() === 'converted' || (f.id || '').toUpperCase().startsWith('TRL-'))) {
+            return false;
+          }
+          const key = normalizePhone(f.whatsapp) || normalizeName(f.parent_name) || f.id;
+          if (seenFamKeys.has(key)) return false;
+          seenFamKeys.add(key);
+          return true;
+        }).map(f => ({
+          ...f,
+          students: (f.students || []).filter(s => {
+            return typeof isRegularStudentRecord === 'function'
+              ? isRegularStudentRecord(s)
+              : ((s.status || '').toLowerCase() !== 'trial' && !(s.id || '').toUpperCase().startsWith('TRL-'));
+          })
+        }));
+
+        ALL_FAMILIES = regularFamilies;
+        regularFamilies.forEach(f => {
+          if (f.students) allStu.push(...f.students);
+        });
+        ALL_STUDENTS = allStu;
       }
-      const { data: families } = await db.from('families').select('*, students(*)').order('created_at', { ascending: false });
-      
-      const normalizePhone = (p) => String(p || '').replace(/[^0-9]/g, '').slice(-10);
-      const normalizeName = (n) => String(n || '').trim().toLowerCase().replace(/\s+/g, ' ');
-      const seenFamKeys = new Set();
-
-      // Strictly include ONLY canonical Regular Families (exclude active Trials and legacy duplicate rows)
-      const regularFamilies = (families || []).filter(f => {
-        if (typeof isRegularFamilyRecord === 'function' ? !isRegularFamilyRecord(f) : ((f.status || '').toLowerCase() === 'trial' || (f.status || '').toLowerCase() === 'converted' || (f.id || '').toUpperCase().startsWith('TRL-'))) {
-          return false;
-        }
-        const key = normalizePhone(f.whatsapp) || normalizeName(f.parent_name) || f.id;
-        if (seenFamKeys.has(key)) return false;
-        seenFamKeys.add(key);
-        return true;
-      });
-      ALL_FAMILIES = regularFamilies;
-
-      // Strictly include ONLY canonical Regular Students inside each Regular Family
-      ALL_FAMILIES = ALL_FAMILIES.map(f => ({
-        ...f,
-        students: (f.students || []).filter(s => {
-          return typeof isRegularStudentRecord === 'function'
-            ? isRegularStudentRecord(s)
-            : ((s.status || '').toLowerCase() !== 'trial' && !(s.id || '').toUpperCase().startsWith('TRL-'));
-        })
-      }));
-
-      const allStu = [];
-      ALL_FAMILIES.forEach(f => {
-        if (f.students) allStu.push(...f.students);
-      });
-      ALL_STUDENTS = allStu;
 
       // Count ONLY currently active Trial families (for info badge in tab)
       const trialFamCount = (families || []).filter(f =>

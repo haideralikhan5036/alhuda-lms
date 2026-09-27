@@ -110,43 +110,48 @@
       };
     }
 
-    async function calculateMonthlySalaries() {
+    async function calculateMonthlySalaries(forceRefresh = false) {
       const tbody = document.getElementById('salariesTableBody');
       if (!tbody) return;
-      tbody.innerHTML = '<tr><td colspan="7" class="p-8 text-center text-slate-400"><i class="fa-solid fa-spinner fa-spin text-xl text-brandGold mb-2 block"></i> Compiling automated course-based teacher payroll...</td></tr>';
+      if (!Array.isArray(ALL_TEACHERS) || ALL_TEACHERS.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="7" class="p-8 text-center text-slate-400"><i class="fa-solid fa-spinner fa-spin text-xl text-brandGold mb-2 block"></i> Compiling automated course-based teacher payroll...</td></tr>';
+      }
 
       const selectedMonth = document.getElementById('salaryMonthSelect')?.value || 'September 2026';
 
-      // 1. Fetch live teachers, schedules, and students
-      const { data: teachers } = await db.from('teachers').select('*').order('created_at', { ascending: false });
-      ALL_TEACHERS = teachers || [];
+      let teachers = ALL_TEACHERS || [];
+      let scheds = ALL_CLASS_SCHEDULES || [];
+      let students = ALL_STUDENTS || [];
 
-      const { data: scheds } = await db.from('class_schedules').select('*, students(*)');
-      const { data: students } = await db.from('students').select('*');
-      ALL_STUDENTS = students || [];
+      if (typeof ensureCoreLmsDataLoaded === 'function') {
+        const core = await ensureCoreLmsDataLoaded({ force: Boolean(forceRefresh) });
+        teachers = core.teachers || [];
+        scheds = core.schedules || [];
+        students = core.students || [];
+      } else {
+        const [tRes, scRes, sRes] = await Promise.all([
+          db.from('teachers').select('*').order('created_at', { ascending: false }),
+          db.from('class_schedules').select('*, students(*)'),
+          db.from('students').select('*')
+        ]);
+        teachers = tRes.data || [];
+        scheds = scRes.data || [];
+        students = sRes.data || [];
+        ALL_TEACHERS = teachers;
+        ALL_STUDENTS = students;
+      }
 
-      // Fetch courses cache
-      try {
-        const { data: courses } = await db.from('courses').select('*');
-        window.ALL_COURSES_CACHE = courses || [];
-      } catch(e){}
+      if (!window.ALL_COURSES_CACHE || window.ALL_COURSES_CACHE.length === 0) {
+        try {
+          const { data: courses } = await db.from('courses').select('*');
+          window.ALL_COURSES_CACHE = courses || [];
+        } catch(e){}
+      }
 
       if (!teachers || teachers.length === 0) {
         tbody.innerHTML = '<tr><td colspan="7" class="p-8 text-center text-slate-400">No teachers found in the academy database.</td></tr>';
         return;
       }
-
-      // Hydrate latest cloud-synced salaries & teacher accounts across Desktop and Mobile
-      try {
-        if (typeof hydrateGlobalSharedStateFromCloud === 'function') {
-          let famsForSync = (typeof ALL_FAMILIES !== 'undefined' && Array.isArray(ALL_FAMILIES) && ALL_FAMILIES.length > 0) ? ALL_FAMILIES : null;
-          if (!famsForSync) {
-            const { data: fData } = await db.from('families').select('id, notes').order('created_at', { ascending: true }).limit(20);
-            famsForSync = fData || [];
-          }
-          await hydrateGlobalSharedStateFromCloud(famsForSync, teachers);
-        }
-      } catch (e) {}
 
       // Load saved salary slips from cloud-hydrated storage
       let savedSalaries = {};

@@ -708,16 +708,27 @@
 
     async function updateDashboardAnalytics() {
       try {
-        const { data: students } = await db.from('students').select('*');
-        const { data: families } = await db.from('families').select('*');
-        const { data: teachers } = await db.from('teachers').select('*');
+        let students = ALL_STUDENTS;
+        let families = ALL_FAMILIES;
+        let teachers = ALL_TEACHERS;
 
-        if (students && students.length > 0) ALL_STUDENTS = students;
-        if (families && families.length > 0) ALL_FAMILIES = families;
-        if (teachers && teachers.length > 0) ALL_TEACHERS = teachers;
-
-        if (typeof hydrateGlobalSharedStateFromCloud === 'function') {
-          await hydrateGlobalSharedStateFromCloud(families || [], teachers || []);
+        if (typeof ensureCoreLmsDataLoaded === 'function') {
+          const core = await ensureCoreLmsDataLoaded();
+          students = core.students || [];
+          families = core.families || [];
+          teachers = core.teachers || [];
+        } else {
+          const [sRes, fRes, tRes] = await Promise.all([
+            db.from('students').select('*'),
+            db.from('families').select('*'),
+            db.from('teachers').select('*')
+          ]);
+          students = sRes.data || [];
+          families = fRes.data || [];
+          teachers = tRes.data || [];
+          if (students.length > 0) ALL_STUDENTS = students;
+          if (families.length > 0) ALL_FAMILIES = families;
+          if (teachers.length > 0) ALL_TEACHERS = teachers;
         }
 
         const activeStudents = (students || []).filter(s => s.status !== 'Left' && s.status !== 'Inactive').length;
@@ -737,7 +748,6 @@
           BASELINE_FEE_DATA.target[currentMonthIdx] = Math.max(totalAgreedFee, BASELINE_FEE_DATA.target[currentMonthIdx]);
         }
 
-        // Do not interrupt the one-time entrance wave animation while it is playing
         const isEntranceAnimating = Date.now() < _dashGraphEntranceAnimatingUntil;
 
         if (DASH_STUDENT_CHART) {
@@ -769,8 +779,21 @@
     // Live Active Families & Active Students Real-time Metrics Engine
     async function updateLiveActiveMetrics() {
       try {
-        const { data: fams } = await db.from('families').select('id, status, notes, parent_name, whatsapp');
-        const { data: stus } = await db.from('students').select('id, family_id, status, notes, name');
+        let fams = ALL_FAMILIES;
+        let stus = ALL_STUDENTS;
+
+        if (typeof ensureCoreLmsDataLoaded === 'function') {
+          const core = await ensureCoreLmsDataLoaded();
+          fams = core.families || [];
+          stus = core.students || [];
+        } else {
+          const [fRes, sRes] = await Promise.all([
+            db.from('families').select('id, status, notes, parent_name, whatsapp'),
+            db.from('students').select('id, family_id, status, notes, name')
+          ]);
+          fams = fRes.data || [];
+          stus = sRes.data || [];
+        }
 
         const normalizePhone = (p) => String(p || '').replace(/[^0-9]/g, '').slice(-10);
         const normalizeName = (n) => String(n || '').trim().toLowerCase().replace(/\s+/g, ' ');
@@ -821,7 +844,9 @@
         if (badge) badge.innerText = `${curMonthName} ${curYear}`;
 
         const records = typeof getStoredFeeRecords === 'function' ? getStoredFeeRecords() : [];
-        const families = (typeof CACHED_FEE_FAMILIES !== 'undefined' && CACHED_FEE_FAMILIES) ? CACHED_FEE_FAMILIES : [];
+        const families = (typeof CACHED_FEE_FAMILIES !== 'undefined' && CACHED_FEE_FAMILIES && CACHED_FEE_FAMILIES.length > 0)
+          ? CACHED_FEE_FAMILIES
+          : (ALL_FAMILIES || []);
 
         let paidCount = 0;
         let onLeaveCount = 0;
@@ -871,23 +896,25 @@
         dateLabel.innerText = now.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
       }
 
-      // 1. Fetch schedules for today
-      const { data: scheds } = await db.from('class_schedules')
-        .select('*, students(*), teachers(*)')
-        .eq('day_of_week', currentDay);
+      // Execute schedule & attendance queries in 1 parallel Promise.all
+      const hasCachedSchedules = Array.isArray(window.ALL_CLASS_SCHEDULES) && window.ALL_CLASS_SCHEDULES.length > 0;
+      const [schedRes, logsRes, advRes] = await Promise.all([
+        hasCachedSchedules
+          ? Promise.resolve({ data: window.ALL_CLASS_SCHEDULES.filter(sc => Number(sc.day_of_week) === Number(currentDay)) })
+          : db.from('class_schedules').select('*, students(*), teachers(*)').eq('day_of_week', currentDay),
+        db.from('attendance_logs').select('*').eq('date', todayDate),
+        db.from('attendance_logs').select('*').eq('status', 'Advance Class')
+      ]);
 
-      // 2. Fetch today's attendance logs
-      const { data: logs } = await db.from('attendance_logs').select('*').eq('date', todayDate);
+      const scheds = schedRes.data || [];
+      const logs = logsRes.data || [];
       const logsMap = {};
       (logs || []).forEach(l => logsMap[l.schedule_id] = l);
 
-      // Check for any advance classes pre-covering today
       let advCoverMap = {};
       try {
-        const { data: allAdv } = await db.from('attendance_logs')
-          .select('*')
-          .eq('status', 'Advance Class');
-        if (allAdv && allAdv.length > 0) {
+        const allAdv = advRes.data || [];
+        if (allAdv.length > 0) {
           allAdv.forEach(al => {
             try {
               const meta = JSON.parse(al.lesson_notes);

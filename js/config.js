@@ -11,11 +11,13 @@
     const SUPABASE_KEY = "sb_publishable_rP38XXgYoYBTPJlCxtwMUg_RPupFrKg";
     const db = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
-    let ALL_TEACHERS = [];
-    let ALL_STUDENTS = [];
-    let ALL_FAMILIES = [];
-    let CURRENT_ROLE = 'owner';
-    let ACTIVE_MANAGER_ID = null;
+    var ALL_TEACHERS = [];
+    var ALL_STUDENTS = [];
+    var ALL_FAMILIES = [];
+    var RAW_ALL_FAMILIES = [];
+    var ALL_CLASS_SCHEDULES = [];
+    var CURRENT_ROLE = 'owner';
+    var ACTIVE_MANAGER_ID = null;
 
     // STUDENT CONTACT PRIVACY GUARDS (MANDATORY FOR MANAGER ROLE)
     function maskStudentPhone(phone) {
@@ -80,28 +82,135 @@
       return true;
     }
 
+    let _CORE_DATA_INFLIGHT_PROMISE = null;
+    let _LAST_CORE_DATA_LOAD_TS = 0;
+    const CORE_DATA_TTL_MS = 60000;
+
+    function invalidateCoreLmsDataCache() {
+      _LAST_CORE_DATA_LOAD_TS = 0;
+    }
+    window.invalidateCoreLmsDataCache = invalidateCoreLmsDataCache;
+
+    async function ensureCoreLmsDataLoaded({ force = false } = {}) {
+      const now = Date.now();
+      const hasData = Array.isArray(ALL_FAMILIES) && ALL_FAMILIES.length > 0 &&
+                      Array.isArray(ALL_STUDENTS) && ALL_STUDENTS.length > 0 &&
+                      Array.isArray(ALL_TEACHERS) && ALL_TEACHERS.length > 0;
+      if (!force && hasData && (now - _LAST_CORE_DATA_LOAD_TS < CORE_DATA_TTL_MS)) {
+        return {
+          rawFamilies: RAW_ALL_FAMILIES,
+          families: ALL_FAMILIES,
+          students: ALL_STUDENTS,
+          teachers: ALL_TEACHERS,
+          schedules: ALL_CLASS_SCHEDULES
+        };
+      }
+      if (_CORE_DATA_INFLIGHT_PROMISE) {
+        return _CORE_DATA_INFLIGHT_PROMISE;
+      }
+
+      _CORE_DATA_INFLIGHT_PROMISE = (async () => {
+        try {
+          const [famRes, stdRes, tchRes, schRes] = await Promise.all([
+            db.from('families').select('*, students(*)').order('created_at', { ascending: false }),
+            db.from('students').select('*').order('created_at', { ascending: false }),
+            db.from('teachers').select('*').order('created_at', { ascending: false }),
+            db.from('class_schedules').select('*, teachers(*), students(*)')
+          ]);
+
+          const rawFamilies = famRes.data || [];
+          RAW_ALL_FAMILIES = rawFamilies;
+
+          const normalizePhone = (p) => String(p || '').replace(/[^0-9]/g, '').slice(-10);
+          const normalizeName = (n) => String(n || '').trim().toLowerCase().replace(/\s+/g, ' ');
+          const seenFamKeys = new Set();
+
+          const regularFamilies = rawFamilies.filter(f => {
+            if (!isRegularFamilyRecord(f)) return false;
+            const key = normalizePhone(f.whatsapp) || normalizeName(f.parent_name) || f.id;
+            if (seenFamKeys.has(key)) return false;
+            seenFamKeys.add(key);
+            return true;
+          }).map(f => ({
+            ...f,
+            students: (f.students || []).filter(s => isRegularStudentRecord(s))
+          }));
+
+          ALL_FAMILIES = regularFamilies;
+
+          if (stdRes.data && stdRes.data.length > 0) {
+            ALL_STUDENTS = stdRes.data.filter(s => isRegularStudentRecord(s));
+          } else {
+            const flatStu = [];
+            regularFamilies.forEach(f => {
+              if (f.students) flatStu.push(...f.students);
+            });
+            ALL_STUDENTS = flatStu;
+          }
+
+          if (tchRes.data) ALL_TEACHERS = tchRes.data;
+          if (schRes.data) ALL_CLASS_SCHEDULES = schRes.data;
+
+          _LAST_CORE_DATA_LOAD_TS = Date.now();
+
+          if (typeof ingestFeeDataFromFamilies === 'function') {
+            try { await ingestFeeDataFromFamilies(rawFamilies); } catch (e) {}
+          }
+          if (typeof hydrateGlobalSharedStateFromCloud === 'function') {
+            try { await hydrateGlobalSharedStateFromCloud(rawFamilies, ALL_TEACHERS); } catch (e) {}
+          }
+          if (typeof syncTopCircleNotificationDots === 'function') syncTopCircleNotificationDots();
+          if (typeof renderPortalAnnouncementBanners === 'function') renderPortalAnnouncementBanners();
+
+          return {
+            rawFamilies: RAW_ALL_FAMILIES,
+            families: ALL_FAMILIES,
+            students: ALL_STUDENTS,
+            teachers: ALL_TEACHERS,
+            schedules: ALL_CLASS_SCHEDULES
+          };
+        } catch (err) {
+          console.warn('[Core Data Cache] Notice:', err);
+          return {
+            rawFamilies: RAW_ALL_FAMILIES || [],
+            families: ALL_FAMILIES || [],
+            students: ALL_STUDENTS || [],
+            teachers: ALL_TEACHERS || [],
+            schedules: ALL_CLASS_SCHEDULES || []
+          };
+        } finally {
+          _CORE_DATA_INFLIGHT_PROMISE = null;
+        }
+      })();
+
+      return _CORE_DATA_INFLIGHT_PROMISE;
+    }
+    window.ensureCoreLmsDataLoaded = ensureCoreLmsDataLoaded;
+
     let _CONSOLIDATION_PROMISE = null;
     async function consolidateDuplicateTrialAndRegularRecords() {
       if (_CONSOLIDATION_PROMISE) return _CONSOLIDATION_PROMISE;
       _CONSOLIDATION_PROMISE = (async () => {
         try {
-          const { data: allFams } = await db.from('families').select('*, students(*)');
-          const { data: allStus } = await db.from('students').select('*');
-          if (!allFams || !allStus) return;
+          const core = await ensureCoreLmsDataLoaded();
+          const allFams = core.rawFamilies || [];
+          const allStus = core.students || [];
+          if (!allFams.length) return;
 
           const regularFams = allFams.filter(f => isRegularFamilyRecord(f));
           const legacyTrialFams = allFams.filter(f => !isRegularFamilyRecord(f));
+          if (legacyTrialFams.length === 0) return;
 
           const normalizePhone = (p) => String(p || '').replace(/[^0-9]/g, '').slice(-10);
           const normalizeName = (n) => String(n || '').trim().toLowerCase().replace(/\s+/g, ' ');
 
+          let didConsolidateAny = false;
           for (const trFam of legacyTrialFams) {
             const trStatus = String(trFam.status || '').toLowerCase();
             const isLegacyTrlId = String(trFam.id || '').toUpperCase().startsWith('TRL-');
             const trPhone = normalizePhone(trFam.whatsapp);
             const trName = normalizeName(trFam.parent_name);
 
-            // Find if a matching Canonical Regular Family already exists for this Trial Family
             let canonicalFam = regularFams.find(rf => {
               const rfPhone = normalizePhone(rf.whatsapp);
               const rfName = normalizeName(rf.parent_name);
@@ -112,8 +221,8 @@
             });
 
             if (canonicalFam && (isLegacyTrlId || trStatus === 'converted')) {
-              // Consolidate Trial Family history & students into canonicalFam
-              const trStudents = allStus.filter(s => String(s.family_id) === String(trFam.id));
+              didConsolidateAny = true;
+              const trStudents = (trFam.students || []);
               const canonicalStudents = allStus.filter(s => String(s.family_id) === String(canonicalFam.id) && isRegularStudentRecord(s));
               const targetStu = canonicalStudents[0] || null;
 
@@ -141,7 +250,6 @@
                 notes: JSON.stringify(famNotesObj)
               }).eq('id', canonicalFam.id);
 
-              // Migrate attendance_logs & schedules from duplicate trial students and delete duplicate student rows
               for (const trStu of trStudents) {
                 if (targetStu && String(trStu.id) !== String(targetStu.id)) {
                   let trStuNotes = {};
@@ -164,12 +272,10 @@
                     notes: JSON.stringify(targetStuNotes)
                   }).eq('id', targetStu.id);
 
-                  // Re-link any attendance_logs from trStu.id to targetStu.id
                   await db.from('attendance_logs').update({ student_id: targetStu.id }).eq('student_id', trStu.id);
                   await db.from('class_schedules').delete().eq('student_id', trStu.id);
                   await db.from('students').delete().eq('id', trStu.id);
                 } else if (!targetStu) {
-                  // Re-parent student to canonicalFam
                   await db.from('students').update({
                     family_id: canonicalFam.id,
                     status: 'Active'
@@ -177,7 +283,6 @@
                 }
               }
 
-              // Update localStorage trial records to reference canonical IDs with status='Converted'
               try {
                 const storedTrials = JSON.parse(localStorage.getItem('alhuda_trial_classes') || '[]');
                 let updatedLocal = false;
@@ -196,9 +301,11 @@
                 }
               } catch (e) {}
 
-              // Remove the duplicate TRL-FAM record from Supabase
               await db.from('families').delete().eq('id', trFam.id);
             }
+          }
+          if (didConsolidateAny) {
+            await ensureCoreLmsDataLoaded({ force: true });
           }
         } catch (err) {
           console.warn('Duplicate trial/regular consolidation notice:', err);
@@ -240,17 +347,26 @@
       const attDateInput = document.getElementById('attendanceDateSelect');
       if (attDateInput) attDateInput.value = today;
 
-      await consolidateDuplicateTrialAndRegularRecords();
-      loadDashboardData();
-      loadFamiliesAndStudents();
-      loadTeachers();
-      loadCourses();
-      loadFeeBillingLedger();
-      loadTrialClassesData();
-      if (typeof loadCurriculumLibrary === 'function') loadCurriculumLibrary();
       if (typeof updateBackBtnVisibility === 'function') updateBackBtnVisibility();
 
-      setInterval(loadDashboardData, 30000);
+      // 1. Kick off core deduplicated data load & visible Dashboard in parallel (non-blocking!)
+      const corePromise = ensureCoreLmsDataLoaded();
+      loadDashboardData();
+
+      // 2. Hydrate background views from the shared in-memory cache once core data arrives
+      corePromise.then(() => {
+        setTimeout(() => {
+          loadFamiliesAndStudents();
+          loadTeachers();
+          loadFeeBillingLedger();
+          loadTrialClassesData();
+          loadCourses();
+          if (typeof loadCurriculumLibrary === 'function') loadCurriculumLibrary();
+          consolidateDuplicateTrialAndRegularRecords();
+        }, 120);
+      });
+
+      setInterval(() => loadDashboardData(), 60000);
     };
 
     function toggleSidebar() {

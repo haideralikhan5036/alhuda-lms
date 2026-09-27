@@ -312,16 +312,17 @@
       try {
         if (typeof db === 'undefined' || !db) return;
 
-        // Always fetch latest families & teachers to keep Cloud Cache 100% synchronized
-        const [{ data: latestFamilies }, { data: latestTeachers }] = await Promise.all([
-          db.from('families').select('*, students(*)').order('created_at', { ascending: false }),
-          db.from('teachers').select('*').order('created_at', { ascending: false })
-        ]);
-
-        if (latestFamilies) window.ALL_FAMILIES = latestFamilies;
-        if (latestTeachers) window.ALL_TEACHERS = latestTeachers;
-
-        await hydrateGlobalSharedStateFromCloud(latestFamilies || [], latestTeachers || []);
+        if (typeof ensureCoreLmsDataLoaded === 'function') {
+          await ensureCoreLmsDataLoaded({ force: true });
+        } else {
+          const [{ data: latestFamilies }, { data: latestTeachers }] = await Promise.all([
+            db.from('families').select('*, students(*)').order('created_at', { ascending: false }),
+            db.from('teachers').select('*').order('created_at', { ascending: false })
+          ]);
+          if (latestFamilies) window.ALL_FAMILIES = latestFamilies;
+          if (latestTeachers) window.ALL_TEACHERS = latestTeachers;
+          await hydrateGlobalSharedStateFromCloud(latestFamilies || [], latestTeachers || []);
+        }
 
         if (typeof syncTopCircleNotificationDots === 'function') {
           syncTopCircleNotificationDots();
@@ -342,10 +343,10 @@
           return el && !el.classList.contains('hidden');
         };
 
-        if (isVisible('tab-dashboard') && typeof loadDashboard === 'function') {
-          await loadDashboard();
-        } else if (isVisible('tab-families') && typeof loadFamilies === 'function') {
-          await loadFamilies();
+        if (isVisible('tab-dashboard') && typeof loadDashboardData === 'function') {
+          await loadDashboardData();
+        } else if (isVisible('tab-families') && typeof loadFamiliesAndStudents === 'function') {
+          await loadFamiliesAndStudents();
         } else if (isVisible('tab-trials') && typeof loadTrials === 'function') {
           await loadTrials();
         } else if (isVisible('tab-teachers') && typeof loadTeachers === 'function') {
@@ -695,12 +696,10 @@
         enforceGlobalNumberTypographySystem();
         enforceGlobalMobileResponsiveSystem();
         setTimeout(enforceGlobalNumberTypographySystem, 400);
-        setTimeout(() => scheduleDebouncedLiveRefresh('startup'), 650);
       });
     } else {
       enforceGlobalNumberTypographySystem();
       enforceGlobalMobileResponsiveSystem();
       setTimeout(enforceGlobalNumberTypographySystem, 400);
-      setTimeout(() => scheduleDebouncedLiveRefresh('startup'), 650);
     }
 

@@ -253,8 +253,31 @@ function exitFullScreen360Profile() {
   }
 }
 
+const _FAMILY_360_MEM_CACHE = {};
+const _TEACHER_360_MEM_CACHE = {};
+
+function invalidate360ProfileCache(familyOrTeacherId = null) {
+  if (!familyOrTeacherId) {
+    Object.keys(_FAMILY_360_MEM_CACHE).forEach(k => delete _FAMILY_360_MEM_CACHE[k]);
+    Object.keys(_TEACHER_360_MEM_CACHE).forEach(k => delete _TEACHER_360_MEM_CACHE[k]);
+    return;
+  }
+  const key = String(familyOrTeacherId).toUpperCase();
+  delete _FAMILY_360_MEM_CACHE[key];
+  delete _TEACHER_360_MEM_CACHE[key];
+}
+window.invalidate360ProfileCache = invalidate360ProfileCache;
+
 async function _ensure360CoreDataReady(forceRefresh = false) {
   try {
+    if (forceRefresh) {
+      invalidate360ProfileCache();
+    }
+    if (typeof ensureCoreLmsDataLoaded === 'function') {
+      await ensureCoreLmsDataLoaded({ force: forceRefresh });
+      return;
+    }
+
     const needFamilies = forceRefresh || !Array.isArray(window.ALL_FAMILIES) || window.ALL_FAMILIES.length === 0;
     const needStudents = forceRefresh || !Array.isArray(window.ALL_STUDENTS) || window.ALL_STUDENTS.length === 0;
     const needTeachers = forceRefresh || !Array.isArray(window.ALL_TEACHERS) || window.ALL_TEACHERS.length === 0;
@@ -325,14 +348,18 @@ function navigateBack360Profile() {
 }
 
 async function refreshCurrent360Profile() {
+  invalidate360ProfileCache();
   await _ensure360CoreDataReady(true);
   if (_CURRENT_360_STATE.type === 'family' && _CURRENT_360_STATE.id) {
     await openFamily360Profile(_CURRENT_360_STATE.id, _CURRENT_360_STATE.activeTab, true, {
       selectedStudentId: _CURRENT_360_STATE.selectedStudentId,
-      studentSubView: _CURRENT_360_STATE.studentSubView
+      studentSubView: _CURRENT_360_STATE.studentSubView,
+      forceRefresh: true
     });
   } else if (_CURRENT_360_STATE.type === 'teacher' && _CURRENT_360_STATE.id) {
-    await openTeacher360Profile(_CURRENT_360_STATE.id, _CURRENT_360_STATE.activeTab, true);
+    await openTeacher360Profile(_CURRENT_360_STATE.id, _CURRENT_360_STATE.activeTab, true, {
+      forceRefresh: true
+    });
   }
 }
 
@@ -382,13 +409,28 @@ function _buildTopWorkspaceNavHtml() {
 // ============================================================================
 async function openStudent360Profile(studentId, initialSubView = 'history') {
   if (!studentId) return;
-  await _ensure360CoreDataReady();
 
-  let student = (window.ALL_STUDENTS || []).find(s => String(s.id).toUpperCase() === String(studentId).toUpperCase());
+  const targetStuIdUpper = String(studentId).toUpperCase();
+  let student = (window.ALL_STUDENTS || []).find(s => String(s.id).toUpperCase() === targetStuIdUpper);
+
+  if (!student && Array.isArray(window.ALL_FAMILIES)) {
+    for (const f of window.ALL_FAMILIES) {
+      const match = (f.students || []).find(s => String(s.id).toUpperCase() === targetStuIdUpper);
+      if (match) {
+        student = match;
+        break;
+      }
+    }
+  }
+
   if (!student) {
-    const { data } = await db.from('students').select('*').eq('id', studentId).maybeSingle();
-    student = data;
-    if (student && Array.isArray(window.ALL_STUDENTS)) window.ALL_STUDENTS.push(student);
+    await _ensure360CoreDataReady();
+    student = (window.ALL_STUDENTS || []).find(s => String(s.id).toUpperCase() === targetStuIdUpper);
+    if (!student) {
+      const { data } = await db.from('students').select('*').eq('id', studentId).maybeSingle();
+      student = data;
+      if (student && Array.isArray(window.ALL_STUDENTS)) window.ALL_STUDENTS.push(student);
+    }
   }
 
   if (!student) {
@@ -541,20 +583,29 @@ async function openFamily360Profile(familyId, initialTab = 'students', skipHisto
   const workspace = document.getElementById('unified360PageWorkspace');
   if (!workspace) return;
 
-  workspace.innerHTML = `
-    <div class="bg-white rounded-2xl border border-slate-200 p-14 text-center text-slate-500 shadow-2xs">
-      <i class="fa-solid fa-circle-notch fa-spin text-2xl text-indigo-600 mb-3 block"></i>
-      <span class="text-sm font-extrabold text-slate-700">Loading Family Profile Workspace...</span>
-    </div>
-  `;
+  const famKey = String(familyId).toUpperCase();
+  const validTabs = ['students', 'payments', 'manager_notes', 'teacher_notes', 'biodata'];
+  const activeTab = validTabs.includes(initialTab) ? initialTab : 'students';
 
-  await _ensure360CoreDataReady();
+  // 1. Try resolving Family & Students synchronously from memory first (0ms latency!)
+  let family = (window.ALL_FAMILIES || []).find(f => String(f.id).toUpperCase() === famKey) ||
+               (window.RAW_ALL_FAMILIES || []).find(f => String(f.id).toUpperCase() === famKey);
 
-  let family = (window.ALL_FAMILIES || []).find(f => String(f.id).toUpperCase() === String(familyId).toUpperCase());
   if (!family) {
-    const { data } = await db.from('families').select('*, students(*)').eq('id', familyId).maybeSingle();
-    family = data;
-    if (family && Array.isArray(window.ALL_FAMILIES)) window.ALL_FAMILIES.push(family);
+    workspace.innerHTML = `
+      <div class="bg-white rounded-2xl border border-slate-200 p-14 text-center text-slate-500 shadow-2xs">
+        <i class="fa-solid fa-circle-notch fa-spin text-2xl text-indigo-600 mb-3 block"></i>
+        <span class="text-sm font-extrabold text-slate-700">Loading Family Profile Workspace...</span>
+      </div>
+    `;
+    const [singleRes] = await Promise.all([
+      db.from('families').select('*, students(*)').eq('id', familyId).maybeSingle(),
+      _ensure360CoreDataReady()
+    ]);
+    family = (window.ALL_FAMILIES || []).find(f => String(f.id).toUpperCase() === famKey) || singleRes?.data;
+    if (family && Array.isArray(window.ALL_FAMILIES) && !window.ALL_FAMILIES.some(f => String(f.id).toUpperCase() === famKey)) {
+      window.ALL_FAMILIES.push(family);
+    }
   }
 
   if (!family) {
@@ -567,19 +618,15 @@ async function openFamily360Profile(familyId, initialTab = 'students', skipHisto
     return;
   }
 
-  // Strictly enforce ONLY the 5 required tabs:
-  // 1. students | 2. payments | 3. manager_notes | 4. teacher_notes | 5. biodata
-  const validTabs = ['students', 'payments', 'manager_notes', 'teacher_notes', 'biodata'];
-  const activeTab = validTabs.includes(initialTab) ? initialTab : 'students';
-
-  // Retrieve all connected Students for this Family
-  const familyStudents = (window.ALL_STUDENTS || []).filter(s =>
-    String(s.family_id || '').toUpperCase() === String(family.id).toUpperCase() &&
+  // Retrieve all connected Students for this Family (from ALL_STUDENTS or nested family.students)
+  let familyStudents = (window.ALL_STUDENTS || []).filter(s =>
+    String(s.family_id || '').toUpperCase() === famKey &&
     String(s.status || '').toLowerCase() !== 'trial'
   );
+  if (familyStudents.length === 0 && Array.isArray(family.students) && family.students.length > 0) {
+    familyStudents = family.students.filter(s => String(s.status || '').toLowerCase() !== 'trial');
+  }
 
-  // Determine selected Student inside Family Profile
-  // Only auto-open the bottom Student Detail Drawer if a specific student was explicitly requested (e.g. from Student Search)
   const hasExplicitStudent = Boolean(options.selectedStudentId);
   let selectedStudentId = options.selectedStudentId || _CURRENT_360_STATE.selectedStudentId;
   if (!selectedStudentId || !familyStudents.some(s => String(s.id).toUpperCase() === String(selectedStudentId).toUpperCase())) {
@@ -599,23 +646,62 @@ async function openFamily360Profile(familyId, initialTab = 'students', skipHisto
   }
 
   const studentIds = familyStudents.map(s => s.id);
-  const [schedRes, logsRes] = await Promise.all([
-    studentIds.length > 0 ? db.from('class_schedules').select('*, teachers(*)').in('student_id', studentIds) : Promise.resolve({ data: [] }),
-    studentIds.length > 0 ? db.from('attendance_logs').select('*').in('student_id', studentIds).order('date', { ascending: false }).limit(250) : Promise.resolve({ data: [] })
-  ]);
+  const studentIdSet = new Set(studentIds.map(id => String(id).toUpperCase()));
 
-  const famSchedules = schedRes.data || [];
-  const famLogs = logsRes.data || [];
+  // 2. Resolve Schedules & Logs immediately from cache or global ALL_CLASS_SCHEDULES
+  const cachedEntry = _FAMILY_360_MEM_CACHE[famKey];
+  const initialSchedules = cachedEntry?.famSchedules ||
+    (Array.isArray(window.ALL_CLASS_SCHEDULES) && window.ALL_CLASS_SCHEDULES.length > 0
+      ? window.ALL_CLASS_SCHEDULES.filter(sc => studentIdSet.has(String(sc.student_id || '').toUpperCase()))
+      : []);
+  const initialLogs = cachedEntry?.famLogs || [];
 
-  // Cache schedules & logs on window for instant tab/student switching
   window._LAST_FAMILY_360_CACHE = {
     family,
     familyStudents,
-    famSchedules,
-    famLogs
+    famSchedules: initialSchedules,
+    famLogs: initialLogs
   };
 
+  // Render Family Workspace DOM immediately (< 5ms, zero loading spinner!)
   _renderFamilyWorkspaceDOM();
+
+  // 3. Background refresh of attendance logs & schedules if cache is older than 30s or forceRefresh is requested
+  const isCacheFresh = cachedEntry && !options.forceRefresh && (Date.now() - cachedEntry.ts < 30000);
+  if (isCacheFresh || studentIds.length === 0) {
+    return;
+  }
+
+  try {
+    const needScheduleFetch = options.forceRefresh || !Array.isArray(window.ALL_CLASS_SCHEDULES) || window.ALL_CLASS_SCHEDULES.length === 0;
+    const [schedRes, logsRes] = await Promise.all([
+      needScheduleFetch
+        ? db.from('class_schedules').select('*, teachers(*)').in('student_id', studentIds)
+        : Promise.resolve({ data: initialSchedules }),
+      db.from('attendance_logs').select('*').in('student_id', studentIds).order('date', { ascending: false }).limit(120)
+    ]);
+
+    const famSchedules = schedRes.data || initialSchedules;
+    const famLogs = logsRes.data || [];
+
+    _FAMILY_360_MEM_CACHE[famKey] = {
+      famSchedules,
+      famLogs,
+      ts: Date.now()
+    };
+
+    if (_CURRENT_360_STATE.type === 'family' && String(_CURRENT_360_STATE.id).toUpperCase() === famKey) {
+      window._LAST_FAMILY_360_CACHE = {
+        family,
+        familyStudents,
+        famSchedules,
+        famLogs
+      };
+      _renderFamilyWorkspaceDOM();
+    }
+  } catch (err) {
+    console.warn('[Family Workspace] Background sync notice:', err);
+  }
 }
 
 /**
@@ -3130,8 +3216,9 @@ async function submitRecordDailyLessonForm(e, familyId, studentId) {
 
   _closeWorkspaceModal();
   _CURRENT_360_STATE.selectedLessonDate = date;
+  invalidate360ProfileCache(familyId);
   _notify360(`Attendance (${status}) & Daily Lesson recorded for ${date}!`);
-  await openFamily360Profile(familyId, 'students', true, { selectedStudentId: studentId, studentSubView: 'history' });
+  await openFamily360Profile(familyId, 'students', true, { selectedStudentId: studentId, studentSubView: 'history', forceRefresh: true });
 }
 
 function openIssueStudentCertificateModal(familyId, studentId) {
@@ -3317,20 +3404,24 @@ async function openTeacher360Profile(teacherId, initialTab = 'students', skipHis
   const workspace = document.getElementById('unified360PageWorkspace');
   if (!workspace) return;
 
-  workspace.innerHTML = `
-    <div class="bg-white rounded-2xl border border-slate-200 p-14 text-center text-slate-500 shadow-2xs">
-      <i class="fa-solid fa-circle-notch fa-spin text-2xl text-indigo-600 mb-3 block"></i>
-      <span class="text-sm font-extrabold">Loading Teacher Schedule &amp; Assigned Students...</span>
-    </div>
-  `;
-
-  await _ensure360CoreDataReady();
-
+  const tchKey = String(teacherId).toUpperCase();
   let teacher = (window.ALL_TEACHERS || []).find(t => String(t.id) === String(teacherId));
+
   if (!teacher) {
-    const { data } = await db.from('teachers').select('*').eq('id', teacherId).maybeSingle();
-    teacher = data;
-    if (teacher && Array.isArray(window.ALL_TEACHERS)) window.ALL_TEACHERS.push(teacher);
+    workspace.innerHTML = `
+      <div class="bg-white rounded-2xl border border-slate-200 p-14 text-center text-slate-500 shadow-2xs">
+        <i class="fa-solid fa-circle-notch fa-spin text-2xl text-indigo-600 mb-3 block"></i>
+        <span class="text-sm font-extrabold">Loading Teacher Schedule &amp; Assigned Students...</span>
+      </div>
+    `;
+    const [singleRes] = await Promise.all([
+      db.from('teachers').select('*').eq('id', teacherId).maybeSingle(),
+      _ensure360CoreDataReady()
+    ]);
+    teacher = (window.ALL_TEACHERS || []).find(t => String(t.id) === String(teacherId)) || singleRes?.data;
+    if (teacher && Array.isArray(window.ALL_TEACHERS) && !window.ALL_TEACHERS.some(t => String(t.id) === String(teacherId))) {
+      window.ALL_TEACHERS.push(teacher);
+    }
   }
   if (!teacher) {
     workspace.innerHTML = `${_buildTopWorkspaceNavHtml()}<div class="p-12 bg-white rounded-2xl border text-center text-rose-600 font-bold">Teacher not found.</div>`;
@@ -3350,94 +3441,119 @@ async function openTeacher360Profile(teacherId, initialTab = 'students', skipHis
     String(s.status || '').toLowerCase() !== 'trial'
   );
 
-  const { data: schedules } = await db.from('class_schedules').select('*, students(*)').eq('teacher_id', teacher.id);
-  const tchSchedules = schedules || [];
+  const cachedTch = _TEACHER_360_MEM_CACHE[tchKey];
+  const initialTchSchedules = cachedTch?.tchSchedules ||
+    (Array.isArray(window.ALL_CLASS_SCHEDULES) && window.ALL_CLASS_SCHEDULES.length > 0
+      ? window.ALL_CLASS_SCHEDULES.filter(sc => String(sc.teacher_id) === String(teacher.id))
+      : []);
 
-  workspace.innerHTML = `
-    ${_buildTopWorkspaceNavHtml()}
+  const renderTeacherDOM = (tchSchedules) => {
+    workspace.innerHTML = `
+      ${_buildTopWorkspaceNavHtml()}
 
-    <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-      <div class="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white p-6 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-        <div class="flex items-center gap-4">
-          <div class="w-14 h-14 rounded-2xl bg-white/10 border border-white/20 flex items-center justify-center text-2xl font-black text-amber-400">
-            ${_esc360((teacher.full_name || 'T').charAt(0).toUpperCase())}
+      <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+        <div class="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white p-6 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+          <div class="flex items-center gap-4">
+            <div class="w-14 h-14 rounded-2xl bg-white/10 border border-white/20 flex items-center justify-center text-2xl font-black text-amber-400">
+              ${_esc360((teacher.full_name || 'T').charAt(0).toUpperCase())}
+            </div>
+            <div>
+              <div class="flex items-center gap-2 flex-wrap">
+                <h1 class="text-xl font-black text-white">${_esc360(teacher.full_name)}</h1>
+                <span class="px-2.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 text-xs font-extrabold">${_esc360(teacher.working_shift || 'Active Shift')}</span>
+              </div>
+              <p class="text-xs text-slate-300 mt-1">
+                Assigned Students: <strong>${assignedStudents.length}</strong> &bull; Booked Weekly Class Slots: <strong>${tchSchedules.length}</strong>
+              </p>
+            </div>
           </div>
+          <div class="flex items-center gap-2">
+            ${typeof openTeacherScheduleModal === 'function' ? `
+              <button onclick="openTeacherScheduleModal('${_esc360(teacher.id)}', '${_esc360(teacher.full_name)}')"
+                      class="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-extrabold transition cursor-pointer">
+                <i class="fa-solid fa-calendar-days mr-1"></i> Open Interactive 2D Timetable Matrix
+              </button>
+            ` : ''}
+          </div>
+        </div>
+
+        <div class="p-6 space-y-6">
           <div>
-            <div class="flex items-center gap-2 flex-wrap">
-              <h1 class="text-xl font-black text-white">${_esc360(teacher.full_name)}</h1>
-              <span class="px-2.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 text-xs font-extrabold">${_esc360(teacher.working_shift || 'Active Shift')}</span>
-            </div>
-            <p class="text-xs text-slate-300 mt-1">
-              Assigned Students: <strong>${assignedStudents.length}</strong> &bull; Booked Weekly Class Slots: <strong>${tchSchedules.length}</strong>
-            </p>
+            <h3 class="text-sm font-black text-slate-900 mb-3">Teacher's Weekly Class Schedule &amp; Assigned Students</h3>
+            ${assignedStudents.length === 0 ? `
+              <div class="p-10 text-center bg-slate-50 rounded-xl border border-slate-200 text-slate-400 text-xs">
+                No regular students currently assigned to ${_esc360(teacher.full_name)}.
+              </div>
+            ` : `
+              <div class="overflow-x-auto border border-slate-200 rounded-xl">
+                <table class="w-full text-left text-xs border-collapse">
+                  <thead class="bg-slate-50 text-slate-700 font-extrabold border-b border-slate-200">
+                    <tr>
+                      <th class="p-3.5">#</th>
+                      <th class="p-3.5">Student (Opens Family Workspace)</th>
+                      <th class="p-3.5">Family / Parent</th>
+                      <th class="p-3.5">Course</th>
+                      <th class="p-3.5">Scheduled Slots</th>
+                      <th class="p-3.5">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody class="divide-y divide-slate-100">
+                    ${assignedStudents.map((stu, i) => {
+                      const fam = (window.ALL_FAMILIES || []).find(f => String(f.id).toUpperCase() === String(stu.family_id).toUpperCase());
+                      const stuSlots = tchSchedules.filter(sc => String(sc.student_id).toUpperCase() === String(stu.id).toUpperCase());
+                      const slotText = stuSlots.length > 0
+                        ? stuSlots.map(sc => `${_DAY_LABELS_360[sc.day_of_week] || sc.day_of_week} (${(sc.start_time || '').slice(0,5)})`).join(', ')
+                        : 'Regular Weekly Slot';
+                      const isHighlighted = options.highlightStudentId && String(stu.id).toUpperCase() === String(options.highlightStudentId).toUpperCase();
+
+                      return `
+                        <tr class="${isHighlighted ? 'bg-indigo-50/80 font-bold' : 'hover:bg-slate-50'}">
+                          <td class="p-3.5 font-mono font-bold text-slate-500">${i + 1}</td>
+                          <td class="p-3.5">
+                            <button onclick="openStudent360Profile('${_esc360(stu.id)}')" class="font-extrabold text-indigo-700 hover:underline cursor-pointer">
+                              ${_esc360(stu.name)} (${_esc360(stu.id)})
+                            </button>
+                          </td>
+                          <td class="p-3.5">
+                            ${fam ? `
+                              <button onclick="openFamily360Profile('${_esc360(fam.id)}')" class="font-bold text-slate-800 hover:text-indigo-700 hover:underline cursor-pointer">
+                                ${_esc360(fam.parent_name)} (${_esc360(fam.id)})
+                              </button>
+                            ` : _esc360(stu.family_id)}
+                          </td>
+                          <td class="p-3.5 text-slate-700">${_esc360(stu.course_id || 'Quran Studies')}</td>
+                          <td class="p-3.5 font-mono text-emerald-800 font-bold">${_esc360(slotText)}</td>
+                          <td class="p-3.5"><span class="px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 text-[10px] font-black">${_esc360(stu.status || 'Active')}</span></td>
+                        </tr>
+                      `;
+                    }).join('')}
+                  </tbody>
+                </table>
+              </div>
+            `}
           </div>
         </div>
-        <div class="flex items-center gap-2">
-          ${typeof openTeacherScheduleModal === 'function' ? `
-            <button onclick="openTeacherScheduleModal('${_esc360(teacher.id)}', '${_esc360(teacher.full_name)}')"
-                    class="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-extrabold transition cursor-pointer">
-              <i class="fa-solid fa-calendar-days mr-1"></i> Open Interactive 2D Timetable Matrix
-            </button>
-          ` : ''}
-        </div>
       </div>
+    `;
+  };
 
-      <div class="p-6 space-y-6">
-        <div>
-          <h3 class="text-sm font-black text-slate-900 mb-3">Teacher's Weekly Class Schedule &amp; Assigned Students</h3>
-          ${assignedStudents.length === 0 ? `
-            <div class="p-10 text-center bg-slate-50 rounded-xl border border-slate-200 text-slate-400 text-xs">
-              No regular students currently assigned to ${_esc360(teacher.full_name)}.
-            </div>
-          ` : `
-            <div class="overflow-x-auto border border-slate-200 rounded-xl">
-              <table class="w-full text-left text-xs border-collapse">
-                <thead class="bg-slate-50 text-slate-700 font-extrabold border-b border-slate-200">
-                  <tr>
-                    <th class="p-3.5">#</th>
-                    <th class="p-3.5">Student (Opens Family Workspace)</th>
-                    <th class="p-3.5">Family / Parent</th>
-                    <th class="p-3.5">Course</th>
-                    <th class="p-3.5">Scheduled Slots</th>
-                    <th class="p-3.5">Status</th>
-                  </tr>
-                </thead>
-                <tbody class="divide-y divide-slate-100">
-                  ${assignedStudents.map((stu, i) => {
-                    const fam = (window.ALL_FAMILIES || []).find(f => String(f.id).toUpperCase() === String(stu.family_id).toUpperCase());
-                    const stuSlots = tchSchedules.filter(sc => String(sc.student_id).toUpperCase() === String(stu.id).toUpperCase());
-                    const slotText = stuSlots.length > 0
-                      ? stuSlots.map(sc => `${_DAY_LABELS_360[sc.day_of_week] || sc.day_of_week} (${(sc.start_time || '').slice(0,5)})`).join(', ')
-                      : 'Regular Weekly Slot';
-                    const isHighlighted = options.highlightStudentId && String(stu.id).toUpperCase() === String(options.highlightStudentId).toUpperCase();
+  // Render Teacher Workspace immediately (< 5ms, zero loading spinner!)
+  renderTeacherDOM(initialTchSchedules);
 
-                    return `
-                      <tr class="${isHighlighted ? 'bg-indigo-50/80 font-bold' : 'hover:bg-slate-50'}">
-                        <td class="p-3.5 font-mono font-bold text-slate-500">${i + 1}</td>
-                        <td class="p-3.5">
-                          <button onclick="openStudent360Profile('${_esc360(stu.id)}')" class="font-extrabold text-indigo-700 hover:underline cursor-pointer">
-                            ${_esc360(stu.name)} (${_esc360(stu.id)})
-                          </button>
-                        </td>
-                        <td class="p-3.5">
-                          ${fam ? `
-                            <button onclick="openFamily360Profile('${_esc360(fam.id)}')" class="font-bold text-slate-800 hover:text-indigo-700 hover:underline cursor-pointer">
-                              ${_esc360(fam.parent_name)} (${_esc360(fam.id)})
-                            </button>
-                          ` : _esc360(stu.family_id)}
-                        </td>
-                        <td class="p-3.5 text-slate-700">${_esc360(stu.course_id || 'Quran Studies')}</td>
-                        <td class="p-3.5 font-mono text-emerald-800 font-bold">${_esc360(slotText)}</td>
-                        <td class="p-3.5"><span class="px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 text-[10px] font-black">${_esc360(stu.status || 'Active')}</span></td>
-                      </tr>
-                    `;
-                  }).join('')}
-                </tbody>
-              </table>
-            </div>
-          `}
-        </div>
-      </div>
-    </div>
-  `;
+  const isTchCacheFresh = cachedTch && !options.forceRefresh && (Date.now() - cachedTch.ts < 30000);
+  if (isTchCacheFresh) return;
+
+  try {
+    const { data: schedules } = await db.from('class_schedules').select('*, students(*)').eq('teacher_id', teacher.id);
+    const tchSchedules = schedules || initialTchSchedules;
+    _TEACHER_360_MEM_CACHE[tchKey] = {
+      tchSchedules,
+      ts: Date.now()
+    };
+    if (_CURRENT_360_STATE.type === 'teacher' && String(_CURRENT_360_STATE.id).toUpperCase() === tchKey) {
+      renderTeacherDOM(tchSchedules);
+    }
+  } catch (err) {
+    console.warn('[Teacher Workspace] Background sync notice:', err);
+  }
 }

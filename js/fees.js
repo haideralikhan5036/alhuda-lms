@@ -266,7 +266,7 @@
     async function manualFeeCloudSync() {
       updateCloudSyncIndicator('syncing');
       showToastNotification("Syncing latest fee records with cloud...");
-      await loadFeeBillingLedger();
+      await loadFeeBillingLedger(true);
       showToastNotification("Fee records 100% synchronized across all devices!");
     }
 
@@ -350,32 +350,31 @@
     }
 
     // Main entrypoint when switching to tab-invoices
-    async function loadFeeBillingLedger() {
+    async function loadFeeBillingLedger(forceRefresh = false) {
       try {
         updateCloudSyncIndicator('syncing');
 
-        // 1. Fetch fresh regular families from Supabase
-        const { data: families } = await db.from('families').select('*, students(*)').order('created_at', { ascending: false });
-
-        // 2. Ingest cloud fee history and matrix overrides from Supabase into cache
-        await ingestFeeDataFromFamilies(families);
-
-        CACHED_FEE_FAMILIES = (families || []).filter(f => {
-          if ((f.status || '').toLowerCase() === 'trial') return false;
-          if ((f.status || '').toLowerCase() === 'converted') return false;
-          if ((f.id || '').toUpperCase().startsWith('TRL-')) return false;
-          if (f.notes) {
-            try {
-              const p = JSON.parse(f.notes);
-              if (p.is_trial && !p.converted_from_trial) return false;
-            } catch(e) {}
+        if (typeof ensureCoreLmsDataLoaded === 'function') {
+          const core = await ensureCoreLmsDataLoaded({ force: Boolean(forceRefresh) });
+          CACHED_FEE_FAMILIES = core.families || [];
+          if (forceRefresh && typeof ingestFeeDataFromFamilies === 'function') {
+            await ingestFeeDataFromFamilies(core.rawFamilies || core.families || []);
           }
-          return true;
-        });
-
-        // Ensure Leave Tracker data is ready for leave-fee synchronization
-        if (!ALL_LEAVE_RECORDS || ALL_LEAVE_RECORDS.length === 0) {
-          try { await loadLeaveManagementData(); } catch(e){}
+        } else {
+          const { data: families } = await db.from('families').select('*, students(*)').order('created_at', { ascending: false });
+          await ingestFeeDataFromFamilies(families);
+          CACHED_FEE_FAMILIES = (families || []).filter(f => {
+            if ((f.status || '').toLowerCase() === 'trial') return false;
+            if ((f.status || '').toLowerCase() === 'converted') return false;
+            if ((f.id || '').toUpperCase().startsWith('TRL-')) return false;
+            if (f.notes) {
+              try {
+                const p = JSON.parse(f.notes);
+                if (p.is_trial && !p.converted_from_trial) return false;
+              } catch(e) {}
+            }
+            return true;
+          });
         }
 
         // Set default month/year in dropdowns if not already set
