@@ -1096,11 +1096,11 @@
           </div>
 
           <div class="inline-flex rounded-xl bg-slate-100 p-1 border border-slate-200 text-xs font-bold overflow-x-auto touch-scroll max-w-full no-scrollbar shrink-0">
-            <button id="btnViewFamCards" onclick="switchFamiliesViewMode('cards')" class="px-3 py-1.5 rounded-lg bg-white text-slate-900 shadow-2xs flex items-center gap-1.5 transition whitespace-nowrap">
-              <i class="fa-solid fa-grip text-brandEmerald"></i> Families Cards
-            </button>
-            <button id="btnViewFamTable" onclick="switchFamiliesViewMode('famTable')" class="px-3 py-1.5 rounded-lg text-slate-600 hover:text-slate-900 flex items-center gap-1.5 transition whitespace-nowrap">
+            <button id="btnViewFamTable" onclick="switchFamiliesViewMode('famTable')" class="px-3 py-1.5 rounded-lg bg-white text-slate-900 shadow-2xs flex items-center gap-1.5 transition font-extrabold whitespace-nowrap">
               <i class="fa-solid fa-table-list text-brandDark"></i> Families Master Table
+            </button>
+            <button id="btnViewFamCards" onclick="switchFamiliesViewMode('cards')" class="px-3 py-1.5 rounded-lg text-slate-600 hover:text-slate-900 flex items-center gap-1.5 transition whitespace-nowrap">
+              <i class="fa-solid fa-grip text-brandEmerald"></i> Families Cards
             </button>
             <button id="btnViewStudentsList" onclick="switchFamiliesViewMode('studentsList')" class="px-3 py-1.5 rounded-lg text-slate-600 hover:text-slate-900 flex items-center gap-1.5 transition whitespace-nowrap">
               <i class="fa-solid fa-user-graduate text-teal-700"></i> All Enrolled Students
@@ -1114,13 +1114,13 @@
         </div>
       </div>
 
-      <!-- VIEW 1: FAMILIES CARDS GRID -->
-      <div id="familiesCardsContainer" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+      <!-- VIEW 1: FAMILIES CARDS GRID (Alternative Overview — Hidden by Default) -->
+      <div id="familiesCardsContainer" class="hidden grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         <!-- Family Cards populated via JS with Serial # -->
       </div>
 
-      <!-- VIEW 2: FAMILIES MASTER REGISTRY TABLE (Numbered 1 to N) -->
-      <div id="familiesTableContainer" class="hidden bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+      <!-- VIEW 2: FAMILIES MASTER REGISTRY TABLE (Default View — Numbered 1 to N) -->
+      <div id="familiesTableContainer" class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
         <div class="p-4 border-b border-slate-200 flex justify-between items-center bg-slate-50/80">
           <div>
             <h3 class="font-extrabold text-slate-900 text-sm flex items-center gap-2">

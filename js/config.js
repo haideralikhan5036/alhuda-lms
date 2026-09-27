@@ -82,8 +82,39 @@
       return true;
     }
 
+    function isStudentSelfDeactivated(s) {
+      if (!s) return true;
+      if (s.is_active === false) return true;
+      const st = String(s.status || 'Active').trim().toLowerCase();
+      return st === 'inactive' || st === 'deactivated' || st === 'deleted' || st === 'left';
+    }
+
+    function getFamilyRegularStudents(f) {
+      if (!f) return [];
+      const famIdUpper = String(f.id || '').trim().toUpperCase();
+      let stuList = [];
+      if (Array.isArray(window.ALL_STUDENTS) && window.ALL_STUDENTS.length > 0 && famIdUpper) {
+        stuList = window.ALL_STUDENTS.filter(s =>
+          String(s.family_id || '').trim().toUpperCase() === famIdUpper &&
+          isRegularStudentRecord(s)
+        );
+      }
+      if (stuList.length === 0 && Array.isArray(f.students) && f.students.length > 0) {
+        stuList = f.students.filter(s => isRegularStudentRecord(s));
+      }
+      return stuList;
+    }
+
     function isFamilyDeactivated(f) {
       if (!f) return true;
+      const stuList = getFamilyRegularStudents(f);
+      if (stuList.length > 0) {
+        // CORE BUSINESS RULE:
+        // IF AT LEAST ONE STUDENT IN A FAMILY IS ACTIVE -> FAMILY MUST BE ACTIVE (return false)
+        // IF ZERO STUDENTS IN A FAMILY ARE ACTIVE -> FAMILY MUST BE DEACTIVATED (return true)
+        const hasAnyActiveStudent = stuList.some(s => !isStudentSelfDeactivated(s));
+        return !hasAnyActiveStudent;
+      }
       if (f.is_active === false) return true;
       const st = String(f.status || 'Active').trim().toLowerCase();
       return st === 'inactive' || st === 'deactivated';
@@ -95,35 +126,15 @@
 
     function isStudentDeactivatedOrParentDeactivated(s, familyLookup = null) {
       if (!s) return true;
-      if (s.is_active === false) return true;
-      const st = String(s.status || 'Active').trim().toLowerCase();
-      if (st === 'inactive' || st === 'deactivated' || st === 'deleted' || st === 'left') return true;
-
-      const famId = String(s.family_id || '').trim();
-      if (famId) {
-        let parentFam = null;
-        if (familyLookup && typeof familyLookup === 'object') {
-          parentFam = familyLookup[famId] || familyLookup[famId.toUpperCase()] || null;
-        }
-        if (!parentFam && s.families && typeof s.families === 'object') {
-          parentFam = s.families;
-        }
-        if (!parentFam && Array.isArray(ALL_FAMILIES)) {
-          parentFam = ALL_FAMILIES.find(f => String(f.id || '').toUpperCase() === famId.toUpperCase()) || null;
-        }
-        if (!parentFam && Array.isArray(RAW_ALL_FAMILIES)) {
-          parentFam = RAW_ALL_FAMILIES.find(f => String(f.id || '').toUpperCase() === famId.toUpperCase()) || null;
-        }
-        if (parentFam && isFamilyDeactivated(parentFam)) {
-          return true;
-        }
-      }
+      if (isStudentSelfDeactivated(s)) return true;
       return false;
     }
 
     function isActiveStudentRecord(s, familyLookup = null) {
       return isRegularStudentRecord(s) && !isStudentDeactivatedOrParentDeactivated(s, familyLookup);
     }
+    window.isStudentSelfDeactivated = isStudentSelfDeactivated;
+    window.getFamilyRegularStudents = getFamilyRegularStudents;
     window.isFamilyDeactivated = isFamilyDeactivated;
     window.isActiveFamilyRecord = isActiveFamilyRecord;
     window.isStudentDeactivatedOrParentDeactivated = isStudentDeactivatedOrParentDeactivated;
@@ -168,6 +179,18 @@
           const rawFamilies = famRes.data || [];
           RAW_ALL_FAMILIES = rawFamilies;
 
+          if (stdRes.data && stdRes.data.length > 0) {
+            ALL_STUDENTS = stdRes.data.filter(s => isRegularStudentRecord(s));
+          } else {
+            const flatStu = [];
+            rawFamilies.forEach(f => {
+              if (f.students) {
+                f.students.filter(s => isRegularStudentRecord(s)).forEach(s => flatStu.push(s));
+              }
+            });
+            ALL_STUDENTS = flatStu;
+          }
+
           const normalizePhone = (p) => String(p || '').replace(/[^0-9]/g, '').slice(-10);
           const normalizeName = (n) => String(n || '').trim().toLowerCase().replace(/\s+/g, ' ');
           const seenFamKeys = new Set();
@@ -178,22 +201,32 @@
             if (seenFamKeys.has(key)) return false;
             seenFamKeys.add(key);
             return true;
-          }).map(f => ({
-            ...f,
-            students: (f.students || []).filter(s => isRegularStudentRecord(s))
-          }));
+          }).map(f => {
+            const famIdUpper = String(f.id || '').trim().toUpperCase();
+            const linkedStudents = ALL_STUDENTS.filter(s => String(s.family_id || '').trim().toUpperCase() === famIdUpper);
+            const stuArr = linkedStudents.length > 0 ? linkedStudents : (f.students || []).filter(s => isRegularStudentRecord(s));
+
+            let syncedStatus = f.status || 'Active';
+            if (stuArr.length > 0) {
+              const hasActive = stuArr.some(s => !isStudentSelfDeactivated(s));
+              const isCurrDeact = ['inactive', 'deactivated'].includes(String(syncedStatus).trim().toLowerCase());
+              if (hasActive && isCurrDeact) {
+                syncedStatus = 'Active';
+                db.from('families').update({ status: 'Active' }).eq('id', f.id).then(() => {});
+              } else if (!hasActive && !isCurrDeact) {
+                syncedStatus = 'Inactive';
+                db.from('families').update({ status: 'Inactive' }).eq('id', f.id).then(() => {});
+              }
+            }
+
+            return {
+              ...f,
+              status: syncedStatus,
+              students: stuArr
+            };
+          });
 
           ALL_FAMILIES = regularFamilies;
-
-          if (stdRes.data && stdRes.data.length > 0) {
-            ALL_STUDENTS = stdRes.data.filter(s => isRegularStudentRecord(s));
-          } else {
-            const flatStu = [];
-            regularFamilies.forEach(f => {
-              if (f.students) flatStu.push(...f.students);
-            });
-            ALL_STUDENTS = flatStu;
-          }
 
           if (tchRes.data) ALL_TEACHERS = tchRes.data;
           if (schRes.data) ALL_CLASS_SCHEDULES = schRes.data;

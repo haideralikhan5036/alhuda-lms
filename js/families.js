@@ -360,6 +360,9 @@
       btn.disabled = false;
       btn.innerText = 'Enroll Student';
       closeModal('modalAddStudent');
+      if (typeof syncFamilyStatusFromStudentsBackend === 'function') {
+        await syncFamilyStatusFromStudentsBackend(family_id);
+      }
       if (typeof invalidateCoreLmsDataCache === 'function') invalidateCoreLmsDataCache();
       await loadFamiliesAndStudents(true);
 
@@ -375,7 +378,7 @@
       alert(`Copied to clipboard!\n\n${txt}`);
     }
 
-    let CURRENT_FAMILIES_VIEW = 'cards';
+    let CURRENT_FAMILIES_VIEW = 'famTable';
     let FAM_SEARCH_QUERY = '';
 
     function switchFamiliesViewMode(mode) {
@@ -504,11 +507,8 @@
         famSelect.innerHTML = activeFamiliesList.map(f => `<option value="${f.id}">${f.parent_name} (${f.id} &bull; ${f.country})</option>`).join('');
       }
 
-      // Update Summary Badges (Exclude Deactivated Families & Students belonging to Deactivated Families from Active counts)
-      const activeFams = activeFamiliesList.filter(f => {
-        const st = (f.status || 'Active').toLowerCase();
-        return st === 'active' || st === 'regular';
-      }).length;
+      // Update Summary Badges (Exclude Deactivated Families & Deactivated Students from Active counts)
+      const activeFams = activeFamiliesList.length;
 
       const activeStudentsOnly = allStu.filter(s => {
         if (typeof isActiveStudentRecord === 'function') return isActiveStudentRecord(s, famMap);
@@ -536,6 +536,11 @@
       setFVal('sidebarActiveFamilies', activeFams);
       setFVal('sidebarActiveStudents', activeStus);
 
+      if (!forceRefresh) {
+        switchFamiliesViewMode('famTable');
+      } else {
+        switchFamiliesViewMode(CURRENT_FAMILIES_VIEW || 'famTable');
+      }
       renderFamiliesCards();
       renderFamiliesMasterTable();
       renderAllStudentsListTable();
@@ -668,13 +673,17 @@
                       const assignedTeacher = ALL_TEACHERS.find(t => t.id === s.assigned_teacher_id);
                       const tName = assignedTeacher ? assignedTeacher.full_name : 'No Teacher Assigned';
                       const joinStr = s.joining_date ? `Joined: ${s.joining_date}` : '';
+                      const isStuDeact = typeof isStudentSelfDeactivated === 'function'
+                        ? isStudentSelfDeactivated(s)
+                        : ['inactive', 'deactivated'].includes(String(s.status || '').toLowerCase());
 
                       return `
-                        <div class="p-2.5 rounded-xl border border-slate-200 bg-slate-50/70 hover:bg-white text-xs transition space-y-1">
+                        <div class="p-2.5 rounded-xl border ${isStuDeact ? 'border-rose-200 bg-rose-50/40' : 'border-slate-200 bg-slate-50/70'} hover:bg-white text-xs transition space-y-1">
                           <div class="flex justify-between items-start">
-                            <div class="flex items-center gap-1.5">
-                              <button onclick="openStudent360Profile('${s.id}')" class="font-bold text-slate-900 hover:text-brandEmerald hover:underline text-left">${s.name}</button>
+                            <div class="flex items-center gap-1.5 flex-wrap">
+                              <button onclick="openStudent360Profile('${s.id}')" class="font-bold ${isStuDeact ? 'text-slate-500' : 'text-slate-900'} hover:text-brandEmerald hover:underline text-left">${s.name}</button>
                               <span class="text-[9px] font-mono px-1.5 py-0.2 bg-slate-200 text-slate-700 rounded font-bold">${s.id}</span>
+                              ${isStuDeact ? `<span class="px-1.5 py-0.2 rounded text-[8px] font-black bg-rose-100 text-rose-800 border border-rose-300">DEACTIVATED</span>` : ''}
                             </div>
                             <button onclick="openStudent360Profile('${s.id}')" class="text-brandEmerald hover:text-brandDark font-bold text-[10px] flex items-center gap-1">
                               Family Profile <i class="fa-solid fa-chevron-right text-[8px]"></i>
@@ -736,16 +745,18 @@
       tbody.innerHTML = filtered.map((f, idx) => {
         const creds = getParentCreds(f);
         const cleanPhone = (f.whatsapp || '').replace(/[^0-9]/g, '');
-        const childrenCount = (f.students || []).length;
+        const allSibs = f.students || [];
+        const activeSibCount = allSibs.filter(s => !(typeof isStudentSelfDeactivated === 'function' ? isStudentSelfDeactivated(s) : ['inactive', 'deactivated'].includes(String(s.status || '').toLowerCase()))).length;
+        const deactSibCount = allSibs.length - activeSibCount;
 
         return `
-          <tr class="hover:bg-slate-50 transition text-xs">
+          <tr onclick="openFamily360Profile('${f.id}')" class="hover:bg-slate-50 transition text-xs cursor-pointer" title="Click to open Family 360° Profile">
             <td class="p-3 text-center lms-num-table font-bold text-slate-600">${idx + 1}</td>
             <td class="p-3 lms-num-id font-bold text-brandDark">
-              <button onclick="openFamily360Profile('${f.id}')" class="px-2 py-0.5 rounded-md bg-emerald-50 border border-emerald-200 hover:bg-emerald-100 text-brandDark transition">${f.id}</button>
+              <button onclick="event.stopPropagation(); openFamily360Profile('${f.id}')" class="px-2 py-0.5 rounded-md bg-emerald-50 border border-emerald-200 hover:bg-emerald-100 text-brandDark transition">${f.id}</button>
             </td>
             <td class="p-3 font-bold text-slate-900">
-              <button onclick="openFamily360Profile('${f.id}')" class="hover:text-brandEmerald hover:underline text-left font-extrabold">${f.parent_name}</button>
+              <button onclick="event.stopPropagation(); openFamily360Profile('${f.id}')" class="hover:text-brandEmerald hover:underline text-left font-extrabold">${f.parent_name}</button>
             </td>
             <td class="p-3 text-slate-600">${f.country || '--'}</td>
             <td class="p-3 lms-num-table">
@@ -754,7 +765,7 @@
                   <i class="fa-solid fa-lock text-amber-500 text-[10px]"></i> ${maskStudentPhone(f.whatsapp)}
                 </span>
               ` : `
-                <a href="https://wa.me/${cleanPhone}" target="_blank" class="text-emerald-700 hover:underline flex items-center gap-1">
+                <a onclick="event.stopPropagation()" href="https://wa.me/${cleanPhone}" target="_blank" class="text-emerald-700 hover:underline flex items-center gap-1">
                   <i class="fa-brands fa-whatsapp text-emerald-600"></i> ${f.whatsapp || '--'}
                 </a>
               `}
@@ -763,17 +774,20 @@
               ${typeof formatLmsCurrencyHtml === 'function' ? formatLmsCurrencyHtml(f.monthly_fee, f.currency, 'text-[15px] text-emerald-800') : `<span class="lms-num-financial text-[15px] text-emerald-800">${f.currency} ${Number(f.monthly_fee || 0).toLocaleString()}</span>`}
             </td>
             <td class="p-3 font-bold text-slate-700">
-              <button onclick="openFamily360Profile('${f.id}', 'students')" class="px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-emerald-100 border border-slate-200 text-xs font-bold lms-num-table transition">${childrenCount} Sibling${childrenCount === 1 ? '' : 's'}</button>
+              <div class="inline-flex items-center gap-1.5 flex-wrap">
+                <button onclick="event.stopPropagation(); openFamily360Profile('${f.id}', 'students')" class="px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-emerald-100 border border-slate-200 text-xs font-bold lms-num-table transition">${activeSibCount} Active</button>
+                ${deactSibCount > 0 ? `<span class="px-2 py-0.5 rounded-md bg-rose-50 text-rose-700 border border-rose-200 text-[10px] font-extrabold">${deactSibCount} Deactivated</span>` : ''}
+              </div>
             </td>
             <td class="p-3 font-mono text-[11px]">
               <span class="text-slate-500">U:</span> <strong>${creds.username}</strong>
             </td>
             <td class="p-3 text-right">
               <div class="flex items-center justify-end gap-1.5">
-                <button onclick="openFamily360Profile('${f.id}')" class="px-2.5 py-1 bg-brandDark hover:bg-brandDarkest text-white rounded-lg font-bold text-[11px] transition">
+                <button onclick="event.stopPropagation(); openFamily360Profile('${f.id}')" class="px-2.5 py-1 bg-brandDark hover:bg-brandDarkest text-white rounded-lg font-bold text-[11px] transition">
                   Family 360°
                 </button>
-                <button onclick="prepareAddStudentModal('${f.id}')" class="px-2.5 py-1 bg-emerald-50 hover:bg-emerald-100 text-brandEmerald rounded-lg font-bold text-[11px] border border-emerald-200 transition">
+                <button onclick="event.stopPropagation(); prepareAddStudentModal('${f.id}')" class="px-2.5 py-1 bg-emerald-50 hover:bg-emerald-100 text-brandEmerald rounded-lg font-bold text-[11px] border border-emerald-200 transition">
                   + Add Child
                 </button>
               </div>

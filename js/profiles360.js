@@ -2539,6 +2539,30 @@ async function submitEditSingleStudentForm(e, familyId, studentId) {
   stuMeta.days_per_week = days_per_week;
   stuMeta.on_leave = (status.toLowerCase() === 'leave');
 
+  const prevWasInactive = String(student.status || '').toLowerCase() === 'inactive' || String(student.status || '').toLowerCase() === 'deactivated';
+  const nextWantsInactive = String(status || '').toLowerCase() === 'inactive' || String(status || '').toLowerCase() === 'deactivated';
+
+  // If transitioning an active student to Deactivated from Edit form, save profile fields first and trigger the mandatory Fee Confirmation dialog
+  if (!prevWasInactive && nextWantsInactive) {
+    await _saveStudentRecordBackend(student.id, {
+      name,
+      joining_date,
+      age,
+      gender,
+      course_id,
+      assigned_teacher_id,
+      notes: JSON.stringify(stuMeta)
+    });
+    _closeWorkspaceModal();
+    openStudentDeactivationFeeModal(familyId, student.id);
+    return;
+  }
+
+  if (prevWasInactive && !nextWantsInactive) {
+    delete stuMeta.family_deactivated;
+    delete stuMeta.deactivated_individually;
+  }
+
   await _saveStudentRecordBackend(student.id, {
     name,
     joining_date,
@@ -2550,31 +2574,405 @@ async function submitEditSingleStudentForm(e, familyId, studentId) {
     notes: JSON.stringify(stuMeta)
   });
 
+  await syncFamilyStatusFromStudentsBackend(familyId);
+
   _closeWorkspaceModal();
-  _notify360(`Student ${name}'s information updated in backend!`);
+  _notify360(`Student ${name}'s information updated and family lifecycle synchronized!`);
   await openFamily360Profile(familyId, 'students', true, { selectedStudentId: student.id, studentSubView: 'info' });
 }
 
 /**
- * STUDENT-ONLY DEACTIVATION (Section #13)
- * Deactivates ONLY the selected Student; Family and sibling Students remain Active!
+ * CORE BACKEND LIFECYCLE SYNCHRONIZER:
+ * IF AT LEAST ONE STUDENT IN A FAMILY IS ACTIVE -> FAMILY MUST BE ACTIVE.
+ * IF ZERO STUDENTS IN A FAMILY ARE ACTIVE -> FAMILY MUST BE DEACTIVATED.
+ */
+async function syncFamilyStatusFromStudentsBackend(familyId, extraFamilyColumns = {}, feeDecisionMeta = null) {
+  const famKey = String(familyId || '').trim().toUpperCase();
+  if (!famKey) return null;
+
+  let family = (window.ALL_FAMILIES || []).find(f => String(f.id).toUpperCase() === famKey)
+            || (window.RAW_ALL_FAMILIES || []).find(f => String(f.id).toUpperCase() === famKey);
+
+  if (!family) {
+    const { data: dbFam } = await db.from('families').select('*, students(*)').eq('id', familyId).maybeSingle();
+    family = dbFam;
+  }
+  if (!family) return null;
+
+  // Query authoritative student rows for this family from Supabase
+  let famStudents = [];
+  try {
+    const { data: dbStus, error: stuErr } = await db.from('students').select('*').eq('family_id', family.id);
+    if (!stuErr && Array.isArray(dbStus) && dbStus.length > 0) {
+      famStudents = dbStus.filter(s => typeof isRegularStudentRecord === 'function' ? isRegularStudentRecord(s) : String(s.status || '').toLowerCase() !== 'trial');
+    }
+  } catch (e) {}
+
+  if (famStudents.length === 0) {
+    famStudents = (window.ALL_STUDENTS || []).filter(s =>
+      String(s.family_id || '').toUpperCase() === famKey &&
+      (typeof isRegularStudentRecord === 'function' ? isRegularStudentRecord(s) : String(s.status || '').toLowerCase() !== 'trial')
+    );
+  }
+
+  // Sync in-memory ALL_STUDENTS & family.students with fresh student statuses
+  famStudents.forEach(freshStu => {
+    const gIdx = (window.ALL_STUDENTS || []).findIndex(s => String(s.id).toUpperCase() === String(freshStu.id).toUpperCase());
+    if (gIdx >= 0) window.ALL_STUDENTS[gIdx] = { ...window.ALL_STUDENTS[gIdx], ...freshStu };
+  });
+  family.students = famStudents;
+
+  const isStuDeact = (s) => {
+    if (typeof isStudentSelfDeactivated === 'function') return isStudentSelfDeactivated(s);
+    const st = String(s?.status || 'Active').trim().toLowerCase();
+    return s?.is_active === false || st === 'inactive' || st === 'deactivated' || st === 'deleted' || st === 'left';
+  };
+
+  const activeStudents = famStudents.filter(s => !isStuDeact(s));
+  const activeStudentCount = activeStudents.length;
+
+  let computedFamilyStatus = family.status || 'Active';
+  if (famStudents.length > 0) {
+    if (activeStudentCount >= 1) {
+      const currLower = String(computedFamilyStatus || '').trim().toLowerCase();
+      computedFamilyStatus = (currLower === 'inactive' || currLower === 'deactivated') ? 'Active' : (computedFamilyStatus || 'Active');
+    } else {
+      computedFamilyStatus = 'Inactive';
+    }
+  } else if (extraFamilyColumns.status) {
+    computedFamilyStatus = extraFamilyColumns.status;
+  }
+
+  const fNotes = _parseFamilyStructuredNotes(family);
+  fNotes.bio_meta = fNotes.bio_meta || {};
+  fNotes.bio_meta.lifecycle_status = computedFamilyStatus === 'Inactive' ? 'DEACTIVATED' : 'ACTIVE';
+  fNotes.bio_meta.lifecycle_updated_at = new Date().toISOString();
+  fNotes.bio_meta.active_students_count = activeStudentCount;
+
+  const updateCols = { ...extraFamilyColumns, status: computedFamilyStatus };
+
+  // Apply explicit fee decision if provided
+  if (feeDecisionMeta && typeof feeDecisionMeta === 'object') {
+    fNotes.bio_meta.last_fee_decision = feeDecisionMeta;
+    if (feeDecisionMeta.decision === 'change_fee' && typeof feeDecisionMeta.newMonthlyFee === 'number') {
+      const newFeeVal = feeDecisionMeta.newMonthlyFee;
+      updateCols.monthly_fee = newFeeVal;
+      fNotes.fee_meta = fNotes.fee_meta || {};
+      fNotes.fee_meta.agreed_monthly_fee = newFeeVal;
+
+      // Also update any current-month unpaid invoice in fee_history & localStorage fee records so billing stays 100% consistent
+      if (Array.isArray(fNotes.fee_history)) {
+        fNotes.fee_history.forEach(rec => {
+          if (rec && String(rec.status || '').toUpperCase() === 'UNPAID') {
+            rec.feeAmount = newFeeVal;
+            rec.amount = newFeeVal;
+          }
+        });
+      }
+      if (typeof getStoredFeeRecords === 'function' && typeof saveStoredFeeRecords === 'function') {
+        try {
+          const allFeeRecs = getStoredFeeRecords() || [];
+          let feeChanged = false;
+          allFeeRecs.forEach(rec => {
+            if (rec && String(rec.familyId || '').toUpperCase() === famKey && String(rec.status || '').toUpperCase() === 'UNPAID') {
+              rec.feeAmount = newFeeVal;
+              rec.amount = newFeeVal;
+              feeChanged = true;
+            }
+          });
+          if (feeChanged) saveStoredFeeRecords(allFeeRecs);
+        } catch (e) {}
+      }
+    }
+  }
+
+  await _saveFamilyStructuredNotes(family.id, fNotes, updateCols);
+
+  // Also synchronize RAW_ALL_FAMILIES
+  const rawIdx = (window.RAW_ALL_FAMILIES || []).findIndex(f => String(f.id).toUpperCase() === famKey);
+  if (rawIdx >= 0) {
+    window.RAW_ALL_FAMILIES[rawIdx] = {
+      ...window.RAW_ALL_FAMILIES[rawIdx],
+      ...updateCols,
+      students: famStudents,
+      notes: JSON.stringify(fNotes)
+    };
+  }
+
+  const allIdx = (window.ALL_FAMILIES || []).findIndex(f => String(f.id).toUpperCase() === famKey);
+  if (allIdx >= 0) {
+    window.ALL_FAMILIES[allIdx].students = famStudents;
+  }
+
+  if (typeof invalidateCoreLmsDataCache === 'function') invalidateCoreLmsDataCache();
+  if (typeof loadFamiliesAndStudents === 'function') await loadFamiliesAndStudents(true);
+  if (typeof updateLiveActiveMetrics === 'function') updateLiveActiveMetrics();
+
+  return {
+    familyStatus: computedFamilyStatus,
+    activeStudentCount,
+    totalStudentCount: famStudents.length,
+    monthlyFee: updateCols.monthly_fee !== undefined ? updateCols.monthly_fee : family.monthly_fee
+  };
+}
+window.syncFamilyStatusFromStudentsBackend = syncFamilyStatusFromStudentsBackend;
+
+/**
+ * INDIVIDUAL STUDENT DEACTIVATION / REACTIVATION (ISSUE #2)
+ * - Deactivating an individual student opens the mandatory Fee Confirmation modal first.
+ * - Reactivating an individual student immediately sets student = Active and recalculates Family status
+ *   (so if Family was DEACTIVATED, Family automatically becomes ACTIVE).
  */
 async function toggleSingleStudentDeactivate(familyId, studentId) {
   const student = (window.ALL_STUDENTS || []).find(s => String(s.id).toUpperCase() === String(studentId).toUpperCase());
   if (!student) return;
 
   const isCurrentlyInactive = String(student.status || '').toLowerCase() === 'inactive' || String(student.status || '').toLowerCase() === 'deactivated';
-  const newStatus = isCurrentlyInactive ? 'Active' : 'Inactive';
 
-  const msg = isCurrentlyInactive
-    ? `Reactivate student "${student.name}" (${student.id})?`
-    : `DEACTIVATE THIS STUDENT ONLY?\n\nStudent: ${student.name} (${student.id})\n\n• ${student.name} will be marked Deactivated.\n• The Family account and all other sibling students in this family will remain ACTIVE.`;
+  if (!isCurrentlyInactive) {
+    // Open the mandatory Fee Confirmation & Lifecycle Impact dialog BEFORE completing deactivation
+    openStudentDeactivationFeeModal(familyId, studentId);
+    return;
+  }
 
-  if (!confirm(msg)) return;
+  // REACTIVATION FLOW (Student DEACTIVATED -> ACTIVE)
+  const family = (window.ALL_FAMILIES || []).find(f => String(f.id).toUpperCase() === String(familyId).toUpperCase())
+              || (window.RAW_ALL_FAMILIES || []).find(f => String(f.id).toUpperCase() === String(familyId).toUpperCase());
+  const famWasDeactivated = family ? (typeof isFamilyDeactivated === 'function' ? isFamilyDeactivated(family) : ['inactive', 'deactivated'].includes(String(family.status || '').toLowerCase())) : false;
 
-  await _saveStudentRecordBackend(student.id, { status: newStatus });
-  _notify360(`${student.name} is now ${newStatus === 'Inactive' ? 'Deactivated' : 'Active'} (Family & siblings unaffected).`);
+  const confirmMsg = famWasDeactivated
+    ? `Reactivate student "${student.name}" (${student.id})?\n\n• ${student.name} will become ACTIVE.\n• Because this family currently has 0 active students, Family "${family?.parent_name || familyId}" will automatically become ACTIVE.`
+    : `Reactivate student "${student.name}" (${student.id})?\n\n• ${student.name} will become ACTIVE.\n• Family "${family?.parent_name || familyId}" will remain ACTIVE.`;
+
+  if (!confirm(confirmMsg)) return;
+
+  const stuMeta = _parseStudentStructuredNotes(student);
+  delete stuMeta.family_deactivated;
+  delete stuMeta.deactivated_individually;
+
+  await _saveStudentRecordBackend(student.id, {
+    status: 'Active',
+    notes: JSON.stringify(stuMeta)
+  });
+
+  const syncResult = await syncFamilyStatusFromStudentsBackend(familyId);
+  const famNowActive = syncResult && syncResult.familyStatus !== 'Inactive';
+
+  _notify360(
+    famWasDeactivated && famNowActive
+      ? `${student.name} reactivated — Family "${family?.parent_name || familyId}" is now automatically ACTIVE.`
+      : `${student.name} is now ACTIVE (Family remains ACTIVE).`
+  );
   await openFamily360Profile(familyId, 'students', true, { selectedStudentId: student.id });
+}
+
+function openStudentDeactivationFeeModal(familyId, studentId) {
+  const famKey = String(familyId || '').toUpperCase();
+  const family = (window.ALL_FAMILIES || []).find(f => String(f.id).toUpperCase() === famKey)
+              || (window.RAW_ALL_FAMILIES || []).find(f => String(f.id).toUpperCase() === famKey);
+  const student = (window.ALL_STUDENTS || []).find(s => String(s.id).toUpperCase() === String(studentId).toUpperCase());
+  if (!family || !student) return;
+
+  const currency = family.currency || 'GBP';
+  const currentFee = parseFloat(family.monthly_fee || 0) || 0;
+
+  const famStudents = (window.ALL_STUDENTS || []).filter(s =>
+    String(s.family_id || '').toUpperCase() === famKey &&
+    (typeof isRegularStudentRecord === 'function' ? isRegularStudentRecord(s) : String(s.status || '').toLowerCase() !== 'trial')
+  );
+  const otherActiveStudents = famStudents.filter(s =>
+    String(s.id).toUpperCase() !== String(student.id).toUpperCase() &&
+    !(typeof isStudentSelfDeactivated === 'function'
+      ? isStudentSelfDeactivated(s)
+      : ['inactive', 'deactivated', 'deleted', 'left'].includes(String(s.status || '').toLowerCase()))
+  );
+  const remainingActiveCount = otherActiveStudents.length;
+  const isLastActiveStudent = (remainingActiveCount === 0);
+
+  const familyStatusImpactHtml = isLastActiveStudent
+    ? `
+      <div class="p-3 rounded-xl bg-rose-50 border border-rose-300 text-rose-900 text-xs flex items-start gap-2.5">
+        <i class="fa-solid fa-triangle-exclamation text-rose-600 text-sm mt-0.5 shrink-0"></i>
+        <div>
+          <div class="font-extrabold">Last Active Student in Family</div>
+          <div class="text-[11px] text-rose-800 mt-0.5 leading-relaxed">
+            <strong>${_esc360(student.name)}</strong> is the only remaining active student in <strong>${_esc360(family.parent_name)}</strong>.
+            After confirming this deactivation, <strong>0 active students</strong> will remain, so Family <strong>${_esc360(family.parent_name)} (${_esc360(family.id)})</strong> will automatically become <strong>DEACTIVATED</strong>.
+          </div>
+        </div>
+      </div>
+    `
+    : `
+      <div class="p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-900 text-xs flex items-start gap-2.5">
+        <i class="fa-solid fa-circle-check text-emerald-600 text-sm mt-0.5 shrink-0"></i>
+        <div>
+          <div class="font-extrabold">Family Remains ACTIVE (${remainingActiveCount} Other Active Student${remainingActiveCount === 1 ? '' : 's'})</div>
+          <div class="text-[11px] text-emerald-800 mt-0.5 leading-relaxed">
+            Only <strong>${_esc360(student.name)}</strong> will be marked <strong>DEACTIVATED</strong>.
+            Because ${remainingActiveCount} other student${remainingActiveCount === 1 ? ' is' : 's are'} still active (${otherActiveStudents.map(s => _esc360(s.name)).join(', ')}), Family <strong>${_esc360(family.parent_name)}</strong> will remain <strong>ACTIVE</strong>.
+          </div>
+        </div>
+      </div>
+    `;
+
+  _openWorkspaceModal(
+    `Deactivate Student — Fee & Lifecycle Confirmation`,
+    `Student: ${student.name} (${student.id}) • Family: ${family.parent_name} (${family.id})`,
+    `
+      <form onsubmit="executeConfirmSingleStudentDeactivation(event, '${_esc360(family.id)}', '${_esc360(student.id)}')" class="space-y-4 text-xs">
+        ${familyStatusImpactHtml}
+
+        <div class="p-3.5 rounded-xl bg-slate-50 border border-slate-200 space-y-3">
+          <div class="flex items-center justify-between border-b border-slate-200 pb-2">
+            <span class="font-extrabold text-slate-800 text-xs">Will the family's fee remain the same or change?</span>
+            <span class="px-2.5 py-0.5 rounded-lg bg-white border border-slate-200 font-mono font-extrabold text-emerald-800 text-xs">
+              Current Fee: ${_esc360(currency)} ${currentFee.toLocaleString()}
+            </span>
+          </div>
+
+          <div class="space-y-2">
+            <!-- OPTION 1: FEE REMAINS THE SAME -->
+            <label id="lblStuDeactFeeSame" class="flex items-start gap-2.5 p-3 rounded-xl border-2 border-emerald-500 bg-emerald-50/60 cursor-pointer transition">
+              <input type="radio" name="stuDeactFeeDecision" value="same" checked onchange="handleStuDeactFeeOptionChange('same')" class="mt-0.5 accent-emerald-600">
+              <div>
+                <div class="font-extrabold text-slate-900 text-xs">1. Fee Remains the Same (${_esc360(currency)} ${currentFee.toLocaleString()})</div>
+                <div class="text-[11px] text-slate-600 mt-0.5">Deactivate only ${_esc360(student.name)} and keep the family's current monthly fee unchanged.</div>
+              </div>
+            </label>
+
+            <!-- OPTION 2: FAMILY FEE WILL CHANGE -->
+            <label id="lblStuDeactFeeChange" class="flex items-start gap-2.5 p-3 rounded-xl border border-slate-200 bg-white cursor-pointer transition">
+              <input type="radio" name="stuDeactFeeDecision" value="change" onchange="handleStuDeactFeeOptionChange('change')" class="mt-0.5 accent-amber-600">
+              <div class="w-full">
+                <div class="font-extrabold text-slate-900 text-xs">2. Family Fee Will Change</div>
+                <div class="text-[11px] text-slate-600 mt-0.5">Enter the updated monthly fee for Family ${_esc360(family.parent_name)} before confirming.</div>
+
+                <div id="stuDeactNewFeeBox" class="hidden mt-3 pt-2.5 border-t border-slate-200 grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div class="p-2 rounded-lg bg-slate-100 border border-slate-200">
+                    <span class="text-[10px] font-bold uppercase text-slate-500 block">Current Family Fee</span>
+                    <span class="font-mono font-extrabold text-sm text-slate-800">${_esc360(currency)} ${currentFee.toLocaleString()}</span>
+                  </div>
+                  <div>
+                    <label class="text-[10px] font-extrabold uppercase text-amber-900 block mb-1">New Family Fee (${_esc360(currency)}) *</label>
+                    <input type="number" step="0.01" min="0" id="stuDeactNewFamilyFeeInput" value="${currentFee}"
+                           class="w-full p-2 rounded-lg border-2 border-amber-400 bg-white font-mono font-extrabold text-sm text-slate-900 focus:outline-none focus:border-amber-600">
+                  </div>
+                </div>
+              </div>
+            </label>
+          </div>
+        </div>
+
+        <div class="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+          <button type="button" onclick="_closeWorkspaceModal()" class="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold">
+            Cancel
+          </button>
+          <button type="submit" id="btnConfirmSingleStuDeact" class="px-5 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-extrabold shadow-sm">
+            Confirm Student Deactivation
+          </button>
+        </div>
+      </form>
+    `
+  );
+}
+
+function handleStuDeactFeeOptionChange(mode) {
+  const box = document.getElementById('stuDeactNewFeeBox');
+  const lblSame = document.getElementById('lblStuDeactFeeSame');
+  const lblChange = document.getElementById('lblStuDeactFeeChange');
+  const input = document.getElementById('stuDeactNewFamilyFeeInput');
+
+  if (mode === 'change') {
+    if (box) box.classList.remove('hidden');
+    if (lblChange) lblChange.className = 'flex items-start gap-2.5 p-3 rounded-xl border-2 border-amber-500 bg-amber-50/50 cursor-pointer transition';
+    if (lblSame) lblSame.className = 'flex items-start gap-2.5 p-3 rounded-xl border border-slate-200 bg-white cursor-pointer transition';
+    if (input) {
+      input.required = true;
+      setTimeout(() => { input.focus(); input.select(); }, 30);
+    }
+  } else {
+    if (box) box.classList.add('hidden');
+    if (lblSame) lblSame.className = 'flex items-start gap-2.5 p-3 rounded-xl border-2 border-emerald-500 bg-emerald-50/60 cursor-pointer transition';
+    if (lblChange) lblChange.className = 'flex items-start gap-2.5 p-3 rounded-xl border border-slate-200 bg-white cursor-pointer transition';
+    if (input) input.required = false;
+  }
+}
+
+async function executeConfirmSingleStudentDeactivation(e, familyId, studentId) {
+  e.preventDefault();
+  const famKey = String(familyId || '').toUpperCase();
+  const family = (window.ALL_FAMILIES || []).find(f => String(f.id).toUpperCase() === famKey)
+              || (window.RAW_ALL_FAMILIES || []).find(f => String(f.id).toUpperCase() === famKey);
+  const student = (window.ALL_STUDENTS || []).find(s => String(s.id).toUpperCase() === String(studentId).toUpperCase());
+  if (!family || !student) return;
+
+  const selectedOption = document.querySelector('input[name="stuDeactFeeDecision"]:checked')?.value || 'same';
+  const currentFee = parseFloat(family.monthly_fee || 0) || 0;
+  let newFee = currentFee;
+
+  if (selectedOption === 'change') {
+    const rawVal = document.getElementById('stuDeactNewFamilyFeeInput')?.value;
+    const parsedFee = parseFloat(rawVal);
+    if (rawVal === '' || isNaN(parsedFee) || parsedFee < 0) {
+      alert('Please enter a valid non-negative New Family Fee amount before confirming.');
+      return;
+    }
+    newFee = parsedFee;
+  }
+
+  const btn = document.getElementById('btnConfirmSingleStuDeact');
+  if (btn) {
+    btn.disabled = true;
+    btn.innerText = 'Saving Changes...';
+  }
+
+  try {
+    // 1. Update Student Status to Inactive (DEACTIVATED) in backend DB & memory
+    const stuMeta = _parseStudentStructuredNotes(student);
+    stuMeta.deactivated_individually = true;
+    stuMeta.deactivated_at = new Date().toISOString();
+
+    await _saveStudentRecordBackend(student.id, {
+      status: 'Inactive',
+      notes: JSON.stringify(stuMeta)
+    });
+
+    // 2. Apply explicit fee decision & recalculate Family status based on remaining active students
+    const feeDecisionMeta = {
+      decision: selectedOption === 'change' ? 'change_fee' : 'same_fee',
+      previousMonthlyFee: currentFee,
+      newMonthlyFee: newFee,
+      studentId: student.id,
+      studentName: student.name,
+      updatedAt: new Date().toISOString()
+    };
+
+    const extraCols = selectedOption === 'change' ? { monthly_fee: newFee } : {};
+    const syncResult = await syncFamilyStatusFromStudentsBackend(family.id, extraCols, feeDecisionMeta);
+
+    if (selectedOption === 'change' && typeof loadFeeBillingLedger === 'function') {
+      try { loadFeeBillingLedger(); } catch (err) {}
+    }
+
+    _closeWorkspaceModal();
+
+    const currency = family.currency || 'GBP';
+    const feeMsg = selectedOption === 'change'
+      ? `Family fee updated from ${currency} ${currentFee} to ${currency} ${newFee}.`
+      : `Family fee unchanged (${currency} ${currentFee}).`;
+    const famStatusMsg = (syncResult && syncResult.familyStatus === 'Inactive')
+      ? `Zero active students remain — Family "${family.parent_name}" is now automatically DEACTIVATED.`
+      : `Family "${family.parent_name}" remains ACTIVE (${syncResult ? syncResult.activeStudentCount : 1} active student(s)).`;
+
+    _notify360(`${student.name} DEACTIVATED. ${famStatusMsg} ${feeMsg}`);
+    await openFamily360Profile(family.id, 'students', true, { selectedStudentId: student.id });
+  } catch (err) {
+    if (btn) {
+      btn.disabled = false;
+      btn.innerText = 'Confirm Student Deactivation';
+    }
+    alert('Error saving student deactivation: ' + (err?.message || err));
+  }
 }
 
 /**
@@ -2601,47 +2999,57 @@ async function toggleSingleStudentLeave(familyId, studentId) {
     notes: JSON.stringify(stuMeta)
   });
 
+  await syncFamilyStatusFromStudentsBackend(familyId);
+
   _notify360(`${student.name} is now ${newStatus === 'Leave' ? 'On Leave' : 'Active'} (Student-only status updated).`);
   await openFamily360Profile(familyId, 'students', true, { selectedStudentId: student.id });
 }
 
 // ============================================================================
 // FAMILY-LEVEL ACTIONS (Section #15)
-// 1. Deactivate Family
+// 1. Deactivate Family (Deactivates ALL students in the family & sets Family = DEACTIVATED)
 // 2. Make Family on Leave
 // 3. Suspend Family Classes
 // 4. Edit Family Profile
 // ============================================================================
 async function handleFamilyLevelDeactivate(familyId) {
-  const family = (window.ALL_FAMILIES || []).find(f => String(f.id).toUpperCase() === String(familyId).toUpperCase())
-              || (window.RAW_ALL_FAMILIES || []).find(f => String(f.id).toUpperCase() === String(familyId).toUpperCase());
+  const famKey = String(familyId || '').toUpperCase();
+  const family = (window.ALL_FAMILIES || []).find(f => String(f.id).toUpperCase() === famKey)
+              || (window.RAW_ALL_FAMILIES || []).find(f => String(f.id).toUpperCase() === famKey);
   if (!family) return;
 
-  const stLower = String(family.status || '').trim().toLowerCase();
-  const isInactive = stLower === 'inactive' || stLower === 'deactivated' || family.is_active === false;
+  const isInactive = typeof isFamilyDeactivated === 'function'
+    ? isFamilyDeactivated(family)
+    : (['inactive', 'deactivated'].includes(String(family.status || '').trim().toLowerCase()) || family.is_active === false);
   const targetStatus = isInactive ? 'Active' : 'Inactive';
 
-  if (!confirm(`${isInactive ? 'Reactivate' : 'Deactivate'} the ENTIRE Family account for "${family.parent_name}" (${family.id})?\n\n${isInactive ? 'This family and its students will return to the Active Families list and active counts.' : 'This family will move to Deactivated Families. All student, fee, attendance, and lesson history will remain 100% intact.'}`)) return;
+  if (!confirm(`${isInactive ? 'Reactivate' : 'Deactivate'} the ENTIRE Family account for "${family.parent_name}" (${family.id})?\n\n${isInactive ? 'This family and its students will return to the Active Families list and active counts.' : 'ALL students belonging to this family will be marked DEACTIVATED, and this family will move to Deactivated Families. All student, fee, invoice, payment, attendance, and lesson history will remain 100% intact.'}`)) return;
 
-  const fNotes = _parseFamilyStructuredNotes(family);
-  fNotes.bio_meta = fNotes.bio_meta || {};
-  fNotes.bio_meta.lifecycle_status = targetStatus === 'Inactive' ? 'DEACTIVATED' : 'ACTIVE';
-  fNotes.bio_meta.lifecycle_updated_at = new Date().toISOString();
-  await _saveFamilyStructuredNotes(family.id, fNotes, { status: targetStatus });
+  // Fetch all students belonging to this family from DB/memory so none are missed
+  let famStudents = [];
+  try {
+    const { data: dbStus } = await db.from('students').select('*').eq('family_id', family.id);
+    if (Array.isArray(dbStus) && dbStus.length > 0) famStudents = dbStus;
+  } catch (e) {}
+  if (famStudents.length === 0) {
+    famStudents = (window.ALL_STUDENTS || []).filter(s => String(s.family_id || '').toUpperCase() === famKey);
+  }
 
-  // Synchronize child students belonging to this family while preserving their historical records
-  const famStudents = (window.ALL_STUDENTS || []).filter(s => String(s.family_id || '').toUpperCase() === String(family.id).toUpperCase());
   for (const stu of famStudents) {
+    if (String(stu.status || '').toLowerCase() === 'trial') continue;
     const stuMeta = _parseStudentStructuredNotes(stu);
     let nextStuStatus = targetStatus;
     if (!isInactive) {
+      // Deactivating entire family -> ALL students must become DEACTIVATED ('Inactive')
       stuMeta.prev_status_before_family_deactivation = stu.status || 'Active';
       stuMeta.family_deactivated = true;
       nextStuStatus = 'Inactive';
     } else {
+      // Reactivating entire family -> restore students to Active
       const prev = stuMeta.prev_status_before_family_deactivation;
       nextStuStatus = (prev && !['inactive', 'deactivated'].includes(String(prev).toLowerCase())) ? prev : 'Active';
       delete stuMeta.family_deactivated;
+      delete stuMeta.deactivated_individually;
     }
     await _saveStudentRecordBackend(stu.id, {
       status: nextStuStatus,
@@ -2649,11 +3057,9 @@ async function handleFamilyLevelDeactivate(familyId) {
     });
   }
 
-  if (typeof invalidateCoreLmsDataCache === 'function') invalidateCoreLmsDataCache();
-  if (typeof loadFamiliesAndStudents === 'function') await loadFamiliesAndStudents(true);
-  if (typeof updateLiveActiveMetrics === 'function') updateLiveActiveMetrics();
+  await syncFamilyStatusFromStudentsBackend(family.id, { status: targetStatus });
 
-  _notify360(`Family "${family.parent_name}" is now ${targetStatus === 'Inactive' ? 'DEACTIVATED' : 'ACTIVE'}.`);
+  _notify360(`Family "${family.parent_name}" and all linked students are now ${targetStatus === 'Inactive' ? 'DEACTIVATED' : 'ACTIVE'}.`);
   const profTab = document.getElementById('tab-profile-360');
   if (profTab && !profTab.classList.contains('hidden')) {
     _renderFamilyWorkspaceDOM();
