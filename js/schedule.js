@@ -323,6 +323,10 @@
         closeModal('modalBookSlot');
         await fetchTeacherSchedules();
         render2DMatrixTable();
+        if (typeof invalidateCoreLmsDataCache === 'function') invalidateCoreLmsDataCache();
+        if (typeof _TEACHER_360_MEM_CACHE === 'object' && CURRENT_MATRIX_TEACHER?.id) {
+          delete _TEACHER_360_MEM_CACHE[String(CURRENT_MATRIX_TEACHER.id).toUpperCase()];
+        }
         loadTeachers();
         if (document.getElementById('tab-schedule-search') && !document.getElementById('tab-schedule-search').classList.contains('hidden')) {
           executeScheduleSearch();
@@ -339,6 +343,10 @@
         await db.from('class_schedules').delete().eq('id', scheduleId);
         await fetchTeacherSchedules();
         render2DMatrixTable();
+        if (typeof invalidateCoreLmsDataCache === 'function') invalidateCoreLmsDataCache();
+        if (typeof _TEACHER_360_MEM_CACHE === 'object' && CURRENT_MATRIX_TEACHER?.id) {
+          delete _TEACHER_360_MEM_CACHE[String(CURRENT_MATRIX_TEACHER.id).toUpperCase()];
+        }
         loadTeachers();
         if (document.getElementById('tab-schedule-search') && !document.getElementById('tab-schedule-search').classList.contains('hidden')) {
           executeScheduleSearch();

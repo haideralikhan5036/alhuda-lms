@@ -3706,29 +3706,24 @@ function switchTeacher360Tab(tabId) {
   }
 }
 
-async function openTeacher360Profile(teacherId, initialTab = 'salary', skipHistoryPush = false, options = {}) {
+async function openTeacher360Profile(teacherId, initialTab = 'students', skipHistoryPush = false, options = {}) {
   if (!teacherId) return;
 
-  // Map legacy tab aliases cleanly
+  // If caller explicitly requested 'schedule', open Teacher 360 AND launch the dedicated 24h/7d Schedule Matrix
+  const shouldOpenDedicatedSchedule = (initialTab === 'schedule');
+
+  // Map tab aliases to the clean Teacher 360 Information Architecture
   const normalizedTab = (initialTab === 'students' || initialTab === 'list_of_students')
     ? 'students'
-    : (initialTab === 'salary' || initialTab === 'salary_details')
-    ? 'salary'
-    : (initialTab === 'deductions' || initialTab === 'current_month_deductions')
-    ? 'deductions'
-    : (initialTab === 'leaves' || initialTab === 'current_month_leaves')
-    ? 'leaves'
-    : (initialTab === 'biodata' || initialTab === 'bio_data')
+    : (initialTab === 'deductions_leaves' || initialTab === 'deductions' || initialTab === 'current_month_deductions' || initialTab === 'leaves' || initialTab === 'current_month_leaves')
+    ? 'deductions_leaves'
+    : (initialTab === 'biodata' || initialTab === 'bio_data' || initialTab === 'overview')
     ? 'biodata'
-    : (initialTab === 'schedule')
-    ? 'schedule'
     : (initialTab === 'documents')
     ? 'documents'
-    : (initialTab === 'notes')
-    ? 'notes'
-    : (initialTab === 'overview')
-    ? 'overview'
-    : 'salary';
+    : (initialTab === 'salary' || initialTab === 'salary_details')
+    ? 'salary'
+    : 'students';
 
   _activateFullScreenProfilePage('teacher');
   const workspace = document.getElementById('unified360PageWorkspace');
@@ -3755,7 +3750,7 @@ async function openTeacher360Profile(teacherId, initialTab = 'salary', skipHisto
     workspace.innerHTML = `
       <div class="bg-white rounded-2xl border border-slate-200 p-12 text-center text-slate-500 shadow-2xs">
         <i class="fa-solid fa-circle-notch fa-spin text-2xl text-indigo-600 mb-3 block"></i>
-        <span class="text-sm font-extrabold">Opening Teacher 360° Command Center...</span>
+        <span class="text-sm font-extrabold">Opening Teacher 360° Profile...</span>
       </div>
     `;
     await _ensure360CoreDataReady();
@@ -3804,6 +3799,10 @@ async function openTeacher360Profile(teacherId, initialTab = 'salary', skipHisto
   // PHASE 1 & 2: Instant Synchronous Render (< 5ms, zero blocking spinner!)
   _renderTeacher360WorkspaceDOM(teacher, initialTchSchedules, initialAttLogs, normalizedTab, options);
 
+  if (shouldOpenDedicatedSchedule) {
+    openTeacherDedicatedScheduleFrom360(teacher.id);
+  }
+
   // PHASE 3: Non-Blocking Background Refresh & Hydration
   const isCacheFresh = cachedTch && !options.forceRefresh && (Date.now() - cachedTch.ts < 30000);
   if (isCacheFresh) return;
@@ -3841,6 +3840,17 @@ function _renderTeacher360WorkspaceDOM(teacher, tchSchedules, attLogs, activeTab
   const workspace = document.getElementById('unified360PageWorkspace');
   if (!workspace) return;
 
+  // Normalize any legacy tab keys
+  const resolvedTab = (activeTab === 'deductions' || activeTab === 'leaves' || activeTab === 'deductions_leaves')
+    ? 'deductions_leaves'
+    : (activeTab === 'overview' || activeTab === 'biodata')
+    ? 'biodata'
+    : (activeTab === 'documents')
+    ? 'documents'
+    : (activeTab === 'salary')
+    ? 'salary'
+    : 'students';
+
   const state = _compileTeacher360AggregatedState(teacher, tchSchedules, attLogs);
   const {
     meta,
@@ -3848,14 +3858,9 @@ function _renderTeacher360WorkspaceDOM(teacher, tchSchedules, attLogs, activeTab
     roleDesignation,
     joinDateStr,
     allMatchedStudents,
-    activeStudents,
-    currentMonthLabel,
-    currentNetSalary,
     displayDeductionRows,
     leaveRows,
-    attendanceRatePercent,
-    documentsList,
-    notesList
+    documentsList
   } = state;
 
   const isAccountActive = String(teacher.status || 'Active').toLowerCase() === 'active';
@@ -3869,40 +3874,30 @@ function _renderTeacher360WorkspaceDOM(teacher, tchSchedules, attLogs, activeTab
          ${_esc360((teacher.full_name || 'T').charAt(0).toUpperCase())}
        </div>`;
 
+  // TARGET STRUCTURE: ONLY 4 MEANINGFUL SECTIONS IN LOWER TEACHER 360 NAVIGATION
   const navTabs = [
-    { id: 'salary', label: 'Salary Details', icon: 'fa-money-check-dollar', count: state.salaryRows.length },
     { id: 'students', label: 'List of Students', icon: 'fa-user-graduate', count: allMatchedStudents.length },
-    { id: 'deductions', label: 'Current Month Deductions', icon: 'fa-arrow-trend-down', count: displayDeductionRows.length },
-    { id: 'leaves', label: 'Current Month Leaves', icon: 'fa-calendar-xmark', count: leaveRows.length },
+    { id: 'deductions_leaves', label: 'Current Month Deductions & Leaves', icon: 'fa-scale-unbalanced', count: displayDeductionRows.length + leaveRows.length },
     { id: 'biodata', label: 'Bio Data', icon: 'fa-address-card', count: null },
-    { id: 'overview', label: 'Overview', icon: 'fa-layer-group', count: null },
-    { id: 'schedule', label: 'Schedule', icon: 'fa-calendar-days', count: tchSchedules.length },
-    { id: 'documents', label: 'Documents', icon: 'fa-folder-open', count: documentsList.length },
-    { id: 'notes', label: 'Notes & Activity', icon: 'fa-clipboard-list', count: notesList.length }
+    { id: 'documents', label: 'Documents', icon: 'fa-folder-open', count: documentsList.length }
   ];
 
   let activeTabContentHtml = '';
-  if (activeTab === 'salary') {
-    activeTabContentHtml = _buildTeacherSalaryDetailsTabHtml(state);
-  } else if (activeTab === 'students') {
+  if (resolvedTab === 'students') {
     activeTabContentHtml = _buildTeacherStudentsListTabHtml(state, options);
-  } else if (activeTab === 'deductions') {
-    activeTabContentHtml = _buildTeacherDeductionsTabHtml(state);
-  } else if (activeTab === 'leaves') {
-    activeTabContentHtml = _buildTeacherLeavesTabHtml(state);
-  } else if (activeTab === 'biodata') {
+  } else if (resolvedTab === 'deductions_leaves') {
+    activeTabContentHtml = _buildTeacherDeductionsAndLeavesTabHtml(state);
+  } else if (resolvedTab === 'biodata') {
     activeTabContentHtml = _buildTeacherBioDataTabHtml(state);
-  } else if (activeTab === 'overview') {
-    activeTabContentHtml = _buildTeacherOverviewTabHtml(state);
-  } else if (activeTab === 'schedule') {
-    activeTabContentHtml = _buildTeacherScheduleTabHtml(state);
-  } else if (activeTab === 'documents') {
+  } else if (resolvedTab === 'documents') {
     activeTabContentHtml = _buildTeacherDocumentsTabHtml(state);
-  } else if (activeTab === 'notes') {
-    activeTabContentHtml = _buildTeacherNotesActivityTabHtml(state);
-  } else {
+  } else if (resolvedTab === 'salary') {
     activeTabContentHtml = _buildTeacherSalaryDetailsTabHtml(state);
+  } else {
+    activeTabContentHtml = _buildTeacherStudentsListTabHtml(state, options);
   }
+
+  const isSalaryActive = (resolvedTab === 'salary');
 
   workspace.innerHTML = `
     ${_buildTopWorkspaceNavHtml()}
@@ -3910,15 +3905,15 @@ function _renderTeacher360WorkspaceDOM(teacher, tchSchedules, attLogs, activeTab
     <!-- TEACHER 360° COMMAND CENTER MAIN CONTAINER -->
     <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
 
-      <!-- MODERN EXECUTIVE HEADER (REPLACES OLD GREEN DESIGN & EXCLUDES CROSSED-OUT PILLS) -->
-      <div class="bg-gradient-to-b from-slate-900 via-slate-900 to-indigo-950 text-white px-4 sm:px-6 pt-6 pb-0">
-        <div class="max-w-6xl mx-auto flex flex-col items-center text-center space-y-4 pb-5">
+      <!-- CLEAN EXECUTIVE TEACHER IDENTITY HEADER (NO REDUNDANT KPI CARDS) -->
+      <div class="bg-gradient-to-b from-slate-900 via-slate-900 to-indigo-950 text-white px-4 sm:px-6 pt-5 pb-0">
+        <div class="max-w-5xl mx-auto flex flex-col items-center text-center space-y-3.5 pb-4">
 
-          <!-- Identity Row: Profile Picture + Full Name + Role/Designation + Status -->
+          <!-- 1. TEACHER IDENTITY BLOCK -->
           <div class="flex flex-col items-center max-w-full">
-            <div class="relative group cursor-pointer mb-2.5" onclick="openTeacherEditPictureModal('${_esc360(teacher.id)}')" title="Click to Edit Profile Picture">
+            <div class="relative group cursor-pointer mb-2" onclick="openTeacherEditPictureModal('${_esc360(teacher.id)}')" title="Click to Edit Profile Picture">
               ${avatarHtml}
-              <span class="absolute -bottom-1 -right-1 w-7 h-7 rounded-full bg-amber-500 hover:bg-amber-400 text-slate-950 flex items-center justify-center text-xs shadow-md transition">
+              <span class="absolute -bottom-1 -right-1 w-6 h-6 rounded-full bg-slate-800 hover:bg-slate-700 border border-white/25 text-amber-300 flex items-center justify-center text-[10px] shadow-md transition">
                 <i class="fa-solid fa-camera"></i>
               </span>
             </div>
@@ -3932,7 +3927,7 @@ function _renderTeacher360WorkspaceDOM(teacher, tchSchedules, attLogs, activeTab
             </div>
 
             <div class="flex items-center justify-center gap-2 flex-wrap text-xs text-slate-300 mt-1">
-              <span class="font-bold text-emerald-300">(${_esc360(roleDesignation)})</span>
+              <span class="font-bold text-emerald-300">${_esc360(roleDesignation)}</span>
               <span>&bull;</span>
               <span>Shift: <strong class="text-white">${_esc360(teacher.working_shift || 'Regular Shift')}</strong></span>
               <span>&bull;</span>
@@ -3940,98 +3935,68 @@ function _renderTeacher360WorkspaceDOM(teacher, tchSchedules, attLogs, activeTab
             </div>
           </div>
 
-          <!-- 6 LIVE KPI QUICK STATISTICS BAR (FOLLOWS LMS NUMBER TYPOGRAPHY SYSTEM) -->
-          <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5 w-full pt-1">
-            <div onclick="switchTeacher360Tab('students')" class="cursor-pointer bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl px-3 py-2.5 text-left transition">
-              <span class="text-[10px] font-extrabold uppercase tracking-wider text-slate-300 block truncate">Total Students</span>
-              <div class="lms-num-kpi text-xl font-black text-white mt-0.5">${allMatchedStudents.length}</div>
-            </div>
-
-            <div onclick="switchTeacher360Tab('students')" class="cursor-pointer bg-emerald-500/10 hover:bg-emerald-500/15 border border-emerald-400/25 rounded-xl px-3 py-2.5 text-left transition">
-              <span class="text-[10px] font-extrabold uppercase tracking-wider text-emerald-300 block truncate">Active Students</span>
-              <div class="lms-num-kpi text-xl font-black text-emerald-300 mt-0.5">${activeStudents.length}</div>
-            </div>
-
-            <div onclick="switchTeacher360Tab('salary')" class="cursor-pointer bg-amber-500/15 hover:bg-amber-500/20 border border-amber-400/30 rounded-xl px-3 py-2.5 text-left transition">
-              <span class="text-[10px] font-extrabold uppercase tracking-wider text-amber-300 block truncate">Current Month Salary</span>
-              <div class="lms-num-financial text-lg font-black text-amber-300 mt-0.5 truncate">PKR ${currentNetSalary.toLocaleString()}</div>
-            </div>
-
-            <div onclick="switchTeacher360Tab('schedule')" class="cursor-pointer bg-sky-500/10 hover:bg-sky-500/15 border border-sky-400/25 rounded-xl px-3 py-2.5 text-left transition">
-              <span class="text-[10px] font-extrabold uppercase tracking-wider text-sky-300 block truncate">Current Attendance</span>
-              <div class="lms-num-percent text-xl font-black text-sky-300 mt-0.5">${attendanceRatePercent}%</div>
-            </div>
-
-            <div onclick="switchTeacher360Tab('leaves')" class="cursor-pointer bg-rose-500/10 hover:bg-rose-500/15 border border-rose-400/25 rounded-xl px-3 py-2.5 text-left transition">
-              <span class="text-[10px] font-extrabold uppercase tracking-wider text-rose-300 block truncate">Current Month Leave</span>
-              <div class="lms-num-kpi text-xl font-black text-rose-300 mt-0.5">${leaveRows.length}</div>
-            </div>
-
-            <div onclick="switchTeacher360Tab('schedule')" class="cursor-pointer bg-indigo-500/10 hover:bg-indigo-500/15 border border-indigo-400/25 rounded-xl px-3 py-2.5 text-left transition">
-              <span class="text-[10px] font-extrabold uppercase tracking-wider text-indigo-300 block truncate">Scheduled Classes</span>
-              <div class="lms-num-kpi text-xl font-black text-indigo-300 mt-0.5">${tchSchedules.length}</div>
-            </div>
-          </div>
-
-          <!-- 8 PRIMARY PROFILE ACTION BUTTONS (REAL BACKEND OPERATIONS - ZERO DUMMY BUTTONS) -->
-          <div class="grid grid-cols-2 sm:grid-cols-4 lg:flex lg:items-center lg:justify-center gap-2 w-full pt-1">
+          <!-- 2. MAIN ACTIONS ROW (CONSISTENT BUTTON HIERARCHY, ZERO DUPLICATION) -->
+          <div class="grid grid-cols-2 sm:grid-cols-4 lg:flex lg:items-center lg:justify-center lg:flex-wrap gap-2 w-full pt-1">
             <button onclick="openTeacherEditPictureModal('${_esc360(teacher.id)}')"
-                    class="h-9 px-3.5 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-600 text-slate-100 text-xs font-extrabold transition inline-flex items-center justify-center gap-1.5 whitespace-nowrap cursor-pointer shadow-2xs">
-              <i class="fa-solid fa-image text-amber-400"></i>
+                    class="h-9 px-3.5 rounded-xl bg-white/10 hover:bg-white/15 border border-white/15 text-slate-100 text-xs font-bold transition inline-flex items-center justify-center gap-1.5 whitespace-nowrap cursor-pointer">
+              <i class="fa-solid fa-image text-slate-300"></i>
               <span>Edit Picture</span>
             </button>
 
             <button onclick="openTeacher360EditProfileModal('${_esc360(teacher.id)}')"
-                    class="h-9 px-3.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-extrabold transition inline-flex items-center justify-center gap-1.5 whitespace-nowrap cursor-pointer shadow-2xs">
-              <i class="fa-solid fa-user-pen"></i>
+                    class="h-9 px-3.5 rounded-xl bg-white/10 hover:bg-white/15 border border-white/15 text-slate-100 text-xs font-bold transition inline-flex items-center justify-center gap-1.5 whitespace-nowrap cursor-pointer">
+              <i class="fa-solid fa-user-pen text-indigo-300"></i>
               <span>Edit Profile</span>
             </button>
 
             <button onclick="openTeacherUploadDocsModal('${_esc360(teacher.id)}')"
-                    class="h-9 px-3.5 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-600 text-slate-100 text-xs font-extrabold transition inline-flex items-center justify-center gap-1.5 whitespace-nowrap cursor-pointer shadow-2xs">
-              <i class="fa-solid fa-file-arrow-up text-sky-400"></i>
+                    class="h-9 px-3.5 rounded-xl bg-white/10 hover:bg-white/15 border border-white/15 text-slate-100 text-xs font-bold transition inline-flex items-center justify-center gap-1.5 whitespace-nowrap cursor-pointer">
+              <i class="fa-solid fa-file-arrow-up text-sky-300"></i>
               <span>Upload Docs</span>
             </button>
 
-            <button onclick="switchTeacher360Tab('students')"
-                    class="h-9 px-3.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-extrabold transition inline-flex items-center justify-center gap-1.5 whitespace-nowrap cursor-pointer shadow-2xs">
-              <i class="fa-solid fa-users"></i>
+            <button onclick="openTeacherStudentRelationshipModal('${_esc360(teacher.id)}')"
+                    class="h-9 px-3.5 rounded-xl bg-white/10 hover:bg-white/15 border border-white/15 text-slate-100 text-xs font-bold transition inline-flex items-center justify-center gap-1.5 whitespace-nowrap cursor-pointer"
+                    title="Assign or Transfer Students & Manage Course Rates">
+              <i class="fa-solid fa-users-gear text-emerald-300"></i>
               <span>Student Details</span>
             </button>
 
             <button onclick="switchTeacher360Tab('salary')"
-                    class="h-9 px-3.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-black transition inline-flex items-center justify-center gap-1.5 whitespace-nowrap cursor-pointer shadow-2xs">
-              <i class="fa-solid fa-file-invoice-dollar"></i>
+                    class="h-9 px-3.5 rounded-xl ${isSalaryActive ? 'bg-amber-400 text-slate-950 border border-amber-300 font-black shadow-xs' : 'bg-white/10 hover:bg-white/15 border border-white/15 text-slate-100 font-bold'} text-xs transition inline-flex items-center justify-center gap-1.5 whitespace-nowrap cursor-pointer"
+                    title="Open Teacher Salary Ledger & Monthly Payroll Slips">
+              <i class="fa-solid fa-file-invoice-dollar ${isSalaryActive ? 'text-slate-950' : 'text-amber-300'}"></i>
               <span>Salary Record</span>
             </button>
 
-            <button onclick="if(typeof openTeacherScheduleModal==='function'){openTeacherScheduleModal('${_esc360(teacher.id)}', '${_esc360(teacher.full_name)}');}else{switchTeacher360Tab('schedule');}"
-                    class="h-9 px-3.5 rounded-xl bg-sky-600 hover:bg-sky-500 text-white text-xs font-extrabold transition inline-flex items-center justify-center gap-1.5 whitespace-nowrap cursor-pointer shadow-2xs">
+            <button onclick="openTeacherDedicatedScheduleFrom360('${_esc360(teacher.id)}')"
+                    class="h-9 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-500 border border-indigo-400/50 text-white text-xs font-extrabold transition inline-flex items-center justify-center gap-1.5 whitespace-nowrap cursor-pointer shadow-xs"
+                    title="Open Dedicated 24-Hour / 7-Day Weekly Schedule Matrix">
               <i class="fa-solid fa-calendar-days"></i>
               <span>Schedule</span>
             </button>
 
             <button onclick="openTeacherSalaryAdjustmentModal('${_esc360(teacher.id)}')"
-                    class="h-9 px-3.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-extrabold transition inline-flex items-center justify-center gap-1.5 whitespace-nowrap cursor-pointer shadow-2xs">
-              <i class="fa-solid fa-sliders"></i>
+                    class="h-9 px-3.5 rounded-xl bg-white/10 hover:bg-white/15 border border-white/15 text-slate-100 text-xs font-bold transition inline-flex items-center justify-center gap-1.5 whitespace-nowrap cursor-pointer">
+              <i class="fa-solid fa-sliders text-purple-300"></i>
               <span>Salary Adjustment</span>
             </button>
 
             <button onclick="handleTeacher360ToggleAccountStatus('${_esc360(teacher.id)}')"
-                    class="h-9 px-3.5 rounded-xl ${isAccountActive ? 'bg-rose-600 hover:bg-rose-500' : 'bg-emerald-600 hover:bg-emerald-500'} text-white text-xs font-extrabold transition inline-flex items-center justify-center gap-1.5 whitespace-nowrap cursor-pointer shadow-2xs">
+                    class="h-9 px-3.5 rounded-xl ${isAccountActive ? 'bg-rose-500/20 hover:bg-rose-600 border border-rose-400/50 text-rose-200 hover:text-white' : 'bg-emerald-500/20 hover:bg-emerald-600 border border-emerald-400/50 text-emerald-200 hover:text-white'} text-xs font-extrabold transition inline-flex items-center justify-center gap-1.5 whitespace-nowrap cursor-pointer">
               <i class="fa-solid ${isAccountActive ? 'fa-user-lock' : 'fa-user-check'}"></i>
               <span>${isAccountActive ? 'Deactivate Account' : 'Activate Account'}</span>
             </button>
           </div>
         </div>
 
-        <!-- MODERN TAB NAVIGATION BAR (UNCLIPPED ON MOBILE & DESKTOP) -->
+        <!-- 3. TEACHER 360 NAVIGATION (4 PURPOSE-SPECIFIC SECTIONS) -->
         <div class="flex items-center justify-start lg:justify-center gap-1.5 pt-2 overflow-x-auto no-scrollbar border-t border-white/10 px-1">
           ${navTabs.map(t => {
-            const isActive = activeTab === t.id;
+            const isActive = resolvedTab === t.id;
             return `
               <button onclick="switchTeacher360Tab('${t.id}')"
-                      class="px-3.5 sm:px-4 py-2.5 rounded-t-xl text-xs font-extrabold transition inline-flex items-center gap-1.5 whitespace-nowrap cursor-pointer shrink-0 ${
+                      class="px-4 py-2.5 rounded-t-xl text-xs font-extrabold transition inline-flex items-center gap-1.5 whitespace-nowrap cursor-pointer shrink-0 ${
                         isActive
                           ? 'bg-white text-slate-900 shadow-xs'
                           : 'bg-slate-800/90 hover:bg-slate-700 text-slate-300 hover:text-white'
@@ -4049,7 +4014,7 @@ function _renderTeacher360WorkspaceDOM(teacher, tchSchedules, attLogs, activeTab
         </div>
       </div>
 
-      <!-- ACTIVE TAB MAIN CONTENT AREA -->
+      <!-- 4. SELECTED SECTION CONTENT AREA -->
       <div class="bg-white p-4 sm:p-6">
         ${activeTabContentHtml}
       </div>
@@ -4061,7 +4026,7 @@ function _renderTeacher360WorkspaceDOM(teacher, tchSchedules, attLogs, activeTab
 }
 
 // ============================================================================
-// TAB 1: SALARY DETAILS (STRICTLY EXCLUDES CROSSED-OUT 'Fixed', 'Makeup', 'Fine')
+// SALARY RECORD VIEW (OPENED VIA MAIN ACTION 'SALARY RECORD')
 // ============================================================================
 function _buildTeacherSalaryDetailsTabHtml(state) {
   const { teacher, salaryRows, currentMonthLabel, currentBaseSubtotal, currentBonusVal, effectiveCurrentDeductions, currentNetSalary } = state;
@@ -4071,15 +4036,19 @@ function _buildTeacherSalaryDetailsTabHtml(state) {
       <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-slate-200 pb-3.5">
         <div>
           <h3 class="text-base font-black text-slate-900 flex items-center gap-2">
-            <i class="fa-solid fa-money-check-dollar text-emerald-600"></i>
-            <span>Teacher Salary Details &amp; Disbursed Ledger</span>
+            <i class="fa-solid fa-file-invoice-dollar text-amber-600"></i>
+            <span>Teacher Salary Record &amp; Disbursed Ledger</span>
           </h3>
           <p class="text-xs text-slate-500 mt-0.5">Synchronized with the LMS Auto Payroll Engine (${_esc360(currentMonthLabel)} Net Payable: <strong>PKR ${currentNetSalary.toLocaleString()}</strong>)</p>
         </div>
         <div class="flex items-center gap-2 flex-wrap">
+          <button onclick="switchTeacher360Tab('students')"
+                  class="px-3 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold inline-flex items-center gap-1.5 transition cursor-pointer">
+            <i class="fa-solid fa-arrow-left"></i> Back to Students List
+          </button>
           <button onclick="openTeacherSalaryAdjustmentModal('${_esc360(teacher.id)}')"
-                  class="px-3.5 py-2 rounded-xl bg-purple-600 hover:bg-purple-700 text-white text-xs font-extrabold inline-flex items-center gap-1.5 transition cursor-pointer shadow-2xs">
-            <i class="fa-solid fa-sliders"></i> Add Bonus / Deduction
+                  class="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-900 text-white text-xs font-extrabold inline-flex items-center gap-1.5 transition cursor-pointer shadow-2xs">
+            <i class="fa-solid fa-sliders text-purple-300"></i> Add Bonus / Deduction
           </button>
           <button onclick="openTeacher360SalarySlipAction('${_esc360(teacher.id)}')"
                   class="px-3.5 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-slate-950 text-xs font-black inline-flex items-center gap-1.5 transition cursor-pointer shadow-2xs">
@@ -4115,7 +4084,7 @@ function _buildTeacherSalaryDetailsTabHtml(state) {
         </div>
       </div>
 
-      <!-- Clean Modern Salary Table (Fixed, Makeup, and Fine columns intentionally removed per screenshot red X) -->
+      <!-- Clean Modern Salary Table (Fixed, Makeup, and Fine columns intentionally removed) -->
       <div class="overflow-x-auto border border-slate-200 rounded-2xl shadow-2xs">
         <table class="w-full text-left text-xs border-collapse">
           <thead class="bg-slate-50 text-slate-700 font-extrabold border-b border-slate-200">
@@ -4169,10 +4138,10 @@ function _buildTeacherSalaryDetailsTabHtml(state) {
 }
 
 // ============================================================================
-// TAB 2: LIST OF STUDENTS (SYNCHRONIZED WITH STUDENT & FAMILY 360 WORKSPACE)
+// SECTION 1: LIST OF STUDENTS (SEPARATE FROM SCHEDULE — NO SCHEDULE SLOTS)
 // ============================================================================
 function _buildTeacherStudentsListTabHtml(state, options = {}) {
-  const { teacher, allMatchedStudents, tchSchedules } = state;
+  const { teacher, allMatchedStudents } = state;
 
   return `
     <div class="space-y-4">
@@ -4180,10 +4149,14 @@ function _buildTeacherStudentsListTabHtml(state, options = {}) {
         <div>
           <h3 class="text-base font-black text-slate-900 flex items-center gap-2">
             <i class="fa-solid fa-user-graduate text-indigo-600"></i>
-            <span>List of Assigned Students (${allMatchedStudents.length})</span>
+            <span>List of Students (${allMatchedStudents.length})</span>
           </h3>
-          <p class="text-xs text-slate-500 mt-0.5">Click any Student Name, Parent, or Daily Progress link to open their synchronized 360° Family &amp; Student Profile.</p>
+          <p class="text-xs text-slate-500 mt-0.5">Students assigned to ${_esc360(teacher.full_name)}. Click any Student or Parent to open their 360° Profile.</p>
         </div>
+        <button onclick="openTeacherStudentRelationshipModal('${_esc360(teacher.id)}')"
+                class="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-900 text-white text-xs font-extrabold inline-flex items-center gap-1.5 transition cursor-pointer shadow-2xs">
+          <i class="fa-solid fa-user-plus text-emerald-400"></i> Assign / Manage Students
+        </button>
       </div>
 
       ${allMatchedStudents.length === 0 ? `
@@ -4197,14 +4170,13 @@ function _buildTeacherStudentsListTabHtml(state, options = {}) {
               <tr>
                 <th class="p-3.5">#</th>
                 <th class="p-3.5">Student Name</th>
-                <th class="p-3.5">Parent</th>
+                <th class="p-3.5">Family / Parent</th>
                 <th class="p-3.5">Country</th>
                 <th class="p-3.5">Language</th>
                 <th class="p-3.5">Gender</th>
                 <th class="p-3.5">Course</th>
-                <th class="p-3.5">Schedule</th>
-                <th class="p-3.5">Status</th>
-                <th class="p-3.5 text-right">History</th>
+                <th class="p-3.5">Student Status</th>
+                <th class="p-3.5 text-right">History / Daily Progress</th>
               </tr>
             </thead>
             <tbody class="divide-y divide-slate-100">
@@ -4212,14 +4184,10 @@ function _buildTeacherStudentsListTabHtml(state, options = {}) {
                 const fam = (window.ALL_FAMILIES || []).find(f => String(f.id).toUpperCase() === String(stu.family_id).toUpperCase());
                 let stuNotes = {};
                 try { if (stu.notes) stuNotes = JSON.parse(stu.notes); } catch (e) {}
-                const country = fam?.country || stuNotes.country || 'USA / UK';
+                const country = fam?.country || stuNotes.country || 'International';
                 const language = stuNotes.language || fam?.language || 'English';
                 const gender = stu.gender || stuNotes.gender || 'Male';
                 const course = stu.course_id || stuNotes.course || 'Qaida Nooraniya';
-                const stuSlots = (tchSchedules || []).filter(sc => String(sc.student_id).toUpperCase() === String(stu.id).toUpperCase());
-                const slotSummary = stuSlots.length > 0
-                  ? stuSlots.map(sc => `${_DAY_LABELS_360[sc.day_of_week] || sc.day_of_week} ${(sc.start_time || '').slice(0, 5)}`).join(', ')
-                  : (stuNotes.class_time || 'Scheduled');
                 const isHighlighted = options.highlightStudentId && String(stu.id).toUpperCase() === String(options.highlightStudentId).toUpperCase();
                 const isStuActive = String(stu.status || 'Active').toLowerCase() === 'active';
 
@@ -4244,7 +4212,6 @@ function _buildTeacherStudentsListTabHtml(state, options = {}) {
                     <td class="p-3.5 text-slate-700 font-medium">${_esc360(language)}</td>
                     <td class="p-3.5 text-slate-700 font-medium">${_esc360(gender)}</td>
                     <td class="p-3.5 font-bold text-slate-800">${_esc360(course)}</td>
-                    <td class="p-3.5 font-mono text-[11px] text-emerald-800 font-bold">${_esc360(slotSummary)}</td>
                     <td class="p-3.5">
                       <span class="px-2 py-0.5 rounded-full text-[10px] font-extrabold ${isStuActive ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-600'}">
                         ${_esc360(stu.status || 'Active')}
@@ -4268,8 +4235,30 @@ function _buildTeacherStudentsListTabHtml(state, options = {}) {
 }
 
 // ============================================================================
-// TAB 3: CURRENT MONTH DEDUCTIONS
+// SECTION 2: COMBINED CURRENT MONTH DEDUCTIONS & LEAVES (TWO SEPARATE SUBSECTIONS)
 // ============================================================================
+function _buildTeacherDeductionsAndLeavesTabHtml(state) {
+  return `
+    <div class="space-y-8">
+      <!-- SUBSECTION A: CURRENT MONTH DEDUCTIONS -->
+      <div class="bg-white rounded-2xl border border-slate-200 p-4 sm:p-5 shadow-2xs">
+        <div class="mb-2">
+          <span class="px-2.5 py-0.5 rounded-md bg-rose-100 text-rose-800 text-[10px] font-black uppercase tracking-wider">Section A &bull; Deductions Dataset</span>
+        </div>
+        ${_buildTeacherDeductionsTabHtml(state)}
+      </div>
+
+      <!-- SUBSECTION B: CURRENT MONTH LEAVES -->
+      <div class="bg-white rounded-2xl border border-slate-200 p-4 sm:p-5 shadow-2xs">
+        <div class="mb-2">
+          <span class="px-2.5 py-0.5 rounded-md bg-amber-100 text-amber-900 text-[10px] font-black uppercase tracking-wider">Section B &bull; Leaves Dataset</span>
+        </div>
+        ${_buildTeacherLeavesTabHtml(state)}
+      </div>
+    </div>
+  `;
+}
+
 function _buildTeacherDeductionsTabHtml(state) {
   const { teacher, displayDeductionRows, effectiveCurrentDeductions, currentMonthLabel } = state;
 
@@ -4290,7 +4279,7 @@ function _buildTeacherDeductionsTabHtml(state) {
       </div>
 
       ${displayDeductionRows.length === 0 ? `
-        <div class="p-10 text-center bg-slate-50 rounded-2xl border border-slate-200 text-slate-500 text-xs">
+        <div class="p-8 text-center bg-slate-50 rounded-2xl border border-slate-200 text-slate-500 text-xs">
           <i class="fa-solid fa-circle-check text-2xl text-emerald-500 mb-2 block"></i>
           No salary deductions recorded for ${_esc360(teacher.full_name)} in ${_esc360(currentMonthLabel)}.
         </div>
@@ -4301,9 +4290,9 @@ function _buildTeacherDeductionsTabHtml(state) {
               <tr>
                 <th class="p-3.5">#</th>
                 <th class="p-3.5">Deduction Type / Category</th>
-                <th class="p-3.5">Applicable Month</th>
+                <th class="p-3.5">Month</th>
                 <th class="p-3.5">Date</th>
-                <th class="p-3.5">Reason / Remarks</th>
+                <th class="p-3.5">Reason / Category</th>
                 <th class="p-3.5">Amount</th>
                 <th class="p-3.5">Status</th>
                 <th class="p-3.5 text-right">Action</th>
@@ -4338,9 +4327,6 @@ function _buildTeacherDeductionsTabHtml(state) {
   `;
 }
 
-// ============================================================================
-// TAB 4: CURRENT MONTH LEAVES
-// ============================================================================
 function _buildTeacherLeavesTabHtml(state) {
   const { teacher, leaveRows, currentMonthLabel } = state;
 
@@ -4352,7 +4338,7 @@ function _buildTeacherLeavesTabHtml(state) {
             <i class="fa-solid fa-calendar-xmark text-amber-600"></i>
             <span>Current Month Leaves (${_esc360(currentMonthLabel)})</span>
           </h3>
-          <p class="text-xs text-slate-500 mt-0.5">Synchronized with Teacher Leave &amp; Schedule Request records.</p>
+          <p class="text-xs text-slate-500 mt-0.5">Synchronized with Teacher Leave &amp; Schedule Request records (${leaveRows.length} Leave Record(s)).</p>
         </div>
         <button onclick="openTeacherRecordLeaveModal('${_esc360(teacher.id)}')"
                 class="px-3.5 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-slate-950 text-xs font-black inline-flex items-center gap-1.5 transition cursor-pointer shadow-2xs">
@@ -4361,7 +4347,7 @@ function _buildTeacherLeavesTabHtml(state) {
       </div>
 
       ${leaveRows.length === 0 ? `
-        <div class="p-10 text-center bg-slate-50 rounded-2xl border border-slate-200 text-slate-500 text-xs">
+        <div class="p-8 text-center bg-slate-50 rounded-2xl border border-slate-200 text-slate-500 text-xs">
           <i class="fa-solid fa-calendar-check text-2xl text-emerald-500 mb-2 block"></i>
           No leave records found for ${_esc360(teacher.full_name)} in ${_esc360(currentMonthLabel)}.
         </div>
@@ -4372,8 +4358,8 @@ function _buildTeacherLeavesTabHtml(state) {
               <tr>
                 <th class="p-3.5">#</th>
                 <th class="p-3.5">Leave Date / Range</th>
-                <th class="p-3.5">Leave Type</th>
                 <th class="p-3.5">Duration</th>
+                <th class="p-3.5">Leave Type</th>
                 <th class="p-3.5">Reason</th>
                 <th class="p-3.5">Status</th>
                 <th class="p-3.5 text-right">Action</th>
@@ -4386,8 +4372,8 @@ function _buildTeacherLeavesTabHtml(state) {
                   <td class="p-3.5 font-mono font-bold text-slate-800">
                     ${_esc360(lv.startDate || '--')}${lv.endDate && lv.endDate !== lv.startDate ? ` &rarr; ${_esc360(lv.endDate)}` : ''}
                   </td>
-                  <td class="p-3.5 font-extrabold text-slate-900">${_esc360(lv.leaveType || 'Casual Leave')}</td>
                   <td class="p-3.5 font-mono text-slate-700">${_esc360(lv.duration || '1 Day')}</td>
+                  <td class="p-3.5 font-extrabold text-slate-900">${_esc360(lv.leaveType || 'Casual Leave')}</td>
                   <td class="p-3.5 text-slate-700">${_esc360(lv.reason || '--')}</td>
                   <td class="p-3.5">
                     <span class="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-amber-100 text-amber-900 border border-amber-300">${_esc360(lv.status || 'Approved')}</span>
@@ -4489,172 +4475,149 @@ function _buildTeacherBioDataTabHtml(state) {
 }
 
 // ============================================================================
-// TAB 6: OVERVIEW TAB (4 CLEAN EXECUTIVE CARDS)
+// DEDICATED SCHEDULE PAGE BRIDGE (OPENS EXISTING 24-HOUR / 7-DAY MATRIX)
 // ============================================================================
-function _buildTeacherOverviewTabHtml(state) {
-  const { teacher, meta, empCode, roleDesignation, joinDateStr, seniorityInc, activeStudents, tchSchedules, currentNetSalary } = state;
-  const isAuthorizedForBank = (typeof CURRENT_ROLE === 'undefined' || CURRENT_ROLE === 'owner' || CURRENT_ROLE === 'manager');
+async function openTeacherDedicatedScheduleFrom360(teacherId) {
+  const teacher = (window.ALL_TEACHERS || []).find(t => String(t.id) === String(teacherId));
+  if (!teacher) return;
 
-  return `
-    <div class="grid grid-cols-1 lg:grid-cols-2 gap-5">
-      <!-- 1. Personal Information -->
-      <div class="bg-slate-50/60 rounded-2xl border border-slate-200 p-5 space-y-3">
-        <h4 class="text-xs font-black uppercase tracking-wider text-slate-800 flex items-center gap-2 border-b border-slate-200 pb-2.5">
-          <i class="fa-solid fa-user text-indigo-600"></i> Personal Information
-        </h4>
-        <div class="grid grid-cols-2 gap-3 text-xs">
-          <div><span class="text-slate-400 block">Full Name</span><strong class="text-slate-900 font-extrabold">${_esc360(teacher.full_name)}</strong></div>
-          <div><span class="text-slate-400 block">Father / Guardian</span><strong class="text-slate-800 font-bold">${_esc360(teacher.father_name || meta.father_name || '--')}</strong></div>
-          <div><span class="text-slate-400 block">Gender</span><strong class="text-slate-800 font-bold">${_esc360(teacher.gender || meta.gender || 'Male')}</strong></div>
-          <div><span class="text-slate-400 block">Nationality</span><strong class="text-slate-800 font-bold">${_esc360(meta.nationality || 'Pakistan')}</strong></div>
-          <div><span class="text-slate-400 block">Mobile / WhatsApp</span><strong class="text-slate-900 font-mono font-bold">${_esc360(teacher.phone || '--')}</strong></div>
-          <div><span class="text-slate-400 block">Email Address</span><strong class="text-slate-800 font-mono truncate block">${_esc360(meta.email || `${meta.username || 'teacher'}@alhudaislamic.com`)}</strong></div>
-          <div class="col-span-2"><span class="text-slate-400 block">Residential Address</span><strong class="text-slate-700 font-semibold">${_esc360(meta.residential_address || (typeof teacher.address === 'string' && !teacher.address.trim().startsWith('{') ? teacher.address : '--'))}</strong></div>
-        </div>
-      </div>
-
-      <!-- 2. Employment Information -->
-      <div class="bg-slate-50/60 rounded-2xl border border-slate-200 p-5 space-y-3">
-        <h4 class="text-xs font-black uppercase tracking-wider text-slate-800 flex items-center gap-2 border-b border-slate-200 pb-2.5">
-          <i class="fa-solid fa-id-badge text-emerald-600"></i> Employment Information
-        </h4>
-        <div class="grid grid-cols-2 gap-3 text-xs">
-          <div><span class="text-slate-400 block">Employee / Teacher ID</span><strong class="text-indigo-700 font-mono font-black">${_esc360(empCode)}</strong></div>
-          <div><span class="text-slate-400 block">Role / Designation</span><strong class="text-slate-900 font-extrabold">${_esc360(roleDesignation)}</strong></div>
-          <div><span class="text-slate-400 block">Joining Date</span><strong class="text-slate-800 font-mono font-bold">${_esc360(joinDateStr)}</strong></div>
-          <div><span class="text-slate-400 block">Account Status</span><strong class="text-emerald-700 font-extrabold">${_esc360(teacher.status || 'Active')}</strong></div>
-          <div><span class="text-slate-400 block">Working Shift</span><strong class="text-slate-800 font-bold">${_esc360(teacher.working_shift || 'Regular Shift')}</strong></div>
-          <div><span class="text-slate-400 block">Timezone</span><strong class="text-slate-800 font-mono">${_esc360(meta.timezone || 'Asia/Karachi (PKT)')}</strong></div>
-        </div>
-      </div>
-
-      <!-- 3. Professional & Classroom Information -->
-      <div class="bg-slate-50/60 rounded-2xl border border-slate-200 p-5 space-y-3">
-        <h4 class="text-xs font-black uppercase tracking-wider text-slate-800 flex items-center gap-2 border-b border-slate-200 pb-2.5">
-          <i class="fa-solid fa-graduation-cap text-amber-600"></i> Professional &amp; Classroom Information
-        </h4>
-        <div class="grid grid-cols-2 gap-3 text-xs">
-          <div><span class="text-slate-400 block">Primary Qualification</span><strong class="text-slate-900 font-bold">${_esc360(meta.qualification || 'Alimiyah / Tajweed Specialist')}</strong></div>
-          <div><span class="text-slate-400 block">Experience</span><strong class="text-slate-800 font-bold">${_esc360(meta.experience || 'Verified Academy Instructor')}</strong></div>
-          <div><span class="text-slate-400 block">Active Students</span><strong class="text-emerald-700 font-black">${activeStudents.length} Enrolled</strong></div>
-          <div><span class="text-slate-400 block">Weekly Booked Slots</span><strong class="text-indigo-700 font-black">${tchSchedules.length} Slots</strong></div>
-          <div class="col-span-2"><span class="text-slate-400 block">Dedicated Zoom Classroom</span><a href="${_esc360(meta.zoom_link || '#')}" target="_blank" class="text-indigo-600 hover:underline font-mono font-bold truncate block">${_esc360(meta.zoom_link || 'Not Configured')}</a></div>
-        </div>
-      </div>
-
-      <!-- 4. Account & Payroll Summary (Permission Guarded) -->
-      <div class="bg-slate-50/60 rounded-2xl border border-slate-200 p-5 space-y-3">
-        <h4 class="text-xs font-black uppercase tracking-wider text-slate-800 flex items-center gap-2 border-b border-slate-200 pb-2.5">
-          <i class="fa-solid fa-building-columns text-purple-600"></i> Account &amp; Payroll Information
-        </h4>
-        <div class="grid grid-cols-2 gap-3 text-xs">
-          <div><span class="text-slate-400 block">Portal Username</span><strong class="text-slate-900 font-mono font-bold">${_esc360(meta.username || 'teacher')}</strong></div>
-          <div><span class="text-slate-400 block">Base Slot / Course Rate</span><strong class="text-slate-900 font-mono font-bold">PKR ${Number(teacher.rate_per_slot || 2200).toLocaleString()}</strong></div>
-          <div><span class="text-slate-400 block">Seniority Increment</span><strong class="text-amber-800 font-bold">+PKR ${seniorityInc} / Student</strong></div>
-          <div><span class="text-slate-400 block">Current Net Salary</span><strong class="text-emerald-800 font-mono font-black">PKR ${currentNetSalary.toLocaleString()}</strong></div>
-          <div><span class="text-slate-400 block">Bank Name</span><strong class="text-slate-800 font-bold">${isAuthorizedForBank ? _esc360(meta.bank_name || '--') : 'Protected'}</strong></div>
-          <div><span class="text-slate-400 block">Account Title / No.</span><strong class="text-slate-800 font-mono">${isAuthorizedForBank ? _esc360(meta.account_number || meta.account_title || '--') : 'Protected'}</strong></div>
-        </div>
-      </div>
-    </div>
-  `;
+  if (typeof open2DMatrixForTeacher === 'function') {
+    await open2DMatrixForTeacher(teacher.id);
+    const meta = _resolveTeacherCustomMeta(teacher);
+    const empCode = meta.teacher_id || meta.emp_id || 'TCH-001';
+    const titleEl = document.getElementById('matrixTeacherName');
+    const subEl = document.getElementById('matrixTeacherSubtitle');
+    if (titleEl) {
+      titleEl.innerHTML = `Teacher: <span class="text-indigo-700">${_esc360(teacher.full_name)}</span> <span class="font-mono text-xs text-slate-500">(${_esc360(empCode)})</span>`;
+    }
+    if (subEl) {
+      subEl.innerHTML = `<span class="text-emerald-700 font-bold"><i class="fa-solid fa-circle-nodes"></i> Opened from Teacher 360° Profile</span> &bull; Full 24-Hour / 7-Day Weekly Schedule Matrix &bull; Shift: <strong>${_esc360(teacher.working_shift || 'Regular Shift')}</strong>`;
+    }
+  } else if (typeof switchTab === 'function') {
+    switchTab('tab-schedule-search');
+  }
 }
 
 // ============================================================================
-// TAB 7: SCHEDULE TAB (SYNCHRONIZED WITH CLASS_SCHEDULES & 2D TIMETABLE MATRIX)
+// STUDENT DETAILS ACTION WORKFLOW (ASSIGN / MANAGE TEACHER-STUDENT LINKS)
 // ============================================================================
-function _buildTeacherScheduleTabHtml(state) {
-  const { teacher, tchSchedules, meta } = state;
+function openTeacherStudentRelationshipModal(teacherId) {
+  const teacher = (window.ALL_TEACHERS || []).find(t => String(t.id) === String(teacherId));
+  if (!teacher) return;
+  const cached = _TEACHER_360_MEM_CACHE[String(teacher.id).toUpperCase()];
+  const state = _compileTeacher360AggregatedState(teacher, cached?.tchSchedules || [], cached?.attLogs || []);
+  const assignedIds = new Set(state.allMatchedStudents.map(s => String(s.id).toUpperCase()));
+  const unassignedOrOtherStudents = (window.ALL_STUDENTS || []).filter(s => {
+    const sIdUp = String(s.id || '').toUpperCase();
+    const st = String(s.status || 'Active').toLowerCase();
+    return !assignedIds.has(sIdUp) && st !== 'trial' && st !== 'deleted';
+  });
 
-  return `
-    <div class="space-y-4">
-      <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-slate-200 pb-3">
+  _openWorkspaceModal(
+    `Teacher–Student Relationship & Assignment Manager`,
+    `Teacher: ${teacher.full_name} (${state.empCode}) • ${state.allMatchedStudents.length} Assigned Student(s)`,
+    `
+      <div class="space-y-4 text-xs">
+        <!-- Assign Existing Student to This Teacher -->
+        <form onsubmit="submitTeacherAssignStudent360(event, '${_esc360(teacher.id)}')" class="p-3.5 rounded-xl bg-slate-50 border border-slate-200 space-y-2.5">
+          <label class="font-extrabold text-slate-800 block">Link / Assign Student to ${_esc360(teacher.full_name)}</label>
+          <div class="flex flex-col sm:flex-row gap-2">
+            <select id="t360AssignStudentSelect" required class="flex-1 p-2.5 rounded-xl border border-slate-300 bg-white font-bold text-slate-800">
+              <option value="">-- Select Student to Assign --</option>
+              ${unassignedOrOtherStudents.map(s => `
+                <option value="${_esc360(s.id)}">${_esc360(s.name)} (${_esc360(s.id)}) — ${_esc360(s.course_id || 'Quran Studies')}</option>
+              `).join('')}
+            </select>
+            <button type="submit" class="px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold whitespace-nowrap cursor-pointer">
+              <i class="fa-solid fa-link mr-1"></i> Assign to Teacher
+            </button>
+          </div>
+        </form>
+
+        <!-- Currently Linked Students & Course Rate Summary -->
         <div>
-          <h3 class="text-base font-black text-slate-900 flex items-center gap-2">
-            <i class="fa-solid fa-calendar-days text-sky-600"></i>
-            <span>Weekly Class Schedule (${tchSchedules.length} Booked Slots)</span>
-          </h3>
-          <p class="text-xs text-slate-500 mt-0.5">Live weekly slots assigned to ${_esc360(teacher.full_name)} across all enrolled students.</p>
+          <div class="flex items-center justify-between mb-2">
+            <h4 class="font-extrabold text-slate-800">Assigned Students &amp; Course Remuneration (${state.allMatchedStudents.length})</h4>
+            <button type="button" onclick="_closeWorkspaceModal(); openTeacherDedicatedScheduleFrom360('${_esc360(teacher.id)}');" class="text-indigo-600 hover:underline font-extrabold text-[11px] cursor-pointer">
+              <i class="fa-solid fa-calendar-days"></i> Open 24h/7d Schedule Matrix &rarr;
+            </button>
+          </div>
+          ${state.allMatchedStudents.length === 0 ? `
+            <div class="p-6 text-center bg-slate-50 rounded-xl border border-slate-200 text-slate-400">
+              No students currently assigned to ${_esc360(teacher.full_name)}.
+            </div>
+          ` : `
+            <div class="max-h-64 overflow-y-auto border border-slate-200 rounded-xl">
+              <table class="w-full text-left text-xs border-collapse">
+                <thead class="bg-slate-50 border-b border-slate-200 font-extrabold text-slate-700">
+                  <tr>
+                    <th class="p-2.5">Student</th>
+                    <th class="p-2.5">Course</th>
+                    <th class="p-2.5">Status</th>
+                    <th class="p-2.5 text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-100">
+                  ${state.allMatchedStudents.map(stu => `
+                    <tr class="hover:bg-slate-50">
+                      <td class="p-2.5 font-extrabold text-slate-900">${_esc360(stu.name)} <span class="font-mono text-[10px] text-slate-400">(${_esc360(stu.id)})</span></td>
+                      <td class="p-2.5 text-slate-700">${_esc360(stu.course_id || 'Qaida / Quran')}</td>
+                      <td class="p-2.5"><span class="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-bold">${_esc360(stu.status || 'Active')}</span></td>
+                      <td class="p-2.5 text-right">
+                        <div class="inline-flex items-center gap-2">
+                          <button type="button" onclick="_closeWorkspaceModal(); openStudent360Profile('${_esc360(stu.id)}', 'history');" class="text-indigo-600 hover:underline font-extrabold cursor-pointer">360° Profile</button>
+                          <button type="button" onclick="unassignStudentFromTeacher360('${_esc360(teacher.id)}', '${_esc360(stu.id)}')" class="text-rose-600 hover:underline font-bold cursor-pointer">Unassign</button>
+                        </div>
+                      </td>
+                    </tr>
+                  `).join('')}
+                </tbody>
+              </table>
+            </div>
+          `}
         </div>
-        <div class="flex items-center gap-2 flex-wrap">
-          ${typeof openQuickZoomModal === 'function' ? `
-            <button onclick="openQuickZoomModal('${_esc360(teacher.id)}')"
-                    class="px-3.5 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-300 text-xs font-extrabold inline-flex items-center gap-1.5 transition cursor-pointer">
-              <i class="fa-solid fa-video text-indigo-600"></i> Zoom Classroom Setup
-            </button>
-          ` : ''}
-          ${typeof openTeacherScheduleModal === 'function' ? `
-            <button onclick="openTeacherScheduleModal('${_esc360(teacher.id)}', '${_esc360(teacher.full_name)}')"
-                    class="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-extrabold inline-flex items-center gap-1.5 transition cursor-pointer shadow-2xs">
-              <i class="fa-solid fa-table-cells"></i> Open Interactive 2D Timetable Matrix
-            </button>
-          ` : ''}
+
+        <div class="flex justify-end pt-2 border-t border-slate-100">
+          <button type="button" onclick="_closeWorkspaceModal()" class="px-4 py-2 rounded-xl bg-slate-100 text-slate-700 font-bold cursor-pointer">Close</button>
         </div>
       </div>
+    `
+  );
+}
 
-      ${tchSchedules.length === 0 ? `
-        <div class="p-10 text-center bg-slate-50 rounded-2xl border border-slate-200 text-slate-500 text-xs">
-          No weekly class slots booked yet for ${_esc360(teacher.full_name)}.
-        </div>
-      ` : `
-        <div class="overflow-x-auto border border-slate-200 rounded-2xl shadow-2xs">
-          <table class="w-full text-left text-xs border-collapse">
-            <thead class="bg-slate-50 text-slate-800 font-extrabold border-b border-slate-200">
-              <tr>
-                <th class="p-3.5">#</th>
-                <th class="p-3.5">Day</th>
-                <th class="p-3.5">Time Slot (PKT)</th>
-                <th class="p-3.5">Student</th>
-                <th class="p-3.5">Family / Parent</th>
-                <th class="p-3.5">Course</th>
-                <th class="p-3.5">Classroom Link</th>
-                <th class="p-3.5">Status</th>
-              </tr>
-            </thead>
-            <tbody class="divide-y divide-slate-100">
-              ${tchSchedules.map((sc, idx) => {
-                const stu = sc.students || (window.ALL_STUDENTS || []).find(s => String(s.id).toUpperCase() === String(sc.student_id).toUpperCase());
-                const fam = stu ? (window.ALL_FAMILIES || []).find(f => String(f.id).toUpperCase() === String(stu.family_id).toUpperCase()) : null;
-                const dayName = _DAY_LABELS_360[sc.day_of_week] || `Day ${sc.day_of_week}`;
-                const startT = (sc.start_time || '').slice(0, 5);
-                const endT = (sc.end_time || '').slice(0, 5);
-                return `
-                  <tr class="hover:bg-slate-50 transition">
-                    <td class="p-3.5 font-mono font-bold text-slate-400">${idx + 1}</td>
-                    <td class="p-3.5 font-extrabold text-slate-900">${_esc360(dayName)}</td>
-                    <td class="p-3.5 font-mono font-bold text-emerald-800">${_esc360(startT)} - ${_esc360(endT)}</td>
-                    <td class="p-3.5">
-                      ${stu ? `
-                        <button onclick="openStudent360Profile('${_esc360(stu.id)}', 'history')" class="font-extrabold text-indigo-600 hover:underline cursor-pointer">
-                          ${_esc360(stu.name)} (${_esc360(stu.id)})
-                        </button>
-                      ` : `<span class="text-slate-500">${_esc360(sc.student_id || '--')}</span>`}
-                    </td>
-                    <td class="p-3.5">
-                      ${fam ? `
-                        <button onclick="openFamily360Profile('${_esc360(fam.id)}')" class="font-bold text-slate-800 hover:text-indigo-600 hover:underline cursor-pointer">
-                          ${_esc360(fam.parent_name)}
-                        </button>
-                      ` : '--'}
-                    </td>
-                    <td class="p-3.5 text-slate-700 font-semibold">${_esc360(stu?.course_id || 'Quran Studies')}</td>
-                    <td class="p-3.5">
-                      <a href="${_esc360(sc.meeting_link || meta.zoom_link || '#')}" target="_blank" class="text-indigo-600 hover:underline font-mono text-[11px]">
-                        Join Zoom
-                      </a>
-                    </td>
-                    <td class="p-3.5">
-                      <span class="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-extrabold">Scheduled</span>
-                    </td>
-                  </tr>
-                `;
-              }).join('')}
-            </tbody>
-          </table>
-        </div>
-      `}
-    </div>
-  `;
+async function submitTeacherAssignStudent360(e, teacherId) {
+  e.preventDefault();
+  const stuId = document.getElementById('t360AssignStudentSelect')?.value;
+  if (!stuId) return;
+
+  try {
+    await db.from('students').update({ assigned_teacher_id: teacherId }).eq('id', stuId);
+  } catch (err) {
+    console.warn('[Teacher 360] Student assign update notice:', err);
+  }
+  _syncStudentRecordInMemory(stuId, { assigned_teacher_id: teacherId });
+  delete _TEACHER_360_MEM_CACHE[String(teacherId).toUpperCase()];
+  if (typeof invalidateCoreLmsDataCache === 'function') invalidateCoreLmsDataCache();
+
+  _closeWorkspaceModal();
+  _notify360('Student assigned to teacher and synchronized across LMS!');
+  await openTeacher360Profile(teacherId, 'students', true, { forceRefresh: true });
+}
+
+async function unassignStudentFromTeacher360(teacherId, stuId) {
+  if (!confirm('Unassign this student from this teacher? (Student record will remain safe in the LMS)')) return;
+  try {
+    await db.from('students').update({ assigned_teacher_id: null }).eq('id', stuId);
+  } catch (err) {
+    console.warn('[Teacher 360] Student unassign notice:', err);
+  }
+  _syncStudentRecordInMemory(stuId, { assigned_teacher_id: null });
+  delete _TEACHER_360_MEM_CACHE[String(teacherId).toUpperCase()];
+  if (typeof invalidateCoreLmsDataCache === 'function') invalidateCoreLmsDataCache();
+
+  _closeWorkspaceModal();
+  _notify360('Student unassigned from teacher.');
+  await openTeacher360Profile(teacherId, 'students', true, { forceRefresh: true });
 }
 
 // ============================================================================
