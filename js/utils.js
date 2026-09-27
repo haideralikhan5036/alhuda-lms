@@ -598,49 +598,69 @@
         styleEl.id = 'lms-global-mobile-responsive-system';
       }
       styleEl.textContent = `
+        /* Global Desktop & Mobile Header Anti-Compression & Layout Stability Rules */
+        #mainAppContainer > header h1 {
+          white-space: nowrap !important;
+          overflow: hidden !important;
+          text-overflow: ellipsis !important;
+          line-height: 1.2 !important;
+        }
+        #btnAppBack {
+          flex-shrink: 0 !important;
+          white-space: nowrap !important;
+        }
+        .no-scrollbar::-webkit-scrollbar {
+          display: none !important;
+        }
+        .no-scrollbar {
+          -ms-overflow-style: none !important;
+          scrollbar-width: none !important;
+        }
+
+        /* Laptop & Mid-Desktop (1024px - 1279px) Anti-Overflow Safeguards */
+        @media (min-width: 1024px) and (max-width: 1279px) {
+          #globalPersistentTopSearchBar {
+            gap: 0.5rem !important;
+          }
+          #dashGlobalSearchContainer {
+            min-width: 220px !important;
+            max-width: 320px !important;
+          }
+        }
+
         @media (max-width: 767px) {
           html, body {
             overflow-x: hidden !important;
             max-width: 100vw !important;
           }
 
-          /* Persistent Top Search & Notification Action Bar Mobile Layout */
+          /* Persistent Top Search & Notification Action Bar Mobile Layout (Clean 2x2 Action Grid below Search) */
           #globalPersistentTopSearchBar {
-            padding: 0.55rem 0.65rem !important;
-          }
-          #globalPersistentTopSearchBar > div {
+            padding: 0.65rem 0.75rem !important;
             flex-direction: column !important;
             align-items: stretch !important;
-            gap: 0.5rem !important;
+            gap: 0.55rem !important;
           }
-          #globalPersistentTopSearchBar > div > div:first-child {
+          #dashGlobalSearchContainer {
             width: 100% !important;
+            max-width: 100% !important;
             min-width: 0 !important;
           }
-          #globalPersistentTopSearchBar > div > div:last-child {
+          #globalPersistentTopSearchBar > div:last-child {
             display: grid !important;
-            grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
-            gap: 0.35rem !important;
+            grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+            gap: 0.45rem !important;
             width: 100% !important;
           }
-          #globalPersistentTopSearchBar > div > div:last-child > button {
+          #globalPersistentTopSearchBar > div:last-child > button {
             width: 100% !important;
-            justify-content: center !important;
-            padding: 0.4rem 0.25rem !important;
-            gap: 0.25rem !important;
-          }
-          #globalPersistentTopSearchBar > div > div:last-child > button > span:nth-child(2) {
-            font-size: 10.5px !important;
-            overflow: hidden !important;
-            text-overflow: ellipsis !important;
-            white-space: nowrap !important;
-          }
-          #globalPersistentTopSearchBar > div > div:last-child > button > span:nth-child(3) {
-            font-size: 10px !important;
-            padding: 0.05rem 0.35rem !important;
+            justify-content: space-between !important;
+            padding: 0.42rem 0.6rem !important;
+            min-width: 0 !important;
           }
 
           /* Global Search Results Dropdown Mobile Fit */
+          #dashGlobalSearchResultsPanel,
           #globalPersistentTopSearchResults {
             left: 0 !important;
             right: 0 !important;
@@ -656,11 +676,12 @@
           #payrollKpiTotal, #payrollKpiTeachers, #payrollKpiStudents, #payrollKpiDisbursed,
           #kpiLeavesActive, #kpiLeavesReturningSoon, #kpiLeavesOverdue, #kpiLeavesTotal,
           #kpiFeeTotalFamilies, #kpiFeePaidCount, #kpiFeePendingCount, #kpiFeeLeaveCount {
-            font-size: 1.45rem !important;
+            font-size: 1.35rem !important;
           }
 
           /* Mobile Modals Viewport Fit & Internal Scroll */
-          div.fixed[id^="modal"] > div {
+          div.fixed[id^="modal"] > div,
+          div.fixed[id*="Modal"] > div {
             max-width: calc(100vw - 16px) !important;
             max-height: 91dvh !important;
             overflow-y: auto !important;
@@ -679,12 +700,6 @@
           #tab-profile-360 {
             padding-left: 0.25rem !important;
             padding-right: 0.25rem !important;
-          }
-        }
-
-        @media (max-width: 390px) {
-          #globalPersistentTopSearchBar > div > div:last-child > button > span:nth-child(2) {
-            display: none !important;
           }
         }
       `;

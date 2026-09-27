@@ -415,34 +415,35 @@
 
   <!-- TOP HEADER -->
   <header class="bg-gradient-to-r from-[#022c22] via-[#064e3b] to-[#047857] text-white h-[56px] px-3 sm:px-5 border-b-4 border-[#d97706] sticky top-0 z-50 shadow-md flex items-center w-full box-border">
-    <div class="w-full flex justify-between items-center gap-2">
-      <div class="flex items-center gap-1.5 sm:gap-2.5 min-w-0">
+    <div class="w-full flex justify-between items-center gap-2 min-w-0">
+      <!-- Left Branding Anchor: Sidebar Toggle + Logo + AL-HUDA ISLAMIC CENTRE (Protected from multi-line compression & Back button shifts) -->
+      <div class="flex items-center gap-2 sm:gap-2.5 min-w-0 flex-1">
         <!-- Sidebar Toggle Button (Mobile & Desktop) -->
-        <button onclick="toggleSidebar()" class="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition shrink-0 active:scale-95 shadow-2xs" title="Toggle Navigation Sidebar">
+        <button onclick="toggleSidebar()" class="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition shrink-0 active:scale-95 shadow-2xs cursor-pointer" title="Toggle Navigation Sidebar">
           <i class="fa-solid fa-bars text-sm sm:text-base"></i>
         </button>
 
-        <!-- SMART IN-APP BACK BUTTON -->
-        <button id="btnAppBack" onclick="navigateAppBack()" class="hidden px-2.5 py-1.5 sm:px-3 sm:py-2 rounded-xl bg-amber-500/30 hover:bg-amber-500/50 border border-amber-400/70 text-amber-200 hover:text-white text-xs font-bold transition items-center gap-1.5 shrink-0 shadow-sm cursor-pointer active:scale-95" title="Go Back">
-          <i class="fa-solid fa-arrow-left text-sm"></i>
-          <span class="font-sans text-xs">Back</span>
-          <span id="lblBackTarget" class="hidden md:inline text-[10px] text-amber-300 font-semibold max-w-[130px] truncate"></span>
-        </button>
-
         <div onclick="switchTab('tab-dashboard')" class="cursor-pointer flex items-center gap-2 sm:gap-2.5 min-w-0" title="Return to Dashboard">
-          <img src="alhuda_logo.jpg" alt="Al-Huda Logo" class="w-9 h-9 sm:w-10 sm:h-10 rounded-full border-2 border-brandGold object-cover shadow-sm bg-black shrink-0">
+          <img src="alhuda_logo.jpg" alt="Al-Huda Logo" class="w-8 h-8 sm:w-9 sm:h-9 rounded-full border-2 border-brandGold object-cover shadow-sm bg-black shrink-0">
           <div class="min-w-0">
-            <h1 class="font-cinzel text-sm sm:text-base md:text-lg font-bold tracking-wide leading-tight">AL-HUDA ISLAMIC CENTRE</h1>
+            <h1 class="font-cinzel text-xs sm:text-sm md:text-base lg:text-lg font-bold tracking-wide leading-tight whitespace-nowrap truncate">AL-HUDA ISLAMIC CENTRE</h1>
           </div>
         </div>
       </div>
 
-      <!-- ROLE BADGE & NOTIFICATIONS -->
-      <div class="flex items-center gap-1.5 sm:gap-2.5 shrink-0">
+      <!-- RIGHT ACTIONS: Non-Overlapping Back Button + Role Session Pill -->
+      <div class="flex items-center gap-1.5 sm:gap-2 shrink-0">
+        <!-- SMART IN-APP BACK BUTTON (Positioned on Right so it never compresses or overlaps AL-HUDA ISLAMIC CENTRE) -->
+        <button id="btnAppBack" onclick="navigateAppBack()" class="hidden px-2.5 py-1.5 sm:px-3 sm:py-1.5 rounded-xl bg-amber-500/30 hover:bg-amber-500/50 border border-amber-400/70 text-amber-200 hover:text-white text-xs font-bold transition items-center gap-1.5 shrink-0 shadow-sm cursor-pointer active:scale-95" title="Go Back">
+          <i class="fa-solid fa-arrow-left text-xs"></i>
+          <span class="font-sans text-xs font-extrabold">Back</span>
+          <span id="lblBackTarget" class="hidden 2xl:inline text-[10px] text-amber-300 font-semibold max-w-[120px] truncate"></span>
+        </button>
+
         <!-- Logged-in Teacher Session Badge -->
-        <div id="teacherSessionPill" class="hidden items-center gap-1.5 bg-emerald-950/80 border border-emerald-400/50 px-2.5 py-1 rounded-full text-xs font-semibold text-emerald-200 shadow-sm">
-          <span><i class="fa-solid fa-chalkboard-user text-emerald-400 text-xs"></i> <span id="teacherActiveName">Teacher</span></span>
-          <button onclick="logoutTeacherPortal()" class="text-amber-300 hover:text-amber-100 font-bold ml-1 text-[11px] underline" title="Exit Teacher Portal">Logout</button>
+        <div id="teacherSessionPill" class="hidden items-center gap-1.5 bg-emerald-950/80 border border-emerald-400/50 px-2.5 py-1 rounded-full text-xs font-semibold text-emerald-200 shadow-sm shrink-0">
+          <span class="truncate max-w-[110px] sm:max-w-[160px]"><i class="fa-solid fa-chalkboard-user text-emerald-400 text-xs"></i> <span id="teacherActiveName">Teacher</span></span>
+          <button onclick="logoutTeacherPortal()" class="text-amber-300 hover:text-amber-100 font-bold ml-1 text-[11px] underline shrink-0" title="Exit Teacher Portal">Logout</button>
         </div>
 
         <!-- Hidden Role Select for internal JS role synchronization -->
@@ -455,22 +456,14 @@
           </select>
         </div>
 
-        <!-- Dynamic Security / Role Badge -->
-        <div id="headerRoleSecurityBadge"></div>
+        <!-- Dynamic Security / Role Badge (Desktop Only, Concise) -->
+        <div id="headerRoleSecurityBadge" class="hidden xl:block shrink-0"></div>
 
-        <!-- Teacher Requests Notification Button -->
-        <button onclick="openAdminTeacherRequestsModal()" class="w-8 h-8 sm:w-auto sm:px-3 sm:py-1.5 rounded-full bg-amber-500/20 hover:bg-amber-500/30 border border-amber-400/50 text-amber-200 text-xs font-bold transition flex items-center justify-center gap-1.5 shadow-xs shrink-0" title="Review Pending Teacher Requests">
-          <i class="fa-solid fa-bell text-amber-300 text-xs"></i>
-          <span class="hidden md:inline">Requests</span>
-          <span id="badgePendingTeacherRequests" class="hidden px-1.5 py-0.2 rounded-full text-[10px] font-mono bg-rose-600 text-white font-black animate-pulse">0</span>
-        </button>
-
-        <!-- Scheduled Return Overdue Alert Button -->
-        <button id="btnReturnAlertsBell" onclick="openReturnAlertsModal()" class="hidden w-8 h-8 sm:w-auto sm:px-3 sm:py-1.5 rounded-full bg-rose-900/60 hover:bg-rose-900 border border-rose-500/50 text-rose-200 text-xs font-bold transition items-center justify-center gap-1.5 shadow-xs shrink-0 animate-bounce" title="Students with Overdue Return">
-          <i class="fa-solid fa-calendar-check text-amber-300 text-xs"></i>
-          <span class="hidden md:inline">Returns Due</span>
-          <span id="badgeReturnAlertsCount" class="px-1.5 py-0.2 rounded-full text-[10px] font-mono bg-rose-600 text-white font-black">0</span>
-        </button>
+        <!-- Hidden legacy duplicate header notification buttons (Already prominently displayed in #globalPersistentTopSearchBar right below) -->
+        <div class="hidden" aria-hidden="true">
+          <button onclick="openAdminTeacherRequestsModal()"><span id="badgePendingTeacherRequests">0</span></button>
+          <button id="btnReturnAlertsBell" onclick="openReturnAlertsModal()"><span id="badgeReturnAlertsCount">0</span></button>
+        </div>
       </div>
     </div>
   </header>
@@ -612,20 +605,22 @@
       </div>
 
       <!-- Right/Center: 4 Global LMS Action Badges (Leave Over, Teacher Time/Attendance Requests, Official Announcements, Parent Complaints Inbox) -->
-      <div class="flex items-center gap-2 flex-wrap justify-end">
+      <div class="grid grid-cols-2 sm:flex sm:items-center gap-2 sm:flex-wrap w-full sm:w-auto justify-end">
         
         <!-- 1. Students Leave Over / Return Due Alerts -->
         <button
           onclick="openReturnAlertsModal()"
           id="btnTopCircleLeaveOver"
-          class="group relative px-3 py-1.5 rounded-xl bg-amber-50/90 hover:bg-amber-100 text-amber-900 border border-amber-200/90 flex items-center gap-2 transition-all shadow-2xs hover:shadow-xs cursor-pointer"
+          class="group relative px-2.5 sm:px-3 py-1.5 rounded-xl bg-amber-50/90 hover:bg-amber-100 text-amber-900 border border-amber-200/90 flex items-center justify-between sm:justify-start gap-1.5 sm:gap-2 transition-all shadow-2xs hover:shadow-xs cursor-pointer min-w-0"
           title="Students Leave Over / Return Date Arrived Alerts"
         >
-          <span class="w-6 h-6 rounded-lg bg-amber-500 text-white flex items-center justify-center text-xs shadow-2xs group-hover:scale-105 transition">
-            <i class="fa-solid fa-calendar-check"></i>
+          <span class="flex items-center gap-1.5 min-w-0">
+            <span class="w-6 h-6 rounded-lg bg-amber-500 text-white flex items-center justify-center text-xs shadow-2xs group-hover:scale-105 transition shrink-0">
+              <i class="fa-solid fa-calendar-check"></i>
+            </span>
+            <span class="text-[11px] sm:text-xs font-bold tracking-tight truncate">Leave Over</span>
           </span>
-          <span class="text-xs font-bold tracking-tight hidden sm:inline">Leave Over</span>
-          <span id="badgeTopLeaveOverCount" class="px-1.5 py-0.5 rounded-md bg-amber-200/80 text-amber-950 font-num text-xs font-extrabold">0</span>
+          <span id="badgeTopLeaveOverCount" class="px-1.5 py-0.5 rounded-md bg-amber-200/80 text-amber-950 font-num text-xs font-extrabold shrink-0">0</span>
           <span id="dotTopCircleLeaveOver" class="hidden absolute -top-1 -right-1 w-3 h-3 rounded-full bg-rose-600 border-2 border-white animate-ping"></span>
           <span id="dotTopCircleLeaveOverSolid" class="hidden absolute -top-1 -right-1 w-3 h-3 rounded-full bg-rose-600 border-2 border-white"></span>
         </button>
@@ -634,14 +629,16 @@
         <button
           onclick="openAdminTeacherRequestsModal()"
           id="btnTopCircleRequests"
-          class="group relative px-3 py-1.5 rounded-xl bg-indigo-50/90 hover:bg-indigo-100 text-indigo-900 border border-indigo-200/90 flex items-center gap-2 transition-all shadow-2xs hover:shadow-xs cursor-pointer"
+          class="group relative px-2.5 sm:px-3 py-1.5 rounded-xl bg-indigo-50/90 hover:bg-indigo-100 text-indigo-900 border border-indigo-200/90 flex items-center justify-between sm:justify-start gap-1.5 sm:gap-2 transition-all shadow-2xs hover:shadow-xs cursor-pointer min-w-0"
           title="Teacher Schedule Time-Change & Wrong Leave/Absent Correction Requests"
         >
-          <span class="w-6 h-6 rounded-lg bg-indigo-600 text-white flex items-center justify-center text-xs shadow-2xs group-hover:scale-105 transition">
-            <i class="fa-solid fa-clock-rotate-left"></i>
+          <span class="flex items-center gap-1.5 min-w-0">
+            <span class="w-6 h-6 rounded-lg bg-indigo-600 text-white flex items-center justify-center text-xs shadow-2xs group-hover:scale-105 transition shrink-0">
+              <i class="fa-solid fa-clock-rotate-left"></i>
+            </span>
+            <span class="text-[11px] sm:text-xs font-bold tracking-tight truncate">Requests</span>
           </span>
-          <span class="text-xs font-bold tracking-tight hidden sm:inline">Teacher Requests</span>
-          <span id="badgeTopRequestsCount" class="px-1.5 py-0.5 rounded-md bg-indigo-200/80 text-indigo-950 font-num text-xs font-extrabold">0</span>
+          <span id="badgeTopRequestsCount" class="px-1.5 py-0.5 rounded-md bg-indigo-200/80 text-indigo-950 font-num text-xs font-extrabold shrink-0">0</span>
           <span id="dotTopCircleRequests" class="hidden absolute -top-1 -right-1 w-3 h-3 rounded-full bg-rose-600 border-2 border-white animate-pulse"></span>
         </button>
 
@@ -649,14 +646,16 @@
         <button
           onclick="openAdminAnnouncementsModal()"
           id="btnTopCircleAnnouncements"
-          class="group relative px-3 py-1.5 rounded-xl bg-emerald-50/90 hover:bg-emerald-100 text-emerald-900 border border-emerald-200/90 flex items-center gap-2 transition-all shadow-2xs hover:shadow-xs cursor-pointer"
+          class="group relative px-2.5 sm:px-3 py-1.5 rounded-xl bg-emerald-50/90 hover:bg-emerald-100 text-emerald-900 border border-emerald-200/90 flex items-center justify-between sm:justify-start gap-1.5 sm:gap-2 transition-all shadow-2xs hover:shadow-xs cursor-pointer min-w-0"
           title="Publish Official Announcements to Teacher Portal & Student/Parent Portal"
         >
-          <span class="w-6 h-6 rounded-lg bg-emerald-600 text-white flex items-center justify-center text-xs shadow-2xs group-hover:scale-105 transition">
-            <i class="fa-solid fa-bullhorn"></i>
+          <span class="flex items-center gap-1.5 min-w-0">
+            <span class="w-6 h-6 rounded-lg bg-emerald-600 text-white flex items-center justify-center text-xs shadow-2xs group-hover:scale-105 transition shrink-0">
+              <i class="fa-solid fa-bullhorn"></i>
+            </span>
+            <span class="text-[11px] sm:text-xs font-bold tracking-tight truncate">Announcements</span>
           </span>
-          <span class="text-xs font-bold tracking-tight hidden sm:inline">Announcements</span>
-          <span id="badgeTopAnnouncementsCount" class="px-1.5 py-0.5 rounded-md bg-emerald-200/80 text-emerald-950 font-num text-xs font-extrabold">1</span>
+          <span id="badgeTopAnnouncementsCount" class="px-1.5 py-0.5 rounded-md bg-emerald-200/80 text-emerald-950 font-num text-xs font-extrabold shrink-0">1</span>
           <span id="dotTopCircleAnnouncements" class="hidden absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-emerald-500 border-2 border-white"></span>
         </button>
 
@@ -664,14 +663,16 @@
         <button
           onclick="openAdminParentComplaintsModal()"
           id="btnTopCircleComplaints"
-          class="group relative px-3 py-1.5 rounded-xl bg-rose-50/90 hover:bg-rose-100 text-rose-900 border border-rose-200/90 flex items-center gap-2 transition-all shadow-2xs hover:shadow-xs cursor-pointer"
+          class="group relative px-2.5 sm:px-3 py-1.5 rounded-xl bg-rose-50/90 hover:bg-rose-100 text-rose-900 border border-rose-200/90 flex items-center justify-between sm:justify-start gap-1.5 sm:gap-2 transition-all shadow-2xs hover:shadow-xs cursor-pointer min-w-0"
           title="Parent Complaints Inbox & Admin Direct Reply to Parents"
         >
-          <span class="w-6 h-6 rounded-lg bg-rose-600 text-white flex items-center justify-center text-xs shadow-2xs group-hover:scale-105 transition">
-            <i class="fa-solid fa-envelope-open-text"></i>
+          <span class="flex items-center gap-1.5 min-w-0">
+            <span class="w-6 h-6 rounded-lg bg-rose-600 text-white flex items-center justify-center text-xs shadow-2xs group-hover:scale-105 transition shrink-0">
+              <i class="fa-solid fa-envelope-open-text"></i>
+            </span>
+            <span class="text-[11px] sm:text-xs font-bold tracking-tight truncate">Complaints</span>
           </span>
-          <span class="text-xs font-bold tracking-tight hidden sm:inline">Complaints</span>
-          <span id="badgeTopComplaintsCount" class="px-1.5 py-0.5 rounded-md bg-rose-200/80 text-rose-950 font-num text-xs font-extrabold">1</span>
+          <span id="badgeTopComplaintsCount" class="px-1.5 py-0.5 rounded-md bg-rose-200/80 text-rose-950 font-num text-xs font-extrabold shrink-0">1</span>
           <span id="dotTopCircleComplaints" class="hidden absolute -top-1 -right-1 w-3 h-3 rounded-full bg-rose-600 border-2 border-white animate-ping"></span>
           <span id="dotTopCircleComplaintsSolid" class="hidden absolute -top-1 -right-1 w-3 h-3 rounded-full bg-rose-600 border-2 border-white"></span>
         </button>
@@ -690,14 +691,14 @@
     <section id="tab-dashboard" class="tab-content block">
 
       <!-- SPACIOUS CLEAN OPEN BANNER AREA (UNCLUTTERED & SLEEK) -->
-      <div class="bg-[#f4f7f6] border border-slate-200/70 rounded-xl px-6 py-4 mb-5 flex items-center justify-between">
-        <div class="flex items-center gap-3.5">
-          <div class="w-11 h-11 rounded-xl bg-white shadow-xs border border-slate-100 text-cyan-600 flex items-center justify-center text-base shrink-0">
+      <div class="bg-[#f4f7f6] border border-slate-200/70 rounded-xl px-4 sm:px-6 py-3.5 sm:py-4 mb-5 flex items-center justify-between">
+        <div class="flex items-center gap-3.5 min-w-0">
+          <div class="w-10 h-10 sm:w-11 sm:h-11 rounded-xl bg-white shadow-xs border border-slate-100 text-cyan-600 flex items-center justify-center text-base shrink-0">
             <i class="fa-solid fa-inbox"></i>
           </div>
-          <div>
-            <h2 class="text-base font-bold text-slate-700 tracking-tight">Admin Dashboard</h2>
-            <p class="text-xs text-slate-400 font-medium mt-0.5">Class Details for Today!</p>
+          <div class="min-w-0">
+            <h2 class="text-sm sm:text-base font-bold text-slate-700 tracking-tight truncate">Admin Dashboard</h2>
+            <p class="text-xs text-slate-400 font-medium mt-0.5 truncate">Class Details for Today!</p>
           </div>
         </div>
         <div class="hidden sm:block"></div>
@@ -706,8 +707,8 @@
       <!-- 8 COMPACT EQUAL-SIZED SMALL KPI BOXES (4 ON LEFT 2x2 + WIDE OPEN CENTER SPACE + 4 ON RIGHT 2x2) -->
       <div class="flex flex-col lg:flex-row items-center justify-between gap-4 mb-5">
         
-        <!-- LEFT CARD: 4 COMPACT EQUAL-SIZED BOXES (2x2 GRID, FIXED COMPACT WIDTH) -->
-        <div class="w-full lg:w-[395px] xl:w-[420px] shrink-0 bg-white p-3 rounded-xl border border-slate-200/80 shadow-xs grid grid-cols-2 gap-2.5">
+        <!-- LEFT CARD: 4 COMPACT EQUAL-SIZED BOXES (2x2 GRID, RESPONSIVE COMPACT WIDTH) -->
+        <div class="w-full lg:w-[48.5%] xl:w-[420px] shrink-0 bg-white p-3 rounded-xl border border-slate-200/80 shadow-xs grid grid-cols-2 gap-2.5">
           
           <!-- 1. Total Today (Slate-Indigo Theme) -->
           <div onclick="filterDashboardClasses('all')" id="kpiBox-all" class="kpi-dash-card cursor-pointer px-3 py-2 rounded-xl shadow-2xs hover:shadow-md transition-all flex items-center justify-between h-[64px] min-h-[64px] max-h-[64px] w-full box-border">
@@ -775,10 +776,10 @@
         </div>
 
         <!-- INTENTIONAL WIDE OPEN BREATHING SPACE IN THE CENTER -->
-        <div class="hidden lg:block flex-1"></div>
+        <div class="hidden xl:block flex-1"></div>
 
-        <!-- RIGHT CARD: 4 COMPACT EQUAL-SIZED BOXES (2x2 GRID, FIXED COMPACT WIDTH) -->
-        <div class="w-full lg:w-[395px] xl:w-[420px] shrink-0 bg-white p-3 rounded-xl border border-slate-200/80 shadow-xs grid grid-cols-2 gap-2.5">
+        <!-- RIGHT CARD: 4 COMPACT EQUAL-SIZED BOXES (2x2 GRID, RESPONSIVE COMPACT WIDTH) -->
+        <div class="w-full lg:w-[48.5%] xl:w-[420px] shrink-0 bg-white p-3 rounded-xl border border-slate-200/80 shadow-xs grid grid-cols-2 gap-2.5">
 
           <!-- 5. Remaining (Warm Amber-Gold Theme) -->
           <div onclick="filterDashboardClasses('remaining')" id="kpiBox-remaining" class="kpi-dash-card cursor-pointer px-3 py-2 rounded-xl shadow-2xs hover:shadow-md transition-all flex items-center justify-between h-[64px] min-h-[64px] max-h-[64px] w-full box-border">

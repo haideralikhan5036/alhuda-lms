@@ -65,16 +65,14 @@
       if (!badge) return;
 
       if (role === 'manager') {
-        const mgrLabel = ACTIVE_MANAGER_ID ? `Manager (${ACTIVE_MANAGER_ID})` : 'Manager Portal';
-        badge.className = 'hidden md:flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-indigo-950/80 border border-indigo-400/50 text-indigo-200 shadow-2xs';
-        badge.innerHTML = `<i class="fa-solid fa-user-shield text-amber-400"></i> <span>${mgrLabel}</span> &bull; <span class="text-[10px] text-amber-300 font-semibold"><i class="fa-solid fa-lock text-[9px]"></i> Protected Contacts &amp; Deletion Guard Active</span>`;
-        badge.classList.remove('hidden');
+        const mgrLabel = ACTIVE_MANAGER_ID ? `Manager (${ACTIVE_MANAGER_ID})` : 'Manager';
+        badge.className = 'hidden xl:flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-indigo-950/80 border border-indigo-400/50 text-indigo-200 shadow-2xs whitespace-nowrap shrink-0';
+        badge.innerHTML = `<i class="fa-solid fa-user-shield text-amber-400"></i> <span>${mgrLabel}</span> <span class="text-[10px] text-amber-300 font-semibold">&bull; Protected</span>`;
       } else if (role === 'owner') {
-        badge.className = 'hidden md:flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-amber-950/60 border border-amber-400/50 text-amber-200 shadow-2xs';
+        badge.className = 'hidden xl:flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-amber-950/60 border border-amber-400/50 text-amber-200 shadow-2xs whitespace-nowrap shrink-0';
         badge.innerHTML = `<i class="fa-solid fa-crown text-brandGold"></i> <span>Owner &amp; Director</span>`;
-        badge.classList.remove('hidden');
       } else {
-        badge.classList.add('hidden');
+        badge.className = 'hidden';
       }
     }
 

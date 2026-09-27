@@ -11,20 +11,26 @@
     // SMART IN-APP NAVIGATION HISTORY & BACK BUTTON ENGINE
     // ============================================================
     const NAV_FEATURE_LABELS = {
-      'tab-dashboard': 'Main Dashboard',
+      'tab-dashboard': 'Dashboard',
       'tab-families': 'Families',
       'tab-teachers': 'Employees',
       'tab-trials': 'Trials',
-      'tab-attendance': 'Daily Attendance & Notes',
-      'tab-salaries': 'Teacher Auto Salary Generation',
-      'tab-leaves': 'Leave',
-      'tab-invoices': 'Fee Management',
-      'tab-curriculum': 'Course Materials',
-      'tab-schedule-search': 'Schedule Slot Finder',
+      'tab-attendance': 'Attendance',
+      'tab-salaries': 'Salaries',
+      'tab-leaves': 'Leaves',
+      'tab-invoices': 'Fee Invoices',
+      'tab-curriculum': 'Curriculum',
+      'tab-schedule-search': 'Slot Finder',
+      'tab-reports': 'Reports',
+      'tab-activity': 'Audit Logs',
+      'tab-teacher-portal': 'Teacher Portal',
+      'tab-student-portal': 'Parent Portal',
+      'tab-owner-managers': 'Managers',
+      'tab-profile-360': 'Profile',
       'fee-subtab-overview': 'Fee Overview',
       'fee-subtab-collect': 'Collect Fee',
-      'fee-subtab-pending': 'Pending Payments',
-      'fee-subtab-defaulters': 'Defaulters (3+ Months)',
+      'fee-subtab-pending': 'Pending Fees',
+      'fee-subtab-defaulters': 'Defaulters',
       'fee-subtab-matrix': 'Annual Matrix',
       'fee-subtab-receipts': 'Receipts'
     };
@@ -53,7 +59,9 @@
       if (!btn) return;
 
       const visibleModal = getActiveModalOverlay();
-      const isNotDashboard = currentNavState.tabId !== 'tab-dashboard';
+      const profTab = document.getElementById('tab-profile-360');
+      const isProfile360Open = profTab && !profTab.classList.contains('hidden');
+      const isNotDashboard = currentNavState.tabId !== 'tab-dashboard' || isProfile360Open;
       const hasHistory = appNavHistory.length > 0 || isNotDashboard || !!visibleModal;
 
       if (hasHistory) {
@@ -63,6 +71,10 @@
         let prevLabel = 'Dashboard';
         if (visibleModal) {
           prevLabel = 'Close';
+        } else if (isProfile360Open) {
+          prevLabel = (typeof _ORIGIN_TAB_BEFORE_360 !== 'undefined' && NAV_FEATURE_LABELS[_ORIGIN_TAB_BEFORE_360])
+            ? NAV_FEATURE_LABELS[_ORIGIN_TAB_BEFORE_360]
+            : 'Directory';
         } else if (appNavHistory.length > 0) {
           const prev = appNavHistory[appNavHistory.length - 1];
           prevLabel = prev.label || (NAV_FEATURE_LABELS[prev.subTabId] || NAV_FEATURE_LABELS[prev.tabId] || 'Dashboard');
@@ -126,7 +138,7 @@
         return;
       }
 
-      // Check if mobile sidebar drawer is open
+      // 2. Check if mobile sidebar drawer is open
       const mobileSidebar = document.getElementById('mainAppSidebar');
       if (mobileSidebar && mobileSidebar.classList.contains('sidebar-mobile-open')) {
         mobileSidebar.classList.remove('sidebar-mobile-open');
@@ -134,7 +146,15 @@
         return;
       }
 
-      // 2. Use browser history if available to keep URL state and JS state in sync
+      // 3. Check if Full-Screen 360° Profile Workspace is open
+      const profTab = document.getElementById('tab-profile-360');
+      if (profTab && !profTab.classList.contains('hidden') && typeof navigateBack360Profile === 'function') {
+        navigateBack360Profile();
+        updateBackBtnVisibility();
+        return;
+      }
+
+      // 4. Use browser history if available to keep URL state and JS state in sync
       if (window.history.state && window.history.state.depth > 0) {
         window.history.back();
         return;

@@ -364,38 +364,42 @@ async function refreshCurrent360Profile() {
 }
 
 function _buildTopWorkspaceNavHtml() {
-  const originLabel = _TAB_NAMES_MAP[_ORIGIN_LMS_TAB] || 'Main Dashboard';
+  const originLabel = _TAB_NAMES_MAP[_ORIGIN_LMS_TAB] || 'Dashboard';
   const crumbsHtml = _PROFILE_360_STACK.map((item, idx) => {
     const isLast = idx === _PROFILE_360_STACK.length - 1;
-    const typeBadge = item.type === 'family' ? 'Family Workspace' : 'Teacher Workspace';
+    const typeBadge = item.type === 'family' ? 'Family' : 'Teacher';
     return `
-      <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold ${isLast ? 'bg-slate-900 text-white shadow-2xs' : 'bg-slate-100 text-slate-700'}">
+      <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold ${isLast ? 'bg-slate-900 text-white shadow-2xs' : 'bg-slate-100 text-slate-700'} max-w-[220px] truncate">
         <span class="opacity-70 font-medium">${typeBadge}:</span>
-        <span class="font-extrabold">${_esc360(item.label)}</span>
+        <span class="font-extrabold truncate">${_esc360(item.label)}</span>
       </span>
       ${!isLast ? '<i class="fa-solid fa-chevron-right text-[10px] text-slate-400 mx-0.5"></i>' : ''}
     `;
   }).join('');
 
   return `
-    <div class="bg-white rounded-2xl border border-slate-200/90 px-4 py-2.5 shadow-2xs flex items-center justify-between gap-3 flex-wrap">
-      <div class="flex items-center gap-2 flex-wrap">
-        <button onclick="exitFullScreen360Profile()" class="px-3.5 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-extrabold flex items-center gap-2 transition shadow-2xs">
-          <i class="fa-solid fa-arrow-left text-amber-400"></i> Back to ${_esc360(originLabel)}
+    <div class="bg-white rounded-2xl border border-slate-200/90 px-3 sm:px-4 py-2.5 shadow-2xs flex items-center justify-between gap-2 sm:gap-3 flex-wrap">
+      <div class="flex items-center gap-2 flex-wrap min-w-0">
+        <button onclick="exitFullScreen360Profile()" class="px-3 sm:px-3.5 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-extrabold flex items-center gap-1.5 sm:gap-2 transition shadow-2xs cursor-pointer shrink-0">
+          <i class="fa-solid fa-arrow-left text-amber-400"></i>
+          <span>Back to ${_esc360(originLabel)}</span>
         </button>
         ${_PROFILE_360_STACK.length > 1 ? `
-          <button onclick="navigateBack360Profile()" class="px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-300 text-xs font-extrabold flex items-center gap-1.5 transition">
-            <i class="fa-solid fa-rotate-left text-slate-600"></i> Previous
+          <button onclick="navigateBack360Profile()" class="px-2.5 sm:px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-300 text-xs font-extrabold flex items-center gap-1.5 transition cursor-pointer shrink-0">
+            <i class="fa-solid fa-rotate-left text-slate-600"></i>
+            <span>Previous</span>
           </button>
         ` : ''}
-        <div class="h-4 w-[1px] bg-slate-200 mx-1 hidden sm:block"></div>
-        <div class="flex items-center gap-1 flex-wrap">
+        <div class="h-4 w-[1px] bg-slate-200 mx-1 hidden lg:block"></div>
+        <div class="hidden lg:flex items-center gap-1 flex-wrap min-w-0">
           ${crumbsHtml}
         </div>
       </div>
-      <div class="flex items-center gap-2">
-        <button onclick="refreshCurrent360Profile()" class="px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-200 text-xs font-extrabold flex items-center gap-1.5 transition">
-          <i class="fa-solid fa-arrows-rotate text-indigo-600"></i> Refresh Live Data
+      <div class="flex items-center gap-2 shrink-0">
+        <button onclick="refreshCurrent360Profile()" class="px-2.5 sm:px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-200 text-xs font-extrabold flex items-center gap-1.5 transition cursor-pointer">
+          <i class="fa-solid fa-arrows-rotate text-indigo-600"></i>
+          <span class="hidden sm:inline">Refresh Live Data</span>
+          <span class="sm:hidden">Refresh</span>
         </button>
       </div>
     </div>
@@ -811,29 +815,29 @@ function _renderFamilyWorkspaceDOM() {
   const isFamSuspended = famStatus === 'SUSPENDED' || Boolean(bioMeta.classes_suspended);
 
   const bottomFamilyActionsHtml = `
-    <div class="bg-slate-50 border-t border-slate-200 px-6 py-4 flex items-center justify-center gap-3 flex-wrap">
+    <div class="bg-slate-50 border-t border-slate-200 px-4 sm:px-6 py-4 grid grid-cols-2 sm:flex sm:items-center sm:justify-center gap-2.5 sm:gap-3 sm:flex-wrap">
       <button onclick="handleFamilyLevelDeactivate('${_esc360(family.id)}')"
-              class="h-9 px-5 rounded-xl font-extrabold text-xs text-white shadow-xs transition inline-flex items-center gap-2 whitespace-nowrap cursor-pointer ${isFamInactive ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-rose-600 hover:bg-rose-700'}">
+              class="h-9 px-3 sm:px-5 rounded-xl font-extrabold text-xs text-white shadow-xs transition inline-flex items-center justify-center gap-1.5 sm:gap-2 whitespace-nowrap cursor-pointer ${isFamInactive ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-rose-600 hover:bg-rose-700'}">
         <i class="fa-solid ${isFamInactive ? 'fa-user-check' : 'fa-ban'}"></i>
-        <span>${isFamInactive ? 'Activate Family' : 'Deactivate'}</span>
+        <span class="truncate">${isFamInactive ? 'Activate Family' : 'Deactivate'}</span>
       </button>
 
       <button onclick="handleFamilyLevelLeave('${_esc360(family.id)}')"
-              class="h-9 px-5 rounded-xl font-extrabold text-xs text-white bg-sky-600 hover:bg-sky-700 shadow-xs transition inline-flex items-center gap-2 whitespace-nowrap cursor-pointer">
+              class="h-9 px-3 sm:px-5 rounded-xl font-extrabold text-xs text-white bg-sky-600 hover:bg-sky-700 shadow-xs transition inline-flex items-center justify-center gap-1.5 sm:gap-2 whitespace-nowrap cursor-pointer">
         <i class="fa-solid fa-calendar-pause"></i>
-        <span>${isFamOnLeave ? 'Return Family from Leave' : 'Make on Leave'}</span>
+        <span class="truncate">${isFamOnLeave ? 'Return from Leave' : 'Make on Leave'}</span>
       </button>
 
       <button onclick="handleFamilyLevelSuspendClasses('${_esc360(family.id)}')"
-              class="h-9 px-5 rounded-xl font-extrabold text-xs text-white ${isFamSuspended ? 'bg-teal-600 hover:bg-teal-700' : 'bg-rose-700 hover:bg-rose-800'} shadow-xs transition inline-flex items-center gap-2 whitespace-nowrap cursor-pointer">
+              class="h-9 px-3 sm:px-5 rounded-xl font-extrabold text-xs text-white ${isFamSuspended ? 'bg-teal-600 hover:bg-teal-700' : 'bg-rose-700 hover:bg-rose-800'} shadow-xs transition inline-flex items-center justify-center gap-1.5 sm:gap-2 whitespace-nowrap cursor-pointer">
         <i class="fa-solid ${isFamSuspended ? 'fa-play' : 'fa-pause-circle'}"></i>
-        <span>${isFamSuspended ? 'Unsuspend Classes' : 'Suspend Classes'}</span>
+        <span class="truncate">${isFamSuspended ? 'Unsuspend Classes' : 'Suspend Classes'}</span>
       </button>
 
       <button onclick="openEditFamilyProfileModal('${_esc360(family.id)}')"
-              class="h-9 px-5 rounded-xl font-extrabold text-xs text-white bg-indigo-600 hover:bg-indigo-700 shadow-xs transition inline-flex items-center gap-2 whitespace-nowrap cursor-pointer">
+              class="h-9 px-3 sm:px-5 rounded-xl font-extrabold text-xs text-white bg-indigo-600 hover:bg-indigo-700 shadow-xs transition inline-flex items-center justify-center gap-1.5 sm:gap-2 whitespace-nowrap cursor-pointer">
         <i class="fa-solid fa-pen-to-square"></i>
-        <span>Edit Profile</span>
+        <span class="truncate">Edit Profile</span>
       </button>
     </div>
   `;
@@ -845,74 +849,76 @@ function _renderFamilyWorkspaceDOM() {
     <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
 
       <!-- CENTERED, BALANCED & SYMMETRICAL FAMILY HEADER BANNER -->
-      <div class="bg-gradient-to-b from-slate-900 via-slate-900 to-indigo-950 text-white px-6 pt-6 pb-0">
+      <div class="bg-gradient-to-b from-slate-900 via-slate-900 to-indigo-950 text-white px-4 sm:px-6 pt-5 sm:pt-6 pb-0">
         <div class="max-w-4xl mx-auto flex flex-col items-center text-center space-y-3.5 pb-5">
 
           <!-- Row 1: Avatar + Family Name + Registration Date + Family ID -->
-          <div class="flex flex-col items-center">
-            <div class="w-14 h-14 rounded-2xl bg-white/10 border-2 border-white/20 flex items-center justify-center text-2xl font-black text-amber-400 shadow-md mb-2">
+          <div class="flex flex-col items-center max-w-full">
+            <div class="w-13 h-13 sm:w-14 sm:h-14 rounded-2xl bg-white/10 border-2 border-white/20 flex items-center justify-center text-2xl font-black text-amber-400 shadow-md mb-2 shrink-0">
               ${_esc360((family.parent_name || 'F').charAt(0).toUpperCase())}
             </div>
-            <div class="flex items-center justify-center gap-2.5 flex-wrap">
-              <h1 class="text-xl sm:text-2xl font-black tracking-tight text-white capitalize">${_esc360(family.parent_name)}</h1>
+            <div class="flex items-center justify-center gap-2 sm:gap-2.5 flex-wrap max-w-full px-2">
+              <h1 class="text-lg sm:text-2xl font-black tracking-tight text-white capitalize break-words">${_esc360(family.parent_name)}</h1>
               <span class="px-2.5 py-0.5 rounded-md bg-white/10 border border-white/20 font-mono text-xs font-extrabold text-slate-200 whitespace-nowrap">${_esc360(family.id)}</span>
             </div>
             <div class="text-xs font-mono text-slate-300 mt-0.5">${_esc360(regDate)}</div>
           </div>
 
-          <!-- Row 2: Single-Line Status & Billing Summary Strip -->
-          <div class="flex items-center justify-center gap-2 flex-wrap">
-            <span class="px-3 py-1 rounded-md border text-[11px] font-black uppercase tracking-wider whitespace-nowrap ${statusBadgeStyle}">
+          <!-- Row 2: Single-Line Status & Billing Summary Strip (No redundant 'Not Provided' email badge) -->
+          <div class="flex items-center justify-center gap-1.5 sm:gap-2 flex-wrap max-w-full">
+            <span class="px-2.5 sm:px-3 py-1 rounded-md border text-[11px] font-black uppercase tracking-wider whitespace-nowrap ${statusBadgeStyle}">
               ${_esc360(displayStatusLabel)}
             </span>
-            ${(Boolean(fNotes.converted_to_regular) || Boolean(fNotes.trial_history?.was_trial) || String(family.notes || '').includes('Converted from Trial')) ? `<span class="px-3 py-1 rounded-md bg-purple-500/20 text-purple-200 border border-purple-400/30 text-[11px] font-extrabold uppercase whitespace-nowrap" title="Originally enrolled via 3-Day Trial and converted to Regular Family"><i class="fa-solid fa-graduation-cap mr-1"></i>CONVERTED FROM TRIAL</span>` : ''}
-            ${isFamSuspended ? `<span class="px-3 py-1 rounded-md bg-rose-600 text-white text-[11px] font-black uppercase whitespace-nowrap">CLASSES SUSPENDED</span>` : ''}
-            <span class="px-3 py-1 rounded-md ${invoiceSentThisMonth ? 'bg-amber-400 text-slate-950' : 'bg-slate-800 text-slate-300 border border-slate-700'} text-[11px] font-black uppercase tracking-wide whitespace-nowrap">
-              MONTHLY INVOICE ${invoiceSentThisMonth ? '✓' : 'PENDING'}
+            ${(Boolean(fNotes.converted_to_regular) || Boolean(fNotes.trial_history?.was_trial) || String(family.notes || '').includes('Converted from Trial')) ? `<span class="px-2.5 sm:px-3 py-1 rounded-md bg-purple-500/20 text-purple-200 border border-purple-400/30 text-[11px] font-extrabold uppercase whitespace-nowrap" title="Originally enrolled via 3-Day Trial and converted to Regular Family"><i class="fa-solid fa-graduation-cap mr-1"></i>CONVERTED FROM TRIAL</span>` : ''}
+            ${isFamSuspended ? `<span class="px-2.5 sm:px-3 py-1 rounded-md bg-rose-600 text-white text-[11px] font-black uppercase whitespace-nowrap">CLASSES SUSPENDED</span>` : ''}
+            <span class="px-2.5 sm:px-3 py-1 rounded-md ${invoiceSentThisMonth ? 'bg-amber-400 text-slate-950' : 'bg-slate-800 text-slate-300 border border-slate-700'} text-[11px] font-black uppercase tracking-wide whitespace-nowrap">
+              INVOICE ${invoiceSentThisMonth ? '✓' : 'PENDING'}
             </span>
-            <span class="px-3 py-1 rounded-md bg-sky-500/20 text-sky-200 border border-sky-400/30 text-[11px] font-extrabold uppercase whitespace-nowrap">
-              MONTHLY PAYMENT &bull; ${_esc360(family.currency || 'USD')} ${_esc360(family.monthly_fee || 0)}
+            <span class="px-2.5 sm:px-3 py-1 rounded-md bg-sky-500/20 text-sky-200 border border-sky-400/30 text-[11px] font-extrabold uppercase whitespace-nowrap">
+              FEE &bull; ${_esc360(family.currency || 'USD')} ${_esc360(family.monthly_fee || 0)}
             </span>
-            <span class="px-3 py-1 rounded-md bg-indigo-500/20 text-indigo-200 border border-indigo-400/30 text-[11px] font-bold whitespace-nowrap">
-              <i class="fa-regular fa-envelope mr-1"></i> ${_esc360(displayEmail)}
-            </span>
+            ${(displayEmail && displayEmail !== 'Not Provided') ? `
+              <span class="px-2.5 sm:px-3 py-1 rounded-md bg-indigo-500/20 text-indigo-200 border border-indigo-400/30 text-[11px] font-bold whitespace-nowrap max-w-[230px] sm:max-w-[300px] truncate" title="${_esc360(displayEmail)}">
+                <i class="fa-regular fa-envelope mr-1"></i> ${_esc360(displayEmail)}
+              </span>
+            ` : ''}
           </div>
 
-          <!-- Row 3: Single-Line 4 Required Family Action Buttons (Never Wraps Unevenly) -->
-          <div class="flex items-center justify-center gap-2.5 flex-wrap pt-1">
+          <!-- Row 3: Symmetrical 2x2 Grid on Mobile / Single Row on Desktop for 4 Family Action Buttons -->
+          <div class="grid grid-cols-2 sm:flex sm:items-center sm:justify-center gap-2 sm:gap-2.5 w-full sm:w-auto pt-1">
             <button onclick="openFamilyAddStudentModal('${_esc360(family.id)}')"
-                    class="h-9 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-extrabold transition shadow-xs inline-flex items-center gap-1.5 whitespace-nowrap cursor-pointer">
+                    class="h-9 px-3 sm:px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-extrabold transition shadow-xs inline-flex items-center justify-center gap-1.5 whitespace-nowrap cursor-pointer">
               <i class="fa-solid fa-user-plus"></i>
               <span>Add Student</span>
             </button>
 
             <button onclick="openFamilySendInvoiceModal('${_esc360(family.id)}')"
-                    class="h-9 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-extrabold transition shadow-xs inline-flex items-center gap-1.5 whitespace-nowrap cursor-pointer">
+                    class="h-9 px-3 sm:px-4 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-extrabold transition shadow-xs inline-flex items-center justify-center gap-1.5 whitespace-nowrap cursor-pointer">
               <i class="fa-solid fa-file-invoice-dollar"></i>
               <span>Send Invoice</span>
             </button>
 
             <button onclick="openFamilyCustomEmailModal('${_esc360(family.id)}')"
-                    class="h-9 px-4 rounded-xl bg-sky-600 hover:bg-sky-500 text-white text-xs font-extrabold transition shadow-xs inline-flex items-center gap-1.5 whitespace-nowrap cursor-pointer">
+                    class="h-9 px-3 sm:px-4 rounded-xl bg-sky-600 hover:bg-sky-500 text-white text-xs font-extrabold transition shadow-xs inline-flex items-center justify-center gap-1.5 whitespace-nowrap cursor-pointer">
               <i class="fa-solid fa-paper-plane"></i>
               <span>Send Email</span>
             </button>
 
             <button onclick="openFamilyManualInvoiceModal('${_esc360(family.id)}')"
-                    class="h-9 px-4 rounded-xl bg-amber-600 hover:bg-amber-500 text-white text-xs font-extrabold transition shadow-xs inline-flex items-center gap-1.5 whitespace-nowrap cursor-pointer">
+                    class="h-9 px-3 sm:px-4 rounded-xl bg-amber-600 hover:bg-amber-500 text-white text-xs font-extrabold transition shadow-xs inline-flex items-center justify-center gap-1.5 whitespace-nowrap cursor-pointer">
               <i class="fa-solid fa-file-circle-plus"></i>
-              <span>Add Manual Invoice</span>
+              <span>Manual Invoice</span>
             </button>
           </div>
         </div>
 
-        <!-- Row 4: Centered 5-Tab Navigation Bar Docked to Bottom of Header -->
-        <div class="flex items-center justify-center gap-1.5 pt-2 overflow-x-auto no-scrollbar border-t border-white/10">
+        <!-- Row 4: 5-Tab Navigation Bar (justify-start on mobile so 'Students' tab is never clipped off left edge!) -->
+        <div class="flex items-center justify-start sm:justify-center gap-1.5 pt-2 overflow-x-auto no-scrollbar border-t border-white/10 px-1">
           ${navTabs.map(t => {
             const isActive = activeTab === t.id;
             return `
               <button onclick="switchFamilyWorkspaceTab('${t.id}')"
-                      class="px-5 py-2.5 rounded-t-xl text-xs font-extrabold transition inline-flex items-center gap-2 whitespace-nowrap cursor-pointer ${
+                      class="px-3.5 sm:px-5 py-2.5 rounded-t-xl text-xs font-extrabold transition inline-flex items-center gap-1.5 sm:gap-2 whitespace-nowrap cursor-pointer shrink-0 ${
                         isActive
                           ? 'bg-white text-slate-900 shadow-xs'
                           : 'bg-slate-800/90 hover:bg-slate-700 text-slate-300 hover:text-white'
