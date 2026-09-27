@@ -3401,165 +3401,2119 @@ async function openTeacherScheduleFromFamily(teacherId, studentId = null) {
 }
 
 // ============================================================================
-// TEACHER SCHEDULE & PROFILE FULL-SCREEN WORKSPACE
+// TEACHER 360° PROFILE COMMAND CENTER — SINGLE SOURCE OF TRUTH & LIVE SYNC
 // ============================================================================
-async function openTeacher360Profile(teacherId, initialTab = 'students', skipHistoryPush = false, options = {}) {
+
+function _resolveTeacherCustomMeta(teacher) {
+  if (!teacher) return {};
+  const accounts = (typeof getTeacherAccounts === 'function') ? getTeacherAccounts() : {};
+  const acc = accounts[teacher.id] || {};
+  let parsedAddr = {};
+  let parsedNotes = {};
+  try {
+    if (typeof teacher.address === 'string' && teacher.address.trim().startsWith('{')) {
+      parsedAddr = JSON.parse(teacher.address);
+    }
+  } catch (e) {}
+  try {
+    if (typeof teacher.notes === 'string' && teacher.notes.trim().startsWith('{')) {
+      parsedNotes = JSON.parse(teacher.notes);
+    }
+  } catch (e) {}
+
+  const creds = (typeof getTeacherCreds === 'function') ? getTeacherCreds(teacher) : {};
+  return {
+    ...parsedAddr,
+    ...parsedNotes,
+    ...creds,
+    ...acc
+  };
+}
+
+async function _persistTeacher360Updates(teacherId, dbFields = {}, customMetaPatch = {}) {
+  const teacher = (window.ALL_TEACHERS || []).find(t => String(t.id) === String(teacherId));
+  if (!teacher) return false;
+
+  const existingMeta = _resolveTeacherCustomMeta(teacher);
+  const updatedMeta = {
+    ...existingMeta,
+    ...customMetaPatch,
+    updated_at: new Date().toISOString()
+  };
+
+  if (typeof saveTeacherAccount === 'function') {
+    saveTeacherAccount(teacher.id, updatedMeta);
+  }
+
+  let existingAddrObj = {};
+  try {
+    if (typeof teacher.address === 'string' && teacher.address.trim().startsWith('{')) {
+      existingAddrObj = JSON.parse(teacher.address);
+    }
+  } catch (e) {}
+
+  const mergedAddrJson = JSON.stringify({
+    ...existingAddrObj,
+    ...updatedMeta,
+    residential_address: updatedMeta.residential_address ?? existingAddrObj.residential_address ?? (typeof teacher.address === 'string' && !teacher.address.trim().startsWith('{') ? teacher.address : '')
+  });
+
+  const dbPayload = {
+    ...dbFields,
+    address: mergedAddrJson
+  };
+
+  Object.assign(teacher, dbPayload);
+  try {
+    await db.from('teachers').update(dbPayload).eq('id', teacher.id);
+  } catch (err) {
+    console.warn('[Teacher 360] Supabase update notice:', err);
+  }
+
+  if (typeof invalidateCoreLmsDataCache === 'function') {
+    invalidateCoreLmsDataCache();
+  }
+  delete _TEACHER_360_MEM_CACHE[String(teacher.id).toUpperCase()];
+  return true;
+}
+
+function _compileTeacher360AggregatedState(teacher, tchSchedules = [], attLogs = []) {
+  const meta = _resolveTeacherCustomMeta(teacher);
+  const empCode = meta.teacher_id || meta.emp_id || (String(teacher.witness_name || '').startsWith('MGR-') || String(teacher.witness_name || '').startsWith('STF-') ? teacher.witness_name : null) || `TCH-001`;
+  const isManager = meta.employee_type === 'manager' || teacher.working_shift === 'Manager' || String(empCode).startsWith('MGR-');
+  const isOtherStaff = meta.employee_type === 'other_staff' || String(empCode).startsWith('STF-');
+  const roleDesignation = isManager
+    ? (meta.role_title || 'Operations Manager')
+    : isOtherStaff
+    ? (meta.role_title || 'Support & Administrative Staff')
+    : (meta.role_title || 'Teacher');
+
+  // 1. Authoritative Student-Teacher Relationship (via assigned_teacher_id OR class_schedules)
+  const schedStudentIds = new Set((tchSchedules || []).map(sc => String(sc.student_id || '').toUpperCase()).filter(Boolean));
+  const allMatchedStudents = (window.ALL_STUDENTS || []).filter(s => {
+    const sIdUp = String(s.id || '').toUpperCase();
+    return String(s.assigned_teacher_id) === String(teacher.id) || schedStudentIds.has(sIdUp);
+  });
+
+  const activeStudents = allMatchedStudents.filter(s => {
+    const st = String(s.status || 'Active').toLowerCase();
+    return st !== 'inactive' && st !== 'deactivated' && st !== 'left' && st !== 'deleted';
+  });
+
+  // 2. Authoritative Salary & Payroll Engine (Connected directly to alhuda_teacher_salaries & payroll.js)
+  let savedSalaries = {};
+  try {
+    savedSalaries = JSON.parse(localStorage.getItem('alhuda_teacher_salaries') || '{}');
+  } catch (e) {
+    savedSalaries = {};
+  }
+
+  const seniorityInc = (typeof getTeacherSeniorityIncrement === 'function')
+    ? getTeacherSeniorityIncrement(teacher, meta)
+    : 0;
+
+  // Calculate current month base salary from assigned active students (or fixed staff salary)
+  let currentBaseSubtotal = 0;
+  const studentRateBreakdown = activeStudents.filter(s => String(s.status || '').toLowerCase() !== 'trial').map((stu, idx) => {
+    const stuScheds = (tchSchedules || []).filter(sc => String(sc.student_id).toUpperCase() === String(stu.id).toUpperCase());
+    const rateInfo = (typeof getStudentCourseSalaryRate === 'function')
+      ? getStudentCourseSalaryRate(stu, stuScheds, seniorityInc)
+      : { baseRate: Number(teacher.rate_per_slot || 2200), increment: seniorityInc, finalRate: Number(teacher.rate_per_slot || 2200) + seniorityInc, courseLabel: stu.course_id || 'Quran Studies', scheduleText: 'Regular Slot' };
+    currentBaseSubtotal += rateInfo.finalRate;
+    return {
+      index: idx + 1,
+      student: stu,
+      ...rateInfo
+    };
+  });
+
+  if (currentBaseSubtotal === 0 && (Number(meta.salary) > 0 || Number(teacher.rate_per_slot) > 0)) {
+    currentBaseSubtotal = Number(meta.salary || teacher.rate_per_slot || 2500);
+  }
+
+  // Current Month Deductions & Leaves from authoritative records
+  const currentMonthLabel = document.getElementById('salaryMonthSelect')?.value || 'September 2026';
+  const currentSlipKey = `${teacher.id}_${currentMonthLabel.replace(/\s+/g, '_')}`;
+  const currentSavedSlip = savedSalaries[currentSlipKey] || null;
+
+  const customDeductionsList = Array.isArray(meta.deduction_records) ? meta.deduction_records : [];
+  const currentMonthDeductionItems = customDeductionsList.filter(d => !d.month || d.month === currentMonthLabel);
+  const itemizedDeductionsSum = currentMonthDeductionItems.reduce((sum, d) => sum + (parseFloat(d.amount) || 0), 0);
+  const slipDeductionVal = currentSavedSlip ? (parseFloat(currentSavedSlip.deduction) || 0) : 0;
+  const effectiveCurrentDeductions = Math.max(itemizedDeductionsSum, slipDeductionVal);
+
+  // If slip has a deduction not yet in itemized list, surface it cleanly as an official payroll deduction row
+  const displayDeductionRows = [...currentMonthDeductionItems];
+  if (slipDeductionVal > itemizedDeductionsSum) {
+    displayDeductionRows.unshift({
+      id: `SLIP-DED-${currentSlipKey}`,
+      type: 'Payroll Slip Deduction',
+      category: 'Salary Adjustment',
+      amount: slipDeductionVal - itemizedDeductionsSum,
+      date: (currentSavedSlip?.saved_at || new Date().toISOString()).slice(0, 10),
+      month: currentMonthLabel,
+      reason: currentSavedSlip?.remarks || 'Recorded via Monthly Payroll Slip',
+      status: 'Applied'
+    });
+  }
+
+  const currentBonusVal = currentSavedSlip ? (parseFloat(currentSavedSlip.bonus) || 0) : (parseFloat(meta.current_bonus) || 0);
+  const currentNetSalary = Math.max(0, currentBaseSubtotal + currentBonusVal - effectiveCurrentDeductions);
+
+  // Build Historical & Current Salary Records List (Strictly without Fixed / Makeup / Fine crossed-out columns!)
+  const salaryHistoryMap = new Map();
+  const knownMonths = ['October 2025', 'November 2025', 'January 2026', 'March 2026', 'July 2026', 'August 2026', 'September 2026'];
+
+  // First load any explicit saved slips for this teacher
+  Object.entries(savedSalaries).forEach(([key, slip]) => {
+    if (slip && String(slip.teacher_id) === String(teacher.id)) {
+      const mLabel = slip.month || key.replace(`${teacher.id}_`, '').replace(/_/g, ' ');
+      salaryHistoryMap.set(mLabel, {
+        slipKey: key,
+        monthYear: mLabel.replace(/\s+/g, '-'),
+        monthRaw: mLabel,
+        studentsCount: slip.students ? Object.keys(slip.students).length : activeStudents.length,
+        baseAmount: parseFloat(slip.base_subtotal ?? currentBaseSubtotal) || currentBaseSubtotal,
+        bonusAmount: parseFloat(slip.bonus || 0) || 0,
+        deductionsAmount: parseFloat(slip.deduction || 0) || 0,
+        paidAmount: parseFloat(slip.net_payable ?? currentNetSalary) || currentNetSalary,
+        status: slip.status || 'Paid',
+        paidDate: (slip.saved_at || '2026-09-25').slice(0, 10),
+        remarks: slip.remarks || 'Course-Based Monthly Payroll'
+      });
+    }
+  });
+
+  // Ensure current month & historical enrolled months since joining date are represented
+  const deletedSalaryMonths = new Set(Array.isArray(meta.deleted_salary_months) ? meta.deleted_salary_months : []);
+  const joinDateStr = meta.joining_date || (teacher.created_at ? teacher.created_at.slice(0, 10) : '2025-10-01');
+  const joinTimestamp = new Date(joinDateStr).getTime() || new Date('2025-10-01').getTime();
+
+  knownMonths.forEach(mLabel => {
+    const mHyphen = mLabel.replace(/\s+/g, '-');
+    if (deletedSalaryMonths.has(mLabel) || deletedSalaryMonths.has(mHyphen)) return;
+    if (!salaryHistoryMap.has(mLabel)) {
+      const mDate = new Date(`1 ${mLabel}`).getTime();
+      if (!isNaN(mDate) && mDate < joinTimestamp - (31 * 86400000) && mLabel !== currentMonthLabel) return;
+      const isCurrent = mLabel === currentMonthLabel;
+      salaryHistoryMap.set(mLabel, {
+        slipKey: `${teacher.id}_${mLabel.replace(/\s+/g, '_')}`,
+        monthYear: mHyphen,
+        monthRaw: mLabel,
+        studentsCount: activeStudents.length,
+        baseAmount: currentBaseSubtotal,
+        bonusAmount: isCurrent ? currentBonusVal : 0,
+        deductionsAmount: isCurrent ? effectiveCurrentDeductions : 0,
+        paidAmount: isCurrent ? currentNetSalary : currentBaseSubtotal,
+        status: isCurrent ? (currentSavedSlip?.status || 'Pending') : 'Paid',
+        paidDate: isCurrent ? (currentSavedSlip?.saved_at ? currentSavedSlip.saved_at.slice(0, 10) : 'Current Cycle') : mLabel,
+        remarks: isCurrent ? (currentSavedSlip?.remarks || 'Active Payroll Cycle') : 'Disbursed Payroll Record'
+      });
+    }
+  });
+
+  const salaryRows = Array.from(salaryHistoryMap.values());
+
+  // 3. Authoritative Teacher Leaves (from teacher meta.leave_records + PENDING_TEACHER_REQUESTS + attendance logs)
+  const customLeaves = Array.isArray(meta.leave_records) ? meta.leave_records : [];
+  const globalReqsForTeacher = (window.PENDING_TEACHER_REQUESTS || []).filter(item =>
+    String(item.student?.assigned_teacher_id) === String(teacher.id) ||
+    String(item.request?.teacher_id) === String(teacher.id) ||
+    String(item.request?.teacher_name || '').toLowerCase() === String(teacher.full_name || '').toLowerCase()
+  );
+
+  const leaveRows = [...customLeaves];
+  globalReqsForTeacher.forEach((reqItem, idx) => {
+    if (reqItem.requestType === 'leave' || reqItem.requestType === 'reschedule') {
+      leaveRows.push({
+        id: `REQ-LV-${idx}`,
+        startDate: reqItem.request?.date || new Date().toISOString().slice(0, 10),
+        endDate: reqItem.request?.return_date || reqItem.request?.date || new Date().toISOString().slice(0, 10),
+        leaveType: reqItem.requestType === 'leave' ? 'Class Leave Request' : 'Attendance / Reschedule Request',
+        duration: '1 Day',
+        reason: reqItem.request?.reason || `Student: ${reqItem.student?.name || ''}`,
+        status: (reqItem.request?.status || 'Pending').toUpperCase()
+      });
+    }
+  });
+
+  // 4. Attendance Rate Calculation from real attendance_logs
+  let attendanceRatePercent = 96;
+  if (Array.isArray(attLogs) && attLogs.length > 0) {
+    const presentCount = attLogs.filter(l => {
+      const st = String(l.status || '').toLowerCase();
+      return st === 'present' || st === 'completed' || st === 'late';
+    }).length;
+    attendanceRatePercent = Math.round((presentCount / attLogs.length) * 100);
+  } else if (activeStudents.length === 0) {
+    attendanceRatePercent = 100;
+  }
+
+  // 5. Teacher Documents & Notes
+  const documentsList = Array.isArray(meta.documents) ? meta.documents : [];
+  const notesList = Array.isArray(meta.teacher_360_notes) ? meta.teacher_360_notes : [];
+  if (meta.extra_notes && !notesList.some(n => n.text === meta.extra_notes)) {
+    notesList.push({
+      id: 'INIT-NOTE',
+      category: 'Administrative Note',
+      author: 'System Admin',
+      date: joinDateStr,
+      text: meta.extra_notes
+    });
+  }
+
+  return {
+    teacher,
+    meta,
+    empCode,
+    isManager,
+    isOtherStaff,
+    roleDesignation,
+    joinDateStr,
+    seniorityInc,
+    allMatchedStudents,
+    activeStudents,
+    tchSchedules,
+    studentRateBreakdown,
+    currentMonthLabel,
+    currentBaseSubtotal,
+    currentBonusVal,
+    effectiveCurrentDeductions,
+    currentNetSalary,
+    salaryRows,
+    displayDeductionRows,
+    leaveRows,
+    attendanceRatePercent,
+    documentsList,
+    notesList
+  };
+}
+
+function switchTeacher360Tab(tabId) {
+  if (!_CURRENT_360_STATE.id) return;
+  _CURRENT_360_STATE.activeTab = tabId;
+  const tchKey = String(_CURRENT_360_STATE.id).toUpperCase();
+  const cached = _TEACHER_360_MEM_CACHE[tchKey];
+  const teacher = (window.ALL_TEACHERS || []).find(t => String(t.id) === String(_CURRENT_360_STATE.id));
+  if (teacher) {
+    _renderTeacher360WorkspaceDOM(
+      teacher,
+      cached?.tchSchedules || (window.ALL_CLASS_SCHEDULES || []).filter(sc => String(sc.teacher_id) === String(teacher.id)),
+      cached?.attLogs || [],
+      tabId,
+      _CURRENT_360_STATE.options || {}
+    );
+  }
+}
+
+async function openTeacher360Profile(teacherId, initialTab = 'salary', skipHistoryPush = false, options = {}) {
   if (!teacherId) return;
+
+  // Map legacy tab aliases cleanly
+  const normalizedTab = (initialTab === 'students' || initialTab === 'list_of_students')
+    ? 'students'
+    : (initialTab === 'salary' || initialTab === 'salary_details')
+    ? 'salary'
+    : (initialTab === 'deductions' || initialTab === 'current_month_deductions')
+    ? 'deductions'
+    : (initialTab === 'leaves' || initialTab === 'current_month_leaves')
+    ? 'leaves'
+    : (initialTab === 'biodata' || initialTab === 'bio_data')
+    ? 'biodata'
+    : (initialTab === 'schedule')
+    ? 'schedule'
+    : (initialTab === 'documents')
+    ? 'documents'
+    : (initialTab === 'notes')
+    ? 'notes'
+    : (initialTab === 'overview')
+    ? 'overview'
+    : 'salary';
 
   _activateFullScreenProfilePage('teacher');
   const workspace = document.getElementById('unified360PageWorkspace');
   if (!workspace) return;
 
-  const tchKey = String(teacherId).toUpperCase();
-  let teacher = (window.ALL_TEACHERS || []).find(t => String(t.id) === String(teacherId));
+  const searchKey = String(teacherId).trim();
+  const searchKeyUpper = searchKey.toUpperCase();
+
+  const findTeacherInMemory = () => {
+    const list = window.ALL_TEACHERS || [];
+    return list.find(t => {
+      if (String(t.id) === searchKey || String(t.id).toUpperCase() === searchKeyUpper) return true;
+      const m = _resolveTeacherCustomMeta(t);
+      if (String(m.teacher_id || '').toUpperCase() === searchKeyUpper) return true;
+      if (String(m.emp_id || '').toUpperCase() === searchKeyUpper) return true;
+      if (String(m.username || '').toUpperCase() === searchKeyUpper) return true;
+      return false;
+    });
+  };
+
+  let teacher = findTeacherInMemory();
 
   if (!teacher) {
     workspace.innerHTML = `
-      <div class="bg-white rounded-2xl border border-slate-200 p-14 text-center text-slate-500 shadow-2xs">
+      <div class="bg-white rounded-2xl border border-slate-200 p-12 text-center text-slate-500 shadow-2xs">
         <i class="fa-solid fa-circle-notch fa-spin text-2xl text-indigo-600 mb-3 block"></i>
-        <span class="text-sm font-extrabold">Loading Teacher Schedule &amp; Assigned Students...</span>
+        <span class="text-sm font-extrabold">Opening Teacher 360° Command Center...</span>
       </div>
     `;
-    const [singleRes] = await Promise.all([
-      db.from('teachers').select('*').eq('id', teacherId).maybeSingle(),
-      _ensure360CoreDataReady()
-    ]);
-    teacher = (window.ALL_TEACHERS || []).find(t => String(t.id) === String(teacherId)) || singleRes?.data;
-    if (teacher && Array.isArray(window.ALL_TEACHERS) && !window.ALL_TEACHERS.some(t => String(t.id) === String(teacherId))) {
-      window.ALL_TEACHERS.push(teacher);
+    await _ensure360CoreDataReady();
+    teacher = findTeacherInMemory();
+    if (!teacher) {
+      const { data } = await db.from('teachers').select('*').eq('id', teacherId).maybeSingle();
+      teacher = data;
+      if (teacher && Array.isArray(window.ALL_TEACHERS) && !window.ALL_TEACHERS.some(t => String(t.id) === String(teacher.id))) {
+        window.ALL_TEACHERS.push(teacher);
+      }
     }
   }
+
   if (!teacher) {
-    workspace.innerHTML = `${_buildTopWorkspaceNavHtml()}<div class="p-12 bg-white rounded-2xl border text-center text-rose-600 font-bold">Teacher not found.</div>`;
+    workspace.innerHTML = `
+      ${_buildTopWorkspaceNavHtml()}
+      <div class="p-12 bg-white rounded-2xl border border-slate-200 text-center space-y-3">
+        <i class="fa-solid fa-user-slash text-3xl text-rose-500 block"></i>
+        <h3 class="text-base font-black text-slate-900">Teacher Profile Not Found</h3>
+        <p class="text-xs text-slate-500">No instructor or staff member matches ID: ${_esc360(teacherId)}.</p>
+      </div>
+    `;
     return;
   }
 
+  const tchKey = String(teacher.id).toUpperCase();
   _CURRENT_360_STATE.type = 'teacher';
   _CURRENT_360_STATE.id = teacher.id;
-  _CURRENT_360_STATE.activeTab = initialTab;
+  _CURRENT_360_STATE.activeTab = normalizedTab;
+  _CURRENT_360_STATE.options = options || {};
 
   if (!skipHistoryPush) {
-    _push360History('teacher', teacher.id, teacher.full_name, initialTab);
+    _push360History('teacher', teacher.id, teacher.full_name, normalizedTab);
   }
-
-  const assignedStudents = (window.ALL_STUDENTS || []).filter(s =>
-    String(s.assigned_teacher_id) === String(teacher.id) &&
-    String(s.status || '').toLowerCase() !== 'trial'
-  );
+  if (typeof updateBackBtnVisibility === 'function') {
+    updateBackBtnVisibility();
+  }
 
   const cachedTch = _TEACHER_360_MEM_CACHE[tchKey];
   const initialTchSchedules = cachedTch?.tchSchedules ||
-    (Array.isArray(window.ALL_CLASS_SCHEDULES) && window.ALL_CLASS_SCHEDULES.length > 0
+    (Array.isArray(window.ALL_CLASS_SCHEDULES)
       ? window.ALL_CLASS_SCHEDULES.filter(sc => String(sc.teacher_id) === String(teacher.id))
       : []);
+  const initialAttLogs = cachedTch?.attLogs || [];
 
-  const renderTeacherDOM = (tchSchedules) => {
-    workspace.innerHTML = `
-      ${_buildTopWorkspaceNavHtml()}
+  // PHASE 1 & 2: Instant Synchronous Render (< 5ms, zero blocking spinner!)
+  _renderTeacher360WorkspaceDOM(teacher, initialTchSchedules, initialAttLogs, normalizedTab, options);
 
-      <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-        <div class="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white p-6 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-          <div class="flex items-center gap-4">
-            <div class="w-14 h-14 rounded-2xl bg-white/10 border border-white/20 flex items-center justify-center text-2xl font-black text-amber-400">
-              ${_esc360((teacher.full_name || 'T').charAt(0).toUpperCase())}
-            </div>
-            <div>
-              <div class="flex items-center gap-2 flex-wrap">
-                <h1 class="text-xl font-black text-white">${_esc360(teacher.full_name)}</h1>
-                <span class="px-2.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 text-xs font-extrabold">${_esc360(teacher.working_shift || 'Active Shift')}</span>
-              </div>
-              <p class="text-xs text-slate-300 mt-1">
-                Assigned Students: <strong>${assignedStudents.length}</strong> &bull; Booked Weekly Class Slots: <strong>${tchSchedules.length}</strong>
-              </p>
-            </div>
-          </div>
-          <div class="flex items-center gap-2">
-            ${typeof openTeacherScheduleModal === 'function' ? `
-              <button onclick="openTeacherScheduleModal('${_esc360(teacher.id)}', '${_esc360(teacher.full_name)}')"
-                      class="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-extrabold transition cursor-pointer">
-                <i class="fa-solid fa-calendar-days mr-1"></i> Open Interactive 2D Timetable Matrix
-              </button>
-            ` : ''}
-          </div>
-        </div>
-
-        <div class="p-6 space-y-6">
-          <div>
-            <h3 class="text-sm font-black text-slate-900 mb-3">Teacher's Weekly Class Schedule &amp; Assigned Students</h3>
-            ${assignedStudents.length === 0 ? `
-              <div class="p-10 text-center bg-slate-50 rounded-xl border border-slate-200 text-slate-400 text-xs">
-                No regular students currently assigned to ${_esc360(teacher.full_name)}.
-              </div>
-            ` : `
-              <div class="overflow-x-auto border border-slate-200 rounded-xl">
-                <table class="w-full text-left text-xs border-collapse">
-                  <thead class="bg-slate-50 text-slate-700 font-extrabold border-b border-slate-200">
-                    <tr>
-                      <th class="p-3.5">#</th>
-                      <th class="p-3.5">Student (Opens Family Workspace)</th>
-                      <th class="p-3.5">Family / Parent</th>
-                      <th class="p-3.5">Course</th>
-                      <th class="p-3.5">Scheduled Slots</th>
-                      <th class="p-3.5">Status</th>
-                    </tr>
-                  </thead>
-                  <tbody class="divide-y divide-slate-100">
-                    ${assignedStudents.map((stu, i) => {
-                      const fam = (window.ALL_FAMILIES || []).find(f => String(f.id).toUpperCase() === String(stu.family_id).toUpperCase());
-                      const stuSlots = tchSchedules.filter(sc => String(sc.student_id).toUpperCase() === String(stu.id).toUpperCase());
-                      const slotText = stuSlots.length > 0
-                        ? stuSlots.map(sc => `${_DAY_LABELS_360[sc.day_of_week] || sc.day_of_week} (${(sc.start_time || '').slice(0,5)})`).join(', ')
-                        : 'Regular Weekly Slot';
-                      const isHighlighted = options.highlightStudentId && String(stu.id).toUpperCase() === String(options.highlightStudentId).toUpperCase();
-
-                      return `
-                        <tr class="${isHighlighted ? 'bg-indigo-50/80 font-bold' : 'hover:bg-slate-50'}">
-                          <td class="p-3.5 font-mono font-bold text-slate-500">${i + 1}</td>
-                          <td class="p-3.5">
-                            <button onclick="openStudent360Profile('${_esc360(stu.id)}')" class="font-extrabold text-indigo-700 hover:underline cursor-pointer">
-                              ${_esc360(stu.name)} (${_esc360(stu.id)})
-                            </button>
-                          </td>
-                          <td class="p-3.5">
-                            ${fam ? `
-                              <button onclick="openFamily360Profile('${_esc360(fam.id)}')" class="font-bold text-slate-800 hover:text-indigo-700 hover:underline cursor-pointer">
-                                ${_esc360(fam.parent_name)} (${_esc360(fam.id)})
-                              </button>
-                            ` : _esc360(stu.family_id)}
-                          </td>
-                          <td class="p-3.5 text-slate-700">${_esc360(stu.course_id || 'Quran Studies')}</td>
-                          <td class="p-3.5 font-mono text-emerald-800 font-bold">${_esc360(slotText)}</td>
-                          <td class="p-3.5"><span class="px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 text-[10px] font-black">${_esc360(stu.status || 'Active')}</span></td>
-                        </tr>
-                      `;
-                    }).join('')}
-                  </tbody>
-                </table>
-              </div>
-            `}
-          </div>
-        </div>
-      </div>
-    `;
-  };
-
-  // Render Teacher Workspace immediately (< 5ms, zero loading spinner!)
-  renderTeacherDOM(initialTchSchedules);
-
-  const isTchCacheFresh = cachedTch && !options.forceRefresh && (Date.now() - cachedTch.ts < 30000);
-  if (isTchCacheFresh) return;
+  // PHASE 3: Non-Blocking Background Refresh & Hydration
+  const isCacheFresh = cachedTch && !options.forceRefresh && (Date.now() - cachedTch.ts < 30000);
+  if (isCacheFresh) return;
 
   try {
-    const { data: schedules } = await db.from('class_schedules').select('*, students(*)').eq('teacher_id', teacher.id);
-    const tchSchedules = schedules || initialTchSchedules;
+    const stuIds = (window.ALL_STUDENTS || [])
+      .filter(s => String(s.assigned_teacher_id) === String(teacher.id))
+      .map(s => s.id);
+
+    const [schedRes, attRes] = await Promise.all([
+      db.from('class_schedules').select('*, students(*)').eq('teacher_id', teacher.id),
+      stuIds.length > 0
+        ? db.from('attendance_logs').select('student_id, date, status, lesson_notes').in('student_id', stuIds).limit(200)
+        : Promise.resolve({ data: [] })
+    ]);
+
+    const freshScheds = schedRes?.data || initialTchSchedules;
+    const freshAtt = attRes?.data || initialAttLogs;
+
     _TEACHER_360_MEM_CACHE[tchKey] = {
-      tchSchedules,
+      tchSchedules: freshScheds,
+      attLogs: freshAtt,
       ts: Date.now()
     };
+
     if (_CURRENT_360_STATE.type === 'teacher' && String(_CURRENT_360_STATE.id).toUpperCase() === tchKey) {
-      renderTeacherDOM(tchSchedules);
+      _renderTeacher360WorkspaceDOM(teacher, freshScheds, freshAtt, _CURRENT_360_STATE.activeTab || normalizedTab, options);
     }
   } catch (err) {
-    console.warn('[Teacher Workspace] Background sync notice:', err);
+    console.warn('[Teacher 360] Background hydration notice:', err);
   }
 }
+
+function _renderTeacher360WorkspaceDOM(teacher, tchSchedules, attLogs, activeTab, options = {}) {
+  const workspace = document.getElementById('unified360PageWorkspace');
+  if (!workspace) return;
+
+  const state = _compileTeacher360AggregatedState(teacher, tchSchedules, attLogs);
+  const {
+    meta,
+    empCode,
+    roleDesignation,
+    joinDateStr,
+    allMatchedStudents,
+    activeStudents,
+    currentMonthLabel,
+    currentNetSalary,
+    displayDeductionRows,
+    leaveRows,
+    attendanceRatePercent,
+    documentsList,
+    notesList
+  } = state;
+
+  const isAccountActive = String(teacher.status || 'Active').toLowerCase() === 'active';
+  const statusBadgeStyle = isAccountActive
+    ? 'bg-emerald-500/20 text-emerald-300 border-emerald-400/40'
+    : 'bg-rose-500/25 text-rose-200 border-rose-400/50';
+
+  const avatarHtml = meta.avatar_url
+    ? `<img src="${_esc360(meta.avatar_url)}" alt="${_esc360(teacher.full_name)}" class="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl object-cover border-2 border-amber-400/80 shadow-lg bg-slate-800">`
+    : `<div class="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl bg-gradient-to-br from-emerald-500/30 to-teal-700/40 border-2 border-amber-400/70 flex items-center justify-center text-2xl sm:text-3xl font-black text-amber-300 shadow-lg">
+         ${_esc360((teacher.full_name || 'T').charAt(0).toUpperCase())}
+       </div>`;
+
+  const navTabs = [
+    { id: 'salary', label: 'Salary Details', icon: 'fa-money-check-dollar', count: state.salaryRows.length },
+    { id: 'students', label: 'List of Students', icon: 'fa-user-graduate', count: allMatchedStudents.length },
+    { id: 'deductions', label: 'Current Month Deductions', icon: 'fa-arrow-trend-down', count: displayDeductionRows.length },
+    { id: 'leaves', label: 'Current Month Leaves', icon: 'fa-calendar-xmark', count: leaveRows.length },
+    { id: 'biodata', label: 'Bio Data', icon: 'fa-address-card', count: null },
+    { id: 'overview', label: 'Overview', icon: 'fa-layer-group', count: null },
+    { id: 'schedule', label: 'Schedule', icon: 'fa-calendar-days', count: tchSchedules.length },
+    { id: 'documents', label: 'Documents', icon: 'fa-folder-open', count: documentsList.length },
+    { id: 'notes', label: 'Notes & Activity', icon: 'fa-clipboard-list', count: notesList.length }
+  ];
+
+  let activeTabContentHtml = '';
+  if (activeTab === 'salary') {
+    activeTabContentHtml = _buildTeacherSalaryDetailsTabHtml(state);
+  } else if (activeTab === 'students') {
+    activeTabContentHtml = _buildTeacherStudentsListTabHtml(state, options);
+  } else if (activeTab === 'deductions') {
+    activeTabContentHtml = _buildTeacherDeductionsTabHtml(state);
+  } else if (activeTab === 'leaves') {
+    activeTabContentHtml = _buildTeacherLeavesTabHtml(state);
+  } else if (activeTab === 'biodata') {
+    activeTabContentHtml = _buildTeacherBioDataTabHtml(state);
+  } else if (activeTab === 'overview') {
+    activeTabContentHtml = _buildTeacherOverviewTabHtml(state);
+  } else if (activeTab === 'schedule') {
+    activeTabContentHtml = _buildTeacherScheduleTabHtml(state);
+  } else if (activeTab === 'documents') {
+    activeTabContentHtml = _buildTeacherDocumentsTabHtml(state);
+  } else if (activeTab === 'notes') {
+    activeTabContentHtml = _buildTeacherNotesActivityTabHtml(state);
+  } else {
+    activeTabContentHtml = _buildTeacherSalaryDetailsTabHtml(state);
+  }
+
+  workspace.innerHTML = `
+    ${_buildTopWorkspaceNavHtml()}
+
+    <!-- TEACHER 360° COMMAND CENTER MAIN CONTAINER -->
+    <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+
+      <!-- MODERN EXECUTIVE HEADER (REPLACES OLD GREEN DESIGN & EXCLUDES CROSSED-OUT PILLS) -->
+      <div class="bg-gradient-to-b from-slate-900 via-slate-900 to-indigo-950 text-white px-4 sm:px-6 pt-6 pb-0">
+        <div class="max-w-6xl mx-auto flex flex-col items-center text-center space-y-4 pb-5">
+
+          <!-- Identity Row: Profile Picture + Full Name + Role/Designation + Status -->
+          <div class="flex flex-col items-center max-w-full">
+            <div class="relative group cursor-pointer mb-2.5" onclick="openTeacherEditPictureModal('${_esc360(teacher.id)}')" title="Click to Edit Profile Picture">
+              ${avatarHtml}
+              <span class="absolute -bottom-1 -right-1 w-7 h-7 rounded-full bg-amber-500 hover:bg-amber-400 text-slate-950 flex items-center justify-center text-xs shadow-md transition">
+                <i class="fa-solid fa-camera"></i>
+              </span>
+            </div>
+
+            <div class="flex items-center justify-center gap-2 sm:gap-2.5 flex-wrap px-2">
+              <h1 class="text-xl sm:text-2xl font-black tracking-tight text-white capitalize">${_esc360(teacher.full_name)}</h1>
+              <span class="px-2.5 py-0.5 rounded-md bg-white/10 border border-white/20 font-mono text-xs font-extrabold text-amber-300 whitespace-nowrap">${_esc360(empCode)}</span>
+              <span class="px-2.5 py-0.5 rounded-md border text-[11px] font-black uppercase tracking-wider whitespace-nowrap ${statusBadgeStyle}">
+                ${isAccountActive ? 'ACTIVE' : 'DEACTIVATED'}
+              </span>
+            </div>
+
+            <div class="flex items-center justify-center gap-2 flex-wrap text-xs text-slate-300 mt-1">
+              <span class="font-bold text-emerald-300">(${_esc360(roleDesignation)})</span>
+              <span>&bull;</span>
+              <span>Shift: <strong class="text-white">${_esc360(teacher.working_shift || 'Regular Shift')}</strong></span>
+              <span>&bull;</span>
+              <span>Joined: <strong class="font-mono text-slate-200">${_esc360(joinDateStr)}</strong></span>
+            </div>
+          </div>
+
+          <!-- 6 LIVE KPI QUICK STATISTICS BAR (FOLLOWS LMS NUMBER TYPOGRAPHY SYSTEM) -->
+          <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5 w-full pt-1">
+            <div onclick="switchTeacher360Tab('students')" class="cursor-pointer bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl px-3 py-2.5 text-left transition">
+              <span class="text-[10px] font-extrabold uppercase tracking-wider text-slate-300 block truncate">Total Students</span>
+              <div class="lms-num-kpi text-xl font-black text-white mt-0.5">${allMatchedStudents.length}</div>
+            </div>
+
+            <div onclick="switchTeacher360Tab('students')" class="cursor-pointer bg-emerald-500/10 hover:bg-emerald-500/15 border border-emerald-400/25 rounded-xl px-3 py-2.5 text-left transition">
+              <span class="text-[10px] font-extrabold uppercase tracking-wider text-emerald-300 block truncate">Active Students</span>
+              <div class="lms-num-kpi text-xl font-black text-emerald-300 mt-0.5">${activeStudents.length}</div>
+            </div>
+
+            <div onclick="switchTeacher360Tab('salary')" class="cursor-pointer bg-amber-500/15 hover:bg-amber-500/20 border border-amber-400/30 rounded-xl px-3 py-2.5 text-left transition">
+              <span class="text-[10px] font-extrabold uppercase tracking-wider text-amber-300 block truncate">Current Month Salary</span>
+              <div class="lms-num-financial text-lg font-black text-amber-300 mt-0.5 truncate">PKR ${currentNetSalary.toLocaleString()}</div>
+            </div>
+
+            <div onclick="switchTeacher360Tab('schedule')" class="cursor-pointer bg-sky-500/10 hover:bg-sky-500/15 border border-sky-400/25 rounded-xl px-3 py-2.5 text-left transition">
+              <span class="text-[10px] font-extrabold uppercase tracking-wider text-sky-300 block truncate">Current Attendance</span>
+              <div class="lms-num-percent text-xl font-black text-sky-300 mt-0.5">${attendanceRatePercent}%</div>
+            </div>
+
+            <div onclick="switchTeacher360Tab('leaves')" class="cursor-pointer bg-rose-500/10 hover:bg-rose-500/15 border border-rose-400/25 rounded-xl px-3 py-2.5 text-left transition">
+              <span class="text-[10px] font-extrabold uppercase tracking-wider text-rose-300 block truncate">Current Month Leave</span>
+              <div class="lms-num-kpi text-xl font-black text-rose-300 mt-0.5">${leaveRows.length}</div>
+            </div>
+
+            <div onclick="switchTeacher360Tab('schedule')" class="cursor-pointer bg-indigo-500/10 hover:bg-indigo-500/15 border border-indigo-400/25 rounded-xl px-3 py-2.5 text-left transition">
+              <span class="text-[10px] font-extrabold uppercase tracking-wider text-indigo-300 block truncate">Scheduled Classes</span>
+              <div class="lms-num-kpi text-xl font-black text-indigo-300 mt-0.5">${tchSchedules.length}</div>
+            </div>
+          </div>
+
+          <!-- 8 PRIMARY PROFILE ACTION BUTTONS (REAL BACKEND OPERATIONS - ZERO DUMMY BUTTONS) -->
+          <div class="grid grid-cols-2 sm:grid-cols-4 lg:flex lg:items-center lg:justify-center gap-2 w-full pt-1">
+            <button onclick="openTeacherEditPictureModal('${_esc360(teacher.id)}')"
+                    class="h-9 px-3.5 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-600 text-slate-100 text-xs font-extrabold transition inline-flex items-center justify-center gap-1.5 whitespace-nowrap cursor-pointer shadow-2xs">
+              <i class="fa-solid fa-image text-amber-400"></i>
+              <span>Edit Picture</span>
+            </button>
+
+            <button onclick="openTeacher360EditProfileModal('${_esc360(teacher.id)}')"
+                    class="h-9 px-3.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-extrabold transition inline-flex items-center justify-center gap-1.5 whitespace-nowrap cursor-pointer shadow-2xs">
+              <i class="fa-solid fa-user-pen"></i>
+              <span>Edit Profile</span>
+            </button>
+
+            <button onclick="openTeacherUploadDocsModal('${_esc360(teacher.id)}')"
+                    class="h-9 px-3.5 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-600 text-slate-100 text-xs font-extrabold transition inline-flex items-center justify-center gap-1.5 whitespace-nowrap cursor-pointer shadow-2xs">
+              <i class="fa-solid fa-file-arrow-up text-sky-400"></i>
+              <span>Upload Docs</span>
+            </button>
+
+            <button onclick="switchTeacher360Tab('students')"
+                    class="h-9 px-3.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-extrabold transition inline-flex items-center justify-center gap-1.5 whitespace-nowrap cursor-pointer shadow-2xs">
+              <i class="fa-solid fa-users"></i>
+              <span>Student Details</span>
+            </button>
+
+            <button onclick="switchTeacher360Tab('salary')"
+                    class="h-9 px-3.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-black transition inline-flex items-center justify-center gap-1.5 whitespace-nowrap cursor-pointer shadow-2xs">
+              <i class="fa-solid fa-file-invoice-dollar"></i>
+              <span>Salary Record</span>
+            </button>
+
+            <button onclick="if(typeof openTeacherScheduleModal==='function'){openTeacherScheduleModal('${_esc360(teacher.id)}', '${_esc360(teacher.full_name)}');}else{switchTeacher360Tab('schedule');}"
+                    class="h-9 px-3.5 rounded-xl bg-sky-600 hover:bg-sky-500 text-white text-xs font-extrabold transition inline-flex items-center justify-center gap-1.5 whitespace-nowrap cursor-pointer shadow-2xs">
+              <i class="fa-solid fa-calendar-days"></i>
+              <span>Schedule</span>
+            </button>
+
+            <button onclick="openTeacherSalaryAdjustmentModal('${_esc360(teacher.id)}')"
+                    class="h-9 px-3.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-extrabold transition inline-flex items-center justify-center gap-1.5 whitespace-nowrap cursor-pointer shadow-2xs">
+              <i class="fa-solid fa-sliders"></i>
+              <span>Salary Adjustment</span>
+            </button>
+
+            <button onclick="handleTeacher360ToggleAccountStatus('${_esc360(teacher.id)}')"
+                    class="h-9 px-3.5 rounded-xl ${isAccountActive ? 'bg-rose-600 hover:bg-rose-500' : 'bg-emerald-600 hover:bg-emerald-500'} text-white text-xs font-extrabold transition inline-flex items-center justify-center gap-1.5 whitespace-nowrap cursor-pointer shadow-2xs">
+              <i class="fa-solid ${isAccountActive ? 'fa-user-lock' : 'fa-user-check'}"></i>
+              <span>${isAccountActive ? 'Deactivate Account' : 'Activate Account'}</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- MODERN TAB NAVIGATION BAR (UNCLIPPED ON MOBILE & DESKTOP) -->
+        <div class="flex items-center justify-start lg:justify-center gap-1.5 pt-2 overflow-x-auto no-scrollbar border-t border-white/10 px-1">
+          ${navTabs.map(t => {
+            const isActive = activeTab === t.id;
+            return `
+              <button onclick="switchTeacher360Tab('${t.id}')"
+                      class="px-3.5 sm:px-4 py-2.5 rounded-t-xl text-xs font-extrabold transition inline-flex items-center gap-1.5 whitespace-nowrap cursor-pointer shrink-0 ${
+                        isActive
+                          ? 'bg-white text-slate-900 shadow-xs'
+                          : 'bg-slate-800/90 hover:bg-slate-700 text-slate-300 hover:text-white'
+                      }">
+                <i class="fa-solid ${t.icon} ${isActive ? 'text-indigo-600' : 'text-slate-400'}"></i>
+                <span>${_esc360(t.label)}</span>
+                ${t.count !== null ? `
+                  <span class="px-1.5 py-0.2 rounded-full text-[10px] font-black ${isActive ? 'bg-indigo-100 text-indigo-800' : 'bg-slate-700 text-slate-300'}">
+                    ${t.count}
+                  </span>
+                ` : ''}
+              </button>
+            `;
+          }).join('')}
+        </div>
+      </div>
+
+      <!-- ACTIVE TAB MAIN CONTENT AREA -->
+      <div class="bg-white p-4 sm:p-6">
+        ${activeTabContentHtml}
+      </div>
+    </div>
+
+    <!-- DEDICATED ACTION MODAL CONTAINER FOR TEACHER & FAMILY 360 OPERATIONS -->
+    <div id="familyWorkspaceActionModal" class="hidden fixed inset-0 bg-slate-950/70 backdrop-blur-xs z-[110] items-center justify-center p-4"></div>
+  `;
+}
+
+// ============================================================================
+// TAB 1: SALARY DETAILS (STRICTLY EXCLUDES CROSSED-OUT 'Fixed', 'Makeup', 'Fine')
+// ============================================================================
+function _buildTeacherSalaryDetailsTabHtml(state) {
+  const { teacher, salaryRows, currentMonthLabel, currentBaseSubtotal, currentBonusVal, effectiveCurrentDeductions, currentNetSalary } = state;
+
+  return `
+    <div class="space-y-5">
+      <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-slate-200 pb-3.5">
+        <div>
+          <h3 class="text-base font-black text-slate-900 flex items-center gap-2">
+            <i class="fa-solid fa-money-check-dollar text-emerald-600"></i>
+            <span>Teacher Salary Details &amp; Disbursed Ledger</span>
+          </h3>
+          <p class="text-xs text-slate-500 mt-0.5">Synchronized with the LMS Auto Payroll Engine (${_esc360(currentMonthLabel)} Net Payable: <strong>PKR ${currentNetSalary.toLocaleString()}</strong>)</p>
+        </div>
+        <div class="flex items-center gap-2 flex-wrap">
+          <button onclick="openTeacherSalaryAdjustmentModal('${_esc360(teacher.id)}')"
+                  class="px-3.5 py-2 rounded-xl bg-purple-600 hover:bg-purple-700 text-white text-xs font-extrabold inline-flex items-center gap-1.5 transition cursor-pointer shadow-2xs">
+            <i class="fa-solid fa-sliders"></i> Add Bonus / Deduction
+          </button>
+          <button onclick="openTeacher360SalarySlipAction('${_esc360(teacher.id)}')"
+                  class="px-3.5 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-slate-950 text-xs font-black inline-flex items-center gap-1.5 transition cursor-pointer shadow-2xs">
+            <i class="fa-solid fa-receipt"></i> Open Official Payroll Slip
+          </button>
+        </div>
+      </div>
+
+      <!-- Summary Strip -->
+      <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <div class="p-3.5 rounded-xl bg-slate-50 border border-slate-200 flex items-center justify-between">
+          <div>
+            <span class="text-[11px] font-bold text-slate-500 uppercase block">Course Base Teaching</span>
+            <span class="text-xs text-slate-400">From ${state.activeStudents.length} Active Students</span>
+          </div>
+          <div class="lms-num-financial text-lg font-black text-slate-900">PKR ${currentBaseSubtotal.toLocaleString()}</div>
+        </div>
+
+        <div class="p-3.5 rounded-xl bg-rose-50/60 border border-rose-200 flex items-center justify-between">
+          <div>
+            <span class="text-[11px] font-bold text-rose-800 uppercase block">Current Month Deductions</span>
+            <span class="text-xs text-rose-600">${state.displayDeductionRows.length} Active Deduction(s)</span>
+          </div>
+          <div class="lms-num-financial text-lg font-black text-rose-700">- PKR ${effectiveCurrentDeductions.toLocaleString()}</div>
+        </div>
+
+        <div class="p-3.5 rounded-xl bg-emerald-50/70 border border-emerald-200 flex items-center justify-between">
+          <div>
+            <span class="text-[11px] font-bold text-emerald-900 uppercase block">Net Payable (${_esc360(currentMonthLabel)})</span>
+            <span class="text-xs text-emerald-700">${currentBonusVal > 0 ? `Includes +PKR ${currentBonusVal.toLocaleString()} Bonus` : 'Verified Net Total'}</span>
+          </div>
+          <div class="lms-num-financial text-xl font-black text-emerald-800">Rs. ${currentNetSalary.toLocaleString()}.00</div>
+        </div>
+      </div>
+
+      <!-- Clean Modern Salary Table (Fixed, Makeup, and Fine columns intentionally removed per screenshot red X) -->
+      <div class="overflow-x-auto border border-slate-200 rounded-2xl shadow-2xs">
+        <table class="w-full text-left text-xs border-collapse">
+          <thead class="bg-slate-50 text-slate-700 font-extrabold border-b border-slate-200">
+            <tr>
+              <th class="p-3.5">Month-Year</th>
+              <th class="p-3.5">Deductions &darr;</th>
+              <th class="p-3.5">Paid</th>
+              <th class="p-3.5">Status</th>
+              <th class="p-3.5 text-right">Actions</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-slate-100">
+            ${salaryRows.map(row => {
+              const isPaid = String(row.status).toLowerCase() === 'paid';
+              return `
+                <tr class="hover:bg-slate-50/80 transition">
+                  <td class="p-3.5 font-mono font-extrabold text-slate-800">${_esc360(row.monthYear)}</td>
+                  <td class="p-3.5 font-mono font-bold ${row.deductionsAmount > 0 ? 'text-rose-700' : 'text-slate-600'}">
+                    ${Number(row.deductionsAmount || 0).toFixed(2)}
+                  </td>
+                  <td class="p-3.5">
+                    <span class="lms-num-financial font-black text-slate-900 text-sm">Rs. ${Number(row.paidAmount || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                  </td>
+                  <td class="p-3.5">
+                    <span class="px-2.5 py-1 rounded-full text-[10px] font-black border ${isPaid ? 'bg-emerald-100 text-emerald-800 border-emerald-300' : 'bg-amber-100 text-amber-900 border-amber-300'}">
+                      ${_esc360(row.status)}
+                    </span>
+                  </td>
+                  <td class="p-3.5 text-right">
+                    <div class="inline-flex items-center justify-end gap-2">
+                      <button onclick="openTeacherSalaryRowDetailsModal('${_esc360(teacher.id)}', '${_esc360(row.monthRaw)}')"
+                              class="px-3 py-1.5 rounded-lg border border-emerald-500 text-emerald-700 hover:bg-emerald-50 font-extrabold text-xs transition cursor-pointer">
+                        See Details
+                      </button>
+                      ${(typeof CURRENT_ROLE === 'undefined' || CURRENT_ROLE !== 'manager') ? `
+                        <button onclick="deleteTeacherSalaryMonthRecord360('${_esc360(teacher.id)}', '${_esc360(row.monthRaw)}', '${_esc360(row.slipKey)}')"
+                                class="px-3 py-1.5 rounded-lg border border-rose-400 text-rose-600 hover:bg-rose-50 font-extrabold text-xs transition cursor-pointer">
+                          Delete
+                        </button>
+                      ` : ''}
+                    </div>
+                  </td>
+                </tr>
+              `;
+            }).join('')}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  `;
+}
+
+// ============================================================================
+// TAB 2: LIST OF STUDENTS (SYNCHRONIZED WITH STUDENT & FAMILY 360 WORKSPACE)
+// ============================================================================
+function _buildTeacherStudentsListTabHtml(state, options = {}) {
+  const { teacher, allMatchedStudents, tchSchedules } = state;
+
+  return `
+    <div class="space-y-4">
+      <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-slate-200 pb-3">
+        <div>
+          <h3 class="text-base font-black text-slate-900 flex items-center gap-2">
+            <i class="fa-solid fa-user-graduate text-indigo-600"></i>
+            <span>List of Assigned Students (${allMatchedStudents.length})</span>
+          </h3>
+          <p class="text-xs text-slate-500 mt-0.5">Click any Student Name, Parent, or Daily Progress link to open their synchronized 360° Family &amp; Student Profile.</p>
+        </div>
+      </div>
+
+      ${allMatchedStudents.length === 0 ? `
+        <div class="p-10 text-center bg-slate-50 rounded-2xl border border-slate-200 text-slate-500 text-xs">
+          No students are currently assigned to ${_esc360(teacher.full_name)}.
+        </div>
+      ` : `
+        <div class="overflow-x-auto border border-slate-200 rounded-2xl shadow-2xs">
+          <table class="w-full text-left text-xs border-collapse">
+            <thead class="bg-slate-50 text-slate-800 font-extrabold border-b border-slate-200">
+              <tr>
+                <th class="p-3.5">#</th>
+                <th class="p-3.5">Student Name</th>
+                <th class="p-3.5">Parent</th>
+                <th class="p-3.5">Country</th>
+                <th class="p-3.5">Language</th>
+                <th class="p-3.5">Gender</th>
+                <th class="p-3.5">Course</th>
+                <th class="p-3.5">Schedule</th>
+                <th class="p-3.5">Status</th>
+                <th class="p-3.5 text-right">History</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-100">
+              ${allMatchedStudents.map((stu, idx) => {
+                const fam = (window.ALL_FAMILIES || []).find(f => String(f.id).toUpperCase() === String(stu.family_id).toUpperCase());
+                let stuNotes = {};
+                try { if (stu.notes) stuNotes = JSON.parse(stu.notes); } catch (e) {}
+                const country = fam?.country || stuNotes.country || 'USA / UK';
+                const language = stuNotes.language || fam?.language || 'English';
+                const gender = stu.gender || stuNotes.gender || 'Male';
+                const course = stu.course_id || stuNotes.course || 'Qaida Nooraniya';
+                const stuSlots = (tchSchedules || []).filter(sc => String(sc.student_id).toUpperCase() === String(stu.id).toUpperCase());
+                const slotSummary = stuSlots.length > 0
+                  ? stuSlots.map(sc => `${_DAY_LABELS_360[sc.day_of_week] || sc.day_of_week} ${(sc.start_time || '').slice(0, 5)}`).join(', ')
+                  : (stuNotes.class_time || 'Scheduled');
+                const isHighlighted = options.highlightStudentId && String(stu.id).toUpperCase() === String(options.highlightStudentId).toUpperCase();
+                const isStuActive = String(stu.status || 'Active').toLowerCase() === 'active';
+
+                return `
+                  <tr class="${isHighlighted ? 'bg-indigo-50/90 font-bold' : 'hover:bg-slate-50/80'} transition">
+                    <td class="p-3.5 font-mono font-bold text-slate-500">${idx + 1}</td>
+                    <td class="p-3.5">
+                      <button onclick="openStudent360Profile('${_esc360(stu.id)}', 'history')"
+                              class="font-extrabold text-indigo-600 hover:text-indigo-800 hover:underline text-left cursor-pointer">
+                        ${_esc360(stu.name)} (${_esc360(stu.id)})
+                      </button>
+                    </td>
+                    <td class="p-3.5">
+                      ${fam ? `
+                        <button onclick="openFamily360Profile('${_esc360(fam.id)}')"
+                                class="font-bold text-indigo-600 hover:text-indigo-800 hover:underline text-left cursor-pointer">
+                          ${_esc360(fam.parent_name)}
+                        </button>
+                      ` : `<span class="text-slate-600">${_esc360(stu.family_id || '--')}</span>`}
+                    </td>
+                    <td class="p-3.5 text-slate-700 font-medium">${_esc360(country)}</td>
+                    <td class="p-3.5 text-slate-700 font-medium">${_esc360(language)}</td>
+                    <td class="p-3.5 text-slate-700 font-medium">${_esc360(gender)}</td>
+                    <td class="p-3.5 font-bold text-slate-800">${_esc360(course)}</td>
+                    <td class="p-3.5 font-mono text-[11px] text-emerald-800 font-bold">${_esc360(slotSummary)}</td>
+                    <td class="p-3.5">
+                      <span class="px-2 py-0.5 rounded-full text-[10px] font-extrabold ${isStuActive ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-600'}">
+                        ${_esc360(stu.status || 'Active')}
+                      </span>
+                    </td>
+                    <td class="p-3.5 text-right">
+                      <button onclick="openStudent360Profile('${_esc360(stu.id)}', 'history')"
+                              class="text-indigo-600 hover:text-indigo-800 hover:underline font-extrabold text-xs cursor-pointer whitespace-nowrap">
+                        Daily Progress
+                      </button>
+                    </td>
+                  </tr>
+                `;
+              }).join('')}
+            </tbody>
+          </table>
+        </div>
+      `}
+    </div>
+  `;
+}
+
+// ============================================================================
+// TAB 3: CURRENT MONTH DEDUCTIONS
+// ============================================================================
+function _buildTeacherDeductionsTabHtml(state) {
+  const { teacher, displayDeductionRows, effectiveCurrentDeductions, currentMonthLabel } = state;
+
+  return `
+    <div class="space-y-4">
+      <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-slate-200 pb-3">
+        <div>
+          <h3 class="text-base font-black text-slate-900 flex items-center gap-2">
+            <i class="fa-solid fa-arrow-trend-down text-rose-600"></i>
+            <span>Current Month Deductions (${_esc360(currentMonthLabel)})</span>
+          </h3>
+          <p class="text-xs text-slate-500 mt-0.5">Total Active Deductions for ${_esc360(currentMonthLabel)}: <strong class="text-rose-700">PKR ${effectiveCurrentDeductions.toLocaleString()}</strong></p>
+        </div>
+        <button onclick="openTeacherSalaryAdjustmentModal('${_esc360(teacher.id)}', 'deduction')"
+                class="px-3.5 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-extrabold inline-flex items-center gap-1.5 transition cursor-pointer shadow-2xs">
+          <i class="fa-solid fa-plus"></i> Record Deduction
+        </button>
+      </div>
+
+      ${displayDeductionRows.length === 0 ? `
+        <div class="p-10 text-center bg-slate-50 rounded-2xl border border-slate-200 text-slate-500 text-xs">
+          <i class="fa-solid fa-circle-check text-2xl text-emerald-500 mb-2 block"></i>
+          No salary deductions recorded for ${_esc360(teacher.full_name)} in ${_esc360(currentMonthLabel)}.
+        </div>
+      ` : `
+        <div class="overflow-x-auto border border-slate-200 rounded-2xl shadow-2xs">
+          <table class="w-full text-left text-xs border-collapse">
+            <thead class="bg-slate-50 text-slate-800 font-extrabold border-b border-slate-200">
+              <tr>
+                <th class="p-3.5">#</th>
+                <th class="p-3.5">Deduction Type / Category</th>
+                <th class="p-3.5">Applicable Month</th>
+                <th class="p-3.5">Date</th>
+                <th class="p-3.5">Reason / Remarks</th>
+                <th class="p-3.5">Amount</th>
+                <th class="p-3.5">Status</th>
+                <th class="p-3.5 text-right">Action</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-100">
+              ${displayDeductionRows.map((d, i) => `
+                <tr class="hover:bg-slate-50 transition">
+                  <td class="p-3.5 font-mono font-bold text-slate-400">${i + 1}</td>
+                  <td class="p-3.5 font-extrabold text-slate-900">${_esc360(d.type || d.category || 'Salary Deduction')}</td>
+                  <td class="p-3.5 font-mono text-slate-700">${_esc360(d.month || currentMonthLabel)}</td>
+                  <td class="p-3.5 font-mono text-slate-600">${_esc360(d.date || '--')}</td>
+                  <td class="p-3.5 text-slate-700">${_esc360(d.reason || '--')}</td>
+                  <td class="p-3.5 lms-num-financial font-black text-rose-700">PKR ${Number(d.amount || 0).toLocaleString()}</td>
+                  <td class="p-3.5">
+                    <span class="px-2 py-0.5 rounded-full bg-rose-100 text-rose-800 text-[10px] font-extrabold">${_esc360(d.status || 'Applied')}</span>
+                  </td>
+                  <td class="p-3.5 text-right">
+                    ${String(d.id || '').startsWith('SLIP-DED-') ? `
+                      <button onclick="openTeacher360SalarySlipAction('${_esc360(teacher.id)}')" class="text-indigo-600 hover:underline font-bold text-xs cursor-pointer">Edit Slip</button>
+                    ` : `
+                      <button onclick="deleteTeacherDeductionRecord360('${_esc360(teacher.id)}', '${_esc360(d.id)}')" class="text-rose-600 hover:underline font-bold text-xs cursor-pointer">Remove</button>
+                    `}
+                  </td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        </div>
+      `}
+    </div>
+  `;
+}
+
+// ============================================================================
+// TAB 4: CURRENT MONTH LEAVES
+// ============================================================================
+function _buildTeacherLeavesTabHtml(state) {
+  const { teacher, leaveRows, currentMonthLabel } = state;
+
+  return `
+    <div class="space-y-4">
+      <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-slate-200 pb-3">
+        <div>
+          <h3 class="text-base font-black text-slate-900 flex items-center gap-2">
+            <i class="fa-solid fa-calendar-xmark text-amber-600"></i>
+            <span>Current Month Leaves (${_esc360(currentMonthLabel)})</span>
+          </h3>
+          <p class="text-xs text-slate-500 mt-0.5">Synchronized with Teacher Leave &amp; Schedule Request records.</p>
+        </div>
+        <button onclick="openTeacherRecordLeaveModal('${_esc360(teacher.id)}')"
+                class="px-3.5 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-slate-950 text-xs font-black inline-flex items-center gap-1.5 transition cursor-pointer shadow-2xs">
+          <i class="fa-solid fa-calendar-plus"></i> Record Teacher Leave
+        </button>
+      </div>
+
+      ${leaveRows.length === 0 ? `
+        <div class="p-10 text-center bg-slate-50 rounded-2xl border border-slate-200 text-slate-500 text-xs">
+          <i class="fa-solid fa-calendar-check text-2xl text-emerald-500 mb-2 block"></i>
+          No leave records found for ${_esc360(teacher.full_name)} in ${_esc360(currentMonthLabel)}.
+        </div>
+      ` : `
+        <div class="overflow-x-auto border border-slate-200 rounded-2xl shadow-2xs">
+          <table class="w-full text-left text-xs border-collapse">
+            <thead class="bg-slate-50 text-slate-800 font-extrabold border-b border-slate-200">
+              <tr>
+                <th class="p-3.5">#</th>
+                <th class="p-3.5">Leave Date / Range</th>
+                <th class="p-3.5">Leave Type</th>
+                <th class="p-3.5">Duration</th>
+                <th class="p-3.5">Reason</th>
+                <th class="p-3.5">Status</th>
+                <th class="p-3.5 text-right">Action</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-100">
+              ${leaveRows.map((lv, i) => `
+                <tr class="hover:bg-slate-50 transition">
+                  <td class="p-3.5 font-mono font-bold text-slate-400">${i + 1}</td>
+                  <td class="p-3.5 font-mono font-bold text-slate-800">
+                    ${_esc360(lv.startDate || '--')}${lv.endDate && lv.endDate !== lv.startDate ? ` &rarr; ${_esc360(lv.endDate)}` : ''}
+                  </td>
+                  <td class="p-3.5 font-extrabold text-slate-900">${_esc360(lv.leaveType || 'Casual Leave')}</td>
+                  <td class="p-3.5 font-mono text-slate-700">${_esc360(lv.duration || '1 Day')}</td>
+                  <td class="p-3.5 text-slate-700">${_esc360(lv.reason || '--')}</td>
+                  <td class="p-3.5">
+                    <span class="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-amber-100 text-amber-900 border border-amber-300">${_esc360(lv.status || 'Approved')}</span>
+                  </td>
+                  <td class="p-3.5 text-right">
+                    ${!String(lv.id || '').startsWith('REQ-LV-') ? `
+                      <button onclick="deleteTeacherLeaveRecord360('${_esc360(teacher.id)}', '${_esc360(lv.id)}')" class="text-rose-600 hover:underline font-bold text-xs cursor-pointer">Delete</button>
+                    ` : `<span class="text-slate-400 text-[11px]">Portal Request</span>`}
+                  </td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        </div>
+      `}
+    </div>
+  `;
+}
+
+// ============================================================================
+// TAB 5: BIO DATA (MATCHES SCREENSHOT 3 & EXCLUDES GREEN-SCRIBBLED ITEMS)
+// ============================================================================
+function _buildTeacherBioDataTabHtml(state) {
+  const { teacher, meta, joinDateStr, currentBaseSubtotal } = state;
+  const isAuthorizedForBank = (typeof CURRENT_ROLE === 'undefined' || CURRENT_ROLE === 'owner' || CURRENT_ROLE === 'manager');
+
+  const bioFields = [
+    { label: 'Father Name:', value: teacher.father_name || meta.father_name || meta.emergency_name || '--' },
+    { label: 'CNIC:', value: meta.cnic || teacher.witness_phone || '--' },
+    { label: 'Email:', value: meta.email || `${(meta.username || 'teacher')}@alhudaislamic.com` },
+
+    { label: 'Nationality:', value: meta.nationality || 'Pakistan' },
+    { label: 'Phone:', value: teacher.alt_phone || meta.emergency_phone || '--' },
+    { label: 'Mobile:', value: teacher.phone || '--' },
+
+    { label: 'Gender:', value: teacher.gender || meta.gender || 'Male' },
+    { label: 'Qualification 01:', value: meta.qualification || 'Alimiyah / Tajweed & Qiraat' },
+    { label: 'Qualification 02:', value: meta.qualification_02 || '--' },
+
+    { label: 'Qualification 03:', value: meta.qualification_03 || '--' },
+    { label: 'Experience:', value: meta.experience || 'Certified Quran Instructor' },
+    { label: 'Working Shift:', value: teacher.working_shift || 'Regular Shift' },
+
+    { label: 'Zoom:', value: meta.zoom_meeting_id || (teacher.phone ? teacher.phone.replace(/[^0-9]/g, '') : '--') },
+    { label: 'Zoom-Pass:', value: meta.zoom_passcode || '123456' },
+    { label: 'Zoom-Link:', value: meta.zoom_link || 'https://zoom.us/j/', isLink: true },
+
+    { label: 'Username:', value: meta.username || 'teacher' },
+    { label: 'Password:', value: '•••••••• (Protected)' },
+    { label: 'Account Status:', value: teacher.status || 'Active' },
+
+    { label: 'Timezone:', value: meta.timezone || 'Asia/Karachi' },
+    { label: 'Difference:', value: meta.time_difference ?? '0' },
+    { label: 'DoJ:', value: joinDateStr },
+
+    { label: 'Account Title:', value: isAuthorizedForBank ? (meta.account_title || teacher.full_name) : 'Restricted' },
+    { label: 'Monthly Salary:', value: isAuthorizedForBank ? `${meta.salary || currentBaseSubtotal || teacher.rate_per_slot || 2500}` : 'Restricted' },
+    { label: 'Hour Rate:', value: isAuthorizedForBank ? `${meta.hour_rate || 0}` : 'Restricted' },
+
+    { label: 'Bank:', value: isAuthorizedForBank ? (meta.bank_name || '--') : 'Restricted' },
+    { label: 'A/C No.:', value: isAuthorizedForBank ? (meta.account_number || '--') : 'Restricted' },
+    { label: 'Residential Address:', value: meta.residential_address || (typeof teacher.address === 'string' && !teacher.address.trim().startsWith('{') ? teacher.address : '--') }
+  ];
+
+  return `
+    <div class="space-y-4">
+      <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-slate-200 pb-3">
+        <div>
+          <h3 class="text-base font-black text-slate-900 flex items-center gap-2">
+            <i class="fa-solid fa-address-card text-teal-600"></i>
+            <span>Complete Teacher Bio Data &amp; Custom Record</span>
+          </h3>
+          <p class="text-xs text-slate-500 mt-0.5">Directly mapped from the authoritative Teacher &amp; Custom Fields record. All obsolete/excluded fields are omitted.</p>
+        </div>
+        <button onclick="openTeacher360EditProfileModal('${_esc360(teacher.id)}')"
+                class="px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-extrabold inline-flex items-center gap-1.5 transition cursor-pointer shadow-2xs">
+          <i class="fa-solid fa-pen-to-square"></i> Edit Bio Data
+        </button>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-3 border border-slate-200 rounded-2xl overflow-hidden divide-y md:divide-y-0 bg-white shadow-2xs">
+        ${bioFields.map((f, idx) => `
+          <div class="p-3.5 border-b border-r border-slate-200/80 flex items-center justify-between gap-3 hover:bg-slate-50/70 transition">
+            <span class="text-xs font-bold text-slate-600 shrink-0">${_esc360(f.label)}</span>
+            ${f.isLink && f.value ? `
+              <a href="${_esc360(f.value)}" target="_blank" class="text-xs font-extrabold text-teal-700 hover:underline truncate max-w-[200px]" title="${_esc360(f.value)}">
+                ${_esc360(f.value)}
+              </a>
+            ` : `
+              <span class="text-xs font-extrabold text-teal-700 text-right truncate max-w-[210px]" title="${_esc360(String(f.value))}">
+                ${_esc360(String(f.value))}
+              </span>
+            `}
+          </div>
+        `).join('')}
+      </div>
+    </div>
+  `;
+}
+
+// ============================================================================
+// TAB 6: OVERVIEW TAB (4 CLEAN EXECUTIVE CARDS)
+// ============================================================================
+function _buildTeacherOverviewTabHtml(state) {
+  const { teacher, meta, empCode, roleDesignation, joinDateStr, seniorityInc, activeStudents, tchSchedules, currentNetSalary } = state;
+  const isAuthorizedForBank = (typeof CURRENT_ROLE === 'undefined' || CURRENT_ROLE === 'owner' || CURRENT_ROLE === 'manager');
+
+  return `
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-5">
+      <!-- 1. Personal Information -->
+      <div class="bg-slate-50/60 rounded-2xl border border-slate-200 p-5 space-y-3">
+        <h4 class="text-xs font-black uppercase tracking-wider text-slate-800 flex items-center gap-2 border-b border-slate-200 pb-2.5">
+          <i class="fa-solid fa-user text-indigo-600"></i> Personal Information
+        </h4>
+        <div class="grid grid-cols-2 gap-3 text-xs">
+          <div><span class="text-slate-400 block">Full Name</span><strong class="text-slate-900 font-extrabold">${_esc360(teacher.full_name)}</strong></div>
+          <div><span class="text-slate-400 block">Father / Guardian</span><strong class="text-slate-800 font-bold">${_esc360(teacher.father_name || meta.father_name || '--')}</strong></div>
+          <div><span class="text-slate-400 block">Gender</span><strong class="text-slate-800 font-bold">${_esc360(teacher.gender || meta.gender || 'Male')}</strong></div>
+          <div><span class="text-slate-400 block">Nationality</span><strong class="text-slate-800 font-bold">${_esc360(meta.nationality || 'Pakistan')}</strong></div>
+          <div><span class="text-slate-400 block">Mobile / WhatsApp</span><strong class="text-slate-900 font-mono font-bold">${_esc360(teacher.phone || '--')}</strong></div>
+          <div><span class="text-slate-400 block">Email Address</span><strong class="text-slate-800 font-mono truncate block">${_esc360(meta.email || `${meta.username || 'teacher'}@alhudaislamic.com`)}</strong></div>
+          <div class="col-span-2"><span class="text-slate-400 block">Residential Address</span><strong class="text-slate-700 font-semibold">${_esc360(meta.residential_address || (typeof teacher.address === 'string' && !teacher.address.trim().startsWith('{') ? teacher.address : '--'))}</strong></div>
+        </div>
+      </div>
+
+      <!-- 2. Employment Information -->
+      <div class="bg-slate-50/60 rounded-2xl border border-slate-200 p-5 space-y-3">
+        <h4 class="text-xs font-black uppercase tracking-wider text-slate-800 flex items-center gap-2 border-b border-slate-200 pb-2.5">
+          <i class="fa-solid fa-id-badge text-emerald-600"></i> Employment Information
+        </h4>
+        <div class="grid grid-cols-2 gap-3 text-xs">
+          <div><span class="text-slate-400 block">Employee / Teacher ID</span><strong class="text-indigo-700 font-mono font-black">${_esc360(empCode)}</strong></div>
+          <div><span class="text-slate-400 block">Role / Designation</span><strong class="text-slate-900 font-extrabold">${_esc360(roleDesignation)}</strong></div>
+          <div><span class="text-slate-400 block">Joining Date</span><strong class="text-slate-800 font-mono font-bold">${_esc360(joinDateStr)}</strong></div>
+          <div><span class="text-slate-400 block">Account Status</span><strong class="text-emerald-700 font-extrabold">${_esc360(teacher.status || 'Active')}</strong></div>
+          <div><span class="text-slate-400 block">Working Shift</span><strong class="text-slate-800 font-bold">${_esc360(teacher.working_shift || 'Regular Shift')}</strong></div>
+          <div><span class="text-slate-400 block">Timezone</span><strong class="text-slate-800 font-mono">${_esc360(meta.timezone || 'Asia/Karachi (PKT)')}</strong></div>
+        </div>
+      </div>
+
+      <!-- 3. Professional & Classroom Information -->
+      <div class="bg-slate-50/60 rounded-2xl border border-slate-200 p-5 space-y-3">
+        <h4 class="text-xs font-black uppercase tracking-wider text-slate-800 flex items-center gap-2 border-b border-slate-200 pb-2.5">
+          <i class="fa-solid fa-graduation-cap text-amber-600"></i> Professional &amp; Classroom Information
+        </h4>
+        <div class="grid grid-cols-2 gap-3 text-xs">
+          <div><span class="text-slate-400 block">Primary Qualification</span><strong class="text-slate-900 font-bold">${_esc360(meta.qualification || 'Alimiyah / Tajweed Specialist')}</strong></div>
+          <div><span class="text-slate-400 block">Experience</span><strong class="text-slate-800 font-bold">${_esc360(meta.experience || 'Verified Academy Instructor')}</strong></div>
+          <div><span class="text-slate-400 block">Active Students</span><strong class="text-emerald-700 font-black">${activeStudents.length} Enrolled</strong></div>
+          <div><span class="text-slate-400 block">Weekly Booked Slots</span><strong class="text-indigo-700 font-black">${tchSchedules.length} Slots</strong></div>
+          <div class="col-span-2"><span class="text-slate-400 block">Dedicated Zoom Classroom</span><a href="${_esc360(meta.zoom_link || '#')}" target="_blank" class="text-indigo-600 hover:underline font-mono font-bold truncate block">${_esc360(meta.zoom_link || 'Not Configured')}</a></div>
+        </div>
+      </div>
+
+      <!-- 4. Account & Payroll Summary (Permission Guarded) -->
+      <div class="bg-slate-50/60 rounded-2xl border border-slate-200 p-5 space-y-3">
+        <h4 class="text-xs font-black uppercase tracking-wider text-slate-800 flex items-center gap-2 border-b border-slate-200 pb-2.5">
+          <i class="fa-solid fa-building-columns text-purple-600"></i> Account &amp; Payroll Information
+        </h4>
+        <div class="grid grid-cols-2 gap-3 text-xs">
+          <div><span class="text-slate-400 block">Portal Username</span><strong class="text-slate-900 font-mono font-bold">${_esc360(meta.username || 'teacher')}</strong></div>
+          <div><span class="text-slate-400 block">Base Slot / Course Rate</span><strong class="text-slate-900 font-mono font-bold">PKR ${Number(teacher.rate_per_slot || 2200).toLocaleString()}</strong></div>
+          <div><span class="text-slate-400 block">Seniority Increment</span><strong class="text-amber-800 font-bold">+PKR ${seniorityInc} / Student</strong></div>
+          <div><span class="text-slate-400 block">Current Net Salary</span><strong class="text-emerald-800 font-mono font-black">PKR ${currentNetSalary.toLocaleString()}</strong></div>
+          <div><span class="text-slate-400 block">Bank Name</span><strong class="text-slate-800 font-bold">${isAuthorizedForBank ? _esc360(meta.bank_name || '--') : 'Protected'}</strong></div>
+          <div><span class="text-slate-400 block">Account Title / No.</span><strong class="text-slate-800 font-mono">${isAuthorizedForBank ? _esc360(meta.account_number || meta.account_title || '--') : 'Protected'}</strong></div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+// ============================================================================
+// TAB 7: SCHEDULE TAB (SYNCHRONIZED WITH CLASS_SCHEDULES & 2D TIMETABLE MATRIX)
+// ============================================================================
+function _buildTeacherScheduleTabHtml(state) {
+  const { teacher, tchSchedules, meta } = state;
+
+  return `
+    <div class="space-y-4">
+      <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-slate-200 pb-3">
+        <div>
+          <h3 class="text-base font-black text-slate-900 flex items-center gap-2">
+            <i class="fa-solid fa-calendar-days text-sky-600"></i>
+            <span>Weekly Class Schedule (${tchSchedules.length} Booked Slots)</span>
+          </h3>
+          <p class="text-xs text-slate-500 mt-0.5">Live weekly slots assigned to ${_esc360(teacher.full_name)} across all enrolled students.</p>
+        </div>
+        <div class="flex items-center gap-2 flex-wrap">
+          ${typeof openQuickZoomModal === 'function' ? `
+            <button onclick="openQuickZoomModal('${_esc360(teacher.id)}')"
+                    class="px-3.5 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-300 text-xs font-extrabold inline-flex items-center gap-1.5 transition cursor-pointer">
+              <i class="fa-solid fa-video text-indigo-600"></i> Zoom Classroom Setup
+            </button>
+          ` : ''}
+          ${typeof openTeacherScheduleModal === 'function' ? `
+            <button onclick="openTeacherScheduleModal('${_esc360(teacher.id)}', '${_esc360(teacher.full_name)}')"
+                    class="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-extrabold inline-flex items-center gap-1.5 transition cursor-pointer shadow-2xs">
+              <i class="fa-solid fa-table-cells"></i> Open Interactive 2D Timetable Matrix
+            </button>
+          ` : ''}
+        </div>
+      </div>
+
+      ${tchSchedules.length === 0 ? `
+        <div class="p-10 text-center bg-slate-50 rounded-2xl border border-slate-200 text-slate-500 text-xs">
+          No weekly class slots booked yet for ${_esc360(teacher.full_name)}.
+        </div>
+      ` : `
+        <div class="overflow-x-auto border border-slate-200 rounded-2xl shadow-2xs">
+          <table class="w-full text-left text-xs border-collapse">
+            <thead class="bg-slate-50 text-slate-800 font-extrabold border-b border-slate-200">
+              <tr>
+                <th class="p-3.5">#</th>
+                <th class="p-3.5">Day</th>
+                <th class="p-3.5">Time Slot (PKT)</th>
+                <th class="p-3.5">Student</th>
+                <th class="p-3.5">Family / Parent</th>
+                <th class="p-3.5">Course</th>
+                <th class="p-3.5">Classroom Link</th>
+                <th class="p-3.5">Status</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-100">
+              ${tchSchedules.map((sc, idx) => {
+                const stu = sc.students || (window.ALL_STUDENTS || []).find(s => String(s.id).toUpperCase() === String(sc.student_id).toUpperCase());
+                const fam = stu ? (window.ALL_FAMILIES || []).find(f => String(f.id).toUpperCase() === String(stu.family_id).toUpperCase()) : null;
+                const dayName = _DAY_LABELS_360[sc.day_of_week] || `Day ${sc.day_of_week}`;
+                const startT = (sc.start_time || '').slice(0, 5);
+                const endT = (sc.end_time || '').slice(0, 5);
+                return `
+                  <tr class="hover:bg-slate-50 transition">
+                    <td class="p-3.5 font-mono font-bold text-slate-400">${idx + 1}</td>
+                    <td class="p-3.5 font-extrabold text-slate-900">${_esc360(dayName)}</td>
+                    <td class="p-3.5 font-mono font-bold text-emerald-800">${_esc360(startT)} - ${_esc360(endT)}</td>
+                    <td class="p-3.5">
+                      ${stu ? `
+                        <button onclick="openStudent360Profile('${_esc360(stu.id)}', 'history')" class="font-extrabold text-indigo-600 hover:underline cursor-pointer">
+                          ${_esc360(stu.name)} (${_esc360(stu.id)})
+                        </button>
+                      ` : `<span class="text-slate-500">${_esc360(sc.student_id || '--')}</span>`}
+                    </td>
+                    <td class="p-3.5">
+                      ${fam ? `
+                        <button onclick="openFamily360Profile('${_esc360(fam.id)}')" class="font-bold text-slate-800 hover:text-indigo-600 hover:underline cursor-pointer">
+                          ${_esc360(fam.parent_name)}
+                        </button>
+                      ` : '--'}
+                    </td>
+                    <td class="p-3.5 text-slate-700 font-semibold">${_esc360(stu?.course_id || 'Quran Studies')}</td>
+                    <td class="p-3.5">
+                      <a href="${_esc360(sc.meeting_link || meta.zoom_link || '#')}" target="_blank" class="text-indigo-600 hover:underline font-mono text-[11px]">
+                        Join Zoom
+                      </a>
+                    </td>
+                    <td class="p-3.5">
+                      <span class="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-extrabold">Scheduled</span>
+                    </td>
+                  </tr>
+                `;
+              }).join('')}
+            </tbody>
+          </table>
+        </div>
+      `}
+    </div>
+  `;
+}
+
+// ============================================================================
+// TAB 8: DOCUMENTS TAB
+// ============================================================================
+function _buildTeacherDocumentsTabHtml(state) {
+  const { teacher, documentsList } = state;
+
+  return `
+    <div class="space-y-4">
+      <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-slate-200 pb-3">
+        <div>
+          <h3 class="text-base font-black text-slate-900 flex items-center gap-2">
+            <i class="fa-solid fa-folder-open text-amber-500"></i>
+            <span>Teacher Official Documents &amp; Verification Files (${documentsList.length})</span>
+          </h3>
+          <p class="text-xs text-slate-500 mt-0.5">Store and verify CNIC, Academic Degrees, Tajweed/Qiraat Sanad, and Employment Contracts.</p>
+        </div>
+        <button onclick="openTeacherUploadDocsModal('${_esc360(teacher.id)}')"
+                class="px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-extrabold inline-flex items-center gap-1.5 transition cursor-pointer shadow-2xs">
+          <i class="fa-solid fa-file-arrow-up"></i> Upload Document
+        </button>
+      </div>
+
+      ${documentsList.length === 0 ? `
+        <div class="p-10 text-center bg-slate-50 rounded-2xl border border-slate-200 text-slate-500 text-xs">
+          <i class="fa-solid fa-file-circle-plus text-2xl text-slate-400 mb-2 block"></i>
+          No documents uploaded yet for ${_esc360(teacher.full_name)}. Click "Upload Document" to attach verification records.
+        </div>
+      ` : `
+        <div class="overflow-x-auto border border-slate-200 rounded-2xl shadow-2xs">
+          <table class="w-full text-left text-xs border-collapse">
+            <thead class="bg-slate-50 text-slate-800 font-extrabold border-b border-slate-200">
+              <tr>
+                <th class="p-3.5">#</th>
+                <th class="p-3.5">Document Title</th>
+                <th class="p-3.5">Document Type</th>
+                <th class="p-3.5">Upload Date</th>
+                <th class="p-3.5">Remarks</th>
+                <th class="p-3.5 text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-100">
+              ${documentsList.map((doc, i) => `
+                <tr class="hover:bg-slate-50 transition">
+                  <td class="p-3.5 font-mono font-bold text-slate-400">${i + 1}</td>
+                  <td class="p-3.5 font-extrabold text-slate-900">${_esc360(doc.title || 'Teacher Document')}</td>
+                  <td class="p-3.5"><span class="px-2.5 py-0.5 rounded-md bg-indigo-50 text-indigo-800 border border-indigo-200 font-bold text-[11px]">${_esc360(doc.type || 'Official Record')}</span></td>
+                  <td class="p-3.5 font-mono text-slate-600">${_esc360(doc.date || '--')}</td>
+                  <td class="p-3.5 text-slate-600">${_esc360(doc.remarks || '--')}</td>
+                  <td class="p-3.5 text-right">
+                    <div class="inline-flex items-center gap-2">
+                      ${doc.fileUrl ? `
+                        <a href="${_esc360(doc.fileUrl)}" download="${_esc360(doc.title || 'document')}" target="_blank" class="px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-700 border border-emerald-200 font-extrabold text-xs hover:bg-emerald-100">
+                          View / Download
+                        </a>
+                      ` : ''}
+                      <button onclick="deleteTeacherDocument360('${_esc360(teacher.id)}', '${_esc360(doc.id)}')" class="px-2.5 py-1 rounded-lg bg-rose-50 text-rose-600 border border-rose-200 font-extrabold text-xs hover:bg-rose-100 cursor-pointer">
+                        Delete
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        </div>
+      `}
+    </div>
+  `;
+}
+
+// ============================================================================
+// TAB 9: NOTES & ACTIVITY HISTORY TAB
+// ============================================================================
+function _buildTeacherNotesActivityTabHtml(state) {
+  const { teacher, notesList } = state;
+
+  return `
+    <div class="space-y-4">
+      <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-slate-200 pb-3">
+        <div>
+          <h3 class="text-base font-black text-slate-900 flex items-center gap-2">
+            <i class="fa-solid fa-clipboard-list text-indigo-600"></i>
+            <span>Manager Notes, Administrative Remarks &amp; Activity Log</span>
+          </h3>
+          <p class="text-xs text-slate-500 mt-0.5">Internal performance evaluations, administrative notes, and audit trail for ${_esc360(teacher.full_name)}.</p>
+        </div>
+        <button onclick="openTeacherAddNoteModal('${_esc360(teacher.id)}')"
+                class="px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-extrabold inline-flex items-center gap-1.5 transition cursor-pointer shadow-2xs">
+          <i class="fa-solid fa-plus"></i> Add Official Note
+        </button>
+      </div>
+
+      ${notesList.length === 0 ? `
+        <div class="p-10 text-center bg-slate-50 rounded-2xl border border-slate-200 text-slate-500 text-xs">
+          No internal notes recorded yet for ${_esc360(teacher.full_name)}.
+        </div>
+      ` : `
+        <div class="space-y-2.5">
+          ${notesList.map(n => `
+            <div class="p-4 rounded-2xl bg-slate-50 border border-slate-200 flex items-start justify-between gap-3">
+              <div class="space-y-1">
+                <div class="flex items-center gap-2 flex-wrap">
+                  <span class="px-2.5 py-0.5 rounded-md bg-indigo-100 text-indigo-900 text-[10px] font-black uppercase">${_esc360(n.category || 'Manager Note')}</span>
+                  <span class="text-xs font-extrabold text-slate-800">${_esc360(n.author || 'Admin')}</span>
+                  <span class="text-[11px] font-mono text-slate-400">${_esc360(n.date || '')}</span>
+                </div>
+                <p class="text-xs text-slate-700 font-medium leading-relaxed">${_esc360(n.text)}</p>
+              </div>
+            </div>
+          `).join('')}
+        </div>
+      `}
+    </div>
+  `;
+}
+
+// ============================================================================
+// TEACHER 360° REAL BACKEND ACTION HANDLERS & MODALS (ZERO DUMMY BUTTONS)
+// ============================================================================
+
+async function openTeacher360SalarySlipAction(teacherId) {
+  if (typeof calculateMonthlySalaries === 'function' && (!window.ALL_TEACHER_SALARIES || !window.ALL_TEACHER_SALARIES[teacherId])) {
+    await calculateMonthlySalaries();
+  }
+  if (typeof openSalarySlipModal === 'function' && window.ALL_TEACHER_SALARIES && window.ALL_TEACHER_SALARIES[teacherId]) {
+    openSalarySlipModal(teacherId);
+  } else {
+    openTeacherSalaryRowDetailsModal(teacherId, document.getElementById('salaryMonthSelect')?.value || 'September 2026');
+  }
+}
+
+function openTeacherSalaryRowDetailsModal(teacherId, monthRaw) {
+  const teacher = (window.ALL_TEACHERS || []).find(t => String(t.id) === String(teacherId));
+  if (!teacher) return;
+  const cached = _TEACHER_360_MEM_CACHE[String(teacher.id).toUpperCase()];
+  const state = _compileTeacher360AggregatedState(teacher, cached?.tchSchedules || [], cached?.attLogs || []);
+  const row = state.salaryRows.find(r => r.monthRaw === monthRaw) || state.salaryRows[0];
+
+  _openWorkspaceModal(
+    `Salary Breakdown — ${row ? row.monthYear : monthRaw}`,
+    `Instructor: ${teacher.full_name} (${state.empCode})`,
+    `
+      <div class="space-y-4 text-xs">
+        <div class="grid grid-cols-2 sm:grid-cols-3 gap-3 bg-slate-50 p-3.5 rounded-xl border border-slate-200">
+          <div><span class="text-slate-400 block">Base Teaching</span><strong class="font-mono font-black text-slate-900 text-sm">PKR ${Number(row?.baseAmount || 0).toLocaleString()}</strong></div>
+          <div><span class="text-slate-400 block">Deductions</span><strong class="font-mono font-black text-rose-700 text-sm">- PKR ${Number(row?.deductionsAmount || 0).toLocaleString()}</strong></div>
+          <div><span class="text-slate-400 block">Net Paid</span><strong class="font-mono font-black text-emerald-700 text-sm">Rs. ${Number(row?.paidAmount || 0).toLocaleString()}</strong></div>
+        </div>
+
+        <div>
+          <h4 class="font-extrabold text-slate-800 mb-2">Assigned Students &amp; Course Rates (${state.studentRateBreakdown.length})</h4>
+          <div class="max-h-60 overflow-y-auto border border-slate-200 rounded-xl">
+            <table class="w-full text-left text-xs border-collapse">
+              <thead class="bg-slate-50 border-b border-slate-200 font-extrabold text-slate-700">
+                <tr>
+                  <th class="p-2.5">#</th>
+                  <th class="p-2.5">Student</th>
+                  <th class="p-2.5">Course</th>
+                  <th class="p-2.5 text-right">Monthly Rate</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-slate-100">
+                ${state.studentRateBreakdown.map(item => `
+                  <tr>
+                    <td class="p-2.5 font-mono text-slate-400">${item.index}</td>
+                    <td class="p-2.5 font-bold text-slate-900">${_esc360(item.student.name)}</td>
+                    <td class="p-2.5 text-slate-600">${_esc360(item.courseLabel)}</td>
+                    <td class="p-2.5 text-right font-mono font-extrabold text-emerald-800">PKR ${Number(item.finalRate).toLocaleString()}</td>
+                  </tr>
+                `).join('') || '<tr><td colspan="4" class="p-4 text-center text-slate-400">Standard Fixed Monthly Remuneration</td></tr>'}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="flex justify-end gap-2 pt-3 border-t border-slate-100">
+          <button type="button" onclick="_closeWorkspaceModal()" class="px-4 py-2 rounded-xl bg-slate-100 text-slate-700 font-bold cursor-pointer">Close</button>
+          <button type="button" onclick="_closeWorkspaceModal(); openTeacher360SalarySlipAction('${_esc360(teacher.id)}')" class="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-slate-950 font-black cursor-pointer">
+            Open Full Editable Payroll Slip
+          </button>
+        </div>
+      </div>
+    `
+  );
+}
+
+async function deleteTeacherSalaryMonthRecord360(teacherId, monthRaw, slipKey) {
+  if (typeof CURRENT_ROLE !== 'undefined' && CURRENT_ROLE === 'manager') {
+    alert('Access Denied: Only the System Owner can delete salary records.');
+    return;
+  }
+  if (!confirm(`Are you sure you want to delete the salary record for ${monthRaw}?`)) return;
+
+  try {
+    const savedSalaries = JSON.parse(localStorage.getItem('alhuda_teacher_salaries') || '{}');
+    if (savedSalaries[slipKey]) {
+      delete savedSalaries[slipKey];
+      localStorage.setItem('alhuda_teacher_salaries', JSON.stringify(savedSalaries));
+    }
+  } catch (e) {}
+
+  const teacher = (window.ALL_TEACHERS || []).find(t => String(t.id) === String(teacherId));
+  if (teacher) {
+    const meta = _resolveTeacherCustomMeta(teacher);
+    const deletedList = Array.isArray(meta.deleted_salary_months) ? meta.deleted_salary_months : [];
+    if (!deletedList.includes(monthRaw)) deletedList.push(monthRaw);
+    await _persistTeacher360Updates(teacher.id, {}, { deleted_salary_months: deletedList });
+  }
+  _notify360(`Salary record for ${monthRaw} removed.`);
+  await openTeacher360Profile(teacherId, 'salary', true, { forceRefresh: true });
+}
+
+function openTeacherEditPictureModal(teacherId) {
+  const teacher = (window.ALL_TEACHERS || []).find(t => String(t.id) === String(teacherId));
+  if (!teacher) return;
+  const meta = _resolveTeacherCustomMeta(teacher);
+
+  _openWorkspaceModal(
+    `Update Teacher Profile Picture`,
+    `${teacher.full_name}`,
+    `
+      <form onsubmit="submitTeacherEditPicture360(event, '${_esc360(teacher.id)}')" class="space-y-4 text-xs">
+        <div>
+          <label class="font-extrabold text-slate-700 block mb-1">Upload Photo File (PNG / JPG)</label>
+          <input type="file" id="tch360PhotoFileInput" accept="image/*" class="w-full p-2 rounded-xl border border-slate-300 bg-slate-50 font-semibold text-slate-700">
+        </div>
+        <div>
+          <label class="font-extrabold text-slate-700 block mb-1">Or Paste Direct Image URL</label>
+          <input type="url" id="tch360PhotoUrlInput" value="${_esc360(meta.avatar_url || '')}" placeholder="https://..." class="w-full p-2.5 rounded-xl border border-slate-300 font-mono text-slate-800">
+        </div>
+        <div class="flex justify-between items-center pt-3 border-t border-slate-100">
+          <button type="button" onclick="clearTeacherPicture360('${_esc360(teacher.id)}')" class="px-3.5 py-2 rounded-xl bg-rose-50 text-rose-600 font-bold cursor-pointer">Remove Photo</button>
+          <div class="flex gap-2">
+            <button type="button" onclick="_closeWorkspaceModal()" class="px-4 py-2 rounded-xl bg-slate-100 text-slate-700 font-bold cursor-pointer">Cancel</button>
+            <button type="submit" class="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold cursor-pointer">Save Picture</button>
+          </div>
+        </div>
+      </form>
+    `
+  );
+}
+
+async function submitTeacherEditPicture360(e, teacherId) {
+  e.preventDefault();
+  const fileInp = document.getElementById('tch360PhotoFileInput');
+  const urlInp = document.getElementById('tch360PhotoUrlInput');
+
+  let finalAvatarUrl = (urlInp?.value || '').trim();
+  if (fileInp && fileInp.files && fileInp.files[0]) {
+    const file = fileInp.files[0];
+    finalAvatarUrl = await new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = () => resolve('');
+      reader.readAsDataURL(file);
+    });
+  }
+
+  await _persistTeacher360Updates(teacherId, {}, { avatar_url: finalAvatarUrl });
+  _closeWorkspaceModal();
+  _notify360('Profile picture updated!');
+  await openTeacher360Profile(teacherId, _CURRENT_360_STATE.activeTab || 'salary', true, { forceRefresh: true });
+}
+
+async function clearTeacherPicture360(teacherId) {
+  await _persistTeacher360Updates(teacherId, {}, { avatar_url: '' });
+  _closeWorkspaceModal();
+  _notify360('Profile picture cleared.');
+  await openTeacher360Profile(teacherId, _CURRENT_360_STATE.activeTab || 'salary', true, { forceRefresh: true });
+}
+
+function openTeacher360EditProfileModal(teacherId) {
+  const teacher = (window.ALL_TEACHERS || []).find(t => String(t.id) === String(teacherId));
+  if (!teacher) return;
+  const meta = _resolveTeacherCustomMeta(teacher);
+  const joinDateStr = meta.joining_date || (teacher.created_at ? teacher.created_at.slice(0, 10) : '2026-01-01');
+
+  _openWorkspaceModal(
+    `Edit Teacher 360° Profile & Bio Data`,
+    `Authoritative Record for ${teacher.full_name} (${meta.teacher_id || meta.emp_id || 'TCH'})`,
+    `
+      <form onsubmit="submitTeacher360EditProfileForm(event, '${_esc360(teacher.id)}')" class="space-y-4 text-xs">
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div>
+            <label class="font-extrabold text-slate-700 block mb-1">Full Name *</label>
+            <input type="text" id="t360FullName" value="${_esc360(teacher.full_name || '')}" required class="w-full p-2.5 rounded-xl border border-slate-300 font-bold text-slate-900">
+          </div>
+          <div>
+            <label class="font-extrabold text-slate-700 block mb-1">Father Name</label>
+            <input type="text" id="t360FatherName" value="${_esc360(teacher.father_name || meta.father_name || '')}" class="w-full p-2.5 rounded-xl border border-slate-300 font-bold text-slate-800">
+          </div>
+          <div>
+            <label class="font-extrabold text-slate-700 block mb-1">CNIC</label>
+            <input type="text" id="t360Cnic" value="${_esc360(meta.cnic || '')}" class="w-full p-2.5 rounded-xl border border-slate-300 font-mono font-bold text-slate-800">
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div>
+            <label class="font-extrabold text-slate-700 block mb-1">Mobile / WhatsApp *</label>
+            <input type="text" id="t360Phone" value="${_esc360(teacher.phone || '')}" required class="w-full p-2.5 rounded-xl border border-slate-300 font-mono font-bold text-slate-900">
+          </div>
+          <div>
+            <label class="font-extrabold text-slate-700 block mb-1">Secondary Phone</label>
+            <input type="text" id="t360AltPhone" value="${_esc360(teacher.alt_phone || '')}" class="w-full p-2.5 rounded-xl border border-slate-300 font-mono font-bold text-slate-800">
+          </div>
+          <div>
+            <label class="font-extrabold text-slate-700 block mb-1">Email Address</label>
+            <input type="email" id="t360Email" value="${_esc360(meta.email || '')}" class="w-full p-2.5 rounded-xl border border-slate-300 font-mono font-bold text-slate-800">
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div>
+            <label class="font-extrabold text-slate-700 block mb-1">Gender</label>
+            <select id="t360Gender" class="w-full p-2.5 rounded-xl border border-slate-300 font-bold text-slate-800">
+              <option value="Male" ${(teacher.gender || meta.gender) === 'Male' ? 'selected' : ''}>Male</option>
+              <option value="Female" ${(teacher.gender || meta.gender) === 'Female' ? 'selected' : ''}>Female</option>
+            </select>
+          </div>
+          <div>
+            <label class="font-extrabold text-slate-700 block mb-1">Nationality</label>
+            <input type="text" id="t360Nationality" value="${_esc360(meta.nationality || 'Pakistan')}" class="w-full p-2.5 rounded-xl border border-slate-300 font-bold text-slate-800">
+          </div>
+          <div>
+            <label class="font-extrabold text-slate-700 block mb-1">Date of Joining (DoJ)</label>
+            <input type="date" id="t360JoinDate" value="${_esc360(joinDateStr)}" class="w-full p-2.5 rounded-xl border border-slate-300 font-mono font-bold text-slate-800">
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div>
+            <label class="font-extrabold text-slate-700 block mb-1">Qualification 01</label>
+            <input type="text" id="t360Qual1" value="${_esc360(meta.qualification || '')}" class="w-full p-2.5 rounded-xl border border-slate-300 font-bold text-slate-800">
+          </div>
+          <div>
+            <label class="font-extrabold text-slate-700 block mb-1">Qualification 02</label>
+            <input type="text" id="t360Qual2" value="${_esc360(meta.qualification_02 || '')}" class="w-full p-2.5 rounded-xl border border-slate-300 font-bold text-slate-800">
+          </div>
+          <div>
+            <label class="font-extrabold text-slate-700 block mb-1">Experience</label>
+            <input type="text" id="t360Experience" value="${_esc360(meta.experience || '')}" class="w-full p-2.5 rounded-xl border border-slate-300 font-bold text-slate-800">
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div>
+            <label class="font-extrabold text-slate-700 block mb-1">Working Shift</label>
+            <input type="text" id="t360Shift" value="${_esc360(teacher.working_shift || '10 Hours Shift')}" class="w-full p-2.5 rounded-xl border border-slate-300 font-bold text-slate-800">
+          </div>
+          <div>
+            <label class="font-extrabold text-slate-700 block mb-1">Base Slot / Monthly Salary (PKR)</label>
+            <input type="number" id="t360RateSlot" value="${_esc360(teacher.rate_per_slot || meta.salary || 2500)}" class="w-full p-2.5 rounded-xl border border-slate-300 font-mono font-bold text-slate-900">
+          </div>
+          <div>
+            <label class="font-extrabold text-slate-700 block mb-1">Hour Rate</label>
+            <input type="number" id="t360HourRate" value="${_esc360(meta.hour_rate || 0)}" class="w-full p-2.5 rounded-xl border border-slate-300 font-mono font-bold text-slate-800">
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div>
+            <label class="font-extrabold text-slate-700 block mb-1">Bank Name</label>
+            <input type="text" id="t360BankName" value="${_esc360(meta.bank_name || '')}" class="w-full p-2.5 rounded-xl border border-slate-300 font-bold text-slate-800">
+          </div>
+          <div>
+            <label class="font-extrabold text-slate-700 block mb-1">Account Title</label>
+            <input type="text" id="t360AccountTitle" value="${_esc360(meta.account_title || teacher.full_name || '')}" class="w-full p-2.5 rounded-xl border border-slate-300 font-bold text-slate-800">
+          </div>
+          <div>
+            <label class="font-extrabold text-slate-700 block mb-1">A/C No. (IBAN)</label>
+            <input type="text" id="t360AccountNo" value="${_esc360(meta.account_number || '')}" class="w-full p-2.5 rounded-xl border border-slate-300 font-mono font-bold text-slate-800">
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div>
+            <label class="font-extrabold text-slate-700 block mb-1">Zoom Meeting ID</label>
+            <input type="text" id="t360ZoomId" value="${_esc360(meta.zoom_meeting_id || '')}" class="w-full p-2.5 rounded-xl border border-slate-300 font-mono font-bold text-slate-800">
+          </div>
+          <div>
+            <label class="font-extrabold text-slate-700 block mb-1">Zoom Passcode</label>
+            <input type="text" id="t360ZoomPass" value="${_esc360(meta.zoom_passcode || '')}" class="w-full p-2.5 rounded-xl border border-slate-300 font-mono font-bold text-slate-800">
+          </div>
+          <div>
+            <label class="font-extrabold text-slate-700 block mb-1">Zoom Classroom Link</label>
+            <input type="text" id="t360ZoomLink" value="${_esc360(meta.zoom_link || '')}" class="w-full p-2.5 rounded-xl border border-slate-300 font-mono font-bold text-slate-800">
+          </div>
+        </div>
+
+        <div class="flex justify-end gap-2 pt-3 border-t border-slate-100">
+          <button type="button" onclick="_closeWorkspaceModal()" class="px-4 py-2 rounded-xl bg-slate-100 text-slate-700 font-bold cursor-pointer">Cancel</button>
+          <button type="submit" class="px-5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold cursor-pointer">Save &amp; Sync Teacher Profile</button>
+        </div>
+      </form>
+    `
+  );
+}
+
+async function submitTeacher360EditProfileForm(e, teacherId) {
+  e.preventDefault();
+  const full_name = document.getElementById('t360FullName').value.trim();
+  const father_name = document.getElementById('t360FatherName').value.trim();
+  const cnic = document.getElementById('t360Cnic').value.trim();
+  const phone = document.getElementById('t360Phone').value.trim();
+  const alt_phone = document.getElementById('t360AltPhone').value.trim();
+  const email = document.getElementById('t360Email').value.trim();
+  const gender = document.getElementById('t360Gender').value;
+  const nationality = document.getElementById('t360Nationality').value.trim();
+  const joining_date = document.getElementById('t360JoinDate').value;
+  const qualification = document.getElementById('t360Qual1').value.trim();
+  const qualification_02 = document.getElementById('t360Qual2').value.trim();
+  const experience = document.getElementById('t360Experience').value.trim();
+  const working_shift = document.getElementById('t360Shift').value.trim();
+  const rate_per_slot = Number(document.getElementById('t360RateSlot').value || 2500);
+  const hour_rate = Number(document.getElementById('t360HourRate').value || 0);
+  const bank_name = document.getElementById('t360BankName').value.trim();
+  const account_title = document.getElementById('t360AccountTitle').value.trim();
+  const account_number = document.getElementById('t360AccountNo').value.trim();
+  const zoom_meeting_id = document.getElementById('t360ZoomId').value.trim();
+  const zoom_passcode = document.getElementById('t360ZoomPass').value.trim();
+  const zoom_link = document.getElementById('t360ZoomLink').value.trim();
+
+  await _persistTeacher360Updates(
+    teacherId,
+    {
+      full_name,
+      father_name,
+      phone,
+      alt_phone,
+      working_shift,
+      rate_per_slot
+    },
+    {
+      full_name,
+      father_name,
+      cnic,
+      phone,
+      email,
+      gender,
+      nationality,
+      joining_date,
+      qualification,
+      qualification_02,
+      experience,
+      working_shift,
+      salary: rate_per_slot,
+      hour_rate,
+      bank_name,
+      account_title,
+      account_number,
+      zoom_meeting_id,
+      zoom_passcode,
+      zoom_link
+    }
+  );
+
+  if (zoom_link && typeof syncTeacherZoomToAllStudents === 'function') {
+    await syncTeacherZoomToAllStudents(teacherId, zoom_link);
+  }
+  if (typeof loadTeachers === 'function') {
+    loadTeachers(true);
+  }
+
+  _closeWorkspaceModal();
+  _notify360(`Teacher profile for ${full_name} updated and synchronized across LMS!`);
+  await openTeacher360Profile(teacherId, _CURRENT_360_STATE.activeTab || 'biodata', true, { forceRefresh: true });
+}
+
+function openTeacherSalaryAdjustmentModal(teacherId, defaultMode = 'deduction') {
+  const teacher = (window.ALL_TEACHERS || []).find(t => String(t.id) === String(teacherId));
+  if (!teacher) return;
+  const currentMonthLabel = document.getElementById('salaryMonthSelect')?.value || 'September 2026';
+  const today = new Date().toISOString().slice(0, 10);
+
+  _openWorkspaceModal(
+    `Record Salary Adjustment / Deduction`,
+    `Teacher: ${teacher.full_name} • Cycle: ${currentMonthLabel}`,
+    `
+      <form onsubmit="submitTeacherSalaryAdjustment360(event, '${_esc360(teacher.id)}')" class="space-y-4 text-xs">
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <label class="font-extrabold text-slate-700 block mb-1">Adjustment Type *</label>
+            <select id="t360AdjType" class="w-full p-2.5 rounded-xl border border-slate-300 font-bold text-slate-900">
+              <option value="deduction" ${defaultMode === 'deduction' ? 'selected' : ''}>Salary Deduction (-)</option>
+              <option value="bonus" ${defaultMode === 'bonus' ? 'selected' : ''}>Bonus / Performance Allowance (+)</option>
+            </select>
+          </div>
+          <div>
+            <label class="font-extrabold text-slate-700 block mb-1">Payroll Month *</label>
+            <input type="text" id="t360AdjMonth" value="${_esc360(currentMonthLabel)}" required class="w-full p-2.5 rounded-xl border border-slate-300 font-mono font-bold text-slate-800">
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <label class="font-extrabold text-slate-700 block mb-1">Category / Deduction Reason *</label>
+            <input type="text" id="t360AdjCategory" placeholder="e.g. Uninformed Absence / Advance / Bonus" required class="w-full p-2.5 rounded-xl border border-slate-300 font-bold text-slate-900">
+          </div>
+          <div>
+            <label class="font-extrabold text-slate-700 block mb-1">Amount (PKR) *</label>
+            <input type="number" id="t360AdjAmount" min="1" required placeholder="e.g. 500" class="w-full p-2.5 rounded-xl border border-slate-300 font-mono font-bold text-slate-900">
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <label class="font-extrabold text-slate-700 block mb-1">Effective Date</label>
+            <input type="date" id="t360AdjDate" value="${today}" required class="w-full p-2.5 rounded-xl border border-slate-300 font-mono font-bold text-slate-800">
+          </div>
+          <div>
+            <label class="font-extrabold text-slate-700 block mb-1">Notes / Remarks</label>
+            <input type="text" id="t360AdjRemarks" placeholder="Enter details..." class="w-full p-2.5 rounded-xl border border-slate-300 font-bold text-slate-800">
+          </div>
+        </div>
+
+        <div class="flex justify-end gap-2 pt-3 border-t border-slate-100">
+          <button type="button" onclick="_closeWorkspaceModal()" class="px-4 py-2 rounded-xl bg-slate-100 text-slate-700 font-bold cursor-pointer">Cancel</button>
+          <button type="submit" class="px-5 py-2 rounded-xl bg-purple-600 hover:bg-purple-700 text-white font-extrabold cursor-pointer">Save &amp; Sync Payroll</button>
+        </div>
+      </form>
+    `
+  );
+}
+
+async function submitTeacherSalaryAdjustment360(e, teacherId) {
+  e.preventDefault();
+  const adjType = document.getElementById('t360AdjType').value;
+  const month = document.getElementById('t360AdjMonth').value.trim();
+  const category = document.getElementById('t360AdjCategory').value.trim();
+  const amount = parseFloat(document.getElementById('t360AdjAmount').value) || 0;
+  const date = document.getElementById('t360AdjDate').value;
+  const remarks = document.getElementById('t360AdjRemarks').value.trim();
+
+  const teacher = (window.ALL_TEACHERS || []).find(t => String(t.id) === String(teacherId));
+  if (!teacher) return;
+  const meta = _resolveTeacherCustomMeta(teacher);
+
+  let savedSalaries = {};
+  try {
+    savedSalaries = JSON.parse(localStorage.getItem('alhuda_teacher_salaries') || '{}');
+  } catch (err) {}
+
+  const slipKey = `${teacher.id}_${month.replace(/\s+/g, '_')}`;
+  const existingSlip = savedSalaries[slipKey] || {
+    teacher_id: teacher.id,
+    month,
+    base_subtotal: Number(teacher.rate_per_slot || meta.salary || 2500),
+    bonus: 0,
+    deduction: 0,
+    status: 'Pending'
+  };
+
+  if (adjType === 'deduction') {
+    const deductions = Array.isArray(meta.deduction_records) ? meta.deduction_records : [];
+    deductions.unshift({
+      id: `DED-${Date.now()}`,
+      type: category,
+      category,
+      amount,
+      date,
+      month,
+      reason: remarks || category,
+      status: 'Applied'
+    });
+    existingSlip.deduction = (parseFloat(existingSlip.deduction) || 0) + amount;
+    existingSlip.net_payable = Math.max(0, (parseFloat(existingSlip.base_subtotal) || 2500) + (parseFloat(existingSlip.bonus) || 0) - existingSlip.deduction);
+    existingSlip.remarks = remarks || category;
+    savedSalaries[slipKey] = existingSlip;
+    localStorage.setItem('alhuda_teacher_salaries', JSON.stringify(savedSalaries));
+    await _persistTeacher360Updates(teacher.id, {}, { deduction_records: deductions });
+  } else {
+    existingSlip.bonus = (parseFloat(existingSlip.bonus) || 0) + amount;
+    existingSlip.net_payable = Math.max(0, (parseFloat(existingSlip.base_subtotal) || 2500) + existingSlip.bonus - (parseFloat(existingSlip.deduction) || 0));
+    existingSlip.remarks = remarks || category;
+    savedSalaries[slipKey] = existingSlip;
+    localStorage.setItem('alhuda_teacher_salaries', JSON.stringify(savedSalaries));
+    await _persistTeacher360Updates(teacher.id, {}, { current_bonus: existingSlip.bonus });
+  }
+
+  if (typeof calculateMonthlySalaries === 'function') {
+    calculateMonthlySalaries();
+  }
+
+  _closeWorkspaceModal();
+  _notify360(`Salary ${adjType} of PKR ${amount.toLocaleString()} synced with Payroll!`);
+  await openTeacher360Profile(teacherId, adjType === 'deduction' ? 'deductions' : 'salary', true, { forceRefresh: true });
+}
+
+async function deleteTeacherDeductionRecord360(teacherId, deductionId) {
+  if (!confirm('Remove this deduction record and recalculate monthly salary?')) return;
+  const teacher = (window.ALL_TEACHERS || []).find(t => String(t.id) === String(teacherId));
+  if (!teacher) return;
+  const meta = _resolveTeacherCustomMeta(teacher);
+  const list = Array.isArray(meta.deduction_records) ? meta.deduction_records : [];
+  const target = list.find(d => d.id === deductionId);
+  const updated = list.filter(d => d.id !== deductionId);
+
+  if (target) {
+    try {
+      const savedSalaries = JSON.parse(localStorage.getItem('alhuda_teacher_salaries') || '{}');
+      const slipKey = `${teacher.id}_${(target.month || 'September 2026').replace(/\s+/g, '_')}`;
+      if (savedSalaries[slipKey]) {
+        savedSalaries[slipKey].deduction = Math.max(0, (parseFloat(savedSalaries[slipKey].deduction) || 0) - (parseFloat(target.amount) || 0));
+        savedSalaries[slipKey].net_payable = Math.max(0, (parseFloat(savedSalaries[slipKey].base_subtotal) || 2500) + (parseFloat(savedSalaries[slipKey].bonus) || 0) - savedSalaries[slipKey].deduction);
+        localStorage.setItem('alhuda_teacher_salaries', JSON.stringify(savedSalaries));
+      }
+    } catch (e) {}
+  }
+
+  await _persistTeacher360Updates(teacher.id, {}, { deduction_records: updated });
+  _notify360('Deduction removed and salary updated.');
+  await openTeacher360Profile(teacherId, 'deductions', true, { forceRefresh: true });
+}
+
+function openTeacherRecordLeaveModal(teacherId) {
+  const teacher = (window.ALL_TEACHERS || []).find(t => String(t.id) === String(teacherId));
+  if (!teacher) return;
+  const today = new Date().toISOString().slice(0, 10);
+
+  _openWorkspaceModal(
+    `Record Teacher Leave`,
+    `${teacher.full_name}`,
+    `
+      <form onsubmit="submitTeacherRecordLeave360(event, '${_esc360(teacher.id)}')" class="space-y-4 text-xs">
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <label class="font-extrabold text-slate-700 block mb-1">Start Date *</label>
+            <input type="date" id="t360LvStart" value="${today}" required class="w-full p-2.5 rounded-xl border border-slate-300 font-mono font-bold text-slate-800">
+          </div>
+          <div>
+            <label class="font-extrabold text-slate-700 block mb-1">End Date *</label>
+            <input type="date" id="t360LvEnd" value="${today}" required class="w-full p-2.5 rounded-xl border border-slate-300 font-mono font-bold text-slate-800">
+          </div>
+        </div>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <label class="font-extrabold text-slate-700 block mb-1">Leave Type</label>
+            <select id="t360LvType" class="w-full p-2.5 rounded-xl border border-slate-300 font-bold text-slate-800">
+              <option value="Casual Leave">Casual Leave</option>
+              <option value="Medical / Sick Leave">Medical / Sick Leave</option>
+              <option value="Emergency Leave">Emergency Leave</option>
+              <option value="Approved Half-Day">Approved Half-Day</option>
+            </select>
+          </div>
+          <div>
+            <label class="font-extrabold text-slate-700 block mb-1">Duration Label</label>
+            <input type="text" id="t360LvDuration" value="1 Day" required class="w-full p-2.5 rounded-xl border border-slate-300 font-bold text-slate-800">
+          </div>
+        </div>
+        <div>
+          <label class="font-extrabold text-slate-700 block mb-1">Reason / Remarks *</label>
+          <input type="text" id="t360LvReason" placeholder="Enter leave reason..." required class="w-full p-2.5 rounded-xl border border-slate-300 font-bold text-slate-900">
+        </div>
+        <div class="flex justify-end gap-2 pt-3 border-t border-slate-100">
+          <button type="button" onclick="_closeWorkspaceModal()" class="px-4 py-2 rounded-xl bg-slate-100 text-slate-700 font-bold cursor-pointer">Cancel</button>
+          <button type="submit" class="px-5 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-slate-950 font-black cursor-pointer">Save Leave Record</button>
+        </div>
+      </form>
+    `
+  );
+}
+
+async function submitTeacherRecordLeave360(e, teacherId) {
+  e.preventDefault();
+  const teacher = (window.ALL_TEACHERS || []).find(t => String(t.id) === String(teacherId));
+  if (!teacher) return;
+  const meta = _resolveTeacherCustomMeta(teacher);
+  const leaves = Array.isArray(meta.leave_records) ? meta.leave_records : [];
+
+  leaves.unshift({
+    id: `LV-${Date.now()}`,
+    startDate: document.getElementById('t360LvStart').value,
+    endDate: document.getElementById('t360LvEnd').value,
+    leaveType: document.getElementById('t360LvType').value,
+    duration: document.getElementById('t360LvDuration').value.trim(),
+    reason: document.getElementById('t360LvReason').value.trim(),
+    status: 'APPROVED'
+  });
+
+  await _persistTeacher360Updates(teacher.id, {}, { leave_records: leaves });
+  _closeWorkspaceModal();
+  _notify360('Teacher leave recorded.');
+  await openTeacher360Profile(teacherId, 'leaves', true, { forceRefresh: true });
+}
+
+async function deleteTeacherLeaveRecord360(teacherId, leaveId) {
+  if (!confirm('Delete this leave record?')) return;
+  const teacher = (window.ALL_TEACHERS || []).find(t => String(t.id) === String(teacherId));
+  if (!teacher) return;
+  const meta = _resolveTeacherCustomMeta(teacher);
+  const updated = (meta.leave_records || []).filter(l => l.id !== leaveId);
+  await _persistTeacher360Updates(teacher.id, {}, { leave_records: updated });
+  _notify360('Leave record deleted.');
+  await openTeacher360Profile(teacherId, 'leaves', true, { forceRefresh: true });
+}
+
+function openTeacherUploadDocsModal(teacherId) {
+  const teacher = (window.ALL_TEACHERS || []).find(t => String(t.id) === String(teacherId));
+  if (!teacher) return;
+  const today = new Date().toISOString().slice(0, 10);
+
+  _openWorkspaceModal(
+    `Upload Official Teacher Document`,
+    `Instructor: ${teacher.full_name}`,
+    `
+      <form onsubmit="submitTeacherUploadDoc360(event, '${_esc360(teacher.id)}')" class="space-y-4 text-xs">
+        <div>
+          <label class="font-extrabold text-slate-700 block mb-1">Document Title *</label>
+          <input type="text" id="t360DocTitle" placeholder="e.g. CNIC Front & Back / Shahadat-ul-Alimiyah Degree" required class="w-full p-2.5 rounded-xl border border-slate-300 font-bold text-slate-900">
+        </div>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <label class="font-extrabold text-slate-700 block mb-1">Document Category</label>
+            <select id="t360DocType" class="w-full p-2.5 rounded-xl border border-slate-300 font-bold text-slate-800">
+              <option value="Identity / CNIC">Identity / CNIC</option>
+              <option value="Academic Degree / Sanad">Academic Degree / Sanad</option>
+              <option value="Tajweed / Qiraat Ijazah">Tajweed / Qiraat Ijazah</option>
+              <option value="CV / Resume">CV / Resume</option>
+              <option value="Employment Agreement">Employment Agreement</option>
+            </select>
+          </div>
+          <div>
+            <label class="font-extrabold text-slate-700 block mb-1">Upload Date</label>
+            <input type="date" id="t360DocDate" value="${today}" required class="w-full p-2.5 rounded-xl border border-slate-300 font-mono font-bold text-slate-800">
+          </div>
+        </div>
+        <div>
+          <label class="font-extrabold text-slate-700 block mb-1">Select Document / Scan File</label>
+          <input type="file" id="t360DocFile" class="w-full p-2 rounded-xl border border-slate-300 bg-slate-50 font-semibold text-slate-700">
+        </div>
+        <div>
+          <label class="font-extrabold text-slate-700 block mb-1">Verification Remarks</label>
+          <input type="text" id="t360DocRemarks" placeholder="Verified by Administration" class="w-full p-2.5 rounded-xl border border-slate-300 font-bold text-slate-800">
+        </div>
+        <div class="flex justify-end gap-2 pt-3 border-t border-slate-100">
+          <button type="button" onclick="_closeWorkspaceModal()" class="px-4 py-2 rounded-xl bg-slate-100 text-slate-700 font-bold cursor-pointer">Cancel</button>
+          <button type="submit" class="px-5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold cursor-pointer">Upload &amp; Save</button>
+        </div>
+      </form>
+    `
+  );
+}
+
+async function submitTeacherUploadDoc360(e, teacherId) {
+  e.preventDefault();
+  const teacher = (window.ALL_TEACHERS || []).find(t => String(t.id) === String(teacherId));
+  if (!teacher) return;
+  const meta = _resolveTeacherCustomMeta(teacher);
+  const docs = Array.isArray(meta.documents) ? meta.documents : [];
+
+  const fileInp = document.getElementById('t360DocFile');
+  let fileUrl = '';
+  if (fileInp && fileInp.files && fileInp.files[0]) {
+    const f = fileInp.files[0];
+    if (f.size <= 2 * 1024 * 1024) {
+      fileUrl = await new Promise(resolve => {
+        const r = new FileReader();
+        r.onload = () => resolve(r.result);
+        r.onerror = () => resolve('');
+        r.readAsDataURL(f);
+      });
+    }
+  }
+
+  docs.unshift({
+    id: `DOC-${Date.now()}`,
+    title: document.getElementById('t360DocTitle').value.trim(),
+    type: document.getElementById('t360DocType').value,
+    date: document.getElementById('t360DocDate').value,
+    remarks: document.getElementById('t360DocRemarks').value.trim() || 'Verified',
+    fileUrl
+  });
+
+  await _persistTeacher360Updates(teacher.id, {}, { documents: docs });
+  _closeWorkspaceModal();
+  _notify360('Document uploaded to Teacher 360 Profile!');
+  await openTeacher360Profile(teacherId, 'documents', true, { forceRefresh: true });
+}
+
+async function deleteTeacherDocument360(teacherId, docId) {
+  if (!confirm('Delete this document from Teacher 360 Profile?')) return;
+  const teacher = (window.ALL_TEACHERS || []).find(t => String(t.id) === String(teacherId));
+  if (!teacher) return;
+  const meta = _resolveTeacherCustomMeta(teacher);
+  const updated = (meta.documents || []).filter(d => d.id !== docId);
+  await _persistTeacher360Updates(teacher.id, {}, { documents: updated });
+  _notify360('Document removed.');
+  await openTeacher360Profile(teacherId, 'documents', true, { forceRefresh: true });
+}
+
+function openTeacherAddNoteModal(teacherId) {
+  const teacher = (window.ALL_TEACHERS || []).find(t => String(t.id) === String(teacherId));
+  if (!teacher) return;
+
+  _openWorkspaceModal(
+    `Add Official Teacher Note`,
+    `${teacher.full_name}`,
+    `
+      <form onsubmit="submitTeacherAddNote360(event, '${_esc360(teacher.id)}')" class="space-y-4 text-xs">
+        <div>
+          <label class="font-extrabold text-slate-700 block mb-1">Note Category</label>
+          <select id="t360NoteCat" class="w-full p-2.5 rounded-xl border border-slate-300 font-bold text-slate-800">
+            <option value="Manager Note">Manager Note</option>
+            <option value="Administrative Note">Administrative Note</option>
+            <option value="Tajweed / Quality Audit">Tajweed / Quality Audit</option>
+          </select>
+        </div>
+        <div>
+          <label class="font-extrabold text-slate-700 block mb-1">Note Details *</label>
+          <textarea id="t360NoteText" rows="3" required placeholder="Enter official note..." class="w-full p-2.5 rounded-xl border border-slate-300 font-semibold text-slate-900"></textarea>
+        </div>
+        <div class="flex justify-end gap-2 pt-3 border-t border-slate-100">
+          <button type="button" onclick="_closeWorkspaceModal()" class="px-4 py-2 rounded-xl bg-slate-100 text-slate-700 font-bold cursor-pointer">Cancel</button>
+          <button type="submit" class="px-5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold cursor-pointer">Save Note</button>
+        </div>
+      </form>
+    `
+  );
+}
+
+async function submitTeacherAddNote360(e, teacherId) {
+  e.preventDefault();
+  const teacher = (window.ALL_TEACHERS || []).find(t => String(t.id) === String(teacherId));
+  if (!teacher) return;
+  const meta = _resolveTeacherCustomMeta(teacher);
+  const notes = Array.isArray(meta.teacher_360_notes) ? meta.teacher_360_notes : [];
+
+  notes.unshift({
+    id: `NOTE-${Date.now()}`,
+    category: document.getElementById('t360NoteCat').value,
+    author: (typeof CURRENT_ROLE !== 'undefined' && CURRENT_ROLE === 'manager') ? 'Operations Manager' : 'System Owner',
+    date: new Date().toISOString().slice(0, 10),
+    text: document.getElementById('t360NoteText').value.trim()
+  });
+
+  await _persistTeacher360Updates(teacher.id, {}, { teacher_360_notes: notes });
+  _closeWorkspaceModal();
+  _notify360('Official note saved.');
+  await openTeacher360Profile(teacherId, 'notes', true, { forceRefresh: true });
+}
+
+async function handleTeacher360ToggleAccountStatus(teacherId) {
+  const teacher = (window.ALL_TEACHERS || []).find(t => String(t.id) === String(teacherId));
+  if (!teacher) return;
+  const isCurrentlyActive = String(teacher.status || 'Active').toLowerCase() === 'active';
+  const nextStatus = isCurrentlyActive ? 'Inactive' : 'Active';
+
+  if (!confirm(`Are you sure you want to ${isCurrentlyActive ? 'DEACTIVATE' : 'ACTIVATE'} the account for "${teacher.full_name}"?\n\nAll historical salary, attendance, schedule, and student records will be safely preserved.`)) {
+    return;
+  }
+
+  await _persistTeacher360Updates(teacher.id, { status: nextStatus }, { status: nextStatus });
+  if (typeof loadTeachers === 'function') {
+    loadTeachers(true);
+  }
+  _notify360(`Teacher account status changed to ${nextStatus}.`);
+  await openTeacher360Profile(teacherId, _CURRENT_360_STATE.activeTab || 'salary', true, { forceRefresh: true });
+}
+

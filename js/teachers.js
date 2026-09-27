@@ -797,8 +797,8 @@
                     </div>
                     <div>
                       <div class="flex items-center gap-1.5 flex-wrap">
-                        <h4 class="font-extrabold text-base text-slate-900 leading-tight">${t.full_name}</h4>
-                        <span class="px-1.5 py-0.5 rounded text-[9px] font-mono font-bold bg-indigo-50 text-indigo-800 border border-indigo-200">${displayId}</span>
+                        <button onclick="openTeacher360Profile('${t.id}')" class="font-extrabold text-base text-slate-900 hover:text-indigo-700 hover:underline leading-tight text-left cursor-pointer">${t.full_name}</button>
+                        <button onclick="openTeacher360Profile('${t.id}')" class="px-1.5 py-0.5 rounded text-[9px] font-mono font-bold bg-indigo-50 text-indigo-800 border border-indigo-200 cursor-pointer">${displayId}</button>
                       </div>
                       <p class="text-[11px] text-indigo-700 font-semibold">${meta.role_title || 'Operations Manager'}</p>
                     </div>
@@ -911,8 +911,8 @@
                     </div>
                     <div>
                       <div class="flex items-center gap-1.5 flex-wrap">
-                        <h4 class="font-extrabold text-base text-slate-900 leading-tight">${t.full_name}</h4>
-                        <span class="px-1.5 py-0.5 rounded text-[9px] font-mono font-bold bg-slate-100 text-slate-700 border border-slate-200">${displayId}</span>
+                        <button onclick="openTeacher360Profile('${t.id}')" class="font-extrabold text-base text-slate-900 hover:text-indigo-700 hover:underline leading-tight text-left cursor-pointer">${t.full_name}</button>
+                        <button onclick="openTeacher360Profile('${t.id}')" class="px-1.5 py-0.5 rounded text-[9px] font-mono font-bold bg-slate-100 text-slate-700 border border-slate-200 cursor-pointer">${displayId}</button>
                       </div>
                       <p class="text-[11px] text-slate-500 font-semibold">${meta.role_title || 'Non-Teaching Staff'}</p>
                     </div>

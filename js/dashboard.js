@@ -1614,9 +1614,12 @@
       switchTab('tab-families');
     }
 
-    // INTERACTIVE TEACHER OPTIONS & MATRIX MODAL
+    // INTERACTIVE TEACHER OPTIONS & MATRIX MODAL -> ROUTES TO CANONICAL TEACHER 360 PROFILE
     async function openTeacherOptionsModal(teacherId) {
       if (!teacherId) return;
+      if (typeof openTeacher360Profile === 'function') {
+        return openTeacher360Profile(teacherId);
+      }
       CURRENT_MODAL_TEACHER_ID = teacherId;
 
       let teacher = (ALL_TEACHERS || []).find(t => t.id === teacherId);
