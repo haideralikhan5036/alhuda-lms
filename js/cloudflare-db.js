@@ -267,10 +267,16 @@
     return _d1CheckPromise;
   }
 
-  async function syncLocalStoreToD1Once() {
+  async function syncLocalStoreToD1Once(force = false) {
     try {
-      if (localStorage.getItem(D1_MIGRATED_FLAG_KEY) === 'true') return;
       const store = loadLocalDbStore();
+      const hasLocalData = TABLES.some(t => Array.isArray(store[t]) && store[t].length > 0);
+      if (!hasLocalData) return false;
+
+      if (!force && localStorage.getItem(D1_MIGRATED_FLAG_KEY) === 'true') {
+        return false;
+      }
+
       for (const table of TABLES) {
         const rows = store[table] || [];
         if (rows.length > 0) {
@@ -283,10 +289,59 @@
       }
       localStorage.setItem(D1_MIGRATED_FLAG_KEY, 'true');
       console.log('[Cloudflare D1] Local records automatically synced to Cloudflare D1!');
+      return true;
     } catch (e) {
       console.warn('[Cloudflare D1] Initial sync notice:', e);
+      return false;
     }
   }
+
+  // Export all local browser cache + DB data to a downloadable JSON file (so user can transfer from old URL to Cloudflare URL in 1 click)
+  window.exportLmsFullBackupJson = function () {
+    const store = loadLocalDbStore();
+    const fullBackup = {
+      exported_at: new Date().toISOString(),
+      tables: store,
+      localStorage_keys: {}
+    };
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k && k.startsWith('alhuda_')) {
+        fullBackup.localStorage_keys[k] = localStorage.getItem(k);
+      }
+    }
+    const blob = new Blob([JSON.stringify(fullBackup, null, 2)], { type: 'application/json' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `AlHuda_LMS_Backup_${new Date().toISOString().slice(0, 10)}.json`;
+    a.click();
+  };
+
+  // Import a backup JSON file directly into Cloudflare D1 + localStorage
+  window.importLmsFullBackupJson = async function (file) {
+    if (!file) return;
+    const text = await file.text();
+    const parsed = JSON.parse(text);
+
+    if (parsed.localStorage_keys && typeof parsed.localStorage_keys === 'object') {
+      Object.entries(parsed.localStorage_keys).forEach(([k, v]) => {
+        if (typeof v === 'string') localStorage.setItem(k, v);
+      });
+    }
+
+    const store = loadLocalDbStore();
+    if (parsed.tables && typeof parsed.tables === 'object') {
+      TABLES.forEach(t => {
+        if (Array.isArray(parsed.tables[t]) && parsed.tables[t].length > 0) {
+          store[t] = parsed.tables[t];
+        }
+      });
+    }
+    saveLocalDbStore(store);
+    localStorage.removeItem(D1_MIGRATED_FLAG_KEY);
+    await syncLocalStoreToD1Once(true);
+    window.location.reload();
+  };
 
   async function executeCloudflareOrLocal(payload) {
     const isD1Live = await checkCloudflareD1Available();
