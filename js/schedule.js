@@ -77,9 +77,16 @@
     async function fetchTeacherSchedules() {
       if (!CURRENT_MATRIX_TEACHER || !CURRENT_MATRIX_TEACHER.id) return;
       const { data: scheds } = await db.from('class_schedules')
-        .select('*, students(name, status, notes)')
+        .select('*, students(id, name, status, notes, family_id)')
         .eq('teacher_id', CURRENT_MATRIX_TEACHER.id);
-      CURRENT_TEACHER_SCHEDULES = scheds || [];
+      CURRENT_TEACHER_SCHEDULES = (scheds || []).filter(slot => {
+        const stuObj = (ALL_STUDENTS || []).find(s => String(s.id) === String(slot.student_id)) || slot.students;
+        if (stuObj && typeof isStudentSelfDeactivated === 'function' && isStudentSelfDeactivated(stuObj)) {
+          db.from('class_schedules').delete().eq('id', slot.id).then(() => {});
+          return false;
+        }
+        return true;
+      });
     }
 
     function convertTrialFromSchedule(studentId) {
@@ -146,6 +153,10 @@
 
       const bookingsMap = {};
       CURRENT_TEACHER_SCHEDULES.forEach(s => {
+        const stuObj = (ALL_STUDENTS || []).find(st => String(st.id) === String(s.student_id)) || s.students;
+        if (stuObj && typeof isStudentSelfDeactivated === 'function' && isStudentSelfDeactivated(stuObj)) {
+          return;
+        }
         const key = `${s.day_of_week}_${s.start_time.slice(0, 5)}`;
         bookingsMap[key] = s;
       });
@@ -184,7 +195,7 @@
             if (slot) {
               const stuStatus = slot.students?.status;
               const isTrialSlot = slot.status === 'Trial' || stuStatus === 'Trial';
-              const stuName = slot.students?.name || 'Student';
+              const stuName = slot.students?.name || (ALL_STUDENTS || []).find(st => String(st.id) === String(slot.student_id))?.name || 'Student';
 
               if (isTrialSlot) {
                 daysCells += `
@@ -200,11 +211,16 @@
                         <button onclick="event.stopPropagation(); convertTrialFromSchedule('${slot.student_id}')" class="px-1.5 py-0.5 bg-emerald-600 hover:bg-emerald-700 text-white text-[9px] font-black rounded shadow-2xs flex items-center gap-0.5 transition" title="Regularize Student">
                           <i class="fa-solid fa-circle-check text-[8px]"></i> Regularize
                         </button>
-                        ${CURRENT_ROLE !== 'manager' ? `
-                          <button onclick="event.stopPropagation(); openMatrixSlotActionModal('${slot.id}')" class="text-rose-500 hover:text-rose-700 text-[10px] font-bold" title="Manage / Delete Scheduled Class">
-                            <i class="fa-solid fa-trash-can"></i>
+                        <div class="flex items-center gap-1 ml-auto">
+                          <button onclick="event.stopPropagation(); openShiftStudentModal('${slot.id}')" class="px-1.5 py-0.5 rounded bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 text-[9px] font-extrabold flex items-center gap-0.5 transition" title="Shift Student to Another Teacher">
+                            <i class="fa-solid fa-right-left text-[8px]"></i> Shift
                           </button>
-                        ` : ''}
+                          ${CURRENT_ROLE !== 'manager' ? `
+                            <button onclick="event.stopPropagation(); openMatrixSlotActionModal('${slot.id}')" class="px-1.5 py-0.5 rounded bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 text-[9px] font-extrabold flex items-center gap-0.5 transition" title="Delete Scheduled Class">
+                              <i class="fa-solid fa-trash-can text-[8px]"></i> Delete
+                            </button>
+                          ` : ''}
+                        </div>
                       </div>
                     </div>
                   </td>
@@ -220,12 +236,17 @@
                         <span class="px-1 py-0.2 rounded text-[8px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">REGULAR</span>
                       </div>
                       <div class="flex items-center justify-between gap-1 mt-0.5">
-                        <span class="text-[9px] text-slate-400 font-mono truncate max-w-[65px]">${slot.student_id || ''}</span>
-                        ${CURRENT_ROLE !== 'manager' ? `
-                          <button onclick="event.stopPropagation(); openMatrixSlotActionModal('${slot.id}')" class="text-rose-500 hover:text-rose-700 text-[10px] font-bold ml-auto" title="Manage / Delete Scheduled Class">
-                            <i class="fa-solid fa-trash-can"></i>
+                        <span class="text-[9px] text-slate-400 font-mono truncate max-w-[55px]">${slot.student_id || ''}</span>
+                        <div class="flex items-center gap-1 ml-auto">
+                          <button onclick="event.stopPropagation(); openShiftStudentModal('${slot.id}')" class="px-1.5 py-0.5 rounded bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 text-[9px] font-extrabold flex items-center gap-0.5 transition" title="Shift Student to Another Teacher">
+                            <i class="fa-solid fa-right-left text-[8px]"></i> Shift
                           </button>
-                        ` : ''}
+                          ${CURRENT_ROLE !== 'manager' ? `
+                            <button onclick="event.stopPropagation(); openMatrixSlotActionModal('${slot.id}')" class="px-1.5 py-0.5 rounded bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 text-[9px] font-extrabold flex items-center gap-0.5 transition" title="Delete Scheduled Class">
+                              <i class="fa-solid fa-trash-can text-[8px]"></i> Delete
+                            </button>
+                          ` : ''}
+                        </div>
                       </div>
                     </div>
                   </td>
@@ -575,6 +596,453 @@
     async function handleDeleteSlot(scheduleId) {
       openMatrixSlotActionModal(scheduleId);
     }
+
+    // =========================================================================
+    // WORKFLOW #1 — SHIFT STUDENT FROM ONE TEACHER TO ANOTHER TEACHER
+    // =========================================================================
+    let _SHIFT_MODAL_ACTIVE_STUDENT_SLOTS = [];
+
+    function openShiftStudentFromSlotAction() {
+      if (!ACTIVE_SLOT_ACTION_CONTEXT) return;
+      const { scheduleId, studentId, teacherId } = ACTIVE_SLOT_ACTION_CONTEXT;
+      closeModal('modalMatrixSlotActions');
+      openShiftStudentModal(scheduleId || studentId, teacherId);
+    }
+
+    async function openShiftStudentModal(scheduleIdOrStudentId, explicitFromTeacherId = null) {
+      const slot = (CURRENT_TEACHER_SCHEDULES || []).find(s => String(s.id) === String(scheduleIdOrStudentId));
+      const studentId = slot ? slot.student_id : String(scheduleIdOrStudentId || '').trim();
+      const fromTeacherId = explicitFromTeacherId || (slot ? slot.teacher_id : (CURRENT_MATRIX_TEACHER ? CURRENT_MATRIX_TEACHER.id : null));
+
+      if (!studentId || !fromTeacherId) {
+        if (typeof lmsNotify === 'function') {
+          lmsNotify('Could not determine student or current teacher for shifting.', { type: 'error' });
+        }
+        return;
+      }
+
+      const stuObj = (ALL_STUDENTS || []).find(s => String(s.id) === String(studentId));
+      const stuName = stuObj?.name || slot?.students?.name || studentId;
+      const fromTchObj = (ALL_TEACHERS || []).find(t => String(t.id) === String(fromTeacherId)) || CURRENT_MATRIX_TEACHER;
+      const fromTeacherName = fromTchObj?.full_name || fromTeacherId;
+
+      // Fetch all active schedule slots for this student with Teacher A
+      let studentSlots = [];
+      try {
+        const { data: dbSlots, error } = await db
+          .from('class_schedules')
+          .select('*')
+          .eq('student_id', studentId)
+          .eq('teacher_id', fromTeacherId);
+        if (!error && Array.isArray(dbSlots)) {
+          studentSlots = dbSlots;
+        } else {
+          studentSlots = (CURRENT_TEACHER_SCHEDULES || []).filter(
+            s => String(s.student_id) === String(studentId) && String(s.teacher_id) === String(fromTeacherId)
+          );
+        }
+      } catch (e) {
+        studentSlots = (CURRENT_TEACHER_SCHEDULES || []).filter(
+          s => String(s.student_id) === String(studentId) && String(s.teacher_id) === String(fromTeacherId)
+        );
+      }
+
+      studentSlots.sort((a, b) => Number(a.day_of_week) - Number(b.day_of_week) || String(a.start_time).localeCompare(String(b.start_time)));
+      _SHIFT_MODAL_ACTIVE_STUDENT_SLOTS = studentSlots;
+
+      // Populate modal UI fields
+      const stuIdInput = document.getElementById('shiftModalStudentId');
+      const fromTchInput = document.getElementById('shiftModalFromTeacherId');
+      const currTchEl = document.getElementById('shiftModalCurrentTeacherName');
+      const stuNameEl = document.getElementById('shiftModalStudentName');
+      const stuCodeEl = document.getElementById('shiftModalStudentCode');
+      const slotsSummaryEl = document.getElementById('shiftModalSlotsSummary');
+      const selectEl = document.getElementById('shiftModalTargetTeacherSelect');
+      const conflictBox = document.getElementById('shiftModalConflictBox');
+
+      if (stuIdInput) stuIdInput.value = studentId;
+      if (fromTchInput) fromTchInput.value = fromTeacherId;
+      if (currTchEl) currTchEl.textContent = `${fromTeacherName} (${fromTeacherId})`;
+      if (stuNameEl) stuNameEl.textContent = stuName;
+      if (stuCodeEl) stuCodeEl.textContent = studentId;
+      if (conflictBox) conflictBox.classList.add('hidden');
+
+      if (slotsSummaryEl) {
+        if (studentSlots.length === 0) {
+          slotsSummaryEl.innerHTML = `<span class="text-slate-400 italic">Roster assignment only (no weekly slots currently booked)</span>`;
+        } else {
+          slotsSummaryEl.innerHTML = studentSlots.map(s => {
+            const dName = DAY_NAMES[Number(s.day_of_week)] || `Day ${s.day_of_week}`;
+            const st = String(s.start_time || '').slice(0, 5);
+            const et = String(s.end_time || '').slice(0, 5);
+            return `<span class="inline-block px-2 py-0.5 mr-1 mb-1 rounded bg-indigo-50 text-indigo-900 border border-indigo-200 font-mono text-[10px] font-bold">${dName} • ${st}${et ? '-' + et : ''}</span>`;
+          }).join('');
+        }
+      }
+
+      // Populate Shift To dropdown with ONLY eligible active teachers, excluding Teacher A and Managers
+      const eligibleTeachers = (typeof getEligibleTeachers === 'function'
+        ? getEligibleTeachers(ALL_TEACHERS)
+        : (ALL_TEACHERS || []).filter(t => String(t.status || 'Active').toLowerCase() === 'active')
+      ).filter(t => String(t.id) !== String(fromTeacherId));
+
+      if (selectEl) {
+        if (eligibleTeachers.length === 0) {
+          selectEl.innerHTML = `<option value="">-- No other active eligible teachers available --</option>`;
+        } else {
+          selectEl.innerHTML = `<option value="">-- Select Target Teacher --</option>` +
+            eligibleTeachers.map(t => `<option value="${t.id}">${t.full_name} (${t.id})${t.working_shift ? ' • ' + t.working_shift.split('(')[0].trim() : ''}</option>`).join('');
+        }
+      }
+
+      openModal('modalShiftStudentTeacher');
+    }
+
+    async function handleShiftTargetTeacherChange(targetTeacherId) {
+      const conflictBox = document.getElementById('shiftModalConflictBox');
+      const conflictMsgEl = document.getElementById('shiftModalConflictMessage');
+      const conflictSubEl = document.getElementById('shiftModalConflictSubnote');
+      const btnConfirm = document.getElementById('btnConfirmShiftStudent');
+      const btnPartial = document.getElementById('btnShiftNonConflictingAndReschedule');
+
+      if (conflictBox) conflictBox.classList.add('hidden');
+      if (btnConfirm) btnConfirm.disabled = false;
+
+      if (!targetTeacherId) return;
+
+      const studentId = document.getElementById('shiftModalStudentId')?.value;
+      const targetTchObj = (ALL_TEACHERS || []).find(t => String(t.id) === String(targetTeacherId));
+      const targetTeacherName = targetTchObj?.full_name || targetTeacherId;
+
+      if (_SHIFT_MODAL_ACTIVE_STUDENT_SLOTS.length === 0) return;
+
+      try {
+        const { data: targetSlots } = await db
+          .from('class_schedules')
+          .select('*, students(id, name, status)')
+          .eq('teacher_id', targetTeacherId);
+
+        const activeTargetSlots = (targetSlots || []).filter(ts => {
+          if (String(ts.student_id) === String(studentId)) return false;
+          const stObj = (ALL_STUDENTS || []).find(s => String(s.id) === String(ts.student_id)) || ts.students;
+          if (stObj && typeof isStudentSelfDeactivated === 'function' && isStudentSelfDeactivated(stObj)) return false;
+          return true;
+        });
+
+        const targetOccupiedMap = new Map();
+        activeTargetSlots.forEach(ts => {
+          const key = `${Number(ts.day_of_week)}_${String(ts.start_time || '').slice(0, 5)}`;
+          targetOccupiedMap.set(key, ts);
+        });
+
+        const conflicts = [];
+        _SHIFT_MODAL_ACTIVE_STUDENT_SLOTS.forEach(s => {
+          const st = String(s.start_time || '').slice(0, 5);
+          const key = `${Number(s.day_of_week)}_${st}`;
+          if (targetOccupiedMap.has(key)) {
+            const occupiedBy = targetOccupiedMap.get(key);
+            conflicts.push({
+              dayOfWeek: Number(s.day_of_week),
+              dayLabel: DAY_NAMES[Number(s.day_of_week)] || `Day ${s.day_of_week}`,
+              startTime: st,
+              occupiedStudentName: occupiedBy.students?.name || occupiedBy.student_id || 'another student'
+            });
+          }
+        });
+
+        if (conflicts.length > 0 && conflictBox && conflictMsgEl) {
+          const first = conflicts[0];
+          conflictMsgEl.textContent = `Student cannot be shifted because ${targetTeacherName} has a schedule conflict for ${first.dayLabel} at ${first.startTime}.`;
+          const nonConflictingCount = _SHIFT_MODAL_ACTIVE_STUDENT_SLOTS.length - conflicts.length;
+          if (conflictSubEl) {
+            const allConflictLabels = conflicts.map(c => `${c.dayLabel} at ${c.startTime} (booked with ${c.occupiedStudentName})`).join('; ');
+            conflictSubEl.textContent = `Conflicting slot(s): ${allConflictLabels}. Existing classes on ${targetTeacherName}'s schedule will NOT be overwritten. You can choose another teacher, or transfer the student & ${nonConflictingCount} available slot(s) now and reschedule the conflicting day(s) on ${targetTeacherName}'s Schedule Matrix.`;
+          }
+          if (btnPartial) {
+            btnPartial.textContent = nonConflictingCount > 0
+              ? `Shift ${nonConflictingCount} Free Slot(s) & Reschedule Conflict`
+              : `Move Student to ${targetTeacherName} & Open Matrix to Reschedule`;
+          }
+          conflictBox.classList.remove('hidden');
+        }
+      } catch (err) {
+        console.warn('[handleShiftTargetTeacherChange] Conflict check notice:', err);
+      }
+    }
+
+    async function executeConfirmShiftStudent(allowPartialOnConflict = false) {
+      const studentId = document.getElementById('shiftModalStudentId')?.value;
+      const fromTeacherId = document.getElementById('shiftModalFromTeacherId')?.value;
+      const toTeacherId = document.getElementById('shiftModalTargetTeacherSelect')?.value;
+
+      if (!studentId || !fromTeacherId) return;
+      if (!toTeacherId) {
+        if (typeof lmsNotify === 'function') {
+          lmsNotify('Please select an eligible target teacher to shift this student to.', { type: 'warning', title: 'Select Target Teacher' });
+        }
+        return;
+      }
+
+      if (String(fromTeacherId) === String(toTeacherId)) {
+        if (typeof lmsNotify === 'function') {
+          lmsNotify('Target teacher must be different from the current teacher.', { type: 'warning' });
+        }
+        return;
+      }
+
+      if (typeof validateEligibleTeacherBackend === 'function') {
+        const validation = await validateEligibleTeacherBackend(toTeacherId);
+        if (!validation.valid) {
+          if (typeof lmsNotify === 'function') {
+            lmsNotify(validation.error || 'Selected person is not an eligible active teacher.', { type: 'error', title: 'Invalid Target Teacher' });
+          }
+          return;
+        }
+      }
+
+      const stuObj = (ALL_STUDENTS || []).find(s => String(s.id) === String(studentId));
+      const studentName = stuObj?.name || document.getElementById('shiftModalStudentName')?.textContent || studentId;
+      const fromTchObj = (ALL_TEACHERS || []).find(t => String(t.id) === String(fromTeacherId)) || CURRENT_MATRIX_TEACHER;
+      const toTchObj = (ALL_TEACHERS || []).find(t => String(t.id) === String(toTeacherId));
+      const fromTeacherName = fromTchObj?.full_name || fromTeacherId;
+      const toTeacherName = toTchObj?.full_name || toTeacherId;
+      const toTeacherZoom = toTchObj?.zoom_link || '';
+
+      // Fetch authoritative schedule rows for student (with Teacher A) and for Teacher B
+      const [stuSchedRes, targetSchedRes] = await Promise.all([
+        db.from('class_schedules').select('*').eq('student_id', studentId).eq('teacher_id', fromTeacherId),
+        db.from('class_schedules').select('*, students(id, name, status)').eq('teacher_id', toTeacherId)
+      ]);
+
+      const studentSlots = Array.isArray(stuSchedRes.data) ? stuSchedRes.data : _SHIFT_MODAL_ACTIVE_STUDENT_SLOTS;
+      const targetSlots = (targetSchedRes.data || []).filter(ts => {
+        if (String(ts.student_id) === String(studentId)) return false;
+        const stObj = (ALL_STUDENTS || []).find(s => String(s.id) === String(ts.student_id)) || ts.students;
+        if (stObj && typeof isStudentSelfDeactivated === 'function' && isStudentSelfDeactivated(stObj)) return false;
+        return true;
+      });
+
+      const targetOccupiedMap = new Map();
+      targetSlots.forEach(ts => {
+        const key = `${Number(ts.day_of_week)}_${String(ts.start_time || '').slice(0, 5)}`;
+        targetOccupiedMap.set(key, ts);
+      });
+
+      const nonConflictingSlots = [];
+      const conflictingSlots = [];
+
+      studentSlots.forEach(s => {
+        const st = String(s.start_time || '').slice(0, 5);
+        const key = `${Number(s.day_of_week)}_${st}`;
+        if (targetOccupiedMap.has(key)) {
+          conflictingSlots.push({
+            slot: s,
+            dayLabel: DAY_NAMES[Number(s.day_of_week)] || `Day ${s.day_of_week}`,
+            startTime: st
+          });
+        } else {
+          nonConflictingSlots.push(s);
+        }
+      });
+
+      if (conflictingSlots.length > 0 && !allowPartialOnConflict) {
+        const first = conflictingSlots[0];
+        await handleShiftTargetTeacherChange(toTeacherId);
+        if (typeof lmsNotify === 'function') {
+          lmsNotify(
+            `Student cannot be shifted because ${toTeacherName} has a schedule conflict for ${first.dayLabel} at ${first.startTime}.`,
+            { type: 'warning', title: 'Schedule Conflict Detected' }
+          );
+        }
+        return;
+      }
+
+      const btnConfirm = document.getElementById('btnConfirmShiftStudent');
+      const origBtnHtml = btnConfirm ? btnConfirm.innerHTML : '';
+      if (btnConfirm) {
+        btnConfirm.disabled = true;
+        btnConfirm.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Shifting...`;
+      }
+
+      try {
+        // 1. Update non-conflicting schedule slots in Supabase from Teacher A to Teacher B
+        for (const s of nonConflictingSlots) {
+          const updateFields = { teacher_id: toTeacherId };
+          if (toTeacherZoom) updateFields.meeting_link = toTeacherZoom;
+          await db.from('class_schedules').update(updateFields).eq('id', s.id);
+        }
+
+        // 2. If partial shift on conflict was chosen, remove conflicting slots from Teacher A so Teacher A never retains duplicate/stale schedule slots
+        if (conflictingSlots.length > 0 && allowPartialOnConflict) {
+          for (const c of conflictingSlots) {
+            await db.from('class_schedules').delete().eq('id', c.slot.id);
+          }
+        }
+
+        // 3. Update student's assigned_teacher_id and preserve shift audit trail in student.notes
+        let stuMeta = {};
+        if (stuObj && stuObj.notes) {
+          try {
+            stuMeta = typeof stuObj.notes === 'string' ? JSON.parse(stuObj.notes) : { ...stuObj.notes };
+          } catch (e) {
+            stuMeta = {};
+          }
+        }
+        const shiftEntry = {
+          from_teacher_id: fromTeacherId,
+          from_teacher_name: fromTeacherName,
+          to_teacher_id: toTeacherId,
+          to_teacher_name: toTeacherName,
+          shifted_at: new Date().toISOString(),
+          shifted_slots_count: nonConflictingSlots.length,
+          conflicting_slots_reschedule_needed: conflictingSlots.map(c => `${c.dayLabel} ${c.startTime}`)
+        };
+        if (!Array.isArray(stuMeta.teacher_shift_history)) {
+          stuMeta.teacher_shift_history = [];
+        }
+        stuMeta.teacher_shift_history.unshift(shiftEntry);
+        stuMeta.previous_teacher_id = fromTeacherId;
+        stuMeta.previous_teacher_name = fromTeacherName;
+        stuMeta.last_shifted_at = shiftEntry.shifted_at;
+
+        const notesStr = JSON.stringify(stuMeta);
+        const { error: stuUpdateErr } = await db
+          .from('students')
+          .update({ assigned_teacher_id: toTeacherId, notes: notesStr })
+          .eq('id', studentId);
+
+        if (stuUpdateErr) {
+          throw stuUpdateErr;
+        }
+
+        // 4. Synchronize in-memory ALL_STUDENTS & ALL_FAMILIES & ALL_CLASS_SCHEDULES
+        if (stuObj) {
+          stuObj.assigned_teacher_id = toTeacherId;
+          stuObj.notes = notesStr;
+        }
+        (ALL_FAMILIES || []).forEach(f => {
+          (f.students || []).forEach(st => {
+            if (String(st.id) === String(studentId)) {
+              st.assigned_teacher_id = toTeacherId;
+              st.notes = notesStr;
+            }
+          });
+        });
+
+        if (Array.isArray(ALL_CLASS_SCHEDULES)) {
+          const shiftedIds = new Set(nonConflictingSlots.map(s => String(s.id)));
+          const deletedIds = new Set(conflictingSlots.map(c => String(c.slot.id)));
+          ALL_CLASS_SCHEDULES = ALL_CLASS_SCHEDULES.filter(row => !deletedIds.has(String(row.id))).map(row => {
+            if (shiftedIds.has(String(row.id))) {
+              return {
+                ...row,
+                teacher_id: toTeacherId,
+                meeting_link: toTeacherZoom || row.meeting_link,
+                teachers: toTchObj || row.teachers
+              };
+            }
+            return row;
+          });
+        }
+
+        // 5. Log transfer in Teacher A and Teacher B 360° notes for full historical audit trail
+        const logTeacherShiftNote = async (tchRecord, noteText) => {
+          if (!tchRecord) return;
+          let tMeta = {};
+          try {
+            tMeta = typeof tchRecord.notes === 'string' ? JSON.parse(tchRecord.notes || '{}') : (tchRecord.notes || {});
+          } catch (e) { tMeta = {}; }
+          if (!Array.isArray(tMeta.teacher_360_notes)) tMeta.teacher_360_notes = [];
+          tMeta.teacher_360_notes.unshift({
+            id: 'SHIFT-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6),
+            category: 'Student Transfer',
+            text: noteText,
+            author: 'LMS Schedule Sync',
+            created_at: new Date().toISOString()
+          });
+          const tNotesStr = JSON.stringify(tMeta);
+          tchRecord.notes = tNotesStr;
+          try {
+            await db.from('teachers').update({ notes: tNotesStr }).eq('id', tchRecord.id);
+          } catch (e) {}
+        };
+
+        await Promise.all([
+          logTeacherShiftNote(fromTchObj, `Student ${studentName} (${studentId}) was shifted from ${fromTeacherName} to ${toTeacherName}.`),
+          logTeacherShiftNote(toTchObj, `Student ${studentName} (${studentId}) was shifted to ${toTeacherName} from ${fromTeacherName}.`)
+        ]);
+
+        // 6. Invalidate caches & refresh Schedule Matrix, Teachers, Families, Salaries, and 360 views
+        if (typeof invalidateCoreLmsDataCache === 'function') invalidateCoreLmsDataCache();
+        if (typeof _TEACHER_360_MEM_CACHE === 'object') {
+          delete _TEACHER_360_MEM_CACHE[String(fromTeacherId).toUpperCase()];
+          delete _TEACHER_360_MEM_CACHE[String(toTeacherId).toUpperCase()];
+        }
+
+        closeModal('modalShiftStudentTeacher');
+        closeModal('modalMatrixSlotActions');
+
+        await fetchTeacherSchedules();
+        render2DMatrixTable();
+        if (typeof loadTeachers === 'function') loadTeachers();
+        if (typeof loadFamiliesAndStudents === 'function') loadFamiliesAndStudents();
+        if (typeof calculateMonthlySalaries === 'function') calculateMonthlySalaries();
+        refreshOpen360ViewsAfterTeacherShift(studentId, fromTeacherId, toTeacherId);
+
+        if (typeof lmsNotify === 'function') {
+          lmsNotify(
+            `${studentName} has been successfully shifted from ${fromTeacherName} to ${toTeacherName}.`,
+            { type: 'success', title: 'Student Shifted Successfully' }
+          );
+        }
+
+        // If there were conflicting slots that need to be booked on Teacher B's matrix, open Teacher B's matrix automatically
+        if (allowPartialOnConflict && conflictingSlots.length > 0) {
+          await open2DMatrixForTeacher(toTeacherId);
+          if (typeof lmsNotify === 'function') {
+            lmsNotify(
+              `Switched to ${toTeacherName}'s Schedule Matrix. Please book a free slot for ${studentName}'s remaining day(s): ${conflictingSlots.map(c => c.dayLabel).join(', ')}.`,
+              { type: 'info', title: 'Select New Slot for Conflicting Day' }
+            );
+          }
+        }
+      } catch (err) {
+        console.error('[executeConfirmShiftStudent] Error:', err);
+        if (typeof lmsNotify === 'function') {
+          lmsNotify('Failed to shift student: ' + (err.message || err), { type: 'error' });
+        }
+      } finally {
+        if (btnConfirm) {
+          btnConfirm.disabled = false;
+          btnConfirm.innerHTML = origBtnHtml || `<i class="fa-solid fa-right-left"></i> Confirm Shift`;
+        }
+      }
+    }
+
+    function refreshOpen360ViewsAfterTeacherShift(studentId, fromTeacherId, toTeacherId) {
+      try {
+        const stuObj = (ALL_STUDENTS || []).find(s => String(s.id) === String(studentId));
+        const famSec = document.getElementById('tab-family-360');
+        if (famSec && !famSec.classList.contains('hidden') && stuObj?.family_id && typeof openFamily360Profile === 'function') {
+          openFamily360Profile(stuObj.family_id);
+        }
+        const stuSec = document.getElementById('tab-student-360');
+        if (stuSec && !stuSec.classList.contains('hidden') && typeof CURRENT_360_STUDENT_ID !== 'undefined' && String(CURRENT_360_STUDENT_ID) === String(studentId) && typeof openStudent360Profile === 'function') {
+          openStudent360Profile(studentId);
+        }
+        const tchSec = document.getElementById('tab-teacher-360');
+        if (tchSec && !tchSec.classList.contains('hidden') && typeof CURRENT_360_TEACHER_ID !== 'undefined' && typeof openTeacher360Profile === 'function') {
+          if (String(CURRENT_360_TEACHER_ID) === String(fromTeacherId) || String(CURRENT_360_TEACHER_ID) === String(toTeacherId)) {
+            openTeacher360Profile(CURRENT_360_TEACHER_ID, { forceSync: true });
+          }
+        }
+      } catch (e) {}
+    }
+
+    window.openShiftStudentFromSlotAction = openShiftStudentFromSlotAction;
+    window.openShiftStudentModal = openShiftStudentModal;
+    window.handleShiftTargetTeacherChange = handleShiftTargetTeacherChange;
+    window.executeConfirmShiftStudent = executeConfirmShiftStudent;
 
     async function loadAttendanceList() {
       const tbody = document.getElementById('attendanceTableBody');

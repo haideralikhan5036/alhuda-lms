@@ -403,6 +403,104 @@
 
     let CURRENT_FAMILIES_VIEW = 'famTable';
     let FAM_SEARCH_QUERY = '';
+    let CURRENT_FAMILIES_STATUS_FILTER = 'ACTIVE'; // 'ALL' | 'ACTIVE' | 'DEACTIVATED'
+    let CURRENT_STUDENTS_STATUS_FILTER = 'ACTIVE'; // 'ALL' | 'ACTIVE' | 'DEACTIVATED'
+
+    function updateStatusFilterPillsUI() {
+      const btnFamAll = document.getElementById('btnFilterFamAll');
+      const btnFamAct = document.getElementById('btnFilterFamActive');
+      const btnFamDeact = document.getElementById('btnFilterFamDeactivated');
+
+      if (btnFamAll) {
+        btnFamAll.className = CURRENT_FAMILIES_STATUS_FILTER === 'ALL'
+          ? 'px-2.5 py-1 rounded-lg text-[11px] font-extrabold border border-slate-800 bg-slate-900 text-white shadow-2xs transition'
+          : 'px-2.5 py-1 rounded-lg text-[11px] font-extrabold border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 transition';
+      }
+      if (btnFamAct) {
+        btnFamAct.className = CURRENT_FAMILIES_STATUS_FILTER === 'ACTIVE'
+          ? 'px-2.5 py-1 rounded-lg text-[11px] font-extrabold border border-emerald-600 bg-emerald-600 text-white shadow-2xs transition'
+          : 'px-2.5 py-1 rounded-lg text-[11px] font-extrabold border border-emerald-200 bg-white text-emerald-700 hover:bg-emerald-50 transition';
+      }
+      if (btnFamDeact) {
+        btnFamDeact.className = CURRENT_FAMILIES_STATUS_FILTER === 'DEACTIVATED'
+          ? 'px-2.5 py-1 rounded-lg text-[11px] font-extrabold border border-rose-600 bg-rose-600 text-white shadow-2xs transition'
+          : 'px-2.5 py-1 rounded-lg text-[11px] font-extrabold border border-rose-200 bg-white text-rose-700 hover:bg-rose-50 transition';
+      }
+
+      const btnStuAll = document.getElementById('btnFilterStuAll');
+      const btnStuAct = document.getElementById('btnFilterStuActive');
+      const btnStuDeact = document.getElementById('btnFilterStuDeactivated');
+
+      if (btnStuAll) {
+        btnStuAll.className = CURRENT_STUDENTS_STATUS_FILTER === 'ALL'
+          ? 'px-2.5 py-1 rounded-lg text-[11px] font-extrabold border border-slate-800 bg-slate-900 text-white shadow-2xs transition'
+          : 'px-2.5 py-1 rounded-lg text-[11px] font-extrabold border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 transition';
+      }
+      if (btnStuAct) {
+        btnStuAct.className = CURRENT_STUDENTS_STATUS_FILTER === 'ACTIVE'
+          ? 'px-2.5 py-1 rounded-lg text-[11px] font-extrabold border border-teal-600 bg-teal-600 text-white shadow-2xs transition'
+          : 'px-2.5 py-1 rounded-lg text-[11px] font-extrabold border border-teal-200 bg-white text-teal-700 hover:bg-teal-50 transition';
+      }
+      if (btnStuDeact) {
+        btnStuDeact.className = CURRENT_STUDENTS_STATUS_FILTER === 'DEACTIVATED'
+          ? 'px-2.5 py-1 rounded-lg text-[11px] font-extrabold border border-rose-600 bg-rose-600 text-white shadow-2xs transition'
+          : 'px-2.5 py-1 rounded-lg text-[11px] font-extrabold border border-rose-200 bg-white text-rose-700 hover:bg-rose-50 transition';
+      }
+    }
+
+    function setFamiliesStatusFilter(filterMode) {
+      CURRENT_FAMILIES_STATUS_FILTER = ['ALL', 'ACTIVE', 'DEACTIVATED'].includes(filterMode) ? filterMode : 'ACTIVE';
+      updateStatusFilterPillsUI();
+      if (CURRENT_FAMILIES_VIEW === 'studentsList' || CURRENT_FAMILIES_VIEW === 'deactivatedFams') {
+        switchFamiliesViewMode('famTable');
+      } else {
+        renderFamiliesCards();
+        renderFamiliesMasterTable();
+      }
+    }
+
+    function setStudentsStatusFilter(filterMode) {
+      CURRENT_STUDENTS_STATUS_FILTER = ['ALL', 'ACTIVE', 'DEACTIVATED'].includes(filterMode) ? filterMode : 'ACTIVE';
+      updateStatusFilterPillsUI();
+      if (CURRENT_FAMILIES_VIEW !== 'studentsList') {
+        switchFamiliesViewMode('studentsList');
+      } else {
+        renderAllStudentsListTable();
+      }
+    }
+
+    window.setFamiliesStatusFilter = setFamiliesStatusFilter;
+    window.setStudentsStatusFilter = setStudentsStatusFilter;
+
+    function getFilteredFamiliesByCurrentStatus() {
+      const allFams = typeof getAllFamilies === 'function' ? getAllFamilies(ALL_FAMILIES) : (ALL_FAMILIES || []);
+      if (CURRENT_FAMILIES_STATUS_FILTER === 'ALL') {
+        return allFams;
+      }
+      if (CURRENT_FAMILIES_STATUS_FILTER === 'DEACTIVATED') {
+        return typeof getDeactivatedFamilies === 'function'
+          ? getDeactivatedFamilies(allFams)
+          : allFams.filter(f => typeof isFamilyDeactivated === 'function' ? isFamilyDeactivated(f) : ['inactive', 'deactivated'].includes(String(f.status || '').toLowerCase()));
+      }
+      return typeof getActiveFamilies === 'function'
+        ? getActiveFamilies(allFams)
+        : allFams.filter(f => typeof isFamilyDeactivated === 'function' ? !isFamilyDeactivated(f) : !['inactive', 'deactivated'].includes(String(f.status || '').toLowerCase()));
+    }
+
+    function getFilteredStudentsByCurrentStatus() {
+      const allStus = typeof getAllStudents === 'function' ? getAllStudents(ALL_STUDENTS, ALL_FAMILIES) : (ALL_STUDENTS || []);
+      if (CURRENT_STUDENTS_STATUS_FILTER === 'ALL') {
+        return allStus;
+      }
+      if (CURRENT_STUDENTS_STATUS_FILTER === 'DEACTIVATED') {
+        return typeof getDeactivatedStudents === 'function'
+          ? getDeactivatedStudents(allStus, ALL_FAMILIES)
+          : allStus.filter(s => !(typeof isActiveStudentRecord === 'function' ? isActiveStudentRecord(s, ALL_FAMILIES) : !['inactive', 'deactivated'].includes(String(s.status || '').toLowerCase())));
+      }
+      return typeof getActiveStudents === 'function'
+        ? getActiveStudents(allStus, ALL_FAMILIES)
+        : allStus.filter(s => typeof isActiveStudentRecord === 'function' ? isActiveStudentRecord(s, ALL_FAMILIES) : !['inactive', 'deactivated'].includes(String(s.status || '').toLowerCase()));
+    }
 
     function switchFamiliesViewMode(mode) {
       CURRENT_FAMILIES_VIEW = mode;
@@ -426,6 +524,7 @@
         if (secTable) secTable.classList.add('hidden');
         if (secStudents) secStudents.classList.add('hidden');
         if (secDeact) secDeact.classList.add('hidden');
+        updateStatusFilterPillsUI();
         renderFamiliesCards();
       } else if (mode === 'famTable') {
         if (btnTable) btnTable.className = 'px-3 py-1.5 rounded-lg bg-white text-slate-900 shadow-2xs flex items-center gap-1.5 transition font-extrabold whitespace-nowrap';
@@ -433,6 +532,7 @@
         if (secTable) secTable.classList.remove('hidden');
         if (secStudents) secStudents.classList.add('hidden');
         if (secDeact) secDeact.classList.add('hidden');
+        updateStatusFilterPillsUI();
         renderFamiliesMasterTable();
       } else if (mode === 'studentsList') {
         if (btnStudents) btnStudents.className = 'px-3 py-1.5 rounded-lg bg-white text-slate-900 shadow-2xs flex items-center gap-1.5 transition font-extrabold whitespace-nowrap';
@@ -440,8 +540,11 @@
         if (secTable) secTable.classList.add('hidden');
         if (secStudents) secStudents.classList.remove('hidden');
         if (secDeact) secDeact.classList.add('hidden');
+        updateStatusFilterPillsUI();
         renderAllStudentsListTable();
       } else if (mode === 'deactivatedFams') {
+        CURRENT_FAMILIES_STATUS_FILTER = 'DEACTIVATED';
+        updateStatusFilterPillsUI();
         if (btnDeact) btnDeact.className = 'px-3 py-1.5 rounded-lg bg-white text-rose-800 shadow-2xs flex items-center gap-1.5 transition font-extrabold whitespace-nowrap';
         if (secCards) secCards.classList.add('hidden');
         if (secTable) secTable.classList.add('hidden');
@@ -518,46 +621,52 @@
       const famMap = {};
       regularFamilies.forEach(f => { famMap[String(f.id).toUpperCase()] = f; });
 
-      const activeFamiliesList = regularFamilies.filter(f =>
-        typeof isFamilyDeactivated === 'function' ? !isFamilyDeactivated(f) : !['inactive', 'deactivated'].includes(String(f.status || '').toLowerCase())
-      );
-      const deactivatedFamiliesList = regularFamilies.filter(f =>
-        typeof isFamilyDeactivated === 'function' ? isFamilyDeactivated(f) : ['inactive', 'deactivated'].includes(String(f.status || '').toLowerCase())
-      );
+      const activeFamiliesList = typeof getActiveFamilies === 'function'
+        ? getActiveFamilies(regularFamilies)
+        : regularFamilies.filter(f => typeof isFamilyDeactivated === 'function' ? !isFamilyDeactivated(f) : !['inactive', 'deactivated'].includes(String(f.status || '').toLowerCase()));
+      const deactivatedFamiliesList = typeof getDeactivatedFamilies === 'function'
+        ? getDeactivatedFamilies(regularFamilies)
+        : regularFamilies.filter(f => typeof isFamilyDeactivated === 'function' ? isFamilyDeactivated(f) : ['inactive', 'deactivated'].includes(String(f.status || '').toLowerCase()));
 
       const famSelect = document.getElementById('stuFamilyId');
       if (famSelect) {
         famSelect.innerHTML = activeFamiliesList.map(f => `<option value="${f.id}">${f.parent_name} (${f.id} &bull; ${f.country})</option>`).join('');
       }
 
-      // Update Summary Badges (Exclude Deactivated Families & Deactivated Students from Active counts)
+      // Update Summary Badges & Filter Counts
       const activeFams = activeFamiliesList.length;
 
-      const activeStudentsOnly = allStu.filter(s => {
-        if (typeof isActiveStudentRecord === 'function') return isActiveStudentRecord(s, famMap);
-        const st = (s.status || 'Active').toLowerCase();
-        if (st === 'inactive' || st === 'deactivated' || st === 'deleted' || st === 'left') return false;
-        const pFam = famMap[String(s.family_id || '').toUpperCase()];
-        if (pFam && ['inactive', 'deactivated'].includes(String(pFam.status || '').toLowerCase())) return false;
-        return true;
-      });
+      const activeStudentsOnly = typeof getActiveStudents === 'function'
+        ? getActiveStudents(allStu, regularFamilies)
+        : allStu.filter(s => typeof isActiveStudentRecord === 'function' ? isActiveStudentRecord(s, famMap) : !['inactive', 'deactivated'].includes(String(s.status || '').toLowerCase()));
+      const deactivatedStudentsOnly = typeof getDeactivatedStudents === 'function'
+        ? getDeactivatedStudents(allStu, regularFamilies)
+        : allStu.filter(s => !(typeof isActiveStudentRecord === 'function' ? isActiveStudentRecord(s, famMap) : !['inactive', 'deactivated'].includes(String(s.status || '').toLowerCase())));
 
       const activeStus = activeStudentsOnly.filter(s => {
         const st = (s.status || 'Active').toLowerCase();
-        return st === 'active' || st === 'regular';
+        return st === 'active' || st === 'regular' || st === 'leave';
       }).length;
 
       const setFVal = (id, val) => { const el = document.getElementById(id); if (el) el.innerText = val; };
-      setFVal('famSummaryTotalFamilies', activeFamiliesList.length);
+      setFVal('famSummaryTotalFamilies', regularFamilies.length);
       setFVal('famSummaryActiveFamilies', activeFams);
-      setFVal('famSummaryTotalStudents', activeStudentsOnly.length);
+      setFVal('famSummaryTotalStudents', allStu.length);
       setFVal('famSummaryActiveStudents', activeStus);
-      setFVal('badgeFamTableCount', `${activeFamiliesList.length} Active Families`);
-      setFVal('badgeStudentsListCount', `${activeStudentsOnly.length} Active Students`);
       setFVal('badgeDeactivatedFamCount', deactivatedFamiliesList.length);
       setFVal('badgeDeactivatedFamiliesHeaderCount', `${deactivatedFamiliesList.length} Deactivated ${deactivatedFamiliesList.length === 1 ? 'Family' : 'Families'}`);
       setFVal('sidebarActiveFamilies', activeFams);
       setFVal('sidebarActiveStudents', activeStus);
+
+      // Update Filter Pill Counters
+      setFVal('badgeFilterFamAllCount', regularFamilies.length);
+      setFVal('badgeFilterFamActiveCount', activeFamiliesList.length);
+      setFVal('badgeFilterFamDeactivatedCount', deactivatedFamiliesList.length);
+      setFVal('badgeFilterStuAllCount', allStu.length);
+      setFVal('badgeFilterStuActiveCount', activeStudentsOnly.length);
+      setFVal('badgeFilterStuDeactivatedCount', deactivatedStudentsOnly.length);
+
+      updateStatusFilterPillsUI();
 
       if (!forceRefresh) {
         switchFamiliesViewMode('famTable');
@@ -575,10 +684,8 @@
       if (!container) return;
 
       const q = FAM_SEARCH_QUERY;
-      const activeFamilies = (ALL_FAMILIES || []).filter(f =>
-        typeof isFamilyDeactivated === 'function' ? !isFamilyDeactivated(f) : !['inactive', 'deactivated'].includes(String(f.status || '').toLowerCase())
-      );
-      const filtered = activeFamilies.filter(f => {
+      const baseFamilies = getFilteredFamiliesByCurrentStatus();
+      const filtered = baseFamilies.filter(f => {
         if (!q) return true;
         const name = (f.parent_name || '').toLowerCase();
         const id = (f.id || '').toLowerCase();
@@ -588,8 +695,9 @@
         return name.includes(q) || id.includes(q) || phone.includes(q) || country.includes(q) || childMatch;
       });
 
+      const statusLabel = CURRENT_FAMILIES_STATUS_FILTER === 'ALL' ? 'families' : CURRENT_FAMILIES_STATUS_FILTER === 'DEACTIVATED' ? 'deactivated families' : 'active families';
       if (filtered.length === 0) {
-        container.innerHTML = '<div class="col-span-full p-8 text-center bg-white rounded-xl border border-slate-200 text-slate-400">No active families match the search criteria.</div>';
+        container.innerHTML = `<div class="col-span-full p-8 text-center bg-white rounded-xl border border-slate-200 text-slate-400">No ${statusLabel} match the current filter/search criteria.</div>`;
         return;
       }
 
@@ -602,20 +710,25 @@
         const waMsg = `Assalam-o-Alaikum Respected ${f.parent_name},\nWelcome to *Al-Huda Islamic Centre LMS*.\nHere are your Parent / Student Portal Login Credentials:\n\n🌐 *Portal Link:* ${currentUrl}\n👨‍👩‍👧 *Family ID:* ${f.id}\n👤 *Username:* ${creds.username}\n🔑 *Password:* ${creds.password}\n💰 *Agreed Monthly Fee:* ${f.currency} ${f.monthly_fee}\n\nPlease sign in to monitor your children's daily Quran lessons and attendance.\nJazakAllahu Khairan!`;
         const waUrl = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(waMsg)}`;
         const studentsList = f.students || [];
+        const isFamDeact = typeof isFamilyDeactivated === 'function' ? isFamilyDeactivated(f) : ['inactive', 'deactivated'].includes(String(f.status || '').toLowerCase());
+        const famStatusBadge = isFamDeact
+          ? `<span class="text-[10px] px-2 py-0.5 bg-rose-100 text-rose-800 border border-rose-300 rounded font-extrabold">DEACTIVATED</span>`
+          : `<span class="text-[10px] px-2 py-0.5 bg-emerald-100 text-emerald-800 border border-emerald-300 rounded font-extrabold">ACTIVE</span>`;
 
         return `
-          <div class="bg-white rounded-2xl border border-slate-200 shadow-sm hover:shadow-md transition p-5 flex flex-col justify-between">
+          <div class="bg-white rounded-2xl border ${isFamDeact ? 'border-rose-200 bg-rose-50/10' : 'border-slate-200'} shadow-sm hover:shadow-md transition p-5 flex flex-col justify-between">
             <div>
               <!-- Family Header with Sequential Number and ID -->
               <div class="flex justify-between items-start border-b pb-3 mb-3">
                 <div class="flex items-center gap-3">
-                  <div class="w-12 h-12 rounded-xl bg-gradient-to-br from-emerald-100 to-amber-100 border border-emerald-300 text-brandDark flex items-center justify-center font-black text-base shadow-xs">
-                    <i class="fa-solid fa-house-user text-brandEmerald"></i>
+                  <div class="w-12 h-12 rounded-xl ${isFamDeact ? 'bg-rose-100 border-rose-300 text-rose-800' : 'bg-gradient-to-br from-emerald-100 to-amber-100 border-emerald-300 text-brandDark'} border flex items-center justify-center font-black text-base shadow-xs">
+                    <i class="fa-solid ${isFamDeact ? 'fa-user-slash text-rose-600' : 'fa-house-user text-brandEmerald'}"></i>
                   </div>
                   <div>
                     <div class="flex items-center gap-1.5 flex-wrap">
                       <span class="text-[10px] font-mono px-2 py-0.5 bg-slate-900 text-white rounded font-black">#${fIdx + 1}</span>
                       <button onclick="openFamily360Profile('${f.id}')" class="text-[10px] font-mono px-2 py-0.5 bg-emerald-100 hover:bg-emerald-200 text-emerald-800 rounded font-extrabold transition" title="Open Family 360° Profile">${f.id}</button>
+                      ${famStatusBadge}
                       <span class="text-[10px] px-2 py-0.5 bg-slate-100 text-slate-600 rounded font-bold">${f.country}</span>
                     </div>
                     <button onclick="openFamily360Profile('${f.id}')" class="font-extrabold text-base text-slate-900 hover:text-brandEmerald hover:underline mt-0.5 text-left block transition" title="Click to open complete Family 360° Profile">${f.parent_name}</button>
@@ -706,7 +819,7 @@
                             <div class="flex items-center gap-1.5 flex-wrap">
                               <button onclick="openStudent360Profile('${s.id}')" class="font-bold ${isStuDeact ? 'text-slate-500' : 'text-slate-900'} hover:text-brandEmerald hover:underline text-left">${s.name}</button>
                               <span class="text-[9px] font-mono px-1.5 py-0.2 bg-slate-200 text-slate-700 rounded font-bold">${s.id}</span>
-                              ${isStuDeact ? `<span class="px-1.5 py-0.2 rounded text-[8px] font-black bg-rose-100 text-rose-800 border border-rose-300">DEACTIVATED</span>` : ''}
+                              ${isStuDeact ? `<span class="px-1.5 py-0.2 rounded text-[8px] font-black bg-rose-100 text-rose-800 border border-rose-300">DEACTIVATED</span>` : `<span class="px-1.5 py-0.2 rounded text-[8px] font-black bg-emerald-100 text-emerald-800 border border-emerald-300">ACTIVE</span>`}
                             </div>
                             <button onclick="openStudent360Profile('${s.id}')" class="text-brandEmerald hover:text-brandDark font-bold text-[10px] flex items-center gap-1">
                               Family Profile <i class="fa-solid fa-chevron-right text-[8px]"></i>
@@ -748,20 +861,30 @@
       if (!tbody) return;
 
       const q = FAM_SEARCH_QUERY;
-      const activeFamilies = (ALL_FAMILIES || []).filter(f =>
-        typeof isFamilyDeactivated === 'function' ? !isFamilyDeactivated(f) : !['inactive', 'deactivated'].includes(String(f.status || '').toLowerCase())
-      );
-      const filtered = activeFamilies.filter(f => {
+      const baseFamilies = getFilteredFamiliesByCurrentStatus();
+      const filtered = baseFamilies.filter(f => {
         if (!q) return true;
         const name = (f.parent_name || '').toLowerCase();
         const id = (f.id || '').toLowerCase();
         const phone = (f.whatsapp || '').toLowerCase();
         const country = (f.country || '').toLowerCase();
-        return name.includes(q) || id.includes(q) || phone.includes(q) || country.includes(q);
+        const childMatch = (f.students || []).some(s => (s.name || '').toLowerCase().includes(q) || (s.id || '').toLowerCase().includes(q));
+        return name.includes(q) || id.includes(q) || phone.includes(q) || country.includes(q) || childMatch;
       });
 
+      const badgeCountEl = document.getElementById('badgeFamTableCount');
+      const filterTitlePrefix = CURRENT_FAMILIES_STATUS_FILTER === 'ALL' ? 'All Families' : CURRENT_FAMILIES_STATUS_FILTER === 'DEACTIVATED' ? 'Deactivated Families' : 'Active Families';
+      if (badgeCountEl) {
+        badgeCountEl.textContent = `${filtered.length} ${filterTitlePrefix}`;
+        badgeCountEl.className = CURRENT_FAMILIES_STATUS_FILTER === 'DEACTIVATED'
+          ? 'px-2.5 py-0.5 rounded-full text-xs font-mono font-bold bg-rose-100 text-rose-800 border border-rose-200'
+          : CURRENT_FAMILIES_STATUS_FILTER === 'ALL'
+          ? 'px-2.5 py-0.5 rounded-full text-xs font-mono font-bold bg-slate-800 text-white border border-slate-700'
+          : 'px-2.5 py-0.5 rounded-full text-xs font-mono font-bold bg-emerald-100 text-emerald-800 border border-emerald-200';
+      }
+
       if (filtered.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="9" class="p-8 text-center text-slate-400">No active families found matching search.</td></tr>';
+        tbody.innerHTML = `<tr><td colspan="10" class="p-8 text-center text-slate-400">No ${filterTitlePrefix.toLowerCase()} found matching search.</td></tr>`;
         return;
       }
 
@@ -771,16 +894,21 @@
         const allSibs = f.students || [];
         const activeSibCount = allSibs.filter(s => !(typeof isStudentSelfDeactivated === 'function' ? isStudentSelfDeactivated(s) : ['inactive', 'deactivated'].includes(String(s.status || '').toLowerCase()))).length;
         const deactSibCount = allSibs.length - activeSibCount;
+        const isFamDeact = typeof isFamilyDeactivated === 'function' ? isFamilyDeactivated(f) : ['inactive', 'deactivated'].includes(String(f.status || '').toLowerCase());
+        const statusBadgeHtml = isFamDeact
+          ? `<span class="px-2 py-0.5 rounded text-[10px] font-extrabold bg-rose-100 text-rose-800 border border-rose-300">DEACTIVATED</span>`
+          : `<span class="px-2 py-0.5 rounded text-[10px] font-extrabold bg-emerald-100 text-emerald-800 border border-emerald-300">ACTIVE</span>`;
 
         return `
-          <tr onclick="openFamily360Profile('${f.id}')" class="hover:bg-slate-50 transition text-xs cursor-pointer" title="Click to open Family 360° Profile">
+          <tr onclick="openFamily360Profile('${f.id}')" class="hover:bg-slate-50 transition text-xs cursor-pointer ${isFamDeact ? 'bg-rose-50/20' : ''}" title="Click to open Family 360° Profile">
             <td class="p-3 text-center lms-num-table font-bold text-slate-600">${idx + 1}</td>
             <td class="p-3 lms-num-id font-bold text-brandDark">
-              <button onclick="event.stopPropagation(); openFamily360Profile('${f.id}')" class="px-2 py-0.5 rounded-md bg-emerald-50 border border-emerald-200 hover:bg-emerald-100 text-brandDark transition">${f.id}</button>
+              <button onclick="event.stopPropagation(); openFamily360Profile('${f.id}')" class="px-2 py-0.5 rounded-md ${isFamDeact ? 'bg-rose-50 border-rose-200 text-rose-800' : 'bg-emerald-50 border-emerald-200 text-brandDark'} border hover:opacity-90 transition">${f.id}</button>
             </td>
             <td class="p-3 font-bold text-slate-900">
               <button onclick="event.stopPropagation(); openFamily360Profile('${f.id}')" class="hover:text-brandEmerald hover:underline text-left font-extrabold">${f.parent_name}</button>
             </td>
+            <td class="p-3">${statusBadgeHtml}</td>
             <td class="p-3 text-slate-600">${f.country || '--'}</td>
             <td class="p-3 lms-num-table">
               ${CURRENT_ROLE === 'manager' ? `
@@ -807,11 +935,17 @@
             </td>
             <td class="p-3 text-right">
               <div class="flex items-center justify-end gap-1.5">
+                ${isFamDeact ? `
+                  <button onclick="event.stopPropagation(); handleFamilyLevelDeactivate('${f.id}')" class="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-bold text-[11px] transition">
+                    <i class="fa-solid fa-rotate-left"></i> Reactivate
+                  </button>
+                ` : `
+                  <button onclick="event.stopPropagation(); prepareAddStudentModal('${f.id}')" class="px-2.5 py-1 bg-emerald-50 hover:bg-emerald-100 text-brandEmerald rounded-lg font-bold text-[11px] border border-emerald-200 transition">
+                    + Add Child
+                  </button>
+                `}
                 <button onclick="event.stopPropagation(); openFamily360Profile('${f.id}')" class="px-2.5 py-1 bg-brandDark hover:bg-brandDarkest text-white rounded-lg font-bold text-[11px] transition">
                   Family 360°
-                </button>
-                <button onclick="event.stopPropagation(); prepareAddStudentModal('${f.id}')" class="px-2.5 py-1 bg-emerald-50 hover:bg-emerald-100 text-brandEmerald rounded-lg font-bold text-[11px] border border-emerald-200 transition">
-                  + Add Child
                 </button>
               </div>
             </td>
@@ -828,45 +962,56 @@
       (ALL_FAMILIES || []).forEach(f => { famMap[String(f.id).toUpperCase()] = f; });
 
       const q = FAM_SEARCH_QUERY;
-      const activeStudents = (ALL_STUDENTS || []).filter(s => {
-        if (typeof isActiveStudentRecord === 'function') return isActiveStudentRecord(s, famMap);
-        const st = (s.status || 'Active').toLowerCase();
-        if (st === 'inactive' || st === 'deactivated' || st === 'deleted' || st === 'left') return false;
-        const pFam = famMap[String(s.family_id || '').toUpperCase()];
-        if (pFam && ['inactive', 'deactivated'].includes(String(pFam.status || '').toLowerCase())) return false;
-        return true;
-      });
+      const baseStudents = getFilteredStudentsByCurrentStatus();
 
-      const filtered = activeStudents.filter(s => {
+      const filtered = baseStudents.filter(s => {
         if (!q) return true;
         const name = (s.name || '').toLowerCase();
         const id = (s.id || '').toLowerCase();
         const famId = (s.family_id || '').toLowerCase();
+        const parentFam = famMap[String(s.family_id || '').toUpperCase()];
+        const parentName = (parentFam?.parent_name || '').toLowerCase();
         const course = (s.course_id || '').toLowerCase();
-        return name.includes(q) || id.includes(q) || famId.includes(q) || course.includes(q);
+        return name.includes(q) || id.includes(q) || famId.includes(q) || parentName.includes(q) || course.includes(q);
       });
 
+      const badgeCountEl = document.getElementById('badgeStudentsListCount');
+      const stuFilterLabel = CURRENT_STUDENTS_STATUS_FILTER === 'ALL' ? 'All Students' : CURRENT_STUDENTS_STATUS_FILTER === 'DEACTIVATED' ? 'Deactivated Students' : 'Active Students';
+      if (badgeCountEl) {
+        badgeCountEl.textContent = `${filtered.length} ${stuFilterLabel}`;
+        badgeCountEl.className = CURRENT_STUDENTS_STATUS_FILTER === 'DEACTIVATED'
+          ? 'px-2.5 py-0.5 rounded-full text-xs font-mono font-bold bg-rose-100 text-rose-800 border border-rose-200'
+          : CURRENT_STUDENTS_STATUS_FILTER === 'ALL'
+          ? 'px-2.5 py-0.5 rounded-full text-xs font-mono font-bold bg-slate-800 text-white border border-slate-700'
+          : 'px-2.5 py-0.5 rounded-full text-xs font-mono font-bold bg-teal-100 text-teal-800 border border-teal-200';
+      }
+
       if (filtered.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="9" class="p-8 text-center text-slate-400">No active students found matching search.</td></tr>';
+        tbody.innerHTML = `<tr><td colspan="9" class="p-8 text-center text-slate-400">No ${stuFilterLabel.toLowerCase()} found matching search.</td></tr>`;
         return;
       }
 
       tbody.innerHTML = filtered.map((s, idx) => {
         const parentFam = famMap[String(s.family_id || '').toUpperCase()];
         const parentName = parentFam ? parentFam.parent_name : (s.family_id || '--');
-        const assignedTeacher = (ALL_TEACHERS || []).find(t => t.id === s.assigned_teacher_id);
+        const isStuActive = typeof isActiveStudentRecord === 'function'
+          ? isActiveStudentRecord(s, famMap)
+          : !['inactive', 'deactivated', 'deleted', 'left'].includes(String(s.status || 'Active').toLowerCase());
+        const assignedTeacher = isStuActive ? (ALL_TEACHERS || []).find(t => t.id === s.assigned_teacher_id) : null;
         const tName = assignedTeacher
           ? `<button onclick="openTeacher360Profile('${assignedTeacher.id}')" class="font-bold text-indigo-700 hover:underline text-left">${assignedTeacher.full_name}</button>`
-          : '<span class="text-slate-400 italic">Not Assigned</span>';
+          : `<span class="text-slate-400 italic">${isStuActive ? 'Not Assigned' : 'Unassigned (Deactivated)'}</span>`;
         const status = s.status || 'Active';
 
-        let statusBadge = '<span class="px-2 py-0.5 rounded text-[10px] font-extrabold bg-emerald-100 text-emerald-800 border border-emerald-200">Active</span>';
-        if (status.toLowerCase() === 'leave') {
-          statusBadge = '<span class="px-2 py-0.5 rounded text-[10px] font-extrabold bg-blue-100 text-blue-800 border border-blue-200">On Leave</span>';
+        let statusBadge = '<span class="px-2 py-0.5 rounded text-[10px] font-extrabold bg-emerald-100 text-emerald-800 border border-emerald-200">ACTIVE</span>';
+        if (!isStuActive) {
+          statusBadge = '<span class="px-2 py-0.5 rounded text-[10px] font-extrabold bg-rose-100 text-rose-800 border border-rose-300">DEACTIVATED</span>';
+        } else if (status.toLowerCase() === 'leave') {
+          statusBadge = '<span class="px-2 py-0.5 rounded text-[10px] font-extrabold bg-blue-100 text-blue-800 border border-blue-200">ON LEAVE</span>';
         }
 
         return `
-          <tr class="hover:bg-slate-50 transition text-xs">
+          <tr class="hover:bg-slate-50 transition text-xs ${!isStuActive ? 'bg-rose-50/20' : ''}">
             <td class="p-3 text-center font-mono font-bold text-slate-500">${idx + 1}</td>
             <td class="p-3 font-mono font-black text-brandDark">
               <button onclick="openStudent360Profile('${s.id}')" class="hover:underline">${s.id}</button>
@@ -887,9 +1032,16 @@
             <td class="p-3">${statusBadge}</td>
             <td class="p-3 font-mono text-[11px] text-slate-600">${s.joining_date || '--'}</td>
             <td class="p-3 text-right">
-              <button onclick="openStudent360Profile('${s.id}')" class="px-2.5 py-1 bg-brandDark text-white rounded-lg font-bold text-[11px] hover:bg-brandDarkest transition">
-                Open Family Profile
-              </button>
+              <div class="flex items-center justify-end gap-1.5">
+                ${!isStuActive && typeof toggleSingleStudentDeactivate === 'function' ? `
+                  <button onclick="toggleSingleStudentDeactivate('${s.family_id}', '${s.id}')" class="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-bold text-[11px] transition flex items-center gap-1" title="Reactivate Student">
+                    <i class="fa-solid fa-rotate-left text-[10px]"></i> Reactivate
+                  </button>
+                ` : ''}
+                <button onclick="openStudent360Profile('${s.id}')" class="px-2.5 py-1 bg-brandDark text-white rounded-lg font-bold text-[11px] hover:bg-brandDarkest transition">
+                  Open Profile
+                </button>
+              </div>
             </td>
           </tr>
         `;

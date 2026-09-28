@@ -2613,6 +2613,7 @@ async function submitEditSingleStudentForm(e, familyId, studentId) {
   if (prevWasInactive && !nextWantsInactive) {
     delete stuMeta.family_deactivated;
     delete stuMeta.deactivated_individually;
+    stuMeta.reactivated_at = new Date().toISOString();
   }
 
   await _saveStudentRecordBackend(student.id, {
@@ -2622,7 +2623,7 @@ async function submitEditSingleStudentForm(e, familyId, studentId) {
     gender,
     status,
     course_id,
-    assigned_teacher_id,
+    assigned_teacher_id: (prevWasInactive && !nextWantsInactive && !assigned_teacher_id) ? null : assigned_teacher_id,
     notes: JSON.stringify(stuMeta)
   });
 
@@ -2795,17 +2796,19 @@ async function toggleSingleStudentDeactivate(familyId, studentId) {
   const famWasDeactivated = family ? (typeof isFamilyDeactivated === 'function' ? isFamilyDeactivated(family) : ['inactive', 'deactivated'].includes(String(family.status || '').toLowerCase())) : false;
 
   const confirmMsg = famWasDeactivated
-    ? `Reactivate student "${student.name}" (${student.id})?\n\n• ${student.name} will become ACTIVE.\n• Because this family currently has 0 active students, Family "${family?.parent_name || familyId}" will automatically become ACTIVE.`
-    : `Reactivate student "${student.name}" (${student.id})?\n\n• ${student.name} will become ACTIVE.\n• Family "${family?.parent_name || familyId}" will remain ACTIVE.`;
+    ? `Reactivate student "${student.name}" (${student.id})?\n\n• ${student.name} will become ACTIVE.\n• Because this family currently has 0 active students, Family "${family?.parent_name || familyId}" will automatically become ACTIVE.\n• Previous teacher and schedule slots will NOT be auto-restored (you can assign a teacher and schedule slots fresh).`
+    : `Reactivate student "${student.name}" (${student.id})?\n\n• ${student.name} will become ACTIVE.\n• Family "${family?.parent_name || familyId}" will remain ACTIVE.\n• Previous teacher and schedule slots will NOT be auto-restored (you can assign a teacher and schedule slots fresh).`;
 
   if (!(await lmsConfirm(confirmMsg))) return;
 
   const stuMeta = _parseStudentStructuredNotes(student);
   delete stuMeta.family_deactivated;
   delete stuMeta.deactivated_individually;
+  stuMeta.reactivated_at = new Date().toISOString();
 
   await _saveStudentRecordBackend(student.id, {
     status: 'Active',
+    assigned_teacher_id: null,
     notes: JSON.stringify(stuMeta)
   });
 
@@ -2814,8 +2817,8 @@ async function toggleSingleStudentDeactivate(familyId, studentId) {
 
   _notify360(
     famWasDeactivated && famNowActive
-      ? `${student.name} reactivated — Family "${family?.parent_name || familyId}" is now automatically ACTIVE.`
-      : `${student.name} is now ACTIVE (Family remains ACTIVE).`
+      ? `${student.name} reactivated — Family "${family?.parent_name || familyId}" is now automatically ACTIVE. Please assign a teacher and book schedule slots when ready.`
+      : `${student.name} is now ACTIVE (Family remains ACTIVE). Please assign a teacher and book schedule slots when ready.`
   );
   await openFamily360Profile(familyId, 'students', true, { selectedStudentId: student.id });
 }
@@ -2981,15 +2984,24 @@ async function executeConfirmSingleStudentDeactivation(e, familyId, studentId) {
   }
 
   try {
-    // 1. Update Student Status to Inactive (DEACTIVATED) in backend DB & memory
+    // 1. Update Student Status to Inactive (DEACTIVATED) in backend DB & memory, and remove active schedule & teacher assignment
     const stuMeta = _parseStudentStructuredNotes(student);
     stuMeta.deactivated_individually = true;
     stuMeta.deactivated_at = new Date().toISOString();
 
+    const deactSyncInfo = (typeof deactivateStudentScheduleAndTeacherBackend === 'function')
+      ? await deactivateStudentScheduleAndTeacherBackend(student.id, stuMeta)
+      : { previousTeacherId: student.assigned_teacher_id };
+
     await _saveStudentRecordBackend(student.id, {
       status: 'Inactive',
+      assigned_teacher_id: null,
       notes: JSON.stringify(stuMeta)
     });
+
+    if (deactSyncInfo.previousTeacherId && typeof _TEACHER_360_MEM_CACHE === 'object') {
+      delete _TEACHER_360_MEM_CACHE[String(deactSyncInfo.previousTeacherId).toUpperCase()];
+    }
 
     // 2. Apply explicit fee decision & recalculate Family status based on remaining active students
     const feeDecisionMeta = {
@@ -3007,6 +3019,17 @@ async function executeConfirmSingleStudentDeactivation(e, familyId, studentId) {
     if (selectedOption === 'change' && typeof loadFeeBillingLedger === 'function') {
       try { loadFeeBillingLedger(); } catch (err) {}
     }
+    if (typeof loadTeachers === 'function') {
+      try { loadTeachers(); } catch (err) {}
+    }
+    if (typeof calculateMonthlySalaries === 'function') {
+      try { calculateMonthlySalaries(); } catch (err) {}
+    }
+    if (typeof CURRENT_MATRIX_TEACHER !== 'undefined' && CURRENT_MATRIX_TEACHER && String(CURRENT_MATRIX_TEACHER.id) === String(deactSyncInfo.previousTeacherId)) {
+      if (typeof fetchTeacherSchedules === 'function' && typeof render2DMatrixTable === 'function') {
+        try { await fetchTeacherSchedules(); render2DMatrixTable(); } catch (err) {}
+      }
+    }
 
     _closeWorkspaceModal();
 
@@ -3018,7 +3041,7 @@ async function executeConfirmSingleStudentDeactivation(e, familyId, studentId) {
       ? `Zero active students remain — Family "${family.parent_name}" is now automatically DEACTIVATED.`
       : `Family "${family.parent_name}" remains ACTIVE (${syncResult ? syncResult.activeStudentCount : 1} active student(s)).`;
 
-    _notify360(`${student.name} DEACTIVATED. ${famStatusMsg} ${feeMsg}`);
+    _notify360(`${student.name} DEACTIVATED and removed from active teacher schedule & roster. ${famStatusMsg} ${feeMsg}`);
     await openFamily360Profile(family.id, 'students', true, { selectedStudentId: student.id });
   } catch (err) {
     if (btn) {
@@ -3077,7 +3100,7 @@ async function handleFamilyLevelDeactivate(familyId) {
     : (['inactive', 'deactivated'].includes(String(family.status || '').trim().toLowerCase()) || family.is_active === false);
   const targetStatus = isInactive ? 'Active' : 'Inactive';
 
-  if (!(await lmsConfirm(`${isInactive ? 'Reactivate' : 'Deactivate'} the ENTIRE Family account for "${family.parent_name}" (${family.id})?\n\n${isInactive ? 'This family and its students will return to the Active Families list and active counts.' : 'ALL students belonging to this family will be marked DEACTIVATED, and this family will move to Deactivated Families. All student, fee, invoice, payment, attendance, and lesson history will remain 100% intact.'}`))) return;
+  if (!(await lmsConfirm(`${isInactive ? 'Reactivate' : 'Deactivate'} the ENTIRE Family account for "${family.parent_name}" (${family.id})?\n\n${isInactive ? 'This family and its students will return to the Active Families list and active counts. Previous teachers and schedule slots will NOT be auto-restored.' : 'ALL students belonging to this family will be marked DEACTIVATED, removed from active teacher schedules/rosters, and this family will move to Deactivated Families. All student, fee, invoice, payment, attendance, and lesson history will remain 100% intact.'}`))) return;
 
   // Fetch all students belonging to this family from DB/memory so none are missed
   let famStudents = [];
@@ -3094,24 +3117,38 @@ async function handleFamilyLevelDeactivate(familyId) {
     const stuMeta = _parseStudentStructuredNotes(stu);
     let nextStuStatus = targetStatus;
     if (!isInactive) {
-      // Deactivating entire family -> ALL students must become DEACTIVATED ('Inactive')
+      // Deactivating entire family -> ALL students must become DEACTIVATED ('Inactive') and removed from active schedules/rosters
       stuMeta.prev_status_before_family_deactivation = stu.status || 'Active';
       stuMeta.family_deactivated = true;
       nextStuStatus = 'Inactive';
+      if (typeof deactivateStudentScheduleAndTeacherBackend === 'function') {
+        const info = await deactivateStudentScheduleAndTeacherBackend(stu.id, stuMeta);
+        if (info.previousTeacherId && typeof _TEACHER_360_MEM_CACHE === 'object') {
+          delete _TEACHER_360_MEM_CACHE[String(info.previousTeacherId).toUpperCase()];
+        }
+      }
     } else {
-      // Reactivating entire family -> restore students to Active
+      // Reactivating entire family -> restore students to Active WITHOUT auto-restoring old teacher or schedule
       const prev = stuMeta.prev_status_before_family_deactivation;
       nextStuStatus = (prev && !['inactive', 'deactivated'].includes(String(prev).toLowerCase())) ? prev : 'Active';
       delete stuMeta.family_deactivated;
       delete stuMeta.deactivated_individually;
+      stuMeta.reactivated_at = new Date().toISOString();
     }
     await _saveStudentRecordBackend(stu.id, {
       status: nextStuStatus,
+      assigned_teacher_id: null,
       notes: JSON.stringify(stuMeta)
     });
   }
 
   await syncFamilyStatusFromStudentsBackend(family.id, { status: targetStatus });
+  if (typeof loadTeachers === 'function') {
+    try { loadTeachers(); } catch (err) {}
+  }
+  if (typeof calculateMonthlySalaries === 'function') {
+    try { calculateMonthlySalaries(); } catch (err) {}
+  }
 
   _notify360(`Family "${family.parent_name}" and all linked students are now ${targetStatus === 'Inactive' ? 'DEACTIVATED' : 'ACTIVE'}.`);
   const profTab = document.getElementById('tab-profile-360');
@@ -3980,9 +4017,17 @@ function _compileTeacher360AggregatedState(teacher, tchSchedules = [], attLogs =
     ? (meta.role_title || 'Support & Administrative Staff')
     : (meta.role_title || 'Teacher');
 
-  // 1. Authoritative Student-Teacher Relationship (via assigned_teacher_id OR class_schedules)
+  // 1. Authoritative Student-Teacher Relationship (via assigned_teacher_id OR class_schedules, strictly excluding deactivated students)
+  tchSchedules = (tchSchedules || []).filter(sc => {
+    const stObj = (window.ALL_STUDENTS || []).find(s => String(s.id || '').toUpperCase() === String(sc.student_id || '').toUpperCase()) || sc.students;
+    if (stObj && typeof isStudentSelfDeactivated === 'function' && isStudentSelfDeactivated(stObj)) return false;
+    return true;
+  });
   const schedStudentIds = new Set((tchSchedules || []).map(sc => String(sc.student_id || '').toUpperCase()).filter(Boolean));
   const allMatchedStudents = (window.ALL_STUDENTS || []).filter(s => {
+    if (typeof isStudentSelfDeactivated === 'function' && isStudentSelfDeactivated(s)) return false;
+    const st = String(s.status || 'Active').toLowerCase();
+    if (st === 'inactive' || st === 'deactivated' || st === 'left' || st === 'deleted') return false;
     const sIdUp = String(s.id || '').toUpperCase();
     return String(s.assigned_teacher_id) === String(teacher.id) || schedStudentIds.has(sIdUp);
   });

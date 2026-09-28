@@ -736,6 +736,109 @@
     window.normalizeStudentCourseRecord = normalizeStudentCourseRecord;
     window.buildStudentDatabasePayload = buildStudentDatabasePayload;
 
+    // =========================================================================
+    // AUTHORITATIVE FAMILY & STUDENT STATUS QUERY HELPERS + DEACTIVATION SYNC
+    // =========================================================================
+    function getAllFamilies(familiesArray = ALL_FAMILIES) {
+      return (Array.isArray(familiesArray) ? familiesArray : []).filter(f => isRegularFamilyRecord(f));
+    }
+
+    function getActiveFamilies(familiesArray = ALL_FAMILIES) {
+      return getAllFamilies(familiesArray).filter(f => isActiveFamilyRecord(f));
+    }
+
+    function getDeactivatedFamilies(familiesArray = ALL_FAMILIES) {
+      return getAllFamilies(familiesArray).filter(f => isDeactivatedFamilyRecord(f));
+    }
+
+    function getAllStudents(studentsArray = ALL_STUDENTS, familiesArray = ALL_FAMILIES) {
+      const fams = getAllFamilies(familiesArray);
+      const validFamIds = new Set(fams.map(f => String(f.id || '').trim().toUpperCase()));
+      return (Array.isArray(studentsArray) ? studentsArray : []).filter(s => {
+        if (!isRegularStudentRecord(s)) return false;
+        const fid = String(s.family_id || '').trim().toUpperCase();
+        return !fid || validFamIds.size === 0 || validFamIds.has(fid);
+      });
+    }
+
+    function getActiveStudents(studentsArray = ALL_STUDENTS, familiesArray = ALL_FAMILIES) {
+      return getAllStudents(studentsArray, familiesArray).filter(s => isActiveStudentRecord(s, familiesArray));
+    }
+
+    function getDeactivatedStudents(studentsArray = ALL_STUDENTS, familiesArray = ALL_FAMILIES) {
+      return getAllStudents(studentsArray, familiesArray).filter(s => !isActiveStudentRecord(s, familiesArray));
+    }
+
+    async function deactivateStudentScheduleAndTeacherBackend(studentId, existingMetaObj = null) {
+      if (!studentId) return { previousTeacherId: null, previousTeacherName: null, archivedSchedules: [] };
+      const stuObj = (ALL_STUDENTS || []).find(s => String(s.id) === String(studentId));
+      const previousTeacherId = stuObj ? (stuObj.assigned_teacher_id || null) : null;
+      const prevTch = previousTeacherId
+        ? (ALL_TEACHERS || []).find(t => String(t.id) === String(previousTeacherId))
+        : null;
+      const previousTeacherName = prevTch ? prevTch.full_name : null;
+
+      let archivedSchedules = [];
+      try {
+        const { data: activeRows } = await db
+          .from('class_schedules')
+          .select('*')
+          .eq('student_id', studentId);
+        if (Array.isArray(activeRows) && activeRows.length > 0) {
+          archivedSchedules = activeRows.map(r => ({
+            id: r.id,
+            teacher_id: r.teacher_id,
+            day_of_week: r.day_of_week,
+            start_time: r.start_time,
+            end_time: r.end_time,
+            duration_mins: r.duration_mins,
+            course_name: r.course_name,
+            archived_at: new Date().toISOString()
+          }));
+        }
+      } catch (e) {
+        console.warn('[deactivateStudentScheduleAndTeacherBackend] Schedule query notice:', e);
+      }
+
+      // Remove all active schedule slots for the deactivated student from Supabase
+      try {
+        await db.from('class_schedules').delete().eq('student_id', studentId);
+      } catch (e) {
+        console.warn('[deactivateStudentScheduleAndTeacherBackend] Schedule delete notice:', e);
+      }
+
+      // Remove from in-memory ALL_CLASS_SCHEDULES
+      if (Array.isArray(ALL_CLASS_SCHEDULES)) {
+        ALL_CLASS_SCHEDULES = ALL_CLASS_SCHEDULES.filter(row => String(row.student_id) !== String(studentId));
+      }
+
+      // Enrich student metadata with archived teacher & schedule history for audit without keeping active links
+      if (existingMetaObj && typeof existingMetaObj === 'object') {
+        if (previousTeacherId) {
+          existingMetaObj.previous_teacher_id_before_deactivation = previousTeacherId;
+          existingMetaObj.previous_teacher_name_before_deactivation = previousTeacherName;
+        }
+        if (archivedSchedules.length > 0) {
+          existingMetaObj.archived_schedules_before_deactivation = archivedSchedules;
+        }
+        existingMetaObj.schedule_cleared_on_deactivation_at = new Date().toISOString();
+      }
+
+      return {
+        previousTeacherId,
+        previousTeacherName,
+        archivedSchedules
+      };
+    }
+
+    window.getAllFamilies = getAllFamilies;
+    window.getActiveFamilies = getActiveFamilies;
+    window.getDeactivatedFamilies = getDeactivatedFamilies;
+    window.getAllStudents = getAllStudents;
+    window.getActiveStudents = getActiveStudents;
+    window.getDeactivatedStudents = getDeactivatedStudents;
+    window.deactivateStudentScheduleAndTeacherBackend = deactivateStudentScheduleAndTeacherBackend;
+
     let _CORE_DATA_INFLIGHT_PROMISE = null;
     let _LAST_CORE_DATA_LOAD_TS = 0;
     const CORE_DATA_TTL_MS = 60000;
@@ -832,7 +935,17 @@
           ALL_FAMILIES = regularFamilies;
 
           if (tchRes.data) ALL_TEACHERS = tchRes.data;
-          if (schRes.data) ALL_CLASS_SCHEDULES = schRes.data;
+          if (schRes.data) {
+            ALL_CLASS_SCHEDULES = schRes.data.filter(slot => {
+              const stuObj = (ALL_STUDENTS || []).find(s => String(s.id) === String(slot.student_id)) || slot.students;
+              if (stuObj && isStudentSelfDeactivated(stuObj)) {
+                // Auto-cleanup any stale schedule rows belonging to a deactivated student
+                db.from('class_schedules').delete().eq('id', slot.id).then(() => {});
+                return false;
+              }
+              return true;
+            });
+          }
 
           _LAST_CORE_DATA_LOAD_TS = Date.now();
 
