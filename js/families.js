@@ -411,42 +411,142 @@
       const btnFamAct = document.getElementById('btnFilterFamActive');
       const btnFamDeact = document.getElementById('btnFilterFamDeactivated');
 
+      const badgeFamAll = document.getElementById('badgeFilterFamAllCount');
+      const badgeFamAct = document.getElementById('badgeFilterFamActiveCount');
+      const badgeFamDeact = document.getElementById('badgeFilterFamDeactivatedCount');
+
       if (btnFamAll) {
         btnFamAll.className = CURRENT_FAMILIES_STATUS_FILTER === 'ALL'
           ? 'px-2.5 py-1 rounded-lg text-[11px] font-extrabold border border-slate-800 bg-slate-900 text-white shadow-2xs transition'
           : 'px-2.5 py-1 rounded-lg text-[11px] font-extrabold border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 transition';
       }
+      if (badgeFamAll) {
+        badgeFamAll.className = CURRENT_FAMILIES_STATUS_FILTER === 'ALL'
+          ? 'ml-1 px-1.5 py-0.2 rounded-full bg-white/25 text-white font-mono text-[10px]'
+          : 'ml-1 px-1.5 py-0.2 rounded-full bg-slate-100 text-slate-800 font-mono text-[10px]';
+      }
+
       if (btnFamAct) {
         btnFamAct.className = CURRENT_FAMILIES_STATUS_FILTER === 'ACTIVE'
           ? 'px-2.5 py-1 rounded-lg text-[11px] font-extrabold border border-emerald-600 bg-emerald-600 text-white shadow-2xs transition'
           : 'px-2.5 py-1 rounded-lg text-[11px] font-extrabold border border-emerald-200 bg-white text-emerald-700 hover:bg-emerald-50 transition';
       }
+      if (badgeFamAct) {
+        badgeFamAct.className = CURRENT_FAMILIES_STATUS_FILTER === 'ACTIVE'
+          ? 'ml-1 px-1.5 py-0.2 rounded-full bg-white/25 text-white font-mono text-[10px]'
+          : 'ml-1 px-1.5 py-0.2 rounded-full bg-emerald-100 text-emerald-800 font-mono text-[10px]';
+      }
+
       if (btnFamDeact) {
         btnFamDeact.className = CURRENT_FAMILIES_STATUS_FILTER === 'DEACTIVATED'
           ? 'px-2.5 py-1 rounded-lg text-[11px] font-extrabold border border-rose-600 bg-rose-600 text-white shadow-2xs transition'
           : 'px-2.5 py-1 rounded-lg text-[11px] font-extrabold border border-rose-200 bg-white text-rose-700 hover:bg-rose-50 transition';
+      }
+      if (badgeFamDeact) {
+        badgeFamDeact.className = CURRENT_FAMILIES_STATUS_FILTER === 'DEACTIVATED'
+          ? 'ml-1 px-1.5 py-0.2 rounded-full bg-white/25 text-white font-mono text-[10px]'
+          : 'ml-1 px-1.5 py-0.2 rounded-full bg-rose-100 text-rose-800 font-mono text-[10px]';
       }
 
       const btnStuAll = document.getElementById('btnFilterStuAll');
       const btnStuAct = document.getElementById('btnFilterStuActive');
       const btnStuDeact = document.getElementById('btnFilterStuDeactivated');
 
+      const badgeStuAll = document.getElementById('badgeFilterStuAllCount');
+      const badgeStuAct = document.getElementById('badgeFilterStuActiveCount');
+      const badgeStuDeact = document.getElementById('badgeFilterStuDeactivatedCount');
+
       if (btnStuAll) {
         btnStuAll.className = CURRENT_STUDENTS_STATUS_FILTER === 'ALL'
           ? 'px-2.5 py-1 rounded-lg text-[11px] font-extrabold border border-slate-800 bg-slate-900 text-white shadow-2xs transition'
           : 'px-2.5 py-1 rounded-lg text-[11px] font-extrabold border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 transition';
       }
+      if (badgeStuAll) {
+        badgeStuAll.className = CURRENT_STUDENTS_STATUS_FILTER === 'ALL'
+          ? 'ml-1 px-1.5 py-0.2 rounded-full bg-white/25 text-white font-mono text-[10px]'
+          : 'ml-1 px-1.5 py-0.2 rounded-full bg-slate-100 text-slate-800 font-mono text-[10px]';
+      }
+
       if (btnStuAct) {
         btnStuAct.className = CURRENT_STUDENTS_STATUS_FILTER === 'ACTIVE'
           ? 'px-2.5 py-1 rounded-lg text-[11px] font-extrabold border border-teal-600 bg-teal-600 text-white shadow-2xs transition'
           : 'px-2.5 py-1 rounded-lg text-[11px] font-extrabold border border-teal-200 bg-white text-teal-700 hover:bg-teal-50 transition';
       }
+      if (badgeStuAct) {
+        badgeStuAct.className = CURRENT_STUDENTS_STATUS_FILTER === 'ACTIVE'
+          ? 'ml-1 px-1.5 py-0.2 rounded-full bg-white/25 text-white font-mono text-[10px]'
+          : 'ml-1 px-1.5 py-0.2 rounded-full bg-teal-100 text-teal-800 font-mono text-[10px]';
+      }
+
       if (btnStuDeact) {
         btnStuDeact.className = CURRENT_STUDENTS_STATUS_FILTER === 'DEACTIVATED'
           ? 'px-2.5 py-1 rounded-lg text-[11px] font-extrabold border border-rose-600 bg-rose-600 text-white shadow-2xs transition'
           : 'px-2.5 py-1 rounded-lg text-[11px] font-extrabold border border-rose-200 bg-white text-rose-700 hover:bg-rose-50 transition';
       }
+      if (badgeStuDeact) {
+        badgeStuDeact.className = CURRENT_STUDENTS_STATUS_FILTER === 'DEACTIVATED'
+          ? 'ml-1 px-1.5 py-0.2 rounded-full bg-white/25 text-white font-mono text-[10px]'
+          : 'ml-1 px-1.5 py-0.2 rounded-full bg-rose-100 text-rose-800 font-mono text-[10px]';
+      }
     }
+
+    function syncAllFamilyAndStudentCountersUI(familiesInput = null, studentsInput = null) {
+      const rawFamilies = Array.isArray(familiesInput) ? familiesInput : (ALL_FAMILIES || []);
+      const rawStudents = Array.isArray(studentsInput) ? studentsInput : (ALL_STUDENTS || []);
+
+      const regularFamilies = typeof getAllFamilies === 'function'
+        ? getAllFamilies(rawFamilies)
+        : rawFamilies.filter(f => typeof isRegularFamilyRecord === 'function' ? isRegularFamilyRecord(f) : true);
+
+      const activeFamiliesList = typeof getActiveFamilies === 'function'
+        ? getActiveFamilies(regularFamilies)
+        : regularFamilies.filter(f => typeof isFamilyDeactivated === 'function' ? !isFamilyDeactivated(f) : !['inactive', 'deactivated'].includes(String(f.status || '').toLowerCase()));
+
+      const deactivatedFamiliesList = typeof getDeactivatedFamilies === 'function'
+        ? getDeactivatedFamilies(regularFamilies)
+        : regularFamilies.filter(f => typeof isFamilyDeactivated === 'function' ? isFamilyDeactivated(f) : ['inactive', 'deactivated'].includes(String(f.status || '').toLowerCase()));
+
+      const allStu = typeof getAllStudents === 'function'
+        ? getAllStudents(rawStudents, regularFamilies)
+        : rawStudents.filter(s => typeof isRegularStudentRecord === 'function' ? isRegularStudentRecord(s) : true);
+
+      const famMap = {};
+      regularFamilies.forEach(f => { famMap[String(f.id).toUpperCase()] = f; });
+
+      const activeStudentsOnly = typeof getActiveStudents === 'function'
+        ? getActiveStudents(allStu, regularFamilies)
+        : allStu.filter(s => typeof isActiveStudentRecord === 'function' ? isActiveStudentRecord(s, famMap) : !['inactive', 'deactivated'].includes(String(s.status || '').toLowerCase()));
+
+      const deactivatedStudentsOnly = typeof getDeactivatedStudents === 'function'
+        ? getDeactivatedStudents(allStu, regularFamilies)
+        : allStu.filter(s => !(typeof isActiveStudentRecord === 'function' ? isActiveStudentRecord(s, famMap) : !['inactive', 'deactivated'].includes(String(s.status || '').toLowerCase())));
+
+      const activeStus = activeStudentsOnly.filter(s => {
+        const st = (s.status || 'Active').toLowerCase();
+        return st === 'active' || st === 'regular' || st === 'leave';
+      }).length;
+
+      const setFVal = (id, val) => { const el = document.getElementById(id); if (el) el.innerText = val; };
+      setFVal('famSummaryTotalFamilies', regularFamilies.length);
+      setFVal('famSummaryActiveFamilies', activeFamiliesList.length);
+      setFVal('famSummaryTotalStudents', allStu.length);
+      setFVal('famSummaryActiveStudents', activeStus);
+      setFVal('badgeDeactivatedFamCount', deactivatedFamiliesList.length);
+      setFVal('badgeDeactivatedFamiliesHeaderCount', `${deactivatedFamiliesList.length} Deactivated ${deactivatedFamiliesList.length === 1 ? 'Family' : 'Families'}`);
+      setFVal('sidebarActiveFamilies', activeFamiliesList.length);
+      setFVal('sidebarActiveStudents', activeStus);
+
+      // Update Filter Pill Counters
+      setFVal('badgeFilterFamAllCount', regularFamilies.length);
+      setFVal('badgeFilterFamActiveCount', activeFamiliesList.length);
+      setFVal('badgeFilterFamDeactivatedCount', deactivatedFamiliesList.length);
+      setFVal('badgeFilterStuAllCount', allStu.length);
+      setFVal('badgeFilterStuActiveCount', activeStudentsOnly.length);
+      setFVal('badgeFilterStuDeactivatedCount', deactivatedStudentsOnly.length);
+
+      updateStatusFilterPillsUI();
+    }
+    window.syncAllFamilyAndStudentCountersUI = syncAllFamilyAndStudentCountersUI;
 
     function setFamiliesStatusFilter(filterMode) {
       CURRENT_FAMILIES_STATUS_FILTER = ['ALL', 'ACTIVE', 'DEACTIVATED'].includes(filterMode) ? filterMode : 'ACTIVE';
@@ -504,6 +604,9 @@
 
     function switchFamiliesViewMode(mode) {
       CURRENT_FAMILIES_VIEW = mode;
+      if (typeof syncAllFamilyAndStudentCountersUI === 'function') {
+        syncAllFamilyAndStudentCountersUI();
+      }
       const btnCards = document.getElementById('btnViewFamCards');
       const btnTable = document.getElementById('btnViewFamTable');
       const btnStudents = document.getElementById('btnViewStudentsList');
@@ -1049,13 +1152,24 @@
     }
 
     function renderDeactivatedFamiliesView() {
+      if (typeof syncAllFamilyAndStudentCountersUI === 'function') {
+        syncAllFamilyAndStudentCountersUI();
+      }
       const tbody = document.getElementById('deactivatedFamiliesTableBody');
       if (!tbody) return;
 
       const q = FAM_SEARCH_QUERY;
       const deactivatedFamilies = (ALL_FAMILIES || []).filter(f =>
-        typeof isFamilyDeactivated === 'function' ? isFamilyDeactivated(f) : ['inactive', 'deactivated'].includes(String(f.status || '').toLowerCase())
+        (typeof isRegularFamilyRecord === 'function' ? isRegularFamilyRecord(f) : true) &&
+        (typeof isFamilyDeactivated === 'function' ? isFamilyDeactivated(f) : ['inactive', 'deactivated'].includes(String(f.status || '').toLowerCase()))
       );
+
+      const badgeDeactTab = document.getElementById('badgeDeactivatedFamCount');
+      if (badgeDeactTab) badgeDeactTab.innerText = deactivatedFamilies.length;
+      const badgeDeactHeader = document.getElementById('badgeDeactivatedFamiliesHeaderCount');
+      if (badgeDeactHeader) badgeDeactHeader.innerText = `${deactivatedFamilies.length} Deactivated ${deactivatedFamilies.length === 1 ? 'Family' : 'Families'}`;
+      const badgeFilterDeact = document.getElementById('badgeFilterFamDeactivatedCount');
+      if (badgeFilterDeact) badgeFilterDeact.innerText = deactivatedFamilies.length;
 
       const filtered = deactivatedFamilies.filter(f => {
         if (!q) return true;

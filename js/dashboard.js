@@ -839,6 +839,9 @@
           const el = document.getElementById(id);
           if (el) el.innerText = stuCount;
         });
+        if (typeof syncAllFamilyAndStudentCountersUI === 'function') {
+          syncAllFamilyAndStudentCountersUI(fams, stus);
+        }
       } catch(e) {
         console.warn("Could not calculate active registry metrics:", e);
       }

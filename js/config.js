@@ -124,6 +124,10 @@
       return isRegularFamilyRecord(f) && !isFamilyDeactivated(f);
     }
 
+    function isDeactivatedFamilyRecord(f) {
+      return isRegularFamilyRecord(f) && isFamilyDeactivated(f);
+    }
+
     function isStudentDeactivatedOrParentDeactivated(s, familyLookup = null) {
       if (!s) return true;
       if (isStudentSelfDeactivated(s)) return true;
@@ -137,6 +141,7 @@
     window.getFamilyRegularStudents = getFamilyRegularStudents;
     window.isFamilyDeactivated = isFamilyDeactivated;
     window.isActiveFamilyRecord = isActiveFamilyRecord;
+    window.isDeactivatedFamilyRecord = isDeactivatedFamilyRecord;
     window.isStudentDeactivatedOrParentDeactivated = isStudentDeactivatedOrParentDeactivated;
     window.isActiveStudentRecord = isActiveStudentRecord;
 
