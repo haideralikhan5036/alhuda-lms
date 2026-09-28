@@ -5,3 +5,8 @@ compatibility_date = "2024-11-01"
 [assets]
 directory = "."
 binding = "ASSETS"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "alhuda-lms-db"
+database_id = "963ee149-3bea-4e3a-813f-c109e77465ae"
