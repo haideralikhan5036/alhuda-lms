@@ -30,7 +30,29 @@
       } catch(e) {
         console.warn("Could not save custom books to storage:", e);
       }
+      if (typeof db !== 'undefined' && db && typeof db.from === 'function') {
+        db.from('system_settings').upsert({
+          id: 'SYS-CUSTOM-BOOKS',
+          key: 'alhuda_custom_books',
+          value: JSON.stringify(books),
+          updated_at: new Date().toISOString()
+        }).then(() => {});
+      }
     }
+
+    async function hydrateCustomBooksFromCloudflareD1() {
+      try {
+        if (typeof db === 'undefined' || !db || typeof db.from !== 'function') return;
+        const { data } = await db.from('system_settings').select('*').eq('key', 'alhuda_custom_books').single();
+        if (data && data.value) {
+          const remoteBooks = JSON.parse(data.value);
+          if (Array.isArray(remoteBooks) && remoteBooks.length > 0) {
+            localStorage.setItem('alhuda_custom_books', JSON.stringify(remoteBooks));
+          }
+        }
+      } catch (e) {}
+    }
+    setTimeout(hydrateCustomBooksFromCloudflareD1, 600);
 
     function getDeletedBookIds() {
       try {
@@ -1270,12 +1292,15 @@
       btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Compressing &amp; Saving...';
 
       try {
-        // Compress images client-side into lightweight WebP data URLs
+        // Compress images client-side into WebP and upload to Cloudflare R2 (10 GB Storage)
         const compressedPages = [];
         for (let i = 0; i < SELECTED_CUSTOM_FILES.length; i++) {
           const file = SELECTED_CUSTOM_FILES[i];
           const dataUrl = await compressImageToWebP(file);
-          compressedPages.push(dataUrl);
+          const r2Url = (typeof window.uploadToCloudflareR2 === 'function')
+            ? await window.uploadToCloudflareR2(dataUrl, 'course_material', `${title.replace(/[^a-zA-Z0-9_-]/g, '_')}_page_${i + 1}.webp`)
+            : dataUrl;
+          compressedPages.push(r2Url);
         }
 
         const customBook = {
@@ -1298,7 +1323,7 @@
         existingCustom.unshift(customBook);
         saveCustomBooks(existingCustom);
 
-        alert(`✅ Custom Book "${title}" Saved Successfully!\n\nTotal Pages: ${compressedPages.length}\nAdded to Course Material Library.`);
+        alert(`✅ Custom Book "${title}" Saved Successfully!\n\nTotal Pages: ${compressedPages.length}\nAdded to Course Material Library (Cloudflare R2 + D1).`);
         closeModal('modalUploadCustomBook');
         loadCurriculumLibrary(category);
       } catch (err) {
@@ -1382,12 +1407,15 @@
         let customBooks = getCustomBooks();
         let bookIndex = customBooks.findIndex(b => b.id === bookId);
 
-        // Compress any new appended pages
+        // Compress any new appended pages and upload to Cloudflare R2 (10 GB Storage)
         let appendedPages = [];
         if (EDIT_BOOK_APPEND_FILES.length > 0) {
           for (let i = 0; i < EDIT_BOOK_APPEND_FILES.length; i++) {
             const dataUrl = await compressImageToWebP(EDIT_BOOK_APPEND_FILES[i]);
-            appendedPages.push(dataUrl);
+            const r2Url = (typeof window.uploadToCloudflareR2 === 'function')
+              ? await window.uploadToCloudflareR2(dataUrl, 'course_material', `${title.replace(/[^a-zA-Z0-9_-]/g, '_')}_append_${i + 1}.webp`)
+              : dataUrl;
+            appendedPages.push(r2Url);
           }
         }
 
