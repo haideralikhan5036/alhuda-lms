@@ -496,7 +496,7 @@
 
         if (designation === 'Manager') {
           // Open official Manager Provisioning Success Modal
-          const portalUrl = `${window.location.origin}/manager.html?m=${emp_id}`;
+          const portalUrl = `${window.location.origin}/manager.html`;
           const badgeEl = document.getElementById('succMgrIdBadge');
           if (badgeEl) badgeEl.innerText = emp_id;
           const nameEl = document.getElementById('succMgrName');
@@ -788,7 +788,7 @@
           const cleanPhone = (t.phone || '').replace(/[^0-9]/g, '');
           const mgrUsername = meta.username || acc.username || `mgr.${t.full_name.toLowerCase().replace(/[^a-z]/g, '').slice(0, 8)}`;
           const mgrPassword = meta.password || acc.password || '12345678';
-          const directPortalUrl = `${window.location.origin}/manager.html?m=${displayId}`;
+          const directPortalUrl = `${window.location.origin}/manager.html`;
           const waMsg = `Assalamu Alaikum Respected ${t.full_name},\nWelcome to Al-Huda Islamic Centre Management Operations.\n\n🌐 *Your Dedicated Manager Portal Link:*\n${directPortalUrl}\n\n🆔 *Manager ID:* ${displayId}\n👤 *Login Username:* ${mgrUsername}\n🔑 *Login Password:* ${mgrPassword}\n💼 *Role / Title:* ${meta.role_title || 'Operations Manager'}\n\nPlease click your portal link to access all management tools, rosters, timetables, and system follow-ups.\nJazakum Allahu Khairan!`;
           const waUrl = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(waMsg)}`;
 
@@ -978,7 +978,7 @@
         const bookedCount = countMap[t.id] || 0;
         const creds = getTeacherCreds(t);
         const cleanPhone = (t.phone || '').replace(/[^0-9]/g, '');
-        const directPortalUrl = `${window.location.origin}/teacher.html?t=${creds.username}`;
+        const directPortalUrl = `${window.location.origin}/teacher.html`;
         const waMsg = `Assalamu Alaikum Respected ${t.full_name},\nWelcome to the Al-Huda Islamic Centre Teacher Operations Portal.\n\n🌐 *Your Personal Portal Link:*\n${directPortalUrl}\n\n👤 *Username:* ${creds.username}\n🔑 *Password:* ${creds.password || '12345678'}\n🕒 *Assigned Shift:* ${t.working_shift || '10 Hours Shift'}\n💰 *Slot Rate:* ${t.rate_per_slot || 2200} PKR\n\nPlease tap the link above to view your timetable, student schedules, and attendance logs.\nJazakum Allahu Khairan!`;
         const waUrl = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(waMsg)}`;
 
@@ -1140,7 +1140,7 @@
               <button onclick="open2DMatrixForTeacher('${t.id}')" class="w-full py-2.5 bg-gradient-to-r from-brandDark to-brandEmerald text-white font-extrabold text-xs rounded-xl hover:shadow-lg transition flex items-center justify-center gap-2 shadow-xs">
                 <i class="fa-solid fa-table-cells"></i> Open 2D Full-Week Timetable
               </button>
-              <a href="teacher.html?t=${creds.username}" target="_blank" class="w-full py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-[11px] rounded-lg transition flex items-center justify-center gap-1.5">
+              <a href="teacher.html" target="_blank" class="w-full py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-[11px] rounded-lg transition flex items-center justify-center gap-1.5">
                 <i class="fa-solid fa-arrow-up-right-from-square text-emerald-600"></i> Open Dedicated Teacher Portal
               </a>
             </div>
@@ -1150,15 +1150,15 @@
     }
 
     function copyTeacherCredentials(user, pass, teacherName) {
-      const url = `${window.location.origin}/teacher.html?t=${user}`;
-      const txt = `Al-Huda Islamic Centre LMS - Teacher Portal\nTeacher: ${teacherName}\nDirect Link: ${url}\nUsername: ${user}\nPassword: ${pass}`;
+      const url = `${window.location.origin}/teacher.html`;
+      const txt = `Al-Huda Islamic Centre LMS - Teacher Portal\nTeacher: ${teacherName}\nPortal Link: ${url}\nUsername: ${user}\nPassword: ${pass}`;
       navigator.clipboard.writeText(txt);
       alert(`Copied to clipboard!\n\n${txt}`);
     }
 
     function copyManagerCredentials(id, user, pass, managerName, portalUrl) {
-      const url = portalUrl || `${window.location.origin}/manager.html?m=${id}`;
-      const txt = `Al-Huda Islamic Centre LMS — Manager Portal\nManager: ${managerName}\nManager ID: ${id}\nDirect Link: ${url}\nUsername: ${user}\nPassword: ${pass}`;
+      const url = portalUrl || `${window.location.origin}/manager.html`;
+      const txt = `Al-Huda Islamic Centre LMS — Manager Portal\nManager: ${managerName}\nManager ID: ${id}\nPortal Link: ${url}\nUsername: ${user}\nPassword: ${pass}`;
       navigator.clipboard.writeText(txt);
       alert(`Copied to clipboard!\n\n${txt}`);
     }

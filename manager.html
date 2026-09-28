@@ -3,33 +3,430 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Redirecting to Unified Operations Portal — Al-Huda LMS</title>
-  <meta http-equiv="refresh" content="0; url=index.html?role=manager">
+  <title>Manager Portal Login — Al-Huda Islamic Centre LMS</title>
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#053344">
+  <link rel="apple-touch-icon" href="apple-touch-icon.png">
+  <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
+  <link rel="icon" type="image/png" sizes="64x64" href="favicon.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script>
-    (function() {
-      var currentSearch = window.location.search;
-      var params = new URLSearchParams(currentSearch);
-      if (!params.has('role')) {
-        params.set('role', 'manager');
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['"Inter"', '"Plus Jakarta Sans"', 'system-ui', '-apple-system', 'sans-serif'],
+            mono: ['"Plus Jakarta Sans"', '"Inter"', 'system-ui', 'sans-serif']
+          },
+          colors: {
+            brandDark: '#084C63',
+            brandDarkest: '#053344',
+            brandGold: '#C5A880',
+            brandEmerald: '#059669'
+          }
+        }
       }
-      var queryString = '?' + params.toString();
-      var targetUrl = 'index.html' + queryString + window.location.hash;
-      window.location.replace(targetUrl);
-    })();
+    };
   </script>
 </head>
-<body style="margin: 0; padding: 0; background: #053344; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; color: #ffffff;">
-  <div style="text-align: center; padding: 24px; max-width: 480px;">
-    <div style="width: 48px; height: 48px; border: 4px solid #C5A880; border-top-color: transparent; border-radius: 50%; margin: 0 auto 18px auto; animation: spin 0.9s linear infinite;"></div>
-    <h2 style="font-size: 19px; font-weight: 700; margin: 0 0 8px 0; color: #f8fafc;">Opening Unified Operations Cockpit...</h2>
-    <p style="font-size: 13px; color: #94a3b8; margin: 0 0 16px 0;">Manager Mode &bull; Protected Contacts &amp; Deletion Guard Active</p>
-    <a href="index.html?role=manager" style="display: inline-block; font-size: 12px; color: #C5A880; text-decoration: underline; font-weight: 600;">Click here if not redirected automatically</a>
-  </div>
-  <style>
-    @keyframes spin {
-      0% { transform: rotate(0deg); }
-      100% { transform: rotate(360deg); }
+<body class="bg-slate-50 text-slate-800 font-sans min-h-screen flex flex-col antialiased">
+
+  <!-- TOP HEADER -->
+  <header class="bg-brandDarkest text-white border-b border-brandDark/60 sticky top-0 z-50 shadow-md">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-600 to-brandDark flex items-center justify-center text-brandGold text-lg shadow-sm border border-indigo-400/30">
+          <i class="fa-solid fa-user-shield"></i>
+        </div>
+        <div>
+          <h1 class="font-extrabold text-sm sm:text-base tracking-wide text-white">
+            AL-HUDA ISLAMIC CENTRE
+          </h1>
+          <p class="text-[10px] text-indigo-300 font-semibold tracking-wider uppercase">
+            Manager Operations Portal
+          </p>
+        </div>
+      </div>
+
+      <div class="hidden sm:flex items-center gap-1.5 px-3 py-1 rounded-lg bg-slate-900/80 border border-indigo-500/30 text-indigo-200 text-xs font-mono font-bold">
+        <i class="fa-regular fa-clock text-brandGold"></i>
+        <span id="liveClock">--:--:-- PKT</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- MAIN CONTENT: MANAGER LOGIN SCREEN -->
+  <main class="flex-1 flex flex-col justify-center items-center p-4 sm:p-6">
+    <div id="managerLoginContainer" class="max-w-md w-full my-6">
+
+      <!-- Role Mismatch Alert -->
+      <div id="mgrRoleMismatchBanner" class="hidden mb-4 p-3.5 rounded-2xl bg-amber-50 border border-amber-300 text-amber-900 text-xs font-semibold shadow-xs">
+        <div class="flex items-start gap-2.5">
+          <i class="fa-solid fa-shield-halved text-amber-600 text-base mt-0.5"></i>
+          <div>
+            <div class="font-extrabold text-amber-950" id="mgrRoleMismatchTitle">Authentication Required</div>
+            <p class="mt-0.5 text-[11px] text-amber-800 leading-relaxed" id="mgrRoleMismatchDesc">Please sign in with authorized Manager credentials to access the Manager Portal.</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="bg-white rounded-2xl shadow-xl border border-slate-200 overflow-hidden">
+        <div class="p-6 bg-gradient-to-br from-indigo-50/70 to-white border-b border-slate-100 flex items-center gap-3.5">
+          <div class="w-12 h-12 rounded-2xl bg-indigo-950 text-amber-400 flex items-center justify-center text-xl shadow-md border border-indigo-400/30">
+            <i class="fa-solid fa-user-shield"></i>
+          </div>
+          <div>
+            <h2 class="text-lg font-extrabold text-slate-900">Manager Portal Login</h2>
+            <p class="text-xs text-slate-500">Authenticate with your personal Manager credentials</p>
+          </div>
+        </div>
+
+        <div class="p-6">
+          <div id="mgrLoginErrorMsg" class="hidden mb-4 p-3 bg-rose-50 border border-rose-200 text-rose-700 rounded-xl text-xs font-bold flex items-center gap-2">
+            <i class="fa-solid fa-circle-exclamation"></i>
+            <span id="mgrLoginErrorText">Invalid username or password.</span>
+          </div>
+
+          <form onsubmit="handleManagerSignIn(event)" class="space-y-4 text-xs" autocomplete="off">
+            <div>
+              <label class="block font-bold text-slate-700 mb-1.5">
+                Username / Manager ID / Email <span class="text-rose-500">*</span>
+              </label>
+              <div class="relative">
+                <i class="fa-solid fa-user-tie absolute left-3.5 top-3 text-slate-400"></i>
+                <input type="text" id="mgrLoginUsername" required placeholder="Enter Manager Username or ID (e.g. MGR-001)" autocomplete="username"
+                  class="w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-300 rounded-xl font-bold text-slate-900 focus:bg-white focus:outline-indigo-600 focus:border-indigo-600 text-xs">
+              </div>
+            </div>
+
+            <div>
+              <label class="block font-bold text-slate-700 mb-1.5">
+                Password <span class="text-rose-500">*</span>
+              </label>
+              <div class="relative">
+                <i class="fa-solid fa-lock absolute left-3.5 top-3 text-slate-400"></i>
+                <input type="password" id="mgrLoginPassword" required placeholder="Enter your password" autocomplete="current-password"
+                  class="w-full pl-9 pr-10 py-2.5 bg-slate-50 border border-slate-300 rounded-xl font-bold text-slate-900 focus:bg-white focus:outline-indigo-600 focus:border-indigo-600 text-xs">
+                <button type="button" onclick="toggleMgrPassVisibility()" class="absolute right-3 top-2.5 text-slate-400 hover:text-slate-700" title="Show / Hide Password">
+                  <i id="mgrPassToggleIcon" class="fa-regular fa-eye"></i>
+                </button>
+              </div>
+            </div>
+
+            <button type="submit" id="btnSubmitMgrLogin" class="w-full py-3 bg-indigo-950 hover:bg-slate-900 text-white font-extrabold text-sm rounded-xl shadow-md transition-all flex items-center justify-center gap-2 border border-indigo-500/30">
+              <i class="fa-solid fa-right-to-bracket text-amber-400"></i> Login to Manager Portal
+            </button>
+          </form>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <footer class="bg-white border-t border-slate-200 py-4 text-center text-xs text-slate-500 mt-auto">
+    <p>Al-Huda Islamic Centre LMS &copy; 2026. Role-Based Manager Security &amp; Contact Protection Active.</p>
+  </footer>
+
+  <script>
+    const SUPABASE_URL = "https://ldgzuyroejzrvktksugy.supabase.co";
+    const SUPABASE_KEY = "sb_publishable_rP38XXgYoYBTPJlCxtwMUg_RPupFrKg";
+    const db = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+    function parseEmployeeMeta(rawStr) {
+      if (!rawStr) return {};
+      if (typeof rawStr === 'object') return rawStr;
+      if (typeof rawStr === 'string' && rawStr.trim().startsWith('{')) {
+        try { return JSON.parse(rawStr); } catch (e) {}
+      }
+      return {};
     }
-  </style>
+
+    function classifyEmployeeRole(emp, accountsMap = {}) {
+      if (!emp || typeof emp !== 'object') return 'unknown';
+      const meta = parseEmployeeMeta(emp.address);
+      const notesMeta = parseEmployeeMeta(emp.notes);
+      const acc = (emp.id && accountsMap[emp.id]) ? accountsMap[emp.id] : (meta.teacher_account || {});
+
+      const empType = String(
+        emp.employee_type || emp.employeeType || emp.role ||
+        meta.employee_type || meta.employeeType || meta.role ||
+        notesMeta.employee_type || acc.employee_type || acc.role || ''
+      ).trim().toLowerCase();
+
+      const designation = String(
+        emp.designation || meta.designation || acc.designation ||
+        meta.role_title || acc.role_title || ''
+      ).trim().toLowerCase();
+
+      const shift = String(emp.working_shift || meta.working_shift || '').trim().toLowerCase();
+      const codeIds = [
+        String(emp.id || ''),
+        String(emp.witness_name || ''),
+        String(meta.emp_id || ''),
+        String(meta.teacher_id || ''),
+        String(acc.emp_id || ''),
+        String(acc.teacher_id || '')
+      ].map(s => s.trim().toUpperCase());
+
+      if (empType === 'manager' || designation === 'manager' || shift === 'manager' || codeIds.some(c => c.startsWith('MGR-'))) {
+        return 'manager';
+      }
+      if (empType === 'other_staff' || empType === 'staff' || designation === 'other staff' || shift === 'other staff' || codeIds.some(c => c.startsWith('STF-'))) {
+        return 'other_staff';
+      }
+      return 'teacher';
+    }
+
+    function isEligibleManagerAccount(emp, accountsMap = {}) {
+      if (!emp || typeof emp !== 'object') return false;
+      const st = String(emp.status || 'Active').trim().toLowerCase();
+      if (st === 'inactive' || st === 'deactivated' || st === 'terminated' || st === 'deleted') return false;
+      return classifyEmployeeRole(emp, accountsMap) === 'manager';
+    }
+
+    function resolveManagerCredentials(m, accountsMap = {}) {
+      const meta = parseEmployeeMeta(m.address);
+      const acc = (m.id && accountsMap[m.id]) ? accountsMap[m.id] : (meta.teacher_account || {});
+      const empId = meta.emp_id || acc.emp_id || acc.teacher_id || (String(m.witness_name || '').toUpperCase().startsWith('MGR-') ? m.witness_name : (String(m.id || '').toUpperCase().startsWith('MGR-') ? m.id : 'MGR-001'));
+      const firstWord = (m.full_name || 'manager').trim().split(/\s+/)[0] || 'manager';
+      const defaultUsername = firstWord.toLowerCase().replace(/[^a-z0-9]/g, '') || 'manager';
+      const username = String(meta.username || acc.username || defaultUsername).trim();
+      const password = String(meta.password || acc.password || '12345678').trim();
+      const roleTitle = String(meta.role_title || acc.role_title || 'Operations Manager').trim();
+      const email = String(m.email || meta.email || acc.email || '').trim();
+      return {
+        emp_id: String(empId).trim().toUpperCase(),
+        username,
+        password,
+        role_title: roleTitle,
+        email,
+        hasExplicitPassword: Boolean(meta.password || acc.password)
+      };
+    }
+
+    async function fetchManagersFromBackend() {
+      let localAccs = {};
+      try {
+        localAccs = JSON.parse(localStorage.getItem('alhuda_teacher_accounts') || localStorage.getItem('bqi_teacher_accounts') || '{}');
+      } catch (e) { localAccs = {}; }
+
+      try {
+        const [tchRes, famRes] = await Promise.all([
+          db.from('teachers').select('*').order('full_name', { ascending: true }),
+          db.from('families').select('id, notes')
+        ]);
+
+        const employees = tchRes.data || [];
+        let cloudSharedState = null;
+        let cloudUpdatedAt = 0;
+        (famRes.data || []).forEach(f => {
+          if (!f || !f.notes) return;
+          try {
+            const nObj = typeof f.notes === 'object' ? f.notes : JSON.parse(f.notes);
+            if (nObj && nObj.lms_shared_sync && typeof nObj.lms_shared_sync === 'object') {
+              const ts = new Date(nObj.lms_shared_sync.updated_at || 0).getTime() || 0;
+              if (ts >= cloudUpdatedAt) {
+                cloudUpdatedAt = ts;
+                cloudSharedState = nObj.lms_shared_sync;
+              }
+            }
+          } catch (e) {}
+        });
+
+        const mergedAccs = { ...(cloudSharedState?.teacher_accounts || {}), ...localAccs };
+        employees.forEach(emp => {
+          if (!emp || !emp.id) return;
+          const meta = parseEmployeeMeta(emp.address);
+          if (meta.teacher_account && typeof meta.teacher_account === 'object') {
+            mergedAccs[emp.id] = { ...(mergedAccs[emp.id] || {}), ...meta.teacher_account };
+          } else if (meta.username || meta.emp_id || meta.password || meta.employee_type) {
+            mergedAccs[emp.id] = {
+              ...(mergedAccs[emp.id] || {}),
+              ...(meta.emp_id ? { teacher_id: meta.emp_id, emp_id: meta.emp_id } : {}),
+              ...(meta.username ? { username: meta.username } : {}),
+              ...(meta.password ? { password: meta.password } : {}),
+              ...(meta.employee_type ? { employee_type: meta.employee_type } : {})
+            };
+          }
+        });
+
+        localStorage.setItem('alhuda_teacher_accounts', JSON.stringify(mergedAccs));
+        const managers = employees.filter(emp => isEligibleManagerAccount(emp, mergedAccs));
+        return { managers, accountsMap: mergedAccs };
+      } catch (err) {
+        console.warn('Could not load managers from Supabase:', err);
+        return { managers: [], accountsMap: localAccs };
+      }
+    }
+
+    function toggleMgrPassVisibility() {
+      const p = document.getElementById('mgrLoginPassword');
+      const icon = document.getElementById('mgrPassToggleIcon');
+      if (!p || !icon) return;
+      if (p.type === 'password') {
+        p.type = 'text';
+        icon.className = 'fa-regular fa-eye-slash';
+      } else {
+        p.type = 'password';
+        icon.className = 'fa-regular fa-eye';
+      }
+    }
+
+    window.onload = async function() {
+      setInterval(() => {
+        const now = new Date();
+        const el = document.getElementById('liveClock');
+        if (el) el.innerText = now.toLocaleTimeString('en-US', { timeZone: 'Asia/Karachi' }) + ' PKT';
+      }, 1000);
+
+      // Strip any URL query parameters (?m=MGR-001, ?id=..., etc.) so URL parameters NEVER select a Manager
+      if (window.location.search) {
+        try {
+          window.history.replaceState({}, document.title, window.location.pathname);
+        } catch (e) {}
+      }
+
+      const activePortalRole = (localStorage.getItem('alhuda_active_portal_role') || '').toLowerCase();
+      const roleBanner = document.getElementById('mgrRoleMismatchBanner');
+      const roleTitle = document.getElementById('mgrRoleMismatchTitle');
+      const roleDesc = document.getElementById('mgrRoleMismatchDesc');
+
+      // Role Mismatch Guard: If user is currently logged in as Teacher or Parent, do NOT auto-open Manager portal
+      if (activePortalRole && activePortalRole !== 'manager') {
+        if (roleBanner && roleTitle && roleDesc) {
+          const roleLabel = activePortalRole === 'teacher' ? 'Teacher' : (activePortalRole === 'parent' ? 'Parent / Student' : activePortalRole);
+          roleTitle.innerText = `Role Authorization Required (${roleLabel} Session Detected)`;
+          roleDesc.innerText = `You are currently signed in as ${roleLabel}. Manager Portal access requires valid Manager credentials.`;
+          roleBanner.classList.remove('hidden');
+        }
+        return;
+      }
+
+      // Verify existing authenticated Manager session
+      const savedMgrRaw = sessionStorage.getItem('alhuda_manager_session') || localStorage.getItem('alhuda_logged_in_manager');
+      let parsedMgr = null;
+      if (savedMgrRaw && activePortalRole === 'manager') {
+        try {
+          parsedMgr = JSON.parse(savedMgrRaw);
+        } catch (e) {
+          parsedMgr = null;
+        }
+      }
+
+      if (parsedMgr && parsedMgr.id && parsedMgr.emp_id) {
+        const { managers, accountsMap } = await fetchManagersFromBackend();
+        const verifiedMgr = managers.find(m => String(m.id) === String(parsedMgr.id));
+        if (verifiedMgr && isEligibleManagerAccount(verifiedMgr, accountsMap)) {
+          const creds = resolveManagerCredentials(verifiedMgr, accountsMap);
+          const sessionPayload = {
+            id: verifiedMgr.id,
+            emp_id: creds.emp_id,
+            full_name: verifiedMgr.full_name,
+            username: creds.username,
+            role_title: creds.role_title,
+            authenticated_at: parsedMgr.authenticated_at || new Date().toISOString()
+          };
+          localStorage.setItem('alhuda_logged_in_manager', JSON.stringify(sessionPayload));
+          sessionStorage.setItem('alhuda_manager_session', JSON.stringify(sessionPayload));
+          localStorage.setItem('alhuda_active_portal_role', 'manager');
+          window.location.replace('index.html?role=manager');
+          return;
+        } else {
+          localStorage.removeItem('alhuda_logged_in_manager');
+          sessionStorage.removeItem('alhuda_manager_session');
+          if (activePortalRole === 'manager') localStorage.removeItem('alhuda_active_portal_role');
+        }
+      }
+    };
+
+    async function handleManagerSignIn(e) {
+      e.preventDefault();
+      const usernameInput = (document.getElementById('mgrLoginUsername')?.value || '').trim();
+      const passwordInput = (document.getElementById('mgrLoginPassword')?.value || '').trim();
+      const errBox = document.getElementById('mgrLoginErrorMsg');
+      const errText = document.getElementById('mgrLoginErrorText');
+      const btn = document.getElementById('btnSubmitMgrLogin');
+
+      if (errBox) errBox.classList.add('hidden');
+
+      if (!usernameInput || !passwordInput) {
+        if (errBox && errText) {
+          errText.innerText = 'Please enter both username and password.';
+          errBox.classList.remove('hidden');
+        }
+        return;
+      }
+
+      if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Authenticating...';
+      }
+
+      const { managers, accountsMap } = await fetchManagersFromBackend();
+      const uNorm = usernameInput.toLowerCase();
+      const uPhone = usernameInput.replace(/[^0-9]/g, '');
+
+      // Match against eligible Manager accounts ONLY (never Teachers, never default/first manager)
+      const matchedManager = managers.find(m => {
+        const creds = resolveManagerCredentials(m, accountsMap);
+        const fullNameLower = String(m.full_name || '').trim().toLowerCase();
+        const firstWordLower = fullNameLower.split(/\s+/)[0] || '';
+        const mPhone = String(m.phone || '').replace(/[^0-9]/g, '');
+
+        const identifierMatches = (
+          uNorm === creds.username.toLowerCase() ||
+          uNorm === creds.emp_id.toLowerCase() ||
+          uNorm === String(m.id || '').trim().toLowerCase() ||
+          uNorm === fullNameLower ||
+          (uNorm === firstWordLower && firstWordLower.length >= 2) ||
+          (creds.email && uNorm === creds.email.toLowerCase()) ||
+          (uPhone.length >= 7 && mPhone.length >= 7 && (mPhone === uPhone || mPhone.slice(-10) === uPhone.slice(-10)))
+        );
+
+        if (!identifierMatches) return false;
+
+        return (
+          passwordInput === creds.password ||
+          (!creds.hasExplicitPassword && passwordInput === '12345678')
+        );
+      });
+
+      if (btn) {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fa-solid fa-right-to-bracket text-amber-400"></i> Login to Manager Portal';
+      }
+
+      if (matchedManager) {
+        const creds = resolveManagerCredentials(matchedManager, accountsMap);
+        const sessionPayload = {
+          id: matchedManager.id,
+          emp_id: creds.emp_id,
+          full_name: matchedManager.full_name,
+          username: creds.username,
+          role_title: creds.role_title,
+          authenticated_at: new Date().toISOString()
+        };
+
+        localStorage.setItem('alhuda_logged_in_manager', JSON.stringify(sessionPayload));
+        sessionStorage.setItem('alhuda_manager_session', JSON.stringify(sessionPayload));
+        localStorage.setItem('alhuda_active_portal_role', 'manager');
+        localStorage.removeItem('alhuda_logged_in_teacher');
+        sessionStorage.removeItem('alhuda_teacher_session');
+        localStorage.removeItem('alhuda_logged_in_parent');
+        sessionStorage.removeItem('alhuda_parent_session');
+
+        window.location.replace('index.html?role=manager');
+      } else {
+        if (errBox && errText) {
+          errText.innerText = 'Invalid username or password.';
+          errBox.classList.remove('hidden');
+        }
+      }
+    }
+  </script>
 </body>
 </html>

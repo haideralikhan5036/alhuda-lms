@@ -168,14 +168,20 @@
           </div>
         </div>
 
-        <!-- Student Selector & Quick Actions -->
-        <div class="flex items-center gap-2 sm:gap-3 flex-wrap justify-end">
-          <!-- Student Account Selector (Connected to Supabase) -->
+        <!-- Student Selector & Quick Actions (Visible ONLY when authenticated) -->
+        <div id="parentHeaderAuthControls" class="hidden items-center gap-2 sm:gap-3 flex-wrap justify-end">
+          <!-- Authorized Family Badge -->
+          <div class="hidden md:flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-emerald-950/80 border border-emerald-700/60 text-[11px] font-bold text-emerald-200">
+            <i class="fa-solid fa-house-user text-brandGold"></i>
+            <span id="parentHeaderFamilyName">Family</span>
+          </div>
+
+          <!-- Student Account Selector (Restricted strictly to authenticated Family's children) -->
           <div class="flex items-center gap-1.5 bg-slate-900/90 px-2 py-1 rounded-xl border border-emerald-700/60 shadow-xs">
             <i class="fa-solid fa-user-graduate text-brandGold text-xs"></i>
             <span class="text-[11px] font-semibold text-slate-300 hidden md:inline">Student:</span>
             <select id="portalStudentSelect" onchange="switchStudentAccount(this.value)" class="bg-transparent text-emerald-200 font-bold text-xs border-none focus:outline-none cursor-pointer py-1 pl-1 pr-6 max-w-[130px] sm:max-w-[200px]">
-              <option value="loading">Loading Students...</option>
+              <option value="">Select Student</option>
             </select>
           </div>
 
@@ -185,23 +191,18 @@
             <span class="hidden lg:inline">Library</span>
           </button>
 
-          <!-- Back to Main LMS -->
-          <a href="/" class="px-2.5 sm:px-3 py-1.5 rounded-xl border border-emerald-700/50 hover:bg-white/10 text-emerald-200 text-xs font-bold transition flex items-center gap-1.5" title="Return to Admin / Teacher Dashboard">
-            <i class="fa-solid fa-house text-xs"></i> <span class="hidden sm:inline">Main LMS</span>
-          </a>
-
           <!-- Logout -->
           <button onclick="handleParentLogout()" class="px-2.5 sm:px-3 py-1.5 rounded-xl bg-rose-600/20 hover:bg-rose-600 text-rose-200 hover:text-white border border-rose-500/30 text-xs font-bold transition flex items-center gap-1" title="Logout">
             <i class="fa-solid fa-right-from-bracket"></i>
-            <span class="hidden sm:inline">Exit</span>
+            <span class="hidden sm:inline">Logout</span>
           </button>
         </div>
 
       </div>
     </div>
 
-    <!-- PORTAL SUB-NAV TABS -->
-    <div class="bg-slate-950/70 border-t border-emerald-900/60 px-4 sm:px-6 lg:px-8 overflow-x-auto touch-scroll no-scrollbar">
+    <!-- PORTAL SUB-NAV TABS (Visible ONLY when authenticated) -->
+    <div id="parentSubNavTabs" class="hidden bg-slate-950/70 border-t border-emerald-900/60 px-4 sm:px-6 lg:px-8 overflow-x-auto touch-scroll no-scrollbar">
       <div class="max-w-7xl mx-auto flex items-center gap-1 py-1.5 min-w-max">
         <button onclick="switchPortalTab('tab-dashboard')" id="navBtn_dashboard" class="portal-nav-btn active px-3.5 py-1.5 rounded-lg text-xs font-bold text-slate-300 hover:text-white hover:bg-slate-800/60 transition flex items-center gap-1.5">
           <i class="fa-solid fa-gauge-high"></i> Dashboard
@@ -225,8 +226,72 @@
     </div>
   </nav>
 
-  <!-- ================= MAIN CONTENT WRAPPER ================= -->
-  <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 flex-1 w-full space-y-6">
+  <!-- ================= 1. PARENT / STUDENT LOGIN SCREEN (WHEN NOT AUTHENTICATED) ================= -->
+  <div id="parentLoginView" class="max-w-md w-full mx-auto my-10 px-4 flex-1 flex flex-col justify-center">
+    <!-- Role Mismatch Notice -->
+    <div id="parentRoleMismatchBanner" class="hidden mb-4 p-3.5 rounded-2xl bg-amber-50 border border-amber-300 text-amber-900 text-xs font-semibold shadow-xs">
+      <div class="flex items-start gap-2.5">
+        <i class="fa-solid fa-shield-halved text-amber-600 text-base mt-0.5"></i>
+        <div>
+          <div class="font-extrabold text-amber-950" id="parentRoleMismatchTitle">Authentication Required</div>
+          <p class="mt-0.5 text-[11px] text-amber-800 leading-relaxed" id="parentRoleMismatchDesc">Please sign in with your Family / Parent credentials to access the Parent &amp; Student Portal.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="bg-white rounded-2xl shadow-xl border border-slate-200 overflow-hidden">
+      <div class="p-6 bg-gradient-to-br from-emerald-50/70 to-white border-b border-slate-100 flex items-center gap-3.5">
+        <div class="w-12 h-12 rounded-2xl bg-brandDarkest text-brandGold flex items-center justify-center text-xl shadow-md">
+          <i class="fa-solid fa-house-user"></i>
+        </div>
+        <div>
+          <h3 class="text-lg font-extrabold text-slate-900">Parent &amp; Student Login</h3>
+          <p class="text-xs text-slate-500">Sign in to view your family's authorized students, Sabaq &amp; fee ledger</p>
+        </div>
+      </div>
+
+      <div class="p-6">
+        <div id="parentLoginErrorMsg" class="hidden mb-4 p-3 bg-rose-50 border border-rose-200 text-rose-700 rounded-xl text-xs font-bold flex items-center gap-2">
+          <i class="fa-solid fa-circle-exclamation"></i>
+          <span id="parentLoginErrorText">Invalid username or password.</span>
+        </div>
+
+        <form onsubmit="handleParentSignIn(event)" class="space-y-4 text-xs" autocomplete="off">
+          <div>
+            <label class="block font-bold text-slate-700 mb-1.5">
+              Username / Family ID / Email <span class="text-rose-500">*</span>
+            </label>
+            <div class="relative">
+              <i class="fa-solid fa-user absolute left-3.5 top-3 text-slate-400"></i>
+              <input type="text" id="parentLoginUsername" required placeholder="Enter Parent Username or Family ID" autocomplete="username"
+                class="w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-300 rounded-xl font-bold text-slate-900 focus:bg-white focus:outline-brandEmerald focus:border-brandEmerald text-xs">
+            </div>
+          </div>
+
+          <div>
+            <label class="block font-bold text-slate-700 mb-1.5">
+              Password <span class="text-rose-500">*</span>
+            </label>
+            <div class="relative">
+              <i class="fa-solid fa-lock absolute left-3.5 top-3 text-slate-400"></i>
+              <input type="password" id="parentLoginPassword" required placeholder="Enter your password" autocomplete="current-password"
+                class="w-full pl-9 pr-10 py-2.5 bg-slate-50 border border-slate-300 rounded-xl font-bold text-slate-900 focus:bg-white focus:outline-brandEmerald focus:border-brandEmerald text-xs">
+              <button type="button" onclick="toggleParentPassVisibility()" class="absolute right-3 top-2.5 text-slate-400 hover:text-slate-700" title="Show / Hide Password">
+                <i id="parentPassToggleIcon" class="fa-regular fa-eye"></i>
+              </button>
+            </div>
+          </div>
+
+          <button type="submit" id="btnSubmitParentLogin" class="w-full py-3 bg-brandDarkest text-white font-extrabold text-sm rounded-xl hover:bg-brandDark shadow-md transition-all flex items-center justify-center gap-2">
+            <i class="fa-solid fa-right-to-bracket text-brandGold"></i> Login to Parent Portal
+          </button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= 2. MAIN CONTENT WRAPPER (HIDDEN UNTIL AUTHENTICATED) ================= -->
+  <main id="parentMainPortalContent" class="hidden max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 flex-1 w-full space-y-6">
 
     <!-- TAB 1: DASHBOARD OVERVIEW -->
     <section id="tab-dashboard" class="portal-tab-content space-y-6">
@@ -706,6 +771,7 @@
 
     // State Variables
     let ALL_STUDENTS = [];
+    let CURRENT_AUTH_FAMILY = null;
     let CURRENT_STUDENT = null;
     let CURRENT_TEACHER = null;
     let CURRENT_SCHEDULES = [];
@@ -726,6 +792,167 @@
     let READER_SCROLL_START_Y = 0;
     let READER_SPACE_DOWN = false;
 
+    function isRegularFamilyEntry(f) {
+      if (!f) return false;
+      const st = String(f.status || 'Active').trim().toLowerCase();
+      if (st === 'trial' || st === 'converted' || st === 'discontinued' || st === 'deleted') return false;
+      if (String(f.id || '').toUpperCase().startsWith('TRL-')) return false;
+      if (f.notes) {
+        try {
+          const parsed = typeof f.notes === 'string' ? JSON.parse(f.notes) : f.notes;
+          if (parsed && parsed.is_trial === true && !parsed.converted_to_regular && !parsed.converted_from_trial) {
+            return false;
+          }
+        } catch (e) {}
+      }
+      return true;
+    }
+
+    function isRegularStudentEntry(s) {
+      if (!s) return false;
+      const st = String(s.status || 'Active').trim().toLowerCase();
+      if (st === 'trial' || st === 'converted' || st === 'discontinued' || st === 'deleted') return false;
+      if (String(s.id || '').toUpperCase().startsWith('TRL-')) return false;
+      if (String(s.family_id || '').toUpperCase().startsWith('TRL-')) return false;
+      return true;
+    }
+
+    function resolveFamilyCredentials(family, parentAccountsMap = {}) {
+      if (!family) return { username: '', password: '' };
+      if (parentAccountsMap[family.id] && parentAccountsMap[family.id].username) {
+        return parentAccountsMap[family.id];
+      }
+      if (family.notes) {
+        try {
+          const nObj = typeof family.notes === 'object' ? family.notes : JSON.parse(family.notes);
+          if (nObj && nObj.portal_credentials && nObj.portal_credentials.username) {
+            return nObj.portal_credentials;
+          }
+        } catch (e) {}
+      }
+      const baseUser = (family.parent_name || 'parent').toLowerCase().replace(/[^a-z0-9]/g, '_').replace(/_+/g, '_').replace(/^_|_$/g, '').slice(0, 15) || 'parent';
+      const stableDigits = String(family.whatsapp || family.id || '786').replace(/[^0-9]/g, '').slice(-3).padStart(3, '7');
+      return {
+        username: 'parent_' + baseUser,
+        password: 'alhuda_' + stableDigits,
+        parent_name: family.parent_name,
+        whatsapp: family.whatsapp
+      };
+    }
+
+    async function fetchFamiliesAndStudentsForAuth() {
+      let localParentAccs = {};
+      try {
+        localParentAccs = JSON.parse(localStorage.getItem('alhuda_parent_accounts') || '{}');
+      } catch (e) { localParentAccs = {}; }
+
+      try {
+        const [famRes, stuRes] = await Promise.all([
+          db.from('families').select('*').order('parent_name'),
+          db.from('students').select('*').order('name')
+        ]);
+
+        const rawFamilies = (famRes.data || []).filter(f => isRegularFamilyEntry(f));
+        const rawStudents = (stuRes.data || []).filter(s => isRegularStudentEntry(s));
+
+        let cloudSharedState = null;
+        let cloudUpdatedAt = 0;
+        (famRes.data || []).forEach(f => {
+          if (!f || !f.notes) return;
+          try {
+            const nObj = typeof f.notes === 'object' ? f.notes : JSON.parse(f.notes);
+            if (nObj && nObj.lms_shared_sync && typeof nObj.lms_shared_sync === 'object') {
+              const ts = new Date(nObj.lms_shared_sync.updated_at || 0).getTime() || 0;
+              if (ts >= cloudUpdatedAt) {
+                cloudUpdatedAt = ts;
+                cloudSharedState = nObj.lms_shared_sync;
+              }
+            }
+          } catch (e) {}
+        });
+
+        const mergedParentAccs = { ...(cloudSharedState?.parent_accounts || {}), ...localParentAccs };
+        rawFamilies.forEach(f => {
+          if (!f || !f.id || !f.notes) return;
+          try {
+            const nObj = typeof f.notes === 'object' ? f.notes : JSON.parse(f.notes);
+            if (nObj && nObj.portal_credentials && nObj.portal_credentials.username) {
+              mergedParentAccs[f.id] = nObj.portal_credentials;
+            }
+          } catch (e) {}
+        });
+
+        localStorage.setItem('alhuda_parent_accounts', JSON.stringify(mergedParentAccs));
+        CURRENT_FAMILIES = rawFamilies;
+        return { families: rawFamilies, students: rawStudents, parentAccountsMap: mergedParentAccs };
+      } catch (err) {
+        console.warn('Error loading families/students for auth:', err);
+        return { families: CURRENT_FAMILIES || [], students: [], parentAccountsMap: localParentAccs };
+      }
+    }
+
+    function toggleParentPassVisibility() {
+      const p = document.getElementById('parentLoginPassword');
+      const icon = document.getElementById('parentPassToggleIcon');
+      if (!p || !icon) return;
+      if (p.type === 'password') {
+        p.type = 'text';
+        icon.className = 'fa-regular fa-eye-slash';
+      } else {
+        p.type = 'password';
+        icon.className = 'fa-regular fa-eye';
+      }
+    }
+
+    function showParentLoginView() {
+      CURRENT_AUTH_FAMILY = null;
+      CURRENT_STUDENT = null;
+      ALL_STUDENTS = [];
+      document.getElementById('parentLoginView')?.classList.remove('hidden');
+      document.getElementById('parentMainPortalContent')?.classList.add('hidden');
+      const headerControls = document.getElementById('parentHeaderAuthControls');
+      if (headerControls) {
+        headerControls.classList.add('hidden');
+        headerControls.classList.remove('flex');
+      }
+      document.getElementById('parentSubNavTabs')?.classList.add('hidden');
+    }
+
+    async function showParentDashboardView(authorizedFamily, authorizedStudents, preferredStudentId = null) {
+      if (!authorizedFamily || !authorizedFamily.id) {
+        showParentLoginView();
+        return;
+      }
+
+      CURRENT_AUTH_FAMILY = authorizedFamily;
+      ALL_STUDENTS = Array.isArray(authorizedStudents) ? authorizedStudents : [];
+
+      document.getElementById('parentLoginView')?.classList.add('hidden');
+      document.getElementById('parentMainPortalContent')?.classList.remove('hidden');
+      const headerControls = document.getElementById('parentHeaderAuthControls');
+      if (headerControls) {
+        headerControls.classList.remove('hidden');
+        headerControls.classList.add('flex');
+      }
+      document.getElementById('parentSubNavTabs')?.classList.remove('hidden');
+
+      const famNameBadge = document.getElementById('parentHeaderFamilyName');
+      if (famNameBadge) {
+        famNameBadge.innerText = `${authorizedFamily.parent_name || 'Family'} (${authorizedFamily.id})`;
+      }
+
+      const savedStuId = preferredStudentId || localStorage.getItem('alhuda_selected_student_id');
+      const verifiedStu = ALL_STUDENTS.find(s => String(s.id) === String(savedStuId));
+      CURRENT_STUDENT = verifiedStu || ALL_STUDENTS[0] || null;
+      if (CURRENT_STUDENT && CURRENT_STUDENT.id) {
+        localStorage.setItem('alhuda_selected_student_id', CURRENT_STUDENT.id);
+      }
+
+      populateStudentDropdown();
+      await renderCurrentStudentData();
+      renderPortalLibrary();
+    }
+
     // Initialization
     window.addEventListener('DOMContentLoaded', async () => {
       await initializePortal();
@@ -734,70 +961,198 @@
     });
 
     async function initializePortal() {
-      // 1. Load All Students from Supabase (or fallback to database.js/local storage)
-      await loadAllStudents();
-
-      // 2. Populate Student Dropdown
-      populateStudentDropdown();
-
-      // 3. Render Dashboard for Selected Student
-      await renderCurrentStudentData();
-
-      // 4. Render Portal Library
-      renderPortalLibrary();
-    }
-
-    // ==========================================
-    // DATA LOADING & SUPABASE SYNC
-    // ==========================================
-    async function loadAllStudents() {
-      let students = [];
-
-      if (db) {
+      // Never allow URL query parameters (?studentId=..., ?id=..., ?familyId=...) to select or override identity
+      if (window.location.search) {
         try {
-          const { data, error } = await db.from('students').select('*').order('name');
-          if (!error && data && data.length > 0) {
-            students = data;
-          }
-        } catch(e) {
-          console.warn('Supabase students load error:', e);
+          window.history.replaceState({}, document.title, window.location.pathname);
+        } catch (e) {}
+      }
+
+      const activePortalRole = (localStorage.getItem('alhuda_active_portal_role') || '').toLowerCase();
+      const roleBanner = document.getElementById('parentRoleMismatchBanner');
+      const roleTitle = document.getElementById('parentRoleMismatchTitle');
+      const roleDesc = document.getElementById('parentRoleMismatchDesc');
+
+      // Role Mismatch Guard: If user is currently logged in as Teacher or Manager, do NOT auto-open Parent portal
+      if (activePortalRole && activePortalRole !== 'parent') {
+        if (roleBanner && roleTitle && roleDesc) {
+          const roleLabel = activePortalRole === 'teacher' ? 'Teacher' : (activePortalRole === 'manager' ? 'Manager' : activePortalRole);
+          roleTitle.innerText = `Role Authorization Required (${roleLabel} Session Detected)`;
+          roleDesc.innerText = `You are currently signed in as ${roleLabel}. Parent Portal access requires valid Family / Parent credentials.`;
+          roleBanner.classList.remove('hidden');
+        }
+        showParentLoginView();
+        return;
+      }
+
+      const savedParentRaw = sessionStorage.getItem('alhuda_parent_session') || localStorage.getItem('alhuda_logged_in_parent');
+      let parsedParent = null;
+      if (savedParentRaw && activePortalRole === 'parent') {
+        try {
+          parsedParent = JSON.parse(savedParentRaw);
+        } catch (e) {
+          parsedParent = null;
         }
       }
 
-      // Fallback sample students if Supabase has none
-      if (!students || students.length === 0) {
-        students = [
-          { id: "STU-114", name: "Jafar Ali", age: 8, gender: "Male", status: "Active", course: "Noorani Qaida & Basic Arabic", family_id: "FAM-114", assigned_teacher_id: "bada6a83-86ed-4321-a59f-f20603a721a2", notes: JSON.stringify({ meeting_link: "https://us06web.zoom.us/j/4862493196", course: "Noorani Qaida & Basic Arabic" }) },
-          { id: "STU-3215", name: "Ali Raaza", age: 8, gender: "Male", status: "Active", course: "Nazra Quran & Tajweed", family_id: "FAM-01", assigned_teacher_id: "6eaf96a3-798f-45ab-916c-e3b88fc2c5a3" },
-          { id: "101", name: "Demo Student Alpha", age: 10, gender: "Male", status: "Active", course: "Qaida Nooraniya", family_id: "FAM-01" }
-        ];
+      if (parsedParent && parsedParent.family_id) {
+        const { families, students } = await fetchFamiliesAndStudentsForAuth();
+        const verifiedFamily = families.find(f => String(f.id || '').trim().toUpperCase() === String(parsedParent.family_id || '').trim().toUpperCase());
+        if (verifiedFamily) {
+          const famIdUpper = String(verifiedFamily.id || '').trim().toUpperCase();
+          const familyStudents = students.filter(s => String(s.family_id || '').trim().toUpperCase() === famIdUpper);
+          await showParentDashboardView(verifiedFamily, familyStudents, parsedParent.selected_student_id);
+          return;
+        } else {
+          localStorage.removeItem('alhuda_logged_in_parent');
+          sessionStorage.removeItem('alhuda_parent_session');
+          localStorage.removeItem('alhuda_selected_student_id');
+          if (activePortalRole === 'parent') localStorage.removeItem('alhuda_active_portal_role');
+        }
       }
 
-      ALL_STUDENTS = students;
+      showParentLoginView();
+    }
 
-      // Select default student: check localStorage or pick first
-      const savedStudentId = localStorage.getItem('alhuda_selected_student_id');
-      const found = ALL_STUDENTS.find(s => s.id === savedStudentId);
-      CURRENT_STUDENT = found || ALL_STUDENTS[0];
+    async function handleParentSignIn(e) {
+      e.preventDefault();
+      const usernameInput = (document.getElementById('parentLoginUsername')?.value || '').trim();
+      const passwordInput = (document.getElementById('parentLoginPassword')?.value || '').trim();
+      const errBox = document.getElementById('parentLoginErrorMsg');
+      const errText = document.getElementById('parentLoginErrorText');
+      const btn = document.getElementById('btnSubmitParentLogin');
+
+      if (errBox) errBox.classList.add('hidden');
+
+      if (!usernameInput || !passwordInput) {
+        if (errBox && errText) {
+          errText.innerText = 'Please enter both username and password.';
+          errBox.classList.remove('hidden');
+        }
+        return;
+      }
+
+      if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Authenticating...';
+      }
+
+      const { families, students, parentAccountsMap } = await fetchFamiliesAndStudentsForAuth();
+      const uNorm = usernameInput.toLowerCase();
+      const uPhone = usernameInput.replace(/[^0-9]/g, '');
+
+      let matchedFamily = null;
+      let matchedInitialStudentId = null;
+
+      for (const f of families) {
+        const creds = resolveFamilyCredentials(f, parentAccountsMap);
+        const famIdLower = String(f.id || '').trim().toLowerCase();
+        const famIdUpper = String(f.id || '').trim().toUpperCase();
+        const parentNameLower = String(f.parent_name || '').trim().toLowerCase();
+        const famEmailLower = String(f.email || '').trim().toLowerCase();
+        const famPhone = String(f.whatsapp || '').replace(/[^0-9]/g, '');
+        const famChildren = students.filter(s => String(s.family_id || '').trim().toUpperCase() === famIdUpper);
+
+        const matchedChild = famChildren.find(s =>
+          String(s.id || '').trim().toLowerCase() === uNorm ||
+          String(s.name || '').trim().toLowerCase() === uNorm
+        );
+
+        const identifierMatches = (
+          uNorm === String(creds.username || '').trim().toLowerCase() ||
+          uNorm === famIdLower ||
+          uNorm === parentNameLower ||
+          (famEmailLower && uNorm === famEmailLower) ||
+          (uPhone.length >= 7 && famPhone.length >= 7 && (famPhone === uPhone || famPhone.slice(-10) === uPhone.slice(-10))) ||
+          Boolean(matchedChild)
+        );
+
+        if (!identifierMatches) continue;
+
+        if (passwordInput === String(creds.password || '').trim()) {
+          matchedFamily = f;
+          matchedInitialStudentId = matchedChild ? matchedChild.id : (famChildren[0] ? famChildren[0].id : null);
+          break;
+        }
+      }
+
+      if (btn) {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fa-solid fa-right-to-bracket text-brandGold"></i> Login to Parent Portal';
+      }
+
+      if (matchedFamily) {
+        const famIdUpper = String(matchedFamily.id || '').trim().toUpperCase();
+        const authorizedStudents = students.filter(s => String(s.family_id || '').trim().toUpperCase() === famIdUpper);
+        const creds = resolveFamilyCredentials(matchedFamily, parentAccountsMap);
+
+        const sessionPayload = {
+          family_id: matchedFamily.id,
+          parent_name: matchedFamily.parent_name,
+          username: creds.username,
+          selected_student_id: matchedInitialStudentId,
+          authenticated_at: new Date().toISOString()
+        };
+
+        localStorage.setItem('alhuda_logged_in_parent', JSON.stringify(sessionPayload));
+        sessionStorage.setItem('alhuda_parent_session', JSON.stringify(sessionPayload));
+        localStorage.setItem('alhuda_active_portal_role', 'parent');
+        localStorage.removeItem('alhuda_logged_in_teacher');
+        sessionStorage.removeItem('alhuda_teacher_session');
+        localStorage.removeItem('alhuda_logged_in_manager');
+        sessionStorage.removeItem('alhuda_manager_session');
+
+        document.getElementById('parentRoleMismatchBanner')?.classList.add('hidden');
+        await showParentDashboardView(matchedFamily, authorizedStudents, matchedInitialStudentId);
+      } else {
+        if (errBox && errText) {
+          errText.innerText = 'Invalid username or password.';
+          errBox.classList.remove('hidden');
+        }
+      }
     }
 
     function populateStudentDropdown() {
       const select = document.getElementById('portalStudentSelect');
       if (!select) return;
 
-      select.innerHTML = ALL_STUDENTS.map(s => `
-        <option value="${s.id}" ${CURRENT_STUDENT && CURRENT_STUDENT.id === s.id ? 'selected' : ''}>
+      if (!CURRENT_AUTH_FAMILY || ALL_STUDENTS.length === 0) {
+        select.innerHTML = '<option value="">No Active Students</option>';
+        return;
+      }
+
+      const authFamIdUpper = String(CURRENT_AUTH_FAMILY.id || '').trim().toUpperCase();
+      const authorizedOnly = ALL_STUDENTS.filter(s => String(s.family_id || '').trim().toUpperCase() === authFamIdUpper);
+
+      select.innerHTML = authorizedOnly.map(s => `
+        <option value="${s.id}" ${CURRENT_STUDENT && String(CURRENT_STUDENT.id) === String(s.id) ? 'selected' : ''}>
           ${s.name} (${s.id})
         </option>
       `).join('');
     }
 
     async function switchStudentAccount(studentId) {
-      const student = ALL_STUDENTS.find(s => s.id === studentId);
+      if (!CURRENT_AUTH_FAMILY) {
+        showParentLoginView();
+        return;
+      }
+      const authFamIdUpper = String(CURRENT_AUTH_FAMILY.id || '').trim().toUpperCase();
+      const student = ALL_STUDENTS.find(s =>
+        String(s.id) === String(studentId) &&
+        String(s.family_id || '').trim().toUpperCase() === authFamIdUpper
+      );
       if (!student) return;
 
       CURRENT_STUDENT = student;
       localStorage.setItem('alhuda_selected_student_id', student.id);
+      try {
+        const savedParent = JSON.parse(localStorage.getItem('alhuda_logged_in_parent') || '{}');
+        if (savedParent && savedParent.family_id) {
+          savedParent.selected_student_id = student.id;
+          localStorage.setItem('alhuda_logged_in_parent', JSON.stringify(savedParent));
+          sessionStorage.setItem('alhuda_parent_session', JSON.stringify(savedParent));
+        }
+      } catch (e) {}
       await renderCurrentStudentData();
     }
 
@@ -1695,7 +2050,15 @@
     function handleParentLogout() {
       localStorage.removeItem('alhuda_logged_in_parent');
       localStorage.removeItem('bqi_logged_in_user');
-      window.location.href = 'index.html';
+      localStorage.removeItem('alhuda_selected_student_id');
+      sessionStorage.removeItem('alhuda_parent_session');
+      if (localStorage.getItem('alhuda_active_portal_role') === 'parent') {
+        localStorage.removeItem('alhuda_active_portal_role');
+      }
+      CURRENT_AUTH_FAMILY = null;
+      CURRENT_STUDENT = null;
+      ALL_STUDENTS = [];
+      window.location.href = 'parent.html';
     }
 
     // Helper Modal utilities
@@ -1724,12 +2087,11 @@
     function scheduleParentPortalLiveSync() {
       if (_parentPortalRealtimeTimer) clearTimeout(_parentPortalRealtimeTimer);
       _parentPortalRealtimeTimer = setTimeout(() => {
+        if (!CURRENT_AUTH_FAMILY || !CURRENT_STUDENT?.id) return;
         const activeTag = document.activeElement ? document.activeElement.tagName : '';
         if (['INPUT', 'TEXTAREA', 'SELECT'].includes(activeTag)) return;
-        if (typeof CURRENT_STUDENT !== 'undefined' && CURRENT_STUDENT?.id && typeof switchStudentAccount === 'function') {
+        if (typeof switchStudentAccount === 'function') {
           switchStudentAccount(CURRENT_STUDENT.id);
-        } else if (typeof initParentPortal === 'function') {
-          initParentPortal();
         }
       }, 450);
     }

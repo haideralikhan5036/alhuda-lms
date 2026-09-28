@@ -251,15 +251,10 @@
           </button>
         </div>
 
-        <!-- Digital Library Quick Access Button for Screen Sharing -->
-        <button onclick="openTeacherDigitalLibrary()" class="px-3 py-1.5 rounded-lg bg-emerald-900/80 hover:bg-emerald-800 text-amber-200 border border-emerald-600/50 text-xs font-bold transition flex items-center gap-1.5 shadow-xs" title="Open Digital Quran, Qaida & Course Material">
+        <!-- Digital Library Quick Access Button for Screen Sharing (Only visible when authenticated) -->
+        <button id="btnTeacherDigitalLibraryHeader" onclick="openTeacherDigitalLibrary()" class="hidden px-3 py-1.5 rounded-lg bg-emerald-900/80 hover:bg-emerald-800 text-amber-200 border border-emerald-600/50 text-xs font-bold transition items-center gap-1.5 shadow-xs" title="Open Digital Quran, Qaida & Course Material">
           <i class="fa-solid fa-book-quran text-brandGold"></i> <span class="hidden md:inline">Digital Library</span>
         </button>
-
-        <!-- Back to Admin Portal Link -->
-        <a href="/" class="px-3 py-1.5 rounded-lg border border-emerald-700/50 hover:bg-white/10 text-emerald-200 text-xs font-bold transition flex items-center gap-1.5">
-          <i class="fa-solid fa-arrow-left"></i> <span class="hidden sm:inline">Admin LMS</span>
-        </a>
       </div>
     </div>
   </header>
@@ -268,18 +263,15 @@
   <main class="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 lg:p-8">
 
     <!-- ================= 1. LOGIN SCREEN (WHEN NOT AUTHENTICATED) ================= -->
-    <div id="loginView" class="max-w-lg mx-auto my-6">
-      
-      <!-- Personalized Greeting Banner (if ?t=name or ?id=TCH-001 is provided) -->
-      <div id="personalBanner" class="hidden mb-4 p-4 rounded-2xl bg-gradient-to-r from-emerald-500 to-brandDark text-white shadow-lg border border-emerald-400/30">
-        <div class="flex items-center gap-3">
-          <div class="w-12 h-12 rounded-xl bg-white/20 backdrop-blur-sm flex items-center justify-center text-xl font-bold">
-            <i class="fa-solid fa-hand-holding-heart"></i>
-          </div>
+    <div id="loginView" class="max-w-md mx-auto my-10">
+
+      <!-- Role Mismatch Alert (if user is currently logged in with another role) -->
+      <div id="roleMismatchBanner" class="hidden mb-4 p-3.5 rounded-2xl bg-amber-50 border border-amber-300 text-amber-900 text-xs font-semibold shadow-xs">
+        <div class="flex items-start gap-2.5">
+          <i class="fa-solid fa-shield-halved text-amber-600 text-base mt-0.5"></i>
           <div>
-            <span class="text-xs uppercase tracking-wider text-emerald-200 font-bold block">Personalized Portal Access</span>
-            <h2 class="text-lg font-extrabold" id="personalGreetingName">Assalam-o-Alaikum, Teacher!</h2>
-            <p class="text-xs text-emerald-100">Welcome to your personal Al-Huda LMS Portal. Please enter your password to view your timetable.</p>
+            <div class="font-extrabold text-amber-950" id="roleMismatchTitle">Authentication Required</div>
+            <p class="mt-0.5 text-[11px] text-amber-800 leading-relaxed" id="roleMismatchDesc">Please sign in with authorized Teacher credentials to access the Teacher Portal.</p>
           </div>
         </div>
       </div>
@@ -291,8 +283,8 @@
             <i class="fa-solid fa-chalkboard-user"></i>
           </div>
           <div>
-            <h3 class="text-lg font-extrabold text-slate-900">Teacher Portal Sign In</h3>
-            <p class="text-xs text-slate-500">Access your daily classes, student roster & Sabaq logs</p>
+            <h3 class="text-lg font-extrabold text-slate-900">Teacher Portal Login</h3>
+            <p class="text-xs text-slate-500">Sign in to access your authorized classes, roster &amp; Sabaq logs</p>
           </div>
         </div>
 
@@ -303,18 +295,17 @@
             <span id="loginErrorText">Invalid username or password.</span>
           </div>
 
-          <form onsubmit="handleTeacherSignIn(event)" class="space-y-4 text-xs">
-            <!-- Username / Teacher Name -->
+          <form onsubmit="handleTeacherSignIn(event)" class="space-y-4 text-xs" autocomplete="off">
+            <!-- Username / Email / Teacher ID -->
             <div>
               <label class="block font-bold text-slate-700 mb-1.5">
-                Teacher Name / Username <span class="text-rose-500">*</span>
+                Email / Username / Teacher ID <span class="text-rose-500">*</span>
               </label>
               <div class="relative">
                 <i class="fa-solid fa-user absolute left-3.5 top-3 text-slate-400"></i>
-                <input type="text" id="loginUsername" required placeholder="e.g. gulfam or TCH-001" 
+                <input type="text" id="loginUsername" required placeholder="Enter your username or Teacher ID" autocomplete="username"
                   class="w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-300 rounded-xl font-bold text-slate-900 focus:bg-white focus:outline-brandEmerald focus:border-brandEmerald text-xs">
               </div>
-              <p class="text-[11px] text-slate-500 mt-1">Enter your first name (e.g. <strong>gulfam</strong>), Teacher ID, or phone number.</p>
             </div>
 
             <!-- Password -->
@@ -323,13 +314,10 @@
                 <label class="font-bold text-slate-700">
                   Password <span class="text-rose-500">*</span>
                 </label>
-                <span class="text-[10px] text-emerald-700 font-bold bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200">
-                  Standard: 12345678
-                </span>
               </div>
               <div class="relative">
                 <i class="fa-solid fa-lock absolute left-3.5 top-3 text-slate-400"></i>
-                <input type="password" id="loginPassword" required placeholder="Enter password (12345678)" 
+                <input type="password" id="loginPassword" required placeholder="Enter your password" autocomplete="current-password"
                   class="w-full pl-9 pr-10 py-2.5 bg-slate-50 border border-slate-300 rounded-xl font-bold text-slate-900 focus:bg-white focus:outline-brandEmerald focus:border-brandEmerald text-xs">
                 <button type="button" onclick="togglePassVisibility()" class="absolute right-3 top-2.5 text-slate-400 hover:text-slate-700" title="Show / Hide Password">
                   <i id="passToggleIcon" class="fa-regular fa-eye"></i>
@@ -338,22 +326,9 @@
             </div>
 
             <button type="submit" id="btnSubmitLogin" class="w-full py-3 bg-brandDark text-white font-extrabold text-sm rounded-xl hover:bg-brandDarkest shadow-md transition-all flex items-center justify-center gap-2">
-              <i class="fa-solid fa-right-to-bracket"></i> Sign In to My Portal
+              <i class="fa-solid fa-right-to-bracket"></i> Login to Teacher Portal
             </button>
           </form>
-
-          <!-- Quick Access for Management & Available Teachers -->
-          <div class="mt-6 pt-4 border-t border-slate-200">
-            <div class="flex items-center justify-between text-[11px] font-bold text-slate-600 mb-2">
-              <span><i class="fa-solid fa-bolt text-brandGold"></i> Registered Instructors (Click to Auto-Fill):</span>
-              <button onclick="loadAvailableTeachersList()" class="text-brandEmerald hover:underline text-[10px]">
-                <i class="fa-solid fa-arrows-rotate"></i> Refresh
-              </button>
-            </div>
-            <div id="quickTeachersList" class="space-y-1.5 max-h-36 overflow-y-auto pr-1 text-xs">
-              <div class="p-2 text-center text-slate-400 text-[11px]">Loading teachers list from Supabase...</div>
-            </div>
-          </div>
         </div>
       </div>
     </div>
@@ -1392,6 +1367,137 @@
     const DAY_NAMES = ['', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 
     // Initialize on page load
+    function parseEmployeeMeta(rawStr) {
+      if (!rawStr) return {};
+      if (typeof rawStr === 'object') return rawStr;
+      if (typeof rawStr === 'string' && rawStr.trim().startsWith('{')) {
+        try { return JSON.parse(rawStr); } catch (e) {}
+      }
+      return {};
+    }
+
+    function classifyEmployeeRole(emp, accountsMap = {}) {
+      if (!emp || typeof emp !== 'object') return 'unknown';
+      const meta = parseEmployeeMeta(emp.address);
+      const notesMeta = parseEmployeeMeta(emp.notes);
+      const acc = (emp.id && accountsMap[emp.id]) ? accountsMap[emp.id] : (meta.teacher_account || {});
+
+      const empType = String(
+        emp.employee_type || emp.employeeType || emp.role ||
+        meta.employee_type || meta.employeeType || meta.role ||
+        notesMeta.employee_type || acc.employee_type || acc.role || ''
+      ).trim().toLowerCase();
+
+      const designation = String(
+        emp.designation || meta.designation || acc.designation ||
+        meta.role_title || acc.role_title || ''
+      ).trim().toLowerCase();
+
+      const shift = String(emp.working_shift || meta.working_shift || '').trim().toLowerCase();
+      const codeIds = [
+        String(emp.id || ''),
+        String(emp.witness_name || ''),
+        String(meta.emp_id || ''),
+        String(meta.teacher_id || ''),
+        String(acc.emp_id || ''),
+        String(acc.teacher_id || '')
+      ].map(s => s.trim().toUpperCase());
+
+      if (empType === 'manager' || designation === 'manager' || shift === 'manager' || codeIds.some(c => c.startsWith('MGR-'))) {
+        return 'manager';
+      }
+      if (empType === 'other_staff' || empType === 'staff' || designation === 'other staff' || shift === 'other staff' || codeIds.some(c => c.startsWith('STF-'))) {
+        return 'other_staff';
+      }
+      return 'teacher';
+    }
+
+    function isEligibleTeacherAccount(emp, accountsMap = {}) {
+      if (!emp || typeof emp !== 'object') return false;
+      const st = String(emp.status || 'Active').trim().toLowerCase();
+      if (st === 'inactive' || st === 'deactivated' || st === 'terminated' || st === 'deleted') return false;
+      return classifyEmployeeRole(emp, accountsMap) === 'teacher';
+    }
+
+    async function fetchTeachersAndAccountsFromBackend() {
+      let localTeacherAccs = {};
+      try {
+        localTeacherAccs = JSON.parse(localStorage.getItem('alhuda_teacher_accounts') || localStorage.getItem('bqi_teacher_accounts') || '{}');
+      } catch (e) { localTeacherAccs = {}; }
+
+      try {
+        const [tchRes, famRes] = await Promise.all([
+          db.from('teachers').select('*').order('full_name', { ascending: true }),
+          db.from('families').select('id, notes')
+        ]);
+
+        const teachers = tchRes.data || [];
+        ALL_TEACHERS = teachers;
+
+        let cloudSharedState = null;
+        let cloudUpdatedAt = 0;
+        (famRes.data || []).forEach(f => {
+          if (!f || !f.notes) return;
+          try {
+            const nObj = typeof f.notes === 'object' ? f.notes : JSON.parse(f.notes);
+            if (nObj && nObj.lms_shared_sync && typeof nObj.lms_shared_sync === 'object') {
+              const ts = new Date(nObj.lms_shared_sync.updated_at || 0).getTime() || 0;
+              if (ts >= cloudUpdatedAt) {
+                cloudUpdatedAt = ts;
+                cloudSharedState = nObj.lms_shared_sync;
+              }
+            }
+          } catch (e) {}
+        });
+
+        const mergedAccs = { ...(cloudSharedState?.teacher_accounts || {}), ...localTeacherAccs };
+        teachers.forEach(t => {
+          if (!t || !t.id) return;
+          const meta = parseEmployeeMeta(t.address);
+          if (meta.teacher_account && typeof meta.teacher_account === 'object') {
+            mergedAccs[t.id] = { ...(mergedAccs[t.id] || {}), ...meta.teacher_account };
+          } else if (meta.username || meta.emp_id || meta.password) {
+            mergedAccs[t.id] = {
+              ...(mergedAccs[t.id] || {}),
+              ...(meta.emp_id ? { teacher_id: meta.emp_id, emp_id: meta.emp_id } : {}),
+              ...(meta.username ? { username: meta.username } : {}),
+              ...(meta.password ? { password: meta.password } : {}),
+              ...(meta.employee_type ? { employee_type: meta.employee_type } : {})
+            };
+          }
+        });
+
+        localStorage.setItem('alhuda_teacher_accounts', JSON.stringify(mergedAccs));
+        return { teachers, accountsMap: mergedAccs };
+      } catch (err) {
+        console.warn("Error loading teachers for authentication:", err);
+        return { teachers: ALL_TEACHERS || [], accountsMap: localTeacherAccs };
+      }
+    }
+
+    function resolveTeacherCreds(t, allTeachersList, accountsMap = {}) {
+      const meta = parseEmployeeMeta(t.address);
+      const acc = (t.id && accountsMap[t.id]) ? accountsMap[t.id] : (meta.teacher_account || {});
+      let seqNum = 1;
+      if (Array.isArray(allTeachersList) && allTeachersList.length > 0) {
+        const idx = allTeachersList.findIndex(item => String(item.id) === String(t.id));
+        seqNum = idx >= 0 ? (idx + 1) : 1;
+      }
+      const assignedId = acc.teacher_id || acc.emp_id || meta.emp_id || `TCH-${String(seqNum).padStart(3, '0')}`;
+      const firstWord = (t.full_name || 'teacher').trim().split(/\s+/)[0];
+      const baseUser = firstWord.toLowerCase().replace(/[^a-z0-9]/g, '') || 'teacher';
+      const cleanNameSlug = (t.full_name || '').trim().toLowerCase().replace(/[^a-z0-9]/g, '_').replace(/_+/g, '_').replace(/^_|_$/g, '');
+
+      return {
+        teacher_id: String(assignedId).trim(),
+        username: String(acc.username || meta.username || baseUser).trim(),
+        cleanNameSlug,
+        password: String(acc.password || meta.password || '12345678').trim(),
+        hasExplicitPassword: Boolean(acc.password || meta.password)
+      };
+    }
+
+    // Initialize on page load
     window.onload = async function() {
       // Live PKT clock
       setInterval(() => {
@@ -1400,110 +1506,62 @@
         if (el) el.innerText = now.toLocaleTimeString('en-US', { timeZone: 'Asia/Karachi' }) + ' PKT';
       }, 1000);
 
-      // Check URL parameters for personalized direct link (?t=gulfam or ?id=TCH-001)
-      const urlParams = new URLSearchParams(window.location.search);
-      const paramTeacher = (urlParams.get('t') || urlParams.get('name') || urlParams.get('id') || '').trim();
-
-      // Check existing session
-      const savedSession = localStorage.getItem('alhuda_logged_in_teacher') || sessionStorage.getItem('alhuda_teacher_session');
-      if (savedSession) {
+      // Strip any URL query parameters (?teacherId=..., ?t=..., ?id=...) so URL parameters NEVER select or identify a user
+      if (window.location.search) {
         try {
-          CURRENT_TEACHER = JSON.parse(savedSession);
-        } catch(e) {
+          window.history.replaceState({}, document.title, window.location.pathname);
+        } catch (e) {}
+      }
+
+      const activePortalRole = (localStorage.getItem('alhuda_active_portal_role') || '').toLowerCase();
+      const roleMismatchBanner = document.getElementById('roleMismatchBanner');
+      const roleMismatchTitle = document.getElementById('roleMismatchTitle');
+      const roleMismatchDesc = document.getElementById('roleMismatchDesc');
+
+      // Role Mismatch Guard: If user is currently logged into Manager or Parent portal, do NOT auto-open Teacher portal
+      if (activePortalRole && activePortalRole !== 'teacher') {
+        CURRENT_TEACHER = null;
+        if (roleMismatchBanner && roleMismatchTitle && roleMismatchDesc) {
+          const roleLabel = activePortalRole === 'manager' ? 'Manager' : (activePortalRole === 'parent' ? 'Parent / Student' : activePortalRole);
+          roleMismatchTitle.innerText = `Role Authorization Required (${roleLabel} Session Detected)`;
+          roleMismatchDesc.innerText = `You are currently signed in as ${roleLabel}. Teacher Portal access requires valid Teacher credentials.`;
+          roleMismatchBanner.classList.remove('hidden');
+        }
+        showLoginView();
+        return;
+      }
+
+      // Check existing authenticated Teacher session
+      const savedSessionRaw = sessionStorage.getItem('alhuda_teacher_session') || localStorage.getItem('alhuda_logged_in_teacher');
+      let parsedSession = null;
+      if (savedSessionRaw && activePortalRole === 'teacher') {
+        try {
+          parsedSession = JSON.parse(savedSessionRaw);
+        } catch (e) {
+          parsedSession = null;
+        }
+      }
+
+      if (parsedSession && parsedSession.id) {
+        const { teachers, accountsMap } = await fetchTeachersAndAccountsFromBackend();
+        const verifiedTeacher = teachers.find(t => String(t.id) === String(parsedSession.id));
+        if (verifiedTeacher && isEligibleTeacherAccount(verifiedTeacher, accountsMap)) {
+          CURRENT_TEACHER = verifiedTeacher;
+          localStorage.setItem('alhuda_logged_in_teacher', JSON.stringify(verifiedTeacher));
+          sessionStorage.setItem('alhuda_teacher_session', JSON.stringify(verifiedTeacher));
+          showDashboardView();
+          return;
+        } else {
+          // Invalid or deactivated session — clear and show Login
+          localStorage.removeItem('alhuda_logged_in_teacher');
+          sessionStorage.removeItem('alhuda_teacher_session');
+          if (activePortalRole === 'teacher') localStorage.removeItem('alhuda_active_portal_role');
           CURRENT_TEACHER = null;
         }
       }
 
-      await loadAvailableTeachersList();
-
-      if (paramTeacher) {
-        handlePersonalizedLinkAccess(paramTeacher);
-      } else if (CURRENT_TEACHER) {
-        showDashboardView();
-      } else {
-        showLoginView();
-      }
-    };
-
-    // Personalized Link Handler
-    function handlePersonalizedLinkAccess(paramTeacher) {
-      const cleanParam = paramTeacher.toLowerCase().replace(/[^a-z0-9]/g, '');
-      const banner = document.getElementById('personalBanner');
-      const greeting = document.getElementById('personalGreetingName');
-      const userInput = document.getElementById('loginUsername');
-      const passInput = document.getElementById('loginPassword');
-
-      // Attempt to match with loaded teachers
-      let matched = ALL_TEACHERS.find(t => {
-        const tName = (t.full_name || '').toLowerCase().replace(/[^a-z0-9]/g, '');
-        return tName.includes(cleanParam) || cleanParam.includes(tName) || (t.phone && t.phone.includes(cleanParam));
-      });
-
-      if (banner && greeting) {
-        const displayName = matched ? matched.full_name : paramTeacher;
-        greeting.innerText = `Assalam-o-Alaikum, ${displayName}!`;
-        banner.classList.remove('hidden');
-      }
-
-      if (userInput) {
-        userInput.value = matched ? matched.full_name.toLowerCase().replace(/\s+/g, '_') : paramTeacher;
-      }
-
-      if (passInput) {
-        passInput.focus();
-      }
-
       showLoginView();
-    }
-
-    // Load available teachers from Supabase
-    async function loadAvailableTeachersList() {
-      try {
-        const { data: teachers, error } = await db.from('teachers').select('*').order('full_name', { ascending: true });
-        ALL_TEACHERS = teachers || [];
-
-        const listContainer = document.getElementById('quickTeachersList');
-        if (!listContainer) return;
-
-        if (ALL_TEACHERS.length === 0) {
-          listContainer.innerHTML = '<div class="p-2 text-center text-slate-400">No teachers found in database.</div>';
-          return;
-        }
-
-        listContainer.innerHTML = ALL_TEACHERS.map(t => {
-          const cleanUser = (t.full_name || 'teacher').toLowerCase().replace(/[^a-z0-9]/g, '_').replace(/_+/g, '_').replace(/^_|_$/g, '');
-          return `
-            <div onclick="quickSelectTeacher('${cleanUser}', '12345678', '${t.full_name}')" class="p-2 bg-slate-50 hover:bg-emerald-50 rounded-lg border border-slate-200 cursor-pointer flex justify-between items-center transition group">
-              <div class="flex items-center gap-2">
-                <span class="w-6 h-6 rounded-md bg-emerald-100 text-brandDark font-bold text-xs flex items-center justify-center group-hover:bg-brandDark group-hover:text-white transition">
-                  ${t.full_name.charAt(0)}
-                </span>
-                <span class="font-bold text-slate-800">${t.full_name}</span>
-              </div>
-              <span class="text-[10px] text-emerald-700 font-mono font-bold bg-white px-2 py-0.5 rounded border border-emerald-200">
-                ${cleanUser}
-              </span>
-            </div>
-          `;
-        }).join('');
-      } catch (err) {
-        console.warn("Could not fetch teachers list:", err);
-      }
-    }
-
-    function quickSelectTeacher(user, pass, fullName) {
-      const uInput = document.getElementById('loginUsername');
-      const pInput = document.getElementById('loginPassword');
-      if (uInput) uInput.value = user;
-      if (pInput) pInput.value = pass;
-
-      const banner = document.getElementById('personalBanner');
-      const greeting = document.getElementById('personalGreetingName');
-      if (banner && greeting) {
-        greeting.innerText = `Assalam-o-Alaikum, ${fullName}!`;
-        banner.classList.remove('hidden');
-      }
-    }
+    };
 
     function togglePassVisibility() {
       const p = document.getElementById('loginPassword');
@@ -1539,49 +1597,73 @@
       btn.disabled = true;
       btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Authenticating...';
 
-      // 1. Fetch fresh teachers from Supabase
-      if (ALL_TEACHERS.length === 0) {
-        const { data: teachers } = await db.from('teachers').select('*');
-        ALL_TEACHERS = teachers || [];
-      }
+      const { teachers, accountsMap } = await fetchTeachersAndAccountsFromBackend();
+      const eligibleTeachers = teachers.filter(t => isEligibleTeacherAccount(t, accountsMap));
 
-      const inputClean = usernameInput.toLowerCase().replace(/[^a-z0-9]/g, '');
+      const uNorm = usernameInput.toLowerCase();
+      const uSlug = uNorm.replace(/[^a-z0-9]/g, '_').replace(/_+/g, '_').replace(/^_|_$/g, '');
+      const uPhone = usernameInput.replace(/[^0-9]/g, '');
 
-      // 2. Match teacher by full_name, username, phone, or id
-      let matchedTeacher = ALL_TEACHERS.find(t => {
-        const nameClean = (t.full_name || '').toLowerCase().replace(/[^a-z0-9]/g, '');
-        const phoneClean = (t.phone || '').replace(/[^0-9]/g, '');
-        const idClean = (t.id || '').toLowerCase();
-        return nameClean === inputClean || nameClean.includes(inputClean) || inputClean.includes(nameClean) || phoneClean === inputClean || idClean === inputClean;
+      // Strictly authenticate against eligible Teacher accounts only (never Managers, never substring fallback, never teachers[0])
+      const matchedTeacher = eligibleTeachers.find(t => {
+        const creds = resolveTeacherCreds(t, teachers, accountsMap);
+        const fullNameLower = String(t.full_name || '').trim().toLowerCase();
+        const firstWordLower = fullNameLower.split(/\s+/)[0] || '';
+        const tPhone = String(t.phone || '').replace(/[^0-9]/g, '');
+        const meta = parseEmployeeMeta(t.address);
+        const tEmail = String(t.email || meta.email || '').trim().toLowerCase();
+
+        const identifierMatches = (
+          uNorm === creds.username.toLowerCase() ||
+          uNorm === creds.teacher_id.toLowerCase() ||
+          uNorm === String(t.id || '').trim().toLowerCase() ||
+          uNorm === fullNameLower ||
+          (uSlug && uSlug === creds.cleanNameSlug) ||
+          (uNorm === firstWordLower && firstWordLower.length >= 2) ||
+          (tEmail && uNorm === tEmail) ||
+          (uPhone.length >= 7 && tPhone.length >= 7 && (tPhone === uPhone || tPhone.slice(-10) === uPhone.slice(-10)))
+        );
+
+        if (!identifierMatches) return false;
+
+        const passwordMatches = (
+          passwordInput === creds.password ||
+          (!creds.hasExplicitPassword && passwordInput === '12345678')
+        );
+
+        return passwordMatches;
       });
 
-      // 3. Password Validation: Standard is 12345678 (also allow backup master passwords)
-      const isPasswordValid = (
-        passwordInput === '12345678' || 
-        passwordInput === '112233' || 
-        passwordInput === 'alhuda_123' ||
-        passwordInput === (matchedTeacher?.full_name?.toLowerCase())
-      );
-
       btn.disabled = false;
-      btn.innerHTML = '<i class="fa-solid fa-right-to-bracket"></i> Sign In to My Portal';
+      btn.innerHTML = '<i class="fa-solid fa-right-to-bracket"></i> Login to Teacher Portal';
 
-      if (matchedTeacher && isPasswordValid) {
+      if (matchedTeacher) {
         CURRENT_TEACHER = matchedTeacher;
         localStorage.setItem('alhuda_logged_in_teacher', JSON.stringify(matchedTeacher));
         sessionStorage.setItem('alhuda_teacher_session', JSON.stringify(matchedTeacher));
+        localStorage.setItem('alhuda_active_portal_role', 'teacher');
+        localStorage.removeItem('alhuda_logged_in_manager');
+        sessionStorage.removeItem('alhuda_manager_session');
+        localStorage.removeItem('alhuda_logged_in_parent');
+        sessionStorage.removeItem('alhuda_parent_session');
+
+        const roleMismatchBanner = document.getElementById('roleMismatchBanner');
+        if (roleMismatchBanner) roleMismatchBanner.classList.add('hidden');
+
         showDashboardView();
       } else {
         if (errBox) {
-          errText.innerText = matchedTeacher 
-            ? "Incorrect password. Standard password is: 12345678" 
-            : "No teacher account found with that name. Please check spelling or contact Admin.";
+          errText.innerText = "Invalid username or password.";
           errBox.classList.remove('hidden');
         }
       }
     }
 
     function showDashboardView() {
+      if (!CURRENT_TEACHER || !CURRENT_TEACHER.id) {
+        showLoginView();
+        return;
+      }
       document.getElementById('loginView').classList.add('hidden');
       document.getElementById('dashboardView').classList.remove('hidden');
       
@@ -1590,6 +1672,11 @@
         headerBadge.classList.remove('hidden');
         headerBadge.classList.add('flex');
         document.getElementById('headerTeacherName').innerText = CURRENT_TEACHER.full_name;
+      }
+      const libBtn = document.getElementById('btnTeacherDigitalLibraryHeader');
+      if (libBtn) {
+        libBtn.classList.remove('hidden');
+        libBtn.classList.add('flex');
       }
 
       // Populate hero
@@ -1605,12 +1692,24 @@
       document.getElementById('dashboardView').classList.add('hidden');
       document.getElementById('loginView').classList.remove('hidden');
       const headerBadge = document.getElementById('teacherHeaderBadge');
-      if (headerBadge) headerBadge.classList.add('hidden');
+      if (headerBadge) {
+        headerBadge.classList.add('hidden');
+        headerBadge.classList.remove('flex');
+      }
+      const libBtn = document.getElementById('btnTeacherDigitalLibraryHeader');
+      if (libBtn) {
+        libBtn.classList.add('hidden');
+        libBtn.classList.remove('flex');
+      }
     }
 
     function logoutTeacher() {
       localStorage.removeItem('alhuda_logged_in_teacher');
+      localStorage.removeItem('bqi_logged_in_teacher');
       sessionStorage.removeItem('alhuda_teacher_session');
+      if (localStorage.getItem('alhuda_active_portal_role') === 'teacher') {
+        localStorage.removeItem('alhuda_active_portal_role');
+      }
       CURRENT_TEACHER = null;
       window.location.href = 'teacher.html';
     }

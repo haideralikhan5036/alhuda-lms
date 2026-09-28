@@ -7,6 +7,49 @@
   <meta http-equiv="Expires" content="0">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, viewport-fit=cover">
   <title>Al-Huda Islamic Centre - Complete Cloud LMS</title>
+  <script>
+    (function() {
+      try {
+        var params = new URLSearchParams(window.location.search);
+        var urlRole = (params.get('role') || '').toLowerCase();
+        var mgrParam = params.get('m') || params.get('mgr') || params.get('id');
+        var activePortalRole = (localStorage.getItem('alhuda_active_portal_role') || '').toLowerCase();
+
+        // 1. If logged in as a Teacher or Parent, prevent accessing Owner/Admin or Manager URLs
+        if (activePortalRole === 'teacher') {
+          window.location.replace('teacher.html');
+          return;
+        }
+        if (activePortalRole === 'parent') {
+          window.location.replace('parent.html');
+          return;
+        }
+
+        // 2. Direct Teacher / Parent query role redirects to their canonical login portals
+        if (urlRole === 'teacher') {
+          window.location.replace('teacher.html');
+          return;
+        }
+        if (urlRole === 'student' || urlRole === 'parent') {
+          window.location.replace('parent.html');
+          return;
+        }
+
+        // 3. Manager Portal Guard: require valid authenticated Manager session
+        if (urlRole === 'manager' || mgrParam || activePortalRole === 'manager') {
+          var mgrRaw = sessionStorage.getItem('alhuda_manager_session') || localStorage.getItem('alhuda_logged_in_manager');
+          var mgrSession = null;
+          if (mgrRaw && activePortalRole === 'manager') {
+            try { mgrSession = JSON.parse(mgrRaw); } catch (e) { mgrSession = null; }
+          }
+          if (!mgrSession || !mgrSession.id || !mgrSession.emp_id) {
+            window.location.replace('manager.html');
+            return;
+          }
+        }
+      } catch (e) {}
+    })();
+  </script>
   
   <!-- Progressive Web App (PWA) Manifest & Icons -->
   <link rel="manifest" href="manifest.json">
@@ -4460,14 +4503,6 @@
           <i class="fa-solid fa-right-to-bracket"></i> Login to My Teacher Portal
         </button>
       </form>
-
-      <!-- Quick Fill Accounts -->
-      <div class="mt-4 pt-3 border-t text-[11px] text-slate-600">
-        <span class="font-bold text-slate-700 block mb-1.5"><i class="fa-solid fa-bolt text-brandGold"></i> Available Registered Teachers (Click to Fill):</span>
-        <div id="quickTeacherLoginsList" class="space-y-1 max-h-32 overflow-y-auto pr-1">
-          <!-- Populated dynamically -->
-        </div>
-      </div>
     </div>
   </div>
 
