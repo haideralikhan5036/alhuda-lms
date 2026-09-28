@@ -731,7 +731,12 @@
       }
 
       const countMap = {};
-      (scheds || []).forEach(s => countMap[s.teacher_id] = (countMap[s.teacher_id] || 0) + 1);
+      (scheds || []).forEach(s => {
+        const stuObj = (window.ALL_STUDENTS || []).find(st => String(st.id) === String(s.student_id));
+        if (stuObj && typeof isStudentSelfDeactivated === 'function' && isStudentSelfDeactivated(stuObj)) return;
+        if (stuObj && stuObj.assigned_teacher_id && String(stuObj.assigned_teacher_id) !== String(s.teacher_id)) return;
+        countMap[s.teacher_id] = (countMap[s.teacher_id] || 0) + 1;
+      });
 
       const accounts = getTeacherAccounts();
 
@@ -976,10 +981,21 @@
         // CARD: TEACHING STAFF (DEFAULT)
         // ==========================================
         const bookedCount = countMap[t.id] || 0;
+        const activeStudentListCount = (window.ALL_STUDENTS || []).filter(s => {
+          if (String(s.assigned_teacher_id || '') !== String(t.id)) return false;
+          const stLow = String(s.status || 'Active').trim().toLowerCase();
+          if (stLow === 'inactive' || stLow === 'deactivated' || stLow === 'left' || stLow === 'deleted' || stLow === 'trial' || stLow === 'converted' || stLow === 'leave') return false;
+          if (typeof isStudentSelfDeactivated === 'function' && isStudentSelfDeactivated(s)) return false;
+          try {
+            const sMeta = typeof s.notes === 'string' ? JSON.parse(s.notes || '{}') : (s.notes || {});
+            if (sMeta && sMeta.on_leave === true) return false;
+          } catch (e) {}
+          return true;
+        }).length;
         const creds = getTeacherCreds(t);
         const cleanPhone = (t.phone || '').replace(/[^0-9]/g, '');
         const directPortalUrl = `${window.location.origin}/teacher.html`;
-        const waMsg = `Assalamu Alaikum Respected ${t.full_name},\nWelcome to the Al-Huda Islamic Centre Teacher Operations Portal.\n\n🌐 *Your Personal Portal Link:*\n${directPortalUrl}\n\n👤 *Username:* ${creds.username}\n🔑 *Password:* ${creds.password || '12345678'}\n🕒 *Assigned Shift:* ${t.working_shift || '10 Hours Shift'}\n💰 *Slot Rate:* ${t.rate_per_slot || 2200} PKR\n\nPlease tap the link above to view your timetable, student schedules, and attendance logs.\nJazakum Allahu Khairan!`;
+        const waMsg = `Assalamu Alaikum Respected ${t.full_name},\nWelcome to the Al-Huda Islamic Centre Teacher Operations Portal.\n\n🌐 *Your Personal Portal Link:*\n${directPortalUrl}\n\n👤 *Username:* ${creds.username}\n🔑 *Password:* ${creds.password || '12345678'}\n🕒 *Assigned Shift:* ${t.working_shift || '10 Hours Shift'}\n💰 *Slot Rate:* ${t.rate_per_slot || 2200} PKR\n\nPlease tap the link above to view your timetable, Student List, and lesson logs.\nJazakum Allahu Khairan!`;
         const waUrl = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(waMsg)}`;
 
         // Seniority increment text
@@ -1028,15 +1044,15 @@
                 </div>
               </div>
 
-              <!-- RATE, SHIFT, SENIORITY & SLOTS -->
+              <!-- RATE, SHIFT, STUDENT LIST & SLOTS -->
               <div class="grid grid-cols-2 gap-2 text-xs mb-3 bg-slate-50 p-2.5 rounded-xl border border-slate-100">
                 <div>
                   <span class="text-slate-400 text-[10px] block">Base Course Rate:</span>
                   <strong class="text-brandDark font-bold text-xs">${t.rate_per_slot || 2200} PKR / stu</strong>
                 </div>
                 <div>
-                  <span class="text-slate-400 text-[10px] block">Seniority Increment:</span>
-                  <span class="text-amber-800 font-extrabold text-[11px] bg-amber-100 px-1.5 py-0.5 rounded inline-block">${incrementText}</span>
+                  <span class="text-slate-400 text-[10px] block">Student List (Active):</span>
+                  <strong class="text-emerald-700 font-extrabold text-xs"><i class="fa-solid fa-users text-[10px]"></i> ${activeStudentListCount} Student${activeStudentListCount === 1 ? '' : 's'}</strong>
                 </div>
                 <div>
                   <span class="text-slate-400 text-[10px] block">WhatsApp Contact:</span>

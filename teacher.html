@@ -395,7 +395,7 @@
               <i class="fa-solid fa-video text-emerald-600"></i> Launch Zoom Class (Host)
             </button>
             <button id="liveBannerAttBtn" onclick="" class="flex-1 md:flex-none px-4 py-2.5 bg-emerald-900/80 hover:bg-emerald-900 text-white font-extrabold text-xs rounded-xl border border-emerald-400/40 shadow-sm transition flex items-center justify-center gap-1.5">
-              <i class="fa-solid fa-clipboard-check text-brandGold"></i> Mark Sabaq
+              <i class="fa-solid fa-clipboard-check text-brandGold"></i> Mark Lesson
             </button>
           </div>
         </div>
@@ -403,20 +403,20 @@
 
       <!-- KEY METRICS STATS CARDS -->
       <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
-        <!-- 1. Assigned Students -->
-        <div class="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-sm flex flex-col justify-between">
+        <!-- 1. Assigned Active Students (Student List) -->
+        <div onclick="switchTeacherPortalTab('students')" class="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 hover:border-emerald-400 shadow-sm flex flex-col justify-between cursor-pointer transition group">
           <div class="flex items-center justify-between text-slate-500 mb-1.5">
-            <span class="text-xs font-bold uppercase tracking-wider text-slate-600">My Students</span>
+            <span class="text-xs font-bold uppercase tracking-wider text-slate-600 group-hover:text-brandDark">Student List</span>
             <span class="w-8 h-8 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-700 flex items-center justify-center text-sm">
               <i class="fa-solid fa-user-graduate"></i>
             </span>
           </div>
           <div class="lms-num-kpi text-slate-900 my-1" id="statAssignedStudents">0</div>
-          <div class="text-xs text-slate-500 font-semibold">Enrolled Quran Learners</div>
+          <div class="text-xs text-slate-500 font-semibold" id="statAssignedStudentsSub">Active Assigned Students</div>
         </div>
 
         <!-- 2. Today's Classes -->
-        <div class="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-sm flex flex-col justify-between">
+        <div onclick="switchTeacherPortalTab('today')" class="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 hover:border-emerald-400 shadow-sm flex flex-col justify-between cursor-pointer transition">
           <div class="flex items-center justify-between text-slate-500 mb-1.5">
             <span class="text-xs font-bold uppercase tracking-wider text-slate-600">Today's Classes</span>
             <span class="w-8 h-8 rounded-xl bg-slate-100 border border-slate-200 text-brandDark flex items-center justify-center text-sm">
@@ -452,17 +452,26 @@
         </div>
       </div>
 
-      <!-- SUB-NAVIGATION: TODAY'S SCHEDULE vs MY TRIALS -->
+      <!-- SUB-NAVIGATION: TODAY'S CLASSES vs STUDENT LIST vs MY TRIALS -->
       <div class="flex items-center justify-between flex-wrap gap-3 border-b border-slate-200 pb-3">
         <div class="flex items-center gap-2 overflow-x-auto touch-scroll no-scrollbar w-full sm:w-auto pb-1 flex-nowrap">
           <button id="btnTabTeacherToday" onclick="switchTeacherPortalTab('today')" class="px-4 py-2 rounded-xl text-xs font-extrabold bg-brandDark text-white shadow-xs flex items-center gap-2 transition whitespace-nowrap flex-shrink-0">
-            <i class="fa-solid fa-calendar-check text-brandEmerald"></i> Today's Live Schedule
+            <i class="fa-solid fa-calendar-check text-brandEmerald"></i> Today's Classes
+            <span id="badgeTeacherTodayNavCount" class="px-2 py-0.5 rounded-full text-[10px] font-mono bg-emerald-900/60 text-emerald-100 font-extrabold border border-emerald-400/30">0</span>
+          </button>
+          <button id="btnTabTeacherStudentList" onclick="switchTeacherPortalTab('students')" class="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 bg-white hover:bg-emerald-50 hover:text-brandDark border border-slate-200 shadow-2xs flex items-center gap-2 transition whitespace-nowrap flex-shrink-0">
+            <i class="fa-solid fa-users text-brandEmerald"></i> Student List
+            <span id="badgeTeacherStudentListCount" class="px-2 py-0.5 rounded-full text-[10px] font-mono bg-emerald-100 text-emerald-800 font-extrabold border border-emerald-200">0</span>
           </button>
           <button id="btnTabTeacherTrials" onclick="switchTeacherPortalTab('trials')" class="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 bg-white hover:bg-purple-50 hover:text-purple-900 border border-slate-200 shadow-2xs flex items-center gap-2 transition whitespace-nowrap flex-shrink-0">
             <i class="fa-solid fa-graduation-cap text-purple-600"></i> My Trial Classes & Retention History
             <span id="badgeTeacherTrialCount" class="px-2 py-0.5 rounded-full text-[10px] font-mono bg-purple-100 text-purple-800 font-extrabold border border-purple-200">0</span>
           </button>
         </div>
+
+        <button onclick="openTeacherAddScheduleModal()" class="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs rounded-xl transition flex items-center gap-1.5 shadow-xs">
+          <i class="fa-solid fa-calendar-plus"></i> + Add Student to Schedule
+        </button>
       </div>
 
       <!-- SECTION 1: TODAY'S SCHEDULE TABLE -->
@@ -472,7 +481,7 @@
             <div>
               <h3 class="font-extrabold text-slate-900 text-base flex items-center gap-2">
                 <i class="fa-solid fa-calendar-check text-brandEmerald"></i>
-                My Scheduled Classes Today
+                Today's Classes
               </h3>
               <p class="text-xs text-slate-500" id="todayDateSubtitle">Loading today's schedule...</p>
             </div>
@@ -495,14 +504,14 @@
                   <th class="p-3.5">Time Slot</th>
                   <th class="p-3.5">Student Details</th>
                   <th class="p-3.5">Course</th>
-                  <th class="p-3.5">Lesson Notes / Sabaq</th>
+                  <th class="p-3.5">Lesson Progress &amp; Notes</th>
                   <th class="p-3.5">Attendance</th>
                   <th class="p-3.5 text-right">Action</th>
                 </tr>
               </thead>
               <tbody id="teacherClassesTableBody" class="divide-y divide-slate-100">
                 <tr>
-                  <td colspan="6" class="p-8 text-center text-slate-400">Loading your assigned classes...</td>
+                  <td colspan="6" class="p-8 text-center text-slate-400">Loading your scheduled classes for today...</td>
                 </tr>
               </tbody>
             </table>
@@ -515,8 +524,74 @@
             </div>
             <h4 class="font-bold text-slate-800 text-base">No Classes Scheduled Today</h4>
             <p class="text-xs text-slate-500 mt-1 max-w-sm mx-auto">
-              You have no booked classes scheduled for today. You can view your full weekly schedule to see upcoming days.
+              You have no booked classes scheduled for today. Your full assigned Student List is shown below, and you can add students to your weekly schedule anytime.
             </p>
+          </div>
+        </div>
+      </div>
+
+      <!-- SECTION 1B: STUDENT LIST (ALL ACTIVE STUDENTS ASSIGNED TO THIS TEACHER) -->
+      <div id="sectionTeacherStudentList" class="space-y-4">
+        <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+          <div class="p-4 sm:p-5 border-b border-slate-200 flex flex-wrap justify-between items-center gap-3 bg-emerald-50/40">
+            <div>
+              <h3 class="font-extrabold text-slate-900 text-base flex items-center gap-2">
+                <i class="fa-solid fa-users text-brandEmerald"></i>
+                Student List
+              </h3>
+              <p class="text-xs text-slate-500">All active students currently assigned to you (including students without a class today or awaiting schedule placement)</p>
+            </div>
+
+            <div class="flex items-center gap-2 flex-wrap">
+              <button onclick="openTeacherAddScheduleModal()" class="px-3 py-1.5 bg-brandDark hover:bg-brandDarkest text-white font-extrabold text-xs rounded-xl transition flex items-center gap-1.5 shadow-xs">
+                <i class="fa-solid fa-calendar-plus text-brandGold"></i> + Add Student to Schedule
+              </button>
+              <span id="studentListCountBadge" class="px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-800 font-extrabold text-xs font-mono border border-emerald-200">
+                0 Active Students
+              </span>
+            </div>
+          </div>
+
+          <div class="overflow-x-auto touch-scroll">
+            <table class="w-full text-left text-xs border-collapse min-w-[680px]">
+              <thead class="bg-slate-100 text-slate-700 font-bold border-b border-slate-200 uppercase tracking-wider text-[11px]">
+                <tr>
+                  <th class="p-3.5 w-14 text-center">#</th>
+                  <th class="p-3.5">Student Name</th>
+                  <th class="p-3.5">Course</th>
+                  <th class="p-3.5">Weekly Schedule Slots</th>
+                  <th class="p-3.5">Status</th>
+                  <th class="p-3.5 text-right">Schedule &amp; Lesson Action</th>
+                </tr>
+              </thead>
+              <tbody id="teacherStudentListTableBody" class="divide-y divide-slate-100">
+                <tr>
+                  <td colspan="6" class="p-8 text-center text-slate-400">Loading your assigned Student List...</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <!-- Empty State for Student List -->
+          <div id="teacherStudentListEmptyState" class="hidden p-10 text-center">
+            <div class="w-14 h-14 rounded-2xl bg-emerald-50 text-emerald-500 flex items-center justify-center text-xl mx-auto mb-3">
+              <i class="fa-solid fa-user-graduate"></i>
+            </div>
+            <h4 class="font-bold text-slate-800 text-base">No Active Students Assigned Yet</h4>
+            <p class="text-xs text-slate-500 mt-1 max-w-sm mx-auto">
+              When Admin assigns an active student to your profile, they will immediately appear here in your Student List.
+            </p>
+          </div>
+
+          <!-- On-Leave Students Notice (if any assigned students are temporarily on Leave) -->
+          <div id="teacherLeaveStudentsNoticeBox" class="hidden px-4 py-3 bg-blue-50/70 border-t border-blue-200 text-xs text-blue-950">
+            <div class="flex items-center justify-between flex-wrap gap-2">
+              <div class="font-extrabold flex items-center gap-1.5 text-[11px] text-blue-900">
+                <i class="fa-solid fa-umbrella-beach text-blue-600"></i>
+                <span>Assigned Students Currently on Leave (Temporarily Paused):</span>
+              </div>
+              <div id="teacherLeaveStudentsPills" class="flex items-center gap-1.5 flex-wrap"></div>
+            </div>
           </div>
         </div>
       </div>
@@ -603,7 +678,7 @@
                   <th class="p-3">Course</th>
                   <th class="p-3">Evaluation Dates / Slot</th>
                   <th class="p-3">Status</th>
-                  <th class="p-3">Sabaq / Trial Notes</th>
+                  <th class="p-3">Trial Evaluation Notes</th>
                   <th class="p-3 text-right">Classroom Action</th>
                 </tr>
               </thead>
@@ -631,7 +706,7 @@
     </div>
   </main>
 
-  <!-- ================= MODAL: ATTENDANCE & SABAQ PROGRESS ================= -->
+  <!-- ================= MODAL: ATTENDANCE & LESSON PROGRESS ================= -->
   <div id="modalTeacherAttendance" class="fixed inset-0 bg-black/60 backdrop-blur-xs z-50 hidden items-center justify-center p-2 sm:p-4 overflow-y-auto">
     <div class="bg-white rounded-2xl max-w-lg w-full max-h-[94vh] flex flex-col p-4 sm:p-6 shadow-2xl border border-slate-200 my-auto">
       <div class="flex justify-between items-center mb-3 border-b pb-3 shrink-0">
@@ -640,7 +715,7 @@
             <i class="fa-solid fa-book-quran"></i>
           </div>
           <div>
-            <h3 class="font-extrabold text-base text-brandDark">Record Class Sabaq & Attendance</h3>
+            <h3 class="font-extrabold text-base text-brandDark">Record Lesson Progress &amp; Attendance</h3>
             <p class="text-xs text-slate-500" id="attModalSubtitle">Class details</p>
           </div>
         </div>
@@ -672,19 +747,19 @@
           <!-- Advance Class Target Date Box in Attendance Modal -->
           <div id="attAdvanceTargetDateBox" class="hidden mt-2.5 p-3 bg-purple-50/80 border border-purple-200 rounded-xl space-y-1.5">
             <label class="block font-bold text-purple-950 text-xs">
-              Advance For Date (Kis aane wale din ki class hai?) <span class="text-rose-500">*</span>:
+              Advance Class Target Date (Upcoming Scheduled Date) <span class="text-rose-500">*</span>:
             </label>
             <input type="date" id="attAdvanceTargetDate" class="w-full p-2 bg-white border border-purple-300 rounded-lg text-xs font-mono font-bold text-purple-900 focus:outline-purple-600">
-            <p class="text-[10px] text-purple-700 leading-tight">Bachay ki is aane wali tareekh ki class aaj complete ho jayegi aur parent portal par advance update chali jayegi.</p>
+            <p class="text-[10px] text-purple-700 leading-tight">This upcoming scheduled date will be marked as completed in advance and updated on the Parent Portal.</p>
           </div>
         </div>
 
-        <!-- SMART COURSE MATERIAL & SABAQ SELECTOR (WHEN PRESENT) -->
+        <!-- SMART COURSE MATERIAL & LESSON PROGRESS SELECTOR (WHEN PRESENT) -->
         <div id="attPresentSabaqDetails" class="p-3.5 bg-emerald-50/70 border border-emerald-200 rounded-2xl space-y-3">
           
           <div class="flex items-center justify-between">
             <span class="font-black text-brandDark uppercase tracking-wide text-[11px] flex items-center gap-1.5">
-              <i class="fa-solid fa-book-quran text-brandEmerald"></i> Course Syllabus &amp; Sabaq Progress
+              <i class="fa-solid fa-book-quran text-brandEmerald"></i> Course Syllabus &amp; Lesson Progress
             </span>
             <span id="attLastSabaqBadge" class="text-[10px] font-bold text-amber-800 bg-amber-100 px-2 py-0.5 rounded-md border border-amber-200">
               <i class="fa-solid fa-bookmark text-amber-600"></i> Smart Resume Ready
@@ -702,7 +777,7 @@
 
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
               <div>
-                <label class="block font-bold text-slate-700 mb-1">Page / Takhti / Portion *:</label>
+                <label class="block font-bold text-slate-700 mb-1">Page / Chapter / Portion *:</label>
                 <div class="flex items-center gap-1.5">
                   <select id="attCoursePageSelect" class="flex-1 p-2 bg-white border border-slate-300 rounded-xl font-semibold text-slate-800 text-xs focus:outline-brandEmerald">
                     <!-- Populated dynamically -->
@@ -721,32 +796,32 @@
 
             <div class="grid grid-cols-2 gap-2.5">
               <div>
-                <label class="block font-bold text-slate-700 mb-1">Sabaq Assessment:</label>
+                <label class="block font-bold text-slate-700 mb-1">Lesson Assessment:</label>
                 <select id="attSabaqResult" class="w-full p-2 bg-white border border-slate-300 rounded-xl font-bold text-slate-800 text-xs">
                   <option value="Pass">⭐ Pass (Advance to Next Lesson)</option>
-                  <option value="Repeat">🔄 Repeat / Dohraai (Same Page Tomorrow)</option>
+                  <option value="Repeat">🔄 Revision / Repeat (Same Page Next Class)</option>
                   <option value="Practice">⚠️ Needs Home Tajweed Practice</option>
                 </select>
               </div>
               <div>
                 <label class="block font-bold text-slate-700 mb-1">Recitation Quality:</label>
                 <select id="attSabaqRating" class="w-full p-2 bg-white border border-slate-300 rounded-xl font-bold text-slate-800 text-xs">
-                  <option value="5">⭐⭐⭐⭐⭐ Excellent (Mumtaz)</option>
-                  <option value="4">⭐⭐⭐⭐ Very Good (Jayyid Jiddan)</option>
-                  <option value="3">⭐⭐⭐ Good (Jayyid)</option>
-                  <option value="2">⭐⭐ Satisfactory (Maqbool)</option>
+                  <option value="5">⭐⭐⭐⭐⭐ Excellent</option>
+                  <option value="4">⭐⭐⭐⭐ Very Good</option>
+                  <option value="3">⭐⭐⭐ Good</option>
+                  <option value="2">⭐⭐ Satisfactory</option>
                 </select>
               </div>
             </div>
           </div>
         </div>
 
-        <!-- Sabaq / Lesson Notes Input -->
+        <!-- Lesson Notes Input -->
         <div>
           <label class="block font-bold text-slate-700 mb-1.5">
             Teacher Lesson Remarks &amp; Tajweed Guidance:
           </label>
-          <textarea id="attLessonNotes" rows="3" placeholder="e.g. Pronounced Huroof-e-Halqi very well. Ensure proper Ghunnah on Noon Mushaddad." 
+          <textarea id="attLessonNotes" rows="3" placeholder="e.g. Pronounced articulation points very well. Ensure proper nasalization on Noon Mushaddad." 
             class="w-full p-3 border border-slate-300 rounded-xl font-medium text-slate-800 text-xs focus:outline-brandEmerald focus:border-brandEmerald"></textarea>
           <p class="text-[10px] text-slate-400 mt-1">These notes and exact material page are permanently saved and directly accessible to student on their portal.</p>
         </div>
@@ -785,7 +860,7 @@
           <div>
             <h3 class="font-black text-base text-slate-900 flex items-center gap-2">
               Log Advance Class Session
-              <span class="px-2 py-0.5 rounded-full bg-purple-100 text-purple-800 text-[10px] font-extrabold uppercase tracking-wide">پیشگی کلاس</span>
+              <span class="px-2 py-0.5 rounded-full bg-purple-100 text-purple-800 text-[10px] font-extrabold uppercase tracking-wide">Advance Session</span>
             </h3>
             <p class="text-xs text-slate-500">Record a preponed session ahead of schedule</p>
           </div>
@@ -843,11 +918,11 @@
           </div>
         </div>
 
-        <!-- 3. Course Material & Sabaq Selector -->
+        <!-- 3. Course Material & Lesson Selector -->
         <div class="p-3.5 bg-purple-50/50 border border-purple-200 rounded-2xl space-y-3">
           <div class="flex items-center justify-between">
             <span class="font-black text-purple-950 uppercase tracking-wide text-[11px] flex items-center gap-1.5">
-              <i class="fa-solid fa-book-quran text-purple-700"></i> Course Syllabus &amp; Sabaq Completed
+              <i class="fa-solid fa-book-quran text-purple-700"></i> Course Syllabus &amp; Lesson Completed
             </span>
             <span class="text-[10px] font-bold text-purple-900 bg-purple-100 px-2 py-0.5 rounded-md border border-purple-300">
               🌟 Advance Session Log
@@ -864,7 +939,7 @@
 
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
               <div>
-                <label class="block font-bold text-slate-700 mb-1">Page / Takhti / Portion *:</label>
+                <label class="block font-bold text-slate-700 mb-1">Page / Chapter / Portion *:</label>
                 <div class="flex items-center gap-1.5">
                   <select id="advCoursePageSelect" class="flex-1 p-2 bg-white border border-slate-300 rounded-xl font-semibold text-slate-800 text-xs focus:outline-purple-600">
                     <!-- Populated dynamically -->
@@ -883,20 +958,20 @@
 
             <div class="grid grid-cols-2 gap-2.5">
               <div>
-                <label class="block font-bold text-slate-700 mb-1">Sabaq Assessment:</label>
+                <label class="block font-bold text-slate-700 mb-1">Lesson Assessment:</label>
                 <select id="advSabaqResult" class="w-full p-2 bg-white border border-slate-300 rounded-xl font-bold text-slate-800 text-xs">
                   <option value="Pass">⭐ Pass (Advance to Next Lesson)</option>
-                  <option value="Repeat">🔄 Repeat / Dohraai (Same Page Tomorrow)</option>
+                  <option value="Repeat">🔄 Revision / Repeat (Same Page Next Class)</option>
                   <option value="Practice">⚠️ Needs Home Tajweed Practice</option>
                 </select>
               </div>
               <div>
                 <label class="block font-bold text-slate-700 mb-1">Recitation Quality:</label>
                 <select id="advSabaqRating" class="w-full p-2 bg-white border border-slate-300 rounded-xl font-bold text-slate-800 text-xs">
-                  <option value="5">⭐⭐⭐⭐⭐ Excellent (Mumtaz)</option>
-                  <option value="4">⭐⭐⭐⭐ Very Good (Jayyid Jiddan)</option>
-                  <option value="3">⭐⭐⭐ Good (Jayyid)</option>
-                  <option value="2">⭐⭐ Satisfactory (Maqbool)</option>
+                  <option value="5">⭐⭐⭐⭐⭐ Excellent</option>
+                  <option value="4">⭐⭐⭐⭐ Very Good</option>
+                  <option value="3">⭐⭐⭐ Good</option>
+                  <option value="2">⭐⭐ Satisfactory</option>
                 </select>
               </div>
             </div>
@@ -1151,7 +1226,7 @@
   <!-- ================= MODAL: 2D FULL WEEKLY TIMETABLE ================= -->
   <div id="modalWeeklyMatrix" class="fixed inset-0 bg-black/70 backdrop-blur-xs z-50 hidden items-center justify-center p-2 sm:p-4 overflow-y-auto">
     <div class="bg-white rounded-2xl max-w-6xl w-full p-4 sm:p-6 shadow-2xl border border-slate-200 max-h-[92vh] flex flex-col my-auto">
-      <div class="flex justify-between items-center mb-4 border-b pb-3 shrink-0">
+      <div class="flex justify-between items-center mb-4 border-b pb-3 shrink-0 flex-wrap gap-2">
         <div>
           <h3 class="font-extrabold text-base text-slate-900 flex items-center gap-2">
             <i class="fa-solid fa-table-cells text-brandEmerald"></i>
@@ -1159,7 +1234,12 @@
           </h3>
           <p class="text-xs text-slate-500">Overview of all 48 half-hour slots per day across your working shift.</p>
         </div>
-        <button onclick="closeWeeklyMatrixModal()" class="text-slate-400 hover:text-slate-600 text-xl font-bold">&times;</button>
+        <div class="flex items-center gap-2">
+          <button onclick="openTeacherAddScheduleModal()" class="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs rounded-xl transition flex items-center gap-1.5 shadow-xs">
+            <i class="fa-solid fa-calendar-plus"></i> + Add Student to Schedule
+          </button>
+          <button onclick="closeWeeklyMatrixModal()" class="text-slate-400 hover:text-slate-600 text-xl font-bold px-2">&times;</button>
+        </div>
       </div>
 
       <div class="overflow-auto touch-scroll flex-1 border border-slate-200 rounded-xl">
@@ -1181,6 +1261,99 @@
           Close Timetable
         </button>
       </div>
+    </div>
+  </div>
+
+  <!-- ================= MODAL: ADD ASSIGNED STUDENT TO SCHEDULE ================= -->
+  <div id="modalTeacherAddScheduleSlot" class="fixed inset-0 bg-black/70 backdrop-blur-xs z-50 hidden items-center justify-center p-2 sm:p-4 overflow-y-auto">
+    <div class="bg-white rounded-2xl max-w-lg w-full max-h-[94vh] flex flex-col p-4 sm:p-6 shadow-2xl border border-emerald-200 my-auto animate-scaleIn">
+      <div class="flex justify-between items-center border-b pb-3 shrink-0">
+        <div class="flex items-center gap-2.5">
+          <div class="w-10 h-10 rounded-xl bg-emerald-100 text-brandDark flex items-center justify-center font-black text-base shadow-2xs">
+            <i class="fa-solid fa-calendar-plus text-brandEmerald"></i>
+          </div>
+          <div>
+            <h3 class="font-black text-base text-slate-900">Add Student to Schedule</h3>
+            <p class="text-xs text-slate-500">Select an active student from your Student List and assign weekly class slots</p>
+          </div>
+        </div>
+        <button onclick="closeTeacherAddScheduleModal()" class="text-slate-400 hover:text-slate-600 text-xl font-bold">&times;</button>
+      </div>
+
+      <form onsubmit="submitTeacherAddScheduleSlot(event)" class="space-y-4 text-xs overflow-y-auto touch-scroll flex-1 pr-1 mt-3">
+        <!-- 1. Select Active Student from Student List -->
+        <div>
+          <label class="block font-bold text-slate-700 mb-1.5">
+            Select Student from Your Student List <span class="text-rose-500">*</span>:
+          </label>
+          <select id="teacherBookStudentSelect" required class="w-full p-2.5 border border-slate-300 rounded-xl font-bold text-slate-900 bg-white focus:outline-brandEmerald">
+            <!-- Populated strictly with ACTIVE assigned students -->
+          </select>
+          <p class="text-[10px] text-slate-500 mt-1">
+            Only active students currently assigned to your Student List are available for scheduling.
+          </p>
+        </div>
+
+        <!-- 2. Select 30-Min Time Slot -->
+        <div>
+          <label class="block font-bold text-slate-700 mb-1.5">
+            Select Class Time Slot (30-Min PKT) <span class="text-rose-500">*</span>:
+          </label>
+          <select id="teacherBookTimeSlotSelect" onchange="updateTeacherAddSlotAvailabilityHint()" required class="w-full p-2.5 border border-emerald-300 rounded-xl font-bold text-slate-900 bg-white focus:outline-brandEmerald">
+            <!-- Populated with 48 half-hour slots -->
+          </select>
+          <p id="teacherBookSlotOccupiedHint" class="text-[10px] text-amber-800 font-semibold mt-1 hidden"></p>
+        </div>
+
+        <!-- 3. Select Weekly Class Days -->
+        <div>
+          <div class="flex items-center justify-between mb-1.5">
+            <label class="font-bold text-slate-700">Select Weekly Class Days <span class="text-rose-500">*</span>:</label>
+            <div class="flex items-center gap-1.5">
+              <button type="button" onclick="selectTeacherBookPresetDays([1,2,3,4,5])" class="px-2 py-0.5 rounded bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 text-[10px] font-bold">Mon–Fri</button>
+              <button type="button" onclick="selectTeacherBookPresetDays([1,2,3])" class="px-2 py-0.5 rounded bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300 text-[10px] font-bold">Mon–Wed</button>
+              <button type="button" onclick="selectTeacherBookPresetDays([1,2,3,4,5,6])" class="px-2 py-0.5 rounded bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300 text-[10px] font-bold">Mon–Sat</button>
+            </div>
+          </div>
+          <div class="grid grid-cols-4 sm:grid-cols-7 gap-1.5">
+            <label class="flex flex-col items-center p-2 rounded-xl border border-slate-200 bg-slate-50 hover:bg-emerald-50 cursor-pointer">
+              <input type="checkbox" name="teacherBookWeekday" value="1" checked class="accent-emerald-600 mb-1">
+              <span class="font-extrabold text-[10px] text-slate-800">Mon</span>
+            </label>
+            <label class="flex flex-col items-center p-2 rounded-xl border border-slate-200 bg-slate-50 hover:bg-emerald-50 cursor-pointer">
+              <input type="checkbox" name="teacherBookWeekday" value="2" checked class="accent-emerald-600 mb-1">
+              <span class="font-extrabold text-[10px] text-slate-800">Tue</span>
+            </label>
+            <label class="flex flex-col items-center p-2 rounded-xl border border-slate-200 bg-slate-50 hover:bg-emerald-50 cursor-pointer">
+              <input type="checkbox" name="teacherBookWeekday" value="3" checked class="accent-emerald-600 mb-1">
+              <span class="font-extrabold text-[10px] text-slate-800">Wed</span>
+            </label>
+            <label class="flex flex-col items-center p-2 rounded-xl border border-slate-200 bg-slate-50 hover:bg-emerald-50 cursor-pointer">
+              <input type="checkbox" name="teacherBookWeekday" value="4" checked class="accent-emerald-600 mb-1">
+              <span class="font-extrabold text-[10px] text-slate-800">Thu</span>
+            </label>
+            <label class="flex flex-col items-center p-2 rounded-xl border border-slate-200 bg-slate-50 hover:bg-emerald-50 cursor-pointer">
+              <input type="checkbox" name="teacherBookWeekday" value="5" checked class="accent-emerald-600 mb-1">
+              <span class="font-extrabold text-[10px] text-slate-800">Fri</span>
+            </label>
+            <label class="flex flex-col items-center p-2 rounded-xl border border-slate-200 bg-slate-50 hover:bg-emerald-50 cursor-pointer">
+              <input type="checkbox" name="teacherBookWeekday" value="6" class="accent-emerald-600 mb-1">
+              <span class="font-extrabold text-[10px] text-slate-800">Sat</span>
+            </label>
+            <label class="flex flex-col items-center p-2 rounded-xl border border-slate-200 bg-slate-50 hover:bg-emerald-50 cursor-pointer">
+              <input type="checkbox" name="teacherBookWeekday" value="7" class="accent-emerald-600 mb-1">
+              <span class="font-extrabold text-[10px] text-slate-800">Sun</span>
+            </label>
+          </div>
+        </div>
+
+        <div class="flex flex-col-reverse sm:flex-row justify-end gap-2 border-t pt-3 shrink-0">
+          <button type="button" onclick="closeTeacherAddScheduleModal()" class="w-full sm:w-auto px-4 py-2 border rounded-xl font-bold text-slate-600 hover:bg-slate-100 text-center">Cancel</button>
+          <button type="submit" id="btnSubmitTeacherAddSchedule" class="w-full sm:w-auto px-5 py-2.5 bg-brandDark hover:bg-brandDarkest text-white font-extrabold rounded-xl flex items-center justify-center gap-1.5 shadow-sm transition">
+            <i class="fa-solid fa-calendar-check text-brandGold"></i> Save to Schedule
+          </button>
+        </div>
+      </form>
     </div>
   </div>
   <!-- ============================================================= -->
@@ -1714,6 +1887,75 @@
       window.location.href = 'teacher.html';
     }
 
+    let ASSIGNED_STUDENTS = [];
+    let ACTIVE_ASSIGNED_STUDENTS = [];
+    let LEAVE_ASSIGNED_STUDENTS = [];
+
+    function isPortalRegularStudent(s) {
+      if (!s) return false;
+      const st = String(s.status || 'Active').trim().toLowerCase();
+      if (st === 'trial' || st === 'converted' || st === 'discontinued' || st === 'deleted') return false;
+      if (String(s.id || '').toUpperCase().startsWith('TRL-')) return false;
+      if (String(s.family_id || '').toUpperCase().startsWith('TRL-')) return false;
+      if (s.notes) {
+        try {
+          const parsed = typeof s.notes === 'string' ? JSON.parse(s.notes) : s.notes;
+          if (parsed && parsed.is_trial === true && !parsed.converted_to_regular && !parsed.converted_from_trial) {
+            return false;
+          }
+        } catch (e) {}
+      }
+      return true;
+    }
+
+    function isPortalStudentDeactivated(s) {
+      if (!s) return true;
+      if (s.is_active === false) return true;
+      const st = String(s.status || 'Active').trim().toLowerCase();
+      if (st === 'inactive' || st === 'deactivated' || st === 'deleted' || st === 'left') return true;
+      if (s.notes) {
+        try {
+          const parsed = typeof s.notes === 'string' ? JSON.parse(s.notes) : s.notes;
+          if (parsed && (parsed.deactivated_individually === true || parsed.family_deactivated === true)) {
+            return true;
+          }
+        } catch (e) {}
+      }
+      if (s.families && typeof s.families === 'object') {
+        if (s.families.is_active === false) return true;
+        const famSt = String(s.families.status || 'Active').trim().toLowerCase();
+        if (famSt === 'inactive' || famSt === 'deactivated') return true;
+      }
+      return false;
+    }
+
+    function isPortalStudentOnLeave(s) {
+      if (!s) return false;
+      const st = String(s.status || '').trim().toLowerCase();
+      if (st === 'leave') return true;
+      if (s.notes) {
+        try {
+          const parsed = typeof s.notes === 'string' ? JSON.parse(s.notes) : s.notes;
+          if (parsed && parsed.on_leave === true) return true;
+        } catch (e) {}
+      }
+      return false;
+    }
+
+    function getStudentCourseDisplay(s) {
+      if (!s) return 'Quran Studies & Tajweed';
+      const isUuidLike = (str) => /^[0-9a-f]{8}-[0-9a-f]{4}/i.test(String(str || '').trim());
+      if (s.notes) {
+        try {
+          const pNotes = typeof s.notes === 'string' ? JSON.parse(s.notes) : s.notes;
+          if (pNotes && pNotes.course && !isUuidLike(pNotes.course)) return pNotes.course;
+        } catch (e) {}
+      }
+      if (s.course && !isUuidLike(s.course)) return s.course;
+      if (s.course_id && !isUuidLike(s.course_id)) return s.course_id;
+      return 'Quran Studies & Tajweed';
+    }
+
     // Load Teacher's Live Data from Supabase
     async function loadTeacherPortalData() {
       if (!CURRENT_TEACHER) return;
@@ -1725,24 +1967,70 @@
 
       document.getElementById('todayDateSubtitle').innerText = `${DAY_NAMES[currentDay]}, ${now.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })} (Asia/Karachi PKT)`;
 
-      // 1. Fetch all assigned students for this teacher
-      const { data: assignedStudents } = await db.from('students')
-        .select('*')
+      // 1. Fetch all assigned students for this teacher (including parent family status)
+      let assignedStudentsRaw = [];
+      const { data: assignedWithFam, error: stuFetchErr } = await db.from('students')
+        .select('*, families(id, parent_name, status)')
         .eq('assigned_teacher_id', CURRENT_TEACHER.id);
 
-      document.getElementById('statAssignedStudents').innerText = (assignedStudents || []).length;
+      if (!stuFetchErr && Array.isArray(assignedWithFam)) {
+        assignedStudentsRaw = assignedWithFam;
+      } else {
+        const { data: fallbackStu } = await db.from('students')
+          .select('*')
+          .eq('assigned_teacher_id', CURRENT_TEACHER.id);
+        assignedStudentsRaw = fallbackStu || [];
+      }
 
-      // 2. Fetch all schedules for this teacher
+      // Filter strictly to regular, non-deactivated students assigned to THIS teacher
+      const regularNonDeactivated = (assignedStudentsRaw || []).filter(s =>
+        String(s.assigned_teacher_id || '') === String(CURRENT_TEACHER.id) &&
+        isPortalRegularStudent(s) &&
+        !isPortalStudentDeactivated(s)
+      );
+
+      ACTIVE_ASSIGNED_STUDENTS = regularNonDeactivated.filter(s => !isPortalStudentOnLeave(s));
+      LEAVE_ASSIGNED_STUDENTS = regularNonDeactivated.filter(s => isPortalStudentOnLeave(s));
+      ASSIGNED_STUDENTS = ACTIVE_ASSIGNED_STUDENTS;
+
+      // Update Student List KPI & Badges (strictly active students assigned to this teacher)
+      const activeAssignedCount = ACTIVE_ASSIGNED_STUDENTS.length;
+      const statAssignedEl = document.getElementById('statAssignedStudents');
+      if (statAssignedEl) statAssignedEl.innerText = activeAssignedCount;
+      const statSubEl = document.getElementById('statAssignedStudentsSub');
+      if (statSubEl) {
+        statSubEl.innerText = LEAVE_ASSIGNED_STUDENTS.length > 0
+          ? `Active Assigned (${LEAVE_ASSIGNED_STUDENTS.length} on Leave)`
+          : 'Active Assigned Students';
+      }
+      const navStudentBadge = document.getElementById('badgeTeacherStudentListCount');
+      if (navStudentBadge) navStudentBadge.innerText = activeAssignedCount;
+      const listHeaderBadge = document.getElementById('studentListCountBadge');
+      if (listHeaderBadge) listHeaderBadge.innerText = `${activeAssignedCount} Active Student${activeAssignedCount === 1 ? '' : 's'}`;
+
+      // 2. Fetch all schedules for this teacher and clean up any stale rows (deactivated or reassigned to another teacher)
       const { data: allScheds } = await db.from('class_schedules')
         .select('*, students(*)')
         .eq('teacher_id', CURRENT_TEACHER.id);
 
-      ALL_TEACHER_SCHEDULES = allScheds || [];
+      const validSchedules = [];
+      for (const slot of (allScheds || [])) {
+        const stuObj = (assignedStudentsRaw || []).find(st => String(st.id) === String(slot.student_id)) || slot.students;
+        if (stuObj) {
+          const isTrialStu = !isPortalRegularStudent(stuObj);
+          // If regular student is deactivated OR assigned to a different teacher (or unassigned), remove stale schedule row
+          if (!isTrialStu && (isPortalStudentDeactivated(stuObj) || String(stuObj.assigned_teacher_id || '') !== String(CURRENT_TEACHER.id))) {
+            db.from('class_schedules').delete().eq('id', slot.id).then(() => {});
+            continue;
+          }
+        }
+        validSchedules.push(slot);
+      }
 
-      // 3. Filter today's schedules
+      ALL_TEACHER_SCHEDULES = validSchedules;
+
+      // 3. Filter today's schedules (excluding deactivated students)
       const todayScheds = ALL_TEACHER_SCHEDULES.filter(s => Number(s.day_of_week) === currentDay);
-
-      ASSIGNED_STUDENTS = assignedStudents || [];
 
       // 4. Fetch attendance logs for today
       const { data: logs } = await db.from('attendance_logs')
@@ -1873,12 +2161,13 @@
         };
       });
 
-      // Also append any extra advance classes taken today for other students not on today's regular schedule
+      // Also append any extra advance classes taken today for active assigned students not on today's regular schedule
       (logs || []).forEach(l => {
         if (l.status === 'Advance Class' && !todayScheds.some(s => String(s.id) === String(l.schedule_id))) {
+          const matchedStudent = (ACTIVE_ASSIGNED_STUDENTS || []).find(st => String(st.id) === String(l.student_id));
+          if (!matchedStudent) return;
           let aMeta = null;
           try { aMeta = JSON.parse(l.lesson_notes); } catch(e){}
-          const matchedStudent = (ASSIGNED_STUDENTS || []).find(st => String(st.id) === String(l.student_id));
           completedCount++;
           TODAY_CLASSES.push({
             id: l.schedule_id || 'adv-' + l.id,
@@ -1886,7 +2175,7 @@
             start_time: 'Advance',
             end_time: 'Class',
             course: aMeta?.book_title || 'Quran Studies',
-            students: matchedStudent || { name: 'Assigned Student', id: l.student_id },
+            students: matchedStudent,
             log: l,
             isAdvanceExtra: true,
             status: `🌟 Advance Class (For: ${aMeta?.advance_target_date ? aMeta.advance_target_date.slice(5) : 'Target'})`,
@@ -1903,6 +2192,8 @@
       document.getElementById('statCompleted').innerText = completedCount;
       document.getElementById('statRemaining').innerText = remainingCount;
       document.getElementById('todayCountBadge').innerText = `${TODAY_CLASSES.length} Classes`;
+      const navTodayBadge = document.getElementById('badgeTeacherTodayNavCount');
+      if (navTodayBadge) navTodayBadge.innerText = TODAY_CLASSES.length;
 
       // Live Class Banner
       const liveAlert = document.getElementById('liveClassAlertBanner');
@@ -1914,7 +2205,7 @@
         const bannerDetails = document.getElementById('liveBannerDetails');
         if (bannerDetails) {
           if (liveClass.log?.status === 'Waiting') {
-            bannerDetails.innerHTML = '<span class="text-amber-200 font-extrabold animate-pulse">⏳ You launched Zoom meeting • Waiting for student to join! Click "Mark Sabaq" when student enters.</span>';
+            bannerDetails.innerHTML = '<span class="text-amber-200 font-extrabold animate-pulse">⏳ You launched Zoom meeting • Waiting for student to join! Click "Mark Lesson" when student enters.</span>';
           } else if (liveClass.log?.status === 'Present') {
             bannerDetails.innerHTML = '<span class="text-emerald-200 font-bold">✅ Class In Session • Student marked Present</span>';
           } else {
@@ -1937,7 +2228,114 @@
       }
 
       renderTeacherClassesTable();
+      renderTeacherStudentListTable();
       loadTeacherTrialsData();
+    }
+
+    // Render Complete Student List (All Active Students Assigned to This Teacher)
+    function renderTeacherStudentListTable() {
+      const tbody = document.getElementById('teacherStudentListTableBody');
+      const emptyState = document.getElementById('teacherStudentListEmptyState');
+      const leaveBox = document.getElementById('teacherLeaveStudentsNoticeBox');
+      const leavePills = document.getElementById('teacherLeaveStudentsPills');
+      if (!tbody) return;
+
+      // Render On-Leave students summary notice if any exist
+      if (leaveBox && leavePills) {
+        if (LEAVE_ASSIGNED_STUDENTS && LEAVE_ASSIGNED_STUDENTS.length > 0) {
+          leaveBox.classList.remove('hidden');
+          leavePills.innerHTML = LEAVE_ASSIGNED_STUDENTS.map(st => {
+            let retDate = '';
+            try {
+              const p = typeof st.notes === 'string' ? JSON.parse(st.notes) : st.notes;
+              if (p && p.return_date) retDate = ` (Returns: ${p.return_date})`;
+            } catch (e) {}
+            return `<span class="px-2.5 py-0.5 rounded-full bg-blue-100 text-blue-900 border border-blue-300 font-bold text-[11px]">🏖️ ${st.name} (${st.id})${retDate}</span>`;
+          }).join('');
+        } else {
+          leaveBox.classList.add('hidden');
+          leavePills.innerHTML = '';
+        }
+      }
+
+      if (!ACTIVE_ASSIGNED_STUDENTS || ACTIVE_ASSIGNED_STUDENTS.length === 0) {
+        tbody.innerHTML = '';
+        if (emptyState) emptyState.classList.remove('hidden');
+        return;
+      }
+
+      if (emptyState) emptyState.classList.add('hidden');
+
+      const shortDays = ['', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+
+      tbody.innerHTML = ACTIVE_ASSIGNED_STUDENTS.map((st, idx) => {
+        const courseTitle = getStudentCourseDisplay(st);
+        const stuScheds = (ALL_TEACHER_SCHEDULES || []).filter(sc => String(sc.student_id) === String(st.id));
+        stuScheds.sort((a, b) => Number(a.day_of_week) - Number(b.day_of_week));
+
+        let scheduleSummaryHtml = '';
+        if (stuScheds.length > 0) {
+          // Group by time slot
+          const timeGroups = {};
+          stuScheds.forEach(sc => {
+            const tKey = `${(sc.start_time || '').slice(0, 5)} - ${(sc.end_time || '').slice(0, 5)}`;
+            if (!timeGroups[tKey]) timeGroups[tKey] = [];
+            const dName = shortDays[Number(sc.day_of_week)] || '';
+            if (dName && !timeGroups[tKey].includes(dName)) timeGroups[tKey].push(dName);
+          });
+          scheduleSummaryHtml = Object.entries(timeGroups).map(([timeRange, daysArr]) => `
+            <div class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-50 text-brandDark border border-emerald-200 font-bold text-[11px] mr-1 mb-1">
+              <i class="fa-regular fa-clock text-brandEmerald"></i>
+              <span class="font-mono">${timeRange} PKT</span>
+              <span class="text-emerald-700">&bull; ${daysArr.join(', ')}</span>
+            </div>
+          `).join('');
+        } else {
+          scheduleSummaryHtml = `
+            <span class="px-2.5 py-1 rounded-lg bg-amber-50 text-amber-900 border border-amber-200 font-bold text-[11px] inline-flex items-center gap-1">
+              <i class="fa-solid fa-calendar-xmark text-amber-600"></i> Not Scheduled Yet
+            </span>
+          `;
+        }
+
+        const todaySlot = TODAY_CLASSES.find(c => String(c.student_id) === String(st.id));
+        const markLessonBtn = todaySlot
+          ? `<button onclick="openAttendanceModal('${todaySlot.id}')" class="px-2.5 py-1 bg-brandDark hover:bg-brandDarkest text-white rounded-lg text-xs font-bold shadow-2xs flex items-center gap-1 transition">
+               <i class="fa-solid fa-clipboard-check text-brandGold"></i> Mark Lesson
+             </button>`
+          : '';
+
+        return `
+          <tr class="hover:bg-slate-50 transition">
+            <td class="p-3.5 text-center font-extrabold text-slate-600 font-mono">${idx + 1}</td>
+            <td class="p-3.5">
+              <div class="font-extrabold text-slate-900 text-[13.5px]">${st.name || 'Student'}</div>
+              <div class="lms-num-id text-slate-600 bg-slate-100 border border-slate-200/80 px-2 py-0.5 rounded inline-block mt-1">ID: ${st.id}</div>
+            </td>
+            <td class="p-3.5">
+              <span class="px-2.5 py-1 rounded-lg bg-emerald-50 text-brandEmerald border border-emerald-200 font-bold text-xs inline-block">
+                ${courseTitle}
+              </span>
+            </td>
+            <td class="p-3.5">
+              ${scheduleSummaryHtml}
+            </td>
+            <td class="p-3.5">
+              <span class="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-100 text-emerald-800 border border-emerald-300">
+                Active
+              </span>
+            </td>
+            <td class="p-3.5 text-right">
+              <div class="flex items-center justify-end gap-1.5 flex-wrap">
+                <button onclick="openTeacherAddScheduleModal('${st.id}')" class="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold shadow-2xs flex items-center gap-1 transition" title="Add or schedule weekly class slots for ${st.name}">
+                  <i class="fa-solid fa-calendar-plus"></i> ${stuScheds.length > 0 ? '+ Add Slot' : '+ Add to Schedule'}
+                </button>
+                ${markLessonBtn}
+              </div>
+            </td>
+          </tr>
+        `;
+      }).join('');
     }
 
     function renderTeacherClassesTable() {
@@ -2093,7 +2491,7 @@
             // FREE STATE — not yet marked, teacher can freely mark
             actionButtons = `
               <button onclick="openAttendanceModal('${c.id}')" class="px-3 py-1 bg-brandDark hover:bg-brandDarkest text-white rounded-lg text-xs font-bold shadow-xs flex items-center gap-1 transition">
-                <i class="fa-solid fa-clipboard-check"></i> Mark Sabaq
+                <i class="fa-solid fa-clipboard-check"></i> Mark Lesson
               </button>
               ${zoomBtn}
               ${changeTimeBtn}
@@ -2204,7 +2602,7 @@
         `🕒 Punch-In Time: ${timeStr} PKT\n\n` +
         `Zoom Native App is opening.\n` +
         `Status is now set to: ⏳ "Waiting for Student".\n\n` +
-        `When student joins Zoom, please click "Mark Sabaq" to record Present and lesson notes!`
+        `When student joins Zoom, please click "Mark Lesson" to record Present and lesson notes!`
       );
 
       // Refresh today's list to update status
@@ -2436,7 +2834,7 @@
           }
         } else {
           if (badge) {
-            badge.innerHTML = `<i class="fa-solid fa-rotate text-amber-600"></i> Dohraai/Repeat: Page ${nextPage}`;
+            badge.innerHTML = `<i class="fa-solid fa-rotate text-amber-600"></i> Revision / Repeat: Page ${nextPage}`;
             badge.className = 'text-[10px] font-bold text-amber-800 bg-amber-100 px-2 py-0.5 rounded-md border border-amber-300';
           }
         }
@@ -2572,7 +2970,7 @@
         btn.innerHTML = '<i class="fa-solid fa-floppy-disk"></i> Save Progress';
         closeAttendanceModal();
         await loadTeacherPortalData();
-        alert(`✅ Attendance & Sabaq Saved Successfully!\n\nStatus: ${status}\nCourse: Registered & Connected with Student Portal.`);
+        alert(`✅ Attendance & Lesson Progress Saved Successfully!\n\nStatus: ${status}\nCourse: Registered & Connected with Student Portal.`);
       } catch (err) {
         console.error("Attendance save error:", err);
         btn.disabled = false;
@@ -2909,28 +3307,249 @@
       if (popHistory) popTeacherModalHistory('modalWeeklyMatrix');
     }
 
-    // ================= TEACHER TRIAL CLASSES & RETENTION LOGIC =================
+    // ================= TEACHER PORTAL TABS & ADD STUDENT TO SCHEDULE LOGIC =================
     let CURRENT_TEACHER_TAB = 'today';
     let TEACHER_TRIALS = [];
 
     function switchTeacherPortalTab(tab) {
       CURRENT_TEACHER_TAB = tab;
       const btnToday = document.getElementById('btnTabTeacherToday');
+      const btnStudents = document.getElementById('btnTabTeacherStudentList');
       const btnTrials = document.getElementById('btnTabTeacherTrials');
       const secToday = document.getElementById('sectionTeacherToday');
+      const secStudents = document.getElementById('sectionTeacherStudentList');
       const secTrials = document.getElementById('sectionTeacherTrials');
 
+      const inactiveBtnClass = 'px-4 py-2 rounded-xl text-xs font-bold text-slate-600 bg-white hover:bg-emerald-50 hover:text-brandDark border border-slate-200 shadow-2xs flex items-center gap-2 transition whitespace-nowrap flex-shrink-0';
+
       if (tab === 'today') {
-        if (btnToday) btnToday.className = 'px-4 py-2 rounded-xl text-xs font-extrabold bg-brandDark text-white shadow-xs flex items-center gap-2 transition';
-        if (btnTrials) btnTrials.className = 'px-4 py-2 rounded-xl text-xs font-bold text-slate-600 bg-white hover:bg-purple-50 hover:text-purple-900 border border-slate-200 shadow-2xs flex items-center gap-2 transition';
+        if (btnToday) btnToday.className = 'px-4 py-2 rounded-xl text-xs font-extrabold bg-brandDark text-white shadow-xs flex items-center gap-2 transition whitespace-nowrap flex-shrink-0';
+        if (btnStudents) btnStudents.className = inactiveBtnClass;
+        if (btnTrials) btnTrials.className = 'px-4 py-2 rounded-xl text-xs font-bold text-slate-600 bg-white hover:bg-purple-50 hover:text-purple-900 border border-slate-200 shadow-2xs flex items-center gap-2 transition whitespace-nowrap flex-shrink-0';
         if (secToday) secToday.classList.remove('hidden');
+        if (secStudents) secStudents.classList.remove('hidden');
         if (secTrials) secTrials.classList.add('hidden');
-      } else {
-        if (btnTrials) btnTrials.className = 'px-4 py-2 rounded-xl text-xs font-extrabold bg-purple-800 text-white shadow-xs flex items-center gap-2 transition';
-        if (btnToday) btnToday.className = 'px-4 py-2 rounded-xl text-xs font-bold text-slate-600 bg-white hover:bg-emerald-50 hover:text-brandDark border border-slate-200 shadow-2xs flex items-center gap-2 transition';
+      } else if (tab === 'students') {
+        if (btnStudents) btnStudents.className = 'px-4 py-2 rounded-xl text-xs font-extrabold bg-brandDark text-white shadow-xs flex items-center gap-2 transition whitespace-nowrap flex-shrink-0';
+        if (btnToday) btnToday.className = inactiveBtnClass;
+        if (btnTrials) btnTrials.className = 'px-4 py-2 rounded-xl text-xs font-bold text-slate-600 bg-white hover:bg-purple-50 hover:text-purple-900 border border-slate-200 shadow-2xs flex items-center gap-2 transition whitespace-nowrap flex-shrink-0';
         if (secToday) secToday.classList.add('hidden');
+        if (secStudents) {
+          secStudents.classList.remove('hidden');
+          secStudents.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+        if (secTrials) secTrials.classList.add('hidden');
+        renderTeacherStudentListTable();
+      } else {
+        if (btnTrials) btnTrials.className = 'px-4 py-2 rounded-xl text-xs font-extrabold bg-purple-800 text-white shadow-xs flex items-center gap-2 transition whitespace-nowrap flex-shrink-0';
+        if (btnToday) btnToday.className = inactiveBtnClass;
+        if (btnStudents) btnStudents.className = inactiveBtnClass;
+        if (secToday) secToday.classList.add('hidden');
+        if (secStudents) secStudents.classList.add('hidden');
         if (secTrials) secTrials.classList.remove('hidden');
         loadTeacherTrialsData();
+      }
+    }
+
+    function selectTeacherBookPresetDays(daysArray) {
+      const set = new Set((daysArray || []).map(Number));
+      document.querySelectorAll('input[name="teacherBookWeekday"]').forEach(cb => {
+        cb.checked = set.has(Number(cb.value));
+      });
+      updateTeacherAddSlotAvailabilityHint();
+    }
+
+    function updateTeacherAddSlotAvailabilityHint() {
+      const slotVal = document.getElementById('teacherBookTimeSlotSelect')?.value || '';
+      const hintEl = document.getElementById('teacherBookSlotOccupiedHint');
+      if (!hintEl || !slotVal) return;
+      const [start24] = slotVal.split('|');
+      const occupiedDays = [];
+      (ALL_TEACHER_SCHEDULES || []).forEach(sc => {
+        if ((sc.start_time || '').slice(0, 5) === start24) {
+          const dName = DAY_NAMES[Number(sc.day_of_week)] || '';
+          if (dName && !occupiedDays.includes(dName)) {
+            occupiedDays.push(`${dName} (${sc.students?.name || sc.student_id})`);
+          }
+        }
+      });
+      if (occupiedDays.length > 0) {
+        hintEl.textContent = `Note: ${start24} PKT is already booked on: ${occupiedDays.join(', ')}.`;
+        hintEl.classList.remove('hidden');
+      } else {
+        hintEl.textContent = '';
+        hintEl.classList.add('hidden');
+      }
+    }
+
+    function openTeacherAddScheduleModal(preselectStudentId = null) {
+      if (!CURRENT_TEACHER) return;
+      const stuSelect = document.getElementById('teacherBookStudentSelect');
+      const slotSelect = document.getElementById('teacherBookTimeSlotSelect');
+      if (!stuSelect || !slotSelect) return;
+
+      // Strictly populate ONLY ACTIVE students currently assigned to THIS teacher (from Student List)
+      const activeList = (ACTIVE_ASSIGNED_STUDENTS || []).filter(s =>
+        String(s.assigned_teacher_id || '') === String(CURRENT_TEACHER.id) &&
+        isPortalRegularStudent(s) &&
+        !isPortalStudentDeactivated(s) &&
+        !isPortalStudentOnLeave(s)
+      );
+
+      if (activeList.length === 0) {
+        stuSelect.innerHTML = '<option value="">No active students in your Student List</option>';
+      } else {
+        stuSelect.innerHTML = activeList.map(s => {
+          const cTitle = getStudentCourseDisplay(s);
+          return `<option value="${s.id}">${s.name} (${s.id}) — ${cTitle}</option>`;
+        }).join('');
+        if (preselectStudentId && activeList.some(s => String(s.id) === String(preselectStudentId))) {
+          stuSelect.value = preselectStudentId;
+        }
+      }
+
+      // Populate 48 half-hour slots with occupancy status
+      const occupiedByStart = {};
+      (ALL_TEACHER_SCHEDULES || []).forEach(sc => {
+        const st = (sc.start_time || '').slice(0, 5);
+        if (st) {
+          if (!occupiedByStart[st]) occupiedByStart[st] = [];
+          const stName = sc.students?.name || sc.student_id || 'Booked';
+          if (!occupiedByStart[st].includes(stName)) occupiedByStart[st].push(stName);
+        }
+      });
+
+      let slotOptions = '';
+      let defaultSlot = '';
+      for (let i = 0; i < 48; i++) {
+        const sH = Math.floor(i / 2);
+        const sM = (i % 2) * 30;
+        const eTotal = (i + 1) * 30;
+        const eH = Math.floor(eTotal / 60) % 24;
+        const eM = eTotal % 60;
+        const start24 = `${String(sH).padStart(2, '0')}:${String(sM).padStart(2, '0')}`;
+        const end24 = `${String(eH).padStart(2, '0')}:${String(eM).padStart(2, '0')}`;
+        const val = `${start24}|${end24}`;
+        const lbl = `${format24To12HourLabel(start24)} - ${format24To12HourLabel(end24)} PKT (${start24} - ${end24})`;
+        const occ = occupiedByStart[start24];
+        const prefix = occ ? `🟡 Booked (${occ.join(', ')})` : '🟢 FREE / Available';
+        if (!defaultSlot && !occ && sH >= 14) defaultSlot = val;
+        slotOptions += `<option value="${val}">${prefix} — ${lbl}</option>`;
+      }
+      slotSelect.innerHTML = slotOptions;
+      if (defaultSlot) slotSelect.value = defaultSlot;
+      updateTeacherAddSlotAvailabilityHint();
+
+      const modal = document.getElementById('modalTeacherAddScheduleSlot');
+      if (modal) {
+        modal.classList.remove('hidden');
+        modal.classList.add('flex');
+        pushTeacherModalHistory('modalTeacherAddScheduleSlot');
+      }
+    }
+
+    function closeTeacherAddScheduleModal(popHistory = true) {
+      const modal = document.getElementById('modalTeacherAddScheduleSlot');
+      if (modal) {
+        modal.classList.add('hidden');
+        modal.classList.remove('flex');
+      }
+      if (popHistory) popTeacherModalHistory('modalTeacherAddScheduleSlot');
+    }
+
+    async function submitTeacherAddScheduleSlot(e) {
+      e.preventDefault();
+      if (!CURRENT_TEACHER || !CURRENT_TEACHER.id) return;
+
+      const studentId = document.getElementById('teacherBookStudentSelect')?.value || '';
+      const slotVal = document.getElementById('teacherBookTimeSlotSelect')?.value || '';
+      const selectedDays = Array.from(document.querySelectorAll('input[name="teacherBookWeekday"]:checked'))
+        .map(cb => Number(cb.value))
+        .filter(d => d >= 1 && d <= 7);
+
+      if (!studentId) {
+        alert('Please select an active student from your Student List.');
+        return;
+      }
+      if (!slotVal) {
+        alert('Please select a class time slot.');
+        return;
+      }
+      if (selectedDays.length === 0) {
+        alert('Please select at least one weekly class day (Monday through Sunday).');
+        return;
+      }
+
+      const btn = document.getElementById('btnSubmitTeacherAddSchedule');
+      if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Saving to Schedule...';
+      }
+
+      try {
+        // Authoritative backend verification: Student must be ACTIVE and assigned to THIS teacher
+        const { data: stuRecord, error: stuErr } = await db.from('students')
+          .select('*, families(id, status)')
+          .eq('id', studentId)
+          .single();
+
+        if (stuErr || !stuRecord) {
+          throw new Error('Student record could not be verified.');
+        }
+        if (String(stuRecord.assigned_teacher_id || '') !== String(CURRENT_TEACHER.id)) {
+          throw new Error('Only students currently assigned to your Student List can be added to your schedule.');
+        }
+        if (isPortalStudentDeactivated(stuRecord) || isPortalStudentOnLeave(stuRecord)) {
+          throw new Error('Only active students (not deactivated or on leave) can be scheduled.');
+        }
+
+        const [start24, end24] = slotVal.split('|');
+        const startTimeSql = `${start24}:00`;
+        const endTimeSql = `${end24}:00`;
+        const zoomLink = CURRENT_TEACHER.zoom_link || '';
+
+        // Check existing occupied days for this start_time
+        const occupiedDays = new Set(
+          (ALL_TEACHER_SCHEDULES || [])
+            .filter(sc => (sc.start_time || '').slice(0, 5) === start24)
+            .map(sc => Number(sc.day_of_week))
+        );
+
+        const freeDaysToInsert = selectedDays.filter(d => !occupiedDays.has(d));
+        if (freeDaysToInsert.length === 0) {
+          throw new Error(`The selected slot (${start24} - ${end24}) is already booked on the chosen day(s). Please choose a free slot or day.`);
+        }
+
+        const rowsToInsert = freeDaysToInsert.map(dayNum => ({
+          teacher_id: CURRENT_TEACHER.id,
+          student_id: studentId,
+          day_of_week: dayNum,
+          start_time: startTimeSql,
+          end_time: endTimeSql,
+          meeting_link: zoomLink
+        }));
+
+        const { error: insErr } = await db.from('class_schedules').insert(rowsToInsert);
+        if (insErr) throw insErr;
+
+        closeTeacherAddScheduleModal();
+        await loadTeacherPortalData();
+
+        // If Weekly Matrix Modal is currently open, re-render its body too
+        const matrixModal = document.getElementById('modalWeeklyMatrix');
+        if (matrixModal && !matrixModal.classList.contains('hidden')) {
+          openWeeklyMatrixModal();
+        }
+
+        const addedDayNames = freeDaysToInsert.map(d => DAY_NAMES[d]).join(', ');
+        alert(`✅ Student Added to Schedule!\n\nStudent: ${stuRecord.name} (${stuRecord.id})\nTime: ${start24} - ${end24} PKT\nDays: ${addedDayNames}`);
+      } catch (err) {
+        alert('Schedule Notice: ' + (err.message || err));
+      } finally {
+        if (btn) {
+          btn.disabled = false;
+          btn.innerHTML = '<i class="fa-solid fa-calendar-check text-brandGold"></i> Save to Schedule';
+        }
       }
     }
 
@@ -3513,19 +4132,15 @@
       const select = document.getElementById('advStudentSelect');
       if (!select) return;
 
-      const studentMap = {};
-      (ASSIGNED_STUDENTS || []).forEach(st => {
-        studentMap[st.id] = st;
-      });
-      (ALL_TEACHER_SCHEDULES || []).forEach(sch => {
-        if (sch.students && sch.students.id) {
-          studentMap[sch.students.id] = { ...sch.students, schedule_info: `${sch.start_time?.slice(0,5)} - ${sch.end_time?.slice(0,5)}` };
-        }
-      });
-
-      const studentsList = Object.values(studentMap);
+      // Strictly use ACTIVE_ASSIGNED_STUDENTS from this teacher's Student List
+      const studentsList = (ACTIVE_ASSIGNED_STUDENTS || []).filter(st =>
+        String(st.assigned_teacher_id || '') === String(CURRENT_TEACHER?.id || '') &&
+        isPortalRegularStudent(st) &&
+        !isPortalStudentDeactivated(st) &&
+        !isPortalStudentOnLeave(st)
+      );
       if (studentsList.length === 0) {
-        select.innerHTML = '<option value="">No assigned students found</option>';
+        select.innerHTML = '<option value="">No active students in your Student List</option>';
         return;
       }
 
@@ -3551,7 +4166,7 @@
         return;
       }
 
-      const st = (ASSIGNED_STUDENTS || []).find(x => String(x.id) === String(studentId)) ||
+      const st = (ACTIVE_ASSIGNED_STUDENTS || []).find(x => String(x.id) === String(studentId)) ||
                  (ALL_TEACHER_SCHEDULES || []).find(x => String(x.students?.id) === String(studentId))?.students;
 
       ADVANCE_SELECTED_STUDENT = st;
@@ -3678,7 +4293,7 @@
         alert(`🌟 Advance Class Successfully Recorded!\n\n` +
           `Student: ${studentName}\n` +
           `Advance Target Date: ${targetDate}\n` +
-          `Sabaq: ${book?.title || 'Course'} (Page ${page})\n` +
+          `Lesson: ${book?.title || 'Course'} (Page ${page})\n` +
           `Status: 🌟 Advance Class\n\n` +
           `Parent Portal has been updated with this advance session!`
         );
@@ -3707,15 +4322,15 @@
       const todayDate = new Date().toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric' });
 
       const msg = `*Assalamu Alaikum Respected Parent!* 🤲\n\n` +
-        `Al-Huda Islamic Centre LMS ki janib se ittila:\n` +
+        `Notice from Al-Huda Islamic Centre LMS:\n` +
         `*Student:* ${studentName}\n` +
         `*Instructor:* ${teacherName}\n` +
-        `*Session Type:* 🌟 Advance Class (پیشگی کلاس)\n` +
+        `*Session Type:* 🌟 Advance Class Session\n` +
         `*Covering Date:* ${targetDate}\n` +
         `*Conducted On:* ${todayDate}\n\n` +
         `*Course Material:* ${bookTitle} (Page ${page})\n` +
         (remarks ? `*Teacher Remarks:* ${remarks}\n\n` : '\n') +
-        `Bachay ki ${targetDate} ki class aaj advance mein kamyabi se mukammal kar li gayi hai.\n\n` +
+        `The class scheduled for ${targetDate} has been completed in advance today.\n\n` +
         `JazakAllah Khair,\n*Al-Huda Islamic Centre*\nhttps://alhuda-lms.vercel.app/parent`;
 
       const url = `https://api.whatsapp.com/send?phone=${encodeURIComponent(cleanPhone)}&text=${encodeURIComponent(msg)}`;

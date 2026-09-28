@@ -2610,10 +2610,37 @@ async function submitEditSingleStudentForm(e, familyId, studentId) {
     return;
   }
 
+  const oldTeacherId = student.assigned_teacher_id || null;
+
   if (prevWasInactive && !nextWantsInactive) {
     delete stuMeta.family_deactivated;
     delete stuMeta.deactivated_individually;
     stuMeta.reactivated_at = new Date().toISOString();
+  }
+
+  let effectiveTeacherId = assigned_teacher_id;
+  if (prevWasInactive && !nextWantsInactive && !effectiveTeacherId && stuMeta.previous_teacher_id_before_deactivation) {
+    const prevTchObj = (window.ALL_TEACHERS || []).find(t => String(t.id) === String(stuMeta.previous_teacher_id_before_deactivation));
+    const isPrevEligible = prevTchObj && (typeof isEligibleTeacherRecord === 'function' ? isEligibleTeacherRecord(prevTchObj) : true);
+    if (isPrevEligible) {
+      effectiveTeacherId = prevTchObj.id;
+    }
+  }
+
+  if (oldTeacherId && String(oldTeacherId) !== String(effectiveTeacherId || '')) {
+    try {
+      await db.from('class_schedules').delete().eq('student_id', student.id).eq('teacher_id', oldTeacherId);
+      if (Array.isArray(window.ALL_CLASS_SCHEDULES)) {
+        window.ALL_CLASS_SCHEDULES = window.ALL_CLASS_SCHEDULES.filter(
+          sc => !(String(sc.student_id) === String(student.id) && String(sc.teacher_id) === String(oldTeacherId))
+        );
+      }
+      if (typeof _TEACHER_360_MEM_CACHE === 'object') {
+        delete _TEACHER_360_MEM_CACHE[String(oldTeacherId).toUpperCase()];
+      }
+    } catch (err) {
+      console.warn('[Student 360] Old teacher schedule cleanup notice:', err);
+    }
   }
 
   await _saveStudentRecordBackend(student.id, {
@@ -2623,14 +2650,20 @@ async function submitEditSingleStudentForm(e, familyId, studentId) {
     gender,
     status,
     course_id,
-    assigned_teacher_id: (prevWasInactive && !nextWantsInactive && !assigned_teacher_id) ? null : assigned_teacher_id,
+    assigned_teacher_id: effectiveTeacherId,
     notes: JSON.stringify(stuMeta)
   });
+
+  if (effectiveTeacherId && typeof _TEACHER_360_MEM_CACHE === 'object') {
+    delete _TEACHER_360_MEM_CACHE[String(effectiveTeacherId).toUpperCase()];
+  }
+  if (typeof invalidateCoreLmsDataCache === 'function') invalidateCoreLmsDataCache();
+  if (typeof loadTeachers === 'function') loadTeachers();
 
   await syncFamilyStatusFromStudentsBackend(familyId);
 
   _closeWorkspaceModal();
-  _notify360(`Student ${name}'s information updated and family lifecycle synchronized!`);
+  _notify360(`Student ${name}'s information updated and teacher Student List synchronized!`);
   await openFamily360Profile(familyId, 'students', true, { selectedStudentId: student.id, studentSubView: 'info' });
 }
 
@@ -2804,21 +2837,38 @@ async function toggleSingleStudentDeactivate(familyId, studentId) {
   const stuMeta = _parseStudentStructuredNotes(student);
   delete stuMeta.family_deactivated;
   delete stuMeta.deactivated_individually;
+  delete stuMeta.on_leave;
   stuMeta.reactivated_at = new Date().toISOString();
+
+  const candidateTchId = student.assigned_teacher_id || stuMeta.previous_teacher_id_before_deactivation || null;
+  let restoredTeacherId = null;
+  if (candidateTchId) {
+    const tchObj = (window.ALL_TEACHERS || []).find(t => String(t.id) === String(candidateTchId));
+    const isEligible = tchObj && (typeof isEligibleTeacherRecord === 'function' ? isEligibleTeacherRecord(tchObj) : true);
+    if (isEligible) {
+      restoredTeacherId = tchObj.id;
+    }
+  }
 
   await _saveStudentRecordBackend(student.id, {
     status: 'Active',
-    assigned_teacher_id: null,
+    assigned_teacher_id: restoredTeacherId,
     notes: JSON.stringify(stuMeta)
   });
+
+  if (restoredTeacherId && typeof _TEACHER_360_MEM_CACHE === 'object') {
+    delete _TEACHER_360_MEM_CACHE[String(restoredTeacherId).toUpperCase()];
+  }
+  if (typeof invalidateCoreLmsDataCache === 'function') invalidateCoreLmsDataCache();
+  if (typeof loadTeachers === 'function') loadTeachers();
 
   const syncResult = await syncFamilyStatusFromStudentsBackend(familyId);
   const famNowActive = syncResult && syncResult.familyStatus !== 'Inactive';
 
   _notify360(
     famWasDeactivated && famNowActive
-      ? `${student.name} reactivated — Family "${family?.parent_name || familyId}" is now automatically ACTIVE. Please assign a teacher and book schedule slots when ready.`
-      : `${student.name} is now ACTIVE (Family remains ACTIVE). Please assign a teacher and book schedule slots when ready.`
+      ? `${student.name} reactivated — Family "${family?.parent_name || familyId}" is now automatically ACTIVE${restoredTeacherId ? ' and student restored to Teacher Student List' : ''}.`
+      : `${student.name} is now ACTIVE${restoredTeacherId ? ' and restored to Teacher Student List' : ''}.`
   );
   await openFamily360Profile(familyId, 'students', true, { selectedStudentId: student.id });
 }
@@ -4017,24 +4067,28 @@ function _compileTeacher360AggregatedState(teacher, tchSchedules = [], attLogs =
     ? (meta.role_title || 'Support & Administrative Staff')
     : (meta.role_title || 'Teacher');
 
-  // 1. Authoritative Student-Teacher Relationship (via assigned_teacher_id OR class_schedules, strictly excluding deactivated students)
+  // 1. Authoritative Student-Teacher Relationship (via assigned_teacher_id, strictly excluding deactivated & reassigned students)
   tchSchedules = (tchSchedules || []).filter(sc => {
     const stObj = (window.ALL_STUDENTS || []).find(s => String(s.id || '').toUpperCase() === String(sc.student_id || '').toUpperCase()) || sc.students;
     if (stObj && typeof isStudentSelfDeactivated === 'function' && isStudentSelfDeactivated(stObj)) return false;
+    if (stObj && stObj.assigned_teacher_id && String(stObj.assigned_teacher_id) !== String(teacher.id)) return false;
     return true;
   });
-  const schedStudentIds = new Set((tchSchedules || []).map(sc => String(sc.student_id || '').toUpperCase()).filter(Boolean));
   const allMatchedStudents = (window.ALL_STUDENTS || []).filter(s => {
     if (typeof isStudentSelfDeactivated === 'function' && isStudentSelfDeactivated(s)) return false;
     const st = String(s.status || 'Active').toLowerCase();
-    if (st === 'inactive' || st === 'deactivated' || st === 'left' || st === 'deleted') return false;
-    const sIdUp = String(s.id || '').toUpperCase();
-    return String(s.assigned_teacher_id) === String(teacher.id) || schedStudentIds.has(sIdUp);
+    if (st === 'inactive' || st === 'deactivated' || st === 'left' || st === 'deleted' || st === 'trial' || st === 'converted') return false;
+    return String(s.assigned_teacher_id || '') === String(teacher.id);
   });
 
   const activeStudents = allMatchedStudents.filter(s => {
-    const st = String(s.status || 'Active').toLowerCase();
-    return st !== 'inactive' && st !== 'deactivated' && st !== 'left' && st !== 'deleted';
+    const st = String(s.status || 'Active').trim().toLowerCase();
+    if (st === 'inactive' || st === 'deactivated' || st === 'left' || st === 'deleted' || st === 'leave') return false;
+    try {
+      const sNotes = typeof s.notes === 'string' ? JSON.parse(s.notes || '{}') : (s.notes || {});
+      if (sNotes && sNotes.on_leave === true) return false;
+    } catch (e) {}
+    return true;
   });
 
   // 2. Authoritative Salary & Payroll Engine (Connected directly to alhuda_teacher_salaries & payroll.js)
@@ -5135,33 +5189,53 @@ async function submitTeacherAssignStudent360(e, teacherId) {
     }
   }
 
+  const stuObj = (window.ALL_STUDENTS || []).find(s => String(s.id) === String(stuId));
+  const prevTeacherId = stuObj?.assigned_teacher_id || null;
+
   try {
     await db.from('students').update({ assigned_teacher_id: teacherId }).eq('id', stuId);
+    if (prevTeacherId && String(prevTeacherId) !== String(teacherId)) {
+      await db.from('class_schedules').delete().eq('student_id', stuId).eq('teacher_id', prevTeacherId);
+      if (Array.isArray(window.ALL_CLASS_SCHEDULES)) {
+        window.ALL_CLASS_SCHEDULES = window.ALL_CLASS_SCHEDULES.filter(
+          sc => !(String(sc.student_id) === String(stuId) && String(sc.teacher_id) === String(prevTeacherId))
+        );
+      }
+      delete _TEACHER_360_MEM_CACHE[String(prevTeacherId).toUpperCase()];
+    }
   } catch (err) {
     console.warn('[Teacher 360] Student assign update notice:', err);
   }
   _syncStudentRecordInMemory(stuId, { assigned_teacher_id: teacherId });
   delete _TEACHER_360_MEM_CACHE[String(teacherId).toUpperCase()];
   if (typeof invalidateCoreLmsDataCache === 'function') invalidateCoreLmsDataCache();
+  if (typeof loadTeachers === 'function') loadTeachers();
 
   _closeWorkspaceModal();
-  _notify360('Student assigned to teacher and synchronized across LMS!');
+  _notify360('Student added to teacher Student List and synchronized across LMS!');
   await openTeacher360Profile(teacherId, 'students', true, { forceRefresh: true });
 }
 
 async function unassignStudentFromTeacher360(teacherId, stuId) {
-  if (!(await lmsConfirm('Unassign this student from this teacher? (Student record will remain safe in the LMS)'))) return;
+  if (!(await lmsConfirm('Remove this student from this teacher\'s Student List? (Active schedule slots with this teacher will be removed, while student record and attendance history remain preserved)'))) return;
   try {
     await db.from('students').update({ assigned_teacher_id: null }).eq('id', stuId);
+    await db.from('class_schedules').delete().eq('student_id', stuId).eq('teacher_id', teacherId);
+    if (Array.isArray(window.ALL_CLASS_SCHEDULES)) {
+      window.ALL_CLASS_SCHEDULES = window.ALL_CLASS_SCHEDULES.filter(
+        sc => !(String(sc.student_id) === String(stuId) && String(sc.teacher_id) === String(teacherId))
+      );
+    }
   } catch (err) {
     console.warn('[Teacher 360] Student unassign notice:', err);
   }
   _syncStudentRecordInMemory(stuId, { assigned_teacher_id: null });
   delete _TEACHER_360_MEM_CACHE[String(teacherId).toUpperCase()];
   if (typeof invalidateCoreLmsDataCache === 'function') invalidateCoreLmsDataCache();
+  if (typeof loadTeachers === 'function') loadTeachers();
 
   _closeWorkspaceModal();
-  _notify360('Student unassigned from teacher.');
+  _notify360('Student removed from teacher Student List.');
   await openTeacher360Profile(teacherId, 'students', true, { forceRefresh: true });
 }
 

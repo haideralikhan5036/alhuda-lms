@@ -2750,11 +2750,11 @@
         </div>
       </div>
 
-      <!-- ASSIGNED STUDENTS ROSTER FOR THIS TEACHER -->
+      <!-- ASSIGNED STUDENT LIST FOR THIS TEACHER -->
       <div id="matrixTeacherStudentsBar" class="mb-3 p-2.5 bg-gradient-to-r from-emerald-50 via-teal-50 to-amber-50 rounded-xl border border-emerald-200 flex items-center justify-between flex-wrap gap-2 text-xs">
         <div class="flex items-center gap-2">
-          <span class="px-2 py-0.5 rounded bg-brandDark text-white font-bold text-[10px] uppercase"><i class="fa-solid fa-users"></i> Assigned Students</span>
-          <span class="text-slate-700 font-semibold">Teacher Roster:</span>
+          <span class="px-2 py-0.5 rounded bg-brandDark text-white font-bold text-[10px] uppercase"><i class="fa-solid fa-users"></i> Student List</span>
+          <span class="text-slate-700 font-semibold">Assigned Active Students:</span>
         </div>
         <div id="matrixTeacherStudentsList" class="flex flex-wrap gap-1.5 items-center">
           <span class="text-slate-400 italic text-[11px]">Loading students...</span>
@@ -3003,7 +3003,7 @@
   <div id="modalBookSlot" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-[60] hidden items-center justify-center p-4">
     <div class="bg-white rounded-2xl max-w-md w-full p-5 shadow-2xl border border-slate-200">
       <div class="flex justify-between items-center mb-3 border-b pb-2">
-        <h4 class="font-bold text-sm text-brandDark"><i class="fa-solid fa-calendar-check text-brandEmerald"></i> Book Roster Student to Slot</h4>
+        <h4 class="font-bold text-sm text-brandDark"><i class="fa-solid fa-calendar-check text-brandEmerald"></i> Add Student from Student List to Slot</h4>
         <button onclick="closeModal('modalBookSlot')" class="text-slate-400 hover:text-slate-600 font-bold">&times;</button>
       </div>
       <form onsubmit="handleConfirmSlotBooking(event)" class="space-y-3.5 text-xs">
@@ -3012,7 +3012,7 @@
           <input type="text" id="bookSlotDisplay" readonly class="w-full p-2 bg-slate-100 border rounded font-mono font-bold text-slate-700">
         </div>
         <div>
-          <label class="block font-bold mb-1">Select Roster Student *:</label>
+          <label class="block font-bold mb-1">Select Student (from Teacher's Student List) *:</label>
           <select id="bookStudentSelect" required class="w-full p-2.5 border rounded-lg font-semibold"></select>
         </div>
 
@@ -3119,7 +3119,7 @@
           </div>
           <div>
             <div class="font-extrabold text-xs text-rose-950">Delete All Classes</div>
-            <div class="text-[11px] text-rose-800 mt-0.5 leading-snug">Removes all scheduled classes for this student across this teacher's weekly matrix. Student remains in teacher's roster.</div>
+            <div class="text-[11px] text-rose-800 mt-0.5 leading-snug">Removes all scheduled classes for this student across this teacher's weekly matrix. Student remains in teacher's Student List.</div>
           </div>
         </button>
 
@@ -3137,7 +3137,7 @@
               Delete all scheduled classes for Student with this teacher?
             </p>
             <p class="text-[11px] text-rose-800 mt-1">
-              This will remove every weekly schedule slot for this student with this teacher. The student record and teacher roster assignment will be preserved.
+              This will remove every weekly schedule slot for this student with this teacher. The student record and teacher Student List assignment will be preserved.
             </p>
           </div>
         </div>
@@ -3456,7 +3456,7 @@
         <div class="bg-slate-50 p-3.5 rounded-xl border border-slate-200 space-y-2">
           <div class="font-bold text-slate-700 uppercase tracking-wide text-[11px] flex justify-between">
             <span>3. Assign Quran Teacher</span>
-            <span class="text-brandEmerald font-bold"><i class="fa-solid fa-chalkboard-user"></i> Teacher Roster</span>
+            <span class="text-brandEmerald font-bold"><i class="fa-solid fa-chalkboard-user"></i> Teacher Student List</span>
           </div>
           <div>
             <label class="block font-bold mb-1">Select Teacher *:</label>
@@ -4481,7 +4481,7 @@
           </div>
           <div>
             <h3 class="font-extrabold text-base text-brandDark">Teacher Portal Login</h3>
-            <p class="text-[11px] text-slate-500">Sign in to view your timetable, students & Sabaq</p>
+            <p class="text-[11px] text-slate-500">Sign in to view your timetable, Student List & Lesson Progress</p>
           </div>
         </div>
         <button onclick="closeModal('modalTeacherLogin')" class="text-slate-400 hover:text-slate-600 text-xl font-bold">&times;</button>

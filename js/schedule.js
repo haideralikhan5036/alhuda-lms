@@ -28,19 +28,25 @@
       document.getElementById('matrixTeacherName').innerText = `${CURRENT_MATRIX_TEACHER.full_name}'s Weekly Timetable (${creds.teacher_id})`;
       document.getElementById('matrixTeacherSubtitle').innerText = `Rate: ${CURRENT_MATRIX_TEACHER.rate_per_slot || 200} PKR / slot • Configured Shift: ${CURRENT_MATRIX_TEACHER.working_shift || '10 Hours Shift (02:00 PM - 12:00 AM PKT)'}`;
 
-      // Populate Assigned Students & Active Trials Bar
+      // Populate Assigned Student List & Active Trials Bar
       const studentsListEl = document.getElementById('matrixTeacherStudentsList');
       if (studentsListEl) {
-        const assignedStudents = (ALL_STUDENTS || []).filter(s =>
-          String(s.assigned_teacher_id || '') === String(teacherId || '') &&
-          s.status !== 'Trial' &&
-          s.status !== 'Converted' &&
-          (typeof isActiveStudentRecord === 'function' ? isActiveStudentRecord(s) : true)
-        );
+        const assignedStudents = (ALL_STUDENTS || []).filter(s => {
+          if (String(s.assigned_teacher_id || '') !== String(teacherId || '')) return false;
+          if (s.status === 'Trial' || s.status === 'Converted') return false;
+          if (typeof isActiveStudentRecord === 'function' && !isActiveStudentRecord(s)) return false;
+          const stLow = String(s.status || '').trim().toLowerCase();
+          if (stLow === 'leave') return false;
+          try {
+            const meta = typeof s.notes === 'string' ? JSON.parse(s.notes || '{}') : (s.notes || {});
+            if (meta && meta.on_leave === true) return false;
+          } catch (e) {}
+          return true;
+        });
         const assignedTrials = (ALL_TRIALS || []).filter(t => t.teacher_id === teacherId && t.status !== 'Discontinued');
 
         if (assignedStudents.length === 0 && assignedTrials.length === 0) {
-          studentsListEl.innerHTML = `<span class="text-slate-400 italic text-[11px]">No students or trials assigned to this teacher yet.</span>`;
+          studentsListEl.innerHTML = `<span class="text-slate-400 italic text-[11px]">No active students in this teacher's Student List yet.</span>`;
         } else {
           let rosterHtml = '';
           // Regular students
@@ -77,11 +83,16 @@
     async function fetchTeacherSchedules() {
       if (!CURRENT_MATRIX_TEACHER || !CURRENT_MATRIX_TEACHER.id) return;
       const { data: scheds } = await db.from('class_schedules')
-        .select('*, students(id, name, status, notes, family_id)')
+        .select('*, students(id, name, status, notes, family_id, assigned_teacher_id)')
         .eq('teacher_id', CURRENT_MATRIX_TEACHER.id);
       CURRENT_TEACHER_SCHEDULES = (scheds || []).filter(slot => {
         const stuObj = (ALL_STUDENTS || []).find(s => String(s.id) === String(slot.student_id)) || slot.students;
         if (stuObj && typeof isStudentSelfDeactivated === 'function' && isStudentSelfDeactivated(stuObj)) {
+          db.from('class_schedules').delete().eq('id', slot.id).then(() => {});
+          return false;
+        }
+        const assignedTch = stuObj?.assigned_teacher_id || slot.students?.assigned_teacher_id;
+        if (assignedTch && String(assignedTch) !== String(CURRENT_MATRIX_TEACHER.id)) {
           db.from('class_schedules').delete().eq('id', slot.id).then(() => {});
           return false;
         }
@@ -328,23 +339,33 @@
         rosterCandidates = (ALL_STUDENTS || []).filter(s => String(s.assigned_teacher_id || '') === String(teacherId));
       }
 
-      // Filter strictly to active students belonging to active families
-      const teacherAssigned = rosterCandidates.filter(s =>
-        String(s.assigned_teacher_id || '') === String(teacherId) &&
-        (typeof isActiveStudentRecord === 'function' ? isActiveStudentRecord(s) : (String(s.status || '').toLowerCase() !== 'inactive' && String(s.status || '').toLowerCase() !== 'deactivated'))
-      );
+      // Filter strictly to active students belonging to this teacher's Student List (exclude deactivated & Leave)
+      const teacherAssigned = rosterCandidates.filter(s => {
+        if (String(s.assigned_teacher_id || '') !== String(teacherId)) return false;
+        const isAct = typeof isActiveStudentRecord === 'function'
+          ? isActiveStudentRecord(s)
+          : (String(s.status || '').toLowerCase() !== 'inactive' && String(s.status || '').toLowerCase() !== 'deactivated');
+        if (!isAct) return false;
+        const stLow = String(s.status || '').trim().toLowerCase();
+        if (stLow === 'leave') return false;
+        try {
+          const meta = typeof s.notes === 'string' ? JSON.parse(s.notes || '{}') : (s.notes || {});
+          if (meta && meta.on_leave === true) return false;
+        } catch (e) {}
+        return true;
+      });
 
       let html = '';
       if (teacherAssigned.length > 0) {
-        html += `<optgroup label="🎯 Roster Students Assigned to ${CURRENT_MATRIX_TEACHER.full_name}">`;
+        html += `<optgroup label="🎯 Active Students in ${CURRENT_MATRIX_TEACHER.full_name}'s Student List">`;
         teacherAssigned.forEach(s => {
           const prof = cachedProfiles[s.id] || {};
-          const days = prof.days_per_week || s.days_per_week || 'Roster Student';
+          const days = prof.days_per_week || s.days_per_week || 'Assigned Student';
           html += `<option value="${s.id}">${s.name} (${s.id}) &bull; ${days}</option>`;
         });
         html += `</optgroup>`;
       } else {
-        html = `<option value="">No active students on ${CURRENT_MATRIX_TEACHER.full_name}'s roster.</option>`;
+        html = `<option value="">No active students in ${CURRENT_MATRIX_TEACHER.full_name}'s Student List.</option>`;
       }
 
       select.innerHTML = html;
@@ -395,7 +416,7 @@
       const meeting_link = document.getElementById('bookMeetingLink').value.trim();
 
       if (!student_id) {
-        alert('Please select an active student from this teacher\'s roster.');
+        alert('Please select an active student from this teacher\'s Student List.');
         return;
       }
 
@@ -421,9 +442,9 @@
         }
       }
 
-      // Backend validation: ensure selected student belongs to this teacher's roster and is active
+      // Backend validation: ensure selected student belongs to this teacher's Student List and is active
       const { data: stuRecord, error: stuErr } = await db.from('students')
-        .select('id, name, status, assigned_teacher_id, family_id, families(id, status)')
+        .select('id, name, status, notes, assigned_teacher_id, family_id, families(id, status)')
         .eq('id', student_id)
         .single();
 
@@ -433,16 +454,24 @@
       }
 
       if (String(stuRecord.assigned_teacher_id || '') !== String(CURRENT_MATRIX_TEACHER.id || '')) {
-        alert('Backend Validation Failed: This student does not belong to this teacher\'s roster. Only students assigned to this teacher can be scheduled.');
+        alert('Backend Validation Failed: This student does not belong to this teacher\'s Student List. Only students assigned to this teacher can be scheduled.');
         return;
       }
 
-      const isStuActive = typeof isActiveStudentRecord === 'function'
+      let isStuOnLeave = String(stuRecord.status || '').trim().toLowerCase() === 'leave';
+      if (!isStuOnLeave) {
+        try {
+          const meta = typeof stuRecord.notes === 'string' ? JSON.parse(stuRecord.notes || '{}') : (stuRecord.notes || {});
+          if (meta && meta.on_leave === true) isStuOnLeave = true;
+        } catch (err) {}
+      }
+
+      const isStuActive = !isStuOnLeave && (typeof isActiveStudentRecord === 'function'
         ? isActiveStudentRecord(stuRecord)
-        : (String(stuRecord.status || '').toLowerCase() !== 'inactive' && String(stuRecord.status || '').toLowerCase() !== 'deactivated');
+        : (String(stuRecord.status || '').toLowerCase() !== 'inactive' && String(stuRecord.status || '').toLowerCase() !== 'deactivated'));
 
       if (!isStuActive) {
-        alert('Backend Validation Failed: Deactivated students or students belonging to a deactivated family cannot be scheduled.');
+        alert('Backend Validation Failed: Students on Leave, deactivated students, or students belonging to a deactivated family cannot be scheduled.');
         return;
       }
 
