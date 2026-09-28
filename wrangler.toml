@@ -10,7 +10,3 @@ binding = "ASSETS"
 binding = "DB"
 database_name = "alhuda-lms-db"
 database_id = "963ee149-3bea-4e3a-813f-c109e77465ae"
-
-[[r2_buckets]]
-binding = "STORAGE"
-bucket_name = "alhuda-centre-storage-2026"
