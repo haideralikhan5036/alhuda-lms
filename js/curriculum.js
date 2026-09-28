@@ -30,25 +30,80 @@
       } catch(e) {
         console.warn("Could not save custom books to storage:", e);
       }
-      if (typeof db !== 'undefined' && db && typeof db.from === 'function') {
-        db.from('system_settings').upsert({
-          id: 'SYS-CUSTOM-BOOKS',
-          key: 'alhuda_custom_books',
-          value: JSON.stringify(books),
+      syncCustomBooksToD1Chunked(books);
+    }
+
+    async function syncCustomBooksToD1Chunked(books) {
+      try {
+        if (typeof db === 'undefined' || !db || typeof db.from !== 'function') return;
+        const catalogIndex = [];
+        const rowsToUpsert = [];
+
+        for (const b of (books || [])) {
+          const pages = Array.isArray(b.pages) ? b.pages : [];
+          const bookMeta = {
+            ...b,
+            pages: [],
+            total_pages: pages.length || b.total_pages || 0
+          };
+          catalogIndex.push(bookMeta);
+
+          for (let i = 0; i < pages.length; i++) {
+            const pageKey = `BOOK_PAGE_${b.id}_${i}`;
+            rowsToUpsert.push({
+              id: `SYS-${b.id}-P${i}`,
+              key: pageKey,
+              value: pages[i],
+              updated_at: new Date().toISOString()
+            });
+          }
+        }
+
+        rowsToUpsert.unshift({
+          id: 'SYS-CUSTOM-BOOKS-INDEX',
+          key: 'alhuda_custom_books_index',
+          value: JSON.stringify(catalogIndex),
           updated_at: new Date().toISOString()
-        }).then(() => {});
+        });
+
+        for (const row of rowsToUpsert) {
+          await db.from('system_settings').upsert(row);
+        }
+      } catch (e) {
+        console.warn('[Course Material D1 Sync] Notice:', e);
       }
     }
 
     async function hydrateCustomBooksFromCloudflareD1() {
       try {
         if (typeof db === 'undefined' || !db || typeof db.from !== 'function') return;
-        const { data } = await db.from('system_settings').select('*').eq('key', 'alhuda_custom_books').single();
-        if (data && data.value) {
-          const remoteBooks = JSON.parse(data.value);
-          if (Array.isArray(remoteBooks) && remoteBooks.length > 0) {
-            localStorage.setItem('alhuda_custom_books', JSON.stringify(remoteBooks));
+        const { data: allSettings } = await db.from('system_settings').select('*');
+        if (!Array.isArray(allSettings) || allSettings.length === 0) return;
+
+        const settingsMap = new Map(allSettings.map(r => [String(r.key), r.value]));
+        const rawIndex = settingsMap.get('alhuda_custom_books_index') || settingsMap.get('alhuda_custom_books');
+        if (!rawIndex) return;
+
+        const books = JSON.parse(rawIndex);
+        if (!Array.isArray(books) || books.length === 0) return;
+
+        books.forEach(b => {
+          const total = Number(b.total_pages) || 0;
+          if ((!b.pages || b.pages.length === 0) && total > 0) {
+            const hydratedPages = [];
+            for (let i = 0; i < total; i++) {
+              const pVal = settingsMap.get(`BOOK_PAGE_${b.id}_${i}`);
+              if (pVal) hydratedPages.push(pVal);
+            }
+            if (hydratedPages.length > 0) {
+              b.pages = hydratedPages;
+            }
           }
+        });
+
+        localStorage.setItem('alhuda_custom_books', JSON.stringify(books));
+        if (typeof loadCurriculumLibrary === 'function') {
+          loadCurriculumLibrary(CURRENT_CURRICULUM_CATEGORY || 'all');
         }
       } catch (e) {}
     }
