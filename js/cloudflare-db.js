@@ -26,11 +26,19 @@
     'system_settings'
   ];
 
+  const DEFAULT_CLOUDFLARE_BACKEND_URL = 'https://alhuda-lms.ceoislamiccentre.workers.dev';
+
   let _d1Status = null; // null = unknown, true = Cloudflare D1 live, false = Local mirror mode
   let _d1CheckPromise = null;
 
   function getApiBase() {
-    return (window.CLOUDFLARE_API_BASE_URL || '').replace(/\/+$/, '');
+    if (window.CLOUDFLARE_API_BASE_URL) {
+      return String(window.CLOUDFLARE_API_BASE_URL).replace(/\/+$/, '');
+    }
+    if (typeof window !== 'undefined' && window.location && window.location.hostname.endsWith('.workers.dev')) {
+      return '';
+    }
+    return DEFAULT_CLOUDFLARE_BACKEND_URL;
   }
 
   function generateLocalId(table) {
@@ -519,29 +527,35 @@
 
   // Global helper to upload files/Base64 to Cloudflare R2 Storage (with dataUrl fallback if R2 not yet bound)
   window.uploadToCloudflareR2 = async function (fileOrDataUrl, folder = 'documents', filename = 'file.bin') {
+    const base = getApiBase() || DEFAULT_CLOUDFLARE_BACKEND_URL;
+    const normalizeUrl = (u) => {
+      if (!u) return '';
+      if (u.startsWith('/')) return `${base}${u}`;
+      return u;
+    };
     try {
       if (typeof fileOrDataUrl === 'string' && fileOrDataUrl.startsWith('data:')) {
-        const res = await fetch(`${getApiBase()}/api/storage`, {
+        const res = await fetch(`${base}/api/storage`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ folder, filename, dataUrl: fileOrDataUrl })
         });
         if (res.ok) {
           const json = await res.json();
-          if (json && json.ok && json.url) return json.url;
+          if (json && json.ok && json.url) return normalizeUrl(json.url);
         }
         return fileOrDataUrl;
       } else if (fileOrDataUrl instanceof Blob || fileOrDataUrl instanceof File) {
         const formData = new FormData();
         formData.append('file', fileOrDataUrl);
         formData.append('folder', folder);
-        const res = await fetch(`${getApiBase()}/api/storage`, {
+        const res = await fetch(`${base}/api/storage`, {
           method: 'POST',
           body: formData
         });
         if (res.ok) {
           const json = await res.json();
-          if (json && json.ok && json.url) return json.url;
+          if (json && json.ok && json.url) return normalizeUrl(json.url);
         }
         return await new Promise((resolve) => {
           const reader = new FileReader();
