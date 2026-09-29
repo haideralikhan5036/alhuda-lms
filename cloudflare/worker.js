@@ -25,7 +25,27 @@ export default {
       return handleStorageRequest({ request, env, ctx });
     }
 
-    // 3. All Portal Pages & Static Assets (index.html, teacher.html, manager.html, parent.html, js/*)
+    // 3. Clean Portal URLs without .html (/teacher, /parent, /manager, /admin)
+    const cleanRouteMap = {
+      '/teacher': '/teacher.html',
+      '/teacher/': '/teacher.html',
+      '/parent': '/parent.html',
+      '/parent/': '/parent.html',
+      '/student': '/parent.html',
+      '/student/': '/parent.html',
+      '/manager': '/manager.html',
+      '/manager/': '/manager.html',
+      '/admin': '/index.html',
+      '/admin/': '/index.html'
+    };
+    const mappedPath = cleanRouteMap[url.pathname.toLowerCase()];
+    if (mappedPath && env.ASSETS && typeof env.ASSETS.fetch === 'function') {
+      const rewrittenUrl = new URL(request.url);
+      rewrittenUrl.pathname = mappedPath;
+      return env.ASSETS.fetch(new Request(rewrittenUrl.toString(), request));
+    }
+
+    // 4. All Portal Pages & Static Assets (index.html, teacher.html, manager.html, parent.html, js/*)
     if (env.ASSETS && typeof env.ASSETS.fetch === 'function') {
       return env.ASSETS.fetch(request);
     }
