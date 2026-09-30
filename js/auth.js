@@ -7,10 +7,142 @@
  * ============================================================================
  */
 
+    // ============================================================
+    // OWNER / ADMIN PORTAL ROLE & SESSION MANAGEMENT
+    // ============================================================
+    function getAuthenticatedOwnerSession() {
+      const raw = sessionStorage.getItem('alhuda_owner_session') || localStorage.getItem('alhuda_logged_in_owner');
+      if (!raw) return null;
+      try {
+        const parsed = JSON.parse(raw);
+        if (parsed && (parsed.role === 'owner' || parsed.username)) {
+          return parsed;
+        }
+      } catch (e) {}
+      return null;
+    }
+
+    function showOwnerLoginView() {
+      const loginView = document.getElementById('ownerLoginView');
+      const mainApp = document.getElementById('mainAppWrapper');
+      if (loginView) {
+        loginView.classList.remove('hidden');
+        loginView.classList.add('flex');
+      }
+      if (mainApp) {
+        mainApp.classList.add('hidden');
+        mainApp.classList.remove('flex');
+      }
+    }
+
+    function showMainAppView() {
+      const loginView = document.getElementById('ownerLoginView');
+      const mainApp = document.getElementById('mainAppWrapper');
+      if (loginView) {
+        loginView.classList.add('hidden');
+        loginView.classList.remove('flex');
+      }
+      if (mainApp) {
+        mainApp.classList.remove('hidden');
+        mainApp.classList.add('flex');
+      }
+    }
+
+    function toggleOwnerPassVisibility() {
+      const p = document.getElementById('ownerLoginPassword');
+      const icon = document.getElementById('ownerPassToggleIcon');
+      if (!p) return;
+      if (p.type === 'password') {
+        p.type = 'text';
+        if (icon) icon.className = 'fa-regular fa-eye-slash';
+      } else {
+        p.type = 'password';
+        if (icon) icon.className = 'fa-regular fa-eye';
+      }
+    }
+
+    function handleOwnerSignIn(e) {
+      if (e && e.preventDefault) e.preventDefault();
+      const user = (document.getElementById('ownerLoginUsername')?.value || '').trim();
+      const pass = (document.getElementById('ownerLoginPassword')?.value || '').trim();
+      const errBox = document.getElementById('ownerLoginErrorMsg');
+      const errText = document.getElementById('ownerLoginErrorText');
+
+      if (errBox) errBox.classList.add('hidden');
+
+      if (!user || !pass) {
+        if (errBox && errText) {
+          errText.innerText = 'Please enter both username and password.';
+          errBox.classList.remove('hidden');
+        }
+        return;
+      }
+
+      const uNorm = user.toLowerCase();
+      const validUsernames = ['beacon_admin', 'admin', 'owner', 'haider'];
+      const validPasswords = ['admin_bqi_123', '12345678', 'admin123', 'alhuda_admin'];
+
+      let customOwnerAcc = null;
+      try {
+        customOwnerAcc = JSON.parse(localStorage.getItem('alhuda_admin_account') || 'null');
+      } catch (err) {}
+
+      const isValid = (
+        (validUsernames.includes(uNorm) && validPasswords.includes(pass)) ||
+        (customOwnerAcc && uNorm === String(customOwnerAcc.username || '').toLowerCase() && pass === String(customOwnerAcc.password || ''))
+      );
+
+      if (isValid) {
+        const sessionPayload = {
+          id: 'OWN-001',
+          username: user,
+          full_name: 'Haider (Owner)',
+          role: 'owner',
+          authenticated_at: new Date().toISOString()
+        };
+        sessionStorage.setItem('alhuda_owner_session', JSON.stringify(sessionPayload));
+        localStorage.setItem('alhuda_logged_in_owner', JSON.stringify(sessionPayload));
+        localStorage.setItem('alhuda_active_portal_role', 'owner');
+
+        showMainAppView();
+        switchUserRole('owner');
+
+        if (typeof ensureCoreLmsDataLoaded === 'function') {
+          ensureCoreLmsDataLoaded().then(() => {
+            if (typeof loadDashboardData === 'function') loadDashboardData();
+          });
+        }
+      } else {
+        if (errBox && errText) {
+          errText.innerText = 'Invalid username or password.';
+          errBox.classList.remove('hidden');
+        }
+      }
+    }
+
+    function logoutOwnerPortal() {
+      sessionStorage.removeItem('alhuda_owner_session');
+      localStorage.removeItem('alhuda_logged_in_owner');
+      localStorage.removeItem('bqi_logged_in_user');
+      if (localStorage.getItem('alhuda_active_portal_role') === 'owner') {
+        localStorage.removeItem('alhuda_active_portal_role');
+      }
+      showOwnerLoginView();
+      const userInp = document.getElementById('ownerLoginUsername');
+      const passInp = document.getElementById('ownerLoginPassword');
+      if (userInp) userInp.value = '';
+      if (passInp) passInp.value = '';
+    }
+
+    window.getAuthenticatedOwnerSession = getAuthenticatedOwnerSession;
+    window.showOwnerLoginView = showOwnerLoginView;
+    window.showMainAppView = showMainAppView;
+    window.toggleOwnerPassVisibility = toggleOwnerPassVisibility;
+    window.handleOwnerSignIn = handleOwnerSignIn;
+    window.logoutOwnerPortal = logoutOwnerPortal;
+
     // TEACHER & MANAGER PORTAL ROLE & SESSION MANAGEMENT
     function getAuthenticatedManagerSession() {
-      const activePortalRole = (localStorage.getItem('alhuda_active_portal_role') || '').toLowerCase();
-      if (activePortalRole !== 'manager') return null;
       const raw = sessionStorage.getItem('alhuda_manager_session') || localStorage.getItem('alhuda_logged_in_manager');
       if (!raw) return null;
       try {
@@ -36,21 +168,6 @@
     window.logoutManagerPortal = logoutManagerPortal;
 
     function switchUserRole(role) {
-      const activePortalRole = (localStorage.getItem('alhuda_active_portal_role') || '').toLowerCase();
-
-      // Prevent role escalation if locked into a specific authenticated portal session
-      if (activePortalRole === 'teacher') {
-        window.location.replace('teacher.html');
-        return;
-      }
-      if (activePortalRole === 'parent') {
-        window.location.replace('parent.html');
-        return;
-      }
-      if (activePortalRole === 'manager') {
-        role = 'manager';
-      }
-
       if (role === 'manager') {
         const mgrSession = getAuthenticatedManagerSession();
         if (!mgrSession) {
@@ -59,12 +176,15 @@
         }
         ACTIVE_MANAGER_ID = mgrSession.emp_id;
         window.ACTIVE_MANAGER_NAME = mgrSession.full_name || '';
+        localStorage.setItem('alhuda_active_portal_role', 'manager');
       } else if (role === 'teacher') {
         window.location.replace('teacher.html');
         return;
       } else if (role === 'student' || role === 'parent') {
         window.location.replace('parent.html');
         return;
+      } else {
+        localStorage.setItem('alhuda_active_portal_role', 'owner');
       }
 
       CURRENT_ROLE = role;
@@ -115,8 +235,8 @@
         badge.className = 'flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-indigo-950/80 border border-indigo-400/50 text-indigo-200 shadow-2xs whitespace-nowrap shrink-0';
         badge.innerHTML = `<i class="fa-solid fa-user-shield text-amber-400"></i> <span>${mgrId}${mgrName}</span> <button onclick="logoutManagerPortal()" class="ml-1.5 px-2 py-0.5 rounded-full bg-rose-600/80 hover:bg-rose-700 text-[10px] text-white font-extrabold transition cursor-pointer" title="Logout Manager"><i class="fa-solid fa-power-off"></i> Logout</button>`;
       } else if (role === 'owner') {
-        badge.className = 'hidden xl:flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-amber-950/60 border border-amber-400/50 text-amber-200 shadow-2xs whitespace-nowrap shrink-0';
-        badge.innerHTML = `<i class="fa-solid fa-crown text-brandGold"></i> <span>Owner &amp; Director</span>`;
+        badge.className = 'flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-amber-950/60 border border-amber-400/50 text-amber-200 shadow-2xs whitespace-nowrap shrink-0';
+        badge.innerHTML = `<i class="fa-solid fa-crown text-brandGold"></i> <span>Owner &amp; Director</span> <button onclick="logoutOwnerPortal()" class="ml-1.5 px-2 py-0.5 rounded-full bg-rose-600/80 hover:bg-rose-700 text-[10px] text-white font-extrabold transition cursor-pointer" title="Logout Owner"><i class="fa-solid fa-power-off"></i> Logout</button>`;
       } else {
         badge.className = 'hidden';
       }
@@ -126,25 +246,25 @@
       const params = new URLSearchParams(window.location.search);
       const urlRole = (params.get('role') || '').toLowerCase();
       const mgrParam = params.get('m') || params.get('mgr') || params.get('id');
-      const activePortalRole = (localStorage.getItem('alhuda_active_portal_role') || '').toLowerCase();
 
-      if (activePortalRole === 'teacher' || urlRole === 'teacher') {
+      // 1. Explicit Teacher & Parent/Student Redirects
+      if (urlRole === 'teacher') {
         window.location.replace('teacher.html');
-        return;
+        return false;
       }
 
-      if (activePortalRole === 'parent' || urlRole === 'student' || urlRole === 'parent') {
+      if (urlRole === 'student' || urlRole === 'parent') {
         window.location.replace('parent.html');
-        return;
+        return false;
       }
 
-      if (urlRole === 'manager' || mgrParam || activePortalRole === 'manager') {
+      // 2. Manager Role: requires authenticated manager session
+      if (urlRole === 'manager' || mgrParam) {
         const mgrSession = getAuthenticatedManagerSession();
         if (!mgrSession) {
           window.location.replace('manager.html');
-          return;
+          return false;
         }
-        // Authoritative identity comes ONLY from the authenticated Manager session, never from ?m=... URL parameters
         ACTIVE_MANAGER_ID = mgrSession.emp_id;
         window.ACTIVE_MANAGER_NAME = mgrSession.full_name || '';
         if (mgrParam) {
@@ -152,11 +272,21 @@
             window.history.replaceState({}, document.title, window.location.pathname + '?role=manager');
           } catch (e) {}
         }
+        showMainAppView();
         switchUserRole('manager');
-        return;
+        return true;
       }
 
+      // 3. Default Owner / Admin Route (index.html, /admin, /)
+      const ownerSession = getAuthenticatedOwnerSession();
+      if (!ownerSession) {
+        showOwnerLoginView();
+        return false;
+      }
+
+      showMainAppView();
       switchUserRole('owner');
+      return true;
     }
 
     function openTeacherLoginModal() {

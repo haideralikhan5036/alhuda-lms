@@ -291,26 +291,13 @@
         } catch (e) {}
       }
 
-      const activePortalRole = (localStorage.getItem('alhuda_active_portal_role') || '').toLowerCase();
       const roleBanner = document.getElementById('mgrRoleMismatchBanner');
-      const roleTitle = document.getElementById('mgrRoleMismatchTitle');
-      const roleDesc = document.getElementById('mgrRoleMismatchDesc');
-
-      // Role Mismatch Guard: If user is currently logged in as Teacher or Parent, do NOT auto-open Manager portal
-      if (activePortalRole && activePortalRole !== 'manager') {
-        if (roleBanner && roleTitle && roleDesc) {
-          const roleLabel = activePortalRole === 'teacher' ? 'Teacher' : (activePortalRole === 'parent' ? 'Parent / Student' : activePortalRole);
-          roleTitle.innerText = `Role Authorization Required (${roleLabel} Session Detected)`;
-          roleDesc.innerText = `You are currently signed in as ${roleLabel}. Manager Portal access requires valid Manager credentials.`;
-          roleBanner.classList.remove('hidden');
-        }
-        return;
-      }
+      if (roleBanner) roleBanner.classList.add('hidden');
 
       // Verify existing authenticated Manager session
       const savedMgrRaw = sessionStorage.getItem('alhuda_manager_session') || localStorage.getItem('alhuda_logged_in_manager');
       let parsedMgr = null;
-      if (savedMgrRaw && activePortalRole === 'manager') {
+      if (savedMgrRaw) {
         try {
           parsedMgr = JSON.parse(savedMgrRaw);
         } catch (e) {
@@ -339,7 +326,7 @@
         } else {
           localStorage.removeItem('alhuda_logged_in_manager');
           sessionStorage.removeItem('alhuda_manager_session');
-          if (activePortalRole === 'manager') localStorage.removeItem('alhuda_active_portal_role');
+          if (localStorage.getItem('alhuda_active_portal_role') === 'manager') localStorage.removeItem('alhuda_active_portal_role');
         }
       }
     };

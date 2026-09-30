@@ -361,14 +361,14 @@
           <div class="grid grid-cols-2 gap-3">
             <div class="p-3 bg-emerald-50/70 border border-emerald-100 rounded-2xl">
               <div class="text-[11px] font-bold text-slate-500">Monthly Fee</div>
-              <div class="text-lg font-black text-emerald-700 mt-0.5" id="parentFeeStat">Paid</div>
-              <div class="text-[10px] text-emerald-600 font-semibold" id="parentFeeMonth">Active Cycle</div>
+              <div class="text-lg font-black text-emerald-700 mt-0.5" id="parentFeeStat">0</div>
+              <div class="text-[10px] text-emerald-600 font-semibold" id="parentFeeMonth">No data available yet.</div>
             </div>
 
             <div class="p-3 bg-blue-50/70 border border-blue-100 rounded-2xl">
               <div class="text-[11px] font-bold text-slate-500">Attendance</div>
-              <div class="text-lg font-black text-blue-700 mt-0.5" id="parentAttRate">98%</div>
-              <div class="text-[10px] text-blue-600 font-semibold" id="parentAttCount">Consistent</div>
+              <div class="text-lg font-black text-blue-700 mt-0.5" id="parentAttRate">0%</div>
+              <div class="text-[10px] text-blue-600 font-semibold" id="parentAttCount">No data available yet.</div>
             </div>
           </div>
         </div>
@@ -969,26 +969,12 @@
         } catch (e) {}
       }
 
-      const activePortalRole = (localStorage.getItem('alhuda_active_portal_role') || '').toLowerCase();
       const roleBanner = document.getElementById('parentRoleMismatchBanner');
-      const roleTitle = document.getElementById('parentRoleMismatchTitle');
-      const roleDesc = document.getElementById('parentRoleMismatchDesc');
-
-      // Role Mismatch Guard: If user is currently logged in as Teacher or Manager, do NOT auto-open Parent portal
-      if (activePortalRole && activePortalRole !== 'parent') {
-        if (roleBanner && roleTitle && roleDesc) {
-          const roleLabel = activePortalRole === 'teacher' ? 'Teacher' : (activePortalRole === 'manager' ? 'Manager' : activePortalRole);
-          roleTitle.innerText = `Role Authorization Required (${roleLabel} Session Detected)`;
-          roleDesc.innerText = `You are currently signed in as ${roleLabel}. Parent Portal access requires valid Family / Parent credentials.`;
-          roleBanner.classList.remove('hidden');
-        }
-        showParentLoginView();
-        return;
-      }
+      if (roleBanner) roleBanner.classList.add('hidden');
 
       const savedParentRaw = sessionStorage.getItem('alhuda_parent_session') || localStorage.getItem('alhuda_logged_in_parent');
       let parsedParent = null;
-      if (savedParentRaw && activePortalRole === 'parent') {
+      if (savedParentRaw) {
         try {
           parsedParent = JSON.parse(savedParentRaw);
         } catch (e) {
@@ -1008,7 +994,7 @@
           localStorage.removeItem('alhuda_logged_in_parent');
           sessionStorage.removeItem('alhuda_parent_session');
           localStorage.removeItem('alhuda_selected_student_id');
-          if (activePortalRole === 'parent') localStorage.removeItem('alhuda_active_portal_role');
+          if (localStorage.getItem('alhuda_active_portal_role') === 'parent') localStorage.removeItem('alhuda_active_portal_role');
         }
       }
 
@@ -1167,27 +1153,29 @@
       if (nameEl) nameEl.innerText = s.name;
 
       const courseBadge = document.getElementById('studentCourseBadge');
-      if (courseBadge) courseBadge.innerText = s.course || 'Noorani Qaida & Tajweed';
+      if (courseBadge) courseBadge.innerText = s.course || 'Not Assigned Yet';
 
-      // 1. Fetch Teacher info
-      let teacherName = 'Ustadh Hamza Murtaza';
-      let teacherZoomLink = 'https://us06web.zoom.us/j/4862493196';
+      // 1. Fetch Teacher info (Real DB Only - No Fake Fallback)
+      let teacherName = 'Not Assigned Yet';
+      let teacherZoomLink = '';
+      CURRENT_TEACHER = null;
 
       if (db && s.assigned_teacher_id) {
         try {
           const { data } = await db.from('teachers').select('*').eq('id', s.assigned_teacher_id).single();
           if (data) {
             CURRENT_TEACHER = data;
-            teacherName = data.full_name;
+            teacherName = data.full_name || 'Assigned Teacher';
+            if (data.zoom_link) teacherZoomLink = data.zoom_link;
           }
         } catch(e) {}
       }
 
-      // Check notes for meeting link
+      // Check student notes for custom meeting link override
       if (s.notes) {
         try {
           const parsedNotes = typeof s.notes === 'string' ? JSON.parse(s.notes) : s.notes;
-          if (parsedNotes.meeting_link) teacherZoomLink = parsedNotes.meeting_link;
+          if (parsedNotes && parsedNotes.meeting_link) teacherZoomLink = parsedNotes.meeting_link;
         } catch(e) {}
       }
 
@@ -1201,30 +1189,70 @@
       }
       CURRENT_SCHEDULES = schedules;
 
+      // Resolve schedule-level Zoom link if present
+      const scheduleZoom = schedules.find(sc => sc.meeting_link && sc.meeting_link.trim() !== '')?.meeting_link || '';
+      const effectiveZoomLink = (scheduleZoom || teacherZoomLink || '').trim();
+
+      // Helper for formatting time & duration
+      const formatSlotRange = (sc) => {
+        if (!sc || !sc.start_time) return 'No classes scheduled.';
+        const st = sc.start_time.slice(0, 5);
+        const et = sc.end_time ? sc.end_time.slice(0, 5) : '';
+        const to12 = (t24) => {
+          const [hStr, mStr] = t24.split(':');
+          let h = parseInt(hStr, 10);
+          const m = parseInt(mStr || '0', 10);
+          if (isNaN(h)) return t24;
+          const ampm = h >= 12 ? 'PM' : 'AM';
+          const h12 = h % 12 || 12;
+          return `${String(h12).padStart(2, '0')}:${String(m).padStart(2, '0')} ${ampm}`;
+        };
+        const toMin = (t24) => {
+          const [h, m] = t24.split(':').map(Number);
+          return (h * 60) + (m || 0);
+        };
+        if (et && toMin(et) > toMin(st)) {
+          const dur = toMin(et) - toMin(st);
+          return `${to12(st)} - ${to12(et)} (${dur}m)`;
+        }
+        return `${to12(st)}`;
+      };
+
       // Update Live Class Banner
       const liveSubject = document.getElementById('liveClassSubject');
       const liveTeacher = document.getElementById('liveClassTeacher');
       const liveTime = document.getElementById('liveClassTime');
       const liveBtn = document.getElementById('btnJoinLiveMeeting');
 
-      if (liveSubject) liveSubject.innerText = s.course || 'Quran Recitation & Tajweed';
+      if (liveSubject) liveSubject.innerText = s.course || 'No Course Assigned';
       if (liveTeacher) liveTeacher.innerText = teacherName;
       if (liveTime) {
         if (schedules.length > 0) {
           const daysMap = ['', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-          const activeDays = schedules.map(sc => daysMap[sc.day_of_week] || '').filter(Boolean).join(', ');
-          const time = schedules[0].start_time ? schedules[0].start_time.slice(0, 5) : '04:00 PM';
-          liveTime.innerText = `${activeDays} @ ${time} PKT`;
+          const activeDays = [...new Set(schedules.map(sc => daysMap[sc.day_of_week] || '').filter(Boolean))].join(', ');
+          liveTime.innerText = `${activeDays} @ ${formatSlotRange(schedules[0])} PKT`;
         } else {
-          liveTime.innerText = 'Mon - Fri @ 04:00 PM PKT';
+          liveTime.innerText = 'No classes scheduled.';
         }
       }
 
       if (liveBtn) {
-        liveBtn.href = teacherZoomLink;
+        if (effectiveZoomLink && /^https?:\/\//i.test(effectiveZoomLink)) {
+          liveBtn.href = effectiveZoomLink;
+          liveBtn.target = '_blank';
+          liveBtn.onclick = null;
+          liveBtn.className = 'w-full sm:w-auto px-6 py-3.5 rounded-2xl bg-brandDark hover:bg-brandDarkest text-white font-black text-sm shadow-md transition flex items-center justify-center gap-2 text-center';
+          liveBtn.innerHTML = '<i class="fa-solid fa-video text-amber-300"></i> Join Zoom Class';
+        } else {
+          liveBtn.href = 'javascript:void(0)';
+          liveBtn.removeAttribute('target');
+          liveBtn.onclick = (e) => { e.preventDefault(); return false; };
+          liveBtn.className = 'w-full sm:w-auto px-5 py-3 rounded-2xl bg-slate-100 text-slate-500 border border-slate-200 font-bold text-xs flex items-center justify-center gap-2 text-center cursor-not-allowed';
+          liveBtn.innerHTML = '<i class="fa-solid fa-video-slash text-slate-400"></i> Zoom meeting not configured.';
+        }
       }
 
-      // 3. Fetch Attendance Logs & Lesson Progress Notes
+      // 3. Fetch Attendance Logs & Lesson Progress Notes (Real DB Only)
       let attLogs = [];
       if (db) {
         try {
@@ -1236,51 +1264,19 @@
         } catch(e) {}
       }
 
-      // Fallback logs if none recorded yet
-      if (!attLogs || attLogs.length === 0) {
-        attLogs = [
-          {
-            id: 'sample-1',
-            date: new Date().toISOString().slice(0, 10),
-            status: 'Present',
-            lesson_notes: JSON.stringify({
-              book_id: 'noorani-qaida',
-              book_title: 'Noorani Qaida (Complete)',
-              page: 4,
-              status: 'Pass',
-              remarks: 'Excellent recitation of Harakat (Zabar, Zer, Pesh). Continue practice on Page 4.'
-            }),
-            teachers: { full_name: teacherName }
-          },
-          {
-            id: 'sample-2',
-            date: new Date(Date.now() - 86400000).toISOString().slice(0, 10),
-            status: 'Present',
-            lesson_notes: JSON.stringify({
-              book_id: 'noorani-qaida',
-              book_title: 'Noorani Qaida (Complete)',
-              page: 3,
-              status: 'Pass',
-              remarks: 'Takhti 3: Huroof-e-Muqattaat mastered smoothly with correct Madd length.'
-            }),
-            teachers: { full_name: teacherName }
-          }
-        ];
-      }
-
       CURRENT_ATTENDANCE = attLogs;
 
-      // Calculate Attendance Metrics
+      // Calculate Real Attendance Metrics (0% when no records exist)
       const totalClasses = attLogs.length;
       const presentCount = attLogs.filter(a => a.status === 'Present').length;
-      const attPercent = totalClasses > 0 ? Math.round((presentCount / totalClasses) * 100) : 98;
+      const attPercent = totalClasses > 0 ? Math.round((presentCount / totalClasses) * 100) : 0;
 
       const attRateEl = document.getElementById('parentAttRate');
       const attCountEl = document.getElementById('parentAttCount');
       if (attRateEl) attRateEl.innerText = `${attPercent}%`;
-      if (attCountEl) attCountEl.innerText = `${presentCount} / ${totalClasses} Classes Present`;
+      if (attCountEl) attCountEl.innerText = totalClasses > 0 ? `${presentCount} / ${totalClasses} Classes Present` : 'No data available yet.';
 
-      // 4. Fetch Fee Status & Invoices
+      // 4. Fetch Real Fee Status & Invoices (No Fake Receipts)
       let feeHistory = [];
       let familyData = null;
 
@@ -1291,38 +1287,45 @@
             familyData = data;
             if (data.notes) {
               const pNotes = typeof data.notes === 'string' ? JSON.parse(data.notes) : data.notes;
-              if (pNotes.fee_history) feeHistory = pNotes.fee_history;
+              if (pNotes && Array.isArray(pNotes.fee_history)) feeHistory = pNotes.fee_history;
             }
+          }
+        } catch(e) {}
+
+        // Also query fee_collections table if available
+        try {
+          const { data: fcData } = await db.from('fee_collections').select('*').eq('family_id', s.family_id).order('created_at', { ascending: false });
+          if (fcData && fcData.length > 0 && feeHistory.length === 0) {
+            feeHistory = fcData.map((fc, idx) => ({
+              receiptNo: fc.receipt_no || `REC-${idx + 1}`,
+              date: (fc.payment_date || fc.created_at || '').slice(0, 10),
+              parentName: familyData?.parent_name || 'Parent',
+              studentsNames: s.name,
+              month: fc.billing_month || fc.month || '-',
+              amountPaid: fc.amount_paid ?? fc.amount ?? 0,
+              currency: fc.currency || familyData?.currency || 'PKR',
+              paymentMethod: fc.payment_method || '-',
+              status: fc.status || 'Paid',
+              remainingBalance: fc.remaining_balance ?? 0
+            }));
           }
         } catch(e) {}
       }
 
-      if (!feeHistory || feeHistory.length === 0) {
-        feeHistory = [
-          {
-            receiptNo: 'AH-REC-2026-0005',
-            date: '2026-09-22',
-            parentName: familyData?.parent_name || 'Family Sponsor',
-            studentsNames: s.name,
-            month: 'September 2026',
-            amountPaid: 10000,
-            currency: 'PKR',
-            paymentMethod: 'Online / Bank Transfer',
-            status: 'Paid in Full',
-            remainingBalance: 0
-          }
-        ];
-      }
-
-      // Update Fee Card
+      // Update Fee Card with Real Data Only
       const feeStatEl = document.getElementById('parentFeeStat');
       const feeMonthEl = document.getElementById('parentFeeMonth');
-      if (feeStatEl) feeStatEl.innerText = feeHistory[0]?.status === 'Paid in Full' ? 'Paid' : 'Pending';
-      if (feeMonthEl) feeMonthEl.innerText = `${feeHistory[0]?.month || 'September'} (${feeHistory[0]?.amountPaid || 10000} PKR)`;
+      if (feeHistory.length > 0) {
+        if (feeStatEl) feeStatEl.innerText = feeHistory[0]?.status === 'Paid in Full' || feeHistory[0]?.status === 'Paid' ? 'Paid' : (feeHistory[0]?.status || 'Recorded');
+        if (feeMonthEl) feeMonthEl.innerText = `${feeHistory[0]?.month || '-'} (${feeHistory[0]?.amountPaid || 0} ${feeHistory[0]?.currency || 'PKR'})`;
+      } else {
+        if (feeStatEl) feeStatEl.innerText = '0';
+        if (feeMonthEl) feeMonthEl.innerText = 'No data available yet.';
+      }
 
       // Render Sub-Sections
       renderRecentSabaqLogs(attLogs, teacherName);
-      renderWeeklyTimetable(schedules, teacherName);
+      renderWeeklyTimetable(schedules, teacherName, effectiveZoomLink);
       renderAttendanceTable(attLogs, teacherName);
       renderFeeInvoicesTable(feeHistory);
     }
@@ -1333,6 +1336,17 @@
       if (!container) return;
 
       LATEST_SABAQ_META = null;
+
+      if (!logs || logs.length === 0) {
+        container.innerHTML = `
+          <div class="p-8 text-center bg-slate-50 rounded-2xl border border-dashed border-slate-200 text-slate-400">
+            <i class="fa-solid fa-clipboard-list text-2xl mb-2 text-slate-300"></i>
+            <p class="text-xs font-bold text-slate-500">No data available yet.</p>
+            <p class="text-[11px] text-slate-400 mt-0.5">Lesson progress logs will appear here once recorded by your teacher.</p>
+          </div>
+        `;
+        return;
+      }
 
       container.innerHTML = logs.map(log => {
         let meta = null;
@@ -1346,7 +1360,7 @@
 
         const teacherName = log.teachers?.full_name || defaultTeacher;
         const bookId = meta?.book_id || 'noorani-qaida';
-        const bookTitle = meta?.book_title || 'Noorani Qaida (Complete)';
+        const bookTitle = meta?.book_title || 'Lesson Material';
         const pageNum = meta?.page || 1;
         const statusClass = meta?.status === 'Pass' ? 'bg-emerald-100 text-emerald-800 border-emerald-300' : 'bg-amber-100 text-amber-800 border-amber-300';
 
@@ -1355,7 +1369,7 @@
             <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 mb-2.5 border-b border-slate-100 pb-2.5">
               <div class="flex items-center gap-2 flex-wrap">
                 <span class="text-xs font-black text-slate-800 font-mono">${log.date}</span>
-                <span class="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-emerald-100 text-emerald-800 border border-emerald-300">🟢 Present</span>
+                <span class="px-2.5 py-0.5 rounded-full text-[10px] font-black ${log.status === 'Present' ? 'bg-emerald-100 text-emerald-800 border border-emerald-300' : 'bg-rose-100 text-rose-800 border border-rose-300'}">${log.status || 'Recorded'}</span>
                 <span class="text-xs text-slate-500">Instructor: <strong class="text-slate-800">${teacherName}</strong></span>
               </div>
               <div>
@@ -1395,7 +1409,7 @@
       // Update Hero Sabaq Button
       const heroBtn = document.getElementById('btnOpenLatestSabaq');
       if (heroBtn && LATEST_SABAQ_META) {
-        heroBtn.innerHTML = `<i class="fa-solid fa-book-open"></i> Read Sabaq: ${LATEST_SABAQ_META.book_title || 'Noorani Qaida'} (Pg ${LATEST_SABAQ_META.page || 1})`;
+        heroBtn.innerHTML = `<i class="fa-solid fa-book-open"></i> Read Sabaq: ${LATEST_SABAQ_META.book_title || 'Lesson'} (Pg ${LATEST_SABAQ_META.page || 1})`;
       }
     }
 
@@ -1408,9 +1422,19 @@
     }
 
     // Render Weekly Timetable Matrix
-    function renderWeeklyTimetable(schedules, teacherName) {
+    function renderWeeklyTimetable(schedules, teacherName, defaultZoomLink) {
       const grid = document.getElementById('weeklyScheduleGrid');
       if (!grid) return;
+
+      if (!schedules || schedules.length === 0) {
+        grid.innerHTML = `
+          <div class="col-span-full p-8 text-center bg-slate-50 rounded-2xl border border-dashed border-slate-200 text-slate-400">
+            <i class="fa-regular fa-calendar-xmark text-2xl mb-2 text-slate-300"></i>
+            <p class="text-xs font-bold text-slate-500">No classes scheduled.</p>
+          </div>
+        `;
+        return;
+      }
 
       const days = [
         { num: 1, name: 'Monday', short: 'Mon' },
@@ -1425,25 +1449,45 @@
       grid.innerHTML = days.map(d => {
         const match = schedules.find(sc => sc.day_of_week === d.num);
         const isActive = !!match;
-        const timeStr = match?.start_time ? `${match.start_time.slice(0, 5)} - ${match.end_time?.slice(0, 5) || ''}` : '04:00 - 04:30 PM';
+        let timeStr = '';
+        let durBadge = '';
+        if (match && match.start_time) {
+          const st = match.start_time.slice(0, 5);
+          const et = match.end_time ? match.end_time.slice(0, 5) : '';
+          timeStr = et ? `${st} - ${et}` : st;
+          if (et) {
+            const [sh, sm] = st.split(':').map(Number);
+            const [eh, em] = et.split(':').map(Number);
+            const diff = ((eh * 60) + (em || 0)) - ((sh * 60) + (sm || 0));
+            if (diff > 0) durBadge = `<span class="px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 text-[9px] font-black">${diff}m</span>`;
+          }
+        }
+        const slotZoom = (match?.meeting_link || defaultZoomLink || '').trim();
 
         return `
-          <div class="rounded-2xl p-4 border transition ${isActive ? 'bg-emerald-50/60 border-emerald-200 text-emerald-950 shadow-xs' : 'bg-slate-50 border-slate-200 text-slate-400'} flex flex-col justify-between min-h-[120px]">
+          <div class="rounded-2xl p-4 border transition ${isActive ? 'bg-emerald-50/60 border-emerald-200 text-emerald-950 shadow-xs' : 'bg-slate-50 border-slate-200 text-slate-400'} flex flex-col justify-between min-h-[135px]">
             <div>
               <div class="flex items-center justify-between mb-1.5">
                 <span class="font-black text-xs uppercase">${d.short}</span>
-                ${isActive ? '<span class="w-2 h-2 rounded-full bg-emerald-500"></span>' : '<span class="text-[10px] text-slate-400">Off</span>'}
+                ${isActive ? (durBadge || '<span class="w-2 h-2 rounded-full bg-emerald-500"></span>') : '<span class="text-[10px] text-slate-400">Off</span>'}
               </div>
               <div class="text-[11px] font-bold ${isActive ? 'text-slate-800' : 'text-slate-400'}">${d.name}</div>
             </div>
 
             ${isActive ? `
-              <div class="mt-2 pt-2 border-t border-emerald-200/60">
+              <div class="mt-2 pt-2 border-t border-emerald-200/60 space-y-1.5">
                 <div class="text-xs font-black font-mono text-emerald-800">${timeStr}</div>
                 <div class="text-[10px] text-slate-500 truncate">${teacherName}</div>
+                ${slotZoom && /^https?:\/\//i.test(slotZoom) ? `
+                  <a href="${slotZoom}" target="_blank" class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-brandDark hover:bg-brandDarkest text-white font-bold text-[10px] transition w-full justify-center">
+                    <i class="fa-solid fa-video text-amber-300"></i> Join Zoom
+                  </a>
+                ` : `
+                  <div class="text-[9px] font-semibold text-slate-400 italic">Zoom meeting not configured.</div>
+                `}
               </div>
             ` : `
-              <div class="text-[10px] text-slate-400 mt-2 pt-2 border-t border-slate-200">No Session</div>
+              <div class="text-[10px] text-slate-400 mt-2 pt-2 border-t border-slate-200">No classes scheduled.</div>
             `}
           </div>
         `;
@@ -1454,6 +1498,17 @@
     function renderAttendanceTable(logs, defaultTeacher) {
       const tbody = document.getElementById('attendanceTableBody');
       if (!tbody) return;
+
+      if (!logs || logs.length === 0) {
+        tbody.innerHTML = `
+          <tr>
+            <td colspan="5" class="p-8 text-center text-slate-400 font-bold text-xs">
+              No data available yet.
+            </td>
+          </tr>
+        `;
+        return;
+      }
 
       tbody.innerHTML = logs.map(log => {
         let meta = null;
@@ -1491,16 +1546,27 @@
       const tbody = document.getElementById('feeInvoicesTableBody');
       if (!tbody) return;
 
+      if (!history || history.length === 0) {
+        tbody.innerHTML = `
+          <tr>
+            <td colspan="7" class="p-8 text-center text-slate-400 font-bold text-xs">
+              No data available yet.
+            </td>
+          </tr>
+        `;
+        return;
+      }
+
       tbody.innerHTML = history.map((h, i) => `
         <tr class="hover:bg-slate-50 transition">
           <td class="p-3.5 font-bold font-mono text-brandDarkest">${h.receiptNo || `AH-REC-${i+1}`}</td>
-          <td class="p-3.5 font-semibold text-slate-800">${h.month || 'Current Month'}</td>
+          <td class="p-3.5 font-semibold text-slate-800">${h.month || '-'}</td>
           <td class="p-3.5 font-mono text-slate-600">${h.date || '-'}</td>
-          <td class="p-3.5 font-black text-emerald-700 font-mono">${h.amountPaid || 10000} ${h.currency || 'PKR'}</td>
-          <td class="p-3.5 font-medium text-slate-600">${h.paymentMethod || 'Online'}</td>
+          <td class="p-3.5 font-black text-emerald-700 font-mono">${h.amountPaid ?? 0} ${h.currency || 'PKR'}</td>
+          <td class="p-3.5 font-medium text-slate-600">${h.paymentMethod || '-'}</td>
           <td class="p-3.5">
             <span class="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-emerald-100 text-emerald-800 border border-emerald-300">
-              ${h.status || 'Paid in Full'}
+              ${h.status || 'Recorded'}
             </span>
           </td>
           <td class="p-3.5 text-right">
@@ -1565,13 +1631,46 @@
       renderPortalLibrary();
     }
 
+    async function hydrateParentCustomBooksFromD1() {
+      try {
+        if (typeof db === 'undefined' || !db || typeof db.from !== 'function') return;
+        const { data: allSettings } = await db.from('system_settings').select('*');
+        if (!Array.isArray(allSettings) || allSettings.length === 0) return;
+        const settingsMap = new Map(allSettings.map(r => [String(r.key), r.value]));
+        const rawIndex = settingsMap.get('alhuda_custom_books_index') || settingsMap.get('alhuda_custom_books');
+        if (!rawIndex) return;
+        const books = JSON.parse(rawIndex);
+        if (!Array.isArray(books)) return;
+        books.forEach(b => {
+          const total = Number(b.total_pages) || 0;
+          if ((!b.pages || b.pages.length === 0) && total > 0) {
+            const hydratedPages = [];
+            for (let i = 0; i < total; i++) {
+              const pVal = settingsMap.get(`BOOK_PAGE_${b.id}_${i}`);
+              if (pVal) hydratedPages.push(pVal);
+            }
+            if (hydratedPages.length > 0) b.pages = hydratedPages;
+          }
+        });
+        localStorage.setItem('alhuda_custom_books', JSON.stringify(books));
+        renderPortalLibrary();
+      } catch (e) {}
+    }
+    setTimeout(hydrateParentCustomBooksFromD1, 500);
+
+    function getAllAvailableBooks() {
+      let customBooks = [];
+      try { customBooks = JSON.parse(localStorage.getItem('alhuda_custom_books') || '[]'); } catch(e){}
+      let deletedIds = [];
+      try { deletedIds = JSON.parse(localStorage.getItem('alhuda_deleted_books') || '[]'); } catch(e){}
+      return (Array.isArray(customBooks) ? customBooks : []).filter(b => b && !deletedIds.includes(b.id));
+    }
+
     function renderPortalLibrary() {
       const grid = document.getElementById('portalLibraryGrid');
       if (!grid) return;
 
-      const allBooks = typeof getAllAvailableBooks === 'function' 
-        ? getAllAvailableBooks() 
-        : ((window.CURRICULUM_DATA && window.CURRICULUM_DATA.books) || window.ALHUDA_CURRICULUM || []);
+      const allBooks = getAllAvailableBooks();
 
       // Update counters
       const totalCount = allBooks.length;
@@ -1602,8 +1701,8 @@
         grid.innerHTML = `
           <div class="col-span-full p-12 text-center bg-white rounded-3xl border border-dashed border-slate-300">
             <i class="fa-solid fa-book-bookmark text-4xl text-slate-300 mb-3"></i>
-            <h4 class="font-extrabold text-slate-700 text-base">No Matching Books Found</h4>
-            <p class="text-xs text-slate-400 mt-1">Try switching categories or clearing your search term.</p>
+            <h4 class="font-extrabold text-slate-700 text-base">No course materials available.</h4>
+            <p class="text-xs text-slate-400 mt-1">Course materials will appear here when published or when filters match.</p>
           </div>
         `;
         return;

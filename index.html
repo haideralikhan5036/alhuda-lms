@@ -13,19 +13,8 @@
         var params = new URLSearchParams(window.location.search);
         var urlRole = (params.get('role') || '').toLowerCase();
         var mgrParam = params.get('m') || params.get('mgr') || params.get('id');
-        var activePortalRole = (localStorage.getItem('alhuda_active_portal_role') || '').toLowerCase();
 
-        // 1. If logged in as a Teacher or Parent, prevent accessing Owner/Admin or Manager URLs
-        if (activePortalRole === 'teacher') {
-          window.location.replace('teacher.html');
-          return;
-        }
-        if (activePortalRole === 'parent') {
-          window.location.replace('parent.html');
-          return;
-        }
-
-        // 2. Direct Teacher / Parent query role redirects to their canonical login portals
+        // 1. Direct Teacher / Parent query role redirects to their canonical login portals
         if (urlRole === 'teacher') {
           window.location.replace('teacher.html');
           return;
@@ -35,18 +24,23 @@
           return;
         }
 
-        // 3. Manager Portal Guard: require valid authenticated Manager session
-        if (urlRole === 'manager' || mgrParam || activePortalRole === 'manager') {
+        // 2. Manager Portal Guard: require valid authenticated Manager session when ?role=manager is requested
+        if (urlRole === 'manager' || mgrParam) {
           var mgrRaw = sessionStorage.getItem('alhuda_manager_session') || localStorage.getItem('alhuda_logged_in_manager');
           var mgrSession = null;
-          if (mgrRaw && activePortalRole === 'manager') {
+          if (mgrRaw) {
             try { mgrSession = JSON.parse(mgrRaw); } catch (e) { mgrSession = null; }
           }
           if (!mgrSession || !mgrSession.id || !mgrSession.emp_id) {
             window.location.replace('manager.html');
             return;
           }
+          localStorage.setItem('alhuda_active_portal_role', 'manager');
+          return;
         }
+
+        // 3. Default Owner / Admin Portal (index.html): clear any stale teacher/parent lock so Admin Portal always opens cleanly
+        localStorage.setItem('alhuda_active_portal_role', 'owner');
       } catch (e) {}
     })();
   </script>
@@ -500,7 +494,102 @@
     .touch-scroll { -webkit-overflow-scrolling: touch; scroll-behavior: smooth; }
   </style>
 </head>
-<body class="text-slate-800 flex flex-col min-h-screen w-full max-w-full overflow-x-hidden">
+<body class="text-slate-800 flex flex-col min-h-screen w-full max-w-full overflow-x-hidden bg-slate-50">
+
+  <!-- ========================================================================== -->
+  <!-- OWNER / ADMIN PORTAL LOGIN SCREEN (AUTHENTICATION REQUIRED)                -->
+  <!-- ========================================================================== -->
+  <div id="ownerLoginView" class="hidden min-h-screen w-full flex-col justify-center items-center p-4 sm:p-6 bg-slate-900 bg-gradient-to-br from-slate-950 via-[#022c22] to-slate-900 text-slate-800">
+    <div class="max-w-md w-full my-auto">
+      
+      <!-- Center Brand Identity -->
+      <div class="text-center mb-6">
+        <img src="alhuda_logo.jpg" alt="Al-Huda Islamic Centre" class="w-16 h-16 sm:w-20 sm:h-20 rounded-full border-2 border-brandGold object-cover shadow-lg mx-auto mb-3 bg-black">
+        <h1 class="font-cinzel text-lg sm:text-xl font-extrabold text-white tracking-wide">AL-HUDA ISLAMIC CENTRE</h1>
+        <p class="text-xs text-amber-300 font-semibold tracking-wider uppercase mt-0.5">Owner &amp; Admin Control Center</p>
+      </div>
+
+      <!-- Login Card -->
+      <div class="bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden">
+        <div class="p-5 sm:p-6 bg-gradient-to-br from-amber-50/70 to-white border-b border-slate-100 flex items-center gap-3.5">
+          <div class="w-12 h-12 rounded-2xl bg-slate-900 text-amber-400 flex items-center justify-center text-xl shadow-md border border-amber-400/30">
+            <i class="fa-solid fa-crown text-brandGold"></i>
+          </div>
+          <div>
+            <h2 class="text-base sm:text-lg font-extrabold text-slate-900">Owner &amp; Director Login</h2>
+            <p class="text-xs text-slate-500">Sign in with authorized credentials to access LMS Admin</p>
+          </div>
+        </div>
+
+        <div class="p-5 sm:p-6">
+          <div id="ownerLoginErrorMsg" class="hidden mb-4 p-3 bg-rose-50 border border-rose-200 text-rose-700 rounded-xl text-xs font-bold flex items-center gap-2">
+            <i class="fa-solid fa-circle-exclamation"></i>
+            <span id="ownerLoginErrorText">Invalid username or password.</span>
+          </div>
+
+          <form onsubmit="handleOwnerSignIn(event)" class="space-y-4 text-xs" autocomplete="off">
+            <div>
+              <label class="block font-bold text-slate-700 mb-1.5">
+                Username / Admin ID <span class="text-rose-500">*</span>
+              </label>
+              <div class="relative">
+                <i class="fa-solid fa-user-shield absolute left-3.5 top-3 text-slate-400"></i>
+                <input type="text" id="ownerLoginUsername" required placeholder="Enter username (e.g. beacon_admin)" autocomplete="username"
+                  class="w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-300 rounded-xl font-bold text-slate-900 focus:bg-white focus:outline-brandEmerald focus:border-brandEmerald text-xs">
+              </div>
+            </div>
+
+            <div>
+              <div class="flex items-center justify-between mb-1.5">
+                <label class="font-bold text-slate-700">
+                  Password <span class="text-rose-500">*</span>
+                </label>
+              </div>
+              <div class="relative">
+                <i class="fa-solid fa-lock absolute left-3.5 top-3 text-slate-400"></i>
+                <input type="password" id="ownerLoginPassword" required placeholder="Enter password" autocomplete="current-password"
+                  class="w-full pl-9 pr-10 py-2.5 bg-slate-50 border border-slate-300 rounded-xl font-bold text-slate-900 focus:bg-white focus:outline-brandEmerald focus:border-brandEmerald text-xs">
+                <button type="button" onclick="toggleOwnerPassVisibility()" class="absolute right-3 top-2.5 text-slate-400 hover:text-slate-700" title="Show / Hide Password">
+                  <i id="ownerPassToggleIcon" class="fa-regular fa-eye"></i>
+                </button>
+              </div>
+            </div>
+
+            <button type="submit" id="btnSubmitOwnerLogin" class="w-full py-3 bg-gradient-to-r from-[#022c22] via-[#064e3b] to-[#047857] text-white font-extrabold text-sm rounded-xl hover:from-[#064e3b] hover:to-[#047857] shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer">
+              <i class="fa-solid fa-right-to-bracket text-brandGold"></i> Login to Control Center
+            </button>
+          </form>
+
+          <!-- Other Portals Quick Navigation Links -->
+          <div class="mt-6 pt-4 border-t border-slate-200 text-center">
+            <span class="text-[11px] text-slate-500 block mb-2 font-medium">Looking for another portal?</span>
+            <div class="flex items-center justify-center gap-3 text-xs font-bold">
+              <a href="teacher.html" class="text-emerald-700 hover:underline flex items-center gap-1">
+                <i class="fa-solid fa-chalkboard-user"></i> Teacher
+              </a>
+              <span class="text-slate-300">&bull;</span>
+              <a href="manager.html" class="text-indigo-700 hover:underline flex items-center gap-1">
+                <i class="fa-solid fa-user-shield"></i> Manager
+              </a>
+              <span class="text-slate-300">&bull;</span>
+              <a href="parent.html" class="text-amber-700 hover:underline flex items-center gap-1">
+                <i class="fa-solid fa-users"></i> Parent
+              </a>
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      <p class="text-center text-xs text-slate-400 mt-6">
+        &copy; 2026 Al-Huda Islamic Centre. Authorized personnel only.
+      </p>
+    </div>
+  </div>
+
+  <!-- ========================================================================== -->
+  <!-- PROTECTED APPLICATION WRAPPER (ONLY VISIBLE WHEN AUTHENTICATED)           -->
+  <!-- ========================================================================== -->
+  <div id="mainAppWrapper" class="hidden flex-col min-h-screen w-full">
 
   <!-- TOP HEADER -->
   <header class="bg-gradient-to-r from-[#022c22] via-[#064e3b] to-[#047857] text-white h-[56px] px-3 sm:px-5 border-b-4 border-[#d97706] sticky top-0 z-50 shadow-md flex items-center w-full box-border">
@@ -2657,11 +2746,16 @@
             </button>
           </div>
 
-          <!-- Teacher Name Filter -->
-          <div class="flex items-center gap-2 max-w-xs w-full sm:w-auto">
-            <div class="relative w-full">
+          <!-- Teacher Selection Dropdown & Search Filter -->
+          <div class="flex items-center gap-2 flex-wrap w-full sm:w-auto">
+            <div class="w-full sm:w-64">
+              <select id="schedSearchTeacherSelect" onchange="onSchedSearchTeacherDropdownChange(this.value)" class="w-full p-2 bg-white border border-slate-300 rounded-xl font-bold text-xs text-slate-800 focus:outline-emerald-600 shadow-2xs">
+                <option value="all">👨‍🏫 All Active Teachers (Select Instructor)</option>
+              </select>
+            </div>
+            <div class="relative w-full sm:w-52">
               <i class="fa-solid fa-magnifying-glass absolute left-3 top-2.5 text-slate-400 text-xs"></i>
-              <input type="text" id="schedSearchTeacherQuery" oninput="executeScheduleSearch()" placeholder="Filter by teacher name..." class="w-full pl-8 pr-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-emerald-500">
+              <input type="text" id="schedSearchTeacherQuery" oninput="executeScheduleSearch()" placeholder="Search teacher name..." class="w-full pl-8 pr-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-semibold focus:bg-white focus:outline-emerald-600 shadow-2xs">
             </div>
           </div>
         </div>
@@ -2732,17 +2826,27 @@
   <div id="modalScheduleMatrix" class="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 hidden items-center justify-center p-2 sm:p-4">
     <div class="bg-white rounded-2xl max-w-7xl w-full p-5 shadow-2xl border border-slate-200 max-h-[95vh] flex flex-col">
       
-      <!-- Header with Teacher Information -->
-      <div class="flex justify-between items-center border-b pb-3 mb-3 flex-wrap gap-2">
-        <div>
-          <div class="flex items-center gap-2">
-            <span class="px-2 py-0.5 bg-emerald-100 text-emerald-800 text-[10px] font-extrabold rounded uppercase">Full 2D Weekly Timetable Matrix</span>
-            <h3 class="font-black text-lg text-slate-900" id="matrixTeacherName">Teacher Schedule</h3>
+      <!-- Header with Teacher Information & Professional Teacher Switcher Dropdown -->
+      <div class="flex justify-between items-center border-b pb-3 mb-3 flex-wrap gap-3">
+        <div class="flex items-center gap-3 flex-wrap">
+          <div>
+            <div class="flex items-center gap-2">
+              <span class="px-2 py-0.5 bg-emerald-100 text-emerald-800 text-[10px] font-extrabold rounded uppercase">Full 2D Weekly Timetable Matrix</span>
+              <h3 class="font-black text-lg text-slate-900" id="matrixTeacherName">Teacher Schedule</h3>
+            </div>
+            <p class="text-xs text-slate-500 mt-0.5" id="matrixTeacherSubtitle">Rate: -- PKR / slot &bull; Shift: --</p>
           </div>
-          <p class="text-xs text-slate-500 mt-0.5" id="matrixTeacherSubtitle">Rate: -- PKR / slot &bull; Shift: --</p>
+          <div class="w-64">
+            <select id="matrixTeacherSwitcherSelect" onchange="onMatrixTeacherSwitcherChange(this.value)" class="w-full p-2 bg-white border border-slate-300 rounded-xl font-bold text-xs text-slate-800 shadow-2xs">
+              <option value="">Switch Instructor Schedule...</option>
+            </select>
+          </div>
         </div>
 
-        <div class="flex items-center gap-3">
+        <div class="flex items-center gap-3 flex-wrap">
+          <button type="button" onclick="openSlotBookingModal(1, '14:00', '14:45')" class="px-3.5 py-1.5 bg-brandEmerald hover:bg-emerald-700 text-white rounded-xl font-extrabold text-xs shadow-xs flex items-center gap-1.5 transition" title="Schedule a student with custom start time, end time, and duration">
+            <i class="fa-solid fa-calendar-plus"></i> + Schedule Student (Custom Time)
+          </button>
           <div class="flex gap-3 text-xs font-semibold">
             <span class="flex items-center gap-1"><span class="w-3 h-3 rounded bg-blue-100 border border-blue-400 inline-block"></span> Booked</span>
             <span class="flex items-center gap-1"><span class="w-3 h-3 rounded bg-emerald-50 border border-emerald-400 inline-block"></span> Free / Vacant</span>
@@ -3000,17 +3104,48 @@
     </div>
   </div>
 
-  <!-- MODAL: QUICK BOOK STUDENT (EXPLICIT WEEKDAY CHECKBOXES MON-SUN) -->
-  <div id="modalBookSlot" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-[60] hidden items-center justify-center p-4">
-    <div class="bg-white rounded-2xl max-w-md w-full p-5 shadow-2xl border border-slate-200">
+  <!-- MODAL: QUICK BOOK STUDENT (EXPLICIT WEEKDAY CHECKBOXES MON-SUN + CUSTOM START/END TIME) -->
+  <div id="modalBookSlot" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-[60] hidden items-center justify-center p-4 overflow-y-auto">
+    <div class="bg-white rounded-2xl max-w-md w-full p-5 shadow-2xl border border-slate-200 my-auto">
       <div class="flex justify-between items-center mb-3 border-b pb-2">
-        <h4 class="font-bold text-sm text-brandDark"><i class="fa-solid fa-calendar-check text-brandEmerald"></i> Add Student from Student List to Slot</h4>
+        <h4 class="font-bold text-sm text-brandDark"><i class="fa-solid fa-calendar-check text-brandEmerald"></i> Add Student from Student List to Schedule</h4>
         <button onclick="closeModal('modalBookSlot')" class="text-slate-400 hover:text-slate-600 font-bold">&times;</button>
       </div>
       <form onsubmit="handleConfirmSlotBooking(event)" class="space-y-3.5 text-xs">
-        <div>
-          <label class="block font-bold mb-1">Time Slot:</label>
-          <input type="text" id="bookSlotDisplay" readonly class="w-full p-2 bg-slate-100 border rounded font-mono font-bold text-slate-700">
+        <div class="bg-emerald-50/60 p-3 rounded-xl border border-emerald-200 space-y-2.5">
+          <div class="flex items-center justify-between gap-2">
+            <label class="font-extrabold text-brandDark flex items-center gap-1.5">
+              <i class="fa-regular fa-clock text-brandEmerald"></i> Class Timing &amp; Duration:
+            </label>
+            <span id="bookSlotDurationBadge" class="px-2.5 py-0.5 rounded-full text-[10px] font-mono font-extrabold bg-emerald-100 text-emerald-900 border border-emerald-300">
+              30 Minutes
+            </span>
+          </div>
+
+          <!-- Quick Duration Presets -->
+          <div class="flex items-center justify-between gap-1.5 flex-wrap">
+            <span class="text-[10px] font-bold text-slate-500 uppercase tracking-wide">Quick Duration:</span>
+            <div class="flex items-center gap-1">
+              <button type="button" onclick="setBookSlotQuickDuration(30)" data-book-dur="30" class="px-2 py-1 rounded-lg border border-emerald-300 bg-white hover:bg-emerald-600 hover:text-white text-emerald-900 font-extrabold text-[10px] transition">30m</button>
+              <button type="button" onclick="setBookSlotQuickDuration(45)" data-book-dur="45" class="px-2 py-1 rounded-lg border border-emerald-300 bg-white hover:bg-emerald-600 hover:text-white text-emerald-900 font-extrabold text-[10px] transition">45m</button>
+              <button type="button" onclick="setBookSlotQuickDuration(60)" data-book-dur="60" class="px-2 py-1 rounded-lg border border-emerald-300 bg-white hover:bg-emerald-600 hover:text-white text-emerald-900 font-extrabold text-[10px] transition">60m</button>
+              <button type="button" onclick="setBookSlotQuickDuration(90)" data-book-dur="90" class="px-2 py-1 rounded-lg border border-emerald-300 bg-white hover:bg-emerald-600 hover:text-white text-emerald-900 font-extrabold text-[10px] transition">90m</button>
+            </div>
+          </div>
+
+          <!-- Custom Start Time & End Time Inputs -->
+          <div class="grid grid-cols-2 gap-2.5">
+            <div>
+              <label class="block font-bold text-slate-700 mb-1 text-[11px]">Start Time (PKT) *:</label>
+              <input type="time" id="bookSlotStartTime" required onchange="onBookSlotTimeChanged('start')" oninput="onBookSlotTimeChanged('start')" class="w-full p-2 bg-white border border-emerald-300 rounded-lg font-mono font-bold text-slate-900 focus:outline-brandEmerald">
+            </div>
+            <div>
+              <label class="block font-bold text-slate-700 mb-1 text-[11px]">End Time (PKT) *:</label>
+              <input type="time" id="bookSlotEndTime" required onchange="onBookSlotTimeChanged('end')" oninput="onBookSlotTimeChanged('end')" class="w-full p-2 bg-white border border-emerald-300 rounded-lg font-mono font-bold text-slate-900 focus:outline-brandEmerald">
+            </div>
+          </div>
+
+          <input type="text" id="bookSlotDisplay" readonly class="w-full p-2 bg-white/90 border border-emerald-200 rounded-lg font-mono font-bold text-[11px] text-slate-700">
         </div>
         <div>
           <label class="block font-bold mb-1">Select Student (from Teacher's Student List) *:</label>
@@ -3061,24 +3196,24 @@
         </div>
         <div class="flex justify-end gap-2 pt-2 border-t">
           <button type="button" onclick="closeModal('modalBookSlot')" class="px-4 py-2 border rounded font-bold">Cancel</button>
-          <button type="submit" class="px-5 py-2 bg-brandEmerald text-white font-bold rounded hover:bg-emerald-700 shadow">Confirm Booking</button>
+          <button type="submit" id="btnConfirmSlotBookingSubmit" class="px-5 py-2 bg-brandEmerald text-white font-bold rounded hover:bg-emerald-700 shadow">Confirm Booking</button>
         </div>
       </form>
     </div>
   </div>
 
-  <!-- MODAL: SCHEDULED SLOT ACTIONS (DELETE THIS DAY'S CLASS vs DELETE ALL CLASSES) -->
-  <div id="modalMatrixSlotActions" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-[65] hidden items-center justify-center p-4">
-    <div class="bg-white rounded-2xl max-w-md w-full p-5 shadow-2xl border border-slate-200">
+  <!-- MODAL: SCHEDULED SLOT ACTIONS (EDIT TIME / SHIFT / DELETE) -->
+  <div id="modalMatrixSlotActions" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-[65] hidden items-center justify-center p-4 overflow-y-auto">
+    <div class="bg-white rounded-2xl max-w-md w-full p-5 shadow-2xl border border-slate-200 my-auto">
       <div class="flex justify-between items-center mb-3 border-b pb-2.5">
         <h4 class="font-bold text-sm text-brandDark flex items-center gap-2">
-          <i class="fa-solid fa-calendar-xmark text-rose-600"></i> Manage Scheduled Class
+          <i class="fa-solid fa-calendar-check text-brandEmerald"></i> Manage Scheduled Class
         </h4>
         <button onclick="closeModal('modalMatrixSlotActions')" class="text-slate-400 hover:text-slate-600 font-bold text-lg leading-none">&times;</button>
       </div>
 
       <!-- Slot Summary Banner -->
-      <div class="bg-slate-50 rounded-xl p-3 border border-slate-200 mb-4 space-y-1">
+      <div class="bg-slate-50 rounded-xl p-3 border border-slate-200 mb-3 space-y-1">
         <div class="flex items-center justify-between">
           <span id="slotActionStudentName" class="font-extrabold text-sm text-slate-900">Student Name</span>
           <span id="slotActionStudentId" class="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-slate-200 text-slate-700">STU-ID</span>
@@ -3089,6 +3224,46 @@
         </div>
         <div class="text-[11px] text-slate-500">
           Teacher: <strong id="slotActionTeacherName" class="text-slate-700">Teacher Name</strong>
+        </div>
+      </div>
+
+      <!-- Custom Start Time / End Time & Zoom Edit Box -->
+      <div class="bg-emerald-50/60 border border-emerald-200 rounded-xl p-3 mb-3 space-y-2 text-xs">
+        <div class="flex items-center justify-between">
+          <span class="font-extrabold text-brandDark text-[11px] flex items-center gap-1">
+            <i class="fa-solid fa-clock text-brandEmerald"></i> Edit Class Start / End Time &amp; Zoom
+          </span>
+          <span id="slotActionEditDurationBadge" class="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-900 font-mono font-extrabold text-[10px]">30m</span>
+        </div>
+        <div class="flex items-center gap-1 flex-wrap">
+          <span class="text-[10px] font-bold text-slate-500 mr-1">Duration:</span>
+          <button type="button" onclick="setSlotActionEditDuration(30)" class="px-2 py-0.5 rounded border border-emerald-300 bg-white hover:bg-emerald-600 hover:text-white font-bold text-[10px]">30m</button>
+          <button type="button" onclick="setSlotActionEditDuration(45)" class="px-2 py-0.5 rounded border border-emerald-300 bg-white hover:bg-emerald-600 hover:text-white font-bold text-[10px]">45m</button>
+          <button type="button" onclick="setSlotActionEditDuration(60)" class="px-2 py-0.5 rounded border border-emerald-300 bg-white hover:bg-emerald-600 hover:text-white font-bold text-[10px]">60m</button>
+          <button type="button" onclick="setSlotActionEditDuration(90)" class="px-2 py-0.5 rounded border border-emerald-300 bg-white hover:bg-emerald-600 hover:text-white font-bold text-[10px]">90m</button>
+        </div>
+        <div class="grid grid-cols-2 gap-2">
+          <div>
+            <label class="block text-[10px] font-bold text-slate-600 mb-0.5">Start Time</label>
+            <input type="time" id="slotActionEditStartTime" onchange="onSlotActionEditTimeChange()" oninput="onSlotActionEditTimeChange()" class="w-full p-1.5 bg-white border border-emerald-300 rounded-lg font-mono font-bold text-xs">
+          </div>
+          <div>
+            <label class="block text-[10px] font-bold text-slate-600 mb-0.5">End Time</label>
+            <input type="time" id="slotActionEditEndTime" onchange="onSlotActionEditTimeChange()" oninput="onSlotActionEditTimeChange()" class="w-full p-1.5 bg-white border border-emerald-300 rounded-lg font-mono font-bold text-xs">
+          </div>
+        </div>
+        <div>
+          <label class="block text-[10px] font-bold text-slate-600 mb-0.5">Zoom Meeting Link / Code</label>
+          <input type="text" id="slotActionEditZoomLink" placeholder="https://zoom.us/j/..." class="w-full p-1.5 bg-white border border-emerald-300 rounded-lg font-mono text-xs">
+        </div>
+        <div class="flex items-center justify-between gap-2 pt-1">
+          <label class="flex items-center gap-1.5 text-[10px] font-bold text-slate-700 cursor-pointer">
+            <input type="checkbox" id="slotActionEditApplyAllDays" checked class="accent-emerald-600 rounded">
+            Apply to all weekly days for this student
+          </label>
+          <button type="button" onclick="executeUpdateSlotTimeAndZoom()" class="px-3 py-1.5 bg-brandEmerald hover:bg-emerald-700 text-white rounded-lg font-extrabold text-[11px] shadow-2xs transition">
+            <i class="fa-solid fa-floppy-disk mr-1"></i> Save Timing
+          </button>
         </div>
       </div>
 
@@ -5862,6 +6037,7 @@
       </div>
     </div>
   </div>
+  </div> <!-- /#mainAppWrapper -->
 
   <!-- JAVASCRIPT APPLICATION LOGIC -->
   <!-- ========================================================================== -->

@@ -1137,12 +1137,18 @@
     const DAY_NAMES = ['', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 
     window.onload = async function() {
-      if (typeof initRoleFromUrl === 'function') initRoleFromUrl();
+      const isAuth = (typeof initRoleFromUrl === 'function') ? initRoleFromUrl() : true;
+
       setInterval(() => {
         const now = new Date();
         const el = document.getElementById('liveClock');
         if (el) el.innerText = now.toLocaleTimeString('en-US', { timeZone: 'Asia/Karachi' }) + ' PKT';
       }, 1000);
+
+      if (!isAuth) {
+        // Halt data loading until user is successfully authenticated
+        return;
+      }
 
       const today = new Date().toISOString().slice(0, 10);
       const attDateInput = document.getElementById('attendanceDateSelect');
@@ -1167,7 +1173,13 @@
         }, 120);
       });
 
-      setInterval(() => loadDashboardData(), 60000);
+      setInterval(() => {
+        if (typeof getAuthenticatedOwnerSession === 'function' && getAuthenticatedOwnerSession()) {
+          loadDashboardData();
+        } else if (typeof getAuthenticatedManagerSession === 'function' && getAuthenticatedManagerSession()) {
+          loadDashboardData();
+        }
+      }, 60000);
     };
 
     function toggleSidebar() {
