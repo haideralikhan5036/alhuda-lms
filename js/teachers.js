@@ -9,7 +9,7 @@
 
     // TEACHER ACCOUNTS & CREDENTIALS STORAGE ENGINE
     function getTeacherAccounts() {
-      return JSON.parse(localStorage.getItem('alhuda_teacher_accounts') || localStorage.getItem('bqi_teacher_accounts') || '{}');
+      return JSON.parse(localStorage.getItem('alhuda_teacher_accounts') || '{}');
     }
 
     function saveTeacherAccount(tId, creds) {

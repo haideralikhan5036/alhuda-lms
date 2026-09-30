@@ -165,7 +165,7 @@
       try {
         const accounts = typeof getTeacherAccounts === 'function'
           ? getTeacherAccounts()
-          : JSON.parse(localStorage.getItem('alhuda_teacher_accounts') || localStorage.getItem('bqi_teacher_accounts') || '{}');
+          : JSON.parse(localStorage.getItem('alhuda_teacher_accounts') || '{}');
         if (emp.id && accounts[emp.id]) acc = accounts[emp.id];
       } catch (e) {}
 

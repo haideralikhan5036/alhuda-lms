@@ -1689,7 +1689,7 @@
     async function fetchTeachersAndAccountsFromBackend() {
       let localTeacherAccs = {};
       try {
-        localTeacherAccs = JSON.parse(localStorage.getItem('alhuda_teacher_accounts') || localStorage.getItem('bqi_teacher_accounts') || '{}');
+        localTeacherAccs = JSON.parse(localStorage.getItem('alhuda_teacher_accounts') || '{}');
       } catch (e) { localTeacherAccs = {}; }
 
       try {
@@ -1967,7 +1967,6 @@
 
     function logoutTeacher() {
       localStorage.removeItem('alhuda_logged_in_teacher');
-      localStorage.removeItem('bqi_logged_in_teacher');
       sessionStorage.removeItem('alhuda_teacher_session');
       if (localStorage.getItem('alhuda_active_portal_role') === 'teacher') {
         localStorage.removeItem('alhuda_active_portal_role');

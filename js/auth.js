@@ -79,8 +79,8 @@
       }
 
       const uNorm = user.toLowerCase();
-      const validUsernames = ['beacon_admin', 'admin', 'owner', 'haider'];
-      const validPasswords = ['admin_bqi_123', '12345678', 'admin123', 'alhuda_admin'];
+      const validUsernames = ['alhuda_admin', 'admin', 'owner', 'haider'];
+      const validPasswords = ['alhuda_admin_123', '12345678', 'admin123', 'alhuda_admin'];
 
       let customOwnerAcc = null;
       try {
@@ -123,7 +123,6 @@
     function logoutOwnerPortal() {
       sessionStorage.removeItem('alhuda_owner_session');
       localStorage.removeItem('alhuda_logged_in_owner');
-      localStorage.removeItem('bqi_logged_in_user');
       if (localStorage.getItem('alhuda_active_portal_role') === 'owner') {
         localStorage.removeItem('alhuda_active_portal_role');
       }
@@ -351,7 +350,6 @@
 
     function logoutTeacherPortal() {
       localStorage.removeItem('alhuda_logged_in_teacher');
-      localStorage.removeItem('bqi_logged_in_teacher');
       sessionStorage.removeItem('alhuda_teacher_session');
       if (localStorage.getItem('alhuda_active_portal_role') === 'teacher') {
         localStorage.removeItem('alhuda_active_portal_role');

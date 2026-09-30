@@ -4,75 +4,19 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Al-Huda Islamic Centre LMS</title>
-    <script>window.location.replace("index.html");</script>
-</head>
-<body>
-
-            <div id="errorAlert" class="alert-error"></div>
-
-            <form id="loginForm">
-                <div class="form-group">
-                    <label for="username">Username</label>
-                    <input type="text" id="username" class="form-input" placeholder="Enter username (e.g. beacon_admin)" required autocomplete="off">
-                </div>
-
-                <div class="form-group">
-                    <label for="password">Password</label>
-                    <input type="password" id="password" class="form-input" placeholder="Enter password" required>
-                </div>
-
-                <button type="submit" class="btn-primary" style="width: 100%; padding: 13px; font-size: 15px;">Login to Dashboard</button>
-            </form>
-        </div>
-    </div>
-
-    <script src="database.js"></script>
+    <link rel="icon" type="image/png" href="favicon.png">
     <script>
-        BQI_DB.clearSession();
-
-        function autoFill(user, pass) {
-            document.getElementById("username").value = user;
-            document.getElementById("password").value = pass;
-            document.getElementById("errorAlert").style.display = "none";
-        }
-
-        document.getElementById("loginForm").addEventListener("submit", function(e) {
-            e.preventDefault();
-            const username = document.getElementById("username").value.trim();
-            const password = document.getElementById("password").value;
-            const errorAlert = document.getElementById("errorAlert");
-
-            const result = BQI_DB.login(username, password);
-
-            if (result.success) {
-                redirectUser(result.role);
-            } else {
-                errorAlert.innerText = result.message;
-                errorAlert.style.display = "block";
-            }
-        });
-
-        function redirectUser(role) {
-            switch(role) {
-                case "super_admin":
-                    window.location.href = "admin.html";
-                    break;
-                case "manager":
-                    window.location.href = "manager.html";
-                    break;
-                case "recording_manager":
-                    window.location.href = "auditor.html";
-                    break;
-                case "teacher":
-                    window.location.href = "teacher.html";
-                    break;
-                case "parent":
-                    window.location.href = "parent.html";
-                    break;
-                default:
-                    window.location.href = "login.html";
-            }
-        }
+      // Immediate clean redirect to main Al-Huda LMS entry point
+      window.location.replace("index.html");
     </script>
+</head>
+<body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; background: #f8fafc;">
+    <div style="text-align: center; padding: 2rem; background: white; border-radius: 1rem; box-shadow: 0 10px 25px rgba(0,0,0,0.05); max-width: 400px; width: 90%;">
+        <h2 style="color: #064e3b; margin-bottom: 0.5rem; font-weight: 800;">Al-Huda Islamic Centre LMS</h2>
+        <p style="color: #64748b; font-size: 0.9rem; margin-bottom: 1.5rem;">Redirecting to the official control center...</p>
+        <a href="index.html" style="display: inline-block; padding: 0.75rem 1.5rem; background: #064e3b; color: white; border-radius: 0.75rem; text-decoration: none; font-weight: bold; font-size: 0.9rem;">
+            Click here if not redirected
+        </a>
+    </div>
 </body>
 </html>

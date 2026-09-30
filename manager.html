@@ -212,7 +212,7 @@
     async function fetchManagersFromBackend() {
       let localAccs = {};
       try {
-        localAccs = JSON.parse(localStorage.getItem('alhuda_teacher_accounts') || localStorage.getItem('bqi_teacher_accounts') || '{}');
+        localAccs = JSON.parse(localStorage.getItem('alhuda_teacher_accounts') || '{}');
       } catch (e) { localAccs = {}; }
 
       try {

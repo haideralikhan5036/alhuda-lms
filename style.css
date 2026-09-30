@@ -1,4 +1,4 @@
-/* Beacon Quran Institute LMS - Official Brand System */
+/* Al-Huda Islamic Centre LMS - Official Brand System */
 /* Brand Colors:
    Primary: #084C63 (Midnight Green)
    Secondary: #757454 (Fusion Gold)
@@ -883,3 +883,38 @@ body.sidebar-collapsed .main-content {
 .modal-close:hover {
     color: var(--text-dark);
 }
+
+/* ============================================================
+   PROFESSIONAL DROPDOWN UI ENGINE (TASK 3)
+   Clean spacing, borders, focus rings, font hierarchy & smooth states
+   ============================================================ */
+select:not(.hidden) {
+    appearance: none;
+    -webkit-appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%23059669' stroke-width='2.5'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' d='M19 9l-7 7-7-7'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 0.75rem center;
+    background-size: 0.95rem 0.95rem;
+    padding-right: 2.35rem !important;
+    transition: border-color 0.16s ease, box-shadow 0.16s ease, background-color 0.16s ease;
+    cursor: pointer;
+}
+
+select:not(.hidden):hover {
+    border-color: #059669 !important;
+}
+
+select:not(.hidden):focus {
+    outline: none !important;
+    border-color: #059669 !important;
+    box-shadow: 0 0 0 3px rgba(5, 150, 105, 0.16) !important;
+}
+
+.custom-select-trigger {
+    min-height: 38px;
+}
+
+.custom-select-menu {
+    box-shadow: 0 18px 38px -6px rgba(6, 78, 59, 0.18), 0 8px 16px -6px rgba(15, 23, 42, 0.08);
+}
+
