@@ -1658,12 +1658,50 @@
     }
     setTimeout(hydrateParentCustomBooksFromD1, 500);
 
+    function isMaterialAuthorizedForStudent(book, currentStudent) {
+      if (!currentStudent) return true;
+      let sCourse = currentStudent.course_name || currentStudent.course_id || currentStudent.course || '';
+      if (!sCourse && currentStudent.notes) {
+        try {
+          const n = typeof currentStudent.notes === 'string' ? JSON.parse(currentStudent.notes) : currentStudent.notes;
+          sCourse = n.course_name || n.course || '';
+        } catch(e){}
+      }
+      sCourse = String(sCourse).toLowerCase();
+      if (!sCourse) return true;
+
+      if (book.assigned_student_id && String(book.assigned_student_id) === String(currentStudent.id)) return true;
+
+      const bTitle = String(book.title || '').toLowerCase();
+      const bCategory = String(book.category || '').toLowerCase();
+      const bCourse = String(book.course_name || book.course || '').toLowerCase();
+
+      if (bCourse && (bCourse.includes(sCourse) || sCourse.includes(bCourse))) return true;
+      if (bTitle.includes(sCourse) || sCourse.includes(bTitle)) return true;
+      if (sCourse.includes('qaida') && (bCategory === 'qaida' || bTitle.includes('qaida'))) return true;
+      if ((sCourse.includes('quran') || sCourse.includes('nazra') || sCourse.includes('hifz') || sCourse.includes('tajweed')) && (bCategory === 'quran' || bCategory === 'qaida')) return true;
+      if (sCourse.includes('tafseer') && bCategory === 'tafseer') return true;
+      if (sCourse.includes('hadith') && bCategory === 'hadith') return true;
+      if ((sCourse.includes('namaz') || sCourse.includes('dua') || sCourse.includes('islamic')) && bCategory === 'essentials') return true;
+
+      return false;
+    }
+
     function getAllAvailableBooks() {
       let customBooks = [];
       try { customBooks = JSON.parse(localStorage.getItem('alhuda_custom_books') || '[]'); } catch(e){}
+      const standardBooks = (typeof ALHUDA_CURRICULUM !== 'undefined' && Array.isArray(ALHUDA_CURRICULUM)) ? ALHUDA_CURRICULUM : [];
       let deletedIds = [];
       try { deletedIds = JSON.parse(localStorage.getItem('alhuda_deleted_books') || '[]'); } catch(e){}
-      return (Array.isArray(customBooks) ? customBooks : []).filter(b => b && !deletedIds.includes(b.id));
+
+      const merged = Array.isArray(customBooks) ? [...customBooks] : [];
+      standardBooks.forEach(b => {
+        if (!merged.some(m => m.id === b.id) && !deletedIds.includes(b.id)) {
+          merged.push(b);
+        }
+      });
+
+      return merged.filter(b => b && !deletedIds.includes(b.id) && isMaterialAuthorizedForStudent(b, CURRENT_STUDENT));
     }
 
     function renderPortalLibrary() {

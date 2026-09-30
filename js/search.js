@@ -41,8 +41,8 @@
     }
 
     // ============================================================
-    // AESTHETIC CUSTOM FLOATING DROPDOWN COMPONENT ENGINE
-    // Replaces Windows/Chrome native square select popups with sleek floating menus!
+    // AESTHETIC CUSTOM FLOATING DROPDOWN COMPONENT ENGINE (TASK 3)
+    // Replaces native select popups with modern floating menus + search filter
     // ============================================================
     function initCustomSelect(selectId) {
       const selectEl = document.getElementById(selectId);
@@ -55,7 +55,7 @@
       const existing = parent.querySelector(`.custom-select-wrapper[data-select="${selectId}"]`);
       if (existing) existing.remove();
 
-      selectEl.classList.add('hidden'); // hide native clunky select
+      selectEl.classList.add('hidden'); // hide native select while keeping DOM events
 
       const wrapper = document.createElement('div');
       wrapper.className = 'custom-select-wrapper relative w-full';
@@ -63,10 +63,10 @@
 
       const trigger = document.createElement('button');
       trigger.type = 'button';
-      trigger.className = 'custom-select-trigger w-full p-2.5 bg-white border border-slate-300 hover:border-emerald-600 rounded-xl font-bold text-xs text-slate-800 shadow-2xs transition flex items-center justify-between focus:outline-none focus:ring-2 focus:ring-emerald-500/20';
+      trigger.className = 'custom-select-trigger w-full px-3.5 py-2.5 bg-white border border-slate-300 hover:border-emerald-600 rounded-xl font-bold text-xs text-slate-800 shadow-2xs transition-all duration-150 flex items-center justify-between focus:outline-none focus:ring-2 focus:ring-emerald-500/25';
 
       const labelSpan = document.createElement('span');
-      labelSpan.className = 'custom-select-label truncate text-left flex-1';
+      labelSpan.className = 'custom-select-label truncate text-left flex-1 tracking-tight';
 
       const chevron = document.createElement('i');
       chevron.className = 'fa-solid fa-chevron-down text-emerald-600 text-[11px] transition-transform duration-200 ml-2 shrink-0';
@@ -75,21 +75,66 @@
       trigger.appendChild(chevron);
 
       const menu = document.createElement('div');
-      menu.className = 'custom-select-menu hidden absolute left-0 right-0 top-full mt-1.5 bg-white/98 backdrop-blur-md rounded-2xl border border-emerald-100 shadow-2xl z-50 p-1.5 space-y-0.5 max-h-64 overflow-y-auto custom-scrollbar';
+      menu.className = 'custom-select-menu hidden absolute left-0 right-0 top-full mt-1.5 bg-white/98 backdrop-blur-md rounded-2xl border border-emerald-200/90 shadow-2xl z-50 p-2 space-y-1 max-h-72 flex flex-col';
 
-      function renderItems() {
-        menu.innerHTML = '';
-        const curVal = selectEl.value;
+      let searchQuery = '';
+      const enableSearch = selectEl.options.length > 5 ||
+        selectId.toLowerCase().includes('teacher') ||
+        selectId.toLowerCase().includes('student') ||
+        selectId.toLowerCase().includes('family');
+
+      let searchInputEl = null;
+      if (enableSearch) {
+        const searchBox = document.createElement('div');
+        searchBox.className = 'relative mb-1 shrink-0';
+        searchBox.innerHTML = `<i class="fa-solid fa-magnifying-glass absolute left-2.5 top-2 text-slate-400 text-[11px]"></i>`;
+        searchInputEl = document.createElement('input');
+        searchInputEl.type = 'text';
+        searchInputEl.placeholder = 'Filter options...';
+        searchInputEl.className = 'w-full pl-7 pr-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-[11px] font-semibold text-slate-800 focus:bg-white focus:outline-none focus:border-emerald-500';
+        searchInputEl.onclick = (ev) => ev.stopPropagation();
+        searchInputEl.oninput = (ev) => {
+          searchQuery = (ev.target.value || '').trim().toLowerCase();
+          renderItemsList();
+        };
+        searchBox.appendChild(searchInputEl);
+        menu.appendChild(searchBox);
+      }
+
+      const itemsContainer = document.createElement('div');
+      itemsContainer.className = 'space-y-0.5 overflow-y-auto max-h-56 custom-scrollbar pr-0.5';
+      menu.appendChild(itemsContainer);
+
+      function updateTriggerLabel() {
         const activeOpt = selectEl.options[selectEl.selectedIndex] || selectEl.options[0];
         labelSpan.innerText = activeOpt ? activeOpt.text : 'Select...';
+      }
 
-        Array.from(selectEl.options).forEach(opt => {
+      function renderItemsList() {
+        itemsContainer.innerHTML = '';
+        const curVal = selectEl.value;
+        updateTriggerLabel();
+
+        const matchedOptions = Array.from(selectEl.options).filter(opt => {
+          if (!searchQuery) return true;
+          return (opt.text || '').toLowerCase().includes(searchQuery) || (opt.value || '').toLowerCase().includes(searchQuery);
+        });
+
+        if (matchedOptions.length === 0) {
+          const emptyDiv = document.createElement('div');
+          emptyDiv.className = 'px-3 py-2.5 text-center text-[11px] text-slate-400 italic';
+          emptyDiv.innerText = 'No matching options found.';
+          itemsContainer.appendChild(emptyDiv);
+          return;
+        }
+
+        matchedOptions.forEach(opt => {
           const item = document.createElement('div');
           const isSelected = opt.value === curVal;
-          item.className = `custom-select-item px-3 py-2 rounded-xl text-xs transition cursor-pointer flex items-center justify-between ${
-            isSelected 
-              ? 'bg-emerald-100/90 text-emerald-950 font-bold border border-emerald-300/70 shadow-2xs' 
-              : 'font-semibold text-slate-700 hover:bg-emerald-50 hover:text-emerald-950'
+          item.className = `custom-select-item px-3 py-2 rounded-xl text-xs transition-all duration-100 cursor-pointer flex items-center justify-between ${
+            isSelected
+              ? 'bg-emerald-100/90 text-emerald-950 font-extrabold border border-emerald-300/80 shadow-2xs'
+              : 'font-semibold text-slate-700 hover:bg-emerald-50/90 hover:text-emerald-950 hover:pl-3.5'
           }`;
           item.innerHTML = `
             <span class="truncate">${opt.text}</span>
@@ -99,24 +144,31 @@
             e.stopPropagation();
             selectEl.value = opt.value;
             selectEl.dispatchEvent(new Event('change', { bubbles: true }));
-            renderItems();
+            searchQuery = '';
+            if (searchInputEl) searchInputEl.value = '';
+            renderItemsList();
             closeAllCustomSelects();
           };
-          menu.appendChild(item);
+          itemsContainer.appendChild(item);
         });
       }
 
-      renderItems();
+      renderItemsList();
 
       trigger.onclick = (e) => {
         e.stopPropagation();
         const isOpen = !menu.classList.contains('hidden');
         closeAllCustomSelects();
         if (!isOpen) {
-          renderItems();
+          searchQuery = '';
+          if (searchInputEl) searchInputEl.value = '';
+          renderItemsList();
           menu.classList.remove('hidden');
           chevron.classList.add('rotate-180');
           trigger.classList.add('border-emerald-600', 'ring-2', 'ring-emerald-500/20');
+          if (searchInputEl) {
+            setTimeout(() => searchInputEl.focus(), 40);
+          }
         }
       };
 
@@ -125,15 +177,25 @@
       parent.appendChild(wrapper);
 
       selectEl.addEventListener('change', () => {
-        const activeOpt = selectEl.options[selectEl.selectedIndex];
-        if (activeOpt) labelSpan.innerText = activeOpt.text;
+        updateTriggerLabel();
       });
     }
 
     function refreshScheduleSearchCustomSelects() {
-      ['schedSearchDay', 'schedSearchTimeFrom', 'schedSearchTimeTo', 'schedSearchGender', 'schedSearchStatus'].forEach(id => {
+      ['schedSearchDay', 'schedSearchTimeFrom', 'schedSearchTimeTo', 'schedSearchGender', 'schedSearchStatus', 'schedSearchTeacherSelect'].forEach(id => {
         initCustomSelect(id);
       });
+    }
+
+    function onSchedSearchTeacherDropdownChange(teacherId) {
+      const qInput = document.getElementById('schedSearchTeacherQuery');
+      if (teacherId && teacherId !== 'all') {
+        const t = (ALL_TEACHERS || []).find(x => String(x.id) === String(teacherId));
+        if (qInput && t) qInput.value = t.full_name || '';
+      } else {
+        if (qInput) qInput.value = '';
+      }
+      executeScheduleSearch();
     }
 
     function closeAllCustomSelects() {
@@ -265,7 +327,22 @@
             return !isExcluded && t.status !== 'Inactive' && t.status !== 'Terminated';
           });
 
-      // Filter by Teacher Gender and Query
+      // Populate Teacher Selection Dropdown (#schedSearchTeacherSelect)
+      const teacherSelectEl = document.getElementById('schedSearchTeacherSelect');
+      const selectedTeacherId = teacherSelectEl ? teacherSelectEl.value : 'all';
+      if (teacherSelectEl) {
+        const curOptionsCount = teacherSelectEl.options.length;
+        if (curOptionsCount <= 1 || curOptionsCount !== teachingStaff.length + 1) {
+          teacherSelectEl.innerHTML = `<option value="all">👨‍🏫 All Active Teachers (${teachingStaff.length} Instructors)</option>` +
+            teachingStaff.map(t => `<option value="${t.id}">${t.full_name} (${t.working_shift || 'Shift'})</option>`).join('');
+          if (selectedTeacherId && Array.from(teacherSelectEl.options).some(o => o.value === selectedTeacherId)) {
+            teacherSelectEl.value = selectedTeacherId;
+          }
+          initCustomSelect('schedSearchTeacherSelect');
+        }
+      }
+
+      // Filter by Teacher Gender, Selected Dropdown Teacher, and Query
       const matchedTeachers = teachingStaff.filter(t => {
         let tGender = t.gender;
         if (!tGender) {
@@ -273,6 +350,7 @@
           tGender = accs[t.id]?.gender || 'Male';
         }
         if (genderFilter !== 'all' && tGender !== genderFilter) return false;
+        if (selectedTeacherId && selectedTeacherId !== 'all' && String(t.id) !== String(selectedTeacherId)) return false;
         if (teacherQuery && !(t.full_name || '').toLowerCase().includes(teacherQuery)) return false;
         return true;
       });
@@ -287,11 +365,23 @@
       const { data: scheds } = await schedulesQuery;
       const allSchedules = scheds || [];
 
-      const scheduleHashMap = {};
+      const parseMin = (tStr, isEnd = false, sRef = 0) => {
+        if (!tStr) return 0;
+        const [h, m] = String(tStr).slice(0, 5).split(':').map(Number);
+        if (isNaN(h) || isNaN(m)) return 0;
+        const tot = h * 60 + m;
+        if (isEnd && tot === 0 && sRef > 0) return 1440;
+        return tot;
+      };
+
+      const schedulesByTeacherDay = {};
       allSchedules.forEach(s => {
-        const sStart = (s.start_time || '').slice(0, 5);
-        const key = `${s.teacher_id}_${s.day_of_week}_${sStart}`;
-        scheduleHashMap[key] = s;
+        const key = `${s.teacher_id}_${Number(s.day_of_week)}`;
+        if (!schedulesByTeacherDay[key]) schedulesByTeacherDay[key] = [];
+        const sStartMin = parseMin(s.start_time, false);
+        let sEndMin = parseMin(s.end_time, true, sStartMin);
+        if (sEndMin <= sStartMin) sEndMin = sStartMin + 30;
+        schedulesByTeacherDay[key].push({ ...s, _startMin: sStartMin, _endMin: sEndMin });
       });
 
       // 4. Generate 30-min evaluation slots in requested window
@@ -336,11 +426,12 @@
           const inShift = isSlotInTeacherShift(slot.startStr, shiftStr);
 
           const dayCells = daysToEvaluate.map(dayNum => {
-            const key = `${teacher.id}_${dayNum}_${slot.startStr}`;
-            const bookedSchedule = scheduleHashMap[key];
+            const dayList = schedulesByTeacherDay[`${teacher.id}_${dayNum}`] || [];
+            const bookedSchedule = dayList.find(sc => sc._startMin < slot.endMin && sc._endMin > slot.startMin) || null;
 
             if (bookedSchedule) {
               teacherBookedCount++;
+              const actualRange = `${(bookedSchedule.start_time || '').slice(0, 5)}-${(bookedSchedule.end_time || '').slice(0, 5)}`;
               return {
                 dayNum,
                 dayShort: DAY_NAMES[dayNum].slice(0, 3),
@@ -348,7 +439,7 @@
                 status: 'booked',
                 schedule: bookedSchedule,
                 studentName: bookedSchedule.students?.name || 'Enrolled Student',
-                course: bookedSchedule.students?.course_id || 'Class',
+                course: `${bookedSchedule.students?.course_id || 'Class'} (${actualRange})`,
                 inShift
               };
             } else {

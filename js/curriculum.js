@@ -66,6 +66,13 @@
           updated_at: new Date().toISOString()
         });
 
+        rowsToUpsert.unshift({
+          id: 'SYS-CUSTOM-BOOKS-ALL',
+          key: 'alhuda_custom_books',
+          value: JSON.stringify(catalogIndex),
+          updated_at: new Date().toISOString()
+        });
+
         for (const row of rowsToUpsert) {
           await db.from('system_settings').upsert(row);
         }
@@ -125,8 +132,16 @@
 
     function getAllAvailableBooks() {
       const customBooks = getCustomBooks();
+      const standardBooks = (typeof ALHUDA_CURRICULUM !== 'undefined' && Array.isArray(ALHUDA_CURRICULUM)) ? ALHUDA_CURRICULUM : [];
       const deletedIds = getDeletedBookIds();
-      return customBooks.filter(b => !deletedIds.includes(b.id));
+
+      const merged = Array.isArray(customBooks) ? [...customBooks] : [];
+      standardBooks.forEach(b => {
+        if (!merged.some(m => m.id === b.id) && !deletedIds.includes(b.id)) {
+          merged.push(b);
+        }
+      });
+      return merged.filter(b => b && !deletedIds.includes(b.id));
     }
 
     function loadCurriculumLibrary(category = 'all') {
@@ -192,9 +207,9 @@
             <div class="w-16 h-16 rounded-2xl bg-emerald-50 text-emerald-700 border border-emerald-200 flex items-center justify-center text-2xl mx-auto mb-4 shadow-xs">
               <i class="fa-solid fa-book-open"></i>
             </div>
-            <h4 class="font-black text-slate-800 text-lg tracking-tight">No Course Materials Found</h4>
+            <h4 class="font-black text-slate-800 text-lg tracking-tight">No course materials available.</h4>
             <p class="text-xs text-slate-500 mt-1.5 max-w-md mx-auto leading-relaxed">
-              No materials match your current category or search filter. You can add new lessons, PDF/image scans, or custom course syllabus using the button below.
+              No course materials available yet. You can upload new lessons, PDF/image scans, or custom course syllabus using the button below.
             </p>
             <div class="mt-6 flex items-center justify-center gap-3 flex-wrap">
               <button onclick="openCustomBookUploadModal()" class="px-5 py-2.5 bg-gradient-to-r from-brandDark to-emerald-950 hover:from-emerald-900 hover:to-brandDark text-white rounded-xl text-xs font-black transition inline-flex items-center gap-2 shadow-md hover:shadow-lg">

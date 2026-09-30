@@ -90,23 +90,28 @@ function generateDynamicSvgDataUri(book, pageNum) {
 
         <!-- Content Outline Card -->
         <g transform="translate(40, 160)">
-          <rect width="520" height="120" rx="12" fill="#f8fafc" stroke="#e2e8f0" stroke-width="1"/>
-          <text x="30" y="40" font-family="sans-serif" font-size="14" font-weight="bold" fill="#0f172a">Lesson Overview &amp; Guidance</text>
-          <text x="30" y="70" font-family="sans-serif" font-size="12" fill="#475569">Section: Page ${p} of ${totalP}</text>
-          <text x="30" y="95" font-family="sans-serif" font-size="12" fill="#047857" font-weight="600">Al-Huda Islamic Centre &bull; Course Material</text>
+          <rect width="520" height="110" rx="12" fill="#f8fafc" stroke="#cbd5e1" stroke-width="1"/>
+          <text x="30" y="38" font-family="'Plus Jakarta Sans', sans-serif" font-size="14" font-weight="bold" fill="#0f172a">Academic Curriculum Syllabus</text>
+          <text x="30" y="65" font-family="'Plus Jakarta Sans', sans-serif" font-size="12" font-weight="600" fill="#475569">Section &bull; Page ${p} of ${totalP}</text>
+          <text x="30" y="90" font-family="'Plus Jakarta Sans', sans-serif" font-size="12" fill="#047857" font-weight="700">Al-Huda Islamic Centre &bull; Course Material</text>
         </g>
 
-        <!-- Visual Icon Graphic -->
-        <circle cx="300" cy="400" r="70" fill="#ecfdf5" stroke="#10b981" stroke-width="3"/>
-        <text x="300" y="415" font-family="'Amiri', serif" font-size="44" font-weight="bold" fill="#047857" text-anchor="middle">📖</text>
+        <!-- Professional Arabic Calligraphy Embellishment -->
+        <g transform="translate(40, 300)">
+          <rect width="520" height="190" rx="14" fill="#fdfbf7" stroke="#e2e8f0" stroke-width="1.2"/>
+          <text x="260" y="70" font-family="'Amiri', 'Traditional Arabic', serif" font-size="34" font-weight="bold" fill="#064e3b" text-anchor="middle" direction="rtl">بِسْمِ اللَّهِ الرَّحْمَٰنِ الرَّحِيمِ</text>
+          <line x1="80" y1="100" x2="440" y2="100" stroke="#c5a880" stroke-width="1.2" stroke-dasharray="4,4"/>
+          <text x="260" y="140" font-family="'Amiri', serif" font-size="22" font-weight="bold" fill="#1e293b" text-anchor="middle" direction="rtl">رَبِّ زِدْنِي عِلْمًا</text>
+          <text x="260" y="165" font-family="'Plus Jakarta Sans', sans-serif" font-size="11" font-weight="600" fill="#64748b" text-anchor="middle">"My Lord, increase me in knowledge." [Surah Taha: 114]</text>
+        </g>
 
-        <!-- Teaching Tips -->
+        <!-- Structured Learning Objectives Card -->
         <g transform="translate(40, 520)">
-          <rect width="520" height="130" rx="12" fill="#fefce8" stroke="#fef08a" stroke-width="1.5"/>
-          <text x="30" y="35" font-family="sans-serif" font-size="13" font-weight="bold" fill="#854d0e">Course Material Guidance:</text>
-          <text x="30" y="65" font-family="sans-serif" font-size="12" fill="#713f12">&bull; Focus on precise recitation and teacher instructions.</text>
-          <text x="30" y="90" font-family="sans-serif" font-size="12" fill="#713f12">&bull; Practice daily lesson exercises with your assigned instructor.</text>
-          <text x="30" y="115" font-family="sans-serif" font-size="12" fill="#713f12">&bull; Review progress using the interactive LMS digital reader.</text>
+          <rect width="520" height="140" rx="12" fill="#f0fdf4" stroke="#86efac" stroke-width="1.2"/>
+          <text x="30" y="32" font-family="'Plus Jakarta Sans', sans-serif" font-size="12" font-weight="bold" fill="#14532d">Core Learning Objectives &amp; Teaching Focus:</text>
+          <text x="30" y="60" font-family="'Plus Jakarta Sans', sans-serif" font-size="11" font-weight="600" fill="#166534">&bull; Master phonetic articulation and Makhaarij rules for this lesson unit.</text>
+          <text x="30" y="85" font-family="'Plus Jakarta Sans', sans-serif" font-size="11" font-weight="600" fill="#166534">&bull; Maintain rhythmic cadence and strict adherence to Tajweed guidelines.</text>
+          <text x="30" y="110" font-family="'Plus Jakarta Sans', sans-serif" font-size="11" font-weight="600" fill="#166534">&bull; Complete assigned recitation exercises and review with your assigned instructor.</text>
         </g>
       </g>
     `;

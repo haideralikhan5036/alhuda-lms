@@ -75,9 +75,31 @@
         }
       }
 
+      // Populate Professional Teacher Switcher Dropdown in Matrix Header
+      const switcherSel = document.getElementById('matrixTeacherSwitcherSelect');
+      if (switcherSel) {
+        const teachingStaff = (typeof getEligibleTeachers === 'function')
+          ? getEligibleTeachers(ALL_TEACHERS || [])
+          : (ALL_TEACHERS || []).filter(t => t.status !== 'Inactive' && t.status !== 'Terminated');
+        switcherSel.innerHTML = teachingStaff.map(t =>
+          `<option value="${t.id}" ${String(t.id) === String(teacherId) ? 'selected' : ''}>👨‍🏫 ${t.full_name} (${t.working_shift || 'Shift'})</option>`
+        ).join('');
+        switcherSel.value = teacherId;
+        if (typeof initCustomSelect === 'function') {
+          initCustomSelect('matrixTeacherSwitcherSelect');
+        }
+      }
+
       openModal('modalScheduleMatrix');
       await fetchTeacherSchedules();
       render2DMatrixTable();
+    }
+
+    async function onMatrixTeacherSwitcherChange(newTeacherId) {
+      if (!newTeacherId) return;
+      const t = (ALL_TEACHERS || []).find(x => String(x.id) === String(newTeacherId));
+      if (!t) return;
+      await openTeacherScheduleMatrix(t.id, t.full_name, t.rate_per_slot || 0, t.working_shift || 'Shift');
     }
 
     async function fetchTeacherSchedules() {
@@ -157,19 +179,85 @@
       return true;
     }
 
+    function parseScheduleTimeToMinutes(timeStr, isEnd = false, startMinRef = 0) {
+      if (!timeStr) return 0;
+      const parts = String(timeStr).trim().slice(0, 5).split(':').map(Number);
+      if (parts.length < 2 || isNaN(parts[0]) || isNaN(parts[1])) return 0;
+      const total = parts[0] * 60 + parts[1];
+      if (isEnd && total === 0 && startMinRef > 0) return 1440; // 24:00 midnight end
+      return total;
+    }
+
+    function formatMinutesToTime24(totalMin) {
+      const clamped = ((totalMin % 1440) + 1440) % 1440;
+      const h = Math.floor(clamped / 60);
+      const m = clamped % 60;
+      return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+    }
+
+    function formatTime24To12hLabel(timeStr) {
+      if (!timeStr) return '--:--';
+      const [h, m] = String(timeStr).trim().slice(0, 5).split(':').map(Number);
+      if (isNaN(h) || isNaN(m)) return timeStr;
+      const period = h >= 12 ? 'PM' : 'AM';
+      const h12 = h % 12 === 0 ? 12 : h % 12;
+      return `${String(h12).padStart(2, '0')}:${String(m).padStart(2, '0')} ${period}`;
+    }
+
+    function getScheduleDurationMinutes(startTime, endTime) {
+      const sMin = parseScheduleTimeToMinutes(startTime, false);
+      const eMin = parseScheduleTimeToMinutes(endTime, true, sMin);
+      return eMin - sMin;
+    }
+
+    function formatScheduleDurationBadge(durationMin) {
+      if (durationMin <= 0) return 'Invalid';
+      if (durationMin === 60) return '60m (1h)';
+      if (durationMin > 60 && durationMin % 60 === 0) return `${durationMin}m (${durationMin / 60}h)`;
+      return `${durationMin}m`;
+    }
+
+    function findTeacherScheduleConflicts(schedulesList, dayOfWeek, newStartStr, newEndStr, ignoreIdsSet = new Set()) {
+      const newStartMin = parseScheduleTimeToMinutes(newStartStr, false);
+      const newEndMin = parseScheduleTimeToMinutes(newEndStr, true, newStartMin);
+      const conflicts = [];
+      if (newEndMin <= newStartMin) return conflicts;
+
+      (schedulesList || []).forEach(sc => {
+        if (ignoreIdsSet && ignoreIdsSet.has(String(sc.id))) return;
+        if (Number(sc.day_of_week) !== Number(dayOfWeek)) return;
+        const stuObj = (ALL_STUDENTS || []).find(st => String(st.id) === String(sc.student_id)) || sc.students;
+        if (stuObj && typeof isStudentSelfDeactivated === 'function' && isStudentSelfDeactivated(stuObj)) return;
+
+        const exStartStr = String(sc.start_time || '').slice(0, 5);
+        const exEndStr = String(sc.end_time || '').slice(0, 5);
+        const exStartMin = parseScheduleTimeToMinutes(exStartStr, false);
+        let exEndMin = parseScheduleTimeToMinutes(exEndStr, true, exStartMin);
+        if (exEndMin <= exStartMin) exEndMin = exStartMin + 30;
+
+        if (newStartMin < exEndMin && newEndMin > exStartMin) {
+          conflicts.push({
+            schedule: sc,
+            studentName: stuObj?.name || sc.students?.name || sc.student_id || 'Booked Student',
+            startTime: exStartStr,
+            endTime: exEndStr
+          });
+        }
+      });
+      return conflicts;
+    }
+
     function render2DMatrixTable() {
       const tbody = document.getElementById('matrix2DTableBody');
       if (!tbody) return;
       tbody.innerHTML = '';
 
-      const bookingsMap = {};
-      CURRENT_TEACHER_SCHEDULES.forEach(s => {
+      const activeSchedules = (CURRENT_TEACHER_SCHEDULES || []).filter(s => {
         const stuObj = (ALL_STUDENTS || []).find(st => String(st.id) === String(s.student_id)) || s.students;
         if (stuObj && typeof isStudentSelfDeactivated === 'function' && isStudentSelfDeactivated(stuObj)) {
-          return;
+          return false;
         }
-        const key = `${s.day_of_week}_${s.start_time.slice(0, 5)}`;
-        bookingsMap[key] = s;
+        return true;
       });
 
       const shiftStr = CURRENT_MATRIX_TEACHER ? (CURRENT_MATRIX_TEACHER.working_shift || '') : '';
@@ -179,7 +267,9 @@
           const hStr = String(hour).padStart(2, '0');
           const mStr = String(min).padStart(2, '0');
           const startTime = `${hStr}:${mStr}`;
-          
+          const rowStartMin = hour * 60 + min;
+          const rowEndMin = rowStartMin + 30;
+
           const endMin = (min + 30) % 60;
           const endHour = (hour + Math.floor((min + 30) / 60)) % 24;
           const endTime = `${String(endHour).padStart(2, '0')}:${String(endMin).padStart(2, '0')}`;
@@ -200,23 +290,38 @@
           let daysCells = '';
 
           for (let day = 1; day <= 7; day++) {
-            const key = `${day}_${startTime}`;
-            const slot = bookingsMap[key];
+            const overlappingSlots = activeSchedules.filter(s => {
+              if (Number(s.day_of_week) !== day) return false;
+              const sStartMin = parseScheduleTimeToMinutes(s.start_time, false);
+              let sEndMin = parseScheduleTimeToMinutes(s.end_time, true, sStartMin);
+              if (sEndMin <= sStartMin) sEndMin = sStartMin + 30;
+              return sStartMin < rowEndMin && sEndMin > rowStartMin;
+            });
+
+            const slot = overlappingSlots[0] || null;
 
             if (slot) {
               const stuStatus = slot.students?.status;
               const isTrialSlot = slot.status === 'Trial' || stuStatus === 'Trial';
               const stuName = slot.students?.name || (ALL_STUDENTS || []).find(st => String(st.id) === String(slot.student_id))?.name || 'Student';
+              const actualStart = String(slot.start_time || '').slice(0, 5);
+              const actualEnd = String(slot.end_time || '').slice(0, 5);
+              const durMins = getScheduleDurationMinutes(actualStart, actualEnd);
+              const durLabel = durMins > 0 ? `${durMins}m` : '30m';
+              const timeRangeBadge = `<span class="px-1.5 py-0.2 rounded bg-slate-100 text-slate-800 border border-slate-300 font-mono font-bold text-[9px]" title="Actual Scheduled Time: ${actualStart} - ${actualEnd} (${durLabel})">${actualStart}-${actualEnd} (${durLabel})</span>`;
 
               if (isTrialSlot) {
                 daysCells += `
                   <td class="p-1 text-center bg-purple-50/90 border border-purple-200">
-                    <div onclick="openMatrixSlotActionModal('${slot.id}')" class="flex flex-col justify-between p-1.5 rounded-lg bg-white shadow-2xs border border-purple-300 gap-1 cursor-pointer hover:border-purple-500 transition" title="Click to manage scheduled class">
+                    <div onclick="openMatrixSlotActionModal('${slot.id}')" class="flex flex-col justify-between p-1.5 rounded-lg bg-white shadow-2xs border border-purple-300 gap-1 cursor-pointer hover:border-purple-500 transition" title="Click to manage scheduled class (${actualStart} - ${actualEnd}, ${durLabel})">
                       <div class="flex items-center justify-between gap-1">
                         <span class="font-extrabold text-[11px] text-purple-950 truncate" title="${stuName}">
                           <i class="fa-solid fa-star text-amber-500"></i> ${stuName}
                         </span>
                         <span class="px-1 py-0.2 rounded text-[8px] font-black bg-purple-200 text-purple-900 border border-purple-300">TRIAL</span>
+                      </div>
+                      <div class="flex items-center justify-between gap-1">
+                        ${timeRangeBadge}
                       </div>
                       <div class="flex items-center justify-between gap-1 mt-0.5">
                         <button onclick="event.stopPropagation(); convertTrialFromSchedule('${slot.student_id}')" class="px-1.5 py-0.5 bg-emerald-600 hover:bg-emerald-700 text-white text-[9px] font-black rounded shadow-2xs flex items-center gap-0.5 transition" title="Regularize Student">
@@ -227,7 +332,7 @@
                             <i class="fa-solid fa-right-left text-[8px]"></i> Shift
                           </button>
                           ${CURRENT_ROLE !== 'manager' ? `
-                            <button onclick="event.stopPropagation(); openMatrixSlotActionModal('${slot.id}')" class="px-1.5 py-0.5 rounded bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 text-[9px] font-extrabold flex items-center gap-0.5 transition" title="Delete Scheduled Class">
+                            <button onclick="event.stopPropagation(); openMatrixSlotActionModal('${slot.id}')" class="px-1.5 py-0.5 rounded bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 text-[9px] font-extrabold flex items-center gap-0.5 transition" title="Manage / Delete Scheduled Class">
                               <i class="fa-solid fa-trash-can text-[8px]"></i> Delete
                             </button>
                           ` : ''}
@@ -239,21 +344,24 @@
               } else {
                 daysCells += `
                   <td class="p-1 text-center bg-emerald-50/50 border border-emerald-200">
-                    <div onclick="openMatrixSlotActionModal('${slot.id}')" class="flex flex-col justify-between p-1.5 rounded-lg bg-white shadow-2xs border border-emerald-300 gap-1 cursor-pointer hover:border-emerald-500 transition" title="Click to manage scheduled class">
+                    <div onclick="openMatrixSlotActionModal('${slot.id}')" class="flex flex-col justify-between p-1.5 rounded-lg bg-white shadow-2xs border border-emerald-300 gap-1 cursor-pointer hover:border-emerald-500 transition" title="Click to manage scheduled class (${actualStart} - ${actualEnd}, ${durLabel})">
                       <div class="flex items-center justify-between gap-1">
                         <span class="font-extrabold text-[11px] text-slate-900 truncate" title="${stuName}">
                           <i class="fa-solid fa-graduation-cap text-emerald-600"></i> ${stuName}
                         </span>
                         <span class="px-1 py-0.2 rounded text-[8px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">REGULAR</span>
                       </div>
+                      <div class="flex items-center justify-between gap-1">
+                        ${timeRangeBadge}
+                        <span class="text-[9px] text-slate-400 font-mono truncate max-w-[48px]">${slot.student_id || ''}</span>
+                      </div>
                       <div class="flex items-center justify-between gap-1 mt-0.5">
-                        <span class="text-[9px] text-slate-400 font-mono truncate max-w-[55px]">${slot.student_id || ''}</span>
                         <div class="flex items-center gap-1 ml-auto">
                           <button onclick="event.stopPropagation(); openShiftStudentModal('${slot.id}')" class="px-1.5 py-0.5 rounded bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 text-[9px] font-extrabold flex items-center gap-0.5 transition" title="Shift Student to Another Teacher">
                             <i class="fa-solid fa-right-left text-[8px]"></i> Shift
                           </button>
                           ${CURRENT_ROLE !== 'manager' ? `
-                            <button onclick="event.stopPropagation(); openMatrixSlotActionModal('${slot.id}')" class="px-1.5 py-0.5 rounded bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 text-[9px] font-extrabold flex items-center gap-0.5 transition" title="Delete Scheduled Class">
+                            <button onclick="event.stopPropagation(); openMatrixSlotActionModal('${slot.id}')" class="px-1.5 py-0.5 rounded bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 text-[9px] font-extrabold flex items-center gap-0.5 transition" title="Manage / Delete Scheduled Class">
                               <i class="fa-solid fa-trash-can text-[8px]"></i> Delete
                             </button>
                           ` : ''}
@@ -265,7 +373,7 @@
               }
             } else {
               daysCells += `
-                <td onclick="openSlotBookingModal(${day}, '${startTime}', '${endTime}')" class="p-1.5 text-center ${isShiftSlot ? 'slot-vacant bg-emerald-50/60' : 'slot-vacant'} transition" title="Click to Book Student">
+                <td onclick="openSlotBookingModal(${day}, '${startTime}', '${endTime}')" class="p-1.5 text-center ${isShiftSlot ? 'slot-vacant bg-emerald-50/60' : 'slot-vacant'} transition" title="Click to Book Student (${startTime} - ${endTime} or custom duration)">
                   <div class="text-[10px] font-bold text-emerald-700">
                     + Free
                   </div>
@@ -284,6 +392,114 @@
     let ACTIVE_START_TIME = '';
     let ACTIVE_END_TIME = '';
     let ACTIVE_SLOT_ACTION_CONTEXT = null;
+
+    function setBookSlotQuickDuration(durationMinutes) {
+      const startInput = document.getElementById('bookSlotStartTime');
+      const endInput = document.getElementById('bookSlotEndTime');
+      const startStr = (startInput && startInput.value) ? startInput.value.slice(0, 5) : (ACTIVE_START_TIME || '14:00');
+      if (startInput) startInput.value = startStr;
+
+      const startMin = parseScheduleTimeToMinutes(startStr, false);
+      const targetEndMin = startMin + Number(durationMinutes || 30);
+      const endStr = targetEndMin >= 1440 ? '23:59' : formatMinutesToTime24(targetEndMin);
+      if (endInput) endInput.value = endStr;
+
+      ACTIVE_START_TIME = startStr;
+      ACTIVE_END_TIME = endStr;
+      syncBookSlotTimingAndConflictUI();
+    }
+
+    function onBookSlotTimeChanged(changedField) {
+      const startInput = document.getElementById('bookSlotStartTime');
+      const endInput = document.getElementById('bookSlotEndTime');
+      if (!startInput || !endInput) return;
+
+      const startStr = (startInput.value || '').slice(0, 5);
+      let endStr = (endInput.value || '').slice(0, 5);
+
+      if (changedField === 'start' && startStr) {
+        const curDur = getScheduleDurationMinutes(ACTIVE_START_TIME || '14:00', ACTIVE_END_TIME || '14:30');
+        const safeDur = (curDur >= 15 && curDur <= 240) ? curDur : 30;
+        const newEndMin = parseScheduleTimeToMinutes(startStr, false) + safeDur;
+        endStr = newEndMin >= 1440 ? '23:59' : formatMinutesToTime24(newEndMin);
+        endInput.value = endStr;
+      }
+
+      if (startStr) ACTIVE_START_TIME = startStr;
+      if (endStr) ACTIVE_END_TIME = endStr;
+      syncBookSlotTimingAndConflictUI();
+    }
+
+    function syncBookSlotTimingAndConflictUI() {
+      const startInput = document.getElementById('bookSlotStartTime');
+      const endInput = document.getElementById('bookSlotEndTime');
+      const durBadge = document.getElementById('bookSlotDurationBadge');
+      const displayEl = document.getElementById('bookSlotDisplay');
+      const hintEl = document.getElementById('bookSlotOccupiedHint');
+      const submitBtn = document.getElementById('btnConfirmSlotBookingSubmit');
+
+      const startStr = (startInput && startInput.value) ? startInput.value.slice(0, 5) : ACTIVE_START_TIME;
+      const endStr = (endInput && endInput.value) ? endInput.value.slice(0, 5) : ACTIVE_END_TIME;
+      const durMins = getScheduleDurationMinutes(startStr, endStr);
+
+      document.querySelectorAll('[data-book-dur]').forEach(btn => {
+        const btnDur = Number(btn.getAttribute('data-book-dur'));
+        if (btnDur === durMins) {
+          btn.className = 'px-2 py-1 rounded-lg border border-emerald-600 bg-emerald-600 text-white font-extrabold text-[10px] shadow-2xs transition';
+        } else {
+          btn.className = 'px-2 py-1 rounded-lg border border-emerald-300 bg-white hover:bg-emerald-600 hover:text-white text-emerald-900 font-extrabold text-[10px] transition';
+        }
+      });
+
+      const selectedDays = Array.from(document.querySelectorAll('input[name="bookSlotWeekday"]:checked'))
+        .map(cb => Number(cb.value))
+        .filter(d => d >= 1 && d <= 7);
+      const daySummary = selectedDays.length > 0
+        ? selectedDays.map(d => DAY_NAMES[d]?.slice(0, 3)).join(', ')
+        : (DAY_NAMES[ACTIVE_DAY] || 'Selected Day');
+
+      if (durMins <= 0) {
+        if (durBadge) {
+          durBadge.textContent = 'Invalid: End <= Start';
+          durBadge.className = 'px-2.5 py-0.5 rounded-full text-[10px] font-mono font-extrabold bg-rose-100 text-rose-800 border border-rose-300';
+        }
+        if (displayEl) {
+          displayEl.value = `Invalid Time Range: End time (${endStr || '--:--'}) must be after Start time (${startStr || '--:--'})`;
+        }
+        if (submitBtn) submitBtn.disabled = true;
+        return;
+      }
+
+      if (submitBtn) submitBtn.disabled = false;
+      const durText = durMins === 60 ? '60 Mins (1 Hr)' : `${durMins} Mins`;
+      if (durBadge) {
+        durBadge.textContent = durText;
+        durBadge.className = 'px-2.5 py-0.5 rounded-full text-[10px] font-mono font-extrabold bg-emerald-100 text-emerald-900 border border-emerald-300';
+      }
+      if (displayEl) {
+        displayEl.value = `${daySummary} • ${formatTime24To12hLabel(startStr)} to ${formatTime24To12hLabel(endStr)} (${startStr}–${endStr} • ${durText})`;
+      }
+
+      if (hintEl) {
+        const conflictMessages = [];
+        for (let d = 1; d <= 7; d++) {
+          const dayConflicts = findTeacherScheduleConflicts(CURRENT_TEACHER_SCHEDULES, d, startStr, endStr);
+          if (dayConflicts.length > 0) {
+            const first = dayConflicts[0];
+            const isSelectedDay = selectedDays.includes(d);
+            conflictMessages.push(`${isSelectedDay ? '⚠️ ' : ''}${DAY_NAMES[d]} (${first.studentName}: ${first.startTime}-${first.endTime})`);
+          }
+        }
+        if (conflictMessages.length > 0) {
+          hintEl.textContent = `Schedule overlap on: ${conflictMessages.join(', ')}.`;
+          hintEl.className = 'text-[10px] text-amber-800 font-bold mt-1';
+          hintEl.classList.remove('hidden');
+        } else {
+          hintEl.textContent = '';
+          hintEl.classList.add('hidden');
+        }
+      }
+    }
 
     function updateBookingWeekdaySelectionUI() {
       const checkboxes = Array.from(document.querySelectorAll('input[name="bookSlotWeekday"]'));
@@ -310,6 +526,7 @@
           ? 'text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200'
           : 'text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-rose-100 text-rose-800 border border-rose-200';
       }
+      syncBookSlotTimingAndConflictUI();
     }
 
     async function loadStudentsForBooking() {
@@ -357,11 +574,11 @@
 
       let html = '';
       if (teacherAssigned.length > 0) {
-        html += `<optgroup label="🎯 Active Students in ${CURRENT_MATRIX_TEACHER.full_name}'s Student List">`;
+        html += `<optgroup label="Active Students in ${CURRENT_MATRIX_TEACHER.full_name}'s Student List">`;
         teacherAssigned.forEach(s => {
           const prof = cachedProfiles[s.id] || {};
           const days = prof.days_per_week || s.days_per_week || 'Assigned Student';
-          html += `<option value="${s.id}">${s.name} (${s.id}) &bull; ${days}</option>`;
+          html += `<option value="${s.id}">${s.name} (${s.id}) • ${days}</option>`;
         });
         html += `</optgroup>`;
       } else {
@@ -369,20 +586,27 @@
       }
 
       select.innerHTML = html;
+      if (typeof initCustomSelect === 'function') {
+        initCustomSelect('bookStudentSelect');
+      }
     }
 
     async function openSlotBookingModal(day, startTime, endTime) {
       ACTIVE_DAY = Number(day) || 1;
-      ACTIVE_START_TIME = startTime;
-      ACTIVE_END_TIME = endTime;
+      ACTIVE_START_TIME = (startTime || '14:00').slice(0, 5);
+      ACTIVE_END_TIME = (endTime || '14:30').slice(0, 5);
 
       await loadStudentsForBooking();
 
-      const occupiedDays = new Set(
-        (CURRENT_TEACHER_SCHEDULES || [])
-          .filter(s => String(s.start_time || '').slice(0, 5) === startTime)
-          .map(s => Number(s.day_of_week))
-      );
+      const startInput = document.getElementById('bookSlotStartTime');
+      const endInput = document.getElementById('bookSlotEndTime');
+      if (startInput) startInput.value = ACTIVE_START_TIME;
+      if (endInput) endInput.value = ACTIVE_END_TIME;
+
+      const zoomInput = document.getElementById('bookMeetingLink');
+      if (zoomInput && !zoomInput.value.trim() && CURRENT_MATRIX_TEACHER?.zoom_link) {
+        zoomInput.value = CURRENT_MATRIX_TEACHER.zoom_link;
+      }
 
       const checkboxes = Array.from(document.querySelectorAll('input[name="bookSlotWeekday"]'));
       checkboxes.forEach(cb => {
@@ -390,35 +614,34 @@
         cb.checked = (dNum === ACTIVE_DAY);
       });
       updateBookingWeekdaySelectionUI();
-
-      const hintEl = document.getElementById('bookSlotOccupiedHint');
-      if (hintEl) {
-        if (occupiedDays.size > 0) {
-          const occupiedLabels = Array.from(occupiedDays).sort((a, b) => a - b).map(d => DAY_NAMES[d]).join(', ');
-          hintEl.textContent = `Note: ${startTime} is already booked on: ${occupiedLabels}.`;
-          hintEl.classList.remove('hidden');
-        } else {
-          hintEl.textContent = '';
-          hintEl.classList.add('hidden');
-        }
-      }
-
-      const displayEl = document.getElementById('bookSlotDisplay');
-      if (displayEl) {
-        displayEl.value = `${DAY_NAMES[ACTIVE_DAY]} • ${startTime} to ${endTime} (30 Mins)`;
-      }
       openModal('modalBookSlot');
     }
 
     async function handleConfirmSlotBooking(e) {
       e.preventDefault();
       const student_id = document.getElementById('bookStudentSelect').value;
-      const meeting_link = document.getElementById('bookMeetingLink').value.trim();
+      const meeting_link = (document.getElementById('bookMeetingLink').value || '').trim() || (CURRENT_MATRIX_TEACHER?.zoom_link || '').trim();
+      const startTimeInput = (document.getElementById('bookSlotStartTime')?.value || ACTIVE_START_TIME || '').trim().slice(0, 5);
+      const endTimeInput = (document.getElementById('bookSlotEndTime')?.value || ACTIVE_END_TIME || '').trim().slice(0, 5);
 
       if (!student_id) {
         alert('Please select an active student from this teacher\'s Student List.');
         return;
       }
+
+      if (!startTimeInput || !endTimeInput) {
+        alert('Please specify both a valid Start Time and End Time.');
+        return;
+      }
+
+      const durationMins = getScheduleDurationMinutes(startTimeInput, endTimeInput);
+      if (durationMins <= 0) {
+        alert('Invalid Class Time Range: End Time must be after Start Time.');
+        return;
+      }
+
+      ACTIVE_START_TIME = startTimeInput;
+      ACTIVE_END_TIME = endTimeInput;
 
       const targetDays = Array.from(document.querySelectorAll('input[name="bookSlotWeekday"]:checked'))
         .map(cb => Number(cb.value))
@@ -475,16 +698,23 @@
         return;
       }
 
-      // Filter out any selected day where this exact teacher + day + start_time is already occupied
-      const existingOccupiedDays = new Set(
-        (CURRENT_TEACHER_SCHEDULES || [])
-          .filter(s => String(s.start_time || '').slice(0, 5) === ACTIVE_START_TIME)
-          .map(s => Number(s.day_of_week))
-      );
+      // Authoritative Conflict Check: check interval overlap across all selected days
+      await fetchTeacherSchedules();
+      const conflictingDetails = [];
+      const daysToInsert = [];
 
-      const daysToInsert = targetDays.filter(d => !existingOccupiedDays.has(d));
-      if (daysToInsert.length === 0) {
-        alert(`The ${ACTIVE_START_TIME} slot is already occupied on the selected day(s).`);
+      targetDays.forEach(d => {
+        const conflicts = findTeacherScheduleConflicts(CURRENT_TEACHER_SCHEDULES, d, ACTIVE_START_TIME, ACTIVE_END_TIME);
+        if (conflicts.length > 0) {
+          const first = conflicts[0];
+          conflictingDetails.push(`${DAY_NAMES[d]} (${first.studentName}: ${first.startTime} - ${first.endTime})`);
+        } else {
+          daysToInsert.push(d);
+        }
+      });
+
+      if (conflictingDetails.length > 0) {
+        alert(`Schedule Conflict Detected!\n\nThe requested class (${ACTIVE_START_TIME} - ${ACTIVE_END_TIME}, ${durationMins} mins) overlaps with an existing class for ${CURRENT_MATRIX_TEACHER.full_name}:\n• ${conflictingDetails.join('\n• ')}\n\nPlease choose a non-overlapping start/end time or deselect the conflicting day(s).`);
         return;
       }
 
@@ -517,6 +747,80 @@
       }
     }
 
+    function setSlotActionEditDuration(durationMinutes) {
+      const sInput = document.getElementById('slotActionEditStartTime');
+      const eInput = document.getElementById('slotActionEditEndTime');
+      if (!sInput || !eInput) return;
+      const startStr = (sInput.value || '14:00').slice(0, 5);
+      const startMin = parseScheduleTimeToMinutes(startStr, false);
+      const endMin = startMin + Number(durationMinutes || 30);
+      eInput.value = endMin >= 1440 ? '23:59' : formatMinutesToTime24(endMin);
+      onSlotActionEditTimeChange();
+    }
+
+    function onSlotActionEditTimeChange() {
+      const sInput = document.getElementById('slotActionEditStartTime');
+      const eInput = document.getElementById('slotActionEditEndTime');
+      const badge = document.getElementById('slotActionEditDurationBadge');
+      if (!sInput || !eInput || !badge) return;
+      const dur = getScheduleDurationMinutes(sInput.value, eInput.value);
+      if (dur <= 0) {
+        badge.textContent = 'Invalid (End <= Start)';
+        badge.className = 'px-2 py-0.5 rounded-full bg-rose-100 text-rose-800 font-mono font-extrabold text-[10px]';
+      } else {
+        badge.textContent = `${dur} Mins`;
+        badge.className = 'px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-900 font-mono font-extrabold text-[10px]';
+      }
+    }
+
+    async function executeUpdateSlotTimeAndZoom() {
+      if (!ACTIVE_SLOT_ACTION_CONTEXT || !ACTIVE_SLOT_ACTION_CONTEXT.scheduleId) return;
+      const newStart = (document.getElementById('slotActionEditStartTime')?.value || '').trim().slice(0, 5);
+      const newEnd = (document.getElementById('slotActionEditEndTime')?.value || '').trim().slice(0, 5);
+      const newZoom = (document.getElementById('slotActionEditZoomLink')?.value || '').trim();
+      const applyAll = Boolean(document.getElementById('slotActionEditApplyAllDays')?.checked);
+
+      const dur = getScheduleDurationMinutes(newStart, newEnd);
+      if (!newStart || !newEnd || dur <= 0) {
+        alert('Invalid Time Range: End Time must be after Start Time.');
+        return;
+      }
+
+      await fetchTeacherSchedules();
+      const { scheduleId, studentId, teacherId, dayOfWeek } = ACTIVE_SLOT_ACTION_CONTEXT;
+
+      const slotsToUpdate = applyAll
+        ? (CURRENT_TEACHER_SCHEDULES || []).filter(s => String(s.student_id) === String(studentId) && String(s.teacher_id) === String(teacherId))
+        : (CURRENT_TEACHER_SCHEDULES || []).filter(s => String(s.id) === String(scheduleId));
+
+      const ignoreIds = new Set(slotsToUpdate.map(s => String(s.id)));
+      const conflicts = [];
+      slotsToUpdate.forEach(s => {
+        const dayConflicts = findTeacherScheduleConflicts(CURRENT_TEACHER_SCHEDULES, s.day_of_week, newStart, newEnd, ignoreIds);
+        if (dayConflicts.length > 0) {
+          const first = dayConflicts[0];
+          conflicts.push(`${DAY_NAMES[Number(s.day_of_week)]} (${first.studentName}: ${first.startTime} - ${first.endTime})`);
+        }
+      });
+
+      if (conflicts.length > 0) {
+        alert(`Schedule Conflict Detected!\n\nCannot update to ${newStart} - ${newEnd} (${dur} mins) because it overlaps with:\n• ${conflicts.join('\n• ')}`);
+        return;
+      }
+
+      for (const s of slotsToUpdate) {
+        const payload = { start_time: newStart, end_time: newEnd };
+        if (newZoom) payload.meeting_link = newZoom;
+        await db.from('class_schedules').update(payload).eq('id', s.id);
+      }
+
+      closeModal('modalMatrixSlotActions');
+      await refreshMatrixAndSchedulesAfterDelete();
+      if (typeof lmsNotify === 'function') {
+        lmsNotify(`Updated class schedule to ${newStart} - ${newEnd} (${dur} Mins).`, { type: 'success', title: 'Schedule Updated' });
+      }
+    }
+
     function openMatrixSlotActionModal(scheduleId) {
       if (CURRENT_ROLE === 'manager') {
         alert("Access Denied: Managers are not authorized to permanently delete class schedule allocations. Only the System Owner can perform permanent deletions.");
@@ -530,6 +834,7 @@
       const dayLabel = DAY_NAMES[Number(slot.day_of_week)] || `Day ${slot.day_of_week}`;
       const startTime = String(slot.start_time || '').slice(0, 5);
       const endTime = String(slot.end_time || '').slice(0, 5);
+      const durMins = getScheduleDurationMinutes(startTime, endTime);
       const teacherName = CURRENT_MATRIX_TEACHER?.full_name || 'Assigned Teacher';
 
       ACTIVE_SLOT_ACTION_CONTEXT = {
@@ -549,13 +854,20 @@
       const teacherEl = document.getElementById('slotActionTeacherName');
       const singleDayLabelEl = document.getElementById('slotActionSingleDayLabel');
       const confirmMsgEl = document.getElementById('slotActionConfirmMessage');
+      const editStartEl = document.getElementById('slotActionEditStartTime');
+      const editEndEl = document.getElementById('slotActionEditEndTime');
+      const editZoomEl = document.getElementById('slotActionEditZoomLink');
 
       if (nameEl) nameEl.textContent = stuName;
       if (idEl) idEl.textContent = slot.student_id || '';
-      if (timeEl) timeEl.textContent = `${dayLabel} • ${startTime}${endTime ? ' - ' + endTime : ''}`;
+      if (timeEl) timeEl.textContent = `${dayLabel} • ${startTime}${endTime ? ' - ' + endTime : ''} (${durMins > 0 ? durMins + ' Mins' : '30 Mins'})`;
       if (teacherEl) teacherEl.textContent = teacherName;
-      if (singleDayLabelEl) singleDayLabelEl.textContent = `${dayLabel} (${startTime})`;
+      if (singleDayLabelEl) singleDayLabelEl.textContent = `${dayLabel} (${startTime} - ${endTime})`;
       if (confirmMsgEl) confirmMsgEl.textContent = `Delete all scheduled classes for ${stuName} with this teacher?`;
+      if (editStartEl) editStartEl.value = startTime;
+      if (editEndEl) editEndEl.value = endTime;
+      if (editZoomEl) editZoomEl.value = slot.meeting_link || CURRENT_MATRIX_TEACHER?.zoom_link || '';
+      onSlotActionEditTimeChange();
 
       cancelDeleteAllClassesConfirm();
       openModal('modalMatrixSlotActions');

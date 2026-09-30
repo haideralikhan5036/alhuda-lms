@@ -110,6 +110,217 @@
       };
     }
 
+    /**
+     * Parse month string (e.g. "September 2026" or "2026-09") into exact calendar bounds.
+     * Uses real calendar days in that month (28, 29, 30, or 31) — never hardcodes 30.
+     */
+    function parsePayrollMonthBounds(monthStr) {
+      const raw = String(monthStr || '').trim();
+      let year = new Date().getFullYear();
+      let monthIndex = new Date().getMonth(); // 0-indexed
+
+      const isoMatch = raw.match(/^(\d{4})-(\d{1,2})/);
+      if (isoMatch) {
+        year = parseInt(isoMatch[1], 10);
+        monthIndex = Math.max(0, Math.min(11, parseInt(isoMatch[2], 10) - 1));
+      } else {
+        const monthNames = [
+          'january', 'february', 'march', 'april', 'may', 'june',
+          'july', 'august', 'september', 'october', 'november', 'december'
+        ];
+        const lower = raw.toLowerCase();
+        for (let i = 0; i < monthNames.length; i++) {
+          if (lower.includes(monthNames[i]) || lower.includes(monthNames[i].slice(0, 3))) {
+            monthIndex = i;
+            break;
+          }
+        }
+        const yrMatch = raw.match(/\b(20\d{2})\b/);
+        if (yrMatch) {
+          year = parseInt(yrMatch[1], 10);
+        }
+      }
+
+      const daysInMonth = new Date(year, monthIndex + 1, 0).getDate();
+      const mm = String(monthIndex + 1).padStart(2, '0');
+      const firstDayStr = `${year}-${mm}-01`;
+      const lastDayStr = `${year}-${mm}-${String(daysInMonth).padStart(2, '0')}`;
+
+      return {
+        year,
+        monthIndex,
+        daysInMonth,
+        firstDayStr,
+        lastDayStr
+      };
+    }
+
+    /**
+     * Extract student metadata (joining_date, deactivation_date, previous_teacher_id_before_deactivation)
+     * from student record, JSON notes, and localStorage profile cache.
+     * IMPORTANT: Never uses class schedule creation date as joining date.
+     */
+    function extractStudentPayrollDates(student) {
+      if (!student) return { joiningDate: null, deactivationDate: null, previousTeacherId: null };
+      let notesObj = {};
+      if (student.notes && typeof student.notes === 'string') {
+        try { notesObj = JSON.parse(student.notes) || {}; } catch (e) { notesObj = {}; }
+      } else if (student.notes && typeof student.notes === 'object') {
+        notesObj = student.notes;
+      }
+
+      let cachedProfile = {};
+      try {
+        const profiles = JSON.parse(localStorage.getItem('alhuda_student_profiles') || '{}');
+        if (student.id && profiles[student.id]) {
+          cachedProfile = profiles[student.id];
+        }
+      } catch (e) {}
+
+      const rawJoining = student.joining_date || notesObj.joining_date || cachedProfile.joining_date || (student.created_at ? String(student.created_at).slice(0, 10) : null);
+      const joiningDate = (rawJoining && /^\d{4}-\d{2}-\d{2}/.test(String(rawJoining))) ? String(rawJoining).slice(0, 10) : null;
+
+      const isCurrentlyActive = String(student.status || '').toLowerCase() === 'active' && !student.deactivation_date;
+      const rawDeactivation = student.deactivation_date || (!isCurrentlyActive ? (notesObj.deactivation_date || cachedProfile.deactivation_date) : null);
+      const deactivationDate = (rawDeactivation && /^\d{4}-\d{2}-\d{2}/.test(String(rawDeactivation))) ? String(rawDeactivation).slice(0, 10) : null;
+
+      const previousTeacherId = student.previous_teacher_id_before_deactivation || notesObj.previous_teacher_id_before_deactivation || cachedProfile.previous_teacher_id_before_deactivation || null;
+
+      return { joiningDate, deactivationDate, previousTeacherId };
+    }
+
+    /**
+     * Calculate exact monthly salary proration for a student in a given calendar month.
+     * Formula:
+     *   Daily Rate = Monthly Rate / Days in Month
+     *   Calculated Salary = Daily Rate * Active Days
+     *
+     * Supports all 5 Master LMS Cases:
+     *   Case A: Active full month -> Full monthlyRate
+     *   Case B: Joined mid-month (e.g. 15th in 30-day month) -> 16 days paid
+     *   Case C: Deactivated mid-month (e.g. 10th in 30-day month) -> 10 days paid
+     *   Case D: Joined 12th, deactivated 20th in 30-day month -> 9 days paid
+     *   Case E: Inactive entire month -> 0 days paid (0 PKR)
+     */
+    function calculateStudentMonthlySalaryProration(student, monthlyRate, monthStr) {
+      const bounds = parsePayrollMonthBounds(monthStr);
+      const { daysInMonth, firstDayStr, lastDayStr } = bounds;
+      const fullRate = Number(monthlyRate) || 0;
+      const { joiningDate, deactivationDate } = extractStudentPayrollDates(student);
+
+      const statusLower = String(student?.status || '').toLowerCase();
+
+      // Case E checks:
+      // 1. Joined after the end of this calendar month
+      if (joiningDate && joiningDate > lastDayStr) {
+        return {
+          daysInMonth,
+          activeDays: 0,
+          startDay: null,
+          endDay: null,
+          joiningDate,
+          deactivationDate,
+          dailyRate: fullRate / daysInMonth,
+          fullRate,
+          proratedRate: 0,
+          isProrated: true,
+          prorationLabel: `0 / ${daysInMonth} Days (Joined ${joiningDate})`
+        };
+      }
+
+      // 2. Deactivated before the 1st of this calendar month
+      if (deactivationDate && deactivationDate < firstDayStr) {
+        return {
+          daysInMonth,
+          activeDays: 0,
+          startDay: null,
+          endDay: null,
+          joiningDate,
+          deactivationDate,
+          dailyRate: fullRate / daysInMonth,
+          fullRate,
+          proratedRate: 0,
+          isProrated: true,
+          prorationLabel: `0 / ${daysInMonth} Days (Deactivated ${deactivationDate})`
+        };
+      }
+
+      // 3. Marked Inactive/Left without any deactivation date in or after this month
+      if ((statusLower === 'inactive' || statusLower === 'left' || statusLower === 'deactivated') && !deactivationDate) {
+        return {
+          daysInMonth,
+          activeDays: 0,
+          startDay: null,
+          endDay: null,
+          joiningDate,
+          deactivationDate: null,
+          dailyRate: fullRate / daysInMonth,
+          fullRate,
+          proratedRate: 0,
+          isProrated: true,
+          prorationLabel: `0 / ${daysInMonth} Days (Inactive)`
+        };
+      }
+
+      // Effective start day within [1, daysInMonth]
+      let startDay = 1;
+      if (joiningDate && joiningDate >= firstDayStr && joiningDate <= lastDayStr) {
+        startDay = parseInt(joiningDate.slice(8, 10), 10) || 1;
+      }
+
+      // Effective end day within [1, daysInMonth]
+      let endDay = daysInMonth;
+      if (deactivationDate && deactivationDate >= firstDayStr && deactivationDate <= lastDayStr) {
+        endDay = parseInt(deactivationDate.slice(8, 10), 10) || daysInMonth;
+      }
+
+      if (endDay < startDay) {
+        return {
+          daysInMonth,
+          activeDays: 0,
+          startDay,
+          endDay,
+          joiningDate,
+          deactivationDate,
+          dailyRate: fullRate / daysInMonth,
+          fullRate,
+          proratedRate: 0,
+          isProrated: true,
+          prorationLabel: `0 / ${daysInMonth} Days`
+        };
+      }
+
+      const activeDays = endDay - startDay + 1;
+      const dailyRate = fullRate / daysInMonth;
+      const isFullMonth = activeDays >= daysInMonth;
+      const proratedRate = isFullMonth ? fullRate : Math.round(dailyRate * activeDays);
+
+      let prorationLabel = `${activeDays} / ${daysInMonth} Days (Full Month)`;
+      if (!isFullMonth) {
+        const reasons = [];
+        if (startDay > 1 && joiningDate) reasons.push(`Joined ${joiningDate}`);
+        if (endDay < daysInMonth && deactivationDate) reasons.push(`Deactivated ${deactivationDate}`);
+        prorationLabel = `${activeDays} / ${daysInMonth} Days${reasons.length ? ' • ' + reasons.join(', ') : ''}`;
+      }
+
+      return {
+        daysInMonth,
+        activeDays,
+        startDay,
+        endDay,
+        joiningDate,
+        deactivationDate,
+        dailyRate,
+        fullRate,
+        proratedRate,
+        isProrated: !isFullMonth,
+        prorationLabel
+      };
+    }
+
+    window.parsePayrollMonthBounds = parsePayrollMonthBounds;
+    window.calculateStudentMonthlySalaryProration = calculateStudentMonthlySalaryProration;
+
     async function calculateMonthlySalaries(forceRefresh = false) {
       const tbody = document.getElementById('salariesTableBody');
       if (!tbody) return;
@@ -173,85 +384,150 @@
         const acc = accounts[t.id] || {};
         const teacherIncrement = getTeacherSeniorityIncrement(t, acc);
 
-        // Find all active students for this teacher
-        // Method A: from schedules
-        const teacherScheds = (scheds || []).filter(s => s.teacher_id === t.id);
-        const studentIdsFromScheds = [...new Set(teacherScheds.map(s => s.student_id))];
-
-        // Method B: from students.assigned_teacher_id
-        const studentIdsFromStudents = (students || []).filter(s => s.assigned_teacher_id === t.id && s.status !== 'Trial').map(s => s.id);
-
-        const allStudentIds = [...new Set([...studentIdsFromScheds, ...studentIdsFromStudents])];
-
-        // Fetch student objects
-        const assignedStudents = allStudentIds.map(sid => {
-          const fromSched = teacherScheds.find(s => s.student_id === sid)?.students;
-          const fromStu = (students || []).find(s => s.id === sid);
-          return fromSched || fromStu || { id: sid, name: 'Student ' + sid };
-        }).filter(s => s && s.name);
-
-        if (assignedStudents.length > 0) activeTeachersCount++;
-        totalAssignedStudentsCount += assignedStudents.length;
-
-        // Compile student rate items
         const slipKey = `${t.id}_${selectedMonth.replace(/\s+/g, '_')}`;
         const savedSlip = savedSalaries[slipKey] || null;
 
-        let baseSubtotal = 0;
-        const studentRateItems = assignedStudents.map((stu, idx) => {
-          const stuScheds = teacherScheds.filter(s => s.student_id === stu.id);
-          const rateInfo = getStudentCourseSalaryRate(stu, stuScheds, teacherIncrement);
+        // Historical Month Protection:
+        // If this month's slip was already marked 'Paid' and has a finalized student snapshot,
+        // preserve the finalized historical record so later student deactivations never alter past paid months.
+        if (savedSlip && savedSlip.status === 'Paid' && Array.isArray(savedSlip.student_items_snapshot) && savedSlip.student_items_snapshot.length > 0) {
+          const studentRateItems = savedSlip.student_items_snapshot;
+          const baseSubtotal = savedSlip.base_subtotal !== undefined
+            ? (parseFloat(savedSlip.base_subtotal) || 0)
+            : studentRateItems.reduce((accSum, item) => accSum + (parseFloat(item.final_rate) || 0), 0);
+          const bonus = parseFloat(savedSlip.bonus) || 0;
+          const deduction = parseFloat(savedSlip.deduction) || 0;
+          const remarks = savedSlip.remarks || '';
+          const netPayable = Math.max(0, baseSubtotal + bonus - deduction);
 
-          // Check if admin custom edited this student's rate previously
-          let finalRate = rateInfo.finalRate;
-          if (savedSlip && savedSlip.students && savedSlip.students[stu.id] !== undefined) {
-            finalRate = parseFloat(savedSlip.students[stu.id]) || rateInfo.finalRate;
-          }
+          if (studentRateItems.length > 0) activeTeachersCount++;
+          totalAssignedStudentsCount += studentRateItems.length;
+          paidCount++;
+          totalGrossPayroll += netPayable;
 
-          baseSubtotal += finalRate;
-
-          return {
-            index: idx + 1,
-            student_id: stu.id,
-            student_name: stu.name,
-            course_label: rateInfo.courseLabel,
-            schedule_text: rateInfo.scheduleText,
-            base_rate: rateInfo.baseRate,
-            increment: teacherIncrement,
-            calculated_rate: rateInfo.finalRate,
-            final_rate: finalRate
+          const compiledSlip = {
+            teacher_id: t.id,
+            teacher_name: t.full_name,
+            phone: t.phone,
+            month: selectedMonth,
+            joining_date: acc.joining_date || (t.created_at ? t.created_at.slice(0, 10) : '2025-01-01'),
+            seniority_increment: teacherIncrement,
+            assigned_students: studentRateItems,
+            base_subtotal: baseSubtotal,
+            bonus,
+            deduction,
+            remarks,
+            net_payable: netPayable,
+            status: 'Paid',
+            slip_key: slipKey
           };
-        });
+          ALL_TEACHER_SALARIES[t.id] = compiledSlip;
+        } else {
+          // Find all students associated with this teacher (active or deactivated during/after this month)
+          // Method A: from schedules
+          const teacherScheds = (scheds || []).filter(s => s.teacher_id === t.id);
+          const studentIdsFromScheds = [...new Set(teacherScheds.map(s => s.student_id))];
 
-        // Bonuses and Deductions
-        const bonus = savedSlip ? (parseFloat(savedSlip.bonus) || 0) : 0;
-        const deduction = savedSlip ? (parseFloat(savedSlip.deduction) || 0) : 0;
-        const remarks = savedSlip ? (savedSlip.remarks || '') : '';
-        const netPayable = Math.max(0, baseSubtotal + bonus - deduction);
-        const status = savedSlip ? (savedSlip.status || 'Pending') : 'Pending';
+          // Method B: from students.assigned_teacher_id OR previous_teacher_id_before_deactivation
+          const studentIdsFromStudents = (students || []).filter(s => {
+            if (s.status === 'Trial') return false;
+            if (s.assigned_teacher_id === t.id) return true;
+            const { previousTeacherId } = extractStudentPayrollDates(s);
+            return previousTeacherId === t.id;
+          }).map(s => s.id);
 
-        if (status === 'Paid') paidCount++;
-        totalGrossPayroll += netPayable;
+          const allStudentIds = [...new Set([...studentIdsFromScheds, ...studentIdsFromStudents])];
 
-        // Store in global state
-        const compiledSlip = {
-          teacher_id: t.id,
-          teacher_name: t.full_name,
-          phone: t.phone,
-          month: selectedMonth,
-          joining_date: acc.joining_date || (t.created_at ? t.created_at.slice(0, 10) : '2025-01-01'),
-          seniority_increment: teacherIncrement,
-          assigned_students: studentRateItems,
-          base_subtotal: baseSubtotal,
-          bonus,
-          deduction,
-          remarks,
-          net_payable: netPayable,
-          status,
-          slip_key: slipKey
-        };
+          // Fetch student objects
+          const candidateStudents = allStudentIds.map(sid => {
+            const fromStu = (students || []).find(s => s.id === sid);
+            const fromSched = teacherScheds.find(s => s.student_id === sid)?.students;
+            return fromStu || fromSched || { id: sid, name: 'Student ' + sid };
+          }).filter(s => s && s.name);
 
-        ALL_TEACHER_SALARIES[t.id] = compiledSlip;
+          let baseSubtotal = 0;
+          const studentRateItems = [];
+
+          candidateStudents.forEach((stu) => {
+            const stuScheds = teacherScheds.filter(s => s.student_id === stu.id);
+            const rateInfo = getStudentCourseSalaryRate(stu, stuScheds, teacherIncrement);
+            const proration = calculateStudentMonthlySalaryProration(stu, rateInfo.finalRate, selectedMonth);
+
+            // If student was deactivated before this month started or joined after this month ended (activeDays === 0),
+            // skip from this month's active payroll unless currently assigned and admin manually set a custom override.
+            const hasManualOverride = Boolean(savedSlip && savedSlip.students && savedSlip.students[stu.id] !== undefined);
+            if (proration.activeDays === 0 && !hasManualOverride) {
+              return;
+            }
+
+            let finalRate = proration.proratedRate;
+            if (hasManualOverride) {
+              finalRate = parseFloat(savedSlip.students[stu.id]);
+              if (isNaN(finalRate)) finalRate = proration.proratedRate;
+            }
+
+            baseSubtotal += finalRate;
+
+            studentRateItems.push({
+              index: studentRateItems.length + 1,
+              student_id: stu.id,
+              student_name: stu.name,
+              course_label: rateInfo.courseLabel,
+              schedule_text: `${rateInfo.scheduleText} (${proration.prorationLabel})`,
+              proration_label: proration.prorationLabel,
+              active_days: proration.activeDays,
+              days_in_month: proration.daysInMonth,
+              joining_date: proration.joiningDate,
+              deactivation_date: proration.deactivationDate,
+              is_prorated: proration.isProrated,
+              base_rate: rateInfo.baseRate,
+              increment: teacherIncrement,
+              full_monthly_rate: rateInfo.finalRate,
+              calculated_rate: proration.proratedRate,
+              final_rate: finalRate
+            });
+          });
+
+          if (studentRateItems.length > 0) activeTeachersCount++;
+          totalAssignedStudentsCount += studentRateItems.length;
+
+          // Bonuses and Deductions
+          const bonus = savedSlip ? (parseFloat(savedSlip.bonus) || 0) : 0;
+          const deduction = savedSlip ? (parseFloat(savedSlip.deduction) || 0) : 0;
+          const remarks = savedSlip ? (savedSlip.remarks || '') : '';
+          const netPayable = Math.max(0, baseSubtotal + bonus - deduction);
+          const status = savedSlip ? (savedSlip.status || 'Pending') : 'Pending';
+
+          if (status === 'Paid') paidCount++;
+          totalGrossPayroll += netPayable;
+
+          const compiledSlip = {
+            teacher_id: t.id,
+            teacher_name: t.full_name,
+            phone: t.phone,
+            month: selectedMonth,
+            joining_date: acc.joining_date || (t.created_at ? t.created_at.slice(0, 10) : '2025-01-01'),
+            seniority_increment: teacherIncrement,
+            assigned_students: studentRateItems,
+            base_subtotal: baseSubtotal,
+            bonus,
+            deduction,
+            remarks,
+            net_payable: netPayable,
+            status,
+            slip_key: slipKey
+          };
+
+          ALL_TEACHER_SALARIES[t.id] = compiledSlip;
+        }
+
+        const compiledSlip = ALL_TEACHER_SALARIES[t.id];
+        const studentRateItems = compiledSlip.assigned_students || [];
+        const baseSubtotal = compiledSlip.base_subtotal;
+        const bonus = compiledSlip.bonus;
+        const deduction = compiledSlip.deduction;
+        const netPayable = compiledSlip.net_payable;
+        const status = compiledSlip.status;
 
         // Seniority text
         const yrs = Math.floor((new Date() - new Date(compiledSlip.joining_date)) / (365.25 * 24 * 3600 * 1000));
@@ -384,16 +660,29 @@
       const tbody = document.getElementById('slipStudentsTableBody');
       if (tbody) {
         if (!slipData.assigned_students || slipData.assigned_students.length === 0) {
-          tbody.innerHTML = '<tr><td colspan="6" class="p-6 text-center text-slate-400">No active students currently assigned to this teacher.</td></tr>';
+          tbody.innerHTML = '<tr><td colspan="6" class="p-6 text-center text-slate-400">No students assigned yet.</td></tr>';
         } else {
           tbody.innerHTML = slipData.assigned_students.map(s => {
+            const prorationBadge = s.proration_label
+              ? `<span class="inline-block mt-1 px-1.5 py-0.5 rounded text-[10px] font-bold ${s.is_prorated ? 'bg-amber-50 text-amber-800 border border-amber-200' : 'bg-emerald-50 text-emerald-800 border border-emerald-200'}">${s.proration_label}</span>`
+              : '';
+            const fullMonthlyRate = s.full_monthly_rate || (s.base_rate + (s.increment || 0));
             return `
               <tr class="hover:bg-slate-50">
                 <td class="p-2.5 font-mono text-slate-400 font-bold">${s.index}</td>
-                <td class="p-2.5 font-extrabold text-slate-900">${s.student_name}</td>
+                <td class="p-2.5 font-extrabold text-slate-900">
+                  <div>${s.student_name}</div>
+                  ${s.joining_date ? `<div class="text-[10px] font-normal text-slate-500">Joined: ${s.joining_date}${s.deactivation_date ? ' • Deactivated: ' + s.deactivation_date : ''}</div>` : ''}
+                </td>
                 <td class="p-2.5 font-bold text-brandDark">${s.course_label}</td>
-                <td class="p-2.5 text-slate-600">${s.schedule_text}</td>
-                <td class="p-2.5 font-mono text-slate-500">${s.base_rate} ${s.increment > 0 ? '+ ' + s.increment : ''} PKR</td>
+                <td class="p-2.5 text-slate-600 text-xs">
+                  <div>${s.schedule_text}</div>
+                  ${prorationBadge}
+                </td>
+                <td class="p-2.5 font-mono text-slate-500 text-xs">
+                  <div>${s.base_rate} ${s.increment > 0 ? '+ ' + s.increment : ''} PKR</div>
+                  ${s.is_prorated ? `<div class="text-[10px] text-amber-700 font-bold">Prorated: ${s.calculated_rate} / ${fullMonthlyRate} PKR</div>` : ''}
+                </td>
                 <td class="p-2.5 text-right">
                   <div class="inline-flex items-center gap-1">
                     <input type="number" class="slip-student-rate w-24 p-1.5 text-right font-mono font-black border border-emerald-400 rounded-lg text-brandDarkest bg-emerald-50/40 focus:bg-white focus:outline-brandEmerald text-xs" 
@@ -457,6 +746,11 @@
         editedStudentRates[sId] = parseFloat(inp.value) || 0;
       });
 
+      const studentItemsSnapshot = (CURRENT_SLIP_DATA.assigned_students || []).map(item => ({
+        ...item,
+        final_rate: editedStudentRates[item.student_id] !== undefined ? editedStudentRates[item.student_id] : item.final_rate
+      }));
+
       let savedSalaries = {};
       try {
         savedSalaries = JSON.parse(localStorage.getItem('alhuda_teacher_salaries') || '{}');
@@ -467,6 +761,7 @@
         teacher_id: CURRENT_SLIP_TEACHER_ID,
         month: CURRENT_SLIP_DATA.month,
         students: editedStudentRates,
+        student_items_snapshot: studentItemsSnapshot,
         base_subtotal: baseSubtotal,
         bonus,
         deduction,
@@ -525,6 +820,7 @@
       savedSalaries[slipKey] = {
         ...slipData,
         ...current,
+        student_items_snapshot: slipData.assigned_students || current.student_items_snapshot || [],
         status: newStatus,
         saved_at: new Date().toISOString()
       };

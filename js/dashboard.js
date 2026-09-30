@@ -17,17 +17,17 @@
     let ACTIVE_HOVER_SIGNUP_MONTH_IDX = 8; // Default Sep-2026
     let ACTIVE_HOVER_FEE_MONTH_IDX = 8;    // Default Sep-2026
 
-    // Baseline year-round monthly data (automatically augmented with live DB records)
+    // Real backend monthly data arrays (0 when no records exist — populated by updateDashboardAnalytics)
     const BASELINE_SIGNUP_DATA = {
-      trial:   [12, 15, 19, 26, 14, 23, 31, 24, 34, 18, 14, 10],
-      regular: [10, 14, 18, 27, 13, 23, 33, 24, 38, 16, 12,  9],
-      left:    [ 3,  4,  5, 23, 25, 14, 14, 19, 31,  5,  4,  2]
+      trial:   [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+      regular: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+      left:    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
     };
 
     const BASELINE_FEE_DATA = {
-      target:   [1800, 2100, 2500, 3200, 2800, 3500, 4200, 3900, 4800, 3600, 3200, 3000],
-      received: [1650, 1950, 2350, 2950, 2500, 3200, 3950, 3600, 4450, 3100, 2800, 2600],
-      pending:  [ 150,  150,  150,  250,  300,  300,  250,  300,  350,  500,  400,  400]
+      target:   [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+      received: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+      pending:  [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
     };
 
     function updateSignupsGraphCalloutBar(monthIdx) {
@@ -731,37 +731,108 @@
           if (teachers.length > 0) ALL_TEACHERS = teachers;
         }
 
-        const activeStudents = (students || []).filter(s => s.status !== 'Left' && s.status !== 'Inactive').length;
-        const leftStudents = (students || []).filter(s => s.status === 'Left' || s.status === 'Inactive').length;
+        const currentMonthIdx = new Date().getMonth();
 
-        let totalAgreedFee = 0;
-        (families || []).forEach(f => {
-          totalAgreedFee += Number(f.monthly_fee) || 0;
+        // Reset arrays to 0 before computing real backend metrics
+        for (let m = 0; m < 12; m++) {
+          BASELINE_SIGNUP_DATA.trial[m] = 0;
+          BASELINE_SIGNUP_DATA.regular[m] = 0;
+          BASELINE_SIGNUP_DATA.left[m] = 0;
+          BASELINE_FEE_DATA.target[m] = 0;
+          BASELINE_FEE_DATA.received[m] = 0;
+          BASELINE_FEE_DATA.pending[m] = 0;
+        }
+
+        const extractMonthIdx = (dateStr, fallbackIdx) => {
+          if (!dateStr) return fallbackIdx;
+          const d = new Date(dateStr);
+          if (!isNaN(d.getTime())) return d.getMonth();
+          return fallbackIdx;
+        };
+
+        // 1. Real Trials per Month
+        const trialsList = Array.isArray(window.ALL_TRIALS) ? window.ALL_TRIALS : [];
+        trialsList.forEach(tr => {
+          const mIdx = extractMonthIdx(tr.created_at || tr.trial_date || tr.date, currentMonthIdx);
+          if (mIdx >= 0 && mIdx < 12) BASELINE_SIGNUP_DATA.trial[mIdx]++;
         });
 
-        const currentMonthIdx = new Date().getMonth();
-        const trialCountNow = (ALL_TRIALS && ALL_TRIALS.length > 0) ? ALL_TRIALS.length : BASELINE_SIGNUP_DATA.trial[currentMonthIdx];
-        BASELINE_SIGNUP_DATA.trial[currentMonthIdx] = Math.max(trialCountNow, BASELINE_SIGNUP_DATA.trial[currentMonthIdx]);
-        BASELINE_SIGNUP_DATA.regular[currentMonthIdx] = Math.max(activeStudents, BASELINE_SIGNUP_DATA.regular[currentMonthIdx]);
-        BASELINE_SIGNUP_DATA.left[currentMonthIdx] = Math.max(leftStudents, BASELINE_SIGNUP_DATA.left[currentMonthIdx]);
+        // 2. Real Regular & Left Students per Month
+        (students || []).forEach(s => {
+          let pNotes = {};
+          try { if (s.notes) pNotes = typeof s.notes === 'string' ? JSON.parse(s.notes) : s.notes; } catch (e) {}
+          const statusLower = String(s.status || 'Active').toLowerCase();
+          const isLeft = statusLower === 'left' || statusLower === 'inactive' || statusLower === 'deactivated';
+          const isTrialOnly = statusLower === 'trial' && !pNotes.converted_from_trial;
+
+          if (isTrialOnly && trialsList.length === 0) {
+            const mIdx = extractMonthIdx(s.joining_date || pNotes.joining_date || s.created_at, currentMonthIdx);
+            if (mIdx >= 0 && mIdx < 12) BASELINE_SIGNUP_DATA.trial[mIdx]++;
+          } else if (isLeft) {
+            const deactDate = s.deactivation_date || pNotes.deactivation_date || pNotes.left_date || s.updated_at || s.created_at;
+            const mIdx = extractMonthIdx(deactDate, currentMonthIdx);
+            if (mIdx >= 0 && mIdx < 12) BASELINE_SIGNUP_DATA.left[mIdx]++;
+          } else {
+            const joinDate = s.joining_date || pNotes.joining_date || s.created_at;
+            const mIdx = extractMonthIdx(joinDate, currentMonthIdx);
+            if (mIdx >= 0 && mIdx < 12) BASELINE_SIGNUP_DATA.regular[mIdx]++;
+          }
+        });
+
+        // 3. Real Fee Target, Received, and Pending per Month
+        let totalAgreedFee = 0;
+        let currentMonthReceived = 0;
+        (families || []).forEach(f => {
+          const st = String(f.status || 'Active').toLowerCase();
+          if (st === 'inactive' || st === 'deactivated' || st === 'left') return;
+          const feeAmt = Number(f.monthly_fee) || 0;
+          totalAgreedFee += feeAmt;
+          let fNotes = {};
+          try { if (f.notes) fNotes = typeof f.notes === 'string' ? JSON.parse(f.notes) : f.notes; } catch (e) {}
+          if (Array.isArray(fNotes.fee_history)) {
+            fNotes.fee_history.forEach(fh => {
+              const mIdx = extractMonthIdx(fh.date, currentMonthIdx);
+              if (mIdx >= 0 && mIdx < 12) {
+                BASELINE_FEE_DATA.received[mIdx] += Number(fh.amountPaid || fh.amount || 0);
+              }
+            });
+          } else if (String(f.fee_status || '').toLowerCase() === 'paid') {
+            currentMonthReceived += feeAmt;
+          }
+        });
+
+        if (Array.isArray(window.ALL_FEE_COLLECTIONS) && window.ALL_FEE_COLLECTIONS.length > 0) {
+          window.ALL_FEE_COLLECTIONS.forEach(fc => {
+            const mIdx = extractMonthIdx(fc.payment_date || fc.created_at, currentMonthIdx);
+            if (mIdx >= 0 && mIdx < 12) {
+              BASELINE_FEE_DATA.received[mIdx] += Number(fc.amount_paid || fc.amount || 0);
+            }
+          });
+        } else if (BASELINE_FEE_DATA.received[currentMonthIdx] === 0 && currentMonthReceived > 0) {
+          BASELINE_FEE_DATA.received[currentMonthIdx] = currentMonthReceived;
+        }
+
         if (totalAgreedFee > 0) {
-          BASELINE_FEE_DATA.target[currentMonthIdx] = Math.max(totalAgreedFee, BASELINE_FEE_DATA.target[currentMonthIdx]);
+          BASELINE_FEE_DATA.target[currentMonthIdx] = totalAgreedFee;
+          BASELINE_FEE_DATA.pending[currentMonthIdx] = Math.max(0, totalAgreedFee - BASELINE_FEE_DATA.received[currentMonthIdx]);
         }
 
         const isEntranceAnimating = Date.now() < _dashGraphEntranceAnimatingUntil;
 
         if (DASH_STUDENT_CHART) {
-          DASH_STUDENT_CHART.data.datasets[0].data[currentMonthIdx] = BASELINE_SIGNUP_DATA.trial[currentMonthIdx];
-          DASH_STUDENT_CHART.data.datasets[1].data[currentMonthIdx] = BASELINE_SIGNUP_DATA.regular[currentMonthIdx];
-          DASH_STUDENT_CHART.data.datasets[2].data[currentMonthIdx] = BASELINE_SIGNUP_DATA.left[currentMonthIdx];
+          DASH_STUDENT_CHART.data.datasets[0].data = [...BASELINE_SIGNUP_DATA.trial];
+          DASH_STUDENT_CHART.data.datasets[1].data = [...BASELINE_SIGNUP_DATA.regular];
+          DASH_STUDENT_CHART.data.datasets[2].data = [...BASELINE_SIGNUP_DATA.left];
           if (!isEntranceAnimating) {
             DASH_STUDENT_CHART.update('none');
           }
           updateSignupsGraphCalloutBar(ACTIVE_HOVER_SIGNUP_MONTH_IDX);
         }
 
-        if (DASH_REVENUE_CHART && totalAgreedFee > 0) {
-          DASH_REVENUE_CHART.data.datasets[0].data[currentMonthIdx] = BASELINE_FEE_DATA.target[currentMonthIdx];
+        if (DASH_REVENUE_CHART) {
+          DASH_REVENUE_CHART.data.datasets[0].data = [...BASELINE_FEE_DATA.target];
+          DASH_REVENUE_CHART.data.datasets[1].data = [...BASELINE_FEE_DATA.received];
+          DASH_REVENUE_CHART.data.datasets[2].data = [...BASELINE_FEE_DATA.pending];
           if (!isEntranceAnimating) {
             DASH_REVENUE_CHART.update('none');
           }
@@ -2876,91 +2947,95 @@
         const realTeachers = (ALL_TEACHERS || []);
         const realFamilies = (ALL_FAMILIES || []);
 
-        realStudents.forEach((s, idx) => {
-          const fam = realFamilies.find(f => f.id === s.family_id);
-          const tch = realTeachers.find(t => t.id === s.assigned_teacher_id) || realTeachers[idx % Math.max(realTeachers.length, 1)];
-          if (category === 'left' && (s.status === 'Left' || s.status === 'Inactive')) {
+        realStudents.forEach((s) => {
+          let pNotes = {};
+          try { if (s.notes) pNotes = typeof s.notes === 'string' ? JSON.parse(s.notes) : s.notes; } catch (e) {}
+          const statusLower = String(s.status || 'Active').toLowerCase();
+          const isLeft = statusLower === 'left' || statusLower === 'inactive' || statusLower === 'deactivated';
+          const isTrial = statusLower === 'trial' && !pNotes.converted_from_trial;
+
+          const joinDateStr = s.joining_date || pNotes.joining_date || (s.created_at ? String(s.created_at).slice(0, 10) : '');
+          const deactDateStr = s.deactivation_date || pNotes.deactivation_date || pNotes.left_date || (s.updated_at ? String(s.updated_at).slice(0, 10) : joinDateStr);
+          const checkDateStr = category === 'left' ? deactDateStr : joinDateStr;
+
+          if (checkDateStr) {
+            const d = new Date(checkDateStr);
+            if (!isNaN(d.getTime()) && d.getMonth() !== safeIdx) return;
+          }
+
+          const fam = realFamilies.find(f => String(f.id) === String(s.family_id));
+          const tch = realTeachers.find(t => String(t.id) === String(s.assigned_teacher_id));
+          const parentDisplay = fam ? `${fam.parent_name} (${fam.id})` : (s.family_id || '-');
+          const teacherDisplay = tch ? tch.full_name : 'Unassigned';
+
+          if (category === 'left' && isLeft) {
             rows.push({
               id: s.id,
               name: s.name,
-              parent: fam ? `${fam.parent_name} (${fam.id})` : (s.family_id || 'FAM-001'),
-              course: s.course_id || 'Tajweed & Quran',
-              teacher: tch ? tch.full_name : 'Qari Abdul Rehman',
-              date: `2026-${monthNumStr}-${String((idx * 3 + 5) % 27 + 1).padStart(2, '0')}`,
+              parent: parentDisplay,
+              course: s.course_id || s.course || '-',
+              teacher: teacherDisplay,
+              date: deactDateStr || '-',
               isRealId: s.id
             });
-          } else if (category === 'regular' && s.status !== 'Left') {
+          } else if (category === 'regular' && !isLeft && !isTrial) {
             rows.push({
               id: s.id,
               name: s.name,
-              parent: fam ? `${fam.parent_name} (${fam.id})` : (s.family_id || 'FAM-001'),
-              course: s.course_id || 'Noorani Qaida & Nazra',
-              teacher: tch ? tch.full_name : 'Qari Abdul Rehman',
-              date: `2026-${monthNumStr}-${String((idx * 4 + 2) % 27 + 1).padStart(2, '0')}`,
+              parent: parentDisplay,
+              course: s.course_id || s.course || '-',
+              teacher: teacherDisplay,
+              date: joinDateStr || '-',
               isRealId: s.id
             });
-          } else if (category === 'trial') {
+          } else if (category === 'trial' && isTrial) {
             rows.push({
-              id: `TRL-${monthNumStr}${String(idx + 1).padStart(2, '0')}`,
+              id: s.id,
               name: s.name,
-              parent: fam ? `${fam.parent_name} (${fam.id})` : (s.family_id || 'FAM-001'),
-              course: s.course_id || 'Trial Evaluation',
-              teacher: tch ? tch.full_name : 'Qari Abdul Rehman',
-              date: `2026-${monthNumStr}-${String((idx * 2 + 3) % 27 + 1).padStart(2, '0')}`,
+              parent: parentDisplay,
+              course: s.course_id || s.course || 'Trial Evaluation',
+              teacher: teacherDisplay,
+              date: joinDateStr || '-',
               isRealId: s.id
             });
           }
         });
 
-        const sampleNames = [
-          ['Ahmed Raza', 'Tariq Mahmood'], ['Fatima Noor', 'Salman Siddiqui'], ['Yusuf Ali', 'Ali Hassan'],
-          ['Zainab Bibi', 'Bilal Farooq'], ['Ibrahim Khalil', 'Khalil Ur Rehman'], ['Maryam Zahra', 'Usman Ghani'],
-          ['Hamza Tariq', 'Nadeem Akhtar'], ['Aisha Siddiqa', 'Farhan Saeed'], ['Mustafa Kamal', 'Kamal Pasha'],
-          ['Khadija Tul Kubra', 'Waqas Ahmed'], ['Hassan Mujtaba', 'Zubair Alam'], ['Safiya Begum', 'Anwar Ul Haq']
-        ];
-        const sampleCourses = ['Noorani Qaida', 'Nazra Quran with Tajweed', 'Hifz-ul-Quran', 'Islamic Studies & Duas'];
-
-        const targetCount = Math.min(Math.max(metaConfig.targetTotal || 6, 4), 15);
-        let seedIdx = 0;
-        while (rows.length < targetCount) {
-          const pair = sampleNames[(safeIdx + seedIdx) % sampleNames.length];
-          const tch = realTeachers[seedIdx % Math.max(realTeachers.length, 1)];
-          const prefix = category === 'trial' ? 'TRL' : 'STD';
-          rows.push({
-            id: `${prefix}-${monthNumStr}${String(rows.length + 1).padStart(2, '0')}`,
-            name: pair[0],
-            parent: `${pair[1]} (FAM-${monthNumStr}${String(rows.length + 1).padStart(2, '0')})`,
-            course: sampleCourses[(safeIdx + seedIdx) % sampleCourses.length],
-            teacher: tch ? tch.full_name : 'Senior Quran Instructor',
-            date: `2026-${monthNumStr}-${String((seedIdx * 3 + 4) % 27 + 1).padStart(2, '0')}`,
-            isRealId: realStudents[0]?.id || null
-          });
-          seedIdx++;
-        }
-
         if (tbodyEl) {
-          tbodyEl.innerHTML = rows.map((r, i) => `
-            <tr class="hover:bg-slate-50 transition">
-              <td class="p-3 font-mono font-bold text-slate-400">${i + 1}</td>
-              <td class="p-3 font-mono font-black text-brandDark">${r.id}</td>
-              <td class="p-3 font-extrabold text-slate-900">
-                ${r.isRealId ? `<button onclick="closeModal('modalGraphMonthDrilldown'); openStudentDetailModal('${r.isRealId}')" class="hover:text-brandEmerald hover:underline text-left">${r.name}</button>` : r.name}
-              </td>
-              <td class="p-3 text-slate-700 font-semibold">${r.parent}</td>
-              <td class="p-3"><span class="px-2 py-0.5 rounded bg-slate-100 border border-slate-200 font-bold text-[11px] text-slate-700">${r.course}</span></td>
-              <td class="p-3 font-bold text-slate-700">${r.teacher}</td>
-              <td class="p-3 font-mono text-slate-600">${r.date}</td>
-              <td class="p-3">
-                <span class="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold border ${metaConfig.badgeClass}">
-                  ${metaConfig.statusLabel}
-                </span>
-              </td>
-            </tr>
-          `).join('');
+          if (rows.length === 0) {
+            tbodyEl.innerHTML = `
+              <tr>
+                <td colspan="8" class="p-8 text-center text-slate-400 font-bold text-xs">
+                  No data available yet.
+                </td>
+              </tr>
+            `;
+          } else {
+            tbodyEl.innerHTML = rows.map((r, i) => `
+              <tr class="hover:bg-slate-50 transition">
+                <td class="p-3 font-mono font-bold text-slate-400">${i + 1}</td>
+                <td class="p-3 font-mono font-black text-brandDark">${r.id}</td>
+                <td class="p-3 font-extrabold text-slate-900">
+                  ${r.isRealId ? `<button onclick="closeModal('modalGraphMonthDrilldown'); openStudentDetailModal('${r.isRealId}')" class="hover:text-brandEmerald hover:underline text-left">${r.name}</button>` : r.name}
+                </td>
+                <td class="p-3 text-slate-700 font-semibold">${r.parent}</td>
+                <td class="p-3"><span class="px-2 py-0.5 rounded bg-slate-100 border border-slate-200 font-bold text-[11px] text-slate-700">${r.course}</span></td>
+                <td class="p-3 font-bold text-slate-700">${r.teacher}</td>
+                <td class="p-3 font-mono text-slate-600">${r.date}</td>
+                <td class="p-3">
+                  <span class="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold border ${metaConfig.badgeClass}">
+                    ${metaConfig.statusLabel}
+                  </span>
+                </td>
+              </tr>
+            `).join('');
+          }
         }
 
         if (footerNoteEl) {
-          footerNoteEl.innerText = `Showing ${rows.length} verified records for ${metaConfig.title} (Total in Graph: ${metaConfig.targetTotal})`;
+          footerNoteEl.innerText = rows.length > 0
+            ? `Showing ${rows.length} verified records for ${metaConfig.title}`
+            : `No data available yet.`;
         }
 
       } else {
@@ -2999,11 +3074,7 @@
           `;
         }
 
-        const fams = (ALL_FAMILIES && ALL_FAMILIES.length > 0) ? ALL_FAMILIES : [
-          { id: 'FAM-001', parent_name: 'Imran Khan', country: 'United Kingdom', currency: 'USD', monthly_fee: 150 },
-          { id: 'FAM-002', parent_name: 'Tariq Mahmood', country: 'United States', currency: 'USD', monthly_fee: 180 },
-          { id: 'FAM-003', parent_name: 'Salman Siddiqui', country: 'Canada', currency: 'USD', monthly_fee: 140 }
-        ];
+        const fams = Array.isArray(ALL_FAMILIES) ? ALL_FAMILIES : [];
 
         const statusLabel = category === 'fee_pending' ? 'Pending Due' : 'Paid / Verified';
         const badgeCls = category === 'fee_pending'
@@ -3011,25 +3082,37 @@
           : 'bg-teal-100 text-teal-900 border-teal-300';
 
         if (tbodyEl) {
-          tbodyEl.innerHTML = fams.map((f, i) => `
-            <tr class="hover:bg-slate-50 transition">
-              <td class="p-3 font-mono font-bold text-slate-400">${i + 1}</td>
-              <td class="p-3 font-mono font-black text-brandDark">${f.id}</td>
-              <td class="p-3 font-extrabold text-slate-900">${f.parent_name}</td>
-              <td class="p-3 text-slate-600 font-semibold">${f.country || 'United States'}</td>
-              <td class="p-3 font-mono font-black text-emerald-800">${f.currency || 'USD'} ${f.monthly_fee || 150}</td>
-              <td class="p-3 font-mono text-slate-600">${monthLabel}</td>
-              <td class="p-3">
-                <span class="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold border ${badgeCls}">
-                  ${statusLabel}
-                </span>
-              </td>
-            </tr>
-          `).join('');
+          if (fams.length === 0) {
+            tbodyEl.innerHTML = `
+              <tr>
+                <td colspan="7" class="p-8 text-center text-slate-400 font-bold text-xs">
+                  No data available yet.
+                </td>
+              </tr>
+            `;
+          } else {
+            tbodyEl.innerHTML = fams.map((f, i) => `
+              <tr class="hover:bg-slate-50 transition">
+                <td class="p-3 font-mono font-bold text-slate-400">${i + 1}</td>
+                <td class="p-3 font-mono font-black text-brandDark">${f.id}</td>
+                <td class="p-3 font-extrabold text-slate-900">${f.parent_name}</td>
+                <td class="p-3 text-slate-600 font-semibold">${f.country || '-'}</td>
+                <td class="p-3 font-mono font-black text-emerald-800">${f.currency || 'USD'} ${f.monthly_fee ?? 0}</td>
+                <td class="p-3 font-mono text-slate-600">${monthLabel}</td>
+                <td class="p-3">
+                  <span class="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold border ${badgeCls}">
+                    ${f.fee_status || statusLabel}
+                  </span>
+                </td>
+              </tr>
+            `).join('');
+          }
         }
 
         if (footerNoteEl) {
-          footerNoteEl.innerText = `Showing ${fams.length} family billing records for ${monthLabel}`;
+          footerNoteEl.innerText = fams.length > 0
+            ? `Showing ${fams.length} family billing records for ${monthLabel}`
+            : `No data available yet.`;
         }
       }
 
