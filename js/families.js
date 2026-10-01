@@ -219,8 +219,10 @@
     }
 
     function prepareAddStudentModal(preselectedFamilyId = null) {
-      document.getElementById('stuName').value = '';
-      document.getElementById('stuAge').value = '8';
+      const nameInput = document.getElementById('stuName');
+      if (nameInput) nameInput.value = '';
+      const ageInput = document.getElementById('stuAge');
+      if (ageInput) ageInput.value = '8';
 
       const nextId = getNextStudentId();
       const badge = document.getElementById('stuGeneratedIdBadge');
@@ -231,16 +233,47 @@
       const famSelect = document.getElementById('stuFamilyId');
       if (famSelect) {
         const activeFamsOnly = (ALL_FAMILIES || []).filter(f => typeof isFamilyDeactivated === 'function' ? !isFamilyDeactivated(f) : !['inactive', 'deactivated'].includes(String(f.status || '').toLowerCase()));
-        famSelect.innerHTML = activeFamsOnly.map(f => `
-          <option value="${f.id}" ${f.id === preselectedFamilyId ? 'selected' : ''}>
-            ${f.parent_name} (${f.id} &bull; ${f.country})
-          </option>
-        `).join('');
+        let famsList = [...activeFamsOnly];
+
+        const targetFamKey = String(preselectedFamilyId || '').trim().toUpperCase();
+        if (targetFamKey) {
+          const preFam = (ALL_FAMILIES || []).find(f => String(f.id).trim().toUpperCase() === targetFamKey)
+                      || (window.RAW_ALL_FAMILIES || []).find(f => String(f.id).trim().toUpperCase() === targetFamKey);
+          if (preFam && !famsList.some(f => String(f.id).trim().toUpperCase() === targetFamKey)) {
+            famsList.unshift(preFam);
+          }
+        }
+
+        famSelect.innerHTML = famsList.map(f => {
+          const isMatch = targetFamKey && String(f.id).trim().toUpperCase() === targetFamKey;
+          return `
+            <option value="${f.id}" ${isMatch ? 'selected' : ''}>
+              ${f.parent_name} (${f.id} &bull; ${f.country || ''})
+            </option>
+          `;
+        }).join('');
+
+        if (targetFamKey) {
+          const matched = famsList.find(f => String(f.id).trim().toUpperCase() === targetFamKey);
+          if (matched) famSelect.value = matched.id;
+        }
       }
 
       const today = new Date().toISOString().split('T')[0];
       const jDateInput = document.getElementById('stuJoiningDate');
       if (jDateInput) jDateInput.value = today;
+
+      const courseSelect = document.getElementById('stuCourseSelect');
+      if (courseSelect) courseSelect.selectedIndex = 0;
+
+      const daysSelect = document.getElementById('stuDaysPerWeek');
+      if (daysSelect) daysSelect.selectedIndex = 0;
+
+      const langSelect = document.getElementById('stuLanguage');
+      if (langSelect) langSelect.value = 'English';
+
+      const genderSelect = document.getElementById('stuGender');
+      if (genderSelect) genderSelect.value = 'Male';
 
       const teacherSelect = document.getElementById('stuTeacherId');
       if (teacherSelect) {
@@ -254,9 +287,16 @@
         teacherSelect.onchange = updateStudentModalTeacherZoom;
       }
 
+      const btn = document.getElementById('btnSaveStudent');
+      if (btn) {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fa-solid fa-user-graduate"></i> Enroll Student';
+      }
+
       updateStudentModalTeacherZoom();
       openModal('modalAddStudent');
     }
+    window.prepareAddStudentModal = prepareAddStudentModal;
 
     function getCanonicalTeacherZoomLink(teacherId) {
       if (!teacherId) return '';
@@ -274,6 +314,17 @@
       }
       if (!zoomLink && teacher?.zoom_link) {
         zoomLink = teacher.zoom_link;
+      }
+      if (!zoomLink && teacher && teacher.notes) {
+        try {
+          const meta = typeof teacher.notes === 'string' ? JSON.parse(teacher.notes) : teacher.notes;
+          if (meta.zoom_link) zoomLink = meta.zoom_link;
+        } catch(e) {}
+      }
+      if (!zoomLink && teacher && (teacher.phone || teacher.full_name)) {
+        const cleanPhone = (teacher.phone || '').replace(/[^0-9]/g, '') || '9876543210';
+        const cleanName = (teacher.full_name || '').toLowerCase().replace(/[^a-z]/g, '') || 'classroom';
+        zoomLink = `https://zoom.us/j/${cleanPhone}?pwd=alhuda_${cleanName}`;
       }
       return (zoomLink || '').trim();
     }
@@ -432,153 +483,166 @@
       lmsNotify(`✅ Family Registered Successfully!\n\n👨‍👩‍👧 Family ID: ${id}\n👤 Parent Name: ${parent_name}\n📧 Email: ${email || 'Not Provided'}\n🌍 Location: ${city ? city + ', ' : ''}${country}\n💰 Agreed Fee: ${currency} ${monthly_fee}\n\n🔑 Parent Portal Login Credentials:\nUsername: ${username}\nPassword: ${password}\n\nParent can now log in to track children classes.${familyEmailNotice}`, { type: 'success' });
     }
 
+    let _IS_ENROLLING_STUDENT = false;
     async function handleSaveStudent(e) {
       e.preventDefault();
+      if (_IS_ENROLLING_STUDENT) return;
+      _IS_ENROLLING_STUDENT = true;
+
       const btn = document.getElementById('btnSaveStudent');
-      btn.disabled = true;
-      btn.innerText = 'Enrolling Student...';
-
-      const family_id = document.getElementById('stuFamilyId').value;
-      const name = (document.getElementById('stuName').value || '').trim();
-      const age = parseInt(document.getElementById('stuAge').value) || 7;
-      const gender = document.getElementById('stuGender').value;
-      const language = document.getElementById('stuLanguage').value;
-      const joining_date = document.getElementById('stuJoiningDate').value || new Date().toISOString().split('T')[0];
-      const course_id = document.getElementById('stuCourseSelect').value;
-      const days_per_week = document.getElementById('stuDaysPerWeek').value;
-      const assigned_teacher_id = document.getElementById('stuTeacherId').value || null;
-      const id = document.getElementById('stuGeneratedIdVal').value || getNextStudentId();
-
-      if (!name) {
-        lmsNotify("Please enter Student Full Name.", { type: 'warning' });
-        btn.disabled = false;
-        btn.innerText = 'Enroll Student';
-        return;
+      if (btn) {
+        btn.disabled = true;
+        btn.innerText = 'Enrolling Student...';
       }
 
-      if (!family_id) {
-        lmsNotify("Please select Family / Parent.", { type: 'warning' });
-        btn.disabled = false;
-        btn.innerText = 'Enroll Student';
-        return;
-      }
+      try {
+        const family_id = document.getElementById('stuFamilyId').value;
+        const name = (document.getElementById('stuName').value || '').trim();
+        const age = parseInt(document.getElementById('stuAge').value) || 7;
+        const gender = document.getElementById('stuGender').value;
+        const language = document.getElementById('stuLanguage').value;
+        const joining_date = document.getElementById('stuJoiningDate').value || new Date().toISOString().split('T')[0];
+        const course_id = document.getElementById('stuCourseSelect').value;
+        const days_per_week = document.getElementById('stuDaysPerWeek').value;
+        const assigned_teacher_id = document.getElementById('stuTeacherId').value || null;
+        const id = document.getElementById('stuGeneratedIdVal').value || getNextStudentId();
 
-      if (assigned_teacher_id && typeof validateEligibleTeacherBackend === 'function') {
-        const tchCheck = await validateEligibleTeacherBackend(assigned_teacher_id);
-        if (!tchCheck.valid) {
-          lmsNotify(tchCheck.reason, { type: 'error' });
-          btn.disabled = false;
-          btn.innerText = 'Enroll Student';
+        if (!name) {
+          lmsNotify("Please enter Student Full Name.", { type: 'warning' });
           return;
         }
-      }
 
-      const zoomInputVal = (document.getElementById('stuTeacherZoomLink')?.value || '').trim();
-      const teacherZoomCanonical = getCanonicalTeacherZoomLink(assigned_teacher_id);
-      const resolvedZoomLink = zoomInputVal || teacherZoomCanonical || '';
+        if (!family_id) {
+          lmsNotify("Please select Family / Parent.", { type: 'warning' });
+          return;
+        }
 
-      const notesMeta = JSON.stringify({
-        language,
-        days_per_week,
-        course_name: course_id,
-        course: course_id,
-        meeting_link: resolvedZoomLink,
-        zoom_link: resolvedZoomLink
-      });
-      const rawStudentRecord = {
-        id, family_id, name, age, gender, course_id, assigned_teacher_id, joining_date, notes: notesMeta, status: 'Active'
-      };
-      const { dbPayload } = (typeof buildStudentDatabasePayload === 'function')
-        ? buildStudentDatabasePayload(rawStudentRecord)
-        : { dbPayload: { ...rawStudentRecord, course_id: null } };
-
-      const { error: stuInsertErr } = await db.from('students').insert([dbPayload]);
-      if (stuInsertErr) {
-        lmsNotify('Failed to enroll student: ' + stuInsertErr.message, { type: 'error' });
-        btn.disabled = false;
-        btn.innerText = 'Enroll Student';
-        return;
-      }
-
-      // Cache student profile in localStorage with resolved meeting link
-      const profiles = JSON.parse(localStorage.getItem('alhuda_student_profiles') || '{}');
-      profiles[id] = { id, family_id, name, age, gender, language, joining_date, course_id, days_per_week, assigned_teacher_id, meeting_link: resolvedZoomLink };
-      localStorage.setItem('alhuda_student_profiles', JSON.stringify(profiles));
-
-      btn.disabled = false;
-      btn.innerText = 'Enroll Student';
-      closeModal('modalAddStudent');
-      if (typeof syncFamilyStatusFromStudentsBackend === 'function') {
-        await syncFamilyStatusFromStudentsBackend(family_id);
-      }
-      if (typeof invalidateCoreLmsDataCache === 'function') invalidateCoreLmsDataCache();
-      await loadFamiliesAndStudents(true);
-
-      // If Family 360 Workspace is currently open for this family, refresh it immediately
-      if (typeof _renderFamilyWorkspaceDOM === 'function' && window._CURRENT_360_STATE && String(window._CURRENT_360_STATE.familyId).toUpperCase() === String(family_id).toUpperCase()) {
-        const updatedFam = (ALL_FAMILIES || []).find(f => String(f.id).toUpperCase() === String(family_id).toUpperCase());
-        if (updatedFam) {
-          window._CURRENT_360_STATE.family = updatedFam;
-          if (Array.isArray(updatedFam.students)) {
-            const memRec = { ...rawStudentRecord, ...dbPayload };
-            if (!updatedFam.students.some(s => s.id === id)) updatedFam.students.push(memRec);
+        if (assigned_teacher_id && typeof validateEligibleTeacherBackend === 'function') {
+          const tchCheck = await validateEligibleTeacherBackend(assigned_teacher_id);
+          if (!tchCheck.valid) {
+            lmsNotify(tchCheck.reason, { type: 'error' });
+            return;
           }
         }
-        _renderFamilyWorkspaceDOM();
-      }
 
-      const assignedTeacher = (ALL_TEACHERS || []).find(t => String(t.id) === String(assigned_teacher_id));
-      const tName = assignedTeacher ? assignedTeacher.full_name : 'Not Assigned Yet';
-      const parentFam = (ALL_FAMILIES || []).find(f => String(f.id) === String(family_id));
-      const parentEmail = String(parentFam?.parent_email || parentFam?.email || '').trim();
-      const creds = parentFam ? getParentCreds(parentFam) : null;
+        const zoomInputVal = (document.getElementById('stuTeacherZoomLink')?.value || '').trim();
+        const teacherZoomCanonical = getCanonicalTeacherZoomLink(assigned_teacher_id);
+        const resolvedZoomLink = zoomInputVal || teacherZoomCanonical || '';
 
-      // Resolve real class schedule & Zoom link
-      const stuSchedules = (window.ALL_SCHEDULES || []).filter(sc => String(sc.student_id) === String(id));
-      let scheduleText = days_per_week ? `${days_per_week} (Timetable slot pending)` : 'No classes scheduled.';
-      let zoomLink = resolvedZoomLink || assignedTeacher?.zoom_link || '';
-      if (stuSchedules.length > 0) {
-        const daysMap = ['', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-        const daysStr = [...new Set(stuSchedules.map(sc => daysMap[sc.day_of_week] || '').filter(Boolean))].join(', ');
-        const st = (stuSchedules[0].start_time || '').slice(0, 5);
-        const et = (stuSchedules[0].end_time || '').slice(0, 5);
-        scheduleText = `${daysStr} @ ${st}${et ? ' - ' + et : ''} PKT`;
-        const schedZoom = stuSchedules.find(sc => sc.meeting_link)?.meeting_link;
-        if (schedZoom) zoomLink = schedZoom;
-      }
+        const notesMeta = JSON.stringify({
+          language,
+          days_per_week,
+          course_name: course_id,
+          course: course_id,
+          meeting_link: resolvedZoomLink,
+          zoom_link: resolvedZoomLink
+        });
+        const rawStudentRecord = {
+          id, family_id, name, age, gender, course_id, assigned_teacher_id, joining_date, notes: notesMeta, status: 'Active'
+        };
+        const { dbPayload } = (typeof buildStudentDatabasePayload === 'function')
+          ? buildStudentDatabasePayload(rawStudentRecord)
+          : { dbPayload: { ...rawStudentRecord, course_id: null } };
 
-      // Automatically send welcome email when parent email exists
-      let emailStatusSuffix = '';
-      if (parentEmail && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(parentEmail) && typeof autoSendWelcomeEmailOnCreation === 'function') {
-        try {
-          const emailRes = await autoSendWelcomeEmailOnCreation({
-            type: 'regular',
-            studentName: name,
-            parentName: parentFam?.parent_name || 'Parent / Guardian',
-            toEmail: parentEmail,
-            phone: parentFam?.whatsapp || '',
-            course: course_id || 'Not Assigned Yet',
-            teacherName: tName,
-            scheduleText: scheduleText,
-            zoomLink: zoomLink,
-            joiningDate: joining_date,
-            credentials: creds ? { username: creds.username, password: creds.password } : null
-          });
-          if (emailRes && emailRes.sent) {
-            emailStatusSuffix = `\n\n📧 Welcome email sent to ${parentEmail}.`;
+        const { error: stuInsertErr } = await db.from('students').insert([dbPayload]);
+        if (stuInsertErr) {
+          lmsNotify('Failed to enroll student: ' + stuInsertErr.message, { type: 'error' });
+          return;
+        }
+
+        // Cache student profile in localStorage with resolved meeting link
+        const profiles = JSON.parse(localStorage.getItem('alhuda_student_profiles') || '{}');
+        profiles[id] = { id, family_id, name, age, gender, language, joining_date, course_id, days_per_week, assigned_teacher_id, meeting_link: resolvedZoomLink };
+        localStorage.setItem('alhuda_student_profiles', JSON.stringify(profiles));
+
+        closeModal('modalAddStudent');
+
+        if (typeof syncFamilyStatusFromStudentsBackend === 'function') {
+          await syncFamilyStatusFromStudentsBackend(family_id);
+        }
+        if (typeof invalidateCoreLmsDataCache === 'function') invalidateCoreLmsDataCache();
+        await loadFamiliesAndStudents(true);
+
+        // If Family 360 Workspace is currently open for this family, refresh it immediately and select newly enrolled child
+        if (window._CURRENT_360_STATE && String(window._CURRENT_360_STATE.familyId).toUpperCase() === String(family_id).toUpperCase()) {
+          const updatedFam = (ALL_FAMILIES || []).find(f => String(f.id).toUpperCase() === String(family_id).toUpperCase());
+          if (updatedFam) {
+            window._CURRENT_360_STATE.family = updatedFam;
+            if (Array.isArray(updatedFam.students)) {
+              const memRec = { ...rawStudentRecord, ...dbPayload };
+              if (!updatedFam.students.some(s => String(s.id).toUpperCase() === String(id).toUpperCase())) {
+                updatedFam.students.push(memRec);
+              }
+            }
           }
-        } catch (err) {
-          console.warn('[Student Welcome Email]', err);
+          window._CURRENT_360_STATE.activeTab = 'students';
+          window._CURRENT_360_STATE.selectedStudentId = id;
+          window._CURRENT_360_STATE.studentDrawerOpen = true;
+          if (typeof _renderFamilyWorkspaceDOM === 'function') {
+            _renderFamilyWorkspaceDOM();
+          }
+        }
+
+        const assignedTeacher = (ALL_TEACHERS || []).find(t => String(t.id) === String(assigned_teacher_id));
+        const tName = assignedTeacher ? assignedTeacher.full_name : 'Not Assigned Yet';
+        const parentFam = (ALL_FAMILIES || []).find(f => String(f.id) === String(family_id));
+        const parentEmail = String(parentFam?.parent_email || parentFam?.email || '').trim();
+        const creds = parentFam ? getParentCreds(parentFam) : null;
+
+        // Resolve real class schedule & Zoom link
+        const stuSchedules = (window.ALL_SCHEDULES || []).filter(sc => String(sc.student_id) === String(id));
+        let scheduleText = days_per_week ? `${days_per_week} (Timetable slot pending)` : 'No classes scheduled.';
+        let zoomLink = resolvedZoomLink || assignedTeacher?.zoom_link || '';
+        if (stuSchedules.length > 0) {
+          const daysMap = ['', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+          const daysStr = [...new Set(stuSchedules.map(sc => daysMap[sc.day_of_week] || '').filter(Boolean))].join(', ');
+          const st = (stuSchedules[0].start_time || '').slice(0, 5);
+          const et = (stuSchedules[0].end_time || '').slice(0, 5);
+          scheduleText = `${daysStr} @ ${st}${et ? ' - ' + et : ''} PKT`;
+          const schedZoom = stuSchedules.find(sc => sc.meeting_link)?.meeting_link;
+          if (schedZoom) zoomLink = schedZoom;
+        }
+
+        // Automatically send welcome email when parent email exists
+        let emailStatusSuffix = '';
+        if (parentEmail && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(parentEmail) && typeof autoSendWelcomeEmailOnCreation === 'function') {
+          try {
+            const emailRes = await autoSendWelcomeEmailOnCreation({
+              type: 'regular',
+              studentName: name,
+              parentName: parentFam?.parent_name || 'Parent / Guardian',
+              toEmail: parentEmail,
+              phone: parentFam?.whatsapp || '',
+              course: course_id || 'Not Assigned Yet',
+              teacherName: tName,
+              scheduleText: scheduleText,
+              zoomLink: zoomLink,
+              joiningDate: joining_date,
+              credentials: creds ? { username: creds.username, password: creds.password } : null
+            });
+            if (emailRes && emailRes.sent) {
+              emailStatusSuffix = `\n\n📧 Welcome email sent to ${parentEmail}.`;
+            }
+          } catch (err) {
+            console.warn('[Student Welcome Email]', err);
+          }
+        }
+
+        let zoomNotice = '';
+        if (assigned_teacher_id && !resolvedZoomLink) {
+          zoomNotice = '\n\n⚠️ Note: Assigned teacher currently has no Zoom link configured. Please set up their Zoom Classroom in Teacher Profile.';
+        }
+
+        alert(`✅ Student Enrolled Successfully!\n\n🎓 Student: ${name} (${id})\n👨‍👩‍👧 Linked Family: ${family_id}\n📚 Course: ${course_id}\n📅 Days Preference: ${days_per_week}\n🗓️ Joining Date: ${joining_date}\n👨‍🏫 Assigned Teacher: ${tName}\n📹 Zoom Room: ${resolvedZoomLink || 'Pending Configuration'}\n\nStudent is now in Teacher's Student List. You can open Teacher's 2D Schedule to book timetable slots.${zoomNotice}${emailStatusSuffix}`);
+      } finally {
+        _IS_ENROLLING_STUDENT = false;
+        if (btn) {
+          btn.disabled = false;
+          btn.innerHTML = '<i class="fa-solid fa-user-graduate"></i> Enroll Student';
         }
       }
-
-      let zoomNotice = '';
-      if (assigned_teacher_id && !resolvedZoomLink) {
-        zoomNotice = '\n\n⚠️ Note: Assigned teacher currently has no Zoom link configured. Please set up their Zoom Classroom in Teacher Profile.';
-      }
-
-      alert(`✅ Student Enrolled Successfully!\n\n🎓 Student: ${name} (${id})\n👨‍👩‍👧 Linked Family: ${family_id}\n📚 Course: ${course_id}\n📅 Days Preference: ${days_per_week}\n🗓️ Joining Date: ${joining_date}\n👨‍🏫 Assigned Teacher: ${tName}\n📹 Zoom Room: ${resolvedZoomLink || 'Pending Configuration'}\n\nStudent is now in Teacher's Student List. You can open Teacher's 2D Schedule to book timetable slots.${zoomNotice}${emailStatusSuffix}`);
     }
+    window.handleSaveStudent = handleSaveStudent;
 
     function copyParentCredentials(user, pass) {
       const txt = `Al-Huda LMS Parent Portal\nUsername: ${user}\nPassword: ${pass}`;

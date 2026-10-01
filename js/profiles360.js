@@ -1961,7 +1961,12 @@ function _closeWorkspaceModal() {
 // Uses the single source of truth modalAddStudent and handleSaveStudent workflow
 // ============================================================================
 function openFamilyAddStudentModal(familyId) {
-  if (typeof prepareAddStudentModal === 'function') {
+  if (typeof _closeWorkspaceModal === 'function') {
+    _closeWorkspaceModal();
+  }
+  if (typeof window.prepareAddStudentModal === 'function') {
+    window.prepareAddStudentModal(familyId);
+  } else if (typeof prepareAddStudentModal === 'function') {
     prepareAddStudentModal(familyId);
   } else {
     console.error('prepareAddStudentModal canonical workflow not found.');
@@ -2230,6 +2235,24 @@ async function submitFamilyManualInvoiceForm(e, familyId) {
 // 2. Put ONLY Selected Student On Leave
 // 3. Deactivate ONLY Selected Student
 // ============================================================================
+function _updateEditStudentZoomLive(teacherId) {
+  const zoomInp = document.getElementById('fwEditStuZoom');
+  const badge = document.getElementById('fwEditStuZoomBadge');
+  if (!zoomInp) return;
+  const zoom = (typeof getCanonicalTeacherZoomLink === 'function') ? getCanonicalTeacherZoomLink(teacherId) : '';
+  zoomInp.value = zoom || '';
+  if (badge) {
+    if (zoom && /^https?:\/\//i.test(zoom)) {
+      badge.className = "text-[10px] px-2 py-0.5 rounded-full font-extrabold bg-emerald-100 text-emerald-800 border border-emerald-300";
+      badge.innerHTML = '<i class="fa-solid fa-circle-check text-emerald-600 mr-1"></i> Active Room Linked';
+    } else {
+      badge.className = "text-[10px] px-2 py-0.5 rounded-full font-extrabold bg-rose-100 text-rose-800 border border-rose-300";
+      badge.innerHTML = '<i class="fa-solid fa-triangle-exclamation text-rose-600 mr-1"></i> Missing Zoom Link';
+    }
+  }
+}
+window._updateEditStudentZoomLive = _updateEditStudentZoomLive;
+
 function openEditSingleStudentModal(familyId, studentId) {
   const family = (window.ALL_FAMILIES || []).find(f => String(f.id).toUpperCase() === String(familyId).toUpperCase());
   const student = (window.ALL_STUDENTS || []).find(s => String(s.id).toUpperCase() === String(studentId).toUpperCase());
@@ -2242,6 +2265,9 @@ function openEditSingleStudentModal(familyId, studentId) {
   const teacherOptions = eligibleTeachers.map(t =>
     `<option value="${_esc360(t.id)}" ${String(t.id) === String(student.assigned_teacher_id) ? 'selected' : ''}>${_esc360(t.full_name)}</option>`
   ).join('');
+
+  const currentTeacherId = student.assigned_teacher_id;
+  const initialZoom = (typeof getCanonicalTeacherZoomLink === 'function' ? getCanonicalTeacherZoomLink(currentTeacherId) : '') || stuMeta.zoom_link || stuMeta.meeting_link || '';
 
   _openWorkspaceModal(
     `Edit Student Information Only`,
@@ -2288,11 +2314,24 @@ function openEditSingleStudentModal(familyId, studentId) {
           </div>
           <div>
             <label class="font-extrabold text-slate-700 block mb-1">Assigned Teacher</label>
-            <select id="fwEditStuTeacher" class="w-full p-2.5 rounded-xl border border-slate-300 font-bold text-slate-800">
+            <select id="fwEditStuTeacher" onchange="_updateEditStudentZoomLive(this.value)" class="w-full p-2.5 rounded-xl border border-slate-300 font-bold text-slate-800">
               <option value="">-- No Teacher Assigned --</option>
               ${teacherOptions}
             </select>
           </div>
+        </div>
+
+        <!-- Teacher Zoom Classroom Auto-Sync Section -->
+        <div class="bg-slate-50 p-2.5 rounded-xl border border-slate-200">
+          <div class="flex items-center justify-between mb-1">
+            <label class="font-bold text-slate-700 text-xs flex items-center gap-1.5">
+              <i class="fa-solid fa-video text-emerald-600"></i> Teacher Zoom Classroom:
+            </label>
+            <span id="fwEditStuZoomBadge" class="text-[10px] px-2 py-0.5 rounded-full font-extrabold ${initialZoom ? 'bg-emerald-100 text-emerald-800 border border-emerald-300' : 'bg-rose-100 text-rose-800 border border-rose-300'}">
+              ${initialZoom ? '<i class="fa-solid fa-circle-check text-emerald-600 mr-1"></i> Active Room Linked' : '<i class="fa-solid fa-triangle-exclamation text-rose-600 mr-1"></i> Missing Zoom Link'}
+            </span>
+          </div>
+          <input type="text" id="fwEditStuZoom" readonly class="w-full p-2 border rounded-lg font-mono text-xs bg-white text-slate-800" value="${_esc360(initialZoom)}" placeholder="Teacher Zoom Classroom link auto-synced...">
         </div>
 
         <div>
@@ -2389,6 +2428,12 @@ async function submitEditSingleStudentForm(e, familyId, studentId) {
     }
   }
 
+  const inputZoom = (document.getElementById('fwEditStuZoom')?.value || '').trim();
+  const canonicalZoom = (typeof getCanonicalTeacherZoomLink === 'function') ? getCanonicalTeacherZoomLink(effectiveTeacherId) : '';
+  const finalZoomLink = inputZoom || canonicalZoom || stuMeta.zoom_link || stuMeta.meeting_link || '';
+  stuMeta.zoom_link = finalZoomLink;
+  stuMeta.meeting_link = finalZoomLink;
+
   await _saveStudentRecordBackend(student.id, {
     name,
     joining_date,
@@ -2399,6 +2444,16 @@ async function submitEditSingleStudentForm(e, familyId, studentId) {
     assigned_teacher_id: effectiveTeacherId,
     notes: JSON.stringify(stuMeta)
   });
+
+  try {
+    const profiles = JSON.parse(localStorage.getItem('alhuda_student_profiles') || '{}');
+    if (profiles[student.id]) {
+      profiles[student.id].meeting_link = finalZoomLink;
+      profiles[student.id].assigned_teacher_id = effectiveTeacherId;
+      profiles[student.id].course_id = course_id;
+      localStorage.setItem('alhuda_student_profiles', JSON.stringify(profiles));
+    }
+  } catch (err) {}
 
   if (effectiveTeacherId && typeof _TEACHER_360_MEM_CACHE === 'object') {
     delete _TEACHER_360_MEM_CACHE[String(effectiveTeacherId).toUpperCase()];
