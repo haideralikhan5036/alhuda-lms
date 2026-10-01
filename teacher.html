@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
@@ -6067,17 +6067,41 @@ Al-Huda Islamic Centre Management
 Official Accounts Email: ceoislamiccentre@gmail.com`;
 
           try {
-            if (typeof emailjs !== 'undefined' && window.EMAILJS_PUBLIC_KEY) {
+            if (typeof sendViaOfficialEmailRelay === 'function' || window.sendViaOfficialEmailRelay) {
+              const fn = window.sendViaOfficialEmailRelay || sendViaOfficialEmailRelay;
+              await fn({
+                to: parentEmail,
+                subject: emailSubject,
+                text: emailBody,
+                html: emailBody.replace(/\n/g, '<br/>'),
+                senderName: 'Al-Huda Islamic Centre (ceoislamiccentre@gmail.com)'
+              });
+              emailDispatched = true;
+            } else if (typeof emailjs !== 'undefined' && window.EMAILJS_PUBLIC_KEY) {
               await emailjs.send(window.EMAILJS_SERVICE_ID, window.EMAILJS_TEMPLATE_ID, {
-                to_email: parentEmail,
+                to: parentEmail,
                 subject: emailSubject,
                 message: emailBody,
                 from_name: 'Al-Huda Islamic Centre (ceoislamiccentre@gmail.com)'
               });
               emailDispatched = true;
+            } else {
+              await fetch('https://script.google.com/macros/s/AKfycbx5WjF-Cy23KwnXx4LoLciNz93MQZwvSoVOLj4hT8NwVQ8H2Pvn2k4w4QeVyvhNHygwEg/exec', {
+                method: 'POST',
+                mode: 'no-cors',
+                headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                body: JSON.stringify({
+                  to: parentEmail,
+                  subject: emailSubject,
+                  text: emailBody,
+                  html: emailBody.replace(/\n/g, '<br/>'),
+                  senderName: 'Al-Huda Islamic Centre (ceoislamiccentre@gmail.com)'
+                })
+              });
+              emailDispatched = true;
             }
           } catch(eJsErr) {
-            console.warn("Advance class emailjs dispatch notice:", eJsErr);
+            console.warn("Advance class email dispatch notice:", eJsErr);
           }
           emailDispatched = true;
         }

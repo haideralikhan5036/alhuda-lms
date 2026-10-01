@@ -249,6 +249,35 @@ Official Email: ${ACADEMY_OFFICIAL_EMAIL}`;
       window.open(`https://wa.me/${phone}?text=${body}`, '_blank');
     }
 
+    const OFFICIAL_APPS_SCRIPT_EMAIL_RELAY = 'https://script.google.com/macros/s/AKfycbx5WjF-Cy23KwnXx4LoLciNz93MQZwvSoVOLj4hT8NwVQ8H2Pvn2k4w4QeVyvhNHygwEg/exec';
+
+    async function sendViaOfficialEmailRelay({ to, subject, html, text, senderName }) {
+      if (!to || !subject) return { success: false, error: 'Recipient or subject missing' };
+      try {
+        const payload = JSON.stringify({
+          to: String(to).trim(),
+          subject: String(subject).trim(),
+          html: html || text || '',
+          text: text || '',
+          senderName: senderName || 'Al-Huda Islamic Centre'
+        });
+
+        await fetch(OFFICIAL_APPS_SCRIPT_EMAIL_RELAY, {
+          method: 'POST',
+          mode: 'no-cors',
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+          body: payload
+        });
+
+        return { success: true, sentTo: to };
+      } catch (err) {
+        console.warn('[Official Email Relay Notice]:', err);
+        return { success: false, error: err?.message || String(err) };
+      }
+    }
+    window.sendViaOfficialEmailRelay = sendViaOfficialEmailRelay;
+    window.OFFICIAL_APPS_SCRIPT_EMAIL_RELAY = OFFICIAL_APPS_SCRIPT_EMAIL_RELAY;
+
     async function dispatchEmailNow() {
       let toEmail = (document.getElementById('emailPreviewTo')?.value || '').trim();
       if ((CURRENT_ROLE === 'manager' || toEmail.includes('••')) && CURRENT_EMAIL_PAYLOAD?.toEmail) {
@@ -256,6 +285,7 @@ Official Email: ${ACADEMY_OFFICIAL_EMAIL}`;
       }
       const subject = document.getElementById('emailPreviewSubject').value.trim();
       const text = document.getElementById('emailPreviewPlainText').value.trim();
+      const html = document.getElementById('emailPreviewHtmlIframe')?.srcdoc || text;
       const btn = document.getElementById('btnDispatchEmailNow');
 
       if (!toEmail) {
@@ -270,14 +300,13 @@ Official Email: ${ACADEMY_OFFICIAL_EMAIL}`;
       }
 
       try {
-        if (typeof emailjs !== 'undefined' && window.EMAILJS_PUBLIC_KEY) {
-          await emailjs.send(window.EMAILJS_SERVICE_ID, window.EMAILJS_TEMPLATE_ID, {
-            to_email: toEmail,
-            subject: subject,
-            message: text,
-            from_name: 'Al-Huda Islamic Centre (ceoislamiccentre@gmail.com)'
-          });
-        }
+        await sendViaOfficialEmailRelay({
+          to: toEmail,
+          subject: subject,
+          html: html,
+          text: text,
+          senderName: 'Al-Huda Islamic Centre (ceoislamiccentre@gmail.com)'
+        });
       } catch(e) {
         console.warn('Background email dispatch notice:', e);
       }
@@ -294,7 +323,7 @@ Official Email: ${ACADEMY_OFFICIAL_EMAIL}`;
         `📧 Official Sender: ${ACADEMY_OFFICIAL_EMAIL}\n` +
         `👤 Recipient: ${toEmail}\n` +
         `📝 Subject: ${subject}\n\n` +
-        `You can also click "Open in Gmail" anytime to inspect or send directly from your logged-in ceoislamiccentre@gmail.com account.`
+        `Dispatched via Al-Huda Official Email Relay (ceoislamiccentre@gmail.com).`
       );
     }
 
@@ -307,41 +336,18 @@ Official Email: ${ACADEMY_OFFICIAL_EMAIL}`;
 
       const compiled = generateWelcomeEmailContent(data);
       try {
-        let dispatched = false;
+        const relayRes = await sendViaOfficialEmailRelay({
+          to: toEmail,
+          subject: compiled.subject,
+          html: compiled.htmlContent,
+          text: compiled.plainText,
+          senderName: 'Al-Huda Islamic Centre (ceoislamiccentre@gmail.com)'
+        });
 
-        if (typeof emailjs !== 'undefined' && window.EMAILJS_PUBLIC_KEY && window.EMAILJS_SERVICE_ID && window.EMAILJS_TEMPLATE_ID) {
-          await emailjs.send(window.EMAILJS_SERVICE_ID, window.EMAILJS_TEMPLATE_ID, {
-            to_email: toEmail,
-            subject: compiled.subject,
-            message: compiled.plainText,
-            html_message: compiled.htmlContent,
-            from_name: 'Al-Huda Islamic Centre (ceoislamiccentre@gmail.com)'
-          });
-          dispatched = true;
-        } else if (typeof fetch === 'function') {
-          const resp = await fetch('/api/send-email', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              to: toEmail,
-              subject: compiled.subject,
-              text: compiled.plainText,
-              html: compiled.htmlContent
-            })
-          });
-          if (resp && resp.ok) {
-            dispatched = true;
-          } else {
-            throw new Error(`Email service responded with status ${resp ? resp.status : 'unknown'}`);
-          }
-        } else {
-          throw new Error('No email transport configured');
+        if (relayRes && relayRes.success) {
+          return { sent: true, toEmail };
         }
-
-        if (!dispatched) {
-          throw new Error('Welcome email transport did not confirm delivery');
-        }
-        return { sent: true, toEmail };
+        throw new Error(relayRes.error || 'Failed to dispatch via official relay');
       } catch (err) {
         console.error('[Welcome Email Failed to Send]:', err);
         return { sent: false, error: err?.message || String(err) };

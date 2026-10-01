@@ -1154,7 +1154,16 @@ Official Accounts Email: ceoislamiccentre@gmail.com`;
       }
 
       try {
-        if (typeof emailjs !== 'undefined' && window.EMAILJS_PUBLIC_KEY) {
+        if (typeof sendViaOfficialEmailRelay === 'function' || window.sendViaOfficialEmailRelay) {
+          const fn = window.sendViaOfficialEmailRelay || sendViaOfficialEmailRelay;
+          await fn({
+            to: targetEmail,
+            subject: subject,
+            text: plainText,
+            html: plainText.replace(/\n/g, '<br/>'),
+            senderName: 'Al-Huda Islamic Centre Payroll (ceoislamiccentre@gmail.com)'
+          });
+        } else if (typeof emailjs !== 'undefined' && window.EMAILJS_PUBLIC_KEY) {
           await emailjs.send(window.EMAILJS_SERVICE_ID, window.EMAILJS_TEMPLATE_ID, {
             to_email: targetEmail,
             subject: subject,
@@ -1163,7 +1172,7 @@ Official Accounts Email: ceoislamiccentre@gmail.com`;
           });
         }
       } catch (eJsErr) {
-        console.warn('Salary slip emailjs dispatch notice:', eJsErr);
+        console.warn('Salary slip email dispatch notice:', eJsErr);
       }
 
       if (btn) {

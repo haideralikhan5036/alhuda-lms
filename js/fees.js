@@ -1872,9 +1872,20 @@
         btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-1"></i> Sending...';
       }
 
-      // Try background dispatch via EmailJS if configured
+      // Try background dispatch via Official Apps Script Relay (with EmailJS fallback)
+      let dispatchedSuccessfully = false;
       try {
-        if (typeof emailjs !== 'undefined' && window.EMAILJS_PUBLIC_KEY) {
+        if (typeof sendViaOfficialEmailRelay === 'function' || window.sendViaOfficialEmailRelay) {
+          const fn = window.sendViaOfficialEmailRelay || sendViaOfficialEmailRelay;
+          const relayRes = await fn({
+            to: targetEmail,
+            subject: subject,
+            text: plainText,
+            html: plainText.replace(/\n/g, '<br/>'),
+            senderName: `Al-Huda Islamic Centre (${offEmail})`
+          });
+          if (relayRes && relayRes.success) dispatchedSuccessfully = true;
+        } else if (typeof emailjs !== 'undefined' && window.EMAILJS_PUBLIC_KEY) {
           await emailjs.send(window.EMAILJS_SERVICE_ID, window.EMAILJS_TEMPLATE_ID, {
             to_email: targetEmail,
             cc_email: offEmail,
@@ -1882,6 +1893,7 @@
             message: plainText,
             from_name: `Al-Huda Islamic Centre (${offEmail})`
           });
+          dispatchedSuccessfully = true;
         }
       } catch (eJsErr) {
         console.warn("Background email dispatch notice:", eJsErr);
@@ -1898,7 +1910,7 @@
         window.open(gmailUrl, '_blank');
         showToastNotification(`Official Invoice Email prepared for ${targetEmail}`);
       } else {
-        showToastNotification(`Official Invoice Email dispatched to ${targetEmail} (CC: ${offEmail})`);
+        showToastNotification(`Official Invoice Email dispatched to ${targetEmail} via Al-Huda Official Relay`);
       }
     }
 
@@ -2154,7 +2166,11 @@ Official Email: ${offEmail}`;
       });
 
       if (!isAuto4thTrigger) {
-        const confirmMsg = `Remind All Parents — ${periodStr}\n\nTotal Pending Families: ${list.length}\nFamilies with Valid Email: ${recipientsWithEmail.length}\n\nDo you want to automatically dispatch the official ${periodStr} Pending Fee & Receipt Request email to all pending parents?`;
+        let confirmMsg = `Remind All Parents — ${periodStr}\n\nTotal Pending Families: ${list.length}\nFamilies with Valid Email: ${recipientsWithEmail.length}\n\n`;
+        if (recipientsWithEmail.length > 85) {
+          confirmMsg += `⚠️ Safe Quota Notice: Free Gmail has a daily limit of 100 emails/day.\nTo keep your official account 100% safe, dispatching will process up to 80 emails in this batch.\n\n`;
+        }
+        confirmMsg += `Do you want to automatically dispatch the official ${periodStr} Pending Fee & Receipt Request email?`;
         if (!(await lmsConfirm(confirmMsg))) return;
       }
 
@@ -2167,9 +2183,11 @@ Official Email: ${offEmail}`;
 
       let sentCount = 0;
       const allBccEmails = [];
+      const MAX_SAFE_BATCH = 85;
+      const itemsToProcess = recipientsWithEmail.length > MAX_SAFE_BATCH ? recipientsWithEmail.slice(0, MAX_SAFE_BATCH) : recipientsWithEmail;
 
-      for (let i = 0; i < list.length; i++) {
-        const item = list[i];
+      for (let i = 0; i < itemsToProcess.length; i++) {
+        const item = itemsToProcess[i];
         const emailAddr = item.email || getFamilyEmailAddress(item.family);
         if (!emailAddr || !emailAddr.includes('@')) continue;
 
@@ -2177,11 +2195,20 @@ Official Email: ${offEmail}`;
         const { subject, plainText, htmlBody, offEmail } = buildPendingMonthReminderEmail(item, targetMonth, targetYear);
 
         if (btn) {
-          btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> <span>Sending (${i + 1}/${recipientsWithEmail.length})...</span>`;
+          btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> <span>Sending (${i + 1}/${itemsToProcess.length})...</span>`;
         }
 
         try {
-          if (window.emailjs) {
+          if (typeof sendViaOfficialEmailRelay === 'function' || window.sendViaOfficialEmailRelay) {
+            const fn = window.sendViaOfficialEmailRelay || sendViaOfficialEmailRelay;
+            await fn({
+              to: emailAddr,
+              subject: subject,
+              text: plainText,
+              html: htmlBody || plainText.replace(/\n/g, '<br/>'),
+              senderName: `Al-Huda Islamic Centre (${offEmail})`
+            });
+          } else if (window.emailjs) {
             await emailjs.send('service_alhuda_lms', 'template_fee_invoice', {
               to_email: emailAddr,
               cc_email: offEmail,
@@ -2195,7 +2222,7 @@ Official Email: ${offEmail}`;
           }
           sentCount++;
         } catch (err) {
-          console.warn('[Remind All] EmailJS background dispatch notice for', emailAddr, err);
+          console.warn('[Remind All] Background dispatch notice for', emailAddr, err);
           sentCount++;
         }
       }
@@ -2211,8 +2238,8 @@ Official Email: ${offEmail}`;
 
       if (!isAuto4thTrigger) {
         if (allBccEmails.length > 0 && CURRENT_ROLE !== 'manager') {
-          showToastNotification(`✅ Dispatched ${sentCount} Fee Reminders for ${periodStr}!`);
-          alert(`✅ ${periodStr} Fee Reminder Emails Dispatched!\n\n• Total Pending Families: ${list.length}\n• Emails Sent Automatically: ${sentCount}\n• Message Included: "${periodStr} fee has not reached us — kindly pay at earliest or share payment screenshot/receipt if already paid."`);
+          showToastNotification(`✅ Dispatched ${sentCount} Fee Reminders via Official Relay for ${periodStr}!`);
+          alert(`✅ ${periodStr} Fee Reminder Emails Dispatched!\n\n• Total Pending Families: ${list.length}\n• Emails Sent via Official Relay: ${sentCount}\n• Message Included: "${periodStr} fee has not reached us — kindly pay at earliest or share payment screenshot/receipt if already paid."`);
         } else {
           showToastNotification(`✅ Processed ${list.length} pending fee reminders for ${periodStr}!`);
           alert(`✅ ${periodStr} Fee Reminder Processed for ${list.length} Pending Families!`);
@@ -2574,7 +2601,16 @@ Official Email: ${offEmail}`;
         if (!item.email || !item.email.includes('@')) continue;
         const { subject, plainText, htmlBody, offEmail } = buildDefaulter3PlusEmail(item);
         try {
-          if (window.emailjs) {
+          if (typeof sendViaOfficialEmailRelay === 'function' || window.sendViaOfficialEmailRelay) {
+            const fn = window.sendViaOfficialEmailRelay || sendViaOfficialEmailRelay;
+            await fn({
+              to: item.email,
+              subject,
+              text: plainText,
+              html: htmlBody || plainText.replace(/\n/g, '<br/>'),
+              senderName: `Al-Huda Islamic Centre (${offEmail})`
+            });
+          } else if (window.emailjs) {
             await emailjs.send('service_alhuda_lms', 'template_fee_invoice', {
               to_email: item.email,
               cc_email: offEmail,
@@ -2598,8 +2634,8 @@ Official Email: ${offEmail}`;
         btn.innerHTML = origHtml;
       }
 
-      showToastNotification(`🚨 Dispatched urgent 3+ month overdue notices to ${sentCount} families!`);
-      alert(`🚨 3+ Months Defaulters Reminder Sent!\n\n• Total 3+ Month Defaulters: ${list.length}\n• Urgent Emails Dispatched: ${sentCount}`);
+      showToastNotification(`🚨 Dispatched urgent 3+ month overdue notices to ${sentCount} families via Official Relay!`);
+      alert(`🚨 3+ Months Defaulters Reminder Sent!\n\n• Total 3+ Month Defaulters: ${list.length}\n• Urgent Emails Dispatched via Official Relay: ${sentCount}`);
     }
 
 

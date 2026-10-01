@@ -2073,18 +2073,29 @@ async function executeSendFamilyCustomEmail(e, familyId) {
   }
 
   try {
-    if (typeof emailjs !== 'undefined' && window.EMAILJS_PUBLIC_KEY) {
+    if (typeof sendViaOfficialEmailRelay === 'function' || window.sendViaOfficialEmailRelay) {
+      const fn = window.sendViaOfficialEmailRelay || sendViaOfficialEmailRelay;
+      await fn({
+        to: toEmail,
+        subject: subject,
+        text: body,
+        html: body.replace(/\n/g, '<br/>'),
+        senderName: 'Al-Huda Islamic Centre (ceoislamiccentre@gmail.com)'
+      });
+    } else if (typeof emailjs !== 'undefined' && window.EMAILJS_PUBLIC_KEY) {
       await emailjs.send(window.EMAILJS_SERVICE_ID, window.EMAILJS_TEMPLATE_ID, {
         to_email: toEmail,
         subject: subject,
         message: body,
-        from_name: 'Al-Huda Islamic Centre'
+        from_name: 'Al-Huda Islamic Centre (ceoislamiccentre@gmail.com)'
       });
     }
-  } catch (err) {}
+  } catch (err) {
+    console.warn('[360 Custom Email Notice]:', err);
+  }
 
   _closeWorkspaceModal();
-  _notify360(`Email sent to ${toEmail} and saved in Family communication logs.`);
+  _notify360(`Official email dispatched to ${toEmail} and saved in communication logs.`);
   _renderFamilyWorkspaceDOM();
 }
 
