@@ -18,10 +18,10 @@
   <!-- Tailwind CSS CDN -->
   <script src="https://cdn.tailwindcss.com"></script>
   <!-- Font Awesome 6 Icons -->
-  <!-- Modern Fonts & Icons (Inter, Outfit, Plus Jakarta Sans) -->
+  <!-- Modern Fonts & Icons (Cinzel, Inter, Outfit, Plus Jakarta Sans) -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Outfit:wght@500;600;700;800;900&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700;800;900&family=Inter:wght@400;500;600;700;800;900&family=Outfit:wght@500;600;700;800;900&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   
   <!-- Supabase JS Client & Cloudflare D1/R2 Universal Engine -->
@@ -37,13 +37,14 @@
           fontFamily: {
             sans: ['"Inter"', '"Plus Jakarta Sans"', '"Segoe UI"', 'system-ui', '-apple-system', 'sans-serif'],
             mono: ['"Plus Jakarta Sans"', '"Inter"', '"Segoe UI"', 'system-ui', 'sans-serif'],
-            num: ['"Plus Jakarta Sans"', '"Inter"', '"Segoe UI"', 'system-ui', 'sans-serif']
+            num: ['"Plus Jakarta Sans"', '"Inter"', '"Segoe UI"', 'system-ui', 'sans-serif'],
+            cinzel: ['"Cinzel"', 'serif']
           },
           colors: {
             brandDark: '#064e3b',
             brandDarkest: '#022c22',
             brandEmerald: '#059669',
-            brandGold: '#d97706',
+            brandGold: '#C5A880',
           }
         }
       }
@@ -259,7 +260,7 @@
 <body class="bg-slate-50 text-slate-800 font-sans min-h-screen flex flex-col antialiased">
 
   <!-- ================= TOP NAVIGATION BAR ================= -->
-  <header class="bg-brandDarkest text-white border-b border-brandDark/60 sticky top-0 z-50 shadow-md">
+  <header id="teacherTopHeader" class="hidden bg-brandDarkest text-white border-b border-brandDark/60 sticky top-0 z-50 shadow-md">
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
       
       <!-- Brand Crest & Title -->
@@ -269,11 +270,9 @@
           <i class="fa-solid fa-bars text-lg"></i>
         </button>
         <a href="index.html" class="flex items-center gap-2.5 group" title="Al-Huda Islamic Centre LMS">
-          <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-brandEmerald to-brandDark flex items-center justify-center text-white text-lg shadow-sm border border-emerald-400/20 group-hover:scale-105 transition">
-            <i class="fa-solid fa-mosque"></i>
-          </div>
+          <img src="alhuda_logo.jpg" alt="Al-Huda Logo" class="w-9 h-9 sm:w-10 sm:h-10 rounded-full border-2 border-brandGold object-cover shadow-sm bg-black shrink-0">
           <div>
-            <h1 class="font-extrabold text-sm sm:text-base tracking-wide text-white flex items-center gap-2">
+            <h1 class="font-cinzel text-xs sm:text-sm md:text-base font-bold tracking-wide text-white flex items-center gap-2 leading-tight">
               AL-HUDA ISLAMIC CENTRE
             </h1>
             <p class="text-[10px] text-emerald-300 font-semibold tracking-wider uppercase">
@@ -303,11 +302,16 @@
     </div>
   </header>
 
-  <!-- ================= MAIN CONTENT WRAPPER ================= -->
-  <main class="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 lg:p-8">
+  <!-- ================= 1. LOGIN SCREEN (WHEN NOT AUTHENTICATED) ================= -->
+  <div id="loginView" class="min-h-screen w-full flex flex-col justify-center items-center p-4 sm:p-6 bg-slate-900 bg-gradient-to-br from-slate-950 via-[#022c22] to-slate-900 text-slate-800">
+    <div class="max-w-md w-full my-auto">
 
-    <!-- ================= 1. LOGIN SCREEN (WHEN NOT AUTHENTICATED) ================= -->
-    <div id="loginView" class="max-w-md mx-auto my-10">
+      <!-- Center Brand Identity -->
+      <div class="text-center mb-6">
+        <img src="alhuda_logo.jpg" alt="Al-Huda Islamic Centre" class="w-16 h-16 sm:w-20 sm:h-20 rounded-full border-2 border-brandGold object-cover shadow-lg mx-auto mb-3 bg-black">
+        <h1 class="font-cinzel text-lg sm:text-xl font-extrabold text-white tracking-wide">AL-HUDA ISLAMIC CENTRE</h1>
+        <p class="text-xs text-amber-300 font-semibold tracking-wider uppercase mt-0.5">Teacher Operations Portal</p>
+      </div>
 
       <!-- Role Mismatch Alert (if user is currently logged in with another role) -->
       <div id="roleMismatchBanner" class="hidden mb-4 p-3.5 rounded-2xl bg-amber-50 border border-amber-300 text-amber-900 text-xs font-semibold shadow-xs">
@@ -321,18 +325,18 @@
       </div>
 
       <!-- Login Card -->
-      <div class="bg-white rounded-2xl shadow-xl border border-slate-200 overflow-hidden">
-        <div class="p-6 bg-gradient-to-br from-emerald-50/60 to-white border-b border-slate-100 flex items-center gap-3.5">
-          <div class="w-12 h-12 rounded-2xl bg-brandDark text-white flex items-center justify-center text-xl shadow-md">
-            <i class="fa-solid fa-chalkboard-user"></i>
+      <div class="bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden">
+        <div class="p-5 sm:p-6 bg-gradient-to-br from-amber-50/70 to-white border-b border-slate-100 flex items-center gap-3.5">
+          <div class="w-12 h-12 rounded-2xl bg-gradient-to-tr from-[#022c22] to-[#064e3b] text-brandGold flex items-center justify-center text-xl shadow-md border border-brandGold/40 shrink-0">
+            <i class="fa-solid fa-chalkboard-user text-brandGold"></i>
           </div>
           <div>
-            <h3 class="text-lg font-extrabold text-slate-900">Teacher Portal Login</h3>
+            <h2 class="text-base sm:text-lg font-extrabold text-slate-900">Teacher Portal Login</h2>
             <p class="text-xs text-slate-500">Sign in to access your authorized classes, roster &amp; Sabaq logs</p>
           </div>
         </div>
 
-        <div class="p-6">
+        <div class="p-5 sm:p-6">
           <!-- Error Alert Banner -->
           <div id="loginErrorMsg" class="hidden mb-4 p-3 bg-rose-50 border border-rose-200 text-rose-700 rounded-xl text-xs font-bold flex items-center gap-2">
             <i class="fa-solid fa-circle-exclamation"></i>
@@ -369,13 +373,39 @@
               </div>
             </div>
 
-            <button type="submit" id="btnSubmitLogin" class="w-full py-3 bg-brandDark text-white font-extrabold text-sm rounded-xl hover:bg-brandDarkest shadow-md transition-all flex items-center justify-center gap-2">
-              <i class="fa-solid fa-right-to-bracket"></i> Login to Teacher Portal
+            <button type="submit" id="btnSubmitLogin" class="w-full py-3 bg-gradient-to-r from-[#022c22] via-[#064e3b] to-[#047857] text-white font-extrabold text-sm rounded-xl hover:from-[#064e3b] hover:to-[#047857] shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer">
+              <i class="fa-solid fa-right-to-bracket text-brandGold"></i> Login to Teacher Portal
             </button>
           </form>
+
+          <!-- Other Portals Quick Navigation Links -->
+          <div class="mt-6 pt-4 border-t border-slate-200 text-center">
+            <span class="text-[11px] text-slate-500 block mb-2 font-medium">Looking for another portal?</span>
+            <div class="flex items-center justify-center gap-3 text-xs font-bold">
+              <a href="index.html" class="text-amber-700 hover:underline flex items-center gap-1">
+                <i class="fa-solid fa-crown"></i> Admin
+              </a>
+              <span class="text-slate-300">&bull;</span>
+              <a href="manager.html" class="text-indigo-700 hover:underline flex items-center gap-1">
+                <i class="fa-solid fa-user-shield"></i> Manager
+              </a>
+              <span class="text-slate-300">&bull;</span>
+              <a href="parent.html" class="text-emerald-700 hover:underline flex items-center gap-1">
+                <i class="fa-solid fa-users"></i> Parent
+              </a>
+            </div>
+          </div>
         </div>
       </div>
+
+      <p class="text-center text-xs text-slate-400 mt-6">
+        &copy; 2026 Al-Huda Islamic Centre. Authorized personnel only.
+      </p>
     </div>
+  </div>
+
+  <!-- ================= MAIN CONTENT WRAPPER ================= -->
+  <main id="teacherMainContainer" class="hidden flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 lg:p-8">
 
     <!-- ================= 2. TEACHER DASHBOARD VIEW (WHEN AUTHENTICATED) ================= -->
     <div id="dashboardView" class="hidden">
@@ -2148,6 +2178,8 @@
         return;
       }
       document.getElementById('loginView').classList.add('hidden');
+      document.getElementById('teacherTopHeader')?.classList.remove('hidden');
+      document.getElementById('teacherMainContainer')?.classList.remove('hidden');
       document.getElementById('dashboardView').classList.remove('hidden');
       
       const toggleSbBtn = document.getElementById('btnToggleTeacherSidebar');
@@ -2191,6 +2223,8 @@
     }
 
     function showLoginView() {
+      document.getElementById('teacherTopHeader')?.classList.add('hidden');
+      document.getElementById('teacherMainContainer')?.classList.add('hidden');
       document.getElementById('dashboardView').classList.add('hidden');
       document.getElementById('loginView').classList.remove('hidden');
       const toggleSbBtn = document.getElementById('btnToggleTeacherSidebar');

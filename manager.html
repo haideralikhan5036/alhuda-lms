@@ -5,13 +5,13 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Manager Portal Login — Al-Huda Islamic Centre LMS</title>
   <link rel="manifest" href="manifest.json">
-  <meta name="theme-color" content="#053344">
+  <meta name="theme-color" content="#064e3b">
   <link rel="apple-touch-icon" href="apple-touch-icon.png">
   <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
   <link rel="icon" type="image/png" sizes="64x64" href="favicon.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700;800;900&family=Inter:wght@400;500;600;700;800;900&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -22,11 +22,12 @@
         extend: {
           fontFamily: {
             sans: ['"Inter"', '"Plus Jakarta Sans"', 'system-ui', '-apple-system', 'sans-serif'],
-            mono: ['"Plus Jakarta Sans"', '"Inter"', 'system-ui', 'sans-serif']
+            mono: ['"Plus Jakarta Sans"', '"Inter"', 'system-ui', 'sans-serif'],
+            cinzel: ['"Cinzel"', 'serif']
           },
           colors: {
-            brandDark: '#084C63',
-            brandDarkest: '#053344',
+            brandDark: '#064e3b',
+            brandDarkest: '#022c22',
             brandGold: '#C5A880',
             brandEmerald: '#059669'
           }
@@ -35,35 +36,18 @@
     };
   </script>
 </head>
-<body class="bg-slate-50 text-slate-800 font-sans min-h-screen flex flex-col antialiased">
-
-  <!-- TOP HEADER -->
-  <header class="bg-brandDarkest text-white border-b border-brandDark/60 sticky top-0 z-50 shadow-md">
-    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
-      <div class="flex items-center gap-3">
-        <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-600 to-brandDark flex items-center justify-center text-brandGold text-lg shadow-sm border border-indigo-400/30">
-          <i class="fa-solid fa-user-shield"></i>
-        </div>
-        <div>
-          <h1 class="font-extrabold text-sm sm:text-base tracking-wide text-white">
-            AL-HUDA ISLAMIC CENTRE
-          </h1>
-          <p class="text-[10px] text-indigo-300 font-semibold tracking-wider uppercase">
-            Manager Operations Portal
-          </p>
-        </div>
-      </div>
-
-      <div class="hidden sm:flex items-center gap-1.5 px-3 py-1 rounded-lg bg-slate-900/80 border border-indigo-500/30 text-indigo-200 text-xs font-mono font-bold">
-        <i class="fa-regular fa-clock text-brandGold"></i>
-        <span id="liveClock">--:--:-- PKT</span>
-      </div>
-    </div>
-  </header>
+<body class="bg-slate-900 bg-gradient-to-br from-slate-950 via-[#022c22] to-slate-900 text-slate-800 font-sans min-h-screen flex flex-col justify-center items-center p-4 sm:p-6 antialiased">
 
   <!-- MAIN CONTENT: MANAGER LOGIN SCREEN -->
-  <main class="flex-1 flex flex-col justify-center items-center p-4 sm:p-6">
-    <div id="managerLoginContainer" class="max-w-md w-full my-6">
+  <main class="w-full flex flex-col justify-center items-center">
+    <div id="managerLoginContainer" class="max-w-md w-full my-auto">
+
+      <!-- Center Brand Identity -->
+      <div class="text-center mb-6">
+        <img src="alhuda_logo.jpg" alt="Al-Huda Islamic Centre" class="w-16 h-16 sm:w-20 sm:h-20 rounded-full border-2 border-brandGold object-cover shadow-lg mx-auto mb-3 bg-black">
+        <h1 class="font-cinzel text-lg sm:text-xl font-extrabold text-white tracking-wide">AL-HUDA ISLAMIC CENTRE</h1>
+        <p class="text-xs text-amber-300 font-semibold tracking-wider uppercase mt-0.5">Manager Operations Portal</p>
+      </div>
 
       <!-- Role Mismatch Alert -->
       <div id="mgrRoleMismatchBanner" class="hidden mb-4 p-3.5 rounded-2xl bg-amber-50 border border-amber-300 text-amber-900 text-xs font-semibold shadow-xs">
@@ -76,18 +60,18 @@
         </div>
       </div>
 
-      <div class="bg-white rounded-2xl shadow-xl border border-slate-200 overflow-hidden">
-        <div class="p-6 bg-gradient-to-br from-indigo-50/70 to-white border-b border-slate-100 flex items-center gap-3.5">
-          <div class="w-12 h-12 rounded-2xl bg-indigo-950 text-amber-400 flex items-center justify-center text-xl shadow-md border border-indigo-400/30">
-            <i class="fa-solid fa-user-shield"></i>
+      <div class="bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden">
+        <div class="p-5 sm:p-6 bg-gradient-to-br from-amber-50/70 to-white border-b border-slate-100 flex items-center gap-3.5">
+          <div class="w-12 h-12 rounded-2xl bg-gradient-to-tr from-[#022c22] to-[#064e3b] text-brandGold flex items-center justify-center text-xl shadow-md border border-brandGold/40 shrink-0">
+            <i class="fa-solid fa-user-shield text-brandGold"></i>
           </div>
           <div>
-            <h2 class="text-lg font-extrabold text-slate-900">Manager Portal Login</h2>
+            <h2 class="text-base sm:text-lg font-extrabold text-slate-900">Manager Portal Login</h2>
             <p class="text-xs text-slate-500">Authenticate with your personal Manager credentials</p>
           </div>
         </div>
 
-        <div class="p-6">
+        <div class="p-5 sm:p-6">
           <div id="mgrLoginErrorMsg" class="hidden mb-4 p-3 bg-rose-50 border border-rose-200 text-rose-700 rounded-xl text-xs font-bold flex items-center gap-2">
             <i class="fa-solid fa-circle-exclamation"></i>
             <span id="mgrLoginErrorText">Invalid username or password.</span>
@@ -101,36 +85,56 @@
               <div class="relative">
                 <i class="fa-solid fa-user-tie absolute left-3.5 top-3 text-slate-400"></i>
                 <input type="text" id="mgrLoginUsername" required placeholder="Enter Manager Username or ID (e.g. MGR-001)" autocomplete="username"
-                  class="w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-300 rounded-xl font-bold text-slate-900 focus:bg-white focus:outline-indigo-600 focus:border-indigo-600 text-xs">
+                  class="w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-300 rounded-xl font-bold text-slate-900 focus:bg-white focus:outline-brandEmerald focus:border-brandEmerald text-xs">
               </div>
             </div>
 
             <div>
-              <label class="block font-bold text-slate-700 mb-1.5">
-                Password <span class="text-rose-500">*</span>
-              </label>
+              <div class="flex items-center justify-between mb-1.5">
+                <label class="font-bold text-slate-700">
+                  Password <span class="text-rose-500">*</span>
+                </label>
+              </div>
               <div class="relative">
                 <i class="fa-solid fa-lock absolute left-3.5 top-3 text-slate-400"></i>
                 <input type="password" id="mgrLoginPassword" required placeholder="Enter your password" autocomplete="current-password"
-                  class="w-full pl-9 pr-10 py-2.5 bg-slate-50 border border-slate-300 rounded-xl font-bold text-slate-900 focus:bg-white focus:outline-indigo-600 focus:border-indigo-600 text-xs">
+                  class="w-full pl-9 pr-10 py-2.5 bg-slate-50 border border-slate-300 rounded-xl font-bold text-slate-900 focus:bg-white focus:outline-brandEmerald focus:border-brandEmerald text-xs">
                 <button type="button" onclick="toggleMgrPassVisibility()" class="absolute right-3 top-2.5 text-slate-400 hover:text-slate-700" title="Show / Hide Password">
                   <i id="mgrPassToggleIcon" class="fa-regular fa-eye"></i>
                 </button>
               </div>
             </div>
 
-            <button type="submit" id="btnSubmitMgrLogin" class="w-full py-3 bg-indigo-950 hover:bg-slate-900 text-white font-extrabold text-sm rounded-xl shadow-md transition-all flex items-center justify-center gap-2 border border-indigo-500/30">
-              <i class="fa-solid fa-right-to-bracket text-amber-400"></i> Login to Manager Portal
+            <button type="submit" id="btnSubmitMgrLogin" class="w-full py-3 bg-gradient-to-r from-[#022c22] via-[#064e3b] to-[#047857] text-white font-extrabold text-sm rounded-xl hover:from-[#064e3b] hover:to-[#047857] shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer">
+              <i class="fa-solid fa-right-to-bracket text-brandGold"></i> Login to Manager Portal
             </button>
           </form>
+
+          <!-- Other Portals Quick Navigation Links -->
+          <div class="mt-6 pt-4 border-t border-slate-200 text-center">
+            <span class="text-[11px] text-slate-500 block mb-2 font-medium">Looking for another portal?</span>
+            <div class="flex items-center justify-center gap-3 text-xs font-bold">
+              <a href="index.html" class="text-amber-700 hover:underline flex items-center gap-1">
+                <i class="fa-solid fa-crown"></i> Admin
+              </a>
+              <span class="text-slate-300">&bull;</span>
+              <a href="teacher.html" class="text-emerald-700 hover:underline flex items-center gap-1">
+                <i class="fa-solid fa-chalkboard-user"></i> Teacher
+              </a>
+              <span class="text-slate-300">&bull;</span>
+              <a href="parent.html" class="text-indigo-700 hover:underline flex items-center gap-1">
+                <i class="fa-solid fa-users"></i> Parent
+              </a>
+            </div>
+          </div>
         </div>
       </div>
+
+      <p class="text-center text-xs text-slate-400 mt-6">
+        &copy; 2026 Al-Huda Islamic Centre. Authorized personnel only.
+      </p>
     </div>
   </main>
-
-  <footer class="bg-white border-t border-slate-200 py-4 text-center text-xs text-slate-500 mt-auto">
-    <p>Al-Huda Islamic Centre LMS &copy; 2026. Role-Based Manager Security &amp; Contact Protection Active.</p>
-  </footer>
 
   <script>
     const SUPABASE_URL = "https://ldgzuyroejzrvktksugy.supabase.co";
