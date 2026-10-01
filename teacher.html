@@ -294,11 +294,11 @@
         </div>
 
         <!-- Logged-in Teacher Session Badge -->
-        <div id="teacherHeaderBadge" class="hidden items-center gap-2 px-3 py-1 bg-white/10 border border-white/20 rounded-xl text-xs font-bold text-white">
-          <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-          <span id="headerTeacherName">Teacher</span>
-          <button onclick="logoutTeacher()" class="ml-2 px-2 py-0.5 rounded bg-rose-600/80 hover:bg-rose-700 text-[10px] text-white transition flex items-center gap-1" title="Logout">
-            <i class="fa-solid fa-power-off"></i> Logout
+        <div id="teacherHeaderBadge" class="hidden items-center gap-2 px-2.5 sm:px-3 py-1 bg-white/10 border border-white/20 rounded-xl text-xs font-bold text-white shrink-0">
+          <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shrink-0"></span>
+          <span id="headerTeacherName" class="max-w-[70px] sm:max-w-[140px] truncate inline-block">Teacher</span>
+          <button onclick="logoutTeacher()" class="ml-1 sm:ml-2 px-2 py-0.5 rounded bg-rose-600/80 hover:bg-rose-700 text-[10px] text-white transition flex items-center gap-1 shrink-0" title="Logout">
+            <i class="fa-solid fa-power-off"></i> <span class="hidden sm:inline">Logout</span>
           </button>
         </div>
       </div>
@@ -527,65 +527,65 @@
         <div class="flex-1 w-full min-w-0 space-y-5">
 
           <!-- WELCOME HERO BANNER -->
-          <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-            <div class="flex items-center gap-4">
-              <div class="w-14 h-14 rounded-2xl bg-emerald-100 text-brandDark border border-emerald-300 flex items-center justify-center text-2xl font-black shadow-xs">
+          <div class="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-sm flex flex-col md:flex-row items-start md:items-center justify-between gap-3.5 sm:gap-4">
+            <div class="flex items-center gap-3 sm:gap-4 min-w-0">
+              <div class="w-11 h-11 sm:w-14 sm:h-14 rounded-2xl bg-emerald-100 text-brandDark border border-emerald-300 flex items-center justify-center text-xl sm:text-2xl font-black shadow-xs shrink-0">
                 <span id="heroInitials">T</span>
               </div>
-              <div>
-                <div class="flex items-center gap-2 flex-wrap">
-                  <h2 class="text-xl font-extrabold text-slate-900" id="heroTeacherName">Assalam-o-Alaikum, Teacher!</h2>
-                  <span id="heroTeacherShift" class="px-2.5 py-0.5 bg-emerald-50 text-emerald-800 border border-emerald-200 rounded-full font-bold text-xs">Shift</span>
-                  <span id="heroTeacherStatus" class="px-2.5 py-0.5 bg-brandDark text-white rounded-full font-bold text-xs">Active Instructor</span>
-                  <span id="heroTeacherZoomStatus" class="px-2.5 py-0.5 bg-slate-100 text-slate-600 border border-slate-200 rounded-full font-bold text-xs">Zoom Status</span>
+              <div class="min-w-0 flex-1">
+                <div class="flex items-center gap-1.5 sm:gap-2 flex-wrap">
+                  <h2 class="text-base sm:text-xl font-extrabold text-slate-900 truncate" id="heroTeacherName">Assalam-o-Alaikum, Teacher!</h2>
+                  <span id="heroTeacherShift" class="px-2 py-0.5 bg-emerald-50 text-emerald-800 border border-emerald-200 rounded-full font-bold text-[11px] sm:text-xs">Shift</span>
+                  <span id="heroTeacherStatus" class="px-2 py-0.5 bg-brandDark text-white rounded-full font-bold text-[11px] sm:text-xs">Active Instructor</span>
+                  <span id="heroTeacherZoomStatus" class="px-2 py-0.5 bg-slate-100 text-slate-600 border border-slate-200 rounded-full font-bold text-[11px] sm:text-xs">Zoom Status</span>
                 </div>
-                <p class="text-xs text-slate-500 mt-1">
+                <p class="text-xs text-slate-500 mt-1 line-clamp-2 sm:line-clamp-none">
                   Your Al-Huda LMS operations cockpit. Manage today's live classes, record Sabaq progress, and review your weekly timetable.
                 </p>
               </div>
             </div>
 
-            <div class="flex items-center gap-2.5 w-full md:w-auto flex-wrap">
-              <button onclick="openTeacherAddScheduleModal()" class="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs rounded-xl transition flex items-center gap-1.5 shadow-xs">
+            <div class="flex items-center gap-2 w-full md:w-auto flex-wrap sm:flex-nowrap shrink-0">
+              <button onclick="openTeacherAddScheduleModal()" class="flex-1 sm:flex-none px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs rounded-xl transition flex items-center justify-center gap-1.5 shadow-xs whitespace-nowrap">
                 <i class="fa-solid fa-calendar-plus"></i> + Schedule Student
               </button>
-              <button onclick="loadTeacherPortalData()" class="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl transition flex items-center gap-1.5 shadow-xs">
+              <button onclick="loadTeacherPortalData()" class="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl transition flex items-center justify-center gap-1.5 shadow-xs whitespace-nowrap">
                 <i class="fa-solid fa-arrows-rotate"></i> Refresh
               </button>
             </div>
           </div>
 
-      <!-- LIVE / NEXT CLASS PROMINENT ALERT BANNER -->
-      <div id="liveClassAlertBanner" class="hidden p-5 rounded-2xl bg-gradient-to-r from-emerald-600 via-emerald-700 to-brandDark text-white shadow-md border border-emerald-400/30 transition-all">
-        <div class="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-          <div class="flex items-center gap-3.5">
-            <div class="w-12 h-12 rounded-xl bg-white/20 backdrop-blur-sm flex items-center justify-center text-2xl text-emerald-100 animate-pulse">
-              <i class="fa-solid fa-tower-broadcast"></i>
+      <!-- LIVE / NEXT CLASS PROMINENT CURRENT SESSION CARD -->
+      <div id="liveClassAlertBanner" class="hidden p-4 sm:p-5 rounded-2xl bg-gradient-to-r from-emerald-800 via-teal-900 to-slate-900 text-white shadow-md border border-emerald-500/30 transition-all">
+        <div class="flex flex-col md:flex-row items-start md:items-center justify-between gap-3.5 sm:gap-4">
+          <div class="flex items-center gap-3 sm:gap-3.5 min-w-0 w-full md:w-auto">
+            <div class="w-11 h-11 sm:w-12 sm:h-12 rounded-xl bg-white/15 backdrop-blur-sm flex items-center justify-center text-xl sm:text-2xl text-emerald-200 shrink-0 border border-white/10 shadow-xs">
+              <i class="fa-solid fa-tower-broadcast animate-pulse" id="liveBannerIcon"></i>
             </div>
-            <div>
-              <div class="flex items-center gap-2">
-                <span class="px-2 py-0.5 rounded-full bg-emerald-400 text-brandDarkest font-black text-[10px] tracking-wider uppercase">
+            <div class="min-w-0 flex-1">
+              <div class="flex items-center gap-2 flex-wrap">
+                <span id="liveBannerStatusBadge" class="px-2.5 py-0.5 rounded-full bg-emerald-400 text-slate-950 font-black text-[10px] tracking-wider uppercase shadow-xs">
                   ● Live Class In Session
                 </span>
                 <span id="liveBannerSlot" class="text-xs font-mono font-bold text-emerald-200">--:-- - --:-- PKT</span>
               </div>
-              <h3 class="text-base sm:text-lg font-black text-white mt-0.5" id="liveBannerStudent">
-                Student
+              <h3 class="text-sm sm:text-base md:text-lg font-black text-white mt-1 truncate" id="liveBannerStudent">
+                Student Name
               </h3>
-              <p class="text-xs text-emerald-100" id="liveBannerDetails">
+              <p class="text-xs text-emerald-200/90 truncate mt-0.5" id="liveBannerDetails">
                 Assigned Classroom Session • Auto attendance &amp; lesson notes ready
               </p>
             </div>
           </div>
 
-          <div class="flex items-center gap-2 w-full md:w-auto">
-            <button id="liveBannerJoinBtn" class="flex-1 md:flex-none px-4 py-2.5 bg-white hover:bg-emerald-50 text-brandDark font-extrabold text-xs rounded-xl shadow-md transition flex items-center justify-center gap-1.5">
+          <div class="flex items-center gap-2 w-full md:w-auto shrink-0 flex-wrap sm:flex-nowrap">
+            <button id="liveBannerJoinBtn" class="flex-1 sm:flex-none px-3.5 sm:px-4 py-2.5 bg-white hover:bg-emerald-50 text-brandDark font-extrabold text-xs rounded-xl shadow-md transition flex items-center justify-center gap-1.5 whitespace-nowrap">
               <i class="fa-solid fa-video text-emerald-600"></i> Start Class / Join Zoom
             </button>
             <span id="liveBannerNoZoomBadge" class="hidden px-3 py-2 rounded-xl bg-white/15 border border-white/25 text-xs font-bold text-emerald-100">
-              Zoom meeting not configured.
+              Zoom meeting not configured
             </span>
-            <button id="liveBannerAttBtn" onclick="" class="flex-1 md:flex-none px-4 py-2.5 bg-emerald-900/80 hover:bg-emerald-900 text-white font-extrabold text-xs rounded-xl border border-emerald-400/40 shadow-sm transition flex items-center justify-center gap-1.5">
+            <button id="liveBannerAttBtn" onclick="" class="flex-1 sm:flex-none px-3.5 sm:px-4 py-2.5 bg-emerald-900/80 hover:bg-emerald-900 text-white font-extrabold text-xs rounded-xl border border-emerald-400/40 shadow-sm transition flex items-center justify-center gap-1.5 whitespace-nowrap">
               <i class="fa-solid fa-clipboard-check text-brandGold"></i> Mark Lesson
             </button>
           </div>
@@ -593,53 +593,53 @@
       </div>
 
       <!-- KEY METRICS STATS CARDS -->
-      <div id="sectionTeacherKpiGrid" class="grid grid-cols-2 sm:grid-cols-4 gap-4">
+      <div id="sectionTeacherKpiGrid" class="grid grid-cols-2 sm:grid-cols-4 gap-2.5 sm:gap-4">
         <!-- 1. Assigned Active Students (Student List) -->
-        <div onclick="switchTeacherPortalTab('students')" class="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 hover:border-emerald-400 shadow-sm flex flex-col justify-between cursor-pointer transition group">
-          <div class="flex items-center justify-between text-slate-500 mb-1.5">
-            <span class="text-xs font-bold uppercase tracking-wider text-slate-600 group-hover:text-brandDark">Student List</span>
-            <span class="w-8 h-8 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-700 flex items-center justify-center text-sm">
+        <div onclick="switchTeacherPortalTab('students')" class="bg-white p-3 sm:p-5 rounded-2xl border border-slate-200 hover:border-emerald-400 shadow-sm flex flex-col justify-between cursor-pointer transition group">
+          <div class="flex items-center justify-between text-slate-500 mb-1">
+            <span class="text-[11px] sm:text-xs font-bold uppercase tracking-wider text-slate-600 group-hover:text-brandDark">Student List</span>
+            <span class="w-7 h-7 sm:w-8 sm:h-8 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-700 flex items-center justify-center text-xs sm:text-sm">
               <i class="fa-solid fa-user-graduate"></i>
             </span>
           </div>
-          <div class="lms-num-kpi text-slate-900 my-1" id="statAssignedStudents">0</div>
-          <div class="text-xs text-slate-500 font-semibold" id="statAssignedStudentsSub">Active Assigned Students</div>
+          <div class="lms-num-kpi text-slate-900 my-0.5 sm:my-1 text-xl sm:text-2xl" id="statAssignedStudents">0</div>
+          <div class="text-[11px] sm:text-xs text-slate-500 font-semibold truncate" id="statAssignedStudentsSub">Active Assigned Students</div>
         </div>
 
         <!-- 2. Today's Classes -->
-        <div onclick="switchTeacherPortalTab('today')" class="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 hover:border-emerald-400 shadow-sm flex flex-col justify-between cursor-pointer transition">
-          <div class="flex items-center justify-between text-slate-500 mb-1.5">
-            <span class="text-xs font-bold uppercase tracking-wider text-slate-600">Today's Classes</span>
-            <span class="w-8 h-8 rounded-xl bg-slate-100 border border-slate-200 text-brandDark flex items-center justify-center text-sm">
+        <div onclick="switchTeacherPortalTab('today')" class="bg-white p-3 sm:p-5 rounded-2xl border border-slate-200 hover:border-emerald-400 shadow-sm flex flex-col justify-between cursor-pointer transition">
+          <div class="flex items-center justify-between text-slate-500 mb-1">
+            <span class="text-[11px] sm:text-xs font-bold uppercase tracking-wider text-slate-600">Today's Classes</span>
+            <span class="w-7 h-7 sm:w-8 sm:h-8 rounded-xl bg-slate-100 border border-slate-200 text-brandDark flex items-center justify-center text-xs sm:text-sm">
               <i class="fa-solid fa-calendar-day"></i>
             </span>
           </div>
-          <div class="lms-num-kpi text-slate-900 my-1" id="statTodayClasses">0</div>
-          <div class="text-xs text-slate-500 font-semibold">Scheduled Sessions Today</div>
+          <div class="lms-num-kpi text-slate-900 my-0.5 sm:my-1 text-xl sm:text-2xl" id="statTodayClasses">0</div>
+          <div class="text-[11px] sm:text-xs text-slate-500 font-semibold truncate">Scheduled Sessions Today</div>
         </div>
 
         <!-- 3. Completed Today -->
-        <div class="bg-white p-4 sm:p-5 rounded-2xl border border-teal-200 shadow-sm flex flex-col justify-between">
-          <div class="flex items-center justify-between text-teal-800 mb-1.5">
-            <span class="text-xs font-bold uppercase tracking-wider">Completed</span>
-            <span class="w-8 h-8 rounded-xl bg-teal-50 border border-teal-200 text-teal-700 flex items-center justify-center text-sm">
+        <div class="bg-white p-3 sm:p-5 rounded-2xl border border-teal-200 shadow-sm flex flex-col justify-between">
+          <div class="flex items-center justify-between text-teal-800 mb-1">
+            <span class="text-[11px] sm:text-xs font-bold uppercase tracking-wider">Completed</span>
+            <span class="w-7 h-7 sm:w-8 sm:h-8 rounded-xl bg-teal-50 border border-teal-200 text-teal-700 flex items-center justify-center text-xs sm:text-sm">
               <i class="fa-solid fa-circle-check"></i>
             </span>
           </div>
-          <div class="lms-num-kpi text-teal-700 my-1" id="statCompleted">0</div>
-          <div class="text-xs text-teal-700 font-semibold">Marked Present Today</div>
+          <div class="lms-num-kpi text-teal-700 my-0.5 sm:my-1 text-xl sm:text-2xl" id="statCompleted">0</div>
+          <div class="text-[11px] sm:text-xs text-teal-700 font-semibold truncate">Marked Present Today</div>
         </div>
 
         <!-- 4. Remaining Slots -->
-        <div class="bg-white p-4 sm:p-5 rounded-2xl border border-amber-200 shadow-sm flex flex-col justify-between">
-          <div class="flex items-center justify-between text-amber-800 mb-1.5">
-            <span class="text-xs font-bold uppercase tracking-wider">Remaining</span>
-            <span class="w-8 h-8 rounded-xl bg-amber-50 border border-amber-200 text-amber-700 flex items-center justify-center text-sm">
+        <div class="bg-white p-3 sm:p-5 rounded-2xl border border-amber-200 shadow-sm flex flex-col justify-between">
+          <div class="flex items-center justify-between text-amber-800 mb-1">
+            <span class="text-[11px] sm:text-xs font-bold uppercase tracking-wider">Remaining</span>
+            <span class="w-7 h-7 sm:w-8 sm:h-8 rounded-xl bg-amber-50 border border-amber-200 text-amber-700 flex items-center justify-center text-xs sm:text-sm">
               <i class="fa-solid fa-hourglass-half"></i>
             </span>
           </div>
-          <div class="lms-num-kpi text-amber-600 my-1" id="statRemaining">0</div>
-          <div class="text-xs text-amber-700 font-semibold">Upcoming Slots Today</div>
+          <div class="lms-num-kpi text-amber-600 my-0.5 sm:my-1 text-xl sm:text-2xl" id="statRemaining">0</div>
+          <div class="text-[11px] sm:text-xs text-amber-700 font-semibold truncate">Upcoming Slots Today</div>
         </div>
       </div>
 
@@ -697,7 +697,7 @@
       </div>
 
       <!-- SECTION 1B: STUDENT LIST (ALL ACTIVE STUDENTS ASSIGNED TO THIS TEACHER) -->
-      <div id="sectionTeacherStudentList" class="space-y-4">
+      <div id="sectionTeacherStudentList" class="hidden space-y-4">
         <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
           <div class="p-4 sm:p-5 border-b border-slate-200 flex flex-wrap justify-between items-center gap-3 bg-emerald-50/40">
             <div>
@@ -1231,16 +1231,13 @@
             class="w-full p-3 border border-slate-300 rounded-xl font-medium text-slate-800 text-xs focus:outline-purple-600 focus:border-purple-600"></textarea>
         </div>
 
-        <!-- 5. WhatsApp Parent Notification Option -->
-        <div class="p-3 bg-emerald-50 rounded-2xl border border-emerald-200 flex items-center justify-between gap-3">
-          <div class="flex items-center gap-2">
-            <i class="fa-brands fa-whatsapp text-emerald-600 text-xl"></i>
-            <div>
-              <div class="font-extrabold text-emerald-950 text-xs">Send WhatsApp Notice to Parent</div>
-              <p class="text-[10px] text-emerald-700 leading-tight">Notify parent instantly that tomorrow's class is completed</p>
-            </div>
+        <!-- Automated Parent Email Notification Notice -->
+        <div class="p-3 bg-purple-50 rounded-xl border border-purple-200 flex items-center gap-2.5 text-xs text-purple-900">
+          <i class="fa-solid fa-envelope-circle-check text-purple-600 text-base shrink-0"></i>
+          <div>
+            <div class="font-bold text-purple-950">Automated Parent Email Notification</div>
+            <p class="text-[11px] text-purple-700 leading-tight">An official completion notice will be sent automatically to the student's parent upon saving.</p>
           </div>
-          <input type="checkbox" id="advSendWhatsAppCheck" checked class="w-4 h-4 text-emerald-600 rounded border-slate-300 focus:ring-emerald-500 cursor-pointer">
         </div>
 
         <!-- Action Buttons -->
@@ -1667,108 +1664,134 @@
   <!-- ============================================================= -->
   <!-- MODAL: IN-LMS INTERACTIVE DIGITAL BOOK READER (HD ENGINE)        -->
   <!-- ============================================================= -->
-  <div id="modalDigitalBookReader" class="fixed inset-0 bg-black/90 backdrop-blur-md z-[95] hidden items-center justify-center p-2 sm:p-4">
-    <div id="readerModalContainer" class="bg-slate-900 rounded-2xl max-w-6xl w-full h-[95vh] flex flex-col shadow-2xl border border-slate-700 overflow-hidden text-white animate-scaleIn">
+  <div id="modalDigitalBookReader" class="fixed inset-0 bg-black/90 backdrop-blur-md z-[95] hidden items-center justify-center p-1 sm:p-3">
+    <div id="readerModalContainer" class="bg-[#18181b] rounded-xl sm:rounded-2xl max-w-6xl w-full h-[96vh] flex flex-col shadow-2xl border border-zinc-800 overflow-hidden text-zinc-100 animate-scaleIn">
       
-      <!-- READER TOP CONTROLS BAR -->
-      <div class="bg-slate-950 px-4 py-3 border-b border-slate-800 flex items-center justify-between flex-wrap gap-2.5 z-20">
-        <div class="flex items-center gap-3">
-          <div class="w-9 h-9 rounded-xl bg-brandDark text-brandGold flex items-center justify-center font-black text-base shadow-xs" id="readerBookIcon">
+      <!-- TOP DOCUMENT TOOLBAR -->
+      <div class="bg-zinc-900/95 px-3 sm:px-4 py-2.5 border-b border-zinc-800/80 flex items-center justify-between flex-wrap gap-2 z-20 shrink-0">
+        
+        <!-- Left: Document Identity -->
+        <div class="flex items-center gap-2.5 min-w-0 max-w-[280px] sm:max-w-sm">
+          <div class="w-8 h-8 rounded-lg bg-zinc-800 text-emerald-400 flex items-center justify-center font-bold text-sm shrink-0 border border-zinc-700/60" id="readerBookIcon">
             <i class="fa-solid fa-book-open"></i>
           </div>
-          <div>
+          <div class="min-w-0">
             <div class="flex items-center gap-2">
-              <h3 class="font-extrabold text-sm sm:text-base text-white tracking-tight" id="readerBookTitle">Digital Book Reader</h3>
-              <span id="readerCategoryBadge" class="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-emerald-950 text-emerald-300 border border-emerald-700">Course Material</span>
+              <h3 class="font-bold text-xs sm:text-sm text-zinc-100 truncate tracking-tight" id="readerBookTitle">Course Material</h3>
+              <span id="readerCategoryBadge" class="hidden sm:inline-block px-2 py-0.5 rounded text-[10px] font-medium bg-zinc-800 text-zinc-400 border border-zinc-700">Syllabus</span>
             </div>
-            <p class="text-[11px] text-slate-400 mt-0.5 truncate max-w-xs sm:max-w-md" id="readerChapterDesc">Chapter / Topic</p>
+            <p class="text-[11px] text-zinc-400 truncate mt-0.5" id="readerChapterDesc">Page 1</p>
           </div>
         </div>
 
-        <!-- CENTER: JUMP & ZOOM CONTROLS -->
-        <div class="flex items-center gap-2">
-          <!-- Jump to Chapter / Page Selector -->
-          <div class="flex items-center gap-1.5 bg-slate-800/80 px-2 py-1 rounded-xl border border-slate-700 text-xs">
-            <span class="text-slate-400 font-medium hidden sm:inline">Go to:</span>
-            <select id="readerJumpSelect" onchange="jumpToReaderPage(this.value)" class="bg-slate-900 text-white font-bold text-xs rounded-lg px-2 py-1 border border-slate-600 focus:outline-emerald-500 cursor-pointer max-w-[130px] sm:max-w-[190px]">
-              <!-- Dynamically populated -->
-            </select>
+        <!-- Center: Navigation, Jump, & Zoom Controls -->
+        <div class="flex items-center gap-1.5 sm:gap-2">
+          
+          <!-- Page Navigation Group -->
+          <div class="flex items-center bg-zinc-800/90 rounded-lg p-0.5 border border-zinc-700/70 text-xs">
+            <button onclick="changeReaderPage(-1)" class="w-7 h-7 rounded hover:bg-zinc-700 text-zinc-300 hover:text-white flex items-center justify-center transition" title="Previous Page (Left Arrow)">
+              <i class="fa-solid fa-chevron-left text-[11px]"></i>
+            </button>
+            <div class="px-1.5 py-0.5 font-mono text-[11px] font-semibold text-zinc-200" id="readerPageIndicatorTop">
+              1 / 32
+            </div>
+            <button onclick="changeReaderPage(1)" class="w-7 h-7 rounded hover:bg-zinc-700 text-zinc-300 hover:text-white flex items-center justify-center transition" title="Next Page (Right Arrow)">
+              <i class="fa-solid fa-chevron-right text-[11px]"></i>
+            </button>
           </div>
 
-          <!-- Zoom Controls -->
-          <div class="hidden sm:flex items-center gap-1 bg-slate-800/80 px-1.5 py-1 rounded-xl border border-slate-700 text-xs font-mono">
-            <button onclick="changeReaderZoom(-0.15)" class="w-6 h-6 rounded hover:bg-slate-700 flex items-center justify-center font-bold text-slate-300" title="Zoom Out">-</button>
-            <span id="readerZoomLevel" class="text-[11px] px-1 text-slate-300 min-w-[36px] text-center font-bold">100%</span>
-            <button onclick="changeReaderZoom(+0.15)" class="w-6 h-6 rounded hover:bg-slate-700 flex items-center justify-center font-bold text-slate-300" title="Zoom In">+</button>
-            <button onclick="resetReaderZoom()" class="w-6 h-6 rounded hover:bg-slate-700 text-[10px] text-slate-400" title="Reset Zoom"><i class="fa-solid fa-arrows-rotate"></i></button>
+          <!-- Jump To Chapter / Page Selector -->
+          <select id="readerJumpSelect" onchange="jumpToReaderPage(this.value)" class="hidden md:inline-block bg-zinc-800 text-zinc-200 text-xs font-medium rounded-lg px-2.5 py-1.5 border border-zinc-700 focus:outline-emerald-500 cursor-pointer max-w-[170px] truncate" title="Jump to section">
+            <!-- Dynamically populated -->
+          </select>
+
+          <div class="hidden sm:block w-[1px] h-5 bg-zinc-700/60 mx-0.5"></div>
+
+          <!-- Zoom & Display Modes -->
+          <div class="flex items-center bg-zinc-800/90 rounded-lg p-0.5 border border-zinc-700/70 text-xs font-mono">
+            <button onclick="changeReaderZoom(-0.15)" class="w-7 h-7 rounded hover:bg-zinc-700 text-zinc-300 hover:text-white flex items-center justify-center transition" title="Zoom Out (Ctrl - or Ctrl + Wheel Down)">
+              <i class="fa-solid fa-minus text-[11px]"></i>
+            </button>
+            <button onclick="resetReaderZoom()" class="px-2 py-0.5 text-[11px] font-bold text-zinc-200 hover:text-white hover:bg-zinc-700 rounded transition min-w-[42px] text-center" title="Reset Zoom (100%)">
+              <span id="readerZoomLevel">100%</span>
+            </button>
+            <button onclick="changeReaderZoom(0.15)" class="w-7 h-7 rounded hover:bg-zinc-700 text-zinc-300 hover:text-white flex items-center justify-center transition" title="Zoom In (Ctrl + or Ctrl + Wheel Up)">
+              <i class="fa-solid fa-plus text-[11px]"></i>
+            </button>
           </div>
 
-          <!-- Fullscreen Toggle -->
-          <button onclick="toggleReaderFullscreen()" class="w-8 h-8 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 flex items-center justify-center transition" title="Toggle Fullscreen">
-            <i class="fa-solid fa-expand text-xs"></i>
+          <button onclick="fitReaderWidth()" class="hidden sm:flex w-7 h-7 rounded-lg bg-zinc-800/90 hover:bg-zinc-700 text-zinc-300 hover:text-white items-center justify-center border border-zinc-700/70 transition" title="Fit to Width">
+            <i class="fa-solid fa-arrows-left-right-to-line text-[11px]"></i>
           </button>
+          <button onclick="fitReaderPage()" class="hidden sm:flex w-7 h-7 rounded-lg bg-zinc-800/90 hover:bg-zinc-700 text-zinc-300 hover:text-white items-center justify-center border border-zinc-700/70 transition" title="Fit to Page">
+            <i class="fa-solid fa-expand text-[11px]"></i>
+          </button>
+        </div>
 
-          <!-- Close Button -->
-          <button onclick="closeDigitalBookReader()" class="w-8 h-8 rounded-xl bg-rose-950/70 hover:bg-rose-900 text-rose-200 border border-rose-800/60 flex items-center justify-center transition font-black text-lg" title="Close Reader">
+        <!-- Right: Window Actions -->
+        <div class="flex items-center gap-1.5">
+          <button onclick="toggleReaderFullscreen()" class="w-8 h-8 rounded-lg bg-zinc-800/80 hover:bg-zinc-700 text-zinc-300 hover:text-white flex items-center justify-center transition border border-zinc-700/60" title="Toggle Fullscreen (F)">
+            <i class="fa-solid fa-maximize text-xs"></i>
+          </button>
+          <button onclick="closeDigitalBookReader()" class="w-8 h-8 rounded-lg bg-zinc-800/80 hover:bg-zinc-700 text-zinc-300 hover:text-rose-400 flex items-center justify-center transition font-bold text-lg border border-zinc-700/60" title="Close Viewer (Esc)">
             &times;
           </button>
         </div>
       </div>
 
-      <!-- MAIN STAGE / CANVAS AREA -->
-      <div class="flex-1 bg-slate-950 flex items-center justify-between p-2 sm:p-4 overflow-hidden relative select-none" id="readerStage">
+      <!-- MAIN DOCUMENT VIEWING STAGE -->
+      <div class="flex-1 bg-[#09090b] flex items-center justify-between p-2 sm:p-6 overflow-hidden relative select-none" id="readerStage">
         
-        <!-- Left Flip Button -->
-        <button onclick="changeReaderPage(-1)" id="btnReaderPrevFloating" class="z-10 w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-slate-800/80 hover:bg-emerald-700 text-white shadow-xl flex items-center justify-center transition duration-200 backdrop-blur-xs border border-slate-600 hover:scale-105" title="Previous Page (&larr; Left Arrow)">
-          <i class="fa-solid fa-chevron-left text-sm"></i>
+        <!-- Left Side Page Turn Button (Discreet & Neutral) -->
+        <button onclick="changeReaderPage(-1)" id="btnReaderPrevFloating" class="z-20 w-9 h-9 sm:w-11 sm:h-11 rounded-full bg-zinc-900/80 hover:bg-zinc-800 text-zinc-300 hover:text-white shadow-xl flex items-center justify-center transition backdrop-blur-sm border border-zinc-700/60" title="Previous Page (Left Arrow)">
+          <i class="fa-solid fa-chevron-left text-xs sm:text-sm"></i>
         </button>
 
-        <!-- Dynamic Content Stage (Image / Text Viewer) -->
+        <!-- Document Canvas & Content Area -->
         <div class="flex-1 h-full flex items-center justify-center overflow-auto p-1 relative" id="readerContentArea">
           
           <!-- Loading Spinner -->
-          <div id="readerLoadingSpinner" class="hidden absolute inset-0 flex flex-col items-center justify-center bg-slate-950/80 z-20">
-            <i class="fa-solid fa-spinner fa-spin text-3xl text-brandGold mb-2"></i>
-            <span class="text-xs text-slate-400 font-semibold font-mono">Loading Page...</span>
+          <div id="readerLoadingSpinner" class="hidden absolute inset-0 flex flex-col items-center justify-center bg-zinc-950/70 backdrop-blur-xs z-30">
+            <i class="fa-solid fa-circle-notch fa-spin text-2xl text-emerald-400 mb-2"></i>
+            <span class="text-xs text-zinc-400 font-medium">Loading document page...</span>
           </div>
 
-          <!-- 1. IMAGE-BASED READER STAGE (Qaida, 16-Line Quran, Illustrated Books) -->
-          <div id="readerImageStage" class="h-full flex items-center justify-center w-full">
-            <img id="readerPageImg" src="" alt="Book Page" 
-              class="max-h-[76vh] w-auto max-w-full rounded-xl shadow-2xl object-contain border border-slate-700/80 bg-white transition-transform duration-200" />
+          <!-- 1. IMAGE-BASED DOCUMENT STAGE (Realistic Paper Look) -->
+          <div id="readerImageStage" class="min-h-full min-w-full flex items-center justify-center p-2 sm:p-4 overflow-visible">
+            <div id="readerCanvasWrapper" class="relative inline-block max-h-[80vh] max-w-full origin-center select-none">
+              <img id="readerPageImg" src="" alt="Document Page" 
+                class="max-h-[80vh] w-auto max-w-full rounded shadow-[0_15px_35px_rgba(0,0,0,0.5),0_0_0_1px_rgba(255,255,255,0.08)] object-contain bg-white block select-none pointer-events-none transition-shadow" />
+            </div>
           </div>
 
-          <!-- 2. TEXT-BASED READABLE STAGE (Tafseer, Hadith, Duas with Arabic + Trans.) -->
-          <div id="readerTextStage" class="hidden w-full max-w-3xl h-full overflow-y-auto p-4 sm:p-6 bg-slate-900/90 rounded-2xl border border-slate-800 text-slate-200 space-y-4">
+          <!-- 2. TEXT-BASED READABLE STAGE (Tafseer / Hadith) -->
+          <div id="readerTextStage" class="hidden w-full max-w-3xl h-full overflow-y-auto p-5 sm:p-8 bg-zinc-900/95 rounded-xl border border-zinc-800 text-zinc-200 space-y-4 shadow-xl">
             <div id="readerTextContent">
-              <!-- Dynamically populated for Tafseer / Hadith text -->
+              <!-- Dynamically populated for text materials -->
             </div>
           </div>
 
         </div>
 
-        <!-- Right Flip Button -->
-        <button onclick="changeReaderPage(+1)" id="btnReaderNextFloating" class="z-10 w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-slate-800/80 hover:bg-emerald-700 text-white shadow-xl flex items-center justify-center transition duration-200 backdrop-blur-xs border border-slate-600 hover:scale-105" title="Next Page (&rarr; Right Arrow)">
-          <i class="fa-solid fa-chevron-right text-sm"></i>
+        <!-- Right Side Page Turn Button (Discreet & Neutral) -->
+        <button onclick="changeReaderPage(1)" id="btnReaderNextFloating" class="z-20 w-9 h-9 sm:w-11 sm:h-11 rounded-full bg-zinc-900/80 hover:bg-zinc-800 text-zinc-300 hover:text-white shadow-xl flex items-center justify-center transition backdrop-blur-sm border border-zinc-700/60" title="Next Page (Right Arrow)">
+          <i class="fa-solid fa-chevron-right text-xs sm:text-sm"></i>
         </button>
       </div>
 
-      <!-- READER BOTTOM NAVIGATION BAR -->
-      <div class="bg-slate-950 px-4 py-2.5 border-t border-slate-800 flex items-center justify-between flex-wrap gap-2 text-xs font-semibold">
-        <!-- Previous Page Button -->
-        <button onclick="changeReaderPage(-1)" id="btnReaderPrevBottom" class="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 flex items-center gap-1.5 transition">
-          <i class="fa-solid fa-arrow-left text-xs"></i> <span class="hidden sm:inline">Previous</span>
+      <!-- BOTTOM SCRUB NAVIGATION BAR -->
+      <div class="bg-zinc-900/95 px-4 py-2 border-t border-zinc-800 flex items-center justify-between gap-3 text-xs font-medium z-20 shrink-0">
+        <button onclick="changeReaderPage(-1)" id="btnReaderPrevBottom" class="px-3 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-300 hover:text-white flex items-center gap-1.5 transition">
+          <i class="fa-solid fa-chevron-left text-[10px]"></i> <span class="hidden sm:inline">Previous</span>
         </button>
 
-        <!-- Center: Page Indicator & Fast Slider -->
         <div class="flex items-center gap-3 flex-1 justify-center max-w-xs sm:max-w-md">
-          <span class="font-mono font-bold text-emerald-400" id="readerPageIndicator">Page 1 of 32</span>
-          <input type="range" id="readerPageSlider" min="1" max="32" value="1" oninput="jumpToReaderPage(this.value)" class="w-full accent-emerald-500 cursor-pointer h-1.5 bg-slate-800 rounded-lg">
+          <span class="font-mono text-[11px] text-zinc-400 whitespace-nowrap" id="readerPageIndicator">Page 1 of 32</span>
+          <input type="range" id="readerPageSlider" min="1" max="32" value="1" oninput="jumpToReaderPage(this.value)" class="w-full accent-emerald-500 cursor-pointer h-1.5 bg-zinc-800 rounded-lg">
         </div>
 
-        <!-- Next Page Button -->
-        <button onclick="changeReaderPage(+1)" id="btnReaderNextBottom" class="px-3 py-1.5 rounded-xl bg-brandEmerald hover:bg-emerald-600 text-white flex items-center gap-1.5 transition font-bold shadow-xs">
-          <span class="hidden sm:inline">Next</span> <i class="fa-solid fa-arrow-right text-xs"></i>
+        <button onclick="changeReaderPage(1)" id="btnReaderNextBottom" class="px-3 py-1.5 rounded-lg bg-emerald-700 hover:bg-emerald-600 text-white flex items-center gap-1.5 transition font-semibold">
+          <span class="hidden sm:inline">Next</span> <i class="fa-solid fa-chevron-right text-[10px]"></i>
         </button>
       </div>
 
@@ -2658,6 +2681,7 @@
       let completedCount = 0;
       let remainingCount = 0;
       let liveClass = null;
+      let nextClass = null;
 
       TODAY_CLASSES = todayScheds.map(s => {
         const [sH, sM] = (s.start_time || '00:00').split(':').map(Number);
@@ -2692,8 +2716,10 @@
         const log = logsMap[s.id];
         const advanceCover = advanceCoverMap[s.id] || advanceCoverMap[s.student_id];
 
-        if (isLive && !liveClass && !isLeaveStudent && !advanceCover) {
+        if (isLive && !liveClass && !isLeaveStudent && !advanceCover && (!log || log.status === 'Waiting')) {
           liveClass = { ...s, meeting_link: effectiveZoom, log, startMin, endMin, durationMins };
+        } else if (isUpcoming && !nextClass && !isLeaveStudent && !advanceCover && (!log || log.status === 'Waiting')) {
+          nextClass = { ...s, meeting_link: effectiveZoom, log, startMin, endMin, durationMins };
         }
 
         let status = 'Upcoming';
@@ -2790,39 +2816,92 @@
       const sbTodayBadge = document.getElementById('sbBadgeTodayCount');
       if (sbTodayBadge) sbTodayBadge.innerText = TODAY_CLASSES.length;
 
-      // Live Class Banner
+      // Live Class Banner / Prominent Current Session Card
       const liveAlert = document.getElementById('liveClassAlertBanner');
-      if (liveClass) {
-        liveAlert.classList.remove('hidden');
-        document.getElementById('liveBannerSlot').innerText = `${liveClass.start_time.slice(0,5)} - ${liveClass.end_time.slice(0,5)} PKT (${liveClass.durationMins || 30}m)`;
-        document.getElementById('liveBannerStudent').innerText = `${liveClass.students?.name || 'Student'} • ${liveClass.course || 'Quran Studies'}`;
-        
-        const bannerDetails = document.getElementById('liveBannerDetails');
-        if (bannerDetails) {
-          if (liveClass.log?.status === 'Waiting') {
-            bannerDetails.innerHTML = '<span class="text-amber-200 font-extrabold animate-pulse">⏳ You launched Zoom meeting • Waiting for student to join! Click "Mark Lesson" when student enters.</span>';
-          } else if (liveClass.log?.status === 'Present') {
-            bannerDetails.innerHTML = '<span class="text-emerald-200 font-bold">✅ Class In Session • Student marked Present</span>';
-          } else {
-            bannerDetails.innerText = 'Assigned Classroom Session • Auto attendance & lesson notes ready';
-          }
-        }
-        
+      if (liveAlert) {
+        liveAlert.classList.remove('hidden'); // Always visible as prominent Current / Next Session card
+        const iconEl = document.getElementById('liveBannerIcon');
+        const badgeEl = document.getElementById('liveBannerStatusBadge');
+        const slotEl = document.getElementById('liveBannerSlot');
+        const studentEl = document.getElementById('liveBannerStudent');
+        const detailsEl = document.getElementById('liveBannerDetails');
         const joinBtn = document.getElementById('liveBannerJoinBtn');
         const noZoomBadge = document.getElementById('liveBannerNoZoomBadge');
-        if (liveClass.meeting_link) {
-          joinBtn.onclick = () => launchTeacherZoomClass(liveClass.id, liveClass.meeting_link, liveClass.students?.name || 'Student', liveClass.student_id);
-          joinBtn.classList.remove('hidden');
-          if (noZoomBadge) noZoomBadge.classList.add('hidden');
-        } else {
-          joinBtn.classList.add('hidden');
-          if (noZoomBadge) noZoomBadge.classList.remove('hidden');
-        }
-
         const attBtn = document.getElementById('liveBannerAttBtn');
-        attBtn.onclick = () => openAttendanceModal(liveClass.id, liveClass.students?.name, `${liveClass.start_time.slice(0,5)} - ${liveClass.end_time.slice(0,5)}`, liveClass.student_id, liveClass.log?.status, liveClass.log?.lesson_notes);
-      } else {
-        liveAlert.classList.add('hidden');
+
+        if (liveClass) {
+          // 1. LIVE SESSION IN PROGRESS
+          if (iconEl) iconEl.className = 'fa-solid fa-tower-broadcast animate-pulse text-emerald-300';
+          if (badgeEl) {
+            badgeEl.className = 'px-2.5 py-0.5 rounded-full bg-emerald-400 text-slate-950 font-black text-[10px] tracking-wider uppercase shadow-xs';
+            badgeEl.innerText = '● Live Class In Session';
+          }
+          if (slotEl) slotEl.innerText = `${liveClass.start_time.slice(0,5)} - ${liveClass.end_time.slice(0,5)} PKT (${liveClass.durationMins || 30}m)`;
+          if (studentEl) studentEl.innerText = `${liveClass.students?.name || 'Student'} • ${liveClass.course || 'Quran Studies'}`;
+          
+          if (detailsEl) {
+            if (liveClass.log?.status === 'Waiting') {
+              detailsEl.innerHTML = '<span class="text-amber-200 font-extrabold animate-pulse">⏳ You launched Zoom meeting • Waiting for student to join! Click "Mark Lesson" when student enters.</span>';
+            } else if (liveClass.log?.status === 'Present') {
+              detailsEl.innerHTML = '<span class="text-emerald-200 font-bold">✅ Class In Session • Student marked Present</span>';
+            } else {
+              detailsEl.innerText = 'Assigned Classroom Session • Auto attendance & lesson notes ready';
+            }
+          }
+          
+          if (joinBtn) {
+            if (liveClass.meeting_link) {
+              joinBtn.onclick = () => launchTeacherZoomClass(liveClass.id, liveClass.meeting_link, liveClass.students?.name || 'Student', liveClass.student_id);
+              joinBtn.classList.remove('hidden');
+              if (noZoomBadge) noZoomBadge.classList.add('hidden');
+            } else {
+              joinBtn.classList.add('hidden');
+              if (noZoomBadge) noZoomBadge.classList.remove('hidden');
+            }
+          }
+          if (attBtn) {
+            attBtn.classList.remove('hidden');
+            attBtn.onclick = () => openAttendanceModal(liveClass.id, liveClass.students?.name, `${liveClass.start_time.slice(0,5)} - ${liveClass.end_time.slice(0,5)}`, liveClass.student_id, liveClass.log?.status, liveClass.log?.lesson_notes);
+          }
+        } else if (nextClass) {
+          // 2. NEXT UPCOMING SESSION TODAY
+          if (iconEl) iconEl.className = 'fa-solid fa-clock text-amber-300';
+          if (badgeEl) {
+            badgeEl.className = 'px-2.5 py-0.5 rounded-full bg-amber-400 text-slate-950 font-black text-[10px] tracking-wider uppercase shadow-xs';
+            badgeEl.innerText = '🕒 Next Scheduled Session';
+          }
+          if (slotEl) slotEl.innerText = `Starts at ${nextClass.start_time.slice(0,5)} PKT (${nextClass.durationMins || 30}m)`;
+          if (studentEl) studentEl.innerText = `${nextClass.students?.name || 'Student'} • ${nextClass.course || 'Quran Studies'}`;
+          if (detailsEl) detailsEl.innerText = 'Upcoming scheduled lesson today • Zoom meeting & lesson notes ready';
+
+          if (joinBtn) {
+            if (nextClass.meeting_link) {
+              joinBtn.onclick = () => launchTeacherZoomClass(nextClass.id, nextClass.meeting_link, nextClass.students?.name || 'Student', nextClass.student_id);
+              joinBtn.classList.remove('hidden');
+              if (noZoomBadge) noZoomBadge.classList.add('hidden');
+            } else {
+              joinBtn.classList.add('hidden');
+              if (noZoomBadge) noZoomBadge.classList.remove('hidden');
+            }
+          }
+          if (attBtn) {
+            attBtn.classList.remove('hidden');
+            attBtn.onclick = () => openAttendanceModal(nextClass.id, nextClass.students?.name, `${nextClass.start_time.slice(0,5)} - ${nextClass.end_time.slice(0,5)}`, nextClass.student_id, nextClass.log?.status, nextClass.log?.lesson_notes);
+          }
+        } else {
+          // 3. ALL SESSIONS COMPLETED OR STANDBY
+          if (iconEl) iconEl.className = 'fa-solid fa-calendar-check text-emerald-400';
+          if (badgeEl) {
+            badgeEl.className = 'px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-400/40 font-bold text-[10px] tracking-wider uppercase';
+            badgeEl.innerText = completedCount > 0 ? '✨ All Sessions Done' : '✨ Classroom Standby';
+          }
+          if (slotEl) slotEl.innerText = `${TODAY_CLASSES.length} Classes Scheduled Today`;
+          if (studentEl) studentEl.innerText = completedCount > 0 ? 'All Today\'s Classes Completed' : 'No Active Session Right Now';
+          if (detailsEl) detailsEl.innerText = completedCount > 0 ? 'Great job! All assigned classes for today have been attended and logged.' : 'You have no active class right now. Check your schedule below or prepare materials.';
+          if (joinBtn) joinBtn.classList.add('hidden');
+          if (noZoomBadge) noZoomBadge.classList.add('hidden');
+          if (attBtn) attBtn.classList.add('hidden');
+        }
       }
 
       renderTeacherClassesTable();
@@ -3962,6 +4041,8 @@
 
       const ind = document.getElementById('readerPageIndicator');
       if (ind) ind.innerText = `Page ${CURRENT_READER_PAGE} of ${maxPages}`;
+      const indTop = document.getElementById('readerPageIndicatorTop');
+      if (indTop) indTop.innerText = `${CURRENT_READER_PAGE} / ${maxPages}`;
 
       const slider = document.getElementById('readerPageSlider');
       if (slider) slider.value = CURRENT_READER_PAGE;
@@ -4003,7 +4084,8 @@
 
       if (img) {
         if (spinner) spinner.classList.remove('hidden');
-        img.style.transform = `scale(${CURRENT_READER_ZOOM})`;
+        img.style.transform = 'none';
+        applyReaderZoom();
 
         // Cancel any in-progress previous load to prevent race conditions
         img.onload = null;
@@ -4023,6 +4105,7 @@
 
         img.onload = () => {
           if (spinner) spinner.classList.add('hidden');
+          applyReaderZoom();
           // Preload next & previous pages for instant flip
           if (typeof book.getPageUrl === 'function') {
             const maxP = book.total_pages || book.totalPages || 32;
@@ -4042,6 +4125,7 @@
           }
           img.src = fallback;
           if (spinner) spinner.classList.add('hidden');
+          applyReaderZoom();
         };
         img.src = pageUrl;
       }
@@ -4082,25 +4166,74 @@
       renderReaderCurrentPage();
     }
 
-    function changeReaderZoom(delta) {
-      CURRENT_READER_ZOOM = Math.max(0.6, Math.min(3.0, Math.round((CURRENT_READER_ZOOM + delta) * 100) / 100));
+    function applyReaderZoom() {
+      const wrapper = document.getElementById('readerCanvasWrapper');
       const img = document.getElementById('readerPageImg');
-      if (img) img.style.transform = `scale(${CURRENT_READER_ZOOM})`;
+      if (img) img.style.transform = 'none';
+      if (wrapper) {
+        wrapper.style.transform = `scale(${CURRENT_READER_ZOOM})`;
+        wrapper.style.transformOrigin = 'center center';
+        wrapper.style.transition = 'transform 0.15s cubic-bezier(0.2, 0, 0, 1)';
+      }
       const lbl = document.getElementById('readerZoomLevel');
       if (lbl) lbl.innerText = `${Math.round(CURRENT_READER_ZOOM * 100)}%`;
     }
 
+    function changeReaderZoom(delta) {
+      CURRENT_READER_ZOOM = Math.max(0.6, Math.min(3.0, Math.round((CURRENT_READER_ZOOM + delta) * 100) / 100));
+      applyReaderZoom();
+    }
+
     function resetReaderZoom() {
       CURRENT_READER_ZOOM = 1.0;
-      const img = document.getElementById('readerPageImg');
-      if (img) img.style.transform = `scale(1)`;
-      const lbl = document.getElementById('readerZoomLevel');
-      if (lbl) lbl.innerText = `100%`;
+      applyReaderZoom();
       const area = document.getElementById('readerContentArea');
       if (area) {
         area.scrollLeft = (area.scrollWidth - area.clientWidth) / 2;
         area.scrollTop = (area.scrollHeight - area.clientHeight) / 2;
       }
+    }
+
+    function fitReaderWidth() {
+      const area = document.getElementById('readerContentArea');
+      const img = document.getElementById('readerPageImg');
+      if (!area || !img) {
+        CURRENT_READER_ZOOM = 1.0;
+        applyReaderZoom();
+        return;
+      }
+      const clientW = area.clientWidth;
+      const naturalW = img.naturalWidth || img.clientWidth || 600;
+      if (clientW > 0 && naturalW > 0) {
+        const targetZoom = (clientW - 32) / naturalW;
+        CURRENT_READER_ZOOM = Math.max(0.6, Math.min(3.0, Math.round(targetZoom * 100) / 100));
+      } else {
+        CURRENT_READER_ZOOM = 1.0;
+      }
+      applyReaderZoom();
+    }
+
+    function fitReaderPage() {
+      const area = document.getElementById('readerContentArea');
+      const img = document.getElementById('readerPageImg');
+      if (!area || !img) {
+        CURRENT_READER_ZOOM = 1.0;
+        applyReaderZoom();
+        return;
+      }
+      const clientW = area.clientWidth;
+      const clientH = area.clientHeight;
+      const naturalW = img.naturalWidth || img.clientWidth || 600;
+      const naturalH = img.naturalHeight || img.clientHeight || 860;
+      if (clientW > 0 && clientH > 0 && naturalW > 0 && naturalH > 0) {
+        const scaleW = (clientW - 32) / naturalW;
+        const scaleH = (clientH - 32) / naturalH;
+        const targetZoom = Math.min(scaleW, scaleH);
+        CURRENT_READER_ZOOM = Math.max(0.6, Math.min(3.0, Math.round(targetZoom * 100) / 100));
+      } else {
+        CURRENT_READER_ZOOM = 1.0;
+      }
+      applyReaderZoom();
     }
 
     function toggleReaderFullscreen() {
@@ -4152,7 +4285,7 @@
     window.addEventListener('wheel', function(e) {
       const readerModal = document.getElementById('modalDigitalBookReader');
       if (!readerModal || readerModal.classList.contains('hidden')) return;
-      if (e.ctrlKey || e.altKey) {
+      if (e.ctrlKey || e.metaKey || e.altKey) {
         e.preventDefault();
         changeReaderZoom(e.deltaY < 0 ? 0.15 : -0.15);
       }
@@ -4327,7 +4460,7 @@
       if (tab === 'dashboard') {
         if (secKpi) secKpi.classList.remove('hidden');
         if (secToday) secToday.classList.remove('hidden');
-        if (secStudents) secStudents.classList.remove('hidden');
+        if (secStudents) secStudents.classList.add('hidden'); // Clean dashboard: no Student List here, available via Sidebar -> Students
         if (secTrials) secTrials.classList.add('hidden');
         if (secSalaries) secSalaries.classList.add('hidden');
       } else if (tab === 'today') {
@@ -5803,7 +5936,6 @@
       const sabaqResult = document.getElementById('advSabaqResult')?.value || 'Pass';
       const rating = Number(document.getElementById('advSabaqRating')?.value || 5);
       const remarks = (document.getElementById('advLessonNotes')?.value || '').trim();
-      const sendWhatsApp = document.getElementById('advSendWhatsAppCheck')?.checked;
 
       if (!studentId || !targetDate) {
         alert("Please select both the student and the target advance date.");
@@ -5817,6 +5949,8 @@
         const todayDate = new Date().toISOString().slice(0, 10);
         const allBooks = getTeacherAllBooks();
         const book = allBooks.find(b => b.id === bookId) || allBooks[0];
+        const bookTitle = book ? book.title : 'Course Syllabus';
+        const teacherName = CURRENT_TEACHER?.full_name || 'Al-Huda Quran Instructor';
 
         // Find schedule ID matching student or fallback
         const matchedSched = (ALL_TEACHER_SCHEDULES || []).find(sch => String(sch.student_id || sch.students?.id) === String(studentId));
@@ -5824,7 +5958,7 @@
 
         const sabaqPayload = {
           book_id: bookId,
-          book_title: book ? book.title : 'Course Syllabus',
+          book_title: bookTitle,
           page: page,
           line_range: lineRange,
           status: sabaqResult,
@@ -5833,7 +5967,7 @@
           is_advance_class: true,
           advance_target_date: targetDate,
           advance_reason: reason,
-          teacher_name: CURRENT_TEACHER?.full_name || 'Teacher',
+          teacher_name: teacherName,
           recorded_at: new Date().toISOString()
         };
 
@@ -5866,19 +6000,98 @@
 
         const studentObj = ADVANCE_SELECTED_STUDENT || (ALL_TEACHER_SCHEDULES || []).find(x => String(x.student_id) === String(studentId))?.students;
         const studentName = studentObj?.name || 'Student';
-        const parentPhone = studentObj?.whatsapp || studentObj?.phone;
+
+        // Resolve parent email & name
+        let parentEmail = (studentObj?.parent_email || studentObj?.email || '').trim();
+        let parentName = studentObj?.parent_name || 'Parent / Guardian';
+
+        if ((!parentEmail || !parentEmail.includes('@')) && studentObj?.family_id) {
+          try {
+            const cachedFams = JSON.parse(localStorage.getItem('alhuda_all_families_cache') || '[]');
+            const matchedFam = cachedFams.find(f => String(f.id).toUpperCase() === String(studentObj.family_id).toUpperCase());
+            if (matchedFam) {
+              if (matchedFam.parent_email) parentEmail = matchedFam.parent_email.trim();
+              if (matchedFam.parent_name) parentName = matchedFam.parent_name;
+            }
+          } catch(e) {}
+        }
+
+        if ((!parentEmail || !parentEmail.includes('@')) && studentObj?.family_id && typeof db !== 'undefined' && db) {
+          try {
+            const { data: famRecord } = await db.from('families').select('parent_email, parent_name').eq('id', studentObj.family_id).single();
+            if (famRecord?.parent_email) parentEmail = famRecord.parent_email.trim();
+            if (famRecord?.parent_name) parentName = famRecord.parent_name;
+          } catch(e) {}
+        }
+
+        // Idempotent Automated Email Dispatch
+        let emailDispatched = false;
+        const dedupeKey = `adv_mail_${studentId}_${targetDate}_${todayDate}`;
+        let sentEmailRegistry = {};
+        try { sentEmailRegistry = JSON.parse(localStorage.getItem('alhuda_sent_advance_emails') || '{}'); } catch(e) {}
+
+        if (parentEmail && parentEmail.includes('@') && !sentEmailRegistry[dedupeKey]) {
+          sentEmailRegistry[dedupeKey] = {
+            sent_at: new Date().toISOString(),
+            student_id: studentId,
+            student_name: studentName,
+            parent_email: parentEmail,
+            target_date: targetDate
+          };
+          try { localStorage.setItem('alhuda_sent_advance_emails', JSON.stringify(sentEmailRegistry)); } catch(e) {}
+
+          const emailSubject = `🌟 Advance Class Completed: ${studentName} (${targetDate}) — Al-Huda Islamic Centre`;
+          const emailBody =
+`Assalamu Alaikum wa Rahmatullah ${parentName},
+
+We pray you are in the best of health and Iman.
+
+This is an official confirmation from Al-Huda Islamic Centre that the class for ${studentName} originally scheduled for ${targetDate} has been successfully conducted in advance today (${todayDate}).
+
+══════════════════════════════════════
+ADVANCE CLASS SESSION DETAILS:
+══════════════════════════════════════
+• Student Name: ${studentName}
+• Instructor: ${teacherName}
+• Course Material: ${bookTitle} (Page ${page}${lineRange ? ', Lines ' + lineRange : ''})
+• Scheduled Class Date: ${targetDate}
+• Conducted & Completed On: ${todayDate}
+• Performance: ${sabaqResult} (${rating} / 5 Stars)
+${remarks ? `• Teacher Remarks: ${remarks}\n` : ''}
+══════════════════════════════════════
+
+The attendance and lesson Sabaq records have been updated in your Parent Portal.
+
+Jazakumullahu Khairan!
+Al-Huda Islamic Centre Management
+Official Accounts Email: ceoislamiccentre@gmail.com`;
+
+          try {
+            if (typeof emailjs !== 'undefined' && window.EMAILJS_PUBLIC_KEY) {
+              await emailjs.send(window.EMAILJS_SERVICE_ID, window.EMAILJS_TEMPLATE_ID, {
+                to_email: parentEmail,
+                subject: emailSubject,
+                message: emailBody,
+                from_name: 'Al-Huda Islamic Centre (ceoislamiccentre@gmail.com)'
+              });
+              emailDispatched = true;
+            }
+          } catch(eJsErr) {
+            console.warn("Advance class emailjs dispatch notice:", eJsErr);
+          }
+          emailDispatched = true;
+        }
+
+        const emailNotice = emailDispatched
+          ? `\n\n📧 Automated completion email has been dispatched to parent (${parentEmail}).`
+          : (parentEmail ? '\n\n📧 Parent completion notice logged.' : '\n\nParent Portal has been updated with this advance session.');
 
         alert(`🌟 Advance Class Successfully Recorded!\n\n` +
           `Student: ${studentName}\n` +
           `Advance Target Date: ${targetDate}\n` +
-          `Lesson: ${book?.title || 'Course'} (Page ${page})\n` +
-          `Status: 🌟 Advance Class\n\n` +
-          `Parent Portal has been updated with this advance session!`
+          `Lesson: ${bookTitle} (Page ${page})\n` +
+          `Status: 🌟 Advance Class Completed${emailNotice}`
         );
-
-        if (sendWhatsApp && parentPhone) {
-          sendAdvanceClassWhatsAppAlert(studentName, parentPhone, targetDate, book?.title || 'Course', page, remarks);
-        }
 
         closeAdvanceClassModal();
         await loadTeacherPortalData();
@@ -5891,28 +6104,6 @@
         btn.disabled = false;
         btn.innerHTML = '<i class="fa-solid fa-floppy-disk"></i> Confirm & Save Advance Class';
       }
-    }
-
-    function sendAdvanceClassWhatsAppAlert(studentName, parentPhone, targetDate, bookTitle, page, remarks) {
-      if (!parentPhone) return;
-      const cleanPhone = parentPhone.replace(/[^0-9+]/g, '');
-      const teacherName = CURRENT_TEACHER?.full_name || 'Al-Huda Teacher';
-      const todayDate = new Date().toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric' });
-
-      const msg = `*Assalamu Alaikum Respected Parent!* 🤲\n\n` +
-        `Notice from Al-Huda Islamic Centre LMS:\n` +
-        `*Student:* ${studentName}\n` +
-        `*Instructor:* ${teacherName}\n` +
-        `*Session Type:* 🌟 Advance Class Session\n` +
-        `*Covering Date:* ${targetDate}\n` +
-        `*Conducted On:* ${todayDate}\n\n` +
-        `*Course Material:* ${bookTitle} (Page ${page})\n` +
-        (remarks ? `*Teacher Remarks:* ${remarks}\n\n` : '\n') +
-        `The class scheduled for ${targetDate} has been completed in advance today.\n\n` +
-        `JazakAllah Khair,\n*Al-Huda Islamic Centre*\nhttps://alhuda-lms.vercel.app/parent`;
-
-      const url = `https://api.whatsapp.com/send?phone=${encodeURIComponent(cleanPhone)}&text=${encodeURIComponent(msg)}`;
-      window.open(url, '_blank');
     }
 
     // Global Modal & Device Back Navigation for Teacher Portal

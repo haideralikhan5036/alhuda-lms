@@ -569,109 +569,122 @@
   </main>
 
   <!-- ================= MODAL: DIGITAL BOOK READER (HD ENGINE) ================= -->
-  <div id="modalParentBookReader" class="fixed inset-0 z-50 bg-black/90 backdrop-blur-md flex flex-col hidden select-none">
-    
-    <!-- Top Reader Bar -->
-    <div class="h-16 bg-slate-950 border-b border-slate-800 text-white px-3 sm:px-6 flex items-center justify-between shrink-0 z-20 shadow-xl">
-      <div class="flex items-center gap-2.5 sm:gap-3 min-w-0">
-        <button onclick="closeParentBookReader()" class="p-2 rounded-xl hover:bg-slate-800 text-slate-300 hover:text-white transition shrink-0" title="Close Reader">
-          <i class="fa-solid fa-arrow-left text-base"></i>
-        </button>
+  <div id="modalParentBookReader" class="fixed inset-0 bg-black/90 backdrop-blur-md z-50 hidden items-center justify-center p-1 sm:p-3 select-none">
+    <div id="parentReaderModalContainer" class="bg-[#18181b] rounded-xl sm:rounded-2xl max-w-6xl w-full h-[96vh] flex flex-col shadow-2xl border border-zinc-800 overflow-hidden text-zinc-100 animate-scaleIn">
+      
+      <!-- TOP DOCUMENT TOOLBAR -->
+      <div class="bg-zinc-900/95 px-3 sm:px-4 py-2.5 border-b border-zinc-800/80 flex items-center justify-between flex-wrap gap-2 z-20 shrink-0">
         
-        <div class="min-w-0">
-          <h2 id="parentReaderBookTitle" class="font-black text-xs sm:text-base text-white truncate max-w-[130px] sm:max-w-xs md:max-w-md">Noorani Qaida</h2>
-          <div class="flex items-center gap-2 text-[10px] sm:text-[11px] text-slate-400">
-            <span id="parentReaderCategoryBadge" class="bg-emerald-950 text-emerald-300 px-2 py-0.5 rounded-full border border-emerald-800/80 font-bold">Qaida</span>
-            <span id="parentReaderPageBadge" class="font-mono font-bold text-amber-300">Page 1 of 32</span>
+        <!-- Left: Document Identity -->
+        <div class="flex items-center gap-2.5 min-w-0 max-w-[280px] sm:max-w-sm">
+          <div class="w-8 h-8 rounded-lg bg-zinc-800 text-emerald-400 flex items-center justify-center font-bold text-sm shrink-0 border border-zinc-700/60" id="parentReaderBookIcon">
+            <i class="fa-solid fa-book-open"></i>
+          </div>
+          <div class="min-w-0">
+            <div class="flex items-center gap-2">
+              <h3 class="font-bold text-xs sm:text-sm text-zinc-100 truncate tracking-tight" id="parentReaderBookTitle">Noorani Qaida</h3>
+              <span id="parentReaderCategoryBadge" class="hidden sm:inline-block px-2 py-0.5 rounded text-[10px] font-medium bg-zinc-800 text-zinc-400 border border-zinc-700">Qaida</span>
+            </div>
+            <p class="text-[11px] text-zinc-400 truncate mt-0.5" id="parentReaderPageBadge">Page 1</p>
           </div>
         </div>
-      </div>
 
-      <!-- Center & Right Controls -->
-      <div class="flex items-center gap-2 shrink-0">
-        <!-- Laser Read-Along Pointer Mode Toggle -->
-        <button onclick="toggleStudentLaserSpotlight()" id="btnStudentLaserToggle" class="px-2.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-amber-300 text-xs font-bold transition flex items-center gap-1.5 border border-slate-700" title="Toggle Laser Spotlight Read-Along">
-          <i class="fa-solid fa-crosshairs text-xs"></i>
-          <span class="hidden sm:inline">Laser Pointer</span>
-        </button>
+        <!-- Center: Navigation, Jump, & Zoom Controls -->
+        <div class="flex items-center gap-1.5 sm:gap-2">
+          
+          <!-- Page Navigation Group -->
+          <div class="flex items-center bg-zinc-800/90 rounded-lg p-0.5 border border-zinc-700/70 text-xs">
+            <button onclick="parentReaderTurnRight()" class="w-7 h-7 rounded hover:bg-zinc-700 text-zinc-300 hover:text-white flex items-center justify-center transition" title="Previous Page (Left Arrow)">
+              <i class="fa-solid fa-chevron-left text-[11px]"></i>
+            </button>
+            <div class="px-1.5 py-0.5 font-mono text-[11px] font-semibold text-zinc-200" id="parentReaderPageIndicatorTop">
+              1 / 32
+            </div>
+            <button onclick="parentReaderTurnLeft()" class="w-7 h-7 rounded hover:bg-zinc-700 text-zinc-300 hover:text-white flex items-center justify-center transition" title="Next Page (Right Arrow)">
+              <i class="fa-solid fa-chevron-right text-[11px]"></i>
+            </button>
+          </div>
 
-        <!-- Jump to Chapter / Page -->
-        <div class="hidden md:flex items-center gap-1 bg-slate-800/80 px-2 py-1 rounded-xl border border-slate-700 text-xs">
-          <span class="text-slate-400 font-medium">Go to:</span>
-          <select id="parentReaderJumpSelect" onchange="parentReaderJumpToPage(this.value)" class="bg-slate-900 text-white font-bold text-xs rounded-lg px-2 py-1 border border-slate-600 focus:outline-emerald-500 max-w-[150px]">
+          <!-- Jump To Chapter / Page Selector -->
+          <select id="parentReaderJumpSelect" onchange="parentReaderJumpToPage(this.value)" class="hidden md:inline-block bg-zinc-800 text-zinc-200 text-xs font-medium rounded-lg px-2.5 py-1.5 border border-zinc-700 focus:outline-emerald-500 cursor-pointer max-w-[170px] truncate" title="Jump to section">
+            <!-- Dynamically populated -->
           </select>
+
+          <div class="hidden sm:block w-[1px] h-5 bg-zinc-700/60 mx-0.5"></div>
+
+          <!-- Zoom & Display Modes -->
+          <div class="flex items-center bg-zinc-800/90 rounded-lg p-0.5 border border-zinc-700/70 text-xs font-mono">
+            <button onclick="changeParentReaderZoom(-0.15)" class="w-7 h-7 rounded hover:bg-zinc-700 text-zinc-300 hover:text-white flex items-center justify-center transition" title="Zoom Out (Ctrl - or Ctrl + Wheel Down)">
+              <i class="fa-solid fa-minus text-[11px]"></i>
+            </button>
+            <button onclick="resetParentReaderZoom()" class="px-2 py-0.5 text-[11px] font-bold text-zinc-200 hover:text-white hover:bg-zinc-700 rounded transition min-w-[42px] text-center" title="Reset Zoom (100%)">
+              <span id="parentReaderZoomLevel">100%</span>
+            </button>
+            <button onclick="changeParentReaderZoom(0.15)" class="w-7 h-7 rounded hover:bg-zinc-700 text-zinc-300 hover:text-white flex items-center justify-center transition" title="Zoom In (Ctrl + or Ctrl + Wheel Up)">
+              <i class="fa-solid fa-plus text-[11px]"></i>
+            </button>
+          </div>
+
+          <button onclick="fitParentReaderWidth()" class="hidden sm:flex w-7 h-7 rounded-lg bg-zinc-800/90 hover:bg-zinc-700 text-zinc-300 hover:text-white items-center justify-center border border-zinc-700/70 transition" title="Fit to Width">
+            <i class="fa-solid fa-arrows-left-right-to-line text-[11px]"></i>
+          </button>
+          <button onclick="fitParentReaderPage()" class="hidden sm:flex w-7 h-7 rounded-lg bg-zinc-800/90 hover:bg-zinc-700 text-zinc-300 hover:text-white items-center justify-center border border-zinc-700/70 transition" title="Fit to Page">
+            <i class="fa-solid fa-expand text-[11px]"></i>
+          </button>
         </div>
 
-        <!-- Zoom Controls -->
-        <div class="flex items-center gap-1 bg-slate-800/80 px-2 py-1 rounded-xl border border-slate-700 text-xs font-mono shadow-xs">
-          <button onclick="changeParentReaderZoom(-0.15)" class="w-6 h-6 rounded-lg hover:bg-slate-700 flex items-center justify-center font-bold text-slate-300 transition" title="Zoom Out (- or Ctrl+Scroll Down)">
-            <i class="fa-solid fa-minus text-[10px]"></i>
+        <!-- Right: Window Actions -->
+        <div class="flex items-center gap-1.5">
+          <button onclick="toggleParentReaderFullscreen()" class="w-8 h-8 rounded-lg bg-zinc-800/80 hover:bg-zinc-700 text-zinc-300 hover:text-white flex items-center justify-center transition border border-zinc-700/60" title="Toggle Fullscreen (F)">
+            <i class="fa-solid fa-maximize text-xs"></i>
           </button>
-          <span id="parentReaderZoomLevel" class="text-[11px] px-1 text-amber-300 min-w-[38px] text-center font-bold font-mono">100%</span>
-          <button onclick="changeParentReaderZoom(+0.15)" class="w-6 h-6 rounded-lg hover:bg-slate-700 flex items-center justify-center font-bold text-slate-300 transition" title="Zoom In (+ or Ctrl+Scroll Up)">
-            <i class="fa-solid fa-plus text-[10px]"></i>
-          </button>
-          <button onclick="resetParentReaderZoom()" class="w-6 h-6 rounded-lg hover:bg-slate-700 text-[10px] text-slate-400 hover:text-white flex items-center justify-center transition" title="Reset Zoom (Press 0)">
-            <i class="fa-solid fa-arrows-rotate"></i>
+          <button onclick="closeParentBookReader()" class="w-8 h-8 rounded-lg bg-zinc-800/80 hover:bg-zinc-700 text-zinc-300 hover:text-rose-400 flex items-center justify-center transition font-bold text-lg border border-zinc-700/60" title="Close Viewer (Esc)">
+            &times;
           </button>
         </div>
-
-        <!-- Fullscreen -->
-        <button onclick="toggleParentReaderFullscreen()" class="w-8 h-8 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 flex items-center justify-center transition" title="Fullscreen">
-          <i class="fa-solid fa-expand text-xs"></i>
-        </button>
-
-        <!-- Close Button -->
-        <button onclick="closeParentBookReader()" class="w-8 h-8 rounded-xl bg-rose-950/70 hover:bg-rose-900 text-rose-200 border border-rose-800/60 flex items-center justify-center transition font-black text-lg" title="Close">
-          &times;
-        </button>
       </div>
-    </div>
 
-    <!-- Reader Viewing Stage -->
-    <div class="flex-1 bg-slate-950 flex items-center justify-between p-2 sm:p-4 overflow-hidden relative select-none" id="parentReaderStage">
-      
-      <!-- Prev Page Turn Arrow -->
-      <button onclick="parentReaderTurnRight()" class="z-20 w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-slate-800/80 hover:bg-brandEmerald text-white flex items-center justify-center shadow-xl border border-slate-600 transition duration-200 backdrop-blur-xs hover:scale-105" title="Previous Page (Left Arrow)">
-        <i class="fa-solid fa-chevron-left text-sm sm:text-base"></i>
-      </button>
+      <!-- MAIN DOCUMENT VIEWING STAGE -->
+      <div class="flex-1 bg-[#09090b] flex items-center justify-between p-2 sm:p-6 overflow-hidden relative select-none" id="parentReaderStage">
+        
+        <!-- Left Side Page Turn Button (Discreet & Neutral) -->
+        <button onclick="parentReaderTurnRight()" id="btnParentReaderPrevFloating" class="z-20 w-9 h-9 sm:w-11 sm:h-11 rounded-full bg-zinc-900/80 hover:bg-zinc-800 text-zinc-300 hover:text-white shadow-xl flex items-center justify-center transition backdrop-blur-sm border border-zinc-700/60" title="Previous Page (Left Arrow)">
+          <i class="fa-solid fa-chevron-left text-xs sm:text-sm"></i>
+        </button>
 
-      <!-- Center Dynamic Content Stage -->
-      <div class="flex-1 h-full flex items-center justify-center overflow-auto p-1 relative" id="parentReaderContentArea">
-        <div id="parentReaderPageStage" class="min-h-full min-w-full flex items-center justify-center p-2 sm:p-4 overflow-visible">
-          <div id="parentReaderCanvasWrapper" class="relative inline-block max-h-[76vh] max-w-full origin-center select-none transition-transform duration-150">
-            <img id="parentReaderPageImg" src="" alt="Lesson Page" class="max-h-[76vh] w-auto max-w-full rounded-xl shadow-2xl object-contain border border-slate-700/80 bg-white block select-none pointer-events-none" />
-            
-            <!-- Laser Spotlight Cursor Halo -->
-            <div id="parentReaderLaserHalo" class="pointer-events-none absolute -translate-x-1/2 -translate-y-1/2 rounded-full hidden z-20 w-9 h-9 border-2 border-amber-400 bg-amber-400/25 shadow-[0_0_20px_rgba(251,191,36,0.95)] animate-pulse">
-              <div class="w-2 h-2 rounded-full bg-amber-300 absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 shadow-xs"></div>
+        <!-- Document Canvas & Content Area -->
+        <div class="flex-1 h-full flex items-center justify-center overflow-auto p-1 relative" id="parentReaderContentArea">
+          <div id="parentReaderPageStage" class="min-h-full min-w-full flex items-center justify-center p-2 sm:p-4 overflow-visible">
+            <div id="parentReaderCanvasWrapper" class="relative inline-block max-h-[80vh] max-w-full origin-center select-none">
+              <img id="parentReaderPageImg" src="" alt="Document Page" 
+                class="max-h-[80vh] w-auto max-w-full rounded shadow-[0_15px_35px_rgba(0,0,0,0.5),0_0_0_1px_rgba(255,255,255,0.08)] object-contain bg-white block select-none pointer-events-none transition-shadow" />
             </div>
           </div>
         </div>
+
+        <!-- Right Side Page Turn Button (Discreet & Neutral) -->
+        <button onclick="parentReaderTurnLeft()" id="btnParentReaderNextFloating" class="z-20 w-9 h-9 sm:w-11 sm:h-11 rounded-full bg-zinc-900/80 hover:bg-zinc-800 text-zinc-300 hover:text-white shadow-xl flex items-center justify-center transition backdrop-blur-sm border border-zinc-700/60" title="Next Page (Right Arrow)">
+          <i class="fa-solid fa-chevron-right text-xs sm:text-sm"></i>
+        </button>
       </div>
 
-      <!-- Next Page Turn Arrow -->
-      <button onclick="parentReaderTurnLeft()" class="z-20 w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-slate-800/80 hover:bg-brandEmerald text-white flex items-center justify-center shadow-xl border border-slate-600 transition duration-200 backdrop-blur-xs hover:scale-105" title="Next Page (Right Arrow)">
-        <i class="fa-solid fa-chevron-right text-sm sm:text-base"></i>
-      </button>
-    </div>
+      <!-- BOTTOM SCRUB NAVIGATION BAR -->
+      <div class="bg-zinc-900/95 px-4 py-2 border-t border-zinc-800 flex items-center justify-between gap-3 text-xs font-medium z-20 shrink-0">
+        <button onclick="parentReaderTurnRight()" id="btnParentReaderPrevBottom" class="px-3 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-300 hover:text-white flex items-center gap-1.5 transition">
+          <i class="fa-solid fa-chevron-left text-[10px]"></i> <span class="hidden sm:inline">Previous</span>
+        </button>
 
-    <!-- Reader Bottom Scrub Navigation Bar -->
-    <div class="bg-slate-950 px-4 py-2.5 border-t border-slate-800 flex items-center justify-between flex-wrap gap-2 text-xs font-semibold text-white">
-      <button onclick="parentReaderTurnRight()" class="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 flex items-center gap-1.5 transition">
-        <i class="fa-solid fa-arrow-left text-xs"></i> <span class="hidden sm:inline">Previous</span>
-      </button>
+        <div class="flex items-center gap-3 flex-1 justify-center max-w-xs sm:max-w-md">
+          <span class="font-mono text-[11px] text-zinc-400 whitespace-nowrap" id="parentReaderBottomPageInd">Page 1 of 32</span>
+          <input type="range" id="parentReaderPageSlider" min="1" max="32" value="1" oninput="parentReaderJumpToPage(this.value)" class="w-full accent-emerald-500 cursor-pointer h-1.5 bg-zinc-800 rounded-lg">
+        </div>
 
-      <div class="flex items-center gap-3 flex-1 justify-center max-w-xs sm:max-w-md">
-        <span class="font-mono font-bold text-emerald-400" id="parentReaderBottomPageInd">Page 1 of 32</span>
-        <input type="range" id="parentReaderPageSlider" min="1" max="32" value="1" oninput="parentReaderJumpToPage(this.value)" class="w-full accent-emerald-500 cursor-pointer h-1.5 bg-slate-800 rounded-lg">
+        <button onclick="parentReaderTurnLeft()" id="btnParentReaderNextBottom" class="px-3 py-1.5 rounded-lg bg-emerald-700 hover:bg-emerald-600 text-white flex items-center gap-1.5 transition font-semibold">
+          <span class="hidden sm:inline">Next</span> <i class="fa-solid fa-chevron-right text-[10px]"></i>
+        </button>
       </div>
 
-      <button onclick="parentReaderTurnLeft()" class="px-3 py-1.5 rounded-xl bg-brandEmerald hover:bg-emerald-600 text-white flex items-center gap-1.5 transition font-bold shadow-xs">
-        <span class="hidden sm:inline">Next</span> <i class="fa-solid fa-arrow-right text-xs"></i>
-      </button>
     </div>
-
   </div>
 
   <!-- ================= MODAL: FEE RECEIPT VOUCHER ================= -->
@@ -801,7 +814,6 @@
     let ACTIVE_READER_BOOK = null;
     let ACTIVE_READER_PAGE = 1;
     let ACTIVE_READER_ZOOM = 1.0;
-    let STUDENT_LASER_ACTIVE = false;
     let READER_IS_PANNING = false;
     let READER_PAN_START_X = 0;
     let READER_PAN_START_Y = 0;
@@ -1855,7 +1867,10 @@
 
       // Open Modal
       const modal = document.getElementById('modalParentBookReader');
-      if (modal) modal.classList.remove('hidden');
+      if (modal) {
+        modal.classList.remove('hidden');
+        modal.classList.add('flex');
+      }
 
       renderCurrentStudentReaderPage();
     }
@@ -1881,7 +1896,10 @@
       if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
       resetParentReaderZoom();
       const modal = document.getElementById('modalParentBookReader');
-      if (modal) modal.classList.add('hidden');
+      if (modal) {
+        modal.classList.add('hidden');
+        modal.classList.remove('flex');
+      }
       ACTIVE_READER_BOOK = null;
     }
 
@@ -1894,6 +1912,9 @@
 
       const pageBadge = document.getElementById('parentReaderPageBadge');
       if (pageBadge) pageBadge.innerText = `Page ${ACTIVE_READER_PAGE} of ${maxPages}`;
+
+      const topInd = document.getElementById('parentReaderPageIndicatorTop');
+      if (topInd) topInd.innerText = `${ACTIVE_READER_PAGE} / ${maxPages}`;
 
       const bottomInd = document.getElementById('parentReaderBottomPageInd');
       if (bottomInd) bottomInd.innerText = `Page ${ACTIVE_READER_PAGE} of ${maxPages}`;
@@ -1953,7 +1974,7 @@
     }
 
     // ==========================================
-    // UNIFIED ZOOM & LASER POINTER ENGINE
+    // UNIFIED ZOOM & DOCUMENT CONTROLS ENGINE
     // ==========================================
     function applyParentReaderZoom() {
       const wrapper = document.getElementById('parentReaderCanvasWrapper');
@@ -1984,6 +2005,48 @@
       }
     }
 
+    function fitParentReaderWidth() {
+      const area = document.getElementById('parentReaderContentArea');
+      const img = document.getElementById('parentReaderPageImg');
+      if (!area || !img) {
+        ACTIVE_READER_ZOOM = 1.0;
+        applyParentReaderZoom();
+        return;
+      }
+      const clientW = area.clientWidth;
+      const naturalW = img.naturalWidth || img.clientWidth || 600;
+      if (clientW > 0 && naturalW > 0) {
+        const targetZoom = (clientW - 32) / naturalW;
+        ACTIVE_READER_ZOOM = Math.max(0.6, Math.min(3.0, Math.round(targetZoom * 100) / 100));
+      } else {
+        ACTIVE_READER_ZOOM = 1.0;
+      }
+      applyParentReaderZoom();
+    }
+
+    function fitParentReaderPage() {
+      const area = document.getElementById('parentReaderContentArea');
+      const img = document.getElementById('parentReaderPageImg');
+      if (!area || !img) {
+        ACTIVE_READER_ZOOM = 1.0;
+        applyParentReaderZoom();
+        return;
+      }
+      const clientW = area.clientWidth;
+      const clientH = area.clientHeight;
+      const naturalW = img.naturalWidth || img.clientWidth || 600;
+      const naturalH = img.naturalHeight || img.clientHeight || 860;
+      if (clientW > 0 && clientH > 0 && naturalW > 0 && naturalH > 0) {
+        const scaleW = (clientW - 32) / naturalW;
+        const scaleH = (clientH - 32) / naturalH;
+        const targetZoom = Math.min(scaleW, scaleH);
+        ACTIVE_READER_ZOOM = Math.max(0.6, Math.min(3.0, Math.round(targetZoom * 100) / 100));
+      } else {
+        ACTIVE_READER_ZOOM = 1.0;
+      }
+      applyParentReaderZoom();
+    }
+
     function updateStudentReaderPanningState() {
       const area = document.getElementById('parentReaderContentArea');
       if (!area) return;
@@ -1991,33 +2054,17 @@
       area.style.cursor = canPan ? 'grab' : 'default';
     }
 
-    function toggleStudentLaserSpotlight() {
-      STUDENT_LASER_ACTIVE = !STUDENT_LASER_ACTIVE;
-      const btn = document.getElementById('btnStudentLaserToggle');
-      const halo = document.getElementById('parentReaderLaserHalo');
-
-      if (STUDENT_LASER_ACTIVE) {
-        btn?.classList.add('bg-amber-400', 'text-slate-950');
-        btn?.classList.remove('bg-slate-800', 'text-amber-300');
-      } else {
-        btn?.classList.remove('bg-amber-400', 'text-slate-950');
-        btn?.classList.add('bg-slate-800', 'text-amber-300');
-        halo?.classList.add('hidden');
-      }
-    }
-
     function setupStudentReaderPanningAndWheel() {
       const area = document.getElementById('parentReaderContentArea');
-      const wrapper = document.getElementById('parentReaderCanvasWrapper');
       if (!area || area._wheelAttached) return;
       area._wheelAttached = true;
 
-      // 1. Mouse wheel zoom (Ctrl + Wheel, Alt + Wheel, or trackpad pinch)
+      // 1. Mouse wheel zoom (Ctrl + Wheel, Meta + Wheel, Alt + Wheel, or trackpad pinch)
       area.addEventListener('wheel', function(e) {
         const modal = document.getElementById('modalParentBookReader');
         if (!modal || modal.classList.contains('hidden')) return;
 
-        if (e.ctrlKey || e.altKey) {
+        if (e.ctrlKey || e.metaKey || e.altKey) {
           e.preventDefault();
           changeParentReaderZoom(e.deltaY < 0 ? 0.15 : -0.15);
         }
@@ -2025,7 +2072,7 @@
 
       // 2. Mouse Drag Panning
       area.addEventListener('mousedown', function(e) {
-        const canPan = READER_SPACE_DOWN || (ACTIVE_READER_ZOOM > 1.0 && !STUDENT_LASER_ACTIVE);
+        const canPan = READER_SPACE_DOWN || (ACTIVE_READER_ZOOM > 1.0);
         if (!canPan) return;
         if (e.button !== 0 && e.button !== 1) return;
 
@@ -2044,23 +2091,6 @@
           const dy = e.clientY - READER_PAN_START_Y;
           area.scrollLeft = READER_SCROLL_START_X - dx;
           area.scrollTop = READER_SCROLL_START_Y - dy;
-        }
-
-        // Laser spotlight follow
-        if (STUDENT_LASER_ACTIVE && wrapper) {
-          const halo = document.getElementById('parentReaderLaserHalo');
-          const rect = wrapper.getBoundingClientRect();
-          if (e.clientX >= rect.left && e.clientX <= rect.right && e.clientY >= rect.top && e.clientY <= rect.bottom) {
-            halo?.classList.remove('hidden');
-            const xPercent = Math.max(0, Math.min(100, ((e.clientX - rect.left) / rect.width) * 100));
-            const yPercent = Math.max(0, Math.min(100, ((e.clientY - rect.top) / rect.height) * 100));
-            if (halo) {
-              halo.style.left = xPercent + '%';
-              halo.style.top = yPercent + '%';
-            }
-          } else {
-            halo?.classList.add('hidden');
-          }
         }
       });
 
@@ -2119,9 +2149,10 @@
           return;
         }
 
-        // Laser Toggle Shortcut (L)
-        if (e.key.toUpperCase() === 'L') {
-          toggleStudentLaserSpotlight();
+        // Close on Escape
+        if (e.key === 'Escape') {
+          e.preventDefault();
+          closeParentBookReader();
           return;
         }
 

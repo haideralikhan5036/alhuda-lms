@@ -559,20 +559,6 @@
               <i class="fa-solid fa-right-to-bracket text-brandGold"></i> Login to Control Center
             </button>
           </form>
-
-          <!-- Other Portals Quick Navigation Links -->
-          <div class="mt-6 pt-4 border-t border-slate-200 text-center">
-            <span class="text-[11px] text-slate-500 block mb-2 font-medium">Looking for another portal?</span>
-            <div class="flex items-center justify-center gap-3 text-xs font-bold">
-              <a href="teacher.html" class="text-emerald-700 hover:underline flex items-center gap-1">
-                <i class="fa-solid fa-chalkboard-user"></i> Teacher
-              </a>
-              <span class="text-slate-300">&bull;</span>
-              <a href="parent.html" class="text-amber-700 hover:underline flex items-center gap-1">
-                <i class="fa-solid fa-users"></i> Parent
-              </a>
-            </div>
-          </div>
         </div>
       </div>
       
@@ -4998,217 +4984,137 @@
   <!-- ============================================================= -->
   <!-- MODAL: IN-LMS INTERACTIVE DIGITAL BOOK READER (HD ENGINE)        -->
   <!-- ============================================================= -->
-  <div id="modalDigitalBookReader" class="fixed inset-0 bg-black/90 backdrop-blur-md z-[95] hidden items-center justify-center p-2 sm:p-4">
-    <div id="readerModalContainer" class="bg-slate-900 rounded-2xl max-w-6xl w-full h-[95vh] flex flex-col shadow-2xl border border-slate-700 overflow-hidden text-white animate-scaleIn">
+  <!-- ============================================================= -->
+  <!-- MODAL: IN-LMS PROFESSIONAL DOCUMENT & COURSE MATERIAL VIEWER -->
+  <!-- ============================================================= -->
+  <div id="modalDigitalBookReader" class="fixed inset-0 bg-black/90 backdrop-blur-md z-[95] hidden items-center justify-center p-1 sm:p-3">
+    <div id="readerModalContainer" class="bg-[#18181b] rounded-xl sm:rounded-2xl max-w-6xl w-full h-[96vh] flex flex-col shadow-2xl border border-zinc-800 overflow-hidden text-zinc-100 animate-scaleIn">
       
-      <!-- READER TOP CONTROLS BAR -->
-      <div class="bg-slate-950 px-4 py-3 border-b border-slate-800 flex items-center justify-between flex-wrap gap-2.5 z-20">
-        <div class="flex items-center gap-3">
-          <div class="w-9 h-9 rounded-xl bg-brandDark text-brandGold flex items-center justify-center font-black text-base shadow-xs" id="readerBookIcon">
+      <!-- TOP DOCUMENT TOOLBAR -->
+      <div class="bg-zinc-900/95 px-3 sm:px-4 py-2.5 border-b border-zinc-800/80 flex items-center justify-between flex-wrap gap-2 z-20 shrink-0">
+        
+        <!-- Left: Document Identity -->
+        <div class="flex items-center gap-2.5 min-w-0 max-w-[280px] sm:max-w-sm">
+          <div class="w-8 h-8 rounded-lg bg-zinc-800 text-emerald-400 flex items-center justify-center font-bold text-sm shrink-0 border border-zinc-700/60" id="readerBookIcon">
             <i class="fa-solid fa-book-open"></i>
           </div>
-          <div>
+          <div class="min-w-0">
             <div class="flex items-center gap-2">
-              <h3 class="font-extrabold text-sm sm:text-base text-white tracking-tight" id="readerBookTitle">Digital Book Reader</h3>
-              <span id="readerCategoryBadge" class="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-emerald-950 text-emerald-300 border border-emerald-700">Course Material</span>
+              <h3 class="font-bold text-xs sm:text-sm text-zinc-100 truncate tracking-tight" id="readerBookTitle">Course Material</h3>
+              <span id="readerCategoryBadge" class="hidden sm:inline-block px-2 py-0.5 rounded text-[10px] font-medium bg-zinc-800 text-zinc-400 border border-zinc-700">Syllabus</span>
             </div>
-            <p class="text-[11px] text-slate-400 mt-0.5 truncate max-w-xs sm:max-w-md" id="readerChapterDesc">Chapter / Topic</p>
+            <p class="text-[11px] text-zinc-400 truncate mt-0.5" id="readerChapterDesc">Page 1</p>
           </div>
         </div>
 
-        <!-- CENTER: JUMP & ZOOM CONTROLS -->
-        <div class="flex items-center gap-2">
-          <!-- Jump to Chapter / Page Selector -->
-          <div class="flex items-center gap-1.5 bg-slate-800/80 px-2 py-1 rounded-xl border border-slate-700 text-xs">
-            <span class="text-slate-400 font-medium hidden sm:inline">Go to:</span>
-            <select id="readerJumpSelect" onchange="jumpToReaderPage(this.value)" class="bg-slate-900 text-white font-bold text-xs rounded-lg px-2 py-1 border border-slate-600 focus:outline-emerald-500 cursor-pointer max-w-[130px] sm:max-w-[190px]">
-              <!-- Dynamically populated -->
-            </select>
-          </div>
-
-          <!-- Zoom Controls -->
-          <div class="flex items-center gap-1 bg-slate-800/80 px-2 py-1 rounded-xl border border-slate-700 text-xs font-mono shadow-xs">
-            <button onclick="changeReaderZoom(-0.15)" class="w-6 h-6 rounded-lg hover:bg-slate-700 flex items-center justify-center font-bold text-slate-300 transition" title="Zoom Out (- or Ctrl+Scroll Down)">
-              <i class="fa-solid fa-minus text-[10px]"></i>
+        <!-- Center: Navigation, Jump, & Zoom Controls -->
+        <div class="flex items-center gap-1.5 sm:gap-2">
+          
+          <!-- Page Navigation Group -->
+          <div class="flex items-center bg-zinc-800/90 rounded-lg p-0.5 border border-zinc-700/70 text-xs">
+            <button onclick="changeReaderPage(-1)" class="w-7 h-7 rounded hover:bg-zinc-700 text-zinc-300 hover:text-white flex items-center justify-center transition" title="Previous Page (Left Arrow)">
+              <i class="fa-solid fa-chevron-left text-[11px]"></i>
             </button>
-            <span id="readerZoomLevel" class="text-[11px] px-1 text-amber-300 min-w-[38px] text-center font-bold font-mono">100%</span>
-            <button onclick="changeReaderZoom(+0.15)" class="w-6 h-6 rounded-lg hover:bg-slate-700 flex items-center justify-center font-bold text-slate-300 transition" title="Zoom In (+ or Ctrl+Scroll Up)">
-              <i class="fa-solid fa-plus text-[10px]"></i>
-            </button>
-            <button onclick="resetReaderZoom()" class="w-6 h-6 rounded-lg hover:bg-slate-700 text-[10px] text-slate-400 hover:text-white flex items-center justify-center transition" title="Reset Zoom (Press 0)">
-              <i class="fa-solid fa-arrows-rotate"></i>
+            <div class="px-1.5 py-0.5 font-mono text-[11px] font-semibold text-zinc-200" id="readerPageIndicatorTop">
+              1 / 32
+            </div>
+            <button onclick="changeReaderPage(1)" class="w-7 h-7 rounded hover:bg-zinc-700 text-zinc-300 hover:text-white flex items-center justify-center transition" title="Next Page (Right Arrow)">
+              <i class="fa-solid fa-chevron-right text-[11px]"></i>
             </button>
           </div>
 
-          <!-- Fullscreen Toggle -->
-          <button onclick="toggleReaderFullscreen()" class="w-8 h-8 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 flex items-center justify-center transition" title="Toggle Fullscreen">
-            <i class="fa-solid fa-expand text-xs"></i>
+          <!-- Jump To Chapter / Page Selector -->
+          <select id="readerJumpSelect" onchange="jumpToReaderPage(this.value)" class="hidden md:inline-block bg-zinc-800 text-zinc-200 text-xs font-medium rounded-lg px-2.5 py-1.5 border border-zinc-700 focus:outline-emerald-500 cursor-pointer max-w-[170px] truncate" title="Jump to section">
+            <!-- Dynamically populated -->
+          </select>
+
+          <div class="hidden sm:block w-[1px] h-5 bg-zinc-700/60 mx-0.5"></div>
+
+          <!-- Zoom & Display Modes -->
+          <div class="flex items-center bg-zinc-800/90 rounded-lg p-0.5 border border-zinc-700/70 text-xs font-mono">
+            <button onclick="changeReaderZoom(-0.15)" class="w-7 h-7 rounded hover:bg-zinc-700 text-zinc-300 hover:text-white flex items-center justify-center transition" title="Zoom Out (Ctrl - or Ctrl + Wheel Down)">
+              <i class="fa-solid fa-minus text-[11px]"></i>
+            </button>
+            <button onclick="resetReaderZoom()" class="px-2 py-0.5 text-[11px] font-bold text-zinc-200 hover:text-white hover:bg-zinc-700 rounded transition min-w-[42px] text-center" title="Reset Zoom (100%)">
+              <span id="readerZoomLevel">100%</span>
+            </button>
+            <button onclick="changeReaderZoom(0.15)" class="w-7 h-7 rounded hover:bg-zinc-700 text-zinc-300 hover:text-white flex items-center justify-center transition" title="Zoom In (Ctrl + or Ctrl + Wheel Up)">
+              <i class="fa-solid fa-plus text-[11px]"></i>
+            </button>
+          </div>
+
+          <button onclick="fitReaderWidth()" class="hidden sm:flex w-7 h-7 rounded-lg bg-zinc-800/90 hover:bg-zinc-700 text-zinc-300 hover:text-white items-center justify-center border border-zinc-700/70 transition" title="Fit to Width">
+            <i class="fa-solid fa-arrows-left-right-to-line text-[11px]"></i>
           </button>
+          <button onclick="fitReaderPage()" class="hidden sm:flex w-7 h-7 rounded-lg bg-zinc-800/90 hover:bg-zinc-700 text-zinc-300 hover:text-white items-center justify-center border border-zinc-700/70 transition" title="Fit to Page">
+            <i class="fa-solid fa-expand text-[11px]"></i>
+          </button>
+        </div>
 
-          <!-- Close Button -->
-          <button onclick="closeDigitalBookReader()" class="w-8 h-8 rounded-xl bg-rose-950/70 hover:bg-rose-900 text-rose-200 border border-rose-800/60 flex items-center justify-center transition font-black text-lg" title="Close Reader">
+        <!-- Right: Window Actions -->
+        <div class="flex items-center gap-1.5">
+          <button onclick="toggleReaderFullscreen()" class="w-8 h-8 rounded-lg bg-zinc-800/80 hover:bg-zinc-700 text-zinc-300 hover:text-white flex items-center justify-center transition border border-zinc-700/60" title="Toggle Fullscreen (F)">
+            <i class="fa-solid fa-maximize text-xs"></i>
+          </button>
+          <button onclick="closeDigitalBookReader()" class="w-8 h-8 rounded-lg bg-zinc-800/80 hover:bg-zinc-700 text-zinc-300 hover:text-rose-400 flex items-center justify-center transition font-bold text-lg border border-zinc-700/60" title="Close Viewer (Esc)">
             &times;
           </button>
         </div>
       </div>
 
-      <!-- MAIN STAGE / CANVAS AREA -->
-      <div class="flex-1 bg-slate-950 flex items-center justify-between p-2 sm:p-4 overflow-hidden relative select-none gap-2 sm:gap-3" id="readerStage">
+      <!-- MAIN DOCUMENT VIEWING STAGE -->
+      <div class="flex-1 bg-[#09090b] flex items-center justify-between p-2 sm:p-6 overflow-hidden relative select-none" id="readerStage">
         
-        <!-- TEACHING STUDIO: DIGITAL WHITEBOARD & ANNOTATION SIDEBAR -->
-        <aside id="readerTeachingToolbar" class="z-30 flex flex-col gap-1 p-2 bg-slate-900/95 border border-slate-700/80 rounded-2xl shadow-2xl backdrop-blur-md max-h-[82vh] overflow-y-auto select-none w-[52px] sm:w-[58px] items-center shrink-0">
-          
-          <!-- Mode Toggle: Pointer vs Laser -->
-          <button type="button" onclick="setTeachingTool('pointer')" id="toolBtn_pointer" class="teaching-tool-btn active w-9 h-9 sm:w-10 sm:h-10 rounded-xl flex items-center justify-center text-slate-300 hover:text-white hover:bg-slate-800 transition" title="Pointer / Select Mode (V)">
-            <i class="fa-solid fa-arrow-pointer text-sm"></i>
-          </button>
-          <button type="button" onclick="setTeachingTool('laser')" id="toolBtn_laser" class="teaching-tool-btn w-9 h-9 sm:w-10 sm:h-10 rounded-xl flex items-center justify-center text-amber-400 hover:bg-slate-800 transition" title="Laser Spotlight Pointer (L)">
-            <i class="fa-solid fa-crosshairs text-base"></i>
-          </button>
-
-          <div class="w-6 h-[1px] bg-slate-700/70 my-0.5"></div>
-
-          <!-- Freehand Pen & Highlighter -->
-          <button type="button" onclick="setTeachingTool('pen')" id="toolBtn_pen" class="teaching-tool-btn w-9 h-9 sm:w-10 sm:h-10 rounded-xl flex items-center justify-center text-slate-300 hover:text-white hover:bg-slate-800 transition" title="Freehand Pen (P)">
-            <i class="fa-solid fa-pencil text-sm"></i>
-          </button>
-          <button type="button" onclick="setTeachingTool('highlighter')" id="toolBtn_highlighter" class="teaching-tool-btn w-9 h-9 sm:w-10 sm:h-10 rounded-xl flex items-center justify-center text-amber-300 hover:bg-slate-800 transition" title="Translucent Text Highlighter (H)">
-            <i class="fa-solid fa-highlighter text-sm"></i>
-          </button>
-
-          <div class="w-6 h-[1px] bg-slate-700/70 my-0.5"></div>
-
-          <!-- Shapes: Circle, Box, Arrow, Star, Tick, Cross -->
-          <button type="button" onclick="setTeachingTool('circle')" id="toolBtn_circle" class="teaching-tool-btn w-9 h-9 sm:w-10 sm:h-10 rounded-xl flex items-center justify-center text-slate-300 hover:text-white hover:bg-slate-800 transition" title="Circle Letter / Harkat (C)">
-            <i class="fa-regular fa-circle text-sm"></i>
-          </button>
-          <button type="button" onclick="setTeachingTool('box')" id="toolBtn_box" class="teaching-tool-btn w-9 h-9 sm:w-10 sm:h-10 rounded-xl flex items-center justify-center text-slate-300 hover:text-white hover:bg-slate-800 transition" title="Box Word / Ayah (B)">
-            <i class="fa-regular fa-square text-sm"></i>
-          </button>
-          <button type="button" onclick="setTeachingTool('arrow')" id="toolBtn_arrow" class="teaching-tool-btn w-9 h-9 sm:w-10 sm:h-10 rounded-xl flex items-center justify-center text-slate-300 hover:text-white hover:bg-slate-800 transition" title="Pointer Arrow (A)">
-            <i class="fa-solid fa-arrow-left-long text-sm"></i>
-          </button>
-          <button type="button" onclick="setTeachingTool('star')" id="toolBtn_star" class="teaching-tool-btn w-9 h-9 sm:w-10 sm:h-10 rounded-xl flex items-center justify-center text-amber-400 hover:bg-slate-800 transition" title="Reward Star ⭐ (S)">
-            <i class="fa-solid fa-star text-sm"></i>
-          </button>
-          <button type="button" onclick="setTeachingTool('tick')" id="toolBtn_tick" class="teaching-tool-btn w-9 h-9 sm:w-10 sm:h-10 rounded-xl flex items-center justify-center text-emerald-400 hover:bg-slate-800 transition" title="Correct Recitation Tick ✔️">
-            <i class="fa-solid fa-check text-sm"></i>
-          </button>
-          <button type="button" onclick="setTeachingTool('cross')" id="toolBtn_cross" class="teaching-tool-btn w-9 h-9 sm:w-10 sm:h-10 rounded-xl flex items-center justify-center text-rose-400 hover:bg-slate-800 transition" title="Correction Cross ❌">
-            <i class="fa-solid fa-xmark text-sm"></i>
-          </button>
-
-          <div class="w-6 h-[1px] bg-slate-700/70 my-0.5"></div>
-
-          <!-- Color Swatches -->
-          <div class="flex flex-col gap-1 items-center py-0.5">
-            <button type="button" onclick="setTeachingColor('#ef4444')" id="colorBtn_red" class="teaching-color-btn active w-5 h-5 rounded-full bg-red-500 border border-white hover:scale-115 transition shadow-xs" title="Red (Mistake / Focus)"></button>
-            <button type="button" onclick="setTeachingColor('#10b981')" id="colorBtn_green" class="teaching-color-btn w-5 h-5 rounded-full bg-emerald-500 border border-slate-600 hover:scale-115 transition shadow-xs" title="Green (Correct / Tajweed)"></button>
-            <button type="button" onclick="setTeachingColor('#f59e0b')" id="colorBtn_gold" class="teaching-color-btn w-5 h-5 rounded-full bg-amber-500 border border-slate-600 hover:scale-115 transition shadow-xs" title="Gold / Yellow"></button>
-            <button type="button" onclick="setTeachingColor('#0ea5e9')" id="colorBtn_blue" class="teaching-color-btn w-5 h-5 rounded-full bg-sky-500 border border-slate-600 hover:scale-115 transition shadow-xs" title="Sky Blue"></button>
-            <button type="button" onclick="setTeachingColor('#a855f7')" id="colorBtn_purple" class="teaching-color-btn w-5 h-5 rounded-full bg-purple-500 border border-slate-600 hover:scale-115 transition shadow-xs" title="Purple"></button>
-            
-            <!-- Custom Color Picker -->
-            <label class="w-5 h-5 rounded-full overflow-hidden cursor-pointer border border-slate-500 hover:scale-115 transition shadow-xs relative mt-0.5" title="Custom Color Palette">
-              <input type="color" id="teachingCustomColorPicker" value="#ef4444" onchange="setTeachingColor(this.value)" class="absolute -top-2 -left-2 w-9 h-9 cursor-pointer opacity-0">
-              <div class="w-full h-full bg-gradient-to-tr from-rose-500 via-amber-400 via-emerald-400 to-indigo-500"></div>
-            </label>
-          </div>
-
-          <div class="w-6 h-[1px] bg-slate-700/70 my-0.5"></div>
-
-          <!-- Stroke Size Selector -->
-          <div class="flex items-center gap-1.5 py-0.5">
-            <button type="button" onclick="setTeachingWidth(2)" id="widthBtn_2" class="w-4 h-4 rounded-full flex items-center justify-center text-slate-400 hover:text-white" title="Thin Line (2px)">
-              <div class="w-1 h-1 rounded-full bg-current"></div>
-            </button>
-            <button type="button" onclick="setTeachingWidth(4)" id="widthBtn_4" class="w-4 h-4 rounded-full flex items-center justify-center text-white" title="Medium Line (4px)">
-              <div class="w-2 h-2 rounded-full bg-current"></div>
-            </button>
-            <button type="button" onclick="setTeachingWidth(8)" id="widthBtn_8" class="w-4 h-4 rounded-full flex items-center justify-center text-slate-400 hover:text-white" title="Bold Line (8px)">
-              <div class="w-3 h-3 rounded-full bg-current"></div>
-            </button>
-          </div>
-
-          <div class="w-6 h-[1px] bg-slate-700/70 my-0.5"></div>
-
-          <!-- Actions: Eraser, Undo, Clear, Snapshot -->
-          <button type="button" onclick="setTeachingTool('eraser')" id="toolBtn_eraser" class="teaching-tool-btn w-9 h-9 sm:w-10 sm:h-10 rounded-xl flex items-center justify-center text-slate-300 hover:text-white hover:bg-slate-800 transition" title="Eraser (E)">
-            <i class="fa-solid fa-eraser text-sm"></i>
-          </button>
-          <button type="button" onclick="undoTeachingAnnotation()" class="w-9 h-9 sm:w-10 sm:h-10 rounded-xl flex items-center justify-center text-slate-300 hover:text-white hover:bg-slate-800 transition" title="Undo (Ctrl+Z)">
-            <i class="fa-solid fa-rotate-left text-sm"></i>
-          </button>
-          <button type="button" onclick="clearCurrentPageAnnotations()" class="w-9 h-9 sm:w-10 sm:h-10 rounded-xl flex items-center justify-center text-rose-400 hover:bg-rose-950/60 transition" title="Clear Page Marks">
-            <i class="fa-solid fa-trash-can text-sm"></i>
-          </button>
-          <button type="button" onclick="downloadAnnotatedLessonSnapshot()" class="w-9 h-9 sm:w-10 sm:h-10 rounded-xl flex items-center justify-center text-amber-300 hover:bg-slate-800 transition" title="Download Snapshot for Parents (PNG)">
-            <i class="fa-solid fa-camera text-sm"></i>
-          </button>
-
-        </aside>
-
-        <!-- Left Flip Button -->
-        <button onclick="changeReaderPage(-1)" id="btnReaderPrevFloating" class="z-10 w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-slate-800/80 hover:bg-emerald-700 text-white shadow-xl flex items-center justify-center transition duration-200 backdrop-blur-xs border border-slate-600 hover:scale-105" title="Previous Page (&larr; Left Arrow)">
-          <i class="fa-solid fa-chevron-left text-sm"></i>
+        <!-- Left Side Page Turn Button (Discreet & Neutral) -->
+        <button onclick="changeReaderPage(-1)" id="btnReaderPrevFloating" class="z-20 w-9 h-9 sm:w-11 sm:h-11 rounded-full bg-zinc-900/80 hover:bg-zinc-800 text-zinc-300 hover:text-white shadow-xl flex items-center justify-center transition backdrop-blur-sm border border-zinc-700/60" title="Previous Page (Left Arrow)">
+          <i class="fa-solid fa-chevron-left text-xs sm:text-sm"></i>
         </button>
 
-        <!-- Dynamic Content Stage (Image / Text Viewer) -->
+        <!-- Document Canvas & Content Area -->
         <div class="flex-1 h-full flex items-center justify-center overflow-auto p-1 relative" id="readerContentArea">
           
           <!-- Loading Spinner -->
-          <div id="readerLoadingSpinner" class="hidden absolute inset-0 flex flex-col items-center justify-center bg-slate-950/80 z-20">
-            <i class="fa-solid fa-spinner fa-spin text-3xl text-brandGold mb-2"></i>
-            <span class="text-xs text-slate-400 font-semibold font-mono">Loading Page...</span>
+          <div id="readerLoadingSpinner" class="hidden absolute inset-0 flex flex-col items-center justify-center bg-zinc-950/70 backdrop-blur-xs z-30">
+            <i class="fa-solid fa-circle-notch fa-spin text-2xl text-emerald-400 mb-2"></i>
+            <span class="text-xs text-zinc-400 font-medium">Loading document page...</span>
           </div>
 
-          <!-- 1. IMAGE-BASED READER STAGE (Qaida, 16-Line Quran, Illustrated Books) -->
+          <!-- 1. IMAGE-BASED DOCUMENT STAGE (Realistic Paper Look) -->
           <div id="readerImageStage" class="min-h-full min-w-full flex items-center justify-center p-2 sm:p-4 overflow-visible">
-            <div id="readerCanvasWrapper" class="relative inline-block max-h-[76vh] max-w-full origin-center select-none">
-              <img id="readerPageImg" src="" alt="Book Page" 
-                class="max-h-[76vh] w-auto max-w-full rounded-xl shadow-2xl object-contain border border-slate-700/80 bg-white block select-none pointer-events-none" />
-              
-              <!-- INTERACTIVE DRAWING / ANNOTATION CANVAS -->
-              <canvas id="readerAnnotationCanvas" class="absolute inset-0 w-full h-full rounded-xl cursor-default z-10 touch-none"></canvas>
-
-              <!-- LASER SPOTLIGHT POINTER HALO -->
-              <div id="readerLaserHalo" class="pointer-events-none absolute -translate-x-1/2 -translate-y-1/2 rounded-full hidden z-20 w-9 h-9 border-2 border-amber-400 bg-amber-400/20 shadow-[0_0_20px_rgba(251,191,36,0.95)] animate-pulse">
-                <div class="w-2 h-2 rounded-full bg-amber-300 absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 shadow-xs"></div>
-              </div>
+            <div id="readerCanvasWrapper" class="relative inline-block max-h-[80vh] max-w-full origin-center select-none">
+              <img id="readerPageImg" src="" alt="Document Page" 
+                class="max-h-[80vh] w-auto max-w-full rounded shadow-[0_15px_35px_rgba(0,0,0,0.5),0_0_0_1px_rgba(255,255,255,0.08)] object-contain bg-white block select-none pointer-events-none transition-shadow" />
             </div>
           </div>
 
-          <!-- 2. TEXT-BASED READABLE STAGE (Tafseer, Hadith, Duas with Arabic + Trans.) -->
-          <div id="readerTextStage" class="hidden w-full max-w-3xl h-full overflow-y-auto p-4 sm:p-6 bg-slate-900/90 rounded-2xl border border-slate-800 text-slate-200 space-y-4">
+          <!-- 2. TEXT-BASED READABLE STAGE (Tafseer / Hadith) -->
+          <div id="readerTextStage" class="hidden w-full max-w-3xl h-full overflow-y-auto p-5 sm:p-8 bg-zinc-900/95 rounded-xl border border-zinc-800 text-zinc-200 space-y-4 shadow-xl">
             <div id="readerTextContent">
-              <!-- Dynamically populated for Tafseer / Hadith text -->
+              <!-- Dynamically populated for text materials -->
             </div>
           </div>
 
         </div>
 
-        <!-- Right Flip Button -->
-        <button onclick="changeReaderPage(+1)" id="btnReaderNextFloating" class="z-10 w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-slate-800/80 hover:bg-emerald-700 text-white shadow-xl flex items-center justify-center transition duration-200 backdrop-blur-xs border border-slate-600 hover:scale-105" title="Next Page (&rarr; Right Arrow)">
-          <i class="fa-solid fa-chevron-right text-sm"></i>
+        <!-- Right Side Page Turn Button (Discreet & Neutral) -->
+        <button onclick="changeReaderPage(1)" id="btnReaderNextFloating" class="z-20 w-9 h-9 sm:w-11 sm:h-11 rounded-full bg-zinc-900/80 hover:bg-zinc-800 text-zinc-300 hover:text-white shadow-xl flex items-center justify-center transition backdrop-blur-sm border border-zinc-700/60" title="Next Page (Right Arrow)">
+          <i class="fa-solid fa-chevron-right text-xs sm:text-sm"></i>
         </button>
       </div>
 
-      <!-- READER BOTTOM NAVIGATION BAR -->
-      <div class="bg-slate-950 px-4 py-2.5 border-t border-slate-800 flex items-center justify-between flex-wrap gap-2 text-xs font-semibold">
-        <!-- Previous Page Button -->
-        <button onclick="changeReaderPage(-1)" id="btnReaderPrevBottom" class="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 flex items-center gap-1.5 transition">
-          <i class="fa-solid fa-arrow-left text-xs"></i> <span class="hidden sm:inline">Previous</span>
+      <!-- BOTTOM SCRUB NAVIGATION BAR -->
+      <div class="bg-zinc-900/95 px-4 py-2 border-t border-zinc-800 flex items-center justify-between gap-3 text-xs font-medium z-20 shrink-0">
+        <button onclick="changeReaderPage(-1)" id="btnReaderPrevBottom" class="px-3 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-300 hover:text-white flex items-center gap-1.5 transition">
+          <i class="fa-solid fa-chevron-left text-[10px]"></i> <span class="hidden sm:inline">Previous</span>
         </button>
 
-        <!-- Center: Page Indicator & Fast Slider -->
         <div class="flex items-center gap-3 flex-1 justify-center max-w-xs sm:max-w-md">
-          <span class="font-mono font-bold text-emerald-400" id="readerPageIndicator">Page 1 of 32</span>
-          <input type="range" id="readerPageSlider" min="1" max="32" value="1" oninput="jumpToReaderPage(this.value)" class="w-full accent-emerald-500 cursor-pointer h-1.5 bg-slate-800 rounded-lg">
+          <span class="font-mono text-[11px] text-zinc-400 whitespace-nowrap" id="readerPageIndicator">Page 1 of 32</span>
+          <input type="range" id="readerPageSlider" min="1" max="32" value="1" oninput="jumpToReaderPage(this.value)" class="w-full accent-emerald-500 cursor-pointer h-1.5 bg-zinc-800 rounded-lg">
         </div>
 
-        <!-- Next Page Button -->
-        <button onclick="changeReaderPage(+1)" id="btnReaderNextBottom" class="px-3 py-1.5 rounded-xl bg-brandEmerald hover:bg-emerald-600 text-white flex items-center gap-1.5 transition font-bold shadow-xs">
-          <span class="hidden sm:inline">Next</span> <i class="fa-solid fa-arrow-right text-xs"></i>
+        <button onclick="changeReaderPage(1)" id="btnReaderNextBottom" class="px-3 py-1.5 rounded-lg bg-emerald-700 hover:bg-emerald-600 text-white flex items-center gap-1.5 transition font-semibold">
+          <span class="hidden sm:inline">Next</span> <i class="fa-solid fa-chevron-right text-[10px]"></i>
         </button>
       </div>
 

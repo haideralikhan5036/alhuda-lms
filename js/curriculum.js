@@ -422,6 +422,8 @@
       // Update Page Indicator & Slider
       const ind = document.getElementById('readerPageIndicator');
       if (ind) ind.innerText = `Page ${CURRENT_READER_PAGE} of ${maxPages}`;
+      const indTop = document.getElementById('readerPageIndicatorTop');
+      if (indTop) indTop.innerText = `${CURRENT_READER_PAGE} / ${maxPages}`;
 
       const slider = document.getElementById('readerPageSlider');
       if (slider) slider.value = CURRENT_READER_PAGE;
@@ -670,6 +672,48 @@
       }
     }
 
+    function fitReaderWidth() {
+      const area = document.getElementById('readerContentArea');
+      const img = document.getElementById('readerPageImg');
+      if (!area || !img) {
+        CURRENT_READER_ZOOM = 1.0;
+        applyReaderZoom();
+        return;
+      }
+      const clientW = area.clientWidth;
+      const naturalW = img.naturalWidth || img.clientWidth || 600;
+      if (clientW > 0 && naturalW > 0) {
+        const targetZoom = (clientW - 32) / naturalW;
+        CURRENT_READER_ZOOM = Math.max(0.6, Math.min(3.0, Math.round(targetZoom * 100) / 100));
+      } else {
+        CURRENT_READER_ZOOM = 1.0;
+      }
+      applyReaderZoom();
+    }
+
+    function fitReaderPage() {
+      const area = document.getElementById('readerContentArea');
+      const img = document.getElementById('readerPageImg');
+      if (!area || !img) {
+        CURRENT_READER_ZOOM = 1.0;
+        applyReaderZoom();
+        return;
+      }
+      const clientW = area.clientWidth;
+      const clientH = area.clientHeight;
+      const naturalW = img.naturalWidth || img.clientWidth || 600;
+      const naturalH = img.naturalHeight || img.clientHeight || 860;
+      if (clientW > 0 && clientH > 0 && naturalW > 0 && naturalH > 0) {
+        const scaleW = (clientW - 32) / naturalW;
+        const scaleH = (clientH - 32) / naturalH;
+        const targetZoom = Math.min(scaleW, scaleH);
+        CURRENT_READER_ZOOM = Math.max(0.6, Math.min(3.0, Math.round(targetZoom * 100) / 100));
+      } else {
+        CURRENT_READER_ZOOM = 1.0;
+      }
+      applyReaderZoom();
+    }
+
     function updateReaderPanningState() {
       const area = document.getElementById('readerContentArea');
       const canvas = document.getElementById('readerAnnotationCanvas');
@@ -692,13 +736,13 @@
       if (!area || area._panWheelAttached) return;
       area._panWheelAttached = true;
 
-      // 1. Mouse wheel zoom (Ctrl + Wheel, Alt + Wheel, or Trackpad Pinch)
+      // 1. Mouse wheel zoom (Ctrl + Wheel, Meta + Wheel, Alt + Wheel, or Trackpad Pinch)
       area.addEventListener('wheel', function(e) {
         const readerModal = document.getElementById('modalDigitalBookReader');
         if (!readerModal || readerModal.classList.contains('hidden')) return;
         if (!CURRENT_READER_BOOK || CURRENT_READER_BOOK.is_text_viewer) return;
 
-        if (e.ctrlKey || e.altKey) {
+        if (e.ctrlKey || e.metaKey || e.altKey) {
           e.preventDefault();
           const delta = e.deltaY < 0 ? 0.15 : -0.15;
           changeReaderZoom(delta);
