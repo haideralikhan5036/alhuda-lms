@@ -52,6 +52,11 @@
   <!-- Al-Huda Curriculum & Course Material Registry Engine -->
   <script src="curriculum_data.js"></script>
 
+  <!-- High-Res Client-Side Invoice PDF Generation Libraries (html2canvas, jsPDF, html2pdf) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+
   <style>
     :root {
       --font-ui: 'Inter', 'Plus Jakarta Sans', 'Segoe UI', system-ui, -apple-system, sans-serif;
@@ -375,8 +380,11 @@
           </div>
 
           <div class="grid grid-cols-2 gap-3">
-            <div class="p-3 bg-emerald-50/70 border border-emerald-100 rounded-2xl">
-              <div class="text-[11px] font-bold text-slate-500">Monthly Fee</div>
+            <div onclick="switchPortalTab('tab-fees')" class="p-3 bg-emerald-50/70 hover:bg-emerald-100/80 border border-emerald-100 rounded-2xl cursor-pointer transition shadow-2xs group" title="Click to view fee invoices & receipts">
+              <div class="flex items-center justify-between text-[11px] font-bold text-slate-500">
+                <span>Monthly Fee</span>
+                <i class="fa-solid fa-arrow-right text-[10px] text-emerald-600 opacity-0 group-hover:opacity-100 transition-opacity"></i>
+              </div>
               <div class="text-lg font-black text-emerald-700 mt-0.5" id="parentFeeStat">0</div>
               <div class="text-[10px] text-emerald-600 font-semibold" id="parentFeeMonth">No data available yet.</div>
             </div>
@@ -687,46 +695,137 @@
     </div>
   </div>
 
-  <!-- ================= MODAL: FEE RECEIPT VOUCHER ================= -->
-  <div id="modalFeeReceipt" class="fixed inset-0 z-50 bg-black/75 backdrop-blur-xs flex items-center justify-center p-3 hidden">
-    <div class="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-200 space-y-4 animate-scaleIn">
-      <div class="flex items-center justify-between border-b pb-3">
-        <div class="flex items-center gap-2">
-          <div class="w-8 h-8 rounded-lg bg-emerald-100 text-emerald-800 flex items-center justify-center font-bold">
-            <i class="fa-solid fa-receipt"></i>
+  <!-- ============================================================ -->
+  <!-- MODAL: OFFICIAL TUITION FEE INVOICE RECEIPT VOUCHER -->
+  <!-- ============================================================ -->
+  <div id="modalFeeInvoice" class="fixed inset-0 bg-black/75 backdrop-blur-xs z-50 hidden items-center justify-center p-2 sm:p-4 overflow-y-auto">
+    <div class="bg-white rounded-2xl max-w-2xl w-full border border-slate-200 shadow-2xl overflow-hidden my-auto max-h-[94vh] flex flex-col animate-scaleIn">
+      
+      <!-- MODAL TOP BAR -->
+      <div class="p-3.5 sm:p-5 bg-slate-50 border-b border-slate-200 flex justify-between items-center shrink-0">
+        <h3 class="font-extrabold text-slate-900 text-sm flex items-center gap-2">
+          <i class="fa-solid fa-file-invoice-dollar text-emerald-700"></i> Official Tuition Fee Receipt Voucher
+        </h3>
+        <button onclick="closeModal('modalFeeInvoice')" class="text-slate-400 hover:text-slate-700 text-2xl font-bold leading-none">&times;</button>
+      </div>
+
+      <!-- INVOICE PRINTABLE / DISPLAY AREA -->
+      <div class="p-3 sm:p-6 space-y-4 flex-1 overflow-y-auto touch-scroll" id="feeInvoicePrintArea">
+        <div id="feeInvoiceReceiptCard" class="border-2 border-emerald-800 rounded-xl sm:rounded-2xl p-3.5 sm:p-5 bg-white space-y-3.5 sm:space-y-4 shadow-xs">
+          
+          <!-- INVOICE HEADER WITH OFFICIAL ACADEMY LOGO -->
+          <div class="border-b-2 border-emerald-800 pb-3 sm:pb-4 flex justify-between items-start sm:items-center flex-col sm:flex-row gap-2.5 sm:gap-3">
+            <div class="flex items-center gap-2.5 sm:gap-3.5">
+              <img id="feeInvLogoImg" src="alhuda_logo.jpg" alt="Al-Huda Islamic Centre" class="w-12 h-12 sm:w-16 sm:h-16 object-cover rounded-xl shadow-xs border border-emerald-700/30 bg-black shrink-0">
+              <div>
+                <h2 class="text-base sm:text-2xl font-black text-emerald-900 tracking-tight font-serif">AL-HUDA ISLAMIC CENTRE</h2>
+                <p class="text-[11px] sm:text-xs text-slate-600 font-medium">Online Quran &amp; Islamic Studies Academy</p>
+                <p class="text-[10px] sm:text-[11px] text-slate-400 font-mono">Official Tuition Fee Billing Statement</p>
+              </div>
+            </div>
+            <div class="text-left sm:text-right flex sm:flex-col items-center sm:items-end justify-between w-full sm:w-auto pt-1 sm:pt-0 border-t border-emerald-100 sm:border-t-0">
+              <div id="feeInvStatusStamp" class="inline-block px-2.5 py-0.5 sm:px-3 sm:py-1 rounded-md text-[10px] sm:text-[11px] font-black border-2 border-emerald-600 bg-emerald-50 text-emerald-800 tracking-wider">
+                <i class="fa-solid fa-circle-check mr-1 text-emerald-600"></i> PAID IN FULL
+              </div>
+              <div class="text-[11px] sm:text-xs text-slate-500 mt-0.5 sm:mt-1">
+                Receipt #: <strong id="feeInvReceiptNo" class="text-emerald-900 font-mono font-bold">AH-REC-OFFICIAL</strong>
+              </div>
+            </div>
           </div>
-          <div>
-            <h3 class="font-black text-sm text-slate-900">Official Tuition Receipt</h3>
-            <span class="text-[10px] text-slate-400 font-mono" id="receiptModalNo">AH-REC-2026-0001</span>
+
+          <!-- FAMILY DETAILS GRID -->
+          <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2 sm:gap-2.5 bg-slate-50 p-2.5 sm:p-3 rounded-xl border border-slate-200 text-xs">
+            <div><span class="text-slate-500 font-bold block">Parent / Guardian:</span> <strong id="feeInvParentName" class="text-slate-900 block truncate">--</strong></div>
+            <div><span class="text-slate-500 font-bold block">Family Account ID:</span> <strong id="feeInvFamilyId" class="text-emerald-900 font-mono block">--</strong></div>
+            <div><span class="text-slate-500 font-bold block">Student(s) Enrolled:</span> <strong id="feeInvStudentsNames" class="text-slate-900 block truncate">--</strong></div>
+            <div><span class="text-slate-500 font-bold block">Issue Date:</span> <strong id="feeInvIssueDate" class="text-slate-800 font-mono block">--</strong></div>
+            <div><span class="text-slate-500 font-bold block">Parent Email:</span> <strong id="feeInvParentEmail" class="text-slate-800 font-mono block truncate">--</strong></div>
+            <div><span class="text-slate-500 font-bold block">WhatsApp / Phone:</span> <strong id="feeInvWhatsAppNo" class="text-slate-800 font-mono block">--</strong></div>
           </div>
+
+          <!-- ITEMIZED CHARGES TABLE -->
+          <div class="rounded-xl border border-slate-200 overflow-x-auto touch-scroll text-xs">
+            <table class="w-full text-left border-collapse min-w-[280px]">
+              <thead class="bg-emerald-900 text-white font-bold text-[11px]">
+                <tr>
+                  <th class="p-2.5">Particulars / Description</th>
+                  <th class="p-2.5">Billing Period</th>
+                  <th class="p-2.5 text-right">Amount</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-slate-100">
+                <tr>
+                  <td class="p-2.5 font-bold text-slate-800" id="feeInvDescription">Current Month Tuition Fee</td>
+                  <td class="p-2.5 text-slate-600" id="feeInvPeriod">--</td>
+                  <td class="p-2.5 text-right font-mono font-bold text-slate-900" id="feeInvCurrentDue">--</td>
+                </tr>
+                <tr id="feeInvPrevBalanceRow" class="hidden bg-amber-50/70">
+                  <td class="p-2.5 text-amber-900 font-bold">Previous Overdue Arrears (Past Months)</td>
+                  <td class="p-2.5 text-amber-800">Prior Dues</td>
+                  <td class="p-2.5 text-right font-mono font-bold text-amber-900" id="feeInvPrevBalanceAmt">--</td>
+                </tr>
+                <tr id="feeInvAdvanceCreditDeductedRow" class="hidden bg-emerald-50/80 text-emerald-900">
+                  <td class="p-2.5 font-bold"><i class="fa-solid fa-wallet text-emerald-700 mr-1"></i> Less: Advance Credit (Pre-Paid from Previous Month)</td>
+                  <td class="p-2.5 text-emerald-800">Credit Adjusted</td>
+                  <td class="p-2.5 text-right font-mono font-bold text-emerald-800" id="feeInvAdvanceCreditDeductedAmt">--</td>
+                </tr>
+                <tr class="bg-slate-50 font-extrabold text-slate-900">
+                  <td colspan="2" class="p-2.5">Net Total Payable:</td>
+                  <td class="p-2.5 text-right font-mono" id="feeInvGrossTotal">--</td>
+                </tr>
+                <tr id="feeInvDiscountRow" class="hidden text-rose-700">
+                  <td colspan="2" class="p-2.5 italic">Fee Concession / Discount:</td>
+                  <td class="p-2.5 text-right font-mono font-bold" id="feeInvDiscountAmt">--</td>
+                </tr>
+                <tr class="bg-emerald-100/90 font-black text-emerald-950 text-sm">
+                  <td colspan="2" class="p-3">Amount Received (Paid via <span id="feeInvPaymentMethod">Online</span>):</td>
+                  <td class="p-3 text-right font-mono text-emerald-950 font-bold" id="feeInvTotalPaid">--</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <!-- REMAINING BALANCE CARRY-FORWARD BOX -->
+          <div id="feeInvCarryForwardBox" class="hidden p-3.5 bg-amber-50 border-2 border-dashed border-amber-400 rounded-xl space-y-1">
+            <div class="flex items-center gap-2 font-black text-xs text-amber-900">
+              <i class="fa-solid fa-triangle-exclamation text-amber-600"></i>
+              <span>Notice: Outstanding Remaining Balance: <strong id="feeInvCarryForwardAmt" class="text-amber-950">--</strong></span>
+            </div>
+            <p class="text-[11px] text-amber-800">
+              This remaining balance has been carried forward and will be automatically added to your next billing statement.
+            </p>
+          </div>
+
+          <!-- ADVANCE SURPLUS CREDIT BOX (WHEN OVERPAID) -->
+          <div id="feeInvAdvanceCreditCarriedBox" class="hidden p-3.5 bg-emerald-50 border-2 border-dashed border-emerald-400 rounded-xl space-y-1">
+            <div class="flex items-center gap-2 font-black text-xs text-emerald-900">
+              <i class="fa-solid fa-circle-check text-emerald-600"></i>
+              <span>Advance Credit Carried Forward: <strong id="feeInvAdvanceCreditCarriedAmt" class="text-emerald-950 font-mono">--</strong></span>
+            </div>
+            <p class="text-[11px] text-emerald-800">
+              Alhamdulillah! Extra payment has been credited to your family account and will be automatically deducted from your next tuition fee invoice.
+            </p>
+          </div>
+
+          <!-- PRAYER / FOOTER NOTE -->
+          <div class="text-center pt-3 border-t border-dashed border-slate-200 text-[11px] text-slate-500 space-y-1">
+            <p class="font-bold text-slate-700">JazakAllahu Khairan! Thank you for partnering with Al-Huda Islamic Centre.</p>
+            <p class="italic text-[10px]">"May Allah (SWT) bless your children with wisdom, piety, and the highest status in both worlds."</p>
+            <p class="text-[9px] text-slate-400 font-mono uppercase tracking-wider">Official Verification &bull; Al-Huda Islamic Centre Accounts Department</p>
+          </div>
+
         </div>
-        <button onclick="closeModal('modalFeeReceipt')" class="text-slate-400 hover:text-slate-700 text-xl font-bold">&times;</button>
       </div>
 
-      <div class="p-4 bg-slate-50 rounded-2xl border border-slate-200/80 space-y-2 text-xs">
-        <div class="flex justify-between"><span class="text-slate-500">Student:</span> <strong id="receiptStudentName" class="text-slate-900">-</strong></div>
-        <div class="flex justify-between"><span class="text-slate-500">Parent / Sponsor:</span> <strong id="receiptParentName" class="text-slate-900">-</strong></div>
-        <div class="flex justify-between"><span class="text-slate-500">Billing Month:</span> <strong id="receiptMonth" class="text-slate-900">-</strong></div>
-        <div class="flex justify-between"><span class="text-slate-500">Date Paid:</span> <strong id="receiptDate" class="text-slate-900 font-mono">-</strong></div>
-        <div class="flex justify-between"><span class="text-slate-500">Payment Method:</span> <strong id="receiptMethod" class="text-slate-900">-</strong></div>
-        <div class="border-t border-slate-200 pt-2 flex justify-between items-center">
-          <span class="font-bold text-slate-700">Total Paid:</span>
-          <span class="text-base font-black text-emerald-700 font-mono" id="receiptAmount">10,000 PKR</span>
-        </div>
-        <div class="flex justify-between text-[11px]"><span class="text-slate-500">Remaining Balance:</span> <strong id="receiptBalance" class="text-slate-600">0 PKR</strong></div>
-      </div>
-
-      <div class="p-3 bg-emerald-50 rounded-xl border border-emerald-200 text-center">
-        <span class="text-xs font-bold text-emerald-800 flex items-center justify-center gap-1.5">
-          <i class="fa-solid fa-circle-check text-emerald-600"></i> Paid in Full &bull; Verified by Al-Huda Academy
-        </span>
-      </div>
-
-      <div class="flex items-center justify-end gap-2 pt-2">
-        <button onclick="window.print()" class="px-4 py-2 bg-brandDark text-white rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-sm">
+      <!-- MODAL FOOTER BUTTONS -->
+      <div class="p-2.5 sm:p-4 bg-slate-50 border-t border-slate-200 flex justify-end items-center gap-2 shrink-0">
+        <button id="feeInvBtnDownloadPdf" onclick="downloadParentFeeInvoicePDF()" class="px-3 py-2 sm:px-4 sm:py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 shadow-2xs">
+          <i class="fa-solid fa-file-pdf"></i> Download PDF
+        </button>
+        <button onclick="printParentFeeInvoiceReceipt()" class="px-3 py-2 sm:px-4 sm:py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 shadow-2xs">
           <i class="fa-solid fa-print"></i> Print Voucher
         </button>
-        <button onclick="closeModal('modalFeeReceipt')" class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition">
+        <button onclick="closeModal('modalFeeInvoice')" class="px-4 py-2 sm:px-5 sm:py-2 bg-slate-800 hover:bg-black text-white rounded-xl text-xs font-bold transition shadow-2xs text-center">
           Close
         </button>
       </div>
@@ -809,6 +908,8 @@
     let CURRENT_FAMILIES = [];
     let LATEST_SABAQ_META = null;
     let CURRENT_PORTAL_CATEGORY = 'all';
+    let CURRENT_FEE_MODAL_RECEIPT = null;
+    let CURRENT_FEE_HISTORY = [];
 
     // Reader State
     let ACTIVE_READER_BOOK = null;
@@ -1327,27 +1428,72 @@
           const { data: fcData } = await db.from('fee_collections').select('*').eq('family_id', s.family_id).order('created_at', { ascending: false });
           if (fcData && fcData.length > 0 && feeHistory.length === 0) {
             feeHistory = fcData.map((fc, idx) => ({
-              receiptNo: fc.receipt_no || `REC-${idx + 1}`,
+              receiptNo: fc.receipt_no || `AH-REC-${fc.id || idx + 1}`,
               date: (fc.payment_date || fc.created_at || '').slice(0, 10),
-              parentName: familyData?.parent_name || 'Parent',
+              familyId: s.family_id || familyData?.id || '',
+              parentName: familyData?.parent_name || CURRENT_AUTH_FAMILY?.parent_name || 'Parent',
               studentsNames: s.name,
+              whatsapp: familyData?.whatsapp || familyData?.phone || '',
+              email: familyData?.email || '',
               month: fc.billing_month || fc.month || '-',
+              year: fc.billing_year || fc.year || (fc.payment_date ? parseInt(fc.payment_date.slice(0, 4), 10) : new Date().getFullYear()),
+              monthlyFee: fc.monthly_fee ?? fc.amount_paid ?? fc.amount ?? 0,
+              previousBalance: fc.previous_balance ?? 0,
+              creditDeducted: fc.credit_deducted ?? 0,
+              totalPayable: fc.total_payable ?? fc.amount_paid ?? fc.amount ?? 0,
               amountPaid: fc.amount_paid ?? fc.amount ?? 0,
-              currency: fc.currency || familyData?.currency || 'PKR',
-              paymentMethod: fc.payment_method || '-',
-              status: fc.status || 'Paid',
-              remainingBalance: fc.remaining_balance ?? 0
+              discount: fc.discount ?? 0,
+              remainingBalance: fc.remaining_balance ?? 0,
+              excessPaid: fc.excess_paid ?? 0,
+              currency: fc.currency || familyData?.currency || CURRENT_AUTH_FAMILY?.currency || 'USD',
+              paymentMethod: fc.payment_method || 'Online',
+              transactionId: fc.transaction_id || 'N/A',
+              notes: fc.notes || '',
+              status: fc.status || ((fc.remaining_balance ?? 0) <= 0 ? 'Paid in Full' : 'Partial')
             }));
           }
         } catch(e) {}
       }
 
+      // Fallback 1: check CURRENT_AUTH_FAMILY notes if feeHistory is empty
+      if (feeHistory.length === 0 && CURRENT_AUTH_FAMILY?.notes) {
+        try {
+          const pNotes = typeof CURRENT_AUTH_FAMILY.notes === 'string' ? JSON.parse(CURRENT_AUTH_FAMILY.notes) : CURRENT_AUTH_FAMILY.notes;
+          if (pNotes && Array.isArray(pNotes.fee_history)) feeHistory = pNotes.fee_history;
+        } catch(e) {}
+      }
+
+      // Fallback 2: check localStorage alhuda_fee_records if feeHistory is empty
+      if (feeHistory.length === 0) {
+        try {
+          const localFees = JSON.parse(localStorage.getItem('alhuda_fee_records') || '[]');
+          if (Array.isArray(localFees) && localFees.length > 0) {
+            const famIdStr = String(s.family_id || CURRENT_AUTH_FAMILY?.id || '').trim().toLowerCase();
+            const matched = localFees.filter(r => {
+              const rFamId = String(r.familyId || '').trim().toLowerCase();
+              const rStuNames = String(r.studentsNames || '').toLowerCase();
+              return (famIdStr && rFamId === famIdStr) || (s.name && rStuNames.includes(s.name.toLowerCase()));
+            });
+            if (matched.length > 0) feeHistory = matched;
+          }
+        } catch (e) {}
+      }
+
+      CURRENT_FEE_HISTORY = feeHistory;
+
       // Update Fee Card with Real Data Only
       const feeStatEl = document.getElementById('parentFeeStat');
       const feeMonthEl = document.getElementById('parentFeeMonth');
       if (feeHistory.length > 0) {
-        if (feeStatEl) feeStatEl.innerText = feeHistory[0]?.status === 'Paid in Full' || feeHistory[0]?.status === 'Paid' ? 'Paid' : (feeHistory[0]?.status || 'Recorded');
-        if (feeMonthEl) feeMonthEl.innerText = `${feeHistory[0]?.month || '-'} (${feeHistory[0]?.amountPaid || 0} ${feeHistory[0]?.currency || 'PKR'})`;
+        const topFee = feeHistory[0];
+        const isPaid = (parseFloat(topFee?.remainingBalance ?? 0) <= 0 && parseFloat(topFee?.amountPaid ?? 0) > 0) ||
+                       (topFee?.status && String(topFee.status).toLowerCase().includes('paid'));
+        if (feeStatEl) feeStatEl.innerText = isPaid ? 'Paid' : (topFee?.status || 'Recorded');
+        if (feeMonthEl) {
+          const cur = topFee?.currency || 'USD';
+          const amt = parseFloat(topFee?.amountPaid ?? 0).toFixed(0);
+          feeMonthEl.innerText = `${topFee?.month || '-'} (${amt} ${cur})`;
+        }
       } else {
         if (feeStatEl) feeStatEl.innerText = '0';
         if (feeMonthEl) feeMonthEl.innerText = 'No data available yet.';
@@ -1576,48 +1722,443 @@
       const tbody = document.getElementById('feeInvoicesTableBody');
       if (!tbody) return;
 
+      CURRENT_FEE_HISTORY = history || [];
+
       if (!history || history.length === 0) {
         tbody.innerHTML = `
           <tr>
             <td colspan="7" class="p-8 text-center text-slate-400 font-bold text-xs">
-              No data available yet.
+              No fee records or invoices available yet.
             </td>
           </tr>
         `;
         return;
       }
 
-      tbody.innerHTML = history.map((h, i) => `
-        <tr class="hover:bg-slate-50 transition">
-          <td class="p-3.5 font-bold font-mono text-brandDarkest">${h.receiptNo || `AH-REC-${i+1}`}</td>
-          <td class="p-3.5 font-semibold text-slate-800">${h.month || '-'}</td>
-          <td class="p-3.5 font-mono text-slate-600">${h.date || '-'}</td>
-          <td class="p-3.5 font-black text-emerald-700 font-mono">${h.amountPaid ?? 0} ${h.currency || 'PKR'}</td>
-          <td class="p-3.5 font-medium text-slate-600">${h.paymentMethod || '-'}</td>
-          <td class="p-3.5">
-            <span class="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-emerald-100 text-emerald-800 border border-emerald-300">
-              ${h.status || 'Recorded'}
-            </span>
-          </td>
-          <td class="p-3.5 text-right">
-            <button onclick="openFeeReceiptModal(${JSON.stringify(h).replace(/"/g, '&quot;')})" class="px-3 py-1 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs transition inline-flex items-center gap-1">
-              <i class="fa-solid fa-eye text-emerald-600"></i> View
-            </button>
-          </td>
-        </tr>
-      `).join('');
+      tbody.innerHTML = history.map((h, i) => {
+        const isPaid = (parseFloat(h.remainingBalance ?? 0) <= 0 && parseFloat(h.amountPaid ?? 0) > 0) ||
+                       (h.status && String(h.status).toLowerCase().includes('paid'));
+        const badgeClass = isPaid
+          ? 'bg-emerald-100 text-emerald-800 border-emerald-300'
+          : ((parseFloat(h.remainingBalance ?? 0) > 0 && parseFloat(h.amountPaid ?? 0) > 0)
+            ? 'bg-amber-100 text-amber-800 border-amber-300'
+            : 'bg-rose-100 text-rose-800 border-rose-300');
+        const badgeLabel = isPaid ? 'Paid in Full' : (h.status || 'Recorded');
+        const cur = h.currency || CURRENT_AUTH_FAMILY?.currency || 'USD';
+        const displayAmt = `${parseFloat(h.amountPaid ?? 0).toFixed(2)} ${cur}`;
+        const receiptNo = h.receiptNo || `AH-REC-${i+1}`;
+        const monthPeriod = h.year ? `${h.month || ''} ${h.year}` : (h.month || '-');
+
+        return `
+          <tr class="hover:bg-slate-50 transition border-b border-slate-100">
+            <td class="p-3.5 font-bold font-mono text-brandDarkest flex items-center gap-1.5">
+              <i class="fa-solid fa-file-invoice-dollar text-emerald-700 text-sm"></i>
+              <span>${receiptNo}</span>
+            </td>
+            <td class="p-3.5 font-semibold text-slate-800">${monthPeriod}</td>
+            <td class="p-3.5 font-mono text-slate-600">${h.date || '-'}</td>
+            <td class="p-3.5 font-black text-emerald-700 font-mono">${displayAmt}</td>
+            <td class="p-3.5 font-medium text-slate-600">${h.paymentMethod || 'Online'}</td>
+            <td class="p-3.5">
+              <span class="px-2.5 py-0.5 rounded-full text-[10px] font-black border ${badgeClass} inline-flex items-center gap-1">
+                ${isPaid ? '<i class="fa-solid fa-circle-check text-emerald-600"></i>' : ''}
+                ${badgeLabel}
+              </span>
+            </td>
+            <td class="p-3.5 text-right">
+              <button onclick="openFeeInvoiceModalIndex(${i})" class="px-3 py-1.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-900 border border-emerald-200 font-bold text-xs transition inline-flex items-center gap-1.5 shadow-2xs">
+                <i class="fa-solid fa-file-invoice text-emerald-700"></i> View Voucher
+              </button>
+            </td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    function openFeeInvoiceModalIndex(idx) {
+      if (CURRENT_FEE_HISTORY && CURRENT_FEE_HISTORY[idx]) {
+        openFeeInvoiceModal(CURRENT_FEE_HISTORY[idx]);
+      }
+    }
+
+    function openFeeInvoiceModal(r) {
+      if (!r) return;
+      CURRENT_FEE_MODAL_RECEIPT = r;
+
+      const famId = r.familyId || CURRENT_AUTH_FAMILY?.id || CURRENT_STUDENT?.family_id || '--';
+      const parentName = r.parentName || CURRENT_AUTH_FAMILY?.parent_name || CURRENT_STUDENT?.parent_name || 'Parent / Sponsor';
+      const stuNames = r.studentsNames || CURRENT_STUDENT?.name || '--';
+      const email = r.email || r.parentEmail || CURRENT_AUTH_FAMILY?.email || CURRENT_STUDENT?.email || '--';
+      const phone = r.whatsapp || r.phone || CURRENT_AUTH_FAMILY?.phone || CURRENT_AUTH_FAMILY?.whatsapp || '--';
+      const cur = r.currency || CURRENT_AUTH_FAMILY?.currency || 'USD';
+
+      // Set Header & Family Elements
+      const receiptNoEl = document.getElementById('feeInvReceiptNo');
+      if (receiptNoEl) receiptNoEl.innerText = r.receiptNo || 'AH-REC-OFFICIAL';
+
+      const parentNameEl = document.getElementById('feeInvParentName');
+      if (parentNameEl) parentNameEl.innerText = parentName;
+
+      const familyIdEl = document.getElementById('feeInvFamilyId');
+      if (familyIdEl) familyIdEl.innerText = famId;
+
+      const studentsNamesEl = document.getElementById('feeInvStudentsNames');
+      if (studentsNamesEl) studentsNamesEl.innerText = stuNames;
+
+      const issueDateEl = document.getElementById('feeInvIssueDate');
+      if (issueDateEl) issueDateEl.innerText = r.date || (r.created_at ? r.created_at.slice(0, 10) : new Date().toISOString().slice(0, 10));
+
+      const parentEmailEl = document.getElementById('feeInvParentEmail');
+      if (parentEmailEl) parentEmailEl.innerText = email;
+
+      const whatsAppEl = document.getElementById('feeInvWhatsAppNo');
+      if (whatsAppEl) whatsAppEl.innerText = phone;
+
+      const periodEl = document.getElementById('feeInvPeriod');
+      if (periodEl) periodEl.innerText = r.year ? `${r.month || ''} ${r.year}` : (r.month || '--');
+
+      // Ensure official logo is rendered properly
+      const logoEl = document.getElementById('feeInvLogoImg');
+      if (logoEl && (!logoEl.src || !logoEl.src.includes('alhuda_logo.jpg'))) {
+        logoEl.src = 'alhuda_logo.jpg';
+      }
+
+      // Particulars / Description
+      const descEl = document.getElementById('feeInvDescription');
+      if (descEl) {
+        if (r.isAdvancePayment && r.advanceMonthsCount > 1) {
+          descEl.innerHTML = `Advance Tuition Fee (${r.advanceMonthsCount} Months Pre-Paid)`;
+        } else if (r.isProrated) {
+          descEl.innerHTML = `Tuition Fee (Mid-Month Admission: ${r.activeDays || 0} Days Active)`;
+        } else {
+          descEl.innerText = 'Current Month Tuition Fee';
+        }
+      }
+
+      // Amounts
+      const monthlyFee = parseFloat(r.monthlyFee ?? r.amountPaid ?? 0);
+      const currentDueEl = document.getElementById('feeInvCurrentDue');
+      if (currentDueEl) currentDueEl.innerText = `${cur} ${monthlyFee.toFixed(2)}`;
+
+      const prevRow = document.getElementById('feeInvPrevBalanceRow');
+      const prevBal = parseFloat(r.previousBalance ?? 0);
+      if (prevRow) {
+        if (prevBal > 0) {
+          prevRow.classList.remove('hidden');
+          const prevAmtEl = document.getElementById('feeInvPrevBalanceAmt');
+          if (prevAmtEl) prevAmtEl.innerText = `${cur} ${prevBal.toFixed(2)}`;
+        } else {
+          prevRow.classList.add('hidden');
+        }
+      }
+
+      const credRow = document.getElementById('feeInvAdvanceCreditDeductedRow');
+      const credAmt = parseFloat(r.creditDeducted ?? 0);
+      if (credRow) {
+        if (credAmt > 0) {
+          credRow.classList.remove('hidden');
+          const credAmtEl = document.getElementById('feeInvAdvanceCreditDeductedAmt');
+          if (credAmtEl) credAmtEl.innerText = `- ${cur} ${credAmt.toFixed(2)}`;
+        } else {
+          credRow.classList.add('hidden');
+        }
+      }
+
+      const totalPayable = parseFloat(r.totalPayable ?? (monthlyFee + prevBal - credAmt));
+      const grossTotalEl = document.getElementById('feeInvGrossTotal');
+      if (grossTotalEl) grossTotalEl.innerText = `${cur} ${totalPayable.toFixed(2)}`;
+
+      const discRow = document.getElementById('feeInvDiscountRow');
+      const discount = parseFloat(r.discount ?? 0);
+      if (discRow) {
+        if (discount > 0) {
+          discRow.classList.remove('hidden');
+          const discAmtEl = document.getElementById('feeInvDiscountAmt');
+          if (discAmtEl) discAmtEl.innerText = `- ${cur} ${discount.toFixed(2)}`;
+        } else {
+          discRow.classList.add('hidden');
+        }
+      }
+
+      const paymentMethodEl = document.getElementById('feeInvPaymentMethod');
+      if (paymentMethodEl) paymentMethodEl.innerText = r.paymentMethod || 'Online Transfer';
+
+      const amountPaid = parseFloat(r.amountPaid ?? 0);
+      const totalPaidEl = document.getElementById('feeInvTotalPaid');
+      if (totalPaidEl) totalPaidEl.innerText = `${cur} ${amountPaid.toFixed(2)}`;
+
+      const remaining = parseFloat(r.remainingBalance ?? Math.max(0, totalPayable - discount - amountPaid));
+      const carryBox = document.getElementById('feeInvCarryForwardBox');
+      if (carryBox) {
+        if (remaining > 0) {
+          carryBox.classList.remove('hidden');
+          const carryAmtEl = document.getElementById('feeInvCarryForwardAmt');
+          if (carryAmtEl) carryAmtEl.innerText = `${cur} ${remaining.toFixed(2)}`;
+        } else {
+          carryBox.classList.add('hidden');
+        }
+      }
+
+      const excessBox = document.getElementById('feeInvAdvanceCreditCarriedBox');
+      const excessAmt = parseFloat(r.excessPaid ?? 0);
+      if (excessBox) {
+        if (excessAmt > 0) {
+          excessBox.classList.remove('hidden');
+          const excessAmtEl = document.getElementById('feeInvAdvanceCreditCarriedAmt');
+          if (excessAmtEl) excessAmtEl.innerText = `+ ${cur} ${excessAmt.toFixed(2)}`;
+        } else {
+          excessBox.classList.add('hidden');
+        }
+      }
+
+      // Status Stamp (Official green "PAID IN FULL" when paid, as requested)
+      const stamp = document.getElementById('feeInvStatusStamp');
+      if (stamp) {
+        const isPaid = (remaining <= 0 && amountPaid > 0) ||
+                       (r.status && String(r.status).toLowerCase().includes('paid'));
+
+        if (isPaid && remaining <= 0) {
+          stamp.className = "inline-block px-2.5 py-0.5 sm:px-3 sm:py-1 rounded-md text-[10px] sm:text-[11px] font-black border-2 border-emerald-600 bg-emerald-50 text-emerald-800 tracking-wider";
+          stamp.innerHTML = '<i class="fa-solid fa-circle-check mr-1 text-emerald-600"></i> PAID IN FULL';
+        } else if (remaining > 0 && amountPaid > 0) {
+          stamp.className = "inline-block px-2.5 py-0.5 sm:px-3 sm:py-1 rounded-md text-[10px] sm:text-[11px] font-black border-2 border-amber-600 bg-amber-50 text-amber-800 tracking-wider";
+          stamp.innerHTML = '<i class="fa-solid fa-clock mr-1 text-amber-600"></i> PARTIAL PAYMENT';
+        } else {
+          stamp.className = "inline-block px-2.5 py-0.5 sm:px-3 sm:py-1 rounded-md text-[10px] sm:text-[11px] font-black border-2 border-rose-600 bg-rose-50 text-rose-800 tracking-wider";
+          stamp.innerHTML = '<i class="fa-solid fa-triangle-exclamation mr-1 text-rose-600"></i> UNPAID / DUE';
+        }
+      }
+
+      // Legacy fallback element IDs
+      const elRecNo = document.getElementById('receiptModalNo');
+      if (elRecNo) elRecNo.innerText = r.receiptNo || 'AH-REC-OFFICIAL';
+      const elStuName = document.getElementById('receiptStudentName');
+      if (elStuName) elStuName.innerText = stuNames;
+      const elParName = document.getElementById('receiptParentName');
+      if (elParName) elParName.innerText = parentName;
+      const elMonth = document.getElementById('receiptMonth');
+      if (elMonth) elMonth.innerText = r.month || '--';
+      const elDate = document.getElementById('receiptDate');
+      if (elDate) elDate.innerText = r.date || '-';
+      const elMethod = document.getElementById('receiptMethod');
+      if (elMethod) elMethod.innerText = r.paymentMethod || 'Online Transfer';
+      const elAmt = document.getElementById('receiptAmount');
+      if (elAmt) elAmt.innerText = `${cur} ${amountPaid.toFixed(2)}`;
+      const elBal = document.getElementById('receiptBalance');
+      if (elBal) elBal.innerText = `${cur} ${remaining.toFixed(2)}`;
+
+      openModal('modalFeeInvoice');
     }
 
     function openFeeReceiptModal(h) {
-      document.getElementById('receiptModalNo').innerText = h.receiptNo || 'AH-REC-2026';
-      document.getElementById('receiptStudentName').innerText = h.studentsNames || CURRENT_STUDENT?.name || 'Student';
-      document.getElementById('receiptParentName').innerText = h.parentName || 'Parent / Sponsor';
-      document.getElementById('receiptMonth').innerText = h.month || 'September 2026';
-      document.getElementById('receiptDate').innerText = h.date || '-';
-      document.getElementById('receiptMethod').innerText = h.paymentMethod || 'Online Transfer';
-      document.getElementById('receiptAmount').innerText = `${h.amountPaid || 10000} ${h.currency || 'PKR'}`;
-      document.getElementById('receiptBalance').innerText = `${h.remainingBalance || 0} ${h.currency || 'PKR'}`;
-      openModal('modalFeeReceipt');
+      openFeeInvoiceModal(h);
+    }
+
+    function printParentFeeInvoiceReceipt() {
+      const card = document.getElementById('feeInvoiceReceiptCard') || document.querySelector('#feeInvoicePrintArea > div') || document.getElementById('feeInvoicePrintArea');
+      if (!card) return;
+
+      const r = CURRENT_FEE_MODAL_RECEIPT;
+
+      // Create pristine isolated print iframe
+      let printFrame = document.getElementById('feeInvoicePrintFrame');
+      if (!printFrame) {
+        printFrame = document.createElement('iframe');
+        printFrame.id = 'feeInvoicePrintFrame';
+        printFrame.style.position = 'fixed';
+        printFrame.style.right = '0';
+        printFrame.style.bottom = '0';
+        printFrame.style.width = '0';
+        printFrame.style.height = '0';
+        printFrame.style.border = '0';
+        document.body.appendChild(printFrame);
+      }
+
+      const frameDoc = printFrame.contentWindow.document;
+      frameDoc.open();
+      frameDoc.write(`<!DOCTYPE html>
+<html>
+<head>
+  <title>Al-Huda Fee Invoice - ${r ? (r.receiptNo || 'Receipt') : ''}</title>
+  <meta charset="UTF-8">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <script src="https://cdn.tailwindcss.com"><\/script>
+  <style>
+    @page { size: A4 portrait; margin: 8mm; }
+    body { font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif; background: #ffffff; color: #0f172a; margin: 0; padding: 12px; }
+    table { width: 100% !important; border-collapse: collapse !important; }
+  </style>
+</head>
+<body class="p-2 bg-white">
+  ${card.outerHTML}
+</body>
+</html>`);
+      frameDoc.close();
+
+      setTimeout(() => {
+        try {
+          printFrame.contentWindow.focus();
+          printFrame.contentWindow.print();
+        } catch (printErr) {
+          window.print();
+        }
+      }, 600);
+    }
+
+    async function downloadParentFeeInvoicePDF() {
+      const r = CURRENT_FEE_MODAL_RECEIPT;
+      if (!r) {
+        alert("No active invoice receipt selected.");
+        return;
+      }
+
+      const sourceCard = document.getElementById('feeInvoiceReceiptCard') || document.querySelector('#feeInvoicePrintArea > div') || document.getElementById('feeInvoicePrintArea');
+      if (!sourceCard) return;
+
+      const btn = document.getElementById('feeInvBtnDownloadPdf');
+      const originalText = btn ? btn.innerHTML : '';
+      if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-1"></i> Generating PDF...';
+      }
+
+      let sandbox = null;
+
+      try {
+        const cleanParent = (r.parentName || 'Family').replace(/[^a-zA-Z0-9_-]/g, '_');
+        const filename = `AlHuda-Invoice-${r.receiptNo || 'AH-REC'}-${cleanParent}.pdf`;
+
+        const scrollArea = document.getElementById('feeInvoicePrintArea');
+        if (scrollArea) scrollArea.scrollTop = 0;
+
+        sandbox = document.createElement('div');
+        sandbox.id = 'cleanParentInvoicePdfSandbox';
+        sandbox.style.position = 'fixed';
+        sandbox.style.top = '0';
+        sandbox.style.left = '0';
+        sandbox.style.width = '794px';
+        sandbox.style.minHeight = '1050px';
+        sandbox.style.backgroundColor = '#ffffff';
+        sandbox.style.zIndex = '-100';
+        sandbox.style.overflow = 'visible';
+        sandbox.style.boxSizing = 'border-box';
+        sandbox.style.padding = '16px';
+
+        const cardClone = sourceCard.cloneNode(true);
+        cardClone.style.width = '100%';
+        cardClone.style.maxWidth = '100%';
+        cardClone.style.margin = '0';
+        cardClone.style.boxShadow = 'none';
+        cardClone.style.backgroundColor = '#ffffff';
+
+        const cloneLogo = cardClone.querySelector('#feeInvLogoImg') || cardClone.querySelector('img');
+        const origLogo = sourceCard.querySelector('#feeInvLogoImg') || sourceCard.querySelector('img');
+        if (cloneLogo && origLogo) {
+          cloneLogo.crossOrigin = 'anonymous';
+          if (origLogo.complete && origLogo.naturalWidth > 0) {
+            cloneLogo.src = origLogo.src;
+          }
+        }
+
+        sandbox.appendChild(cardClone);
+        document.body.appendChild(sandbox);
+
+        await new Promise(resolve => setTimeout(resolve, 120));
+
+        let pdfGenerated = false;
+
+        const hasHtml2Canvas = typeof html2canvas !== 'undefined';
+        const hasJsPDF = typeof window.jspdf !== 'undefined' && window.jspdf.jsPDF;
+
+        if (hasHtml2Canvas && hasJsPDF) {
+          try {
+            const canvas = await html2canvas(cardClone, {
+              scale: 2,
+              useCORS: true,
+              allowTaint: true,
+              scrollY: 0,
+              scrollX: 0,
+              backgroundColor: '#ffffff',
+              logging: false,
+              windowWidth: 794
+            });
+
+            if (canvas && canvas.width > 0 && canvas.height > 0) {
+              const imgData = canvas.toDataURL('image/jpeg', 0.98);
+              const { jsPDF } = window.jspdf;
+              const pdf = new jsPDF({
+                orientation: 'portrait',
+                unit: 'mm',
+                format: 'a4',
+                compress: true
+              });
+
+              const pageWidth = pdf.internal.pageSize.getWidth();
+              const pageHeight = pdf.internal.pageSize.getHeight();
+              const margin = 8;
+              const maxContentWidth = pageWidth - (margin * 2);
+              const maxContentHeight = pageHeight - (margin * 2);
+
+              let renderWidth = maxContentWidth;
+              let renderHeight = (canvas.height * renderWidth) / canvas.width;
+
+              if (renderHeight > maxContentHeight) {
+                const ratio = maxContentHeight / renderHeight;
+                renderHeight = maxContentHeight;
+                renderWidth = renderWidth * ratio;
+              }
+
+              const xPos = margin + ((maxContentWidth - renderWidth) / 2);
+              const yPos = margin;
+
+              pdf.addImage(imgData, 'JPEG', xPos, yPos, renderWidth, renderHeight, undefined, 'FAST');
+              pdf.save(filename);
+              pdfGenerated = true;
+            }
+          } catch (canvasErr) {
+            console.warn("[Parent Invoice PDF] html2canvas+jsPDF direct error:", canvasErr);
+          }
+        }
+
+        if (!pdfGenerated && typeof html2pdf !== 'undefined') {
+          const opt = {
+            margin: [8, 8, 8, 8],
+            filename: filename,
+            image: { type: 'jpeg', quality: 0.98 },
+            html2canvas: {
+              scale: 2,
+              useCORS: true,
+              allowTaint: true,
+              scrollY: 0,
+              scrollX: 0,
+              backgroundColor: '#ffffff',
+              logging: false,
+              windowWidth: 794
+            },
+            jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
+            pagebreak: { mode: ['avoid-all', 'css', 'legacy'] }
+          };
+
+          await html2pdf().set(opt).from(cardClone).save();
+          pdfGenerated = true;
+        }
+
+        if (!pdfGenerated) {
+          printParentFeeInvoiceReceipt();
+        }
+
+      } catch (err) {
+        console.error("[Parent Invoice PDF] PDF generation error:", err);
+        printParentFeeInvoiceReceipt();
+      } finally {
+        if (sandbox && sandbox.parentNode) {
+          sandbox.parentNode.removeChild(sandbox);
+        }
+        if (btn) {
+          btn.disabled = false;
+          btn.innerHTML = originalText;
+        }
+      }
     }
 
     // ==========================================
@@ -2249,10 +2790,20 @@
 
     // Helper Modal utilities
     function openModal(id) {
-      document.getElementById(id)?.classList.remove('hidden');
+      const targetId = (id === 'modalFeeReceipt') ? 'modalFeeInvoice' : id;
+      const el = document.getElementById(targetId);
+      if (el) {
+        el.classList.remove('hidden');
+        el.classList.add('flex');
+      }
     }
     function closeModal(id) {
-      document.getElementById(id)?.classList.add('hidden');
+      const targetId = (id === 'modalFeeReceipt') ? 'modalFeeInvoice' : id;
+      const el = document.getElementById(targetId);
+      if (el) {
+        el.classList.add('hidden');
+        el.classList.remove('flex');
+      }
     }
 
     // =========================================================================
