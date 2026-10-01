@@ -198,6 +198,13 @@
       }
       if (limit) rows = rows.slice(0, Number(limit) || 100);
       const hydrated = hydrateLocalJoins(store, table, rows, select);
+      if (table === 'families') {
+        hydrated.forEach(f => {
+          const em = String(f.email || f.parent_email || '').trim();
+          f.email = em;
+          f.parent_email = em;
+        });
+      }
       return { data: single ? (hydrated[0] || null) : hydrated, error: null };
     }
 
@@ -208,6 +215,13 @@
         const row = { ...raw };
         if (!row.id) row.id = generateLocalId(table);
         if (!row.created_at) row.created_at = new Date().toISOString();
+        if (table === 'families') {
+          const em = String(row.email || row.parent_email || '').trim();
+          if (em) {
+            row.email = em;
+            row.parent_email = em;
+          }
+        }
         const idx = store[table].findIndex(existing => String(existing.id) === String(row.id));
         if (idx >= 0) {
           store[table][idx] = { ...store[table][idx], ...row };
@@ -221,7 +235,14 @@
     }
 
     if (action === 'update') {
-      const patch = values || {};
+      const patch = { ...(values || {}) };
+      if (table === 'families') {
+        const em = String(patch.email || patch.parent_email || '').trim();
+        if (em) {
+          patch.email = em;
+          patch.parent_email = em;
+        }
+      }
       const updated = [];
       store[table] = store[table].map(r => {
         if (filters.every(f => matchFilter(r, f))) {
@@ -372,9 +393,24 @@
               delete clean.students;
               delete clean.families;
               delete clean.teachers;
+              if (payload.table === 'families') {
+                const em = String(clean.email || clean.parent_email || '').trim();
+                clean.email = em;
+                clean.parent_email = em;
+              }
               return clean;
             });
             saveLocalDbStore(store);
+          }
+          if (payload.table === 'families' && result && result.data) {
+            const list = Array.isArray(result.data) ? result.data : [result.data];
+            list.forEach(f => {
+              if (f) {
+                const em = String(f.email || f.parent_email || '').trim();
+                f.email = em;
+                f.parent_email = em;
+              }
+            });
           }
           return result;
         }

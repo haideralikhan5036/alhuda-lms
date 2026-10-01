@@ -881,6 +881,9 @@
           ]);
 
           const rawFamilies = (famRes.data || []).map(f => {
+            const em = String(f.parent_email || f.email || '').trim();
+            f.parent_email = em;
+            f.email = em;
             if (Array.isArray(f.students)) {
               f.students = f.students.map(s => normalizeStudentCourseRecord(s));
             }

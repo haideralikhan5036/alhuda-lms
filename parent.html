@@ -966,7 +966,8 @@
         username: 'parent_' + baseUser,
         password: 'alhuda_' + stableDigits,
         parent_name: family.parent_name,
-        whatsapp: family.whatsapp
+        whatsapp: family.whatsapp,
+        email: family.email || family.parent_email || ''
       };
     }
 
@@ -1003,11 +1004,18 @@
 
         const mergedParentAccs = { ...(cloudSharedState?.parent_accounts || {}), ...localParentAccs };
         rawFamilies.forEach(f => {
-          if (!f || !f.id || !f.notes) return;
+          if (!f || !f.id) return;
+          const em = String(f.email || f.parent_email || '').trim();
+          f.email = em;
+          f.parent_email = em;
+          if (!f.notes) return;
           try {
             const nObj = typeof f.notes === 'object' ? f.notes : JSON.parse(f.notes);
             if (nObj && nObj.portal_credentials && nObj.portal_credentials.username) {
-              mergedParentAccs[f.id] = nObj.portal_credentials;
+              mergedParentAccs[f.id] = {
+                ...nObj.portal_credentials,
+                email: nObj.portal_credentials.email || em
+              };
             }
           } catch (e) {}
         });
@@ -1167,7 +1175,7 @@
         const famIdLower = String(f.id || '').trim().toLowerCase();
         const famIdUpper = String(f.id || '').trim().toUpperCase();
         const parentNameLower = String(f.parent_name || '').trim().toLowerCase();
-        const famEmailLower = String(f.email || '').trim().toLowerCase();
+        const famEmailLower = String(f.email || f.parent_email || creds.email || '').trim().toLowerCase();
         const famPhone = String(f.whatsapp || '').replace(/[^0-9]/g, '');
         const famChildren = students.filter(s => String(s.family_id || '').trim().toUpperCase() === famIdUpper);
 

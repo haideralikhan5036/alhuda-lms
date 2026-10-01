@@ -157,6 +157,9 @@ async function ensureSchema(db) {
     }
     _schemaInitialized = true;
   }
+  // Backward-compatible schema patches for families table
+  try { await db.prepare('ALTER TABLE families ADD COLUMN parent_email TEXT').run(); } catch (e) {}
+  try { await db.prepare('ALTER TABLE families ADD COLUMN email TEXT').run(); } catch (e) {}
 }
 
 function generateId(table) {
@@ -349,6 +352,17 @@ export async function onRequest(context) {
       const stmt = d1.prepare(query).bind(...params);
       const { results } = await stmt.all();
       const hydrated = await hydrateRelationalJoins(d1, table, results || [], select);
+
+      // Normalize family email aliases across both email and parent_email
+      if (table === 'families') {
+        const famList = Array.isArray(hydrated) ? hydrated : (hydrated ? [hydrated] : []);
+        famList.forEach(f => {
+          const em = String(f.email || f.parent_email || '').trim();
+          f.email = em;
+          f.parent_email = em;
+        });
+      }
+
       const data = single ? (hydrated[0] || null) : hydrated;
       return new Response(JSON.stringify({ data, error: null }), {
         status: 200,
@@ -366,6 +380,15 @@ export async function onRequest(context) {
         if (!row.id) row.id = generateId(table);
         if (!row.created_at && validCols.has('created_at')) {
           row.created_at = new Date().toISOString();
+        }
+
+        // Bridge email / parent_email for families
+        if (table === 'families') {
+          const em = String(row.email || row.parent_email || '').trim();
+          if (em) {
+            if (validCols.has('email')) row.email = em;
+            if (validCols.has('parent_email')) row.parent_email = em;
+          }
         }
 
         const cols = Object.keys(row).filter(k => validCols.has(k));
@@ -390,7 +413,15 @@ export async function onRequest(context) {
 
     // 3. UPDATE
     if (action === 'update') {
-      const patch = values || {};
+      const patch = { ...(values || {}) };
+      if (table === 'families') {
+        const em = String(patch.email || patch.parent_email || '').trim();
+        if (em) {
+          if (validCols.has('email')) patch.email = em;
+          if (validCols.has('parent_email')) patch.parent_email = em;
+        }
+      }
+
       const cols = Object.keys(patch).filter(k => validCols.has(k));
       if (cols.length > 0) {
         const setSql = cols.map(c => `${c} = ?`).join(', ');
@@ -406,7 +437,15 @@ export async function onRequest(context) {
 
       const { sql: whereSql, params: whereParams } = buildWhereClause(filters);
       const { results } = await d1.prepare(`SELECT * FROM ${table}${whereSql}`).bind(...whereParams).all();
-      const data = single ? ((results || [])[0] || null) : (results || []);
+      const rawResults = results || [];
+      if (table === 'families') {
+        rawResults.forEach(f => {
+          const em = String(f.email || f.parent_email || '').trim();
+          f.email = em;
+          f.parent_email = em;
+        });
+      }
+      const data = single ? (rawResults[0] || null) : rawResults;
       return new Response(JSON.stringify({ data, error: null }), {
         status: 200,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }

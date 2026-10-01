@@ -114,16 +114,24 @@
     }
 
     function getParentCreds(family) {
-      if (!family) return { username: 'parent_user', password: 'alhuda_786' };
+      if (!family) return { username: 'parent_user', password: 'alhuda_786', email: '' };
       const accounts = getParentAccounts();
-      if (accounts[family.id] && accounts[family.id].username) return accounts[family.id];
+      if (accounts[family.id] && accounts[family.id].username) {
+        if (!accounts[family.id].email && (family.email || family.parent_email)) {
+          accounts[family.id].email = family.email || family.parent_email;
+        }
+        return accounts[family.id];
+      }
       if (family.notes) {
         try {
           const nObj = typeof family.notes === 'object' ? family.notes : JSON.parse(family.notes);
           if (nObj && nObj.portal_credentials && nObj.portal_credentials.username) {
-            accounts[family.id] = nObj.portal_credentials;
+            accounts[family.id] = {
+              ...nObj.portal_credentials,
+              email: nObj.portal_credentials.email || family.email || family.parent_email || ''
+            };
             localStorage.setItem('alhuda_parent_accounts', JSON.stringify(accounts));
-            return nObj.portal_credentials;
+            return accounts[family.id];
           }
         } catch (e) {}
       }
@@ -133,7 +141,8 @@
         username: 'parent_' + baseUser,
         password: 'alhuda_' + stableDigits,
         parent_name: family.parent_name,
-        whatsapp: family.whatsapp
+        whatsapp: family.whatsapp,
+        email: family.email || family.parent_email || ''
       };
       saveParentAccount(family.id, defaultCred);
       return defaultCred;
@@ -306,7 +315,8 @@
 
       const parent_name = (document.getElementById('famParentName').value || '').trim();
       const whatsapp = (document.getElementById('famWhatsApp').value || '').trim();
-      const email = (document.getElementById('famEmail').value || '').trim();
+      const rawEmail = (document.getElementById('famEmail').value || '').trim().replace(/\s+/g, '');
+      const email = rawEmail.toLowerCase();
       const city = (document.getElementById('famCity').value || '').trim();
       const countrySelectVal = document.getElementById('famCountrySelect').value;
       const country = (countrySelectVal === '__NEW_COUNTRY__') 
@@ -335,6 +345,12 @@
         btn.innerText = 'Save Family & Generate LMS Account';
         return;
       }
+      if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        lmsNotify("Please enter a valid email address (e.g. parent@example.com) or leave it blank.", { type: 'warning' });
+        btn.disabled = false;
+        btn.innerText = 'Save Family & Generate LMS Account';
+        return;
+      }
       if (!username || !password) {
         lmsNotify("Parent Portal Username and Password are required.", { type: 'warning' });
         btn.disabled = false;
@@ -342,10 +358,32 @@
         return;
       }
 
-      const notes = city ? `City: ${city}` : '';
+      const notesPayload = {
+        city: city || '',
+        email: email || '',
+        parent_email: email || '',
+        custom_notes: city ? `City: ${city}` : '',
+        portal_credentials: {
+          username,
+          password,
+          parent_name,
+          whatsapp,
+          email: email || ''
+        }
+      };
+      const notes = JSON.stringify(notesPayload);
 
       await db.from('families').insert([{
-        id, parent_name, whatsapp, country, monthly_fee, currency, notes, parent_email: email, status: 'Active'
+        id,
+        parent_name,
+        whatsapp,
+        country,
+        monthly_fee,
+        currency,
+        notes,
+        email: email || null,
+        parent_email: email || null,
+        status: 'Active'
       }]);
 
       saveParentAccount(id, {
@@ -353,6 +391,7 @@
         password,
         parent_name,
         whatsapp,
+        email: email || '',
         city,
         country,
         monthly_fee,
@@ -369,29 +408,28 @@
       // TASK 6: Automatically send welcome email if parent email exists
       let familyEmailNotice = '';
       if (email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) && typeof autoSendWelcomeEmailOnCreation === 'function') {
-        const emailResult = await autoSendWelcomeEmailOnCreation({
-          type: 'regular',
-          studentName: parent_name,
-          parentName: parent_name,
-          toEmail: email,
-          phone: whatsapp,
-          course: 'Not Assigned Yet',
-          teacherName: 'Not Assigned Yet',
-          scheduleText: 'No classes scheduled.',
-          zoomLink: '',
-          credentials: { username, password }
-        });
-        if (emailResult && emailResult.sent === false) {
-          familyEmailNotice = '\n\n⚠️ Student created, but welcome email failed to send.';
-          if (typeof lmsNotify === 'function') {
-            lmsNotify('Student created, but welcome email failed to send.', { type: 'warning' });
+        try {
+          const emailResult = await autoSendWelcomeEmailOnCreation({
+            type: 'regular',
+            studentName: parent_name,
+            parentName: parent_name,
+            toEmail: email,
+            phone: whatsapp,
+            course: 'Not Assigned Yet',
+            teacherName: 'Not Assigned Yet',
+            scheduleText: 'No classes scheduled.',
+            zoomLink: '',
+            credentials: { username, password }
+          });
+          if (emailResult && emailResult.sent) {
+            familyEmailNotice = `\n\n📧 Welcome email automatically sent to ${email}.`;
           }
-        } else if (emailResult && emailResult.sent) {
-          familyEmailNotice = `\n\n📧 Welcome email automatically sent to ${email}.`;
+        } catch (err) {
+          console.warn('[Welcome Email Notice]:', err);
         }
       }
 
-      lmsNotify(`✅ Family Registered Successfully!\n\n👨‍👩‍👧 Family ID: ${id}\n👤 Parent Name: ${parent_name}\n🌍 Location: ${city ? city + ', ' : ''}${country}\n💰 Agreed Fee: ${currency} ${monthly_fee}\n\n🔑 Parent Portal Login Credentials:\nUsername: ${username}\nPassword: ${password}\n\nParent can now log in to track children classes.${familyEmailNotice}`, { type: 'success' });
+      lmsNotify(`✅ Family Registered Successfully!\n\n👨‍👩‍👧 Family ID: ${id}\n👤 Parent Name: ${parent_name}\n📧 Email: ${email || 'Not Provided'}\n🌍 Location: ${city ? city + ', ' : ''}${country}\n💰 Agreed Fee: ${currency} ${monthly_fee}\n\n🔑 Parent Portal Login Credentials:\nUsername: ${username}\nPassword: ${password}\n\nParent can now log in to track children classes.${familyEmailNotice}`, { type: 'success' });
     }
 
     async function handleSaveStudent(e) {
@@ -492,7 +530,7 @@
       const assignedTeacher = (ALL_TEACHERS || []).find(t => String(t.id) === String(assigned_teacher_id));
       const tName = assignedTeacher ? assignedTeacher.full_name : 'Not Assigned Yet';
       const parentFam = (ALL_FAMILIES || []).find(f => String(f.id) === String(family_id));
-      const parentEmail = String(parentFam?.parent_email || '').trim();
+      const parentEmail = String(parentFam?.parent_email || parentFam?.email || '').trim();
       const creds = parentFam ? getParentCreds(parentFam) : null;
 
       // Resolve real class schedule & Zoom link
@@ -512,26 +550,25 @@
       // Automatically send welcome email when parent email exists
       let emailStatusSuffix = '';
       if (parentEmail && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(parentEmail) && typeof autoSendWelcomeEmailOnCreation === 'function') {
-        const emailRes = await autoSendWelcomeEmailOnCreation({
-          type: 'regular',
-          studentName: name,
-          parentName: parentFam?.parent_name || 'Parent / Guardian',
-          toEmail: parentEmail,
-          phone: parentFam?.whatsapp || '',
-          course: course_id || 'Not Assigned Yet',
-          teacherName: tName,
-          scheduleText: scheduleText,
-          zoomLink: zoomLink,
-          joiningDate: joining_date,
-          credentials: creds ? { username: creds.username, password: creds.password } : null
-        });
-        if (emailRes && emailRes.sent === false) {
-          emailStatusSuffix = '\n\n⚠️ Student created, but welcome email failed to send.';
-          if (typeof lmsNotify === 'function') {
-            lmsNotify('Student created, but welcome email failed to send.', { type: 'warning' });
+        try {
+          const emailRes = await autoSendWelcomeEmailOnCreation({
+            type: 'regular',
+            studentName: name,
+            parentName: parentFam?.parent_name || 'Parent / Guardian',
+            toEmail: parentEmail,
+            phone: parentFam?.whatsapp || '',
+            course: course_id || 'Not Assigned Yet',
+            teacherName: tName,
+            scheduleText: scheduleText,
+            zoomLink: zoomLink,
+            joiningDate: joining_date,
+            credentials: creds ? { username: creds.username, password: creds.password } : null
+          });
+          if (emailRes && emailRes.sent) {
+            emailStatusSuffix = `\n\n📧 Welcome email sent to ${parentEmail}.`;
           }
-        } else if (emailRes && emailRes.sent) {
-          emailStatusSuffix = `\n\n📧 Welcome email sent to ${parentEmail}.`;
+        } catch (err) {
+          console.warn('[Student Welcome Email]', err);
         }
       }
 
@@ -987,11 +1024,11 @@
                       ${CURRENT_ROLE === 'manager' ? `
                         <i class="fa-solid fa-lock text-amber-500"></i>
                         <span class="font-mono text-slate-600 font-bold" title="Protected Contact Number">${maskStudentPhone(f.whatsapp)}</span>
-                        ${f.parent_email ? `&bull; <span class="truncate max-w-[130px] font-mono text-slate-500" title="Protected Email">${maskStudentEmail(f.parent_email)}</span>` : ''}
+                        ${(f.parent_email || f.email) ? `&bull; <span class="truncate max-w-[130px] font-mono text-slate-500" title="Protected Email">${maskStudentEmail(f.parent_email || f.email)}</span>` : ''}
                       ` : `
                         <i class="fa-brands fa-whatsapp text-emerald-600"></i>
                         <a href="https://wa.me/${cleanPhone}" target="_blank" class="hover:underline font-mono">${f.whatsapp}</a>
-                        ${f.parent_email ? `&bull; <span class="truncate max-w-[130px]">${f.parent_email}</span>` : ''}
+                        ${(f.parent_email || f.email) ? `&bull; <span class="truncate max-w-[130px]">${f.parent_email || f.email}</span>` : ''}
                       `}
                     </p>
                   </div>

@@ -794,8 +794,8 @@ function _renderFamilyWorkspaceDOM() {
 
   const invoiceSentThisMonth = Boolean(bioMeta.last_invoice_sent_month === 'September 2026' || payData.currentMonthPaid);
   const displayEmail = (window.CURRENT_ROLE === 'manager' && typeof maskStudentEmail === 'function')
-    ? maskStudentEmail(family.parent_email || '')
-    : (family.parent_email || 'Not Provided');
+    ? maskStudentEmail(family.parent_email || family.email || '')
+    : (family.parent_email || family.email || 'Not Provided');
 
   const managerNotesCount = (fNotes.manager_notes || []).length;
   const teacherNotesList = _collectAllFamilyTeacherNotes(family, familyStudents, famLogs);
@@ -1811,8 +1811,8 @@ function _buildFamilyBioDataTabHtml(family, fNotes, creds) {
   const bio = fNotes.bio_meta || {};
 
   const emailVal = (window.CURRENT_ROLE === 'manager' && typeof maskStudentEmail === 'function')
-    ? maskStudentEmail(family.parent_email || '')
-    : (family.parent_email || '--');
+    ? maskStudentEmail(family.parent_email || family.email || '')
+    : (family.parent_email || family.email || '--');
 
   const telephoneVal = (window.CURRENT_ROLE === 'manager' && typeof maskStudentPhone === 'function')
     ? maskStudentPhone(bio.telephone || family.whatsapp || '')
@@ -2002,7 +2002,7 @@ function openFamilyCustomEmailModal(familyId) {
   const family = (window.ALL_FAMILIES || []).find(f => String(f.id).toUpperCase() === String(familyId).toUpperCase());
   if (!family) return;
 
-  const toEmail = family.parent_email || '';
+  const toEmail = family.parent_email || family.email || '';
   const defaultSubject = `Academic Update for ${family.parent_name} (${family.id}) — Al-Huda Islamic Centre`;
   const defaultBody =
 `Assalamu Alaikum Respected ${family.parent_name},
@@ -3062,7 +3062,7 @@ function openEditFamilyProfileModal(familyId) {
           </div>
           <div>
             <label class="font-extrabold text-slate-700 block mb-1">Email Address</label>
-            <input type="email" id="fwEditFamEmail" value="${_esc360(family.parent_email || '')}" class="w-full p-2.5 rounded-xl border border-slate-300 font-bold text-slate-900">
+            <input type="text" inputmode="email" id="fwEditFamEmail" value="${_esc360(family.parent_email || family.email || '')}" oninput="this.value = this.value.replace(/\s+/g, '')" class="w-full p-2.5 rounded-xl border border-slate-300 font-bold text-slate-900 font-mono text-xs">
           </div>
         </div>
 
@@ -3165,6 +3165,7 @@ async function submitEditFamilyProfileForm(e, familyId) {
   await _saveFamilyStructuredNotes(family.id, fNotes, {
     parent_name,
     parent_email,
+    email: parent_email,
     whatsapp: telephone || family.whatsapp,
     country,
     monthly_fee,
@@ -3172,7 +3173,7 @@ async function submitEditFamilyProfileForm(e, familyId) {
   });
 
   if (typeof saveParentAccount === 'function') {
-    saveParentAccount(family.id, { username, password, parent_name, whatsapp: telephone, city, country, monthly_fee, currency });
+    saveParentAccount(family.id, { username, password, parent_name, whatsapp: telephone, email: parent_email, city, country, monthly_fee, currency });
   }
 
   _closeWorkspaceModal();
