@@ -27,6 +27,9 @@
   <!-- Supabase JS Client & Cloudflare D1/R2 Universal Engine -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="js/cloudflare-db.js"></script>
+  <!-- High-Res Client-Side PDF Generation Libraries (html2canvas, jsPDF) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <!-- Al-Huda Curriculum & Digital Islamic Library Engine -->
   <script src="curriculum_data.js"></script>
 
@@ -478,6 +481,13 @@
                   <span class="truncate">Trial Classes</span>
                   <span id="sbBadgeTrialCount" class="ml-auto text-[10px] font-mono px-2 py-0.5 rounded-full bg-purple-100 text-purple-800 font-extrabold border border-purple-200">0</span>
                 </button>
+
+                <!-- Previous Salaries (Single Source of Truth) -->
+                <button id="sbNavSalaries" onclick="switchTeacherPortalTab('salaries'); toggleTeacherSidebar(false);" class="sidebar-nav-btn w-full text-left px-3 py-2.5 flex items-center gap-2.5" title="Previous Salaries & Disbursed Slips">
+                  <span class="sidebar-icon-box"><i class="fa-solid fa-receipt"></i></span>
+                  <span class="truncate">Previous Salaries</span>
+                  <span id="sbBadgeSalariesCount" class="ml-auto text-[10px] font-mono px-2 py-0.5 rounded-full bg-amber-100 text-amber-900 font-extrabold border border-amber-200">Slips</span>
+                </button>
               </nav>
             </div>
 
@@ -855,6 +865,86 @@
           </div>
         </div>
       </div>
+      </div>
+
+      <!-- SECTION 3: MY PREVIOUS SALARIES & DISBURSED SLIPS -->
+      <div id="sectionTeacherSalaries" class="hidden space-y-4">
+        <!-- HEADER -->
+        <div class="bg-gradient-to-r from-emerald-950 via-brandDark to-emerald-900 rounded-2xl p-5 text-white shadow-md border border-emerald-800/40 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+          <div class="flex items-center gap-3">
+            <img src="alhuda_logo.jpg" alt="Al-Huda Islamic Centre" class="w-12 h-12 object-cover rounded-xl border border-emerald-600/40 bg-black shrink-0">
+            <div>
+              <div class="flex items-center gap-2 flex-wrap">
+                <h2 class="text-lg font-black tracking-tight font-serif">Previous Salaries & Compensation</h2>
+                <span class="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-amber-400 text-slate-950">Official Vouchers</span>
+              </div>
+              <p class="text-xs text-emerald-200 mt-0.5">View your verified monthly teaching compensation statements, itemized student rates, and download high-resolution PDF vouchers.</p>
+            </div>
+          </div>
+          <button onclick="loadTeacherPreviousSalaries()" class="px-3.5 py-2 bg-emerald-800 hover:bg-emerald-700 text-emerald-100 rounded-xl text-xs font-bold transition flex items-center gap-1.5 border border-emerald-700">
+            <i class="fa-solid fa-arrows-rotate"></i> Refresh Slips
+          </button>
+        </div>
+
+        <!-- 3 SUMMARY STATS CARDS -->
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
+          <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs">
+            <div class="flex items-center justify-between text-slate-500 mb-1">
+              <span class="text-[10px] font-black uppercase tracking-wider">Total Disbursed Earnings</span>
+              <i class="fa-solid fa-wallet text-emerald-600 text-sm"></i>
+            </div>
+            <div class="text-2xl font-black text-emerald-800 font-mono" id="tSalTotalEarnings">PKR 0</div>
+            <div class="text-[10px] text-slate-500 mt-0.5">Cumulative Paid Vouchers</div>
+          </div>
+
+          <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs">
+            <div class="flex items-center justify-between text-slate-500 mb-1">
+              <span class="text-[10px] font-black uppercase tracking-wider">Latest Voucher Month</span>
+              <i class="fa-solid fa-calendar-check text-amber-600 text-sm"></i>
+            </div>
+            <div class="text-2xl font-black text-slate-900" id="tSalLatestMonth">--</div>
+            <div class="text-[10px] text-slate-500 mt-0.5">Most Recent Statement</div>
+          </div>
+
+          <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs">
+            <div class="flex items-center justify-between text-slate-500 mb-1">
+              <span class="text-[10px] font-black uppercase tracking-wider">Seniority Tier / Increment</span>
+              <i class="fa-solid fa-award text-purple-600 text-sm"></i>
+            </div>
+            <div class="text-2xl font-black text-purple-700 font-mono" id="tSalSeniorityTier">Standard</div>
+            <div class="text-[10px] text-slate-500 mt-0.5">Per-Student Level</div>
+          </div>
+        </div>
+
+        <!-- SALARIES TABLE CARD -->
+        <div class="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
+          <div class="p-4 bg-slate-50 border-b border-slate-200 flex justify-between items-center flex-wrap gap-2">
+            <div>
+              <h3 class="font-extrabold text-slate-900 text-sm flex items-center gap-2">
+                <i class="fa-solid fa-receipt text-amber-600"></i> Monthly Compensation Ledger
+              </h3>
+              <p class="text-xs text-slate-500">Itemized official statements disbursed by Al-Huda Accounts Management</p>
+            </div>
+          </div>
+
+          <div class="overflow-x-auto touch-scroll">
+            <table class="w-full text-left text-xs border-collapse min-w-[640px]">
+              <thead class="bg-slate-100 text-slate-700 font-bold border-b border-slate-200 uppercase tracking-wide text-[11px]">
+                <tr>
+                  <th class="p-3">Billing Month</th>
+                  <th class="p-3">Assigned Students</th>
+                  <th class="p-3">Base Teaching</th>
+                  <th class="p-3">Adjustments (Bonus/Ded)</th>
+                  <th class="p-3 text-right">Net Payable</th>
+                  <th class="p-3 text-center">Status</th>
+                  <th class="p-3 text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody id="tSalariesTableBody" class="divide-y divide-slate-100">
+                <tr><td colspan="7" class="p-8 text-center text-slate-400">Loading your salary vouchers...</td></tr>
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
     </div>
@@ -1856,6 +1946,136 @@
     </div>
   </div>
 
+  <!-- ================================================================= -->
+  <!-- MODAL: OFFICIAL TEACHER SALARY STATEMENT (VOUCHER)               -->
+  <!-- ================================================================= -->
+  <div id="modalTeacherSalarySlip" class="fixed inset-0 bg-black/75 backdrop-blur-sm z-50 hidden items-center justify-center p-2 sm:p-4 overflow-y-auto">
+    <div id="teacherSalarySlipReceiptCard" class="bg-white rounded-2xl max-w-3xl w-full p-4 sm:p-6 my-auto max-h-[94vh] flex flex-col shadow-2xl border border-slate-200">
+      
+      <!-- Voucher Header -->
+      <div class="flex justify-between items-start border-b pb-3 sm:pb-4 mb-3 sm:mb-4 shrink-0">
+        <div class="flex items-center gap-2.5 sm:gap-3.5">
+          <img src="alhuda_logo.jpg" alt="Al-Huda Islamic Centre" class="w-12 h-12 sm:w-14 sm:h-14 object-cover rounded-xl shadow-xs border border-emerald-700/30 bg-black shrink-0">
+          <div>
+            <div class="flex items-center gap-2 flex-wrap">
+              <h2 class="text-base sm:text-xl font-black text-emerald-900 tracking-tight font-serif">AL-HUDA ISLAMIC CENTRE</h2>
+              <span class="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-amber-100 text-amber-900 border border-amber-300">Monthly Salary Statement</span>
+            </div>
+            <p class="text-[11px] sm:text-xs text-slate-500 font-medium" id="tSlipMonthSubtitle">Official Teacher Compensation & Course Payroll Voucher</p>
+          </div>
+        </div>
+        <button onclick="closeTeacherSalarySlip()" class="text-slate-400 hover:text-slate-600 text-2xl font-bold leading-none">&times;</button>
+      </div>
+
+      <!-- Scrollable Voucher Body -->
+      <div class="space-y-4 overflow-y-auto touch-scroll flex-1 pr-1">
+        <!-- Teacher Meta Card -->
+        <div class="bg-slate-50 p-3 sm:p-4 rounded-xl border border-slate-200 grid grid-cols-2 sm:grid-cols-4 gap-2.5 sm:gap-3 text-xs">
+          <div>
+            <span class="text-slate-400 text-[10px] block font-medium">Instructor Name:</span>
+            <strong id="tSlipTeacherName" class="text-slate-900 text-xs sm:text-sm font-extrabold block truncate">--</strong>
+          </div>
+          <div>
+            <span class="text-slate-400 text-[10px] block font-medium">Teacher ID:</span>
+            <strong id="tSlipTeacherCode" class="text-emerald-800 font-mono font-bold block">--</strong>
+          </div>
+          <div>
+            <span class="text-slate-400 text-[10px] block font-medium">Joining Date:</span>
+            <span id="tSlipJoiningDate" class="text-slate-700 font-semibold block">--</span>
+          </div>
+          <div>
+            <span class="text-slate-400 text-[10px] block font-medium">Disbursement Status:</span>
+            <span id="tSlipStatusBadge" class="text-emerald-800 font-bold bg-emerald-100 px-2 py-0.5 rounded-full text-[10px] sm:text-[11px] inline-block">Paid</span>
+          </div>
+        </div>
+
+        <!-- Itemized Students & Course Rate Table -->
+        <div class="space-y-2">
+          <div class="flex justify-between items-center flex-wrap gap-2">
+            <h4 class="font-extrabold text-xs text-slate-800 uppercase tracking-wide flex items-center gap-1.5">
+              <i class="fa-solid fa-graduation-cap text-emerald-600"></i> Enrolled Students & Course Rates Breakdown
+            </h4>
+            <span class="text-[10px] sm:text-[11px] text-slate-500 font-medium">
+              Verified Academy Payroll Breakdown
+            </span>
+          </div>
+
+          <div class="border border-slate-200 rounded-xl overflow-x-auto touch-scroll shadow-xs">
+            <table class="w-full text-left text-xs min-w-[540px]">
+              <thead class="bg-slate-100 text-slate-700 font-bold border-b border-slate-200 text-[11px] uppercase tracking-wide">
+                <tr>
+                  <th class="p-2.5">#</th>
+                  <th class="p-2.5">Student Name</th>
+                  <th class="p-2.5">Course Enrolled</th>
+                  <th class="p-2.5">Schedule</th>
+                  <th class="p-2.5">Course Base + Inc</th>
+                  <th class="p-2.5 text-right">Compensation Rate</th>
+                </tr>
+              </thead>
+              <tbody id="tSlipStudentsTableBody" class="divide-y divide-slate-100 font-medium">
+                <!-- Populated dynamically -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Adjustments & Final Settlement Card -->
+        <div class="bg-gradient-to-br from-amber-50 to-emerald-50/60 p-3.5 sm:p-4 rounded-xl border border-amber-300/60 space-y-3">
+          <div class="font-extrabold text-slate-800 text-xs uppercase tracking-wide flex items-center gap-1.5">
+            <i class="fa-solid fa-sliders text-amber-600"></i> Payroll Adjustments & Final Settlement
+          </div>
+
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+            <div>
+              <span class="block font-bold mb-1 text-slate-600">Base Teaching Subtotal:</span>
+              <div id="tSlipBaseSubtotal" class="p-2 bg-slate-100 border border-slate-300 rounded-lg font-mono font-black text-slate-800">0 PKR</div>
+            </div>
+            <div>
+              <span class="block font-bold mb-1 text-emerald-800"><i class="fa-solid fa-plus text-emerald-600"></i> Additional Bonus:</span>
+              <div id="tSlipBonus" class="p-2 bg-white border border-emerald-400 rounded-lg font-mono font-bold text-emerald-800">0 PKR</div>
+            </div>
+            <div>
+              <span class="block font-bold mb-1 text-rose-800"><i class="fa-solid fa-minus text-rose-600"></i> Deductions / Advance:</span>
+              <div id="tSlipDeduction" class="p-2 bg-white border border-rose-400 rounded-lg font-mono font-bold text-rose-800">0 PKR</div>
+            </div>
+          </div>
+
+          <div id="tSlipRemarksContainer" class="hidden">
+            <span class="block font-bold mb-1 text-slate-700 text-xs">Adjustment Remarks:</span>
+            <div id="tSlipRemarks" class="p-2 bg-white border border-slate-300 rounded-lg text-xs text-slate-700 italic"></div>
+          </div>
+
+          <!-- Net Payable Display -->
+          <div class="flex justify-between items-center bg-white p-3 sm:p-3.5 rounded-xl border-2 border-emerald-800 shadow-xs">
+            <div>
+              <span class="text-[10px] sm:text-[11px] font-bold text-slate-500 uppercase block">Total Net Disbursed Compensation</span>
+              <span class="text-xs text-slate-400 font-semibold" id="tSlipTotalStudentsCount">For 0 Assigned Students</span>
+            </div>
+            <div class="text-right">
+              <span class="text-xl sm:text-2xl font-black text-emerald-800 font-mono" id="tSlipNetPayable">0 PKR</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Action Buttons -->
+      <div class="flex items-center justify-between gap-2.5 pt-3 border-t shrink-0">
+        <button type="button" onclick="printTeacherSalarySlip()" class="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition flex items-center gap-1.5">
+          <i class="fa-solid fa-print"></i> Print Voucher
+        </button>
+        <div class="flex items-center gap-2">
+          <button type="button" onclick="closeTeacherSalarySlip()" class="px-4 py-2 border rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100 transition">
+            Close
+          </button>
+          <button type="button" onclick="downloadTeacherSalarySlipPDF()" id="btnTeacherSlipDownloadPdf" class="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-black shadow transition flex items-center gap-1.5">
+            <i class="fa-solid fa-file-pdf"></i> Download PDF
+          </button>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
   <!-- ================= FOOTER ================= -->
   <footer class="bg-white border-t border-slate-200 py-4 text-center text-xs text-slate-500 mt-auto">
 
@@ -2608,6 +2828,7 @@
       renderTeacherClassesTable();
       renderTeacherStudentListTable();
       loadTeacherTrialsData();
+      loadTeacherPreviousSalaries();
     }
 
     // Render Complete Student List (All Active Students Assigned to This Teacher)
@@ -4079,7 +4300,8 @@
         dashboard: 'sbNavDashboard',
         today: 'sbNavToday',
         students: 'sbNavStudents',
-        trials: 'sbNavTrials'
+        trials: 'sbNavTrials',
+        salaries: 'sbNavSalaries'
       };
       Object.values(navMap).forEach(id => {
         const el = document.getElementById(id);
@@ -4100,12 +4322,14 @@
       const secToday = document.getElementById('sectionTeacherToday');
       const secStudents = document.getElementById('sectionTeacherStudentList');
       const secTrials = document.getElementById('sectionTeacherTrials');
+      const secSalaries = document.getElementById('sectionTeacherSalaries');
 
       if (tab === 'dashboard') {
         if (secKpi) secKpi.classList.remove('hidden');
         if (secToday) secToday.classList.remove('hidden');
         if (secStudents) secStudents.classList.remove('hidden');
         if (secTrials) secTrials.classList.add('hidden');
+        if (secSalaries) secSalaries.classList.add('hidden');
       } else if (tab === 'today') {
         if (secKpi) secKpi.classList.remove('hidden');
         if (secToday) {
@@ -4114,6 +4338,7 @@
         }
         if (secStudents) secStudents.classList.add('hidden');
         if (secTrials) secTrials.classList.add('hidden');
+        if (secSalaries) secSalaries.classList.add('hidden');
       } else if (tab === 'students') {
         if (secKpi) secKpi.classList.remove('hidden');
         if (secToday) secToday.classList.add('hidden');
@@ -4122,6 +4347,7 @@
           secStudents.scrollIntoView({ behavior: 'smooth', block: 'start' });
         }
         if (secTrials) secTrials.classList.add('hidden');
+        if (secSalaries) secSalaries.classList.add('hidden');
         renderTeacherStudentListTable();
       } else if (tab === 'trials') {
         if (secKpi) secKpi.classList.add('hidden');
@@ -4131,8 +4357,394 @@
           secTrials.classList.remove('hidden');
           secTrials.scrollIntoView({ behavior: 'smooth', block: 'start' });
         }
+        if (secSalaries) secSalaries.classList.add('hidden');
         loadTeacherTrialsData();
+      } else if (tab === 'salaries') {
+        if (secKpi) secKpi.classList.add('hidden');
+        if (secToday) secToday.classList.add('hidden');
+        if (secStudents) secStudents.classList.add('hidden');
+        if (secTrials) secTrials.classList.add('hidden');
+        if (secSalaries) {
+          secSalaries.classList.remove('hidden');
+          secSalaries.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+        loadTeacherPreviousSalaries();
       }
+    }
+
+    // =================================================================
+    // TEACHER SALARIES & COMPENSATION VOUCHERS MODULE
+    // =================================================================
+    let CURRENT_TEACHER_ACTIVE_SLIP = null;
+
+    function loadTeacherPreviousSalaries() {
+      if (!CURRENT_TEACHER || !CURRENT_TEACHER.id) return;
+
+      const tbody = document.getElementById('tSalariesTableBody');
+      if (!tbody) return;
+
+      let savedSalaries = {};
+      try {
+        savedSalaries = JSON.parse(localStorage.getItem('alhuda_teacher_salaries') || '{}');
+      } catch (e) {
+        savedSalaries = {};
+      }
+
+      // Hydrate teacher address meta if contains salary slips
+      const meta = parseEmployeeMeta(CURRENT_TEACHER.address);
+      if (meta && meta.salary_slips && typeof meta.salary_slips === 'object') {
+        let updated = false;
+        Object.entries(meta.salary_slips).forEach(([k, v]) => {
+          if (!savedSalaries[k]) {
+            savedSalaries[k] = v;
+            updated = true;
+          }
+        });
+        if (updated) {
+          try { localStorage.setItem('alhuda_teacher_salaries', JSON.stringify(savedSalaries)); } catch (e) {}
+        }
+      }
+
+      // Seniority tier & increment resolution
+      let accountsMap = {};
+      try {
+        accountsMap = JSON.parse(localStorage.getItem('alhuda_teacher_accounts') || '{}');
+      } catch (e) {}
+      const acc = (CURRENT_TEACHER.id && accountsMap[CURRENT_TEACHER.id]) ? accountsMap[CURRENT_TEACHER.id] : (meta.teacher_account || {});
+      const seniorityIncrement = parseFloat(acc.seniority_increment || meta.seniority_increment || CURRENT_TEACHER.seniority_increment || 0);
+      const tierEl = document.getElementById('tSalSeniorityTier');
+      if (tierEl) {
+        tierEl.innerText = seniorityIncrement > 0 ? `+${seniorityIncrement} PKR / stu` : 'Standard Tier';
+      }
+
+      // Collect all slips belonging to logged in teacher
+      const teacherSlips = [];
+      Object.entries(savedSalaries).forEach(([slipKey, slip]) => {
+        if (!slip) return;
+        const tId = slip.teacher_id || slipKey.split('_')[0];
+        if (String(tId) === String(CURRENT_TEACHER.id)) {
+          teacherSlips.push({ slipKey, ...slip });
+        }
+      });
+
+      // Sort by date/timestamp descending
+      teacherSlips.sort((a, b) => {
+        const tA = new Date(a.saved_at || 0).getTime();
+        const tB = new Date(b.saved_at || 0).getTime();
+        return tB - tA;
+      });
+
+      // Compute summary metrics
+      let totalPaid = 0;
+      let latestMonth = '--';
+      teacherSlips.forEach((s, idx) => {
+        const net = parseFloat(s.net_payable) || 0;
+        if (s.status === 'Paid') {
+          totalPaid += net;
+        }
+        if (idx === 0 && s.month) {
+          latestMonth = s.month;
+        }
+      });
+
+      // If no explicit 'Paid' status yet but vouchers exist, fallback to total net of available vouchers
+      const effectiveEarnings = totalPaid > 0 ? totalPaid : teacherSlips.reduce((sum, s) => sum + (parseFloat(s.net_payable) || 0), 0);
+      const earningsEl = document.getElementById('tSalTotalEarnings');
+      if (earningsEl) {
+        earningsEl.innerText = `PKR ${effectiveEarnings.toLocaleString()}`;
+      }
+      const monthEl = document.getElementById('tSalLatestMonth');
+      if (monthEl) {
+        monthEl.innerText = latestMonth;
+      }
+
+      if (teacherSlips.length === 0) {
+        tbody.innerHTML = `
+          <tr>
+            <td colspan="7" class="p-8 text-center text-slate-400">
+              <div class="max-w-md mx-auto space-y-2.5 py-4">
+                <div class="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-700 flex items-center justify-center mx-auto text-xl shadow-xs">
+                  <i class="fa-solid fa-receipt"></i>
+                </div>
+                <div class="font-extrabold text-slate-800 text-sm">No Official Salary Statements Disbursed Yet</div>
+                <p class="text-xs text-slate-500">Official monthly compensation vouchers generated and finalized by Al-Huda Administration will appear here with complete itemized student breakdowns and single-click PDF downloads.</p>
+              </div>
+            </td>
+          </tr>
+        `;
+        return;
+      }
+
+      tbody.innerHTML = teacherSlips.map(s => {
+        const studentsList = s.student_items_snapshot || [];
+        const studentCount = studentsList.length || (s.students ? Object.keys(s.students).length : 0);
+        const isPaid = s.status === 'Paid';
+        const statusBadge = isPaid
+          ? `<span class="px-2.5 py-1 rounded-full text-[10px] font-black bg-emerald-100 text-emerald-800 border border-emerald-300 inline-flex items-center gap-1"><i class="fa-solid fa-circle-check text-emerald-600"></i> Paid</span>`
+          : `<span class="px-2.5 py-1 rounded-full text-[10px] font-black bg-amber-100 text-amber-800 border border-amber-300 inline-flex items-center gap-1"><i class="fa-solid fa-clock text-amber-600"></i> Pending</span>`;
+
+        const netPayable = parseFloat(s.net_payable) || 0;
+        const baseSubtotal = parseFloat(s.base_subtotal) || 0;
+        const bonus = parseFloat(s.bonus) || 0;
+        const deduction = parseFloat(s.deduction) || 0;
+        const adjParts = [];
+        if (bonus > 0) adjParts.push(`+${bonus.toLocaleString()}`);
+        if (deduction > 0) adjParts.push(`-${deduction.toLocaleString()}`);
+        const adjText = adjParts.length > 0 ? adjParts.join(' / ') + ' PKR' : '--';
+
+        return `
+          <tr class="hover:bg-slate-50/80 transition">
+            <td class="p-3 font-extrabold text-slate-900">${s.month || 'Statement'}</td>
+            <td class="p-3 text-slate-600"><span class="font-bold text-slate-900">${studentCount}</span> Enrolled Students</td>
+            <td class="p-3 font-mono text-slate-700 font-bold">${baseSubtotal.toLocaleString()} PKR</td>
+            <td class="p-3 text-slate-600 font-mono text-xs">${adjText}</td>
+            <td class="p-3 text-right font-mono font-black text-emerald-800 text-sm">${netPayable.toLocaleString()} PKR</td>
+            <td class="p-3 text-center">${statusBadge}</td>
+            <td class="p-3 text-right">
+              <div class="inline-flex items-center gap-1.5 justify-end">
+                <button onclick="viewTeacherSalarySlip('${s.slipKey}')" class="px-3 py-1.5 rounded-lg text-xs font-bold bg-slate-100 hover:bg-slate-200 text-slate-700 transition flex items-center gap-1">
+                  <i class="fa-solid fa-eye text-emerald-700"></i> View Voucher
+                </button>
+                <button onclick="downloadTeacherSalarySlipDirect('${s.slipKey}')" class="px-2.5 py-1.5 rounded-lg text-xs font-bold bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 transition flex items-center gap-1" title="Download PDF Voucher">
+                  <i class="fa-solid fa-file-pdf"></i>
+                </button>
+              </div>
+            </td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    function viewTeacherSalarySlip(slipKey) {
+      let savedSalaries = {};
+      try {
+        savedSalaries = JSON.parse(localStorage.getItem('alhuda_teacher_salaries') || '{}');
+      } catch (e) {
+        savedSalaries = {};
+      }
+
+      const slip = savedSalaries[slipKey];
+      if (!slip) {
+        alert("Salary slip details not found in academy records.");
+        return;
+      }
+
+      CURRENT_TEACHER_ACTIVE_SLIP = { slipKey, ...slip };
+
+      const subTitle = document.getElementById('tSlipMonthSubtitle');
+      if (subTitle) subTitle.innerText = `Official Teacher Compensation & Course Payroll Voucher for ${slip.month || 'Statement'}`;
+
+      const nameEl = document.getElementById('tSlipTeacherName');
+      if (nameEl) nameEl.innerText = CURRENT_TEACHER?.full_name || 'Al-Huda Teacher';
+
+      const codeEl = document.getElementById('tSlipTeacherCode');
+      if (codeEl) codeEl.innerText = (CURRENT_TEACHER?.id || '').slice(0, 8).toUpperCase();
+
+      const meta = parseEmployeeMeta(CURRENT_TEACHER?.address);
+      const joinEl = document.getElementById('tSlipJoiningDate');
+      if (joinEl) joinEl.innerText = CURRENT_TEACHER?.joining_date || meta.joining_date || 'Registered Instructor';
+
+      const isPaid = slip.status === 'Paid';
+      const badge = document.getElementById('tSlipStatusBadge');
+      if (badge) {
+        badge.className = isPaid
+          ? "text-emerald-800 font-bold bg-emerald-100 px-2.5 py-0.5 rounded-full text-[10px] sm:text-[11px] inline-block"
+          : "text-amber-800 font-bold bg-amber-100 px-2.5 py-0.5 rounded-full text-[10px] sm:text-[11px] inline-block";
+        badge.innerText = isPaid ? "Paid / Disbursed" : "Pending Approval";
+      }
+
+      // Populate students table
+      const tbody = document.getElementById('tSlipStudentsTableBody');
+      const studentsList = slip.student_items_snapshot || [];
+      if (tbody) {
+        if (!studentsList || studentsList.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="6" class="p-6 text-center text-slate-400">No student items recorded for this voucher.</td></tr>';
+        } else {
+          tbody.innerHTML = studentsList.map((s, idx) => {
+            const prorationBadge = s.proration_label
+              ? `<span class="inline-block mt-1 px-1.5 py-0.5 rounded text-[10px] font-bold ${s.is_prorated ? 'bg-amber-50 text-amber-800 border border-amber-200' : 'bg-emerald-50 text-emerald-800 border border-emerald-200'}">${s.proration_label}</span>`
+              : '';
+            const rateVal = s.final_rate !== undefined ? s.final_rate : (s.calculated_rate || 0);
+            return `
+              <tr class="hover:bg-slate-50">
+                <td class="p-2.5 font-mono text-slate-400 font-bold">${s.index || (idx + 1)}</td>
+                <td class="p-2.5 font-extrabold text-slate-900">
+                  <div>${s.student_name || 'Student'}</div>
+                  ${s.joining_date ? `<div class="text-[10px] font-normal text-slate-500">Joined: ${s.joining_date}</div>` : ''}
+                </td>
+                <td class="p-2.5 font-bold text-emerald-900">${s.course_label || 'Quran Course'}</td>
+                <td class="p-2.5 text-slate-600 text-xs">
+                  <div>${s.schedule_text || '--'}</div>
+                  ${prorationBadge}
+                </td>
+                <td class="p-2.5 font-mono text-slate-500 text-xs">
+                  <div>${s.base_rate || s.calculated_rate || 0} ${s.increment > 0 ? '+ ' + s.increment : ''} PKR</div>
+                </td>
+                <td class="p-2.5 text-right font-mono font-black text-slate-900">
+                  ${Number(rateVal).toLocaleString()} PKR
+                </td>
+              </tr>
+            `;
+          }).join('');
+        }
+      }
+
+      const baseSubtotal = parseFloat(slip.base_subtotal) || 0;
+      const bonus = parseFloat(slip.bonus) || 0;
+      const deduction = parseFloat(slip.deduction) || 0;
+      const netPayable = parseFloat(slip.net_payable) || 0;
+
+      const baseSubEl = document.getElementById('tSlipBaseSubtotal');
+      if (baseSubEl) baseSubEl.innerText = `${baseSubtotal.toLocaleString()} PKR`;
+
+      const bonusEl = document.getElementById('tSlipBonus');
+      if (bonusEl) bonusEl.innerText = `${bonus.toLocaleString()} PKR`;
+
+      const dedEl = document.getElementById('tSlipDeduction');
+      if (dedEl) dedEl.innerText = `${deduction.toLocaleString()} PKR`;
+
+      const remCont = document.getElementById('tSlipRemarksContainer');
+      const remText = document.getElementById('tSlipRemarks');
+      if (slip.remarks && slip.remarks.trim()) {
+        if (remCont) remCont.classList.remove('hidden');
+        if (remText) remText.innerText = slip.remarks.trim();
+      } else {
+        if (remCont) remCont.classList.add('hidden');
+      }
+
+      const netEl = document.getElementById('tSlipNetPayable');
+      if (netEl) netEl.innerText = `${netPayable.toLocaleString()} PKR`;
+
+      const countEl = document.getElementById('tSlipTotalStudentsCount');
+      if (countEl) countEl.innerText = `For ${studentsList.length} Assigned Students (${baseSubtotal.toLocaleString()} Base ${bonus > 0 ? '+ ' + bonus + ' Bonus' : ''} ${deduction > 0 ? '- ' + deduction + ' Deduction' : ''})`;
+
+      const modal = document.getElementById('modalTeacherSalarySlip');
+      if (modal) {
+        modal.classList.remove('hidden');
+        modal.classList.add('flex');
+      }
+    }
+
+    function closeTeacherSalarySlip() {
+      const modal = document.getElementById('modalTeacherSalarySlip');
+      if (modal) {
+        modal.classList.add('hidden');
+        modal.classList.remove('flex');
+      }
+    }
+
+    async function downloadTeacherSalarySlipDirect(slipKey) {
+      viewTeacherSalarySlip(slipKey);
+      setTimeout(async () => {
+        await downloadTeacherSalarySlipPDF();
+      }, 350);
+    }
+
+    async function downloadTeacherSalarySlipPDF() {
+      const sourceCard = document.getElementById('teacherSalarySlipReceiptCard');
+      if (!sourceCard) {
+        alert("Salary voucher element not found.");
+        return;
+      }
+
+      const btn = document.getElementById('btnTeacherSlipDownloadPdf');
+      const originalText = btn ? btn.innerHTML : '';
+      if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-1"></i> Generating PDF...';
+      }
+
+      let sandbox = null;
+      try {
+        const cleanName = (CURRENT_TEACHER?.full_name || 'Teacher').replace(/[^a-zA-Z0-9_-]/g, '_');
+        const cleanMonth = (CURRENT_TEACHER_ACTIVE_SLIP?.month || 'Statement').replace(/[^a-zA-Z0-9_-]/g, '_');
+        const filename = `AlHuda-SalarySlip-${cleanName}-${cleanMonth}.pdf`;
+
+        const cardClone = sourceCard.cloneNode(true);
+        const actionRow = cardClone.querySelector('.border-t:last-child') || cardClone.querySelector('.shrink-0:last-child');
+        if (actionRow) actionRow.style.display = 'none';
+
+        cardClone.style.maxWidth = '780px';
+        cardClone.style.width = '780px';
+        cardClone.style.margin = '0';
+        cardClone.style.padding = '24px';
+        cardClone.style.background = '#ffffff';
+        cardClone.style.boxShadow = 'none';
+        cardClone.style.borderRadius = '0';
+        cardClone.style.border = '1px solid #cbd5e1';
+
+        const images = cardClone.querySelectorAll('img');
+        await Promise.all(Array.from(images).map(img => {
+          if (img.complete) return Promise.resolve();
+          return new Promise(resolve => {
+            img.onload = resolve;
+            img.onerror = resolve;
+          });
+        }));
+
+        sandbox = document.createElement('div');
+        sandbox.id = 'teacherSalarySlipPdfSandbox';
+        sandbox.style.position = 'fixed';
+        sandbox.style.left = '0';
+        sandbox.style.top = '0';
+        sandbox.style.width = '800px';
+        sandbox.style.zIndex = '-9999';
+        sandbox.style.opacity = '1';
+        sandbox.style.pointerEvents = 'none';
+        sandbox.appendChild(cardClone);
+        document.body.appendChild(sandbox);
+
+        const hasHtml2Canvas = typeof html2canvas !== 'undefined';
+        const hasJsPDF = typeof window.jspdf !== 'undefined' && window.jspdf.jsPDF;
+
+        if (hasHtml2Canvas && hasJsPDF) {
+          const canvas = await html2canvas(cardClone, {
+            scale: 2,
+            useCORS: true,
+            logging: false,
+            backgroundColor: '#ffffff'
+          });
+
+          const imgData = canvas.toDataURL('image/jpeg', 0.95);
+          const { jsPDF } = window.jspdf;
+          const pdf = new jsPDF({
+            orientation: 'portrait',
+            unit: 'mm',
+            format: 'a4'
+          });
+
+          const pageWidth = pdf.internal.pageSize.getWidth();
+          const pageHeight = pdf.internal.pageSize.getHeight();
+          const margin = 10;
+          const printableWidth = pageWidth - (margin * 2);
+          const imgHeight = (canvas.height * printableWidth) / canvas.width;
+
+          if (imgHeight <= (pageHeight - (margin * 2))) {
+            pdf.addImage(imgData, 'JPEG', margin, margin, printableWidth, imgHeight);
+          } else {
+            pdf.addImage(imgData, 'JPEG', margin, margin, printableWidth, pageHeight - (margin * 2));
+          }
+
+          pdf.save(filename);
+        } else {
+          window.print();
+        }
+      } catch (err) {
+        console.error("Teacher PDF generation failed:", err);
+        window.print();
+      } finally {
+        if (sandbox && sandbox.parentNode) {
+          sandbox.parentNode.removeChild(sandbox);
+        }
+        if (btn) {
+          btn.disabled = false;
+          btn.innerHTML = originalText;
+        }
+      }
+    }
+
+    function printTeacherSalarySlip() {
+      window.print();
     }
 
     function selectTeacherBookPresetDays(daysArray) {

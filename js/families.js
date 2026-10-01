@@ -242,10 +242,61 @@
           const creds = getTeacherCreds(t);
           return `<option value="${t.id}">${t.full_name} (${creds.teacher_id} &bull; ${t.working_shift || '10 Hours'})</option>`;
         }).join('');
+        teacherSelect.onchange = updateStudentModalTeacherZoom;
       }
 
+      updateStudentModalTeacherZoom();
       openModal('modalAddStudent');
     }
+
+    function getCanonicalTeacherZoomLink(teacherId) {
+      if (!teacherId) return '';
+      const teacher = (window.ALL_TEACHERS || []).find(t => String(t.id) === String(teacherId));
+      let zoomLink = '';
+      try {
+        const accounts = typeof getTeacherAccounts === 'function' ? getTeacherAccounts() : JSON.parse(localStorage.getItem('alhuda_teacher_accounts') || '{}');
+        if (accounts[teacherId] && accounts[teacherId].zoom_link) {
+          zoomLink = accounts[teacherId].zoom_link;
+        }
+      } catch(e) {}
+      if (!zoomLink && teacher && typeof getTeacherCreds === 'function') {
+        const creds = getTeacherCreds(teacher);
+        if (creds && creds.zoom_link) zoomLink = creds.zoom_link;
+      }
+      if (!zoomLink && teacher?.zoom_link) {
+        zoomLink = teacher.zoom_link;
+      }
+      return (zoomLink || '').trim();
+    }
+    window.getCanonicalTeacherZoomLink = getCanonicalTeacherZoomLink;
+
+    function updateStudentModalTeacherZoom() {
+      const teacherSelect = document.getElementById('stuTeacherId');
+      const zoomInp = document.getElementById('stuTeacherZoomLink');
+      const zoomBadge = document.getElementById('stuTeacherZoomBadge');
+      const zoomWarn = document.getElementById('stuTeacherZoomWarning');
+      if (!teacherSelect || !zoomInp) return;
+
+      const tId = teacherSelect.value;
+      const zoomLink = getCanonicalTeacherZoomLink(tId);
+
+      if (zoomLink && /^https?:\/\//i.test(zoomLink)) {
+        zoomInp.value = zoomLink;
+        if (zoomBadge) {
+          zoomBadge.className = "text-[10px] px-2 py-0.5 rounded-full font-extrabold bg-emerald-100 text-emerald-800 border border-emerald-300";
+          zoomBadge.innerHTML = '<i class="fa-solid fa-circle-check text-emerald-600 mr-1"></i> Active Room Linked';
+        }
+        if (zoomWarn) zoomWarn.classList.add('hidden');
+      } else {
+        zoomInp.value = zoomLink || '';
+        if (zoomBadge) {
+          zoomBadge.className = "text-[10px] px-2 py-0.5 rounded-full font-extrabold bg-rose-100 text-rose-800 border border-rose-300";
+          zoomBadge.innerHTML = '<i class="fa-solid fa-triangle-exclamation text-rose-600 mr-1"></i> Missing Zoom Link';
+        }
+        if (zoomWarn) zoomWarn.classList.remove('hidden');
+      }
+    }
+    window.updateStudentModalTeacherZoom = updateStudentModalTeacherZoom;
 
     async function handleSaveFamily(e) {
       e.preventDefault();
@@ -384,7 +435,18 @@
         }
       }
 
-      const notesMeta = JSON.stringify({ language, days_per_week, course_name: course_id, course: course_id });
+      const zoomInputVal = (document.getElementById('stuTeacherZoomLink')?.value || '').trim();
+      const teacherZoomCanonical = getCanonicalTeacherZoomLink(assigned_teacher_id);
+      const resolvedZoomLink = zoomInputVal || teacherZoomCanonical || '';
+
+      const notesMeta = JSON.stringify({
+        language,
+        days_per_week,
+        course_name: course_id,
+        course: course_id,
+        meeting_link: resolvedZoomLink,
+        zoom_link: resolvedZoomLink
+      });
       const rawStudentRecord = {
         id, family_id, name, age, gender, course_id, assigned_teacher_id, joining_date, notes: notesMeta, status: 'Active'
       };
@@ -400,9 +462,9 @@
         return;
       }
 
-      // Cache student profile in localStorage
+      // Cache student profile in localStorage with resolved meeting link
       const profiles = JSON.parse(localStorage.getItem('alhuda_student_profiles') || '{}');
-      profiles[id] = { id, family_id, name, age, gender, language, joining_date, course_id, days_per_week, assigned_teacher_id };
+      profiles[id] = { id, family_id, name, age, gender, language, joining_date, course_id, days_per_week, assigned_teacher_id, meeting_link: resolvedZoomLink };
       localStorage.setItem('alhuda_student_profiles', JSON.stringify(profiles));
 
       btn.disabled = false;
@@ -414,16 +476,29 @@
       if (typeof invalidateCoreLmsDataCache === 'function') invalidateCoreLmsDataCache();
       await loadFamiliesAndStudents(true);
 
+      // If Family 360 Workspace is currently open for this family, refresh it immediately
+      if (typeof _renderFamilyWorkspaceDOM === 'function' && window._CURRENT_360_STATE && String(window._CURRENT_360_STATE.familyId).toUpperCase() === String(family_id).toUpperCase()) {
+        const updatedFam = (ALL_FAMILIES || []).find(f => String(f.id).toUpperCase() === String(family_id).toUpperCase());
+        if (updatedFam) {
+          window._CURRENT_360_STATE.family = updatedFam;
+          if (Array.isArray(updatedFam.students)) {
+            const memRec = { ...rawStudentRecord, ...dbPayload };
+            if (!updatedFam.students.some(s => s.id === id)) updatedFam.students.push(memRec);
+          }
+        }
+        _renderFamilyWorkspaceDOM();
+      }
+
       const assignedTeacher = (ALL_TEACHERS || []).find(t => String(t.id) === String(assigned_teacher_id));
       const tName = assignedTeacher ? assignedTeacher.full_name : 'Not Assigned Yet';
       const parentFam = (ALL_FAMILIES || []).find(f => String(f.id) === String(family_id));
       const parentEmail = String(parentFam?.parent_email || '').trim();
       const creds = parentFam ? getParentCreds(parentFam) : null;
 
-      // Resolve real class schedule & Zoom link from DB
+      // Resolve real class schedule & Zoom link
       const stuSchedules = (window.ALL_SCHEDULES || []).filter(sc => String(sc.student_id) === String(id));
       let scheduleText = days_per_week ? `${days_per_week} (Timetable slot pending)` : 'No classes scheduled.';
-      let zoomLink = assignedTeacher?.zoom_link || '';
+      let zoomLink = resolvedZoomLink || assignedTeacher?.zoom_link || '';
       if (stuSchedules.length > 0) {
         const daysMap = ['', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
         const daysStr = [...new Set(stuSchedules.map(sc => daysMap[sc.day_of_week] || '').filter(Boolean))].join(', ');
@@ -434,7 +509,7 @@
         if (schedZoom) zoomLink = schedZoom;
       }
 
-      // TASK 6: Automatically send welcome email when parent email exists
+      // Automatically send welcome email when parent email exists
       let emailStatusSuffix = '';
       if (parentEmail && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(parentEmail) && typeof autoSendWelcomeEmailOnCreation === 'function') {
         const emailRes = await autoSendWelcomeEmailOnCreation({
@@ -447,6 +522,7 @@
           teacherName: tName,
           scheduleText: scheduleText,
           zoomLink: zoomLink,
+          joiningDate: joining_date,
           credentials: creds ? { username: creds.username, password: creds.password } : null
         });
         if (emailRes && emailRes.sent === false) {
@@ -459,7 +535,12 @@
         }
       }
 
-      alert(`✅ Student Enrolled Successfully!\n\n🎓 Student: ${name} (${id})\n👨‍👩‍👧 Linked Family: ${family_id}\n📚 Course: ${course_id}\n📅 Days Preference: ${days_per_week}\n🗓️ Joining Date: ${joining_date}\n👨‍🏫 Assigned Teacher: ${tName}\n\nStudent is now in Teacher's Student List. You can open Teacher's 2D Schedule to book timetable slots.${emailStatusSuffix}`);
+      let zoomNotice = '';
+      if (assigned_teacher_id && !resolvedZoomLink) {
+        zoomNotice = '\n\n⚠️ Note: Assigned teacher currently has no Zoom link configured. Please set up their Zoom Classroom in Teacher Profile.';
+      }
+
+      alert(`✅ Student Enrolled Successfully!\n\n🎓 Student: ${name} (${id})\n👨‍👩‍👧 Linked Family: ${family_id}\n📚 Course: ${course_id}\n📅 Days Preference: ${days_per_week}\n🗓️ Joining Date: ${joining_date}\n👨‍🏫 Assigned Teacher: ${tName}\n📹 Zoom Room: ${resolvedZoomLink || 'Pending Configuration'}\n\nStudent is now in Teacher's Student List. You can open Teacher's 2D Schedule to book timetable slots.${zoomNotice}${emailStatusSuffix}`);
     }
 
     function copyParentCredentials(user, pass) {
@@ -1018,7 +1099,7 @@
                 <i class="fa-solid fa-circle-nodes text-brandGold"></i> Family 360°
               </button>
               <button onclick="prepareAddStudentModal('${f.id}')" class="py-2 bg-emerald-50 hover:bg-emerald-100 text-brandEmerald font-bold rounded-xl text-xs border border-emerald-200 flex items-center justify-center gap-1.5 transition">
-                <i class="fa-solid fa-plus"></i> + Add Sibling
+                <i class="fa-solid fa-plus"></i> + Add Student
               </button>
             </div>
           </div>

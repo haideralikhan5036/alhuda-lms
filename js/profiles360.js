@@ -1957,289 +1957,35 @@ function _closeWorkspaceModal() {
 }
 
 // ============================================================================
-// TOP FAMILY ACTION 1: ADD STUDENT TO CURRENT FAMILY (Section #4)
+// TOP FAMILY ACTION 1: ADD STUDENT TO CURRENT FAMILY (CANONICAL WORKFLOW)
+// Uses the single source of truth modalAddStudent and handleSaveStudent workflow
 // ============================================================================
 function openFamilyAddStudentModal(familyId) {
-  const family = (window.ALL_FAMILIES || []).find(f => String(f.id).toUpperCase() === String(familyId).toUpperCase());
-  if (!family) return;
-
-  const nextId = (typeof getNextStudentId === 'function') ? getNextStudentId() : `STU-${Math.floor(100 + Math.random() * 899)}`;
-  const today = new Date().toISOString().slice(0, 10);
-  const eligibleTeachers = (typeof getEligibleTeachers === 'function')
-    ? getEligibleTeachers(window.ALL_TEACHERS)
-    : (window.ALL_TEACHERS || []);
-  const teacherOptions = eligibleTeachers.map(t =>
-    `<option value="${_esc360(t.id)}">${_esc360(t.full_name)} (${_esc360(t.working_shift || 'Regular Shift')})</option>`
-  ).join('');
-
-  _openWorkspaceModal(
-    `Add New Student to ${family.parent_name}`,
-    `Automatically connected to Family ID: ${family.id}`,
-    `
-      <form onsubmit="submitFamilyAddStudentForm(event, '${_esc360(family.id)}')" class="space-y-4 text-xs">
-        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <div>
-            <label class="font-extrabold text-slate-700 block mb-1">Student ID</label>
-            <input type="text" id="fwNewStuId" value="${_esc360(nextId)}" readonly class="w-full p-2.5 rounded-xl bg-slate-100 border border-slate-200 font-mono font-bold text-slate-700">
-          </div>
-          <div>
-            <label class="font-extrabold text-slate-700 block mb-1">Joining Date</label>
-            <input type="date" id="fwNewStuJoinDate" value="${today}" required class="w-full p-2.5 rounded-xl border border-slate-300 font-bold text-slate-800">
-          </div>
-        </div>
-
-        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          <div class="sm:col-span-2">
-            <label class="font-extrabold text-slate-700 block mb-1">Student Full Name *</label>
-            <input type="text" id="fwNewStuName" placeholder="Enter student full name" required class="w-full p-2.5 rounded-xl border border-slate-300 font-bold text-slate-900">
-          </div>
-          <div>
-            <label class="font-extrabold text-slate-700 block mb-1">Age</label>
-            <input type="number" id="fwNewStuAge" value="8" min="3" max="70" class="w-full p-2.5 rounded-xl border border-slate-300 font-bold text-slate-800">
-          </div>
-        </div>
-
-        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <div>
-            <label class="font-extrabold text-slate-700 block mb-1">Gender</label>
-            <select id="fwNewStuGender" class="w-full p-2.5 rounded-xl border border-slate-300 font-bold text-slate-800">
-              <option value="Male">Male</option>
-              <option value="Female">Female</option>
-            </select>
-          </div>
-          <div>
-            <label class="font-extrabold text-slate-700 block mb-1">Course / Program</label>
-            <select id="fwNewStuCourse" class="w-full p-2.5 rounded-xl border border-slate-300 font-bold text-slate-800">
-              <option value="Noorani Qaida">Noorani Qaida</option>
-              <option value="Nazra Quran Reading">Nazra Quran Reading</option>
-              <option value="Hifz-ul-Quran">Hifz-ul-Quran</option>
-              <option value="Tajweed & Recitation">Tajweed &amp; Recitation</option>
-              <option value="Tafseer & Islamic Studies">Tafseer &amp; Islamic Studies</option>
-            </select>
-          </div>
-        </div>
-
-        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <div>
-            <label class="font-extrabold text-slate-700 block mb-1">Assign Teacher</label>
-            <select id="fwNewStuTeacher" class="w-full p-2.5 rounded-xl border border-slate-300 font-bold text-slate-800">
-              <option value="">-- Select Teacher --</option>
-              ${teacherOptions}
-            </select>
-          </div>
-          <div>
-            <label class="font-extrabold text-slate-700 block mb-1">Days Per Week</label>
-            <select id="fwNewStuDays" class="w-full p-2.5 rounded-xl border border-slate-300 font-bold text-slate-800">
-              <option value="5 Days (Mon-Fri)">5 Days (Mon-Fri)</option>
-              <option value="3 Days (Mon-Wed-Fri)">3 Days (Mon-Wed-Fri)</option>
-              <option value="2 Days (Weekend)">2 Days (Weekend)</option>
-              <option value="6 Days (Mon-Sat)">6 Days (Mon-Sat)</option>
-            </select>
-          </div>
-        </div>
-
-        <div class="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
-          <button type="button" onclick="_closeWorkspaceModal()" class="px-4 py-2 rounded-xl bg-slate-100 text-slate-700 font-bold">Cancel</button>
-          <button type="submit" id="btnFwSaveNewStudent" class="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold">
-            Enroll Student in Family
-          </button>
-        </div>
-      </form>
-    `
-  );
+  if (typeof prepareAddStudentModal === 'function') {
+    prepareAddStudentModal(familyId);
+  } else {
+    console.error('prepareAddStudentModal canonical workflow not found.');
+  }
 }
-
-async function submitFamilyAddStudentForm(e, familyId) {
-  e.preventDefault();
-  const btn = document.getElementById('btnFwSaveNewStudent');
-  if (btn) { btn.disabled = true; btn.innerText = 'Saving to Database...'; }
-
-  const id = document.getElementById('fwNewStuId').value.trim();
-  const name = document.getElementById('fwNewStuName').value.trim();
-  const age = parseInt(document.getElementById('fwNewStuAge').value, 10) || 8;
-  const gender = document.getElementById('fwNewStuGender').value;
-  const course_id = document.getElementById('fwNewStuCourse').value;
-  const joining_date = document.getElementById('fwNewStuJoinDate').value;
-  const assigned_teacher_id = document.getElementById('fwNewStuTeacher').value || null;
-  const days_per_week = document.getElementById('fwNewStuDays').value;
-
-  if (assigned_teacher_id && typeof validateEligibleTeacherBackend === 'function') {
-    const check = await validateEligibleTeacherBackend(assigned_teacher_id);
-    if (!check.valid) {
-      if (btn) { btn.disabled = false; btn.innerText = 'Enroll Student in Family'; }
-      _notify360(check.error, 'error');
-      return;
-    }
-  }
-
-  const notes = JSON.stringify({
-    days_per_week,
-    language: 'English',
-    course_name: course_id,
-    course: course_id,
-    certificates: []
-  });
-
-  const rawStuRecord = {
-    id,
-    family_id: familyId,
-    name,
-    age,
-    gender,
-    course_id,
-    assigned_teacher_id,
-    joining_date,
-    notes,
-    status: 'Active'
-  };
-
-  const { dbPayload, memRecord: newStuRecord } = (typeof buildStudentDatabasePayload === 'function')
-    ? buildStudentDatabasePayload(rawStuRecord)
-    : { dbPayload: { ...rawStuRecord, course_id: null }, memRecord: rawStuRecord };
-
-  const { error } = await db.from('students').insert([dbPayload]);
-  if (error) {
-    alert('Failed to enroll student: ' + error.message);
-    if (btn) { btn.disabled = false; btn.innerText = 'Enroll Student in Family'; }
-    return;
-  }
-
-  if (Array.isArray(window.ALL_STUDENTS)) window.ALL_STUDENTS.unshift(newStuRecord);
-  const fam = (window.ALL_FAMILIES || []).find(f => String(f.id).toUpperCase() === String(familyId).toUpperCase())
-           || (window.RAW_ALL_FAMILIES || []).find(f => String(f.id).toUpperCase() === String(familyId).toUpperCase());
-  if (fam) {
-    if (!Array.isArray(fam.students)) fam.students = [];
-    fam.students.push(newStuRecord);
-  }
-
-  if (typeof syncFamilyStatusFromStudentsBackend === 'function') {
-    await syncFamilyStatusFromStudentsBackend(familyId);
-  }
-  if (typeof invalidateCoreLmsDataCache === 'function') invalidateCoreLmsDataCache();
-
-  _closeWorkspaceModal();
-  _notify360(`Student ${name} (${id}) added to ${fam ? fam.parent_name : familyId} successfully!`);
-  await openFamily360Profile(familyId, 'students', true, { selectedStudentId: id, studentSubView: 'info' });
-}
+window.openFamilyAddStudentModal = openFamilyAddStudentModal;
 
 // ============================================================================
-// TOP FAMILY ACTION 2: SEND INVOICE (Section #4)
-// Uses actual saved/current invoice and parent email, dispatches & logs to backend
+// TOP FAMILY ACTION 2: SEND INVOICE (CANONICAL WORKFLOW)
+// Routes directly to the official tuition fee invoice modal & PDF/Email dispatcher
 // ============================================================================
 function openFamilySendInvoiceModal(familyId) {
   const family = (window.ALL_FAMILIES || []).find(f => String(f.id).toUpperCase() === String(familyId).toUpperCase());
   if (!family) return;
 
   const payData = _getFamilyPaymentsList(family);
-  const currentInvoice = payData.rows[0] || {
-    month: 'September',
-    year: 2026,
-    feeAmount: family.monthly_fee || 0,
-    currency: family.currency || 'USD',
-    status: 'UNPAID'
-  };
-
-  const parentEmail = family.parent_email || '';
-  const studentsNames = ((window.ALL_STUDENTS || []).filter(s => String(s.family_id).toUpperCase() === String(family.id).toUpperCase()).map(s => s.name)).join(', ') || 'Enrolled Students';
-
-  const subject = `Official Monthly Fee Invoice (${currentInvoice.month} ${currentInvoice.year}) — Al-Huda Islamic Centre`;
-  const bodyText =
-`Assalamu Alaikum Respected ${family.parent_name},
-
-We pray you and your family are in the best of health and Iman.
-Please find below your official monthly tuition invoice details for ${currentInvoice.month} ${currentInvoice.year}:
-
-• Family ID: ${family.id}
-• Enrolled Student(s): ${studentsNames}
-• Billing Month: ${currentInvoice.month} ${currentInvoice.year}
-• Agreed Monthly Fee: ${currentInvoice.currency} ${currentInvoice.feeAmount}
-• Current Payment Status: ${currentInvoice.status}
-
-Kindly remit the monthly fee via ${currentInvoice.paymentMethod || 'your usual payment method'} and share the confirmation receipt.
-
-Jazakumullahu Khairan,
-Accounts & Billing Department
-Al-Huda Islamic Centre`;
-
-  _openWorkspaceModal(
-    `Send Current Month's Invoice`,
-    `Family: ${family.parent_name} (${family.id})`,
-    `
-      <form onsubmit="executeSendFamilyInvoice(event, '${_esc360(family.id)}')" class="space-y-4 text-xs">
-        <div>
-          <label class="font-extrabold text-slate-700 block mb-1">Parent Recipient Email *</label>
-          <input type="email" id="fwInvToEmail" value="${_esc360(parentEmail)}" required placeholder="parent@example.com" class="w-full p-2.5 rounded-xl border border-slate-300 font-bold text-slate-900">
-        </div>
-        <div>
-          <label class="font-extrabold text-slate-700 block mb-1">Invoice Subject</label>
-          <input type="text" id="fwInvSubject" value="${_esc360(subject)}" required class="w-full p-2.5 rounded-xl border border-slate-300 font-bold text-slate-900">
-        </div>
-        <div>
-          <label class="font-extrabold text-slate-700 block mb-1">Invoice Details &amp; Message</label>
-          <textarea id="fwInvBody" rows="8" required class="w-full p-3 rounded-xl border border-slate-300 font-mono text-xs text-slate-800">${_esc360(bodyText)}</textarea>
-        </div>
-        <div class="flex items-center justify-between gap-2 pt-3 border-t border-slate-100 flex-wrap">
-          <button type="button" onclick="openGmailDirectFromWorkspace('fwInvToEmail','fwInvSubject','fwInvBody')" class="px-3.5 py-2 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 font-extrabold">
-            <i class="fa-brands fa-google mr-1"></i> Open in Gmail
-          </button>
-          <div class="flex items-center gap-2">
-            <button type="button" onclick="_closeWorkspaceModal()" class="px-4 py-2 rounded-xl bg-slate-100 text-slate-700 font-bold">Cancel</button>
-            <button type="submit" id="btnFwSendInvoiceSubmit" class="px-5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold">
-              <i class="fa-solid fa-paper-plane mr-1"></i> Send Invoice Now
-            </button>
-          </div>
-        </div>
-      </form>
-    `
-  );
-}
-
-async function executeSendFamilyInvoice(e, familyId) {
-  e.preventDefault();
-  const toEmail = document.getElementById('fwInvToEmail').value.trim();
-  const subject = document.getElementById('fwInvSubject').value.trim();
-  const body = document.getElementById('fwInvBody').value.trim();
-  const btn = document.getElementById('btnFwSendInvoiceSubmit');
-
-  if (!toEmail) {
-    alert('Parent email address is required to send the invoice.');
+  const row = payData.rows[0];
+  if (!row) {
+    alert("No fee invoice or payment records found for this family.");
     return;
   }
-
-  if (btn) { btn.disabled = true; btn.innerText = 'Dispatching Invoice...'; }
-
-  const family = (window.ALL_FAMILIES || []).find(f => String(f.id).toUpperCase() === String(familyId).toUpperCase());
-  if (family) {
-    const fNotes = _parseFamilyStructuredNotes(family);
-    fNotes.bio_meta.last_invoice_sent_month = 'September 2026';
-    fNotes.bio_meta.last_invoice_sent_at = new Date().toISOString();
-    fNotes.communication_logs.unshift({
-      id: `INV-LOG-${Date.now()}`,
-      type: 'invoice',
-      to: toEmail,
-      subject,
-      sent_at: new Date().toISOString().slice(0, 16).replace('T', ' ')
-    });
-
-    await _saveFamilyStructuredNotes(family.id, fNotes, { parent_email: toEmail });
-  }
-
-  // Dispatch via EmailJS if configured
-  try {
-    if (typeof emailjs !== 'undefined' && window.EMAILJS_PUBLIC_KEY) {
-      await emailjs.send(window.EMAILJS_SERVICE_ID, window.EMAILJS_TEMPLATE_ID, {
-        to_email: toEmail,
-        subject: subject,
-        message: body,
-        from_name: 'Al-Huda Islamic Centre Billing'
-      });
-    }
-  } catch (err) {}
-
-  _closeWorkspaceModal();
-  _notify360(`Monthly Invoice dispatched to ${toEmail} and logged in Family records.`);
-  _renderFamilyWorkspaceDOM();
+  viewFamilyPaymentInvoiceModal(family.id, row.recordId, row.month, row.year);
 }
+window.openFamilySendInvoiceModal = openFamilySendInvoiceModal;
 
 function openGmailDirectFromWorkspace(toId, subId, bodyId) {
   const to = encodeURIComponent(document.getElementById(toId)?.value || '');
@@ -3444,30 +3190,46 @@ function viewFamilyPaymentInvoiceModal(familyId, recordId, month, year) {
   const row = payData.rows.find(r => r.recordId === recordId || (r.month === month && String(r.year) === String(year))) || payData.rows[0];
   if (!row) return;
 
-  _openWorkspaceModal(
-    `Official Invoice / Payment Record`,
-    `Reference: ${row.recordId} • ${row.monthDisplay}`,
-    `
-      <div class="space-y-4 text-xs">
-        <div class="p-4 rounded-xl bg-slate-50 border border-slate-200 space-y-2">
-          <div class="flex justify-between"><span class="text-slate-500">Family / Parent:</span> <strong class="text-slate-900">${_esc360(family.parent_name)} (${_esc360(family.id)})</strong></div>
-          <div class="flex justify-between"><span class="text-slate-500">Billing Month:</span> <strong class="text-slate-900">${_esc360(row.monthDisplay)}</strong></div>
-          <div class="flex justify-between"><span class="text-slate-500">Payment Method:</span> <strong class="text-emerald-800">${_esc360(row.paymentMethod)}</strong></div>
-          <div class="flex justify-between"><span class="text-slate-500">Paid Date:</span> <strong class="font-mono text-slate-800">${_esc360(row.paidDate)}</strong></div>
-          <div class="flex justify-between"><span class="text-slate-500">Fee Amount:</span> <strong class="font-mono text-base text-slate-900">${_esc360(row.currency)} ${_esc360(row.feeAmount)}</strong></div>
-          <div class="flex justify-between"><span class="text-slate-500">Status:</span> <strong class="${row.status === 'PAID' ? 'text-emerald-700' : 'text-rose-700'}">${_esc360(row.status)}</strong></div>
-          <div class="flex justify-between"><span class="text-slate-500">Reason / Purpose:</span> <strong class="text-slate-800">${_esc360(row.reason || 'Monthly Tuition Fee')}</strong></div>
-        </div>
-        <div class="flex justify-end gap-2">
-          <button onclick="_closeWorkspaceModal()" class="px-4 py-2 rounded-xl bg-slate-100 text-slate-700 font-bold">Close</button>
-          <button onclick="openEditFamilyPaymentModal('${_esc360(family.id)}', '${_esc360(row.recordId)}', '${_esc360(row.month)}', '${_esc360(row.year)}')" class="px-4 py-2 rounded-xl bg-amber-500 text-white font-extrabold">
-            Edit Record
-          </button>
-        </div>
-      </div>
-    `
-  );
+  const studentsNames = ((window.ALL_STUDENTS || []).filter(s => String(s.family_id).toUpperCase() === String(family.id).toUpperCase()).map(s => s.name)).join(', ') || 'Enrolled Students';
+
+  const raw = row.rawRecord || {};
+  const isPaid = (row.status === 'PAID');
+  const agreedFee = parseFloat(family.monthly_fee || 0) || 0;
+  const canonicalReceipt = {
+    receiptNo: raw.receiptNo || (String(row.recordId || '').startsWith('AUTO-') ? `AH-REC-${family.id}-${row.month}-${row.year}` : (row.recordId || `AH-REC-${family.id}`)),
+    parentName: raw.parentName || family.parent_name,
+    familyId: family.id,
+    studentsNames: raw.studentsNames || studentsNames,
+    date: raw.date && raw.date !== '--' ? raw.date : (row.paidDate !== '--' ? row.paidDate : new Date().toISOString().slice(0, 10)),
+    month: raw.month || row.month,
+    year: raw.year || row.year,
+    email: raw.email || raw.parentEmail || family.parent_email || '',
+    parentEmail: raw.parentEmail || raw.email || family.parent_email || '',
+    whatsapp: raw.whatsapp || family.whatsapp || '',
+    currency: raw.currency || row.currency || family.currency || 'USD',
+    monthlyFee: raw.monthlyFee ?? row.feeAmount ?? agreedFee,
+    totalPayable: raw.totalPayable ?? row.feeAmount ?? agreedFee,
+    amountPaid: raw.amountPaid ?? (isPaid ? (row.feeAmount || agreedFee) : 0),
+    paymentMethod: raw.paymentMethod || row.paymentMethod || 'Online',
+    discount: raw.discount || 0,
+    previousBalance: raw.previousBalance || 0,
+    creditDeducted: raw.creditDeducted || 0,
+    remainingBalance: raw.remainingBalance ?? (isPaid ? 0 : (row.feeAmount || agreedFee)),
+    excessPaid: raw.excessPaid || 0,
+    status: isPaid ? 'Paid' : 'Unpaid',
+    isAdvancePayment: Boolean(raw.isAdvancePayment),
+    advanceMonthsCount: raw.advanceMonthsCount || 0,
+    isProrated: Boolean(raw.isProrated),
+    activeDays: raw.activeDays || 0
+  };
+
+  if (typeof openFeeInvoiceModal === 'function') {
+    openFeeInvoiceModal(canonicalReceipt);
+  } else {
+    console.error('Canonical openFeeInvoiceModal not found.');
+  }
 }
+window.viewFamilyPaymentInvoiceModal = viewFamilyPaymentInvoiceModal;
 
 function openEditFamilyPaymentModal(familyId, recordId, month, year) {
   const family = (window.ALL_FAMILIES || []).find(f => String(f.id).toUpperCase() === String(familyId).toUpperCase());
@@ -3582,7 +3344,7 @@ async function submitEditFamilyPaymentForm(e, familyId, recordId, month, year) {
 }
 
 function emailSpecificFamilyInvoice(familyId, recordId, month, year) {
-  openFamilySendInvoiceModal(familyId);
+  viewFamilyPaymentInvoiceModal(familyId, recordId, month, year);
 }
 
 async function deleteFamilyPaymentRecord(familyId, recordId, month, year) {
@@ -5427,58 +5189,11 @@ async function openTeacher360SalarySlipAction(teacherId) {
 }
 
 function openTeacherSalaryRowDetailsModal(teacherId, monthRaw) {
-  const teacher = (window.ALL_TEACHERS || []).find(t => String(t.id) === String(teacherId));
-  if (!teacher) return;
-  const cached = _TEACHER_360_MEM_CACHE[String(teacher.id).toUpperCase()];
-  const state = _compileTeacher360AggregatedState(teacher, cached?.tchSchedules || [], cached?.attLogs || []);
-  const row = state.salaryRows.find(r => r.monthRaw === monthRaw) || state.salaryRows[0];
-
-  _openWorkspaceModal(
-    `Salary Breakdown — ${row ? row.monthYear : monthRaw}`,
-    `Instructor: ${teacher.full_name} (${state.empCode})`,
-    `
-      <div class="space-y-4 text-xs">
-        <div class="grid grid-cols-2 sm:grid-cols-3 gap-3 bg-slate-50 p-3.5 rounded-xl border border-slate-200">
-          <div><span class="text-slate-400 block">Base Teaching</span><strong class="font-mono font-black text-slate-900 text-sm">PKR ${Number(row?.baseAmount || 0).toLocaleString()}</strong></div>
-          <div><span class="text-slate-400 block">Deductions</span><strong class="font-mono font-black text-rose-700 text-sm">- PKR ${Number(row?.deductionsAmount || 0).toLocaleString()}</strong></div>
-          <div><span class="text-slate-400 block">Net Paid</span><strong class="font-mono font-black text-emerald-700 text-sm">Rs. ${Number(row?.paidAmount || 0).toLocaleString()}</strong></div>
-        </div>
-
-        <div>
-          <h4 class="font-extrabold text-slate-800 mb-2">Assigned Students &amp; Course Rates (${state.studentRateBreakdown.length})</h4>
-          <div class="max-h-60 overflow-y-auto border border-slate-200 rounded-xl">
-            <table class="w-full text-left text-xs border-collapse">
-              <thead class="bg-slate-50 border-b border-slate-200 font-extrabold text-slate-700">
-                <tr>
-                  <th class="p-2.5">#</th>
-                  <th class="p-2.5">Student</th>
-                  <th class="p-2.5">Course</th>
-                  <th class="p-2.5 text-right">Monthly Rate</th>
-                </tr>
-              </thead>
-              <tbody class="divide-y divide-slate-100">
-                ${state.studentRateBreakdown.map(item => `
-                  <tr>
-                    <td class="p-2.5 font-mono text-slate-400">${item.index}</td>
-                    <td class="p-2.5 font-bold text-slate-900">${_esc360(item.student.name)}</td>
-                    <td class="p-2.5 text-slate-600">${_esc360(item.courseLabel)}</td>
-                    <td class="p-2.5 text-right font-mono font-extrabold text-emerald-800">PKR ${Number(item.finalRate).toLocaleString()}</td>
-                  </tr>
-                `).join('') || '<tr><td colspan="4" class="p-4 text-center text-slate-400">Standard Fixed Monthly Remuneration</td></tr>'}
-              </tbody>
-            </table>
-          </div>
-        </div>
-
-        <div class="flex justify-end gap-2 pt-3 border-t border-slate-100">
-          <button type="button" onclick="_closeWorkspaceModal()" class="px-4 py-2 rounded-xl bg-slate-100 text-slate-700 font-bold cursor-pointer">Close</button>
-          <button type="button" onclick="_closeWorkspaceModal(); openTeacher360SalarySlipAction('${_esc360(teacher.id)}')" class="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-slate-950 font-black cursor-pointer">
-            Open Full Editable Payroll Slip
-          </button>
-        </div>
-      </div>
-    `
-  );
+  if (typeof openSalarySlipModal === 'function') {
+    openSalarySlipModal(teacherId);
+  } else {
+    openTeacher360SalarySlipAction(teacherId);
+  }
 }
 
 async function deleteTeacherSalaryMonthRecord360(teacherId, monthRaw, slipKey) {

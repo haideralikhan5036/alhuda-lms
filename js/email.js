@@ -51,6 +51,7 @@ ACADEMY ENROLLMENT DETAILS:
 • Course: ${courseName}
 • Assigned Teacher: ${teacherName}
 • Class Schedule Time: ${scheduleText}
+• Joining Date: ${data.joiningDate || startDate}
 ${isTrial ? `• Trial Start Date: ${startDate}\n` : ''}
 ══════════════════════════════════════
 CLASSROOM ZOOM MEETING LINK:
@@ -97,7 +98,7 @@ Official Email: ${ACADEMY_OFFICIAL_EMAIL}`;
                 <tr><td style="padding: 4px 0; color: #64748b;"><strong>Course:</strong></td><td style="padding: 4px 0; color: #047857; font-weight: 700;">${courseName}</td></tr>
                 <tr><td style="padding: 4px 0; color: #64748b;"><strong>Assigned Teacher:</strong></td><td style="padding: 4px 0; color: #0f172a; font-weight: 700;">${teacherName}</td></tr>
                 <tr><td style="padding: 4px 0; color: #64748b;"><strong>Class Schedule Time:</strong></td><td style="padding: 4px 0; color: #0f172a; font-weight: 700;">${scheduleText}</td></tr>
-                ${isTrial ? `<tr><td style="padding: 4px 0; color: #64748b;"><strong>Trial Start Date:</strong></td><td style="padding: 4px 0; color: #7c3aed; font-weight: 700;">${startDate}</td></tr>` : ''}
+                <tr><td style="padding: 4px 0; color: #64748b;"><strong>${isTrial ? 'Trial Start Date:' : 'Joining Date:'}</strong></td><td style="padding: 4px 0; color: #047857; font-weight: 700;">${data.joiningDate || startDate}</td></tr>
               </table>
             </div>
 

@@ -802,6 +802,14 @@
 
       updateSlipPaidButtonUI(nextStatus === 'Paid');
       saveSalarySlipRecord();
+
+      if (nextStatus === 'Paid') {
+        setTimeout(async () => {
+          if (confirm(`Do you want to dispatch the finalized salary statement email to ${CURRENT_SLIP_DATA.teacher_name}?`)) {
+            await sendSalarySlipEmailModal(CURRENT_SLIP_DATA, false);
+          }
+        }, 400);
+      }
     }
 
     function quickToggleSalaryPaid(teacherId) {
@@ -893,3 +901,283 @@ Al-Huda Islamic Centre Management`;
     }
 
     // ============================================================
+    // CANONICAL SALARY SLIP PDF GENERATION (html2canvas + jsPDF)
+    // ============================================================
+    async function downloadSalarySlipPDF(teacherIdOrData) {
+      let slipData = null;
+      if (typeof teacherIdOrData === 'object' && teacherIdOrData !== null) {
+        slipData = teacherIdOrData;
+      } else if (typeof teacherIdOrData === 'string') {
+        slipData = (typeof ALL_TEACHER_SALARIES !== 'undefined') ? ALL_TEACHER_SALARIES[teacherIdOrData] : null;
+      } else {
+        slipData = CURRENT_SLIP_DATA;
+      }
+
+      if (!slipData) {
+        alert("No salary slip data available to generate PDF.");
+        return;
+      }
+
+      const sourceCard = document.getElementById('salarySlipReceiptCard') || document.querySelector('#modalSalarySlip > div') || document.getElementById('modalSalarySlip');
+      if (!sourceCard) {
+        alert("Salary slip modal is not active.");
+        return;
+      }
+
+      const btn = document.getElementById('btnSlipDownloadPdf');
+      const originalText = btn ? btn.innerHTML : '';
+      if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-1"></i> Generating PDF...';
+      }
+
+      let sandbox = null;
+      try {
+        const cleanName = (slipData.teacher_name || 'Teacher').replace(/[^a-zA-Z0-9_-]/g, '_');
+        const cleanMonth = (slipData.month || 'Month').replace(/[^a-zA-Z0-9_-]/g, '_');
+        const filename = `AlHuda-SalarySlip-${cleanName}-${cleanMonth}.pdf`;
+
+        const cardClone = sourceCard.cloneNode(true);
+        const actionRow = cardClone.querySelector('.border-t:last-child') || cardClone.querySelector('.shrink-0:last-child');
+        if (actionRow) actionRow.style.display = 'none';
+
+        cardClone.style.maxWidth = '780px';
+        cardClone.style.width = '780px';
+        cardClone.style.margin = '0';
+        cardClone.style.padding = '24px';
+        cardClone.style.background = '#ffffff';
+        cardClone.style.boxShadow = 'none';
+        cardClone.style.borderRadius = '0';
+        cardClone.style.border = '1px solid #cbd5e1';
+
+        cardClone.querySelectorAll('.slip-student-rate').forEach(inp => {
+          const span = document.createElement('span');
+          span.style.fontFamily = 'monospace';
+          span.style.fontWeight = 'bold';
+          span.style.color = '#064e3b';
+          span.innerText = Number(inp.value || 0).toLocaleString();
+          inp.parentNode.replaceChild(span, inp);
+        });
+
+        cardClone.querySelectorAll('input').forEach(inp => {
+          if (inp.type === 'hidden') return;
+          const span = document.createElement('span');
+          span.style.fontWeight = 'bold';
+          span.innerText = inp.value || '0';
+          inp.parentNode.replaceChild(span, inp);
+        });
+
+        const images = cardClone.querySelectorAll('img');
+        await Promise.all(Array.from(images).map(img => {
+          if (img.complete) return Promise.resolve();
+          return new Promise(resolve => {
+            img.onload = resolve;
+            img.onerror = resolve;
+          });
+        }));
+
+        sandbox = document.createElement('div');
+        sandbox.id = 'salarySlipPdfSandbox';
+        sandbox.style.position = 'fixed';
+        sandbox.style.left = '0';
+        sandbox.style.top = '0';
+        sandbox.style.width = '800px';
+        sandbox.style.zIndex = '-9999';
+        sandbox.style.opacity = '1';
+        sandbox.style.pointerEvents = 'none';
+        sandbox.appendChild(cardClone);
+        document.body.appendChild(sandbox);
+
+        let pdfGenerated = false;
+
+        const hasHtml2Canvas = typeof html2canvas !== 'undefined';
+        const hasJsPDF = typeof window.jspdf !== 'undefined' && window.jspdf.jsPDF;
+
+        if (hasHtml2Canvas && hasJsPDF) {
+          try {
+            const canvas = await html2canvas(cardClone, {
+              scale: 2,
+              useCORS: true,
+              logging: false,
+              backgroundColor: '#ffffff'
+            });
+
+            const imgData = canvas.toDataURL('image/jpeg', 0.95);
+            const { jsPDF } = window.jspdf;
+            const pdf = new jsPDF({
+              orientation: 'portrait',
+              unit: 'mm',
+              format: 'a4'
+            });
+
+            const pageWidth = pdf.internal.pageSize.getWidth();
+            const pageHeight = pdf.internal.pageSize.getHeight();
+            const margin = 10;
+            const printableWidth = pageWidth - (margin * 2);
+            const imgHeight = (canvas.height * printableWidth) / canvas.width;
+
+            if (imgHeight <= (pageHeight - (margin * 2))) {
+              pdf.addImage(imgData, 'JPEG', margin, margin, printableWidth, imgHeight);
+            } else {
+              pdf.addImage(imgData, 'JPEG', margin, margin, printableWidth, pageHeight - (margin * 2));
+            }
+
+            pdf.save(filename);
+            pdfGenerated = true;
+            if (typeof lmsNotify === 'function') lmsNotify('✅ Official Salary Slip PDF downloaded successfully!', { type: 'success' });
+            else alert('✅ Official Salary Slip PDF downloaded successfully!');
+          } catch (canvasErr) {
+            console.warn('[Salary Slip PDF] html2canvas error:', canvasErr);
+          }
+        }
+
+        if (!pdfGenerated && typeof html2pdf !== 'undefined') {
+          const opt = {
+            margin: [8, 8, 8, 8],
+            filename: filename,
+            image: { type: 'jpeg', quality: 0.95 },
+            html2canvas: { scale: 2, useCORS: true },
+            jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
+          };
+          await html2pdf().set(opt).from(cardClone).save();
+          pdfGenerated = true;
+          if (typeof lmsNotify === 'function') lmsNotify('✅ Official Salary Slip PDF downloaded!', { type: 'success' });
+          else alert('✅ Official Salary Slip PDF downloaded!');
+        }
+
+        if (!pdfGenerated) {
+          window.print();
+        }
+
+      } catch (err) {
+        console.error('[Salary Slip PDF] Generation error:', err);
+        window.print();
+      } finally {
+        if (sandbox && sandbox.parentNode) {
+          sandbox.parentNode.removeChild(sandbox);
+        }
+        if (btn) {
+          btn.disabled = false;
+          btn.innerHTML = originalText;
+        }
+      }
+    }
+    window.downloadSalarySlipPDF = downloadSalarySlipPDF;
+
+    // ============================================================
+    // CANONICAL SALARY SLIP EMAIL DISPATCHER
+    // ============================================================
+    async function sendSalarySlipEmailModal(slipDataOrTeacherId, isSilent = false) {
+      let slipData = null;
+      if (typeof slipDataOrTeacherId === 'object' && slipDataOrTeacherId !== null) {
+        slipData = slipDataOrTeacherId;
+      } else if (typeof slipDataOrTeacherId === 'string') {
+        slipData = (typeof ALL_TEACHER_SALARIES !== 'undefined') ? ALL_TEACHER_SALARIES[slipDataOrTeacherId] : null;
+      } else {
+        slipData = CURRENT_SLIP_DATA;
+      }
+
+      if (!slipData) {
+        alert("No active salary slip record available to send.");
+        return;
+      }
+
+      const teacher = (window.ALL_TEACHERS || []).find(t => String(t.id) === String(slipData.teacher_id || CURRENT_SLIP_TEACHER_ID));
+      const accounts = typeof getTeacherAccounts === 'function' ? getTeacherAccounts() : JSON.parse(localStorage.getItem('alhuda_teacher_accounts') || '{}');
+      const teacherAcc = (teacher && accounts[teacher.id]) || {};
+
+      let targetEmail = (teacher?.email || teacherAcc?.email || '').trim();
+
+      if (!targetEmail && !isSilent) {
+        const promptEmail = await lmsPrompt(`Please enter teacher email address for ${slipData.teacher_name}:`, "", {
+          title: 'Teacher Email Required',
+          subtitle: `${slipData.teacher_name} (${slipData.teacher_id || ''})`,
+          confirmText: 'Send Salary Slip'
+        });
+        if (promptEmail && promptEmail.includes('@')) {
+          targetEmail = promptEmail.trim();
+        }
+      }
+
+      if (!targetEmail || !targetEmail.includes('@')) {
+        if (!isSilent) {
+          alert(`No valid email address found for ${slipData.teacher_name}. Please specify teacher email.`);
+        }
+        return;
+      }
+
+      const subject = `Official Salary Statement [${slipData.month}] — ${slipData.teacher_name} — Al-Huda Islamic Centre`;
+
+      let studentLines = '';
+      if (slipData.assigned_students && slipData.assigned_students.length > 0) {
+        studentLines = slipData.assigned_students.map((s, idx) => {
+          return `• ${idx + 1}. ${s.student_name} (${s.course_label}) — PKR ${Number(s.final_rate || s.calculated_rate || 0).toLocaleString()}`;
+        }).join('\n');
+      } else {
+        studentLines = '• Base fixed monthly teaching';
+      }
+
+      const plainText =
+`Assalamu Alaikum wa Rahmatullah Respected ${slipData.teacher_name},
+
+We pray you are in the best of health and Iman.
+Please find below your official monthly salary compensation statement for ${slipData.month} from Al-Huda Islamic Centre.
+
+══════════════════════════════════════
+TEACHER SALARY VOUCHER DETAILS:
+══════════════════════════════════════
+• Instructor Name: ${slipData.teacher_name}
+• Teacher ID: ${slipData.teacher_id || 'N/A'}
+• Joining Date: ${slipData.joining_date || 'N/A'}
+• Billing Month: ${slipData.month}
+• Seniority Increment: ${slipData.seniority_increment > 0 ? '+' + slipData.seniority_increment + ' PKR / student' : 'Standard'}
+
+ASSIGNED STUDENTS & COURSE RATES:
+${studentLines}
+
+══════════════════════════════════════
+FINANCIAL SETTLEMENT:
+══════════════════════════════════════
+• Base Teaching Subtotal: PKR ${Number(slipData.base_subtotal || 0).toLocaleString()}
+${slipData.bonus > 0 ? `• Bonus / Allowances: + PKR ${Number(slipData.bonus).toLocaleString()}\n` : ''}${slipData.deduction > 0 ? `• Deductions / Advances: - PKR ${Number(slipData.deduction).toLocaleString()}\n` : ''}${slipData.remarks ? `• Remarks: ${slipData.remarks}\n` : ''}• TOTAL NET PAYABLE: PKR ${Number(slipData.net_payable || 0).toLocaleString()}
+• Disbursed Status: ${slipData.status === 'Paid' ? 'PAID / DISBURSED' : 'PENDING APPROVAL'}
+
+Jazakumullahu Khairan!
+Al-Huda Islamic Centre Management
+Official Accounts Email: ceoislamiccentre@gmail.com`;
+
+      const btn = document.getElementById('btnSlipSendEmail');
+      const origHtml = btn ? btn.innerHTML : '';
+      if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-1"></i> Sending...';
+      }
+
+      try {
+        if (typeof emailjs !== 'undefined' && window.EMAILJS_PUBLIC_KEY) {
+          await emailjs.send(window.EMAILJS_SERVICE_ID, window.EMAILJS_TEMPLATE_ID, {
+            to_email: targetEmail,
+            subject: subject,
+            message: plainText,
+            from_name: 'Al-Huda Islamic Centre Payroll (ceoislamiccentre@gmail.com)'
+          });
+        }
+      } catch (eJsErr) {
+        console.warn('Salary slip emailjs dispatch notice:', eJsErr);
+      }
+
+      if (btn) {
+        btn.disabled = false;
+        btn.innerHTML = origHtml;
+      }
+
+      if (!isSilent) {
+        const gmailUrl = `https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(targetEmail)}&cc=ceoislamiccentre@gmail.com&su=${encodeURIComponent(subject)}&body=${encodeURIComponent(plainText)}`;
+        window.open(gmailUrl, '_blank');
+        if (typeof lmsNotify === 'function') lmsNotify(`Official Salary Slip email prepared for ${targetEmail}`, { type: 'success' });
+        else alert(`Official Salary Slip email prepared for ${targetEmail}`);
+      } else {
+        if (typeof lmsNotify === 'function') lmsNotify(`Official Salary Slip email dispatched to ${targetEmail}`, { type: 'success' });
+      }
+    }
+    window.sendSalarySlipEmailModal = sendSalarySlipEmailModal;
