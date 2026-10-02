@@ -19,7 +19,7 @@
   <!-- Google Fonts & Font Awesome -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700;800;900&family=Amiri:wght@400;700&family=Inter:wght@400;500;600;700;800;900&family=Outfit:wght@500;600;700;800;900&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700;800;900&family=Amiri:wght@400;700&family=Noto+Naskh+Arabic:wght@400;600;700&family=Inter:wght@400;500;600;700;800;900&family=Outfit:wght@500;600;700;800;900&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   
   <!-- Tailwind CSS -->
@@ -51,6 +51,7 @@
   <script src="js/cloudflare-db.js"></script>
   <!-- Al-Huda Curriculum & Course Material Registry Engine -->
   <script src="curriculum_data.js"></script>
+  <script src="js/interactive_qaida.js"></script>
 
   <!-- High-Res Client-Side Invoice PDF Generation Libraries (html2canvas, jsPDF, html2pdf) -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
@@ -666,6 +667,13 @@
             <div id="parentReaderCanvasWrapper" class="relative inline-block max-h-[80vh] max-w-full origin-center select-none">
               <img id="parentReaderPageImg" src="" alt="Document Page" 
                 class="max-h-[80vh] w-auto max-w-full rounded shadow-[0_15px_35px_rgba(0,0,0,0.5),0_0_0_1px_rgba(255,255,255,0.08)] object-contain bg-white block select-none pointer-events-none transition-shadow" />
+            </div>
+          </div>
+
+          <!-- Interactive E-Qaida Stage for Students -->
+          <div id="parentReaderInteractiveStage" class="hidden w-full max-w-5xl h-full overflow-y-auto p-2 sm:p-5 bg-slate-950/95 rounded-2xl border border-emerald-900/50 text-slate-100 shadow-2xl space-y-4">
+            <div id="parentReaderInteractiveContent">
+              <!-- Dynamically populated for interactive lessons -->
             </div>
           </div>
         </div>
@@ -2443,6 +2451,11 @@
 
     function closeParentBookReader() {
       if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+      if (typeof AlHudaInteractiveQaida !== 'undefined') {
+        if (AlHudaInteractiveQaida.stopSequentialAudioTour) AlHudaInteractiveQaida.stopSequentialAudioTour();
+        if (AlHudaInteractiveQaida.closeLetterDetailModal) AlHudaInteractiveQaida.closeLetterDetailModal();
+        if (AlHudaInteractiveQaida.closeMakharijTeethReferenceModal) AlHudaInteractiveQaida.closeMakharijTeethReferenceModal();
+      }
       resetParentReaderZoom();
       const modal = document.getElementById('modalParentBookReader');
       if (modal) {
@@ -2474,6 +2487,21 @@
       const jumpSelect = document.getElementById('parentReaderJumpSelect');
       if (jumpSelect) jumpSelect.value = ACTIVE_READER_PAGE;
 
+      if (book.is_interactive) {
+        document.getElementById('parentReaderPageStage')?.classList.add('hidden');
+        const interStage = document.getElementById('parentReaderInteractiveStage');
+        if (interStage) {
+          interStage.classList.remove('hidden');
+          if (typeof AlHudaInteractiveQaida !== 'undefined' && AlHudaInteractiveQaida.renderInteractivePage) {
+            AlHudaInteractiveQaida.renderInteractivePage('parentReaderInteractiveContent', ACTIVE_READER_PAGE);
+          }
+        }
+        return;
+      }
+
+      document.getElementById('parentReaderInteractiveStage')?.classList.add('hidden');
+      document.getElementById('parentReaderPageStage')?.classList.remove('hidden');
+
       const img = document.getElementById('parentReaderPageImg');
       if (img) {
         img.style.transform = 'none';
@@ -2501,6 +2529,9 @@
     // Page navigation (Arabic RTL & standard)
     function parentReaderTurnLeft() {
       if (!ACTIVE_READER_BOOK) return;
+      if (typeof AlHudaInteractiveQaida !== 'undefined' && AlHudaInteractiveQaida.stopSequentialAudioTour) {
+        AlHudaInteractiveQaida.stopSequentialAudioTour();
+      }
       const maxPages = ACTIVE_READER_BOOK.total_pages || (ACTIVE_READER_BOOK.paras ? 548 : 32);
       if (ACTIVE_READER_PAGE < maxPages) {
         ACTIVE_READER_PAGE++;
@@ -2510,6 +2541,9 @@
 
     function parentReaderTurnRight() {
       if (!ACTIVE_READER_BOOK) return;
+      if (typeof AlHudaInteractiveQaida !== 'undefined' && AlHudaInteractiveQaida.stopSequentialAudioTour) {
+        AlHudaInteractiveQaida.stopSequentialAudioTour();
+      }
       if (ACTIVE_READER_PAGE > 1) {
         ACTIVE_READER_PAGE--;
         renderCurrentStudentReaderPage();
@@ -2518,6 +2552,9 @@
 
     function parentReaderJumpToPage(pageNum) {
       if (!ACTIVE_READER_BOOK) return;
+      if (typeof AlHudaInteractiveQaida !== 'undefined' && AlHudaInteractiveQaida.stopSequentialAudioTour) {
+        AlHudaInteractiveQaida.stopSequentialAudioTour();
+      }
       ACTIVE_READER_PAGE = Number(pageNum) || 1;
       renderCurrentStudentReaderPage();
     }

@@ -21,7 +21,7 @@
   <!-- Modern Fonts & Icons (Cinzel, Inter, Outfit, Plus Jakarta Sans) -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700;800;900&family=Inter:wght@400;500;600;700;800;900&family=Outfit:wght@500;600;700;800;900&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Amiri:wght@400;700&family=Noto+Naskh+Arabic:wght@400;600;700&family=Cinzel:wght@600;700;800;900&family=Inter:wght@400;500;600;700;800;900&family=Outfit:wght@500;600;700;800;900&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   
   <!-- Supabase JS Client & Cloudflare D1/R2 Universal Engine -->
@@ -32,6 +32,7 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <!-- Al-Huda Curriculum & Digital Islamic Library Engine -->
   <script src="curriculum_data.js"></script>
+  <script src="js/interactive_qaida.js"></script>
 
   <script>
     tailwind.config = {
@@ -1836,6 +1837,13 @@
           <div id="readerTextStage" class="hidden w-full max-w-3xl h-full overflow-y-auto p-5 sm:p-8 bg-zinc-900/95 rounded-xl border border-zinc-800 text-zinc-200 space-y-4 shadow-xl">
             <div id="readerTextContent">
               <!-- Dynamically populated for text materials -->
+            </div>
+          </div>
+
+          <!-- 3. INTERACTIVE E-QAIDA STAGE (Al-Huda Digital Lab) -->
+          <div id="readerInteractiveStage" class="hidden w-full max-w-5xl h-full overflow-y-auto p-2 sm:p-5 bg-slate-950/95 rounded-2xl border border-emerald-900/50 text-slate-100 shadow-2xl space-y-4">
+            <div id="readerInteractiveContent">
+              <!-- Dynamically populated for interactive lessons -->
             </div>
           </div>
 
@@ -4590,6 +4598,22 @@
         }
       }
 
+      if (book.is_interactive) {
+        document.getElementById('readerImageStage')?.classList.add('hidden');
+        document.getElementById('readerTextStage')?.classList.add('hidden');
+        const interStage = document.getElementById('readerInteractiveStage');
+        if (interStage) {
+          interStage.classList.remove('hidden');
+          if (typeof AlHudaInteractiveQaida !== 'undefined' && AlHudaInteractiveQaida.renderInteractivePage) {
+            AlHudaInteractiveQaida.renderInteractivePage('readerInteractiveContent', CURRENT_READER_PAGE);
+          }
+        }
+        document.getElementById('readerLoadingSpinner')?.classList.add('hidden');
+        return;
+      }
+
+      document.getElementById('readerInteractiveStage')?.classList.add('hidden');
+
       if (book.is_text_viewer) {
         document.getElementById('readerImageStage')?.classList.add('hidden');
         document.getElementById('readerTextStage')?.classList.remove('hidden');
@@ -4676,12 +4700,18 @@
 
     function changeReaderPage(delta) {
       if (!CURRENT_READER_BOOK) return;
+      if (typeof AlHudaInteractiveQaida !== 'undefined' && AlHudaInteractiveQaida.stopSequentialAudioTour) {
+        AlHudaInteractiveQaida.stopSequentialAudioTour();
+      }
       CURRENT_READER_PAGE += delta;
       renderReaderCurrentPage();
     }
 
     function jumpToReaderPage(p) {
       if (!CURRENT_READER_BOOK) return;
+      if (typeof AlHudaInteractiveQaida !== 'undefined' && AlHudaInteractiveQaida.stopSequentialAudioTour) {
+        AlHudaInteractiveQaida.stopSequentialAudioTour();
+      }
       CURRENT_READER_PAGE = Number(p) || 1;
       renderReaderCurrentPage();
     }
@@ -4768,6 +4798,11 @@
 
     function closeDigitalBookReader(popHistory = true) {
       if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+      if (typeof AlHudaInteractiveQaida !== 'undefined') {
+        if (AlHudaInteractiveQaida.stopSequentialAudioTour) AlHudaInteractiveQaida.stopSequentialAudioTour();
+        if (AlHudaInteractiveQaida.closeLetterDetailModal) AlHudaInteractiveQaida.closeLetterDetailModal();
+        if (AlHudaInteractiveQaida.closeMakharijTeethReferenceModal) AlHudaInteractiveQaida.closeMakharijTeethReferenceModal();
+      }
       resetReaderZoom();
       document.getElementById('modalDigitalBookReader').classList.add('hidden');
       document.getElementById('modalDigitalBookReader').classList.remove('flex');
@@ -6432,8 +6467,14 @@
 
       const maxP = book.total_pages || (book.paras ? 548 : 32);
       const opts = [];
-      for (let i = 1; i <= Math.min(maxP, 120); i++) {
-        opts.push(`<option value="${i}">Page / Lesson ${i}</option>`);
+      if (book.chapters && book.chapters.length > 0) {
+        book.chapters.forEach((ch, idx) => {
+          opts.push(`<option value="${ch.page_start || (idx + 1)}">Page ${ch.page_start || (idx + 1)} &bull; ${ch.title.slice(0, 35)}</option>`);
+        });
+      } else {
+        for (let i = 1; i <= Math.min(maxP, 120); i++) {
+          opts.push(`<option value="${i}">Page / Lesson ${i}</option>`);
+        }
       }
       pSelect.innerHTML = opts.join('');
     }

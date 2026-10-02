@@ -166,6 +166,29 @@ function generateDynamicSvgDataUri(book, pageNum) {
 // Master standard curriculum array containing core academy syllabus
 const ALHUDA_CURRICULUM = [
   {
+    id: "interactive-madani-qaida",
+    title: "Al-Huda Interactive E-Qaida",
+    title_ar: "القاعدة المدنية التفاعلية",
+    category: "qaida",
+    category_label: "Interactive Digital Lab",
+    author: "Al-Huda Quranic Academy Board",
+    edition: "Multimedia Audio Edition",
+    total_pages: 7,
+    is_interactive: true,
+    cover_bg: "from-emerald-700 via-teal-800 to-slate-900",
+    cover_icon: "fa-solid fa-volume-high",
+    description: "Interactive multimedia Arabic Qaida with clickable letter cards, authentic Arabic audio recitation, English transliteration, Makharij articulation points, and teeth diagrams.",
+    chapters: [
+      { title: "Lesson 1: Pronunciation of 29 Alphabets (Mufradat)", desc: "29 Single Letters with Phonetics & Audio", page_start: 1, page_end: 1 },
+      { title: "Lesson 2: Makharij (Points of Pronunciation)", desc: "5 Major Organs, 17 Points & Teeth Chart", page_start: 2, page_end: 2 },
+      { title: "Lesson 3: Different Forms & Compound Letters (Murakkabat)", desc: "Initial, Medial, Final Shapes & Pairs", page_start: 3, page_end: 3 },
+      { title: "Lesson 4: Harakat — Short Vowels (Fatha, Kasra, Damma)", desc: "Vowel Movements, Sound & Practice", page_start: 4, page_end: 4 },
+      { title: "Lesson 5: Tanween — Double Vowels", desc: "Two Zabar, Two Zer, Two Pesh", page_start: 5, page_end: 5 },
+      { title: "Lesson 6: Sukoon & Jazm (Resting Sign & Qalqalah)", desc: "5 Bouncing Echo Letters (Qutb Jadd)", page_start: 6, page_end: 6 },
+      { title: "Lesson 7: Tashdeed — Doubled Letters & Ghunnah", desc: "Shaddah & 2-Harakah Nasal Sound", page_start: 7, page_end: 7 }
+    ]
+  },
+  {
     id: "noorani-qaida",
     title: "Noorani Qaida (Complete)",
     title_ar: "القاعدة النورانية",

@@ -453,6 +453,23 @@
         }
       }
 
+      // 0. Interactive Digital Lab (Interactive E-Qaida)
+      if (book.is_interactive) {
+        document.getElementById('readerImageStage')?.classList.add('hidden');
+        document.getElementById('readerTextStage')?.classList.add('hidden');
+        const interStage = document.getElementById('readerInteractiveStage');
+        if (interStage) {
+          interStage.classList.remove('hidden');
+          if (typeof AlHudaInteractiveQaida !== 'undefined' && AlHudaInteractiveQaida.renderInteractivePage) {
+            AlHudaInteractiveQaida.renderInteractivePage('readerInteractiveContent', CURRENT_READER_PAGE);
+          }
+        }
+        document.getElementById('readerLoadingSpinner')?.classList.add('hidden');
+        return;
+      }
+
+      document.getElementById('readerInteractiveStage')?.classList.add('hidden');
+
       // 1. Text-based viewer (Tafseer / Hadith)
       if (book.is_text_viewer) {
         document.getElementById('readerImageStage')?.classList.add('hidden');
@@ -626,12 +643,18 @@
 
     function changeReaderPage(delta) {
       if (!CURRENT_READER_BOOK) return;
+      if (typeof AlHudaInteractiveQaida !== 'undefined' && AlHudaInteractiveQaida.stopSequentialAudioTour) {
+        AlHudaInteractiveQaida.stopSequentialAudioTour();
+      }
       CURRENT_READER_PAGE += delta;
       renderReaderCurrentPage();
     }
 
     function jumpToReaderPage(pageVal) {
       if (!CURRENT_READER_BOOK) return;
+      if (typeof AlHudaInteractiveQaida !== 'undefined' && AlHudaInteractiveQaida.stopSequentialAudioTour) {
+        AlHudaInteractiveQaida.stopSequentialAudioTour();
+      }
       CURRENT_READER_PAGE = Number(pageVal) || 1;
       renderReaderCurrentPage();
     }
@@ -796,6 +819,11 @@
     function closeDigitalBookReader() {
       if (document.fullscreenElement) {
         document.exitFullscreen();
+      }
+      if (typeof AlHudaInteractiveQaida !== 'undefined') {
+        if (AlHudaInteractiveQaida.stopSequentialAudioTour) AlHudaInteractiveQaida.stopSequentialAudioTour();
+        if (AlHudaInteractiveQaida.closeLetterDetailModal) AlHudaInteractiveQaida.closeLetterDetailModal();
+        if (AlHudaInteractiveQaida.closeMakharijTeethReferenceModal) AlHudaInteractiveQaida.closeMakharijTeethReferenceModal();
       }
       resetReaderZoom();
       closeModal('modalDigitalBookReader');
