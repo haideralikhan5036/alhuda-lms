@@ -1050,25 +1050,27 @@
         }
 
         const isCurrentSlot = isLive && !isLeaveStudent;
-        const isRunningMarked = isLive && Boolean(log && (log.status === 'Present' || log.status === 'Running'));
+        const isRunningMarked = Boolean(log && log.status === 'Running');
 
-        let status = 'Remaining';
-        let badgeClass = 'bg-amber-100 text-amber-900 border-amber-400 font-bold';
+        let status = 'SCHEDULED';
+        let badgeClass = isLive ? 'bg-cyan-100 text-cyan-900 border-cyan-400 font-bold' : 'bg-slate-100 text-slate-700 border-slate-300 font-bold';
         let filterCategory = 'remaining';
 
         if (log) {
           if (log.status === 'Waiting') {
             waitingCount++;
-            status = '⏳ Teacher Waiting';
+            status = 'WAITING';
             filterCategory = 'waiting';
             badgeClass = 'bg-amber-100 text-amber-900 border-amber-400 font-extrabold animate-pulse';
-          } else if (log.status === 'Present' || log.status === 'Running') {
+          } else if (log.status === 'Running') {
+            status = 'RUNNING';
+            filterCategory = 'running';
+            badgeClass = 'bg-emerald-100 text-emerald-900 border-emerald-400 font-extrabold animate-pulse';
+          } else if (log.status === 'Completed' || log.status === 'Present') {
             completedCount++;
-            status = isLive ? 'Running' : 'Taken';
+            status = 'COMPLETED';
             filterCategory = 'completed';
-            badgeClass = isLive
-              ? 'bg-emerald-100 text-emerald-900 border-emerald-400 font-extrabold animate-pulse'
-              : 'bg-teal-100 text-teal-900 border-teal-400 font-extrabold';
+            badgeClass = 'bg-teal-100 text-teal-900 border-teal-400 font-extrabold';
           } else if (log.status === 'Advance Class') {
             completedCount++;
             let advTarget = '';
@@ -1076,47 +1078,48 @@
               const parsed = JSON.parse(log.lesson_notes);
               if (parsed?.advance_target_date) advTarget = ` (For: ${parsed.advance_target_date})`;
             } catch(e) {}
-            status = `Taken (Advance${advTarget})`;
+            status = `COMPLETED (Advance${advTarget})`;
             filterCategory = 'completed';
             badgeClass = 'bg-teal-100 text-teal-900 border-teal-400 font-extrabold';
           } else if (log.status === 'Absent') {
             absentCount++;
-            status = 'Absent';
+            status = 'ABSENT';
             filterCategory = 'absent';
             badgeClass = 'bg-rose-100 text-rose-900 border-rose-400 font-extrabold';
           } else if (log.status === 'Leave') {
             leaveCount++;
-            status = 'Leave';
+            status = 'LEAVE';
             filterCategory = 'leave';
             badgeClass = 'bg-blue-100 text-blue-900 border-blue-400 font-extrabold';
           }
         } else if (advCoverMap[s.id] || advCoverMap['student_' + s.student_id]) {
           completedCount++;
           const cov = advCoverMap[s.id] || advCoverMap['student_' + s.student_id];
-          status = `Taken (Pre-Covered ${cov.log.date})`;
+          status = `COMPLETED (Pre-Covered ${cov.log.date})`;
           filterCategory = 'completed';
           badgeClass = 'bg-teal-100 text-teal-900 border-teal-400 font-extrabold';
         } else {
           if (isLeaveStudent) {
             leaveCount++;
             const returnInfo = leaveMeta?.return_date ? ` (Returns: ${leaveMeta.return_date.slice(5)})` : '';
-            status = `Leave${returnInfo}`;
+            status = `LEAVE${returnInfo}`;
             filterCategory = 'leave';
             badgeClass = 'bg-blue-100 text-blue-900 border-blue-400 font-extrabold';
           } else if (isLive) {
-            liveCount++;
-            status = 'Current Class';
+            remainingCount++;
+            status = 'SCHEDULED (Live Slot)';
             filterCategory = 'current';
             badgeClass = 'bg-cyan-100 text-cyan-900 border-cyan-400 font-extrabold animate-pulse';
           } else if (isPast) {
-            status = 'Remaining (Pending Mark)';
+            remainingCount++;
+            status = 'SCHEDULED (Past)';
             filterCategory = 'remaining';
             badgeClass = 'bg-amber-100 text-amber-900 border-amber-400 font-bold';
           } else {
             remainingCount++;
-            status = 'Remaining';
+            status = 'SCHEDULED';
             filterCategory = 'remaining';
-            badgeClass = 'bg-amber-100 text-amber-900 border-amber-400 font-bold';
+            badgeClass = 'bg-slate-100 text-slate-700 border-slate-300 font-bold';
           }
         }
 
@@ -1337,13 +1340,13 @@
         } else if (CURRENT_DASH_FILTER === 'current' || CURRENT_DASH_FILTER === 'live') {
           if (!c.isCurrentSlot) return false;
         } else if (CURRENT_DASH_FILTER === 'running') {
-          if (!c.isRunningMarked) return false;
+          if (c.filterCategory !== 'running') return false;
         } else if (CURRENT_DASH_FILTER === 'waiting') {
           if (c.filterCategory !== 'waiting') return false;
         } else if (CURRENT_DASH_FILTER === 'completed') {
           if (c.filterCategory !== 'completed') return false;
         } else if (CURRENT_DASH_FILTER === 'remaining') {
-          if (c.filterCategory !== 'remaining' && !c.isUpcoming) return false;
+          if (c.filterCategory !== 'remaining') return false;
         } else if (CURRENT_DASH_FILTER === 'absent') {
           if (c.filterCategory !== 'absent') return false;
         } else if (CURRENT_DASH_FILTER === 'leave') {
@@ -1377,10 +1380,10 @@
           const emptyMessages = {
             'all': { title: 'No Classes Scheduled Today', msg: 'No classes are scheduled for today in the timetable.' },
             'current': { title: 'No Classes Scheduled In Current Slot', msg: 'There are no classes scheduled in the current 30-minute time slot.' },
-            'running': { title: 'No Running Classes Marked Yet', msg: 'No teachers have marked attendance for the current time slot yet.' },
-            'live': { title: 'No Classes In This Slot', msg: 'No ongoing classes in the current time slot.' },
-            'completed': { title: 'No Taken Classes Yet', msg: 'No taken classes recorded yet today since midnight.' },
-            'remaining': { title: 'All Scheduled Classes Taken', msg: 'No remaining classes scheduled for the rest of today.' },
+            'running': { title: 'No Classes Currently Running', msg: 'No active class sessions are currently marked as running.' },
+            'waiting': { title: 'No Classes Waiting', msg: 'No teachers are currently waiting for students in Zoom.' },
+            'completed': { title: 'No Completed Classes Yet', msg: 'No completed classes recorded yet today.' },
+            'remaining': { title: 'All Scheduled Classes Completed', msg: 'No remaining classes scheduled for the rest of today.' },
             'absent': { title: 'Zero Absent Sessions Today', msg: 'Zero absent students recorded today. All students are attending regularly!' },
             'leave': { title: 'No Student Leaves Marked Today', msg: 'No student leaves recorded for today.' },
             'trial': { title: 'No Trial Classes Scheduled Today', msg: 'No trial classes booked for today.' }
@@ -3125,6 +3128,41 @@
         syncTopCircleNotificationDots();
       }
     }, 600);
+
+    // =========================================================================
+    // REAL-TIME CLASS SESSION LIFECYCLE SYNC (ADMIN DASHBOARD)
+    // Synchronizes instantaneously when teacher transitions to WAITING, RUNNING, COMPLETED, etc.
+    // =========================================================================
+    if (typeof window !== 'undefined' && !window._lmsSessionSyncBound) {
+      window._lmsSessionSyncBound = true;
+      try {
+        if (typeof BroadcastChannel !== 'undefined') {
+          const bc = new BroadcastChannel('alhuda_class_session_sync');
+          bc.onmessage = (event) => {
+            if (event.data && typeof loadDashboardData === 'function') {
+              loadDashboardData();
+            }
+          };
+        }
+      } catch(e) {}
+
+      window.addEventListener('storage', (e) => {
+        if (e.key === 'alhuda_session_sync_ping' && e.newValue) {
+          if (typeof loadDashboardData === 'function') {
+            loadDashboardData();
+          }
+        }
+      });
+
+      // 15-second active heartbeat poll on Dashboard tab
+      setInterval(() => {
+        const dashTab = document.getElementById('tab-dashboard');
+        const isDashActive = dashTab && !dashTab.classList.contains('hidden');
+        if (isDashActive && typeof loadDashboardData === 'function') {
+          loadDashboardData();
+        }
+      }, 15000);
+    }
 
 
 

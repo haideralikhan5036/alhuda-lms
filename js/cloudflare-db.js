@@ -110,7 +110,11 @@
   }
 
   function matchFilter(row, f) {
-    const val = row ? row[f.column] : undefined;
+    let val = row ? row[f.column] : undefined;
+    if (val === undefined && f.column === 'date') val = row ? row.class_date : undefined;
+    if (val === undefined && f.column === 'class_date') val = row ? row.date : undefined;
+    if (val === undefined && f.column === 'lesson_notes') val = row ? row.remarks : undefined;
+    if (val === undefined && f.column === 'remarks') val = row ? row.lesson_notes : undefined;
     const target = f.value;
     const op = f.op;
 
@@ -205,6 +209,16 @@
           f.parent_email = em;
         });
       }
+      if (table === 'attendance_logs') {
+        hydrated.forEach(l => {
+          const dt = String(l.date || l.class_date || '').trim();
+          l.date = dt;
+          l.class_date = dt;
+          const notes = String(l.lesson_notes || l.remarks || '').trim();
+          l.lesson_notes = notes;
+          l.remarks = notes;
+        });
+      }
       return { data: single ? (hydrated[0] || null) : hydrated, error: null };
     }
 
@@ -220,6 +234,18 @@
           if (em) {
             row.email = em;
             row.parent_email = em;
+          }
+        }
+        if (table === 'attendance_logs') {
+          const dt = String(row.date || row.class_date || '').trim();
+          if (dt) {
+            row.date = dt;
+            row.class_date = dt;
+          }
+          const notes = String(row.lesson_notes || row.remarks || '').trim();
+          if (notes) {
+            row.lesson_notes = notes;
+            row.remarks = notes;
           }
         }
         const idx = store[table].findIndex(existing => String(existing.id) === String(row.id));

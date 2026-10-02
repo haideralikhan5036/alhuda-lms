@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
@@ -578,7 +578,7 @@
             </div>
           </div>
 
-          <div class="flex items-center gap-2 w-full md:w-auto shrink-0 flex-wrap sm:flex-nowrap">
+          <div id="liveBannerActionsContainer" class="flex items-center gap-2 w-full md:w-auto shrink-0 flex-wrap sm:flex-nowrap">
             <button id="liveBannerJoinBtn" class="flex-1 sm:flex-none px-3.5 sm:px-4 py-2.5 bg-white hover:bg-emerald-50 text-brandDark font-extrabold text-xs rounded-xl shadow-md transition flex items-center justify-center gap-1.5 whitespace-nowrap">
               <i class="fa-solid fa-video text-emerald-600"></i> Start Class / Join Zoom
             </button>
@@ -1019,6 +1019,16 @@
               </select>
             </div>
 
+            <!-- Dynamic Para/Juz Selector for Quran Students -->
+            <div id="attQuranParaContainer" class="hidden">
+              <label class="block font-bold text-slate-700 mb-1 flex items-center gap-1.5">
+                <i class="fa-solid fa-quran text-brandEmerald"></i> Select Para / Juz (1 - 30) *:
+              </label>
+              <select id="attQuranParaSelect" onchange="onTeacherQuranParaChanged(this.value)" class="w-full p-2.5 bg-white border border-emerald-300 rounded-xl font-bold text-slate-800 text-xs focus:outline-brandEmerald shadow-2xs">
+                <!-- Dynamically populated with 30 Paras -->
+              </select>
+            </div>
+
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
               <div>
                 <label class="block font-bold text-slate-700 mb-1">Page / Chapter / Portion *:</label>
@@ -1087,6 +1097,64 @@
         </button>
         <button type="button" id="btnSaveAttendance" onclick="saveAttendanceAndLessonNotes()" class="w-full sm:w-auto px-5 py-2.5 bg-brandDark text-white font-extrabold rounded-xl hover:bg-brandDarkest shadow-md transition flex items-center justify-center gap-1.5">
           <i class="fa-solid fa-floppy-disk"></i> Save Progress
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= MODAL: CLASS LEAVE / ABSENT ================= -->
+  <div id="modalClassLeaveAbsent" class="fixed inset-0 bg-black/70 backdrop-blur-xs z-50 hidden items-center justify-center p-2 sm:p-4 overflow-y-auto">
+    <div class="bg-white rounded-3xl max-w-md w-full max-h-[94vh] flex flex-col p-5 sm:p-6 shadow-2xl border border-slate-200 my-auto animate-scaleIn">
+      <div class="flex justify-between items-center mb-3 border-b pb-3 shrink-0">
+        <div class="flex items-center gap-2.5">
+          <div class="w-10 h-10 rounded-2xl bg-gradient-to-br from-rose-500 to-amber-600 text-white flex items-center justify-center text-base shadow-md">
+            <i class="fa-solid fa-user-xmark"></i>
+          </div>
+          <div>
+            <h3 class="font-black text-base text-slate-900">Record Class Outcome</h3>
+            <p class="text-xs text-slate-500" id="leaveAbsentModalSubtitle">Mark Student Leave or Absent</p>
+          </div>
+        </div>
+        <button type="button" onclick="closeLeaveAbsentModal()" class="text-slate-400 hover:text-slate-600 text-xl font-bold">&times;</button>
+      </div>
+
+      <input type="hidden" id="leaveAbsentScheduleId">
+      <input type="hidden" id="leaveAbsentStudentId">
+      <input type="hidden" id="leaveAbsentTeacherId">
+
+      <div class="space-y-4 text-xs overflow-y-auto touch-scroll flex-1 pr-1">
+        <div>
+          <label class="block font-bold text-slate-700 mb-2">Select Class Outcome *:</label>
+          <div class="grid grid-cols-2 gap-2.5">
+            <label class="cursor-pointer border-2 border-rose-600 bg-rose-50/80 rounded-2xl p-3 flex flex-col items-center gap-1.5 transition text-center shadow-xs" id="labelOutcomeAbsent">
+              <input type="radio" name="leaveAbsentOutcomeRadio" value="Absent" checked class="hidden" onchange="updateLeaveAbsentModalUi()">
+              <i class="fa-solid fa-user-xmark text-lg text-rose-600"></i>
+              <span class="font-extrabold text-xs text-rose-900">ABSENT</span>
+              <span class="text-[10px] text-slate-500">Student did not join / no response</span>
+            </label>
+            <label class="cursor-pointer border-2 border-slate-200 bg-white rounded-2xl p-3 flex flex-col items-center gap-1.5 transition text-center hover:bg-slate-50 opacity-70" id="labelOutcomeLeave">
+              <input type="radio" name="leaveAbsentOutcomeRadio" value="Leave" class="hidden" onchange="updateLeaveAbsentModalUi()">
+              <i class="fa-solid fa-calendar-xmark text-lg text-blue-600"></i>
+              <span class="font-extrabold text-xs text-blue-900">LEAVE</span>
+              <span class="text-[10px] text-slate-500">Informed leave / holiday / excusal</span>
+            </label>
+          </div>
+        </div>
+
+        <div>
+          <label class="block font-bold text-slate-700 mb-1">Reason / Remarks (Optional):</label>
+          <textarea id="leaveAbsentRemarks" rows="3" placeholder="e.g. Student did not connect after 10 mins or Parent messaged on WhatsApp."
+            class="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-xl font-medium text-slate-800 text-xs focus:bg-white focus:outline-rose-500"></textarea>
+          <p class="text-[10px] text-slate-400 mt-1">This outcome will be saved to attendance logs and reflected immediately on Admin Dashboard.</p>
+        </div>
+      </div>
+
+      <div class="pt-3 border-t flex flex-col-reverse sm:flex-row justify-end gap-2 shrink-0">
+        <button type="button" onclick="closeLeaveAbsentModal()" class="w-full sm:w-auto px-4 py-2.5 border rounded-xl font-bold text-slate-600 hover:bg-slate-100 text-center">
+          Cancel
+        </button>
+        <button type="button" id="btnConfirmLeaveAbsent" onclick="submitLeaveAbsentModal()" class="w-full sm:w-auto px-5 py-2.5 bg-rose-600 hover:bg-rose-700 text-white font-extrabold rounded-xl shadow-md transition flex items-center justify-center gap-1.5">
+          <i class="fa-solid fa-user-xmark"></i> Mark as ABSENT
         </button>
       </div>
     </div>
@@ -2716,23 +2784,22 @@
         const log = logsMap[s.id];
         const advanceCover = advanceCoverMap[s.id] || advanceCoverMap[s.student_id];
 
-        if (isLive && !liveClass && !isLeaveStudent && !advanceCover && (!log || log.status === 'Waiting')) {
-          liveClass = { ...s, meeting_link: effectiveZoom, log, startMin, endMin, durationMins };
-        } else if (isUpcoming && !nextClass && !isLeaveStudent && !advanceCover && (!log || log.status === 'Waiting')) {
-          nextClass = { ...s, meeting_link: effectiveZoom, log, startMin, endMin, durationMins };
-        }
-
-        let status = 'Upcoming';
+        let status = 'SCHEDULED';
         let badgeClass = 'bg-slate-100 text-slate-700 border-slate-200';
 
         if (log) {
-          if (log.status === 'Waiting') {
-            status = '⏳ Waiting for Student';
+          if (log.status === 'Running') {
+            status = 'RUNNING';
+            badgeClass = 'bg-emerald-600 text-white border-emerald-700 font-extrabold shadow-sm animate-pulse';
+            remainingCount++;
+          } else if (log.status === 'Waiting') {
+            status = 'WAITING';
             badgeClass = 'bg-amber-100 text-amber-900 border-amber-300 font-extrabold animate-pulse';
-          } else if (log.status === 'Present') {
+            remainingCount++;
+          } else if (log.status === 'Completed' || log.status === 'Present') {
             completedCount++;
-            status = 'Completed';
-            badgeClass = 'bg-emerald-100 text-emerald-800 border-emerald-300';
+            status = 'COMPLETED';
+            badgeClass = 'bg-emerald-100 text-emerald-800 border-emerald-300 font-extrabold';
           } else if (log.status === 'Advance Class') {
             completedCount++;
             let aMeta = null;
@@ -2740,11 +2807,11 @@
             status = `🌟 Advance Class (${aMeta?.advance_target_date ? 'For: ' + aMeta.advance_target_date.slice(5) : 'Preponed'})`;
             badgeClass = 'bg-purple-100 text-purple-900 border-purple-300 font-extrabold shadow-2xs';
           } else if (log.status === 'Absent') {
-            status = 'Absent';
-            badgeClass = 'bg-rose-100 text-rose-800 border-rose-300';
+            status = 'ABSENT';
+            badgeClass = 'bg-rose-100 text-rose-800 border-rose-300 font-bold';
           } else if (log.status === 'Leave') {
-            status = 'On Leave';
-            badgeClass = 'bg-blue-100 text-blue-800 border-blue-300';
+            status = 'LEAVE';
+            badgeClass = 'bg-blue-100 text-blue-800 border-blue-300 font-bold';
           }
         } else if (advanceCover) {
           completedCount++;
@@ -2752,7 +2819,7 @@
           badgeClass = 'bg-gradient-to-r from-purple-100 to-indigo-100 text-purple-900 border-purple-300 font-extrabold shadow-2xs';
         } else {
           if (isLeaveStudent) {
-            status = `🏖️ On Leave${leaveMeta?.return_date ? ' (Returns: ' + leaveMeta.return_date.slice(5) + ')' : ''}`;
+            status = `LEAVE${leaveMeta?.return_date ? ' (Returns: ' + leaveMeta.return_date.slice(5) + ')' : ''}`;
             badgeClass = 'bg-blue-100 text-blue-900 border-blue-300 font-bold';
           } else {
             remainingCount++;
@@ -2806,6 +2873,18 @@
       // Sort by start_time
       TODAY_CLASSES.sort((a, b) => (a.startMin || 0) - (b.startMin || 0));
 
+      // Resolve active liveClass and nextClass with high precision:
+      // Priority 1: Any class that is currently 'Running'
+      // Priority 2: Any class that is currently 'Waiting'
+      // Priority 3: Current timeslot class that is not marked (Scheduled)
+      liveClass = TODAY_CLASSES.find(c => c.log && c.log.status === 'Running') ||
+                  TODAY_CLASSES.find(c => c.log && c.log.status === 'Waiting') ||
+                  TODAY_CLASSES.find(c => c.isLive && !c.isLeaveStudent && !c.advanceCover && (!c.log || c.log.status === 'Scheduled')) ||
+                  null;
+
+      // Next class is the first upcoming class that has no completed/absent/leave mark and is not the active liveClass
+      nextClass = TODAY_CLASSES.find(c => c !== liveClass && c.isUpcoming && !c.isLeaveStudent && !c.advanceCover && (!c.log || c.log.status === 'Scheduled' || c.log.status === 'Waiting')) || null;
+
       // Update Metric Badges
       document.getElementById('statTodayClasses').innerText = TODAY_CLASSES.length;
       document.getElementById('statCompleted').innerText = completedCount;
@@ -2825,68 +2904,108 @@
         const slotEl = document.getElementById('liveBannerSlot');
         const studentEl = document.getElementById('liveBannerStudent');
         const detailsEl = document.getElementById('liveBannerDetails');
-        const joinBtn = document.getElementById('liveBannerJoinBtn');
-        const noZoomBadge = document.getElementById('liveBannerNoZoomBadge');
-        const attBtn = document.getElementById('liveBannerAttBtn');
+        const actionsContainer = document.getElementById('liveBannerActionsContainer');
 
         if (liveClass) {
-          // 1. LIVE SESSION IN PROGRESS
-          if (iconEl) iconEl.className = 'fa-solid fa-tower-broadcast animate-pulse text-emerald-300';
-          if (badgeEl) {
-            badgeEl.className = 'px-2.5 py-0.5 rounded-full bg-emerald-400 text-slate-950 font-black text-[10px] tracking-wider uppercase shadow-xs';
-            badgeEl.innerText = '● Live Class In Session';
-          }
+          const lStatus = liveClass.log?.status || 'Scheduled';
+          const safeStudentName = (liveClass.students?.name || 'Student').replace(/'/g, "\\'");
           if (slotEl) slotEl.innerText = `${liveClass.start_time.slice(0,5)} - ${liveClass.end_time.slice(0,5)} PKT (${liveClass.durationMins || 30}m)`;
           if (studentEl) studentEl.innerText = `${liveClass.students?.name || 'Student'} • ${liveClass.course || 'Quran Studies'}`;
-          
-          if (detailsEl) {
-            if (liveClass.log?.status === 'Waiting') {
-              detailsEl.innerHTML = '<span class="text-amber-200 font-extrabold animate-pulse">⏳ You launched Zoom meeting • Waiting for student to join! Click "Mark Lesson" when student enters.</span>';
-            } else if (liveClass.log?.status === 'Present') {
-              detailsEl.innerHTML = '<span class="text-emerald-200 font-bold">✅ Class In Session • Student marked Present</span>';
-            } else {
-              detailsEl.innerText = 'Assigned Classroom Session • Auto attendance & lesson notes ready';
+
+          if (lStatus === 'Running') {
+            if (iconEl) iconEl.className = 'fa-solid fa-play animate-pulse text-emerald-300';
+            if (badgeEl) {
+              badgeEl.className = 'px-2.5 py-0.5 rounded-full bg-emerald-500 text-slate-950 font-black text-[10px] tracking-wider uppercase shadow-xs animate-pulse';
+              badgeEl.innerText = '● RUNNING';
             }
-          }
-          
-          if (joinBtn) {
-            if (liveClass.meeting_link) {
-              joinBtn.onclick = () => launchTeacherZoomClass(liveClass.id, liveClass.meeting_link, liveClass.students?.name || 'Student', liveClass.student_id);
-              joinBtn.classList.remove('hidden');
-              if (noZoomBadge) noZoomBadge.classList.add('hidden');
-            } else {
-              joinBtn.classList.add('hidden');
-              if (noZoomBadge) noZoomBadge.classList.remove('hidden');
+            if (detailsEl) detailsEl.innerHTML = '<span class="text-emerald-200 font-extrabold">● Class is in session! Conduct your class and click COMPLETE CLASS when finished.</span>';
+            if (actionsContainer) {
+              actionsContainer.innerHTML = `
+                <button onclick="handleTeacherCompleteClass('${liveClass.id}', '${liveClass.student_id}', '${CURRENT_TEACHER.id}', '${safeStudentName}')" class="flex-1 sm:flex-none px-4 py-2.5 bg-white hover:bg-emerald-50 text-slate-950 font-black text-xs rounded-xl shadow-md transition flex items-center justify-center gap-1.5 whitespace-nowrap">
+                  <i class="fa-solid fa-circle-check text-emerald-600"></i> COMPLETE CLASS
+                </button>
+                <button onclick="openLeaveAbsentModal('${liveClass.id}', '${liveClass.student_id}', '${CURRENT_TEACHER.id}', '${safeStudentName}')" class="flex-1 sm:flex-none px-3.5 py-2.5 bg-rose-600/90 hover:bg-rose-700 text-white font-extrabold text-xs rounded-xl border border-rose-400/40 shadow-sm transition flex items-center justify-center gap-1.5 whitespace-nowrap">
+                  <i class="fa-solid fa-user-xmark"></i> LEAVE / ABSENT
+                </button>
+                ${liveClass.meeting_link ? `
+                  <button onclick="launchTeacherZoomClass('${liveClass.id}', '${liveClass.meeting_link}', '${safeStudentName}', '${liveClass.student_id}')" class="flex-1 sm:flex-none px-3 py-2.5 bg-white/15 hover:bg-white/25 text-white font-bold text-xs rounded-xl border border-white/20 transition flex items-center justify-center gap-1.5 whitespace-nowrap">
+                    <i class="fa-solid fa-video"></i> Zoom
+                  </button>
+                ` : ''}
+              `;
             }
-          }
-          if (attBtn) {
-            attBtn.classList.remove('hidden');
-            attBtn.onclick = () => openAttendanceModal(liveClass.id, liveClass.students?.name, `${liveClass.start_time.slice(0,5)} - ${liveClass.end_time.slice(0,5)}`, liveClass.student_id, liveClass.log?.status, liveClass.log?.lesson_notes);
+          } else if (lStatus === 'Waiting') {
+            if (iconEl) iconEl.className = 'fa-solid fa-hourglass-half animate-pulse text-amber-300';
+            if (badgeEl) {
+              badgeEl.className = 'px-2.5 py-0.5 rounded-full bg-amber-400 text-slate-950 font-black text-[10px] tracking-wider uppercase shadow-xs animate-pulse';
+              badgeEl.innerText = '⏳ WAITING';
+            }
+            if (detailsEl) detailsEl.innerHTML = '<span class="text-amber-200 font-extrabold animate-pulse">⏳ Zoom meeting launched • Waiting for student! When admitted, click START CLASS below.</span>';
+            if (actionsContainer) {
+              actionsContainer.innerHTML = `
+                <button onclick="handleTeacherStartClass('${liveClass.id}', '${liveClass.student_id}', '${CURRENT_TEACHER.id}')" class="flex-1 sm:flex-none px-4 py-2.5 bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-black text-xs rounded-xl shadow-md transition flex items-center justify-center gap-1.5 whitespace-nowrap animate-pulse">
+                  <i class="fa-solid fa-play"></i> START CLASS
+                </button>
+                <button onclick="openLeaveAbsentModal('${liveClass.id}', '${liveClass.student_id}', '${CURRENT_TEACHER.id}', '${safeStudentName}')" class="flex-1 sm:flex-none px-3.5 py-2.5 bg-rose-600/90 hover:bg-rose-700 text-white font-extrabold text-xs rounded-xl border border-rose-400/40 shadow-sm transition flex items-center justify-center gap-1.5 whitespace-nowrap">
+                  <i class="fa-solid fa-user-xmark"></i> LEAVE / ABSENT
+                </button>
+                ${liveClass.meeting_link ? `
+                  <button onclick="launchTeacherZoomClass('${liveClass.id}', '${liveClass.meeting_link}', '${safeStudentName}', '${liveClass.student_id}')" class="flex-1 sm:flex-none px-3 py-2.5 bg-white/15 hover:bg-white/25 text-white font-bold text-xs rounded-xl border border-white/20 transition flex items-center justify-center gap-1.5 whitespace-nowrap">
+                    <i class="fa-solid fa-video"></i> Re-open Zoom
+                  </button>
+                ` : ''}
+              `;
+            }
+          } else {
+            // Scheduled session
+            if (iconEl) iconEl.className = 'fa-solid fa-tower-broadcast animate-pulse text-emerald-300';
+            if (badgeEl) {
+              badgeEl.className = 'px-2.5 py-0.5 rounded-full bg-emerald-400 text-slate-950 font-black text-[10px] tracking-wider uppercase shadow-xs';
+              badgeEl.innerText = '🕒 SCHEDULED';
+            }
+            if (detailsEl) detailsEl.innerText = 'Assigned Classroom Session • Auto attendance & lesson notes ready';
+            if (actionsContainer) {
+              actionsContainer.innerHTML = `
+                ${liveClass.meeting_link ? `
+                  <button onclick="launchTeacherZoomClass('${liveClass.id}', '${liveClass.meeting_link}', '${safeStudentName}', '${liveClass.student_id}')" class="flex-1 sm:flex-none px-4 py-2.5 bg-white hover:bg-emerald-50 text-brandDark font-extrabold text-xs rounded-xl shadow-md transition flex items-center justify-center gap-1.5 whitespace-nowrap">
+                    <i class="fa-solid fa-video text-emerald-600"></i> Start Zoom
+                  </button>
+                ` : ''}
+                <button onclick="handleTeacherStartClass('${liveClass.id}', '${liveClass.student_id}', '${CURRENT_TEACHER.id}')" class="flex-1 sm:flex-none px-3.5 py-2.5 bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-black text-xs rounded-xl shadow-md transition flex items-center justify-center gap-1.5 whitespace-nowrap">
+                  <i class="fa-solid fa-play"></i> START CLASS
+                </button>
+                <button onclick="openLeaveAbsentModal('${liveClass.id}', '${liveClass.student_id}', '${CURRENT_TEACHER.id}', '${safeStudentName}')" class="flex-1 sm:flex-none px-3.5 py-2.5 bg-rose-600/90 hover:bg-rose-700 text-white font-extrabold text-xs rounded-xl border border-rose-400/40 shadow-sm transition flex items-center justify-center gap-1.5 whitespace-nowrap">
+                  <i class="fa-solid fa-user-xmark"></i> LEAVE / ABSENT
+                </button>
+              `;
+            }
           }
         } else if (nextClass) {
           // 2. NEXT UPCOMING SESSION TODAY
+          const safeNextName = (nextClass.students?.name || 'Student').replace(/'/g, "\\'");
           if (iconEl) iconEl.className = 'fa-solid fa-clock text-amber-300';
           if (badgeEl) {
             badgeEl.className = 'px-2.5 py-0.5 rounded-full bg-amber-400 text-slate-950 font-black text-[10px] tracking-wider uppercase shadow-xs';
-            badgeEl.innerText = '🕒 Next Scheduled Session';
+            badgeEl.innerText = '🕒 UPCOMING SCHEDULE';
           }
           if (slotEl) slotEl.innerText = `Starts at ${nextClass.start_time.slice(0,5)} PKT (${nextClass.durationMins || 30}m)`;
           if (studentEl) studentEl.innerText = `${nextClass.students?.name || 'Student'} • ${nextClass.course || 'Quran Studies'}`;
           if (detailsEl) detailsEl.innerText = 'Upcoming scheduled lesson today • Zoom meeting & lesson notes ready';
 
-          if (joinBtn) {
-            if (nextClass.meeting_link) {
-              joinBtn.onclick = () => launchTeacherZoomClass(nextClass.id, nextClass.meeting_link, nextClass.students?.name || 'Student', nextClass.student_id);
-              joinBtn.classList.remove('hidden');
-              if (noZoomBadge) noZoomBadge.classList.add('hidden');
-            } else {
-              joinBtn.classList.add('hidden');
-              if (noZoomBadge) noZoomBadge.classList.remove('hidden');
-            }
-          }
-          if (attBtn) {
-            attBtn.classList.remove('hidden');
-            attBtn.onclick = () => openAttendanceModal(nextClass.id, nextClass.students?.name, `${nextClass.start_time.slice(0,5)} - ${nextClass.end_time.slice(0,5)}`, nextClass.student_id, nextClass.log?.status, nextClass.log?.lesson_notes);
+          if (actionsContainer) {
+            actionsContainer.innerHTML = `
+              ${nextClass.meeting_link ? `
+                <button onclick="launchTeacherZoomClass('${nextClass.id}', '${nextClass.meeting_link}', '${safeNextName}', '${nextClass.student_id}')" class="flex-1 sm:flex-none px-4 py-2.5 bg-white hover:bg-emerald-50 text-brandDark font-extrabold text-xs rounded-xl shadow-md transition flex items-center justify-center gap-1.5 whitespace-nowrap">
+                  <i class="fa-solid fa-video text-emerald-600"></i> Start Zoom
+                </button>
+              ` : ''}
+              <button onclick="handleTeacherStartClass('${nextClass.id}', '${nextClass.student_id}', '${CURRENT_TEACHER.id}')" class="flex-1 sm:flex-none px-3.5 py-2.5 bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-black text-xs rounded-xl shadow-md transition flex items-center justify-center gap-1.5 whitespace-nowrap">
+                <i class="fa-solid fa-play"></i> START CLASS
+              </button>
+              <button onclick="openLeaveAbsentModal('${nextClass.id}', '${nextClass.student_id}', '${CURRENT_TEACHER.id}', '${safeNextName}')" class="flex-1 sm:flex-none px-3.5 py-2.5 bg-rose-600/90 hover:bg-rose-700 text-white font-extrabold text-xs rounded-xl border border-rose-400/40 shadow-sm transition flex items-center justify-center gap-1.5 whitespace-nowrap">
+                <i class="fa-solid fa-user-xmark"></i> LEAVE / ABSENT
+              </button>
+            `;
           }
         } else {
           // 3. ALL SESSIONS COMPLETED OR STANDBY
@@ -2898,9 +3017,7 @@
           if (slotEl) slotEl.innerText = `${TODAY_CLASSES.length} Classes Scheduled Today`;
           if (studentEl) studentEl.innerText = completedCount > 0 ? 'All Today\'s Classes Completed' : 'No Active Session Right Now';
           if (detailsEl) detailsEl.innerText = completedCount > 0 ? 'Great job! All assigned classes for today have been attended and logged.' : 'You have no active class right now. Check your schedule below or prepare materials.';
-          if (joinBtn) joinBtn.classList.add('hidden');
-          if (noZoomBadge) noZoomBadge.classList.add('hidden');
-          if (attBtn) attBtn.classList.add('hidden');
+          if (actionsContainer) actionsContainer.innerHTML = '';
         }
       }
 
@@ -2986,11 +3103,43 @@
         }
 
         const todaySlot = TODAY_CLASSES.find(c => String(c.student_id) === String(st.id));
-        const markLessonBtn = todaySlot
-          ? `<button onclick="openAttendanceModal('${todaySlot.id}')" class="px-2.5 py-1 bg-brandDark hover:bg-brandDarkest text-white rounded-lg text-xs font-bold shadow-2xs flex items-center gap-1 transition">
-               <i class="fa-solid fa-clipboard-check text-brandGold"></i> Mark Lesson
-             </button>`
-          : '';
+        const safeStName = (st.name || 'Student').replace(/'/g, "\\'");
+        let markLessonBtn = '';
+
+        if (todaySlot) {
+          const sStat = todaySlot.log?.status || 'Scheduled';
+          if (sStat === 'Waiting') {
+            markLessonBtn = `
+              <button onclick="handleTeacherStartClass('${todaySlot.id}', '${st.id}', '${CURRENT_TEACHER.id}')" class="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-black shadow-xs flex items-center gap-1 transition animate-pulse">
+                <i class="fa-solid fa-play"></i> START CLASS
+              </button>
+              <button onclick="openLeaveAbsentModal('${todaySlot.id}', '${st.id}', '${CURRENT_TEACHER.id}', '${safeStName}')" class="px-2 py-1 bg-rose-50 hover:bg-rose-100 text-rose-800 border border-rose-300 rounded-lg text-xs font-bold transition">
+                <i class="fa-solid fa-user-xmark"></i> LEAVE / ABSENT
+              </button>
+            `;
+          } else if (sStat === 'Running') {
+            markLessonBtn = `
+              <button onclick="handleTeacherCompleteClass('${todaySlot.id}', '${st.id}', '${CURRENT_TEACHER.id}', '${safeStName}')" class="px-2.5 py-1 bg-brandDark hover:bg-brandDarkest text-white rounded-lg text-xs font-black shadow-xs flex items-center gap-1 transition">
+                <i class="fa-solid fa-circle-check text-brandGold"></i> COMPLETE CLASS
+              </button>
+              <button onclick="openLeaveAbsentModal('${todaySlot.id}', '${st.id}', '${CURRENT_TEACHER.id}', '${safeStName}')" class="px-2 py-1 bg-rose-50 hover:bg-rose-100 text-rose-800 border border-rose-300 rounded-lg text-xs font-bold transition">
+                <i class="fa-solid fa-user-xmark"></i> LEAVE / ABSENT
+              </button>
+            `;
+          } else if (sStat === 'Completed' || sStat === 'Present') {
+            markLessonBtn = `
+              <button onclick="openAttendanceModal('${todaySlot.id}')" class="px-2.5 py-1 bg-slate-800 hover:bg-slate-900 text-white rounded-lg text-xs font-bold shadow-2xs flex items-center gap-1 transition">
+                <i class="fa-solid fa-clipboard-check text-brandGold"></i> Record / Edit Lesson
+              </button>
+            `;
+          } else {
+            markLessonBtn = `
+              <button onclick="openAttendanceModal('${todaySlot.id}')" class="px-2.5 py-1 bg-brandDark hover:bg-brandDarkest text-white rounded-lg text-xs font-bold shadow-2xs flex items-center gap-1 transition">
+                <i class="fa-solid fa-clipboard-check text-brandGold"></i> Mark Lesson
+              </button>
+            `;
+          }
+        }
 
         const zoomActionBtn = studentZoomLink
           ? `<button onclick="launchTeacherZoomClass('${todaySlot ? todaySlot.id : (firstScheduleId || 'stu-' + st.id)}', '${studentZoomLink}', '${(st.name || 'Student').split("'").join(" ")}', '${st.id}')" class="px-2.5 py-1 bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-700 hover:to-teal-800 text-white rounded-lg text-xs font-bold shadow-2xs flex items-center gap-1 transition" title="Start Zoom Class for ${st.name}">
@@ -3163,32 +3312,73 @@
             ${changeTimeBtn}
           `;
         } else {
-          // Check if already marked (locked) — status must be a real mark, not just Waiting
-          const alreadyMarked = c.log && c.log.status && c.log.status !== 'Waiting';
+          const stStatus = c.log?.status || 'Scheduled';
+          const safeStudentName = (c.students?.name || 'Student').replace(/'/g, "\\'");
 
-          if (alreadyMarked) {
-            // LOCKED STATE — already marked, show reschedule request button
-            const markedStatusColor = c.log.status === 'Present' ? 'bg-emerald-100 text-emerald-800 border-emerald-300' :
-                                      c.log.status === 'Absent'  ? 'bg-rose-100 text-rose-800 border-rose-300' :
-                                      c.log.status === 'Leave'   ? 'bg-blue-100 text-blue-800 border-blue-300' :
-                                                                   'bg-slate-100 text-slate-700 border-slate-300';
+          if (stStatus === 'Waiting') {
             actionButtons = `
-              <span class="px-2.5 py-1 rounded-lg text-xs font-extrabold border ${markedStatusColor} flex items-center gap-1">
-                <i class="fa-solid fa-lock text-xs opacity-60"></i> ${c.log.status} (Locked)
-              </span>
-              ${zoomBtn}
+              <button onclick="handleTeacherStartClass('${c.id}', '${c.student_id}', '${CURRENT_TEACHER.id}')" class="px-3 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-black shadow-xs flex items-center gap-1 transition animate-pulse">
+                <i class="fa-solid fa-play"></i> START CLASS
+              </button>
+              <button onclick="openLeaveAbsentModal('${c.id}', '${c.student_id}', '${CURRENT_TEACHER.id}', '${safeStudentName}')" class="px-2.5 py-1 bg-rose-50 hover:bg-rose-100 text-rose-800 border border-rose-300 rounded-lg text-xs font-bold shadow-2xs flex items-center gap-1 transition">
+                <i class="fa-solid fa-user-xmark"></i> LEAVE / ABSENT
+              </button>
+              ${effectiveZoomLink ? `
+                <button onclick="launchTeacherZoomClassById('${c.id}')" class="px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300 rounded-lg text-xs font-bold transition flex items-center gap-1" title="Re-open Zoom Meeting">
+                  <i class="fa-solid fa-video text-emerald-600"></i> Zoom
+                </button>
+              ` : ''}
               ${changeTimeBtn}
-              <button onclick="openRescheduleRequestModal('${c.id}')" class="px-2.5 py-1 bg-orange-50 hover:bg-orange-100 text-orange-900 border border-orange-300 rounded-lg text-xs font-bold shadow-2xs flex items-center gap-1 transition" title="Request Admin to approve a status change">
+            `;
+          } else if (stStatus === 'Running') {
+            actionButtons = `
+              <button onclick="handleTeacherCompleteClass('${c.id}', '${c.student_id}', '${CURRENT_TEACHER.id}', '${safeStudentName}')" class="px-3 py-1 bg-brandDark hover:bg-brandDarkest text-white rounded-lg text-xs font-black shadow-xs flex items-center gap-1 transition">
+                <i class="fa-solid fa-circle-check text-brandGold"></i> COMPLETE CLASS
+              </button>
+              <button onclick="openLeaveAbsentModal('${c.id}', '${c.student_id}', '${CURRENT_TEACHER.id}', '${safeStudentName}')" class="px-2.5 py-1 bg-rose-50 hover:bg-rose-100 text-rose-800 border border-rose-300 rounded-lg text-xs font-bold shadow-2xs flex items-center gap-1 transition">
+                <i class="fa-solid fa-user-xmark"></i> LEAVE / ABSENT
+              </button>
+              ${effectiveZoomLink ? `
+                <button onclick="launchTeacherZoomClassById('${c.id}')" class="px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300 rounded-lg text-xs font-bold transition flex items-center gap-1">
+                  <i class="fa-solid fa-video text-emerald-600"></i> Zoom
+                </button>
+              ` : ''}
+              ${changeTimeBtn}
+            `;
+          } else if (stStatus === 'Completed' || stStatus === 'Present' || stStatus === 'Advance Class') {
+            actionButtons = `
+              <button onclick="openAttendanceModal('${c.id}')" class="px-3 py-1 bg-slate-800 hover:bg-slate-900 text-white rounded-lg text-xs font-bold shadow-2xs flex items-center gap-1 transition" title="View or edit lesson notes for this completed class">
+                <i class="fa-solid fa-clipboard-check text-brandGold"></i> Record / Edit Lesson
+              </button>
+              ${changeTimeBtn}
+              <button onclick="openRescheduleRequestModal('${c.id}')" class="px-2 py-1 bg-orange-50 hover:bg-orange-100 text-orange-900 border border-orange-300 rounded-lg text-xs font-bold shadow-2xs flex items-center gap-1 transition" title="Request Admin to approve a status change">
                 <i class="fa-solid fa-rotate text-orange-600"></i> Status Change
               </button>
             `;
-          } else {
-            // FREE STATE — not yet marked, teacher can freely mark
+          } else if (stStatus === 'Absent' || stStatus === 'Leave') {
             actionButtons = `
-              <button onclick="openAttendanceModal('${c.id}')" class="px-3 py-1 bg-brandDark hover:bg-brandDarkest text-white rounded-lg text-xs font-bold shadow-xs flex items-center gap-1 transition">
-                <i class="fa-solid fa-clipboard-check"></i> Mark Lesson
+              <span class="px-2.5 py-1 rounded-lg text-xs font-extrabold border ${stStatus === 'Absent' ? 'bg-rose-100 text-rose-800 border-rose-300' : 'bg-blue-100 text-blue-800 border-blue-300'} flex items-center gap-1">
+                <i class="fa-solid fa-lock text-xs opacity-60"></i> ${stStatus} (Logged)
+              </span>
+              <button onclick="openLeaveAbsentModal('${c.id}', '${c.student_id}', '${CURRENT_TEACHER.id}', '${safeStudentName}')" class="px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300 rounded-lg text-xs font-bold transition flex items-center gap-1" title="Adjust outcome">
+                <i class="fa-solid fa-pen-to-square"></i> Adjust
               </button>
-              ${zoomBtn}
+              ${changeTimeBtn}
+            `;
+          } else {
+            // Scheduled / Free
+            actionButtons = `
+              ${effectiveZoomLink ? `
+                <button onclick="launchTeacherZoomClassById('${c.id}')" class="px-3 py-1 bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-700 hover:to-teal-800 text-white rounded-lg text-xs font-black shadow-xs flex items-center gap-1 transition">
+                  <i class="fa-solid fa-video"></i> Start Zoom
+                </button>
+              ` : ''}
+              <button onclick="handleTeacherStartClass('${c.id}', '${c.student_id}', '${CURRENT_TEACHER.id}')" class="px-2.5 py-1 bg-emerald-100 hover:bg-emerald-200 text-emerald-900 border border-emerald-300 rounded-lg text-xs font-black transition flex items-center gap-1">
+                <i class="fa-solid fa-play text-emerald-700"></i> START CLASS
+              </button>
+              <button onclick="openLeaveAbsentModal('${c.id}', '${c.student_id}', '${CURRENT_TEACHER.id}', '${safeStudentName}')" class="px-2.5 py-1 bg-rose-50 hover:bg-rose-100 text-rose-800 border border-rose-300 rounded-lg text-xs font-bold transition flex items-center gap-1">
+                <i class="fa-solid fa-user-xmark"></i> LEAVE / ABSENT
+              </button>
               ${changeTimeBtn}
             `;
           }
@@ -3259,18 +3449,15 @@
       const now = new Date();
       const timeStr = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
 
-      // 1. Log Punch-In Timestamp into attendance_logs in Supabase as 'Waiting'
+      // 1. Transition class session state to 'Waiting' in backend and broadcast
       try {
-        const todayDate = now.toISOString().slice(0, 10);
-        await db.from('attendance_logs').upsert([{
-          schedule_id: scheduleId,
-          teacher_id: CURRENT_TEACHER.id,
-          student_id: studentId,
-          date: todayDate,
-          status: 'Waiting',
-          lesson_notes: `[Auto-Logged] Teacher joined Zoom at ${timeStr} PKT (Waiting for Student)`,
-          recorded_at: now.toISOString()
-        }], { onConflict: 'schedule_id, date' });
+        await transitionClassSessionState({
+          scheduleId,
+          studentId,
+          teacherId: CURRENT_TEACHER?.id,
+          targetStatus: 'Waiting',
+          notes: `[Auto-Logged] Teacher joined Zoom at ${timeStr} PKT (Waiting for Student)`
+        });
       } catch(e) {
         console.warn("Could not log punch-in timestamp:", e);
       }
@@ -3283,7 +3470,7 @@
         const confno = matchConf ? matchConf[1] : '';
         const pwd = u.searchParams.get('pwd') || '';
         if (confno) {
-          zoomAppUrl = `zoommtg://zoom.us/join?action=join&confno=${confno}${pwd ? '&pwd=' + pwd : ''}&uname=${encodeURIComponent((CURRENT_TEACHER.full_name || 'Instructor') + ' (Teacher)')}`;
+          zoomAppUrl = `zoommtg://zoom.us/join?action=join&confno=${confno}${pwd ? '&pwd=' + pwd : ''}&uname=${encodeURIComponent((CURRENT_TEACHER?.full_name || 'Instructor') + ' (Teacher)')}`;
         }
       } catch(e) {}
 
@@ -3297,20 +3484,246 @@
       // Open standard web meeting in new tab as guaranteed fallback
       window.open(rawMeetingLink, '_blank');
 
-      alert(`🚀 Zoom Classroom Launched Successfully!\n\n` +
-        `👨‍🏫 Host: ${CURRENT_TEACHER.full_name}\n` +
-        `🎓 Student: ${studentName}\n` +
-        `🕒 Punch-In Time: ${timeStr} PKT\n\n` +
-        `Zoom Native App is opening.\n` +
-        `Status is now set to: ⏳ "Waiting for Student".\n\n` +
-        `When student joins Zoom, please click "Mark Lesson" to record Present and lesson notes!`
-      );
-
-      // Refresh today's list to update status
-      if (typeof loadTeacherPortalData === 'function') {
-        loadTeacherPortalData();
+      // Refresh today's list to update status in Teacher Portal
+      if (typeof loadTeacherTodayClasses === 'function') {
+        loadTeacherTodayClasses();
       }
     }
+
+    // ============================================================
+    // TEACHER CLASS SESSION STATUS LIFECYCLE ENGINE
+    // SCHEDULED -> WAITING -> RUNNING -> COMPLETED (LEAVE/ABSENT)
+    // ============================================================
+
+    function notifyClassSessionSync(payload) {
+      try {
+        if (typeof BroadcastChannel !== 'undefined') {
+          const ch = new BroadcastChannel('alhuda_class_session_sync');
+          ch.postMessage({
+            type: 'CLASS_SESSION_STATUS_CHANGED',
+            ...payload,
+            timestamp: Date.now()
+          });
+          ch.close();
+        }
+      } catch(e) {}
+      try {
+        localStorage.setItem('alhuda_last_class_sync', JSON.stringify({
+          ...payload,
+          timestamp: Date.now()
+        }));
+        localStorage.setItem('alhuda_session_sync_ping', String(Date.now()));
+      } catch(e) {}
+    }
+
+    async function transitionClassSessionState({ scheduleId, studentId, teacherId, targetStatus, notes = '', lessonNotesPayload = null }) {
+      if (!scheduleId && !studentId) {
+        alert("Invalid class record. Please refresh.");
+        return { success: false, error: 'Missing schedule or student ID' };
+      }
+
+      const todayDate = new Date().toISOString().slice(0, 10);
+      const nowIso = new Date().toISOString();
+      const tid = teacherId || CURRENT_TEACHER?.id;
+
+      // Validate transition against current state to prevent illegal transitions
+      const currentSlot = (TODAY_CLASSES || []).find(c => String(c.id) === String(scheduleId));
+      const currentStatus = currentSlot?.log?.status || 'Scheduled';
+
+      if (currentStatus === 'Completed' && (targetStatus === 'Waiting' || targetStatus === 'Running')) {
+        alert("This class session has already been COMPLETED. It cannot be reverted to Waiting or Running.");
+        return { success: false, error: 'Cannot revert completed session' };
+      }
+
+      const upsertData = {
+        schedule_id: scheduleId,
+        student_id: studentId,
+        teacher_id: tid,
+        date: todayDate,
+        status: targetStatus,
+        recorded_at: nowIso
+      };
+
+      if (targetStatus === 'Waiting') {
+        upsertData.waiting_at = nowIso;
+        if (notes) upsertData.lesson_notes = notes;
+      } else if (targetStatus === 'Running') {
+        upsertData.started_at = nowIso;
+        if (currentSlot?.log?.waiting_at) upsertData.waiting_at = currentSlot.log.waiting_at;
+        if (notes && (!currentSlot?.log?.lesson_notes || currentSlot.log.lesson_notes.startsWith('[Auto-Logged]'))) {
+          upsertData.lesson_notes = notes;
+        }
+      } else if (targetStatus === 'Completed') {
+        upsertData.completed_at = nowIso;
+        if (currentSlot?.log?.started_at) upsertData.started_at = currentSlot.log.started_at;
+        if (currentSlot?.log?.waiting_at) upsertData.waiting_at = currentSlot.log.waiting_at;
+        if (lessonNotesPayload) {
+          upsertData.lesson_notes = typeof lessonNotesPayload === 'string' ? lessonNotesPayload : JSON.stringify(lessonNotesPayload);
+        } else if (notes) {
+          upsertData.lesson_notes = notes;
+        }
+      } else if (targetStatus === 'Absent' || targetStatus === 'Leave') {
+        if (notes) upsertData.lesson_notes = notes;
+        if (currentSlot?.log?.started_at) upsertData.started_at = currentSlot.log.started_at;
+        if (currentSlot?.log?.waiting_at) upsertData.waiting_at = currentSlot.log.waiting_at;
+      }
+
+      try {
+        const { error } = await db.from('attendance_logs').upsert([upsertData], { onConflict: 'schedule_id,date' });
+        if (error) {
+          console.error("transitionClassSessionState DB error:", error);
+        }
+
+        notifyClassSessionSync({
+          scheduleId,
+          studentId,
+          teacherId: tid,
+          date: todayDate,
+          status: targetStatus,
+          waiting_at: upsertData.waiting_at,
+          started_at: upsertData.started_at,
+          completed_at: upsertData.completed_at
+        });
+
+        return { success: true };
+      } catch(e) {
+        console.error("transitionClassSessionState exception:", e);
+        notifyClassSessionSync({
+          scheduleId,
+          studentId,
+          teacherId: tid,
+          date: todayDate,
+          status: targetStatus
+        });
+        return { success: true };
+      }
+    }
+
+    async function handleTeacherStartClass(scheduleId, studentId, teacherId) {
+      const now = new Date();
+      const timeStr = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
+      const res = await transitionClassSessionState({
+        scheduleId,
+        studentId,
+        teacherId: teacherId || CURRENT_TEACHER?.id,
+        targetStatus: 'Running',
+        notes: `Class started by teacher at ${timeStr} PKT`
+      });
+      if (res && res.success) {
+        await loadTeacherPortalData();
+      }
+    }
+
+    async function handleTeacherCompleteClass(scheduleId, studentId, teacherId, studentName) {
+      const now = new Date();
+      const timeStr = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
+      const res = await transitionClassSessionState({
+        scheduleId,
+        studentId,
+        teacherId: teacherId || CURRENT_TEACHER?.id,
+        targetStatus: 'Completed',
+        notes: `Class completed at ${timeStr} PKT`
+      });
+      if (res && res.success) {
+        await loadTeacherPortalData();
+        // Immediately open post-class lesson recording form
+        openAttendanceModal(scheduleId, studentName, '', studentId, 'Completed', '');
+      }
+    }
+
+    function openLeaveAbsentModal(scheduleId, studentId, teacherId, studentName) {
+      document.getElementById('leaveAbsentScheduleId').value = scheduleId || '';
+      document.getElementById('leaveAbsentStudentId').value = studentId || '';
+      document.getElementById('leaveAbsentTeacherId').value = teacherId || CURRENT_TEACHER?.id || '';
+      const subtitle = document.getElementById('leaveAbsentModalSubtitle');
+      if (subtitle) subtitle.innerText = `${studentName || 'Student'} • Daily Class Session`;
+      const rem = document.getElementById('leaveAbsentRemarks');
+      if (rem) rem.value = '';
+
+      const radAbsent = document.querySelector('input[name="leaveAbsentOutcomeRadio"][value="Absent"]');
+      if (radAbsent) radAbsent.checked = true;
+      updateLeaveAbsentModalUi();
+
+      document.getElementById('modalClassLeaveAbsent')?.classList.remove('hidden');
+      document.getElementById('modalClassLeaveAbsent')?.classList.add('flex');
+      pushTeacherModalHistory('modalClassLeaveAbsent');
+    }
+
+    function closeLeaveAbsentModal(popHistory = true) {
+      document.getElementById('modalClassLeaveAbsent')?.classList.add('hidden');
+      document.getElementById('modalClassLeaveAbsent')?.classList.remove('flex');
+      if (popHistory) popTeacherModalHistory('modalClassLeaveAbsent');
+    }
+
+    function updateLeaveAbsentModalUi() {
+      const selected = document.querySelector('input[name="leaveAbsentOutcomeRadio"]:checked')?.value || 'Absent';
+      const labelAbsent = document.getElementById('labelOutcomeAbsent');
+      const labelLeave = document.getElementById('labelOutcomeLeave');
+      const btnConfirm = document.getElementById('btnConfirmLeaveAbsent');
+
+      if (selected === 'Absent') {
+        if (labelAbsent) labelAbsent.className = 'cursor-pointer border-2 border-rose-600 bg-rose-50/80 rounded-2xl p-3 flex flex-col items-center gap-1.5 transition text-center shadow-xs';
+        if (labelLeave) labelLeave.className = 'cursor-pointer border-2 border-slate-200 bg-white rounded-2xl p-3 flex flex-col items-center gap-1.5 transition text-center hover:bg-slate-50 opacity-60';
+        if (btnConfirm) {
+          btnConfirm.className = 'w-full sm:w-auto px-5 py-2.5 bg-rose-600 hover:bg-rose-700 text-white font-extrabold rounded-xl shadow-md transition flex items-center justify-center gap-1.5';
+          btnConfirm.innerHTML = '<i class="fa-solid fa-user-xmark"></i> Mark as ABSENT';
+        }
+      } else {
+        if (labelAbsent) labelAbsent.className = 'cursor-pointer border-2 border-slate-200 bg-white rounded-2xl p-3 flex flex-col items-center gap-1.5 transition text-center hover:bg-slate-50 opacity-60';
+        if (labelLeave) labelLeave.className = 'cursor-pointer border-2 border-blue-600 bg-blue-50/80 rounded-2xl p-3 flex flex-col items-center gap-1.5 transition text-center shadow-xs';
+        if (btnConfirm) {
+          btnConfirm.className = 'w-full sm:w-auto px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-extrabold rounded-xl shadow-md transition flex items-center justify-center gap-1.5';
+          btnConfirm.innerHTML = '<i class="fa-solid fa-calendar-xmark"></i> Mark as LEAVE';
+        }
+      }
+    }
+
+    async function submitLeaveAbsentModal() {
+      const scheduleId = document.getElementById('leaveAbsentScheduleId').value;
+      const studentId = document.getElementById('leaveAbsentStudentId').value;
+      const teacherId = document.getElementById('leaveAbsentTeacherId').value;
+      const outcome = document.querySelector('input[name="leaveAbsentOutcomeRadio"]:checked')?.value || 'Absent';
+      const remarks = (document.getElementById('leaveAbsentRemarks')?.value || '').trim();
+
+      const btn = document.getElementById('btnConfirmLeaveAbsent');
+      if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Saving...';
+      }
+
+      await transitionClassSessionState({
+        scheduleId,
+        studentId,
+        teacherId,
+        targetStatus: outcome,
+        notes: remarks || `Marked as ${outcome} by teacher.`
+      });
+
+      if (btn) btn.disabled = false;
+      closeLeaveAbsentModal();
+      await loadTeacherPortalData();
+    }
+
+    // Two-way synchronization listener for Teacher Portal
+    if (typeof BroadcastChannel !== 'undefined') {
+      try {
+        const teacherSyncChannel = new BroadcastChannel('alhuda_class_session_sync');
+        teacherSyncChannel.onmessage = (event) => {
+          if (event && event.data && event.data.type === 'CLASS_SESSION_STATUS_CHANGED') {
+            if (typeof loadTeacherTodayClasses === 'function') {
+              loadTeacherTodayClasses();
+            }
+          }
+        };
+      } catch(e) {}
+    }
+    window.addEventListener('storage', (e) => {
+      if (e.key === 'alhuda_last_class_sync') {
+        if (typeof loadTeacherTodayClasses === 'function') {
+          loadTeacherTodayClasses();
+        }
+      }
+    });
 
     // ============================================================
     // COURSE MATERIAL & DIGITAL LIBRARY CONTROLLER (TEACHER PORTAL)
@@ -3442,33 +3855,119 @@
       onTeacherCourseBookChanged(bSelect.value);
     }
 
-    function onTeacherCourseBookChanged(bookId) {
+    const QURAN_PARAS_LIST = [
+      { para: 1, name: "Alif Lam Meem (الم)", page_start: 1, page_end: 18 },
+      { para: 2, name: "Sayaqool (سیقول)", page_start: 19, page_end: 36 },
+      { para: 3, name: "Tilka-r-Rusul (تلک الرسل)", page_start: 37, page_end: 54 },
+      { para: 4, name: "Lan Tanaaloo (لن تنالوا)", page_start: 55, page_end: 72 },
+      { para: 5, name: "Wal Mohsanat (والمحصنت)", page_start: 73, page_end: 90 },
+      { para: 6, name: "La Yuhibbullah (لا یحب اللہ)", page_start: 91, page_end: 108 },
+      { para: 7, name: "Wa Iza Samiu (واذا سمعوا)", page_start: 109, page_end: 126 },
+      { para: 8, name: "Wa Lau Annana (ولو اننا)", page_start: 127, page_end: 144 },
+      { para: 9, name: "Qalal Malao (قال الملاء)", page_start: 145, page_end: 162 },
+      { para: 10, name: "Wa A'lamoo (واعلموا)", page_start: 163, page_end: 180 },
+      { para: 11, name: "Ya'taziroon (یعتذرون)", page_start: 181, page_end: 198 },
+      { para: 12, name: "Wa Mamin Da'abbat (ومامن دابة)", page_start: 199, page_end: 216 },
+      { para: 13, name: "Wa Ma Ubrioo (وما ابری)", page_start: 217, page_end: 234 },
+      { para: 14, name: "Rubama (ربما)", page_start: 235, page_end: 252 },
+      { para: 15, name: "Subhanallazi (سبحن الذی)", page_start: 253, page_end: 270 },
+      { para: 16, name: "Qala Alam (قال الم)", page_start: 271, page_end: 288 },
+      { para: 17, name: "Iqtaraba Lin-Nasi (اقترب للناس)", page_start: 289, page_end: 306 },
+      { para: 18, name: "Qad Aflaha (قد افلح)", page_start: 307, page_end: 324 },
+      { para: 19, name: "Wa Qalal Lazina (وقال الذین)", page_start: 325, page_end: 342 },
+      { para: 20, name: "Am-man Khalaq (امن خلق)", page_start: 343, page_end: 360 },
+      { para: 21, name: "Utlu Ma Oohiya (اتل ما اوحی)", page_start: 361, page_end: 378 },
+      { para: 22, name: "Wa Man Yaqnut (ومن یقنت)", page_start: 379, page_end: 396 },
+      { para: 23, name: "Wa Maliya (ومالی)", page_start: 397, page_end: 414 },
+      { para: 24, name: "Fa-man Azlam (فمن اظلم)", page_start: 415, page_end: 432 },
+      { para: 25, name: "Ilaihi Yuraddu (الیہ یرد)", page_start: 433, page_end: 450 },
+      { para: 26, name: "Ha-Meem (حم)", page_start: 451, page_end: 468 },
+      { para: 27, name: "Qala Fama Khatbukum (قال فما خطبکم)", page_start: 469, page_end: 486 },
+      { para: 28, name: "Qad Sami Allah (قد سمع اللہ)", page_start: 487, page_end: 504 },
+      { para: 29, name: "Tabarakallazi (تبارک الذی)", page_start: 505, page_end: 524 },
+      { para: 30, name: "Amma Yatasa'aloon (عمّ یتساءلون)", page_start: 525, page_end: 548 }
+    ];
+
+    function onTeacherQuranParaChanged(paraNum, targetPage = null) {
       const pageSelect = document.getElementById('attCoursePageSelect');
+      if (!pageSelect) return;
+      const pNum = Number(paraNum) || 1;
+      const allBooks = getTeacherAllBooks();
+      const bookId = document.getElementById('attCourseBookSelect')?.value || 'holy-quran-16-line';
+      const book = allBooks.find(b => b.id === bookId) || allBooks[0];
+
+      let pStart = (pNum - 1) * 18 + 1;
+      let pEnd = pNum * 18;
+      const matchedPara = (book?.paras || QURAN_PARAS_LIST).find(p => Number(p.para) === pNum);
+      if (matchedPara) {
+        pStart = Number(matchedPara.page_start) || pStart;
+        pEnd = Number(matchedPara.page_end) || pEnd;
+      }
+
+      const opts = [];
+      for (let i = pStart; i <= pEnd; i++) {
+        const offset = i - pStart + 1;
+        opts.push(`<option value="${i}">Page ${i} (Para ${pNum} &bull; Page ${offset})</option>`);
+      }
+      pageSelect.innerHTML = opts.join('');
+
+      if (targetPage && targetPage >= pStart && targetPage <= pEnd) {
+        pageSelect.value = targetPage;
+      } else {
+        pageSelect.value = pStart;
+      }
+    }
+
+    function onTeacherCourseBookChanged(bookId, defaultPara = null, defaultPage = null) {
+      const pageSelect = document.getElementById('attCoursePageSelect');
+      const paraContainer = document.getElementById('attQuranParaContainer');
+      const paraSelect = document.getElementById('attQuranParaSelect');
       if (!pageSelect) return;
 
       const allBooks = getTeacherAllBooks();
       const book = allBooks.find(b => b.id === bookId) || allBooks[0];
       if (!book) return;
 
-      let html = '';
-      if (book.id === 'quran-16-line' && book.paras) {
-        html = book.paras.map(p => `
-          <option value="${p.page_start}">Para ${p.para} (Page ${p.page_start})</option>
-        `).join('');
-      } else if (book.chapters && book.chapters.length > 0) {
-        html = book.chapters.map((ch, idx) => `
-          <option value="${ch.page_start || (idx + 1)}">Page ${ch.page_start || (idx + 1)} &bull; ${ch.title.slice(0, 30)}</option>
-        `).join('');
-      } else {
-        const total = book.total_pages || 32;
-        const opts = [];
-        for (let i = 1; i <= total; i++) {
-          opts.push(`<option value="${i}">Page ${i}</option>`);
-        }
-        html = opts.join('');
-      }
+      const isQuran = (book.id === 'holy-quran-16-line' || book.id === 'quran-16-line' || book.category === 'quran' || (book.title && book.title.toLowerCase().includes('quran')) || !!book.paras);
 
-      pageSelect.innerHTML = html;
+      if (isQuran) {
+        if (paraContainer) paraContainer.classList.remove('hidden');
+        if (paraSelect) {
+          const parasList = book.paras || QURAN_PARAS_LIST;
+          paraSelect.innerHTML = parasList.map(p => `
+            <option value="${p.para}">Para ${p.para}: ${p.name || p.name_ur || ('Juz ' + p.para)} (Pages ${p.page_start}-${p.page_end})</option>
+          `).join('');
+
+          let targetPara = defaultPara;
+          if (!targetPara && defaultPage) {
+            const foundP = parasList.find(p => defaultPage >= p.page_start && defaultPage <= p.page_end);
+            if (foundP) targetPara = foundP.para;
+          }
+          if (targetPara) {
+            paraSelect.value = targetPara;
+          }
+          onTeacherQuranParaChanged(paraSelect.value || 1, defaultPage);
+        }
+      } else {
+        if (paraContainer) paraContainer.classList.add('hidden');
+        let html = '';
+        if (book.chapters && book.chapters.length > 0) {
+          html = book.chapters.map((ch, idx) => `
+            <option value="${ch.page_start || (idx + 1)}">Page ${ch.page_start || (idx + 1)} &bull; ${ch.title.slice(0, 35)}</option>
+          `).join('');
+        } else {
+          const total = book.total_pages || 32;
+          const opts = [];
+          for (let i = 1; i <= total; i++) {
+            opts.push(`<option value="${i}">Page / Takhti ${i}</option>`);
+          }
+          html = opts.join('');
+        }
+        pageSelect.innerHTML = html;
+        if (defaultPage) {
+          pageSelect.value = defaultPage;
+        }
+      }
     }
 
     function previewTeacherSelectedMaterial() {
@@ -3785,7 +4284,7 @@
       } else if (cName.includes('kid') || cName.includes('cartoon') || cName.includes('child')) {
         suggestedBook = 'kids-cartoon-qaida';
       } else if (cName.includes('quran') || cName.includes('tajweed') || cName.includes('hifz') || cName.includes('nazra')) {
-        suggestedBook = 'quran-16-line';
+        suggestedBook = 'holy-quran-16-line';
       } else if (cName.includes('tafseer') || cName.includes('translation')) {
         suggestedBook = 'tafseer-taqi-usmani';
       }
@@ -3800,27 +4299,25 @@
         suggestedBook = parsedNotes.book_id;
       }
 
-      populateTeacherCourseBooks(suggestedBook);
-
       // Smart Resume logic
       const badge = document.getElementById('attLastSabaqBadge');
+      let resumePara = parsedNotes?.para || null;
+      let nextPage = 1;
       if (parsedNotes && parsedNotes.page) {
-        let nextPage = Number(parsedNotes.page);
+        nextPage = Number(parsedNotes.page);
         if (parsedNotes.status === 'Pass') {
           nextPage += 1;
           if (badge) {
-            badge.innerHTML = `<i class="fa-solid fa-check-double text-emerald-600"></i> Resuming Next: Page ${nextPage}`;
+            badge.innerHTML = `<i class="fa-solid fa-check-double text-emerald-600"></i> Resuming Next: Page ${nextPage}${resumePara ? ' (Para ' + resumePara + ')' : ''}`;
             badge.className = 'text-[10px] font-bold text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded-md border border-emerald-300';
           }
         } else {
           if (badge) {
-            badge.innerHTML = `<i class="fa-solid fa-rotate text-amber-600"></i> Revision / Repeat: Page ${nextPage}`;
+            badge.innerHTML = `<i class="fa-solid fa-rotate text-amber-600"></i> Revision / Repeat: Page ${nextPage}${resumePara ? ' (Para ' + resumePara + ')' : ''}`;
             badge.className = 'text-[10px] font-bold text-amber-800 bg-amber-100 px-2 py-0.5 rounded-md border border-amber-300';
           }
         }
 
-        const pSel = document.getElementById('attCoursePageSelect');
-        if (pSel) pSel.value = nextPage;
         document.getElementById('attLineRange').value = parsedNotes.line_range || '';
         document.getElementById('attSabaqResult').value = parsedNotes.status || 'Pass';
         document.getElementById('attSabaqRating').value = parsedNotes.rating || '5';
@@ -3834,7 +4331,10 @@
         document.getElementById('attLessonNotes').value = currentNotes || '';
       }
 
-      selectAttendanceStatus(currentStatus || 'Present');
+      populateTeacherCourseBooks(suggestedBook);
+      onTeacherCourseBookChanged(suggestedBook, resumePara, nextPage);
+
+      selectAttendanceStatus((currentStatus === 'Completed' || currentStatus === 'Running' || currentStatus === 'Waiting') ? 'Present' : (currentStatus || 'Present'));
       document.getElementById('modalTeacherAttendance').classList.remove('hidden');
       document.getElementById('modalTeacherAttendance').classList.add('flex');
       pushTeacherModalHistory('modalTeacherAttendance');
@@ -3859,8 +4359,8 @@
         if (b) b.className = 'py-2.5 rounded-xl font-bold border border-slate-300 bg-white text-slate-600 text-center hover:bg-slate-50 transition flex items-center justify-center gap-1.5';
       });
 
-      if (status === 'Present') {
-        btnP.className = 'py-2.5 rounded-xl font-extrabold border-2 border-emerald-600 bg-emerald-50 text-emerald-800 text-center transition flex items-center justify-center gap-1.5 shadow-xs';
+      if (status === 'Present' || status === 'Completed') {
+        if (btnP) btnP.className = 'py-2.5 rounded-xl font-extrabold border-2 border-emerald-600 bg-emerald-50 text-emerald-800 text-center transition flex items-center justify-center gap-1.5 shadow-xs';
         if (sabaqBox) sabaqBox.classList.remove('hidden');
         if (advDateBox) advDateBox.classList.add('hidden');
       } else if (status === 'Advance Class') {
@@ -3876,11 +4376,11 @@
           }
         }
       } else if (status === 'Absent') {
-        btnA.className = 'py-2.5 rounded-xl font-extrabold border-2 border-rose-600 bg-rose-50 text-rose-800 text-center transition flex items-center justify-center gap-1.5 shadow-xs';
+        if (btnA) btnA.className = 'py-2.5 rounded-xl font-extrabold border-2 border-rose-600 bg-rose-50 text-rose-800 text-center transition flex items-center justify-center gap-1.5 shadow-xs';
         if (sabaqBox) sabaqBox.classList.add('hidden');
         if (advDateBox) advDateBox.classList.add('hidden');
       } else if (status === 'Leave') {
-        btnL.className = 'py-2.5 rounded-xl font-extrabold border-2 border-blue-600 bg-blue-50 text-blue-800 text-center transition flex items-center justify-center gap-1.5 shadow-xs';
+        if (btnL) btnL.className = 'py-2.5 rounded-xl font-extrabold border-2 border-blue-600 bg-blue-50 text-blue-800 text-center transition flex items-center justify-center gap-1.5 shadow-xs';
         if (sabaqBox) sabaqBox.classList.add('hidden');
         if (advDateBox) advDateBox.classList.add('hidden');
       }
@@ -3889,14 +4389,15 @@
     async function saveAttendanceAndLessonNotes() {
       const schedule_id = document.getElementById('attScheduleId').value;
       const student_id = document.getElementById('attStudentId').value;
-      const status = document.getElementById('attSelectedStatus').value;
+      const selectedStatus = document.getElementById('attSelectedStatus').value;
+      const dbStatus = selectedStatus === 'Present' ? 'Completed' : selectedStatus;
       const date = new Date().toISOString().slice(0, 10);
 
       let lesson_notes = '';
 
-      if (status === 'Present' || status === 'Advance Class') {
+      if (selectedStatus === 'Present' || selectedStatus === 'Advance Class' || selectedStatus === 'Completed') {
         let targetDate = null;
-        if (status === 'Advance Class') {
+        if (selectedStatus === 'Advance Class') {
           targetDate = document.getElementById('attAdvanceTargetDate')?.value;
           if (!targetDate) {
             alert("Please choose the target date for which this advance class is taken.");
@@ -3904,7 +4405,7 @@
           }
         }
 
-        const bookId = document.getElementById('attCourseBookSelect')?.value || 'noorani-qaida-classic';
+        const bookId = document.getElementById('attCourseBookSelect')?.value || 'holy-quran-16-line';
         const allBooks = getTeacherAllBooks();
         const book = allBooks.find(b => b.id === bookId) || allBooks[0];
         const page = Number(document.getElementById('attCoursePageSelect')?.value || 1);
@@ -3913,15 +4414,19 @@
         const rating = Number(document.getElementById('attSabaqRating')?.value || 5);
         const remarks = (document.getElementById('attLessonNotes')?.value || '').trim();
 
+        const isQuran = (bookId === 'holy-quran-16-line' || bookId === 'quran-16-line' || book?.category === 'quran' || (book?.title && book.title.toLowerCase().includes('quran')) || !!book?.paras);
+        const selectedPara = isQuran ? Number(document.getElementById('attQuranParaSelect')?.value || 1) : null;
+
         const sabaqPayload = {
           book_id: bookId,
           book_title: book ? book.title : 'Course',
+          para: selectedPara,
           page: page,
           line_range: line_range,
           status: sabaq_result,
           rating: rating,
           remarks: remarks,
-          is_advance_class: (status === 'Advance Class'),
+          is_advance_class: (selectedStatus === 'Advance Class'),
           advance_target_date: targetDate,
           recorded_at: new Date().toISOString()
         };
@@ -3936,21 +4441,36 @@
       btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Saving...';
 
       try {
-        // Upsert into attendance_logs in Supabase
-        const { error } = await db.from('attendance_logs').upsert([{
+        const nowIso = new Date().toISOString();
+        const upsertRow = {
           schedule_id,
           student_id,
           teacher_id: CURRENT_TEACHER.id,
           date,
-          status,
-          lesson_notes
-        }], { onConflict: 'schedule_id,date' });
+          status: dbStatus,
+          lesson_notes,
+          recorded_at: nowIso
+        };
+        if (dbStatus === 'Completed') {
+          upsertRow.completed_at = nowIso;
+        }
+
+        const { error } = await db.from('attendance_logs').upsert([upsertRow], { onConflict: 'schedule_id,date' });
+
+        notifyClassSessionSync({
+          scheduleId: schedule_id,
+          studentId: student_id,
+          teacherId: CURRENT_TEACHER.id,
+          date,
+          status: dbStatus,
+          completed_at: upsertRow.completed_at
+        });
 
         btn.disabled = false;
         btn.innerHTML = '<i class="fa-solid fa-floppy-disk"></i> Save Progress';
         closeAttendanceModal();
         await loadTeacherPortalData();
-        alert(`✅ Attendance & Lesson Progress Saved Successfully!\n\nStatus: ${status}\nCourse: Registered & Connected with Student Portal.`);
+        alert(`✅ Attendance & Lesson Progress Saved Successfully!\n\nStatus: ${dbStatus}\nCourse: Registered & Connected with Student Portal.`);
       } catch (err) {
         console.error("Attendance save error:", err);
         btn.disabled = false;

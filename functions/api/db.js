@@ -160,6 +160,13 @@ async function ensureSchema(db) {
   // Backward-compatible schema patches for families table
   try { await db.prepare('ALTER TABLE families ADD COLUMN parent_email TEXT').run(); } catch (e) {}
   try { await db.prepare('ALTER TABLE families ADD COLUMN email TEXT').run(); } catch (e) {}
+  // Backward-compatible schema patches for attendance_logs table
+  try { await db.prepare('ALTER TABLE attendance_logs ADD COLUMN date TEXT').run(); } catch (e) {}
+  try { await db.prepare('ALTER TABLE attendance_logs ADD COLUMN lesson_notes TEXT').run(); } catch (e) {}
+  try { await db.prepare('ALTER TABLE attendance_logs ADD COLUMN waiting_at TEXT').run(); } catch (e) {}
+  try { await db.prepare('ALTER TABLE attendance_logs ADD COLUMN started_at TEXT').run(); } catch (e) {}
+  try { await db.prepare('ALTER TABLE attendance_logs ADD COLUMN completed_at TEXT').run(); } catch (e) {}
+  try { await db.prepare('ALTER TABLE attendance_logs ADD COLUMN recorded_at TEXT').run(); } catch (e) {}
 }
 
 function generateId(table) {
@@ -363,6 +370,19 @@ export async function onRequest(context) {
         });
       }
 
+      // Normalize attendance_logs date / class_date and lesson_notes / remarks
+      if (table === 'attendance_logs') {
+        const logList = Array.isArray(hydrated) ? hydrated : (hydrated ? [hydrated] : []);
+        logList.forEach(l => {
+          const dt = String(l.date || l.class_date || '').trim();
+          l.date = dt;
+          l.class_date = dt;
+          const notes = String(l.lesson_notes || l.remarks || '').trim();
+          l.lesson_notes = notes;
+          l.remarks = notes;
+        });
+      }
+
       const data = single ? (hydrated[0] || null) : hydrated;
       return new Response(JSON.stringify({ data, error: null }), {
         status: 200,
@@ -388,6 +408,20 @@ export async function onRequest(context) {
           if (em) {
             if (validCols.has('email')) row.email = em;
             if (validCols.has('parent_email')) row.parent_email = em;
+          }
+        }
+
+        // Bridge date / class_date and lesson_notes / remarks for attendance_logs
+        if (table === 'attendance_logs') {
+          const dt = String(row.date || row.class_date || '').trim();
+          if (dt) {
+            if (validCols.has('date')) row.date = dt;
+            if (validCols.has('class_date')) row.class_date = dt;
+          }
+          const notes = String(row.lesson_notes || row.remarks || '').trim();
+          if (notes) {
+            if (validCols.has('lesson_notes')) row.lesson_notes = notes;
+            if (validCols.has('remarks')) row.remarks = notes;
           }
         }
 
