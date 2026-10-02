@@ -259,6 +259,62 @@
       background-color: rgba(255, 255, 255, 0.16) !important;
       color: #fde68a !important;
     }
+
+    /* Collapsed Sidebar Styles on Desktop */
+    @media (min-width: 1024px) {
+      aside#teacherSidebar.is-collapsed {
+        width: 5rem !important;
+      }
+      aside#teacherSidebar.is-collapsed .sidebar-text,
+      aside#teacherSidebar.is-collapsed .sidebar-badge,
+      aside#teacherSidebar.is-collapsed .sidebar-group-title,
+      aside#teacherSidebar.is-collapsed #sbTeacherShiftDisplay,
+      aside#teacherSidebar.is-collapsed #sbTeacherNameDisplay,
+      aside#teacherSidebar.is-collapsed .sidebar-collapse-label {
+        display: none !important;
+      }
+      aside#teacherSidebar.is-collapsed .sidebar-nav-btn {
+        justify-content: center !important;
+        padding-left: 0.5rem !important;
+        padding-right: 0.5rem !important;
+      }
+      aside#teacherSidebar.is-collapsed .sidebar-nav-btn .sidebar-icon-box {
+        margin: 0 !important;
+      }
+      aside#teacherSidebar.is-collapsed .sidebar-card-inner {
+        padding: 0.75rem 0.5rem !important;
+      }
+    }
+
+    /* Independent Sidebar Vertical Scroll */
+    .custom-sidebar-scroll {
+      scrollbar-width: thin;
+      scrollbar-color: #cbd5e1 transparent;
+    }
+    .custom-sidebar-scroll::-webkit-scrollbar {
+      width: 5px;
+    }
+    .custom-sidebar-scroll::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    .custom-sidebar-scroll::-webkit-scrollbar-thumb {
+      background: #cbd5e1;
+      border-radius: 4px;
+    }
+    .custom-sidebar-scroll::-webkit-scrollbar-thumb:hover {
+      background: #94a3b8;
+    }
+
+    /* Whiteboard & Annotation Tool Styles */
+    .annotation-tool-btn.active {
+      background: #047857 !important;
+      color: #ffffff !important;
+      box-shadow: 0 0 0 2px #34d399 !important;
+    }
+    .annotation-color-btn.active {
+      transform: scale(1.18);
+      box-shadow: 0 0 0 2.5px #ffffff, 0 0 0 4px #059669;
+    }
   </style>
 </head>
 <body class="bg-slate-50 text-slate-800 font-sans min-h-screen flex flex-col antialiased">
@@ -269,8 +325,8 @@
       
       <!-- Brand Crest & Title -->
       <div class="flex items-center gap-3">
-        <!-- Mobile Sidebar Drawer Toggle (Only when authenticated) -->
-        <button id="btnToggleTeacherSidebar" onclick="toggleTeacherSidebar()" class="hidden lg:hidden p-2 text-emerald-200 hover:text-white hover:bg-emerald-900/60 rounded-xl transition" title="Toggle Navigation Sidebar">
+        <!-- Sidebar Drawer & Desktop Rail Toggle (When authenticated) -->
+        <button id="btnToggleTeacherSidebar" onclick="toggleTeacherSidebar()" class="hidden p-2 text-emerald-200 hover:text-white hover:bg-emerald-900/60 rounded-xl transition" title="Toggle Navigation Sidebar">
           <i class="fa-solid fa-bars text-lg"></i>
         </button>
         <a href="teacher.html" class="flex items-center gap-2.5 group" title="Al-Huda Islamic Centre LMS">
@@ -403,8 +459,8 @@
       <div class="flex flex-col lg:flex-row gap-6 items-start">
 
         <!-- ================= TEACHER PORTAL SIDEBAR ================= -->
-        <aside id="teacherSidebar" class="fixed inset-y-0 left-0 z-50 w-72 bg-white shadow-2xl p-4 flex flex-col transition-transform duration-300 -translate-x-full lg:translate-x-0 lg:static lg:z-auto lg:w-64 lg:p-0 lg:bg-transparent lg:shadow-none lg:flex-shrink-0">
-          <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 w-full space-y-5 lg:sticky lg:top-24">
+        <aside id="teacherSidebar" class="fixed inset-y-0 left-0 z-50 w-72 bg-white shadow-2xl p-4 flex flex-col transition-all duration-300 -translate-x-full lg:translate-x-0 lg:static lg:z-auto lg:w-64 lg:p-0 lg:bg-transparent lg:shadow-none lg:flex-shrink-0 overflow-y-auto max-h-screen lg:max-h-none lg:overflow-visible">
+          <div class="sidebar-card-inner bg-white rounded-2xl border border-slate-200 shadow-sm p-4 w-full space-y-4 lg:sticky lg:top-20 lg:max-h-[calc(100vh-5.5rem)] overflow-y-auto custom-sidebar-scroll">
 
             <!-- Mobile Header with Close Button -->
             <div class="flex items-center justify-between lg:hidden pb-3 border-b border-slate-100">
@@ -422,44 +478,55 @@
               </button>
             </div>
 
+            <!-- Desktop Sidebar Header (Collapse / Expand Rail Toggle) -->
+            <div class="hidden lg:flex items-center justify-between pb-2 border-b border-slate-100">
+              <div class="flex items-center gap-2 min-w-0">
+                <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
+                <span class="sidebar-collapse-label font-black text-[11px] uppercase tracking-wider text-slate-700 truncate">Menu Rail</span>
+              </div>
+              <button id="btnCollapseDesktopSidebar" onclick="toggleDesktopSidebar()" class="w-7 h-7 flex items-center justify-center text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition" title="Collapse / Expand Sidebar (Desktop)">
+                <i id="desktopCollapseIcon" class="fa-solid fa-chevron-left text-xs"></i>
+              </button>
+            </div>
+
             <!-- 1. MAIN Group -->
             <div>
-              <p class="text-[10px] font-black uppercase tracking-wider text-slate-400 px-3 mb-2 flex items-center justify-between">
+              <p class="sidebar-group-title text-[10px] font-black uppercase tracking-wider text-slate-400 px-3 mb-2 flex items-center justify-between">
                 <span>Main</span>
                 <i class="fa-solid fa-compass text-slate-300 text-[10px]"></i>
               </p>
               <nav class="space-y-1">
                 <!-- Dashboard -->
-                <button id="sbNavDashboard" onclick="switchTeacherPortalTab('dashboard'); toggleTeacherSidebar(false);" class="sidebar-nav-btn active w-full text-left px-3 py-2.5 flex items-center gap-2.5">
+                <button id="sbNavDashboard" onclick="switchTeacherPortalTab('dashboard'); toggleTeacherSidebar(false);" class="sidebar-nav-btn active w-full text-left px-3 py-2.5 flex items-center gap-2.5" title="Dashboard">
                   <span class="sidebar-icon-box"><i class="fa-solid fa-gauge-high"></i></span>
-                  <span class="truncate">Dashboard</span>
+                  <span class="sidebar-text truncate">Dashboard</span>
                 </button>
 
                 <!-- Student List -->
-                <button id="sbNavStudents" onclick="switchTeacherPortalTab('students'); toggleTeacherSidebar(false);" class="sidebar-nav-btn w-full text-left px-3 py-2.5 flex items-center gap-2.5">
+                <button id="sbNavStudents" onclick="switchTeacherPortalTab('students'); toggleTeacherSidebar(false);" class="sidebar-nav-btn w-full text-left px-3 py-2.5 flex items-center gap-2.5" title="Student List">
                   <span class="sidebar-icon-box"><i class="fa-solid fa-users"></i></span>
-                  <span class="truncate">Student List</span>
-                  <span id="sbBadgeStudentCount" class="ml-auto text-[10px] font-mono px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 font-extrabold border border-emerald-200">0</span>
+                  <span class="sidebar-text truncate">Student List</span>
+                  <span id="sbBadgeStudentCount" class="sidebar-badge ml-auto text-[10px] font-mono px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 font-extrabold border border-emerald-200">0</span>
                 </button>
 
                 <!-- Today's Classes -->
-                <button id="sbNavToday" onclick="switchTeacherPortalTab('today'); toggleTeacherSidebar(false);" class="sidebar-nav-btn w-full text-left px-3 py-2.5 flex items-center gap-2.5">
+                <button id="sbNavToday" onclick="switchTeacherPortalTab('today'); toggleTeacherSidebar(false);" class="sidebar-nav-btn w-full text-left px-3 py-2.5 flex items-center gap-2.5" title="Today's Classes">
                   <span class="sidebar-icon-box"><i class="fa-solid fa-calendar-check"></i></span>
-                  <span class="truncate">Today's Classes</span>
-                  <span id="sbBadgeTodayCount" class="ml-auto text-[10px] font-mono px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 font-extrabold border border-emerald-200">0</span>
+                  <span class="sidebar-text truncate">Today's Classes</span>
+                  <span id="sbBadgeTodayCount" class="sidebar-badge ml-auto text-[10px] font-mono px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 font-extrabold border border-emerald-200">0</span>
                 </button>
 
                 <!-- Full Week Schedule -->
-                <button id="sbNavWeekSchedule" onclick="openWeeklyMatrixModal(); toggleTeacherSidebar(false);" class="sidebar-nav-btn w-full text-left px-3 py-2.5 flex items-center gap-2.5">
+                <button id="sbNavWeekSchedule" onclick="openWeeklyMatrixModal(); toggleTeacherSidebar(false);" class="sidebar-nav-btn w-full text-left px-3 py-2.5 flex items-center gap-2.5" title="Full Week Schedule">
                   <span class="sidebar-icon-box"><i class="fa-solid fa-table-cells"></i></span>
-                  <span class="truncate">Full Week Schedule</span>
+                  <span class="sidebar-text truncate">Full Week Schedule</span>
                 </button>
               </nav>
             </div>
 
             <!-- 2. TEACHING Group -->
             <div class="pt-2 border-t border-slate-100">
-              <p class="text-[10px] font-black uppercase tracking-wider text-slate-400 px-3 mb-2 flex items-center justify-between">
+              <p class="sidebar-group-title text-[10px] font-black uppercase tracking-wider text-slate-400 px-3 mb-2 flex items-center justify-between">
                 <span>Teaching</span>
                 <i class="fa-solid fa-graduation-cap text-slate-300 text-[10px]"></i>
               </p>
@@ -467,45 +534,41 @@
                 <!-- Course Materials (Preserved, Digital Library removed) -->
                 <button id="sbNavCourseMaterials" onclick="openTeacherCourseMaterialsLibrary(); toggleTeacherSidebar(false);" class="sidebar-nav-btn w-full text-left px-3 py-2.5 flex items-center gap-2.5" title="Course Materials & Syllabus Library">
                   <span class="sidebar-icon-box"><i class="fa-solid fa-book-open-reader"></i></span>
-                  <span class="truncate">Course Materials</span>
+                  <span class="sidebar-text truncate">Course Materials</span>
                 </button>
 
                 <!-- Advanced Class (Replaces Lessons / Attendance) -->
                 <button id="sbNavAdvanceClass" onclick="openAdvanceClassModal(); toggleTeacherSidebar(false);" class="sidebar-nav-btn w-full text-left px-3 py-2.5 flex items-center gap-2.5" title="Open Advanced Class Controller">
                   <span class="sidebar-icon-box"><i class="fa-solid fa-chalkboard-user"></i></span>
-                  <span class="truncate">Advanced Class</span>
+                  <span class="sidebar-text truncate">Advanced Class</span>
                 </button>
 
                 <!-- Trial Classes -->
-                <button id="sbNavTrials" onclick="switchTeacherPortalTab('trials'); toggleTeacherSidebar(false);" class="sidebar-nav-btn w-full text-left px-3 py-2.5 flex items-center gap-2.5">
+                <button id="sbNavTrials" onclick="switchTeacherPortalTab('trials'); toggleTeacherSidebar(false);" class="sidebar-nav-btn w-full text-left px-3 py-2.5 flex items-center gap-2.5" title="Trial Classes">
                   <span class="sidebar-icon-box"><i class="fa-solid fa-award"></i></span>
-                  <span class="truncate">Trial Classes</span>
-                  <span id="sbBadgeTrialCount" class="ml-auto text-[10px] font-mono px-2 py-0.5 rounded-full bg-purple-100 text-purple-800 font-extrabold border border-purple-200">0</span>
+                  <span class="sidebar-text truncate">Trial Classes</span>
+                  <span id="sbBadgeTrialCount" class="sidebar-badge ml-auto text-[10px] font-mono px-2 py-0.5 rounded-full bg-purple-100 text-purple-800 font-extrabold border border-purple-200">0</span>
                 </button>
 
                 <!-- Previous Salaries (Single Source of Truth) -->
                 <button id="sbNavSalaries" onclick="switchTeacherPortalTab('salaries'); toggleTeacherSidebar(false);" class="sidebar-nav-btn w-full text-left px-3 py-2.5 flex items-center gap-2.5" title="Previous Salaries & Disbursed Slips">
                   <span class="sidebar-icon-box"><i class="fa-solid fa-receipt"></i></span>
-                  <span class="truncate">Previous Salaries</span>
-                  <span id="sbBadgeSalariesCount" class="ml-auto text-[10px] font-mono px-2 py-0.5 rounded-full bg-amber-100 text-amber-900 font-extrabold border border-amber-200">Slips</span>
+                  <span class="sidebar-text truncate">Previous Salaries</span>
+                  <span id="sbBadgeSalariesCount" class="sidebar-badge ml-auto text-[10px] font-mono px-2 py-0.5 rounded-full bg-amber-100 text-amber-900 font-extrabold border border-amber-200">Slips</span>
                 </button>
               </nav>
             </div>
 
             <!-- 3. ACTIONS Group -->
             <div class="pt-2 border-t border-slate-100">
-              <p class="text-[10px] font-black uppercase tracking-wider text-slate-400 px-3 mb-2 flex items-center justify-between">
+              <p class="sidebar-group-title text-[10px] font-black uppercase tracking-wider text-slate-400 px-3 mb-2 flex items-center justify-between">
                 <span>Quick Actions</span>
                 <i class="fa-solid fa-bolt text-slate-300 text-[10px]"></i>
               </p>
               <nav class="space-y-1">
-                <button onclick="openTeacherAddScheduleModal(); toggleTeacherSidebar(false);" class="sidebar-nav-btn w-full text-left px-3 py-2.5 flex items-center gap-2.5 text-emerald-800 hover:bg-emerald-50">
+                <button onclick="openTeacherAddScheduleModal(); toggleTeacherSidebar(false);" class="sidebar-nav-btn w-full text-left px-3 py-2.5 flex items-center gap-2.5 text-emerald-800 hover:bg-emerald-50" title="+ Schedule Student">
                   <span class="sidebar-icon-box bg-emerald-50 text-emerald-700"><i class="fa-solid fa-calendar-plus"></i></span>
-                  <span class="truncate font-bold">+ Schedule Student</span>
-                </button>
-                <button onclick="openTeacherLeaveRequestModal(); toggleTeacherSidebar(false);" class="sidebar-nav-btn w-full text-left px-3 py-2.5 flex items-center gap-2.5 text-amber-800 hover:bg-amber-50">
-                  <span class="sidebar-icon-box bg-amber-50 text-amber-700"><i class="fa-solid fa-umbrella-beach"></i></span>
-                  <span class="truncate font-bold">Leave Request</span>
+                  <span class="sidebar-text truncate font-bold">+ Schedule Student</span>
                 </button>
               </nav>
             </div>
@@ -1592,41 +1655,85 @@
     </div>
   </div>
 
-  <!-- ================= MODAL: 2D FULL WEEKLY TIMETABLE ================= -->
-  <div id="modalWeeklyMatrix" class="fixed inset-0 bg-black/70 backdrop-blur-xs z-50 hidden items-center justify-center p-2 sm:p-4 overflow-y-auto">
-    <div class="bg-white rounded-2xl max-w-6xl w-full p-4 sm:p-6 shadow-2xl border border-slate-200 max-h-[92vh] flex flex-col my-auto">
-      <div class="flex justify-between items-center mb-4 border-b pb-3 shrink-0 flex-wrap gap-2">
-        <div>
-          <h3 class="font-extrabold text-base text-slate-900 flex items-center gap-2">
-            <i class="fa-solid fa-table-cells text-brandEmerald"></i>
-            Full Weekly Timetable Matrix (Monday – Sunday)
-          </h3>
-          <p class="text-xs text-slate-500">Overview of all scheduled classes and custom durations across your working shift.</p>
+  <!-- ================= MODAL: FULL WEEKLY TIMETABLE MATRIX ================= -->
+  <div id="modalWeeklyMatrix" class="fixed inset-0 bg-black/75 backdrop-blur-xs z-50 hidden items-center justify-center p-2 sm:p-4 overflow-y-auto">
+    <div class="bg-white rounded-3xl max-w-6xl w-full p-4 sm:p-6 shadow-2xl border border-slate-200 max-h-[94vh] flex flex-col my-auto animate-scaleIn">
+      <!-- Header -->
+      <div class="flex justify-between items-center pb-3 border-b border-slate-200 shrink-0 flex-wrap gap-2.5">
+        <div class="flex items-center gap-3">
+          <div class="w-10 h-10 rounded-2xl bg-gradient-to-br from-emerald-800 to-teal-900 text-white flex items-center justify-center text-lg shadow-sm">
+            <i class="fa-solid fa-table-cells text-brandGold"></i>
+          </div>
+          <div>
+            <h3 class="font-extrabold text-base text-slate-900 flex items-center gap-2">
+              Weekly Timetable Matrix
+              <span id="matrixShiftBadge" class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">Shift</span>
+            </h3>
+            <p class="text-xs text-slate-500">Executive 7-day teaching schedule overview with live slot tracking and quick Zoom links</p>
+          </div>
         </div>
         <div class="flex items-center gap-2">
-          <button onclick="openTeacherAddScheduleModal()" class="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs rounded-xl transition flex items-center gap-1.5 shadow-xs">
-            <i class="fa-solid fa-calendar-plus"></i> + Add Student to Schedule
+          <button onclick="openTeacherAddScheduleModal()" class="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs rounded-xl transition flex items-center gap-1.5 shadow-xs whitespace-nowrap">
+            <i class="fa-solid fa-calendar-plus"></i> + Schedule Student
           </button>
-          <button onclick="closeWeeklyMatrixModal()" class="text-slate-400 hover:text-slate-600 text-xl font-bold px-2">&times;</button>
+          <button onclick="closeWeeklyMatrixModal()" class="w-8 h-8 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-500 hover:text-slate-800 flex items-center justify-center font-bold text-lg transition" title="Close">&times;</button>
         </div>
       </div>
 
-      <div class="overflow-auto touch-scroll flex-1 border border-slate-200 rounded-xl">
-        <table class="w-full text-xs text-left border-collapse min-w-[700px]">
-          <thead class="bg-slate-100 text-slate-700 font-bold border-b border-slate-200 sticky top-0 uppercase text-[10px]">
-            <tr>
-              <th class="p-2.5 border-r border-slate-200">Day</th>
-              <th class="p-2.5">Weekly Booked Class Sessions</th>
-            </tr>
-          </thead>
-          <tbody id="weeklyMatrixBody" class="divide-y divide-slate-100">
-            <!-- Rendered dynamically -->
-          </tbody>
-        </table>
+      <!-- Quick Metrics Strip -->
+      <div class="grid grid-cols-2 sm:grid-cols-4 gap-2.5 py-3 border-b border-slate-100 shrink-0">
+        <div class="p-2.5 rounded-xl bg-slate-50 border border-slate-200/80 flex items-center gap-2.5">
+          <div class="w-8 h-8 rounded-lg bg-emerald-100 text-emerald-800 flex items-center justify-center font-bold text-xs shrink-0">
+            <i class="fa-solid fa-calendar-week"></i>
+          </div>
+          <div class="min-w-0">
+            <span class="text-[10px] font-black uppercase tracking-wider text-slate-400 block truncate">Weekly Classes</span>
+            <span id="matrixTotalClasses" class="text-sm font-black text-slate-900 font-mono">0</span>
+          </div>
+        </div>
+        <div class="p-2.5 rounded-xl bg-slate-50 border border-slate-200/80 flex items-center gap-2.5">
+          <div class="w-8 h-8 rounded-lg bg-purple-100 text-purple-800 flex items-center justify-center font-bold text-xs shrink-0">
+            <i class="fa-solid fa-users"></i>
+          </div>
+          <div class="min-w-0">
+            <span class="text-[10px] font-black uppercase tracking-wider text-slate-400 block truncate">Assigned Students</span>
+            <span id="matrixUniqueStudents" class="text-sm font-black text-slate-900 font-mono">0</span>
+          </div>
+        </div>
+        <div class="p-2.5 rounded-xl bg-slate-50 border border-slate-200/80 flex items-center gap-2.5">
+          <div class="w-8 h-8 rounded-lg bg-amber-100 text-amber-900 flex items-center justify-center font-bold text-xs shrink-0">
+            <i class="fa-solid fa-clock"></i>
+          </div>
+          <div class="min-w-0">
+            <span class="text-[10px] font-black uppercase tracking-wider text-slate-400 block truncate">Teaching Load</span>
+            <span id="matrixTotalHours" class="text-sm font-black text-slate-900 font-mono">0 hrs / wk</span>
+          </div>
+        </div>
+        <div class="p-2.5 rounded-xl bg-slate-50 border border-slate-200/80 flex items-center gap-2.5">
+          <div class="w-8 h-8 rounded-lg bg-teal-100 text-teal-800 flex items-center justify-center font-bold text-xs shrink-0">
+            <i class="fa-solid fa-bolt"></i>
+          </div>
+          <div class="min-w-0">
+            <span class="text-[10px] font-black uppercase tracking-wider text-slate-400 block truncate">Today's Load</span>
+            <span id="matrixTodayLoad" class="text-sm font-black text-teal-900 font-mono">0 Scheduled</span>
+          </div>
+        </div>
       </div>
 
-      <div class="mt-4 pt-3 border-t text-right shrink-0">
-        <button onclick="closeWeeklyMatrixModal()" class="w-full sm:w-auto px-5 py-2.5 bg-slate-800 text-white font-bold text-xs rounded-xl hover:bg-slate-900 transition text-center">
+      <!-- Day Filter Tabs / Bar (Mobile & Tablet Friendly) -->
+      <div class="py-2.5 flex items-center gap-1.5 overflow-x-auto touch-scroll shrink-0 border-b border-slate-100" id="matrixDayTabs">
+        <!-- Rendered dynamically -->
+      </div>
+
+      <!-- Main Matrix Body / Cards -->
+      <div id="weeklyMatrixContainer" class="flex-1 overflow-y-auto touch-scroll py-3 space-y-4 pr-1">
+        <!-- Dynamically rendered day cards or timetable grid -->
+      </div>
+
+      <!-- Footer -->
+      <div class="pt-3 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500 shrink-0 flex-wrap gap-2">
+        <span class="flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span> Synchronized with live Al-Huda schedules</span>
+        <button onclick="closeWeeklyMatrixModal()" class="px-5 py-2 bg-slate-800 hover:bg-slate-900 text-white font-extrabold rounded-xl transition">
           Close Timetable
         </button>
       </div>
@@ -1829,6 +1936,10 @@
           <button onclick="fitReaderPage()" class="hidden sm:flex w-7 h-7 rounded-lg bg-zinc-800/90 hover:bg-zinc-700 text-zinc-300 hover:text-white items-center justify-center border border-zinc-700/70 transition" title="Fit to Page">
             <i class="fa-solid fa-expand text-[11px]"></i>
           </button>
+          <button id="btnToggleWhiteboard" onclick="toggleReaderWhiteboard()" class="px-2.5 py-1 rounded-lg bg-zinc-800/90 hover:bg-emerald-800 text-zinc-300 hover:text-white flex items-center gap-1.5 border border-zinc-700/70 transition text-xs font-bold cursor-pointer" title="Toggle Live Whiteboard & Annotation Tools (Fine Pen, Marker, Shapes)">
+            <i class="fa-solid fa-pen-nib text-emerald-400"></i>
+            <span class="hidden md:inline">Annotate</span>
+          </button>
         </div>
 
         <!-- Right: Window Actions -->
@@ -1838,6 +1949,82 @@
           </button>
           <button onclick="closeDigitalBookReader()" class="w-8 h-8 rounded-lg bg-zinc-800/80 hover:bg-zinc-700 text-zinc-300 hover:text-rose-400 flex items-center justify-center transition font-bold text-lg border border-zinc-700/60" title="Close Viewer (Esc)">
             &times;
+          </button>
+        </div>
+      </div>
+
+      <!-- WHITEBOARD & ANNOTATION TOOLBAR (TASKS 7, 8, 9) -->
+      <div id="readerAnnotationToolbar" class="hidden bg-zinc-900/98 px-3 py-2 border-b border-zinc-800 flex items-center justify-between flex-wrap gap-2 text-xs z-30 shadow-md">
+        <!-- Tools Palette -->
+        <div class="flex items-center gap-1.5 flex-wrap">
+          <!-- Fine Pen -->
+          <button type="button" id="toolBtnPen" onclick="selectAnnotationTool('pen')" class="annotation-tool-btn active px-2.5 py-1.5 rounded-lg bg-zinc-800 text-zinc-200 hover:text-white flex items-center gap-1 text-xs font-bold transition cursor-pointer" title="Fine Pen (P)">
+            <i class="fa-solid fa-pen"></i> <span class="hidden sm:inline">Pen</span>
+          </button>
+          <!-- Highlighter -->
+          <button type="button" id="toolBtnHighlighter" onclick="selectAnnotationTool('highlighter')" class="annotation-tool-btn px-2.5 py-1.5 rounded-lg bg-zinc-800 text-zinc-200 hover:text-white flex items-center gap-1 text-xs font-bold transition cursor-pointer" title="Highlighter / Marker (H)">
+            <i class="fa-solid fa-highlighter text-amber-400"></i> <span class="hidden sm:inline">Highlighter</span>
+          </button>
+          <!-- Eraser -->
+          <button type="button" id="toolBtnEraser" onclick="selectAnnotationTool('eraser')" class="annotation-tool-btn px-2.5 py-1.5 rounded-lg bg-zinc-800 text-zinc-200 hover:text-white flex items-center gap-1 text-xs font-bold transition cursor-pointer" title="Eraser (E)">
+            <i class="fa-solid fa-eraser text-rose-400"></i> <span class="hidden sm:inline">Eraser</span>
+          </button>
+
+          <div class="w-[1px] h-5 bg-zinc-700 mx-1 hidden sm:block"></div>
+
+          <!-- Shapes Selector -->
+          <div class="flex items-center bg-zinc-800/90 rounded-lg p-0.5 border border-zinc-700/60">
+            <button type="button" id="toolBtnLine" onclick="selectAnnotationTool('line')" class="annotation-tool-btn w-7 h-7 rounded hover:bg-zinc-700 text-zinc-300 hover:text-white flex items-center justify-center transition cursor-pointer" title="Line (L)">
+              <i class="fa-solid fa-slash text-[11px]"></i>
+            </button>
+            <button type="button" id="toolBtnArrow" onclick="selectAnnotationTool('arrow')" class="annotation-tool-btn w-7 h-7 rounded hover:bg-zinc-700 text-zinc-300 hover:text-white flex items-center justify-center transition cursor-pointer" title="Arrow (A)">
+              <i class="fa-solid fa-arrow-right text-[11px]"></i>
+            </button>
+            <button type="button" id="toolBtnRect" onclick="selectAnnotationTool('rect')" class="annotation-tool-btn w-7 h-7 rounded hover:bg-zinc-700 text-zinc-300 hover:text-white flex items-center justify-center transition cursor-pointer" title="Rectangle (R)">
+              <i class="fa-regular fa-square text-[11px]"></i>
+            </button>
+            <button type="button" id="toolBtnCircle" onclick="selectAnnotationTool('circle')" class="annotation-tool-btn w-7 h-7 rounded hover:bg-zinc-700 text-zinc-300 hover:text-white flex items-center justify-center transition cursor-pointer" title="Circle (C)">
+              <i class="fa-regular fa-circle text-[11px]"></i>
+            </button>
+            <button type="button" id="toolBtnText" onclick="selectAnnotationTool('text')" class="annotation-tool-btn w-7 h-7 rounded hover:bg-zinc-700 text-zinc-300 hover:text-white flex items-center justify-center transition cursor-pointer" title="Text Label (T)">
+              <i class="fa-solid fa-font text-[11px]"></i>
+            </button>
+          </div>
+
+          <div class="w-[1px] h-5 bg-zinc-700 mx-1 hidden sm:block"></div>
+
+          <!-- Stroke Size Selector -->
+          <select id="annotationStrokeSelect" onchange="setAnnotationStroke(this.value)" class="bg-zinc-800 text-zinc-200 text-xs rounded-lg px-2 py-1 border border-zinc-700 cursor-pointer" title="Stroke Thickness">
+            <option value="2">Fine (2px)</option>
+            <option value="4" selected>Medium (4px)</option>
+            <option value="8">Bold (8px)</option>
+            <option value="16">Broad (16px)</option>
+          </select>
+
+          <!-- Colors Palette -->
+          <div class="flex items-center gap-1.5 ml-1">
+            <button type="button" onclick="setAnnotationColor('#dc2626')" class="annotation-color-btn w-5 h-5 rounded-full bg-red-600 transition border border-white/20 active cursor-pointer" data-color="#dc2626" title="Red"></button>
+            <button type="button" onclick="setAnnotationColor('#16a34a')" class="annotation-color-btn w-5 h-5 rounded-full bg-emerald-600 transition border border-white/20 cursor-pointer" data-color="#16a34a" title="Green"></button>
+            <button type="button" onclick="setAnnotationColor('#2563eb')" class="annotation-color-btn w-5 h-5 rounded-full bg-blue-600 transition border border-white/20 cursor-pointer" data-color="#2563eb" title="Blue"></button>
+            <button type="button" onclick="setAnnotationColor('#eab308')" class="annotation-color-btn w-5 h-5 rounded-full bg-yellow-500 transition border border-white/20 cursor-pointer" data-color="#eab308" title="Gold / Yellow"></button>
+            <button type="button" onclick="setAnnotationColor('#111827')" class="annotation-color-btn w-5 h-5 rounded-full bg-black transition border border-zinc-600 cursor-pointer" data-color="#111827" title="Black"></button>
+            <button type="button" onclick="setAnnotationColor('#ffffff')" class="annotation-color-btn w-5 h-5 rounded-full bg-white transition border border-zinc-400 cursor-pointer" data-color="#ffffff" title="White"></button>
+          </div>
+        </div>
+
+        <!-- Annotation Actions -->
+        <div class="flex items-center gap-1.5">
+          <button type="button" onclick="undoAnnotation()" class="px-2.5 py-1 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded-lg text-xs font-bold transition flex items-center gap-1 cursor-pointer" title="Undo (Ctrl+Z)">
+            <i class="fa-solid fa-rotate-left"></i> <span class="hidden sm:inline">Undo</span>
+          </button>
+          <button type="button" onclick="redoAnnotation()" class="px-2.5 py-1 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded-lg text-xs font-bold transition flex items-center gap-1 cursor-pointer" title="Redo (Ctrl+Y)">
+            <i class="fa-solid fa-rotate-right"></i> <span class="hidden sm:inline">Redo</span>
+          </button>
+          <button type="button" onclick="clearAnnotationCanvas()" class="px-2.5 py-1 bg-rose-950/70 hover:bg-rose-900 text-rose-200 rounded-lg text-xs font-bold transition flex items-center gap-1 border border-rose-800 cursor-pointer" title="Clear Canvas">
+            <i class="fa-solid fa-trash-can"></i> <span class="hidden sm:inline">Clear</span>
+          </button>
+          <button type="button" onclick="downloadAnnotatedPage()" class="px-3 py-1 bg-emerald-700 hover:bg-emerald-600 text-white rounded-lg text-xs font-black transition flex items-center gap-1 shadow-xs cursor-pointer" title="Save / Download Annotated Page">
+            <i class="fa-solid fa-download"></i> <span class="hidden sm:inline">Save Page</span>
           </button>
         </div>
       </div>
@@ -1864,6 +2051,7 @@
             <div id="readerCanvasWrapper" class="relative inline-block max-h-[80vh] max-w-full origin-center select-none">
               <img id="readerPageImg" src="" alt="Document Page" 
                 class="max-h-[80vh] w-auto max-w-full rounded shadow-[0_15px_35px_rgba(0,0,0,0.5),0_0_0_1px_rgba(255,255,255,0.08)] object-contain bg-white block select-none pointer-events-none transition-shadow" />
+              <canvas id="readerAnnotationCanvas" class="absolute inset-0 w-full h-full pointer-events-none cursor-crosshair z-10 rounded"></canvas>
             </div>
           </div>
 
@@ -1995,32 +2183,67 @@
           </div>
         </div>
 
-        <!-- Right Column: Interactive Page Preview Canvas (7 Cols) -->
-        <div class="lg:col-span-7 flex flex-col items-center justify-between bg-white rounded-2xl border border-slate-200 shadow-xs p-4 sm:p-5">
-          <!-- Canvas Top Controls -->
-          <div class="w-full flex items-center justify-between pb-3 border-b border-slate-100 mb-3 text-xs">
+        <!-- Right Column: Interactive Page Preview Canvas (7 Cols) (TASK 6) -->
+        <div class="lg:col-span-7 flex flex-col items-center justify-between bg-slate-900/5 rounded-2xl border border-slate-200/90 shadow-sm p-3.5 sm:p-5">
+          <!-- Canvas Top Controls (Executive Book Toolbar) -->
+          <div class="w-full flex items-center justify-between pb-3 border-b border-slate-200/80 mb-3 text-xs flex-wrap gap-2">
+            <!-- Left: Page indicator & info -->
             <div class="flex items-center gap-2">
-              <span class="font-bold text-slate-700" id="previewPageIndicator">Page 1 of 32</span>
-              <span class="text-[11px] text-slate-400 hidden sm:inline">&bull; High-Fidelity Vector View</span>
+              <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-800 border border-emerald-200/80 font-bold font-mono" id="previewPageIndicator">
+                <i class="fa-solid fa-file-lines text-xs text-emerald-600"></i> Page 1 of 32
+              </span>
+              <span class="text-[11px] text-slate-500 font-medium hidden sm:inline">&bull; High-Fidelity Study View</span>
             </div>
-            <div class="flex items-center gap-1.5">
-              <button onclick="changePreviewPage(-1)" class="px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold transition flex items-center gap-1" title="Previous Page">
-                <i class="fa-solid fa-chevron-left text-xs"></i> <span class="hidden sm:inline">Prev</span>
-              </button>
-              <button onclick="changePreviewPage(1)" class="px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold transition flex items-center gap-1" title="Next Page">
-                <span class="hidden sm:inline">Next</span> <i class="fa-solid fa-chevron-right text-xs"></i>
-              </button>
+
+            <!-- Middle/Right: Zoom & Navigation Controls -->
+            <div class="flex items-center gap-2">
+              <!-- Zoom Suite -->
+              <div class="flex items-center bg-white rounded-lg border border-slate-200 p-0.5 shadow-2xs">
+                <button type="button" onclick="changePreviewZoom(-0.1)" class="w-6 h-6 rounded flex items-center justify-center text-slate-600 hover:text-slate-900 hover:bg-slate-100 transition cursor-pointer" title="Zoom Out (-)">
+                  <i class="fa-solid fa-minus text-[10px]"></i>
+                </button>
+                <span id="previewZoomLevel" class="text-[11px] font-mono font-bold text-slate-700 px-1.5 min-w-[38px] text-center select-none">100%</span>
+                <button type="button" onclick="changePreviewZoom(0.1)" class="w-6 h-6 rounded flex items-center justify-center text-slate-600 hover:text-slate-900 hover:bg-slate-100 transition cursor-pointer" title="Zoom In (+)">
+                  <i class="fa-solid fa-plus text-[10px]"></i>
+                </button>
+                <div class="w-[1px] h-3.5 bg-slate-200 mx-0.5"></div>
+                <button type="button" onclick="fitPreviewWidth()" class="px-1.5 h-6 rounded text-[10px] font-bold text-slate-600 hover:text-slate-900 hover:bg-slate-100 transition cursor-pointer" title="Fit Width">
+                  Fit
+                </button>
+                <button type="button" onclick="resetPreviewZoom()" class="px-1.5 h-6 rounded text-[10px] font-bold text-slate-600 hover:text-slate-900 hover:bg-slate-100 transition cursor-pointer" title="Reset Zoom (100%)">
+                  100%
+                </button>
+              </div>
+
+              <!-- Page Step Buttons -->
+              <div class="flex items-center gap-1">
+                <button type="button" onclick="changePreviewPage(-1)" class="px-2.5 py-1 rounded-lg bg-white hover:bg-slate-100 text-slate-700 font-bold border border-slate-200 shadow-2xs transition flex items-center gap-1 cursor-pointer" title="Previous Page">
+                  <i class="fa-solid fa-chevron-left text-xs"></i> <span class="hidden sm:inline">Prev</span>
+                </button>
+                <button type="button" onclick="changePreviewPage(1)" class="px-2.5 py-1 rounded-lg bg-white hover:bg-slate-100 text-slate-700 font-bold border border-slate-200 shadow-2xs transition flex items-center gap-1 cursor-pointer" title="Next Page">
+                  <span class="hidden sm:inline">Next</span> <i class="fa-solid fa-chevron-right text-xs"></i>
+                </button>
+              </div>
             </div>
           </div>
 
-          <!-- Page Stage -->
-          <div class="w-full flex-1 min-h-[380px] max-h-[500px] flex items-center justify-center bg-slate-900/5 rounded-xl border border-slate-200/80 p-2 overflow-hidden">
-            <img id="previewCanvasImg" src="" alt="Course Material Page Preview" class="max-h-[480px] w-auto max-w-full rounded-lg shadow-md object-contain bg-white transition-all" />
+          <!-- Page Stage: Realistic Archival Reading Surface -->
+          <div id="previewStageContainer" class="w-full flex-1 min-h-[380px] max-h-[500px] flex items-center justify-center bg-gradient-to-b from-stone-100/90 to-amber-50/40 rounded-xl border border-stone-200/90 p-3 sm:p-4 overflow-auto relative select-none">
+            <!-- Floating Navigation Chevrons inside stage -->
+            <button type="button" onclick="changePreviewPage(-1)" class="absolute left-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-white/90 hover:bg-white text-slate-700 shadow-md border border-slate-200/80 flex items-center justify-center transition z-10 opacity-70 hover:opacity-100 cursor-pointer" title="Previous Page">
+              <i class="fa-solid fa-chevron-left text-xs"></i>
+            </button>
+            <button type="button" onclick="changePreviewPage(1)" class="absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-white/90 hover:bg-white text-slate-700 shadow-md border border-slate-200/80 flex items-center justify-center transition z-10 opacity-70 hover:opacity-100 cursor-pointer" title="Next Page">
+              <i class="fa-solid fa-chevron-right text-xs"></i>
+            </button>
+
+            <!-- Book Page Image with authentic document drop shadow -->
+            <img id="previewCanvasImg" src="" alt="Course Material Page Preview" class="max-h-[460px] w-auto max-w-full rounded-md shadow-[0_12px_32px_rgba(0,0,0,0.18),0_1px_3px_rgba(0,0,0,0.08)] object-contain bg-white transition-transform duration-150" />
           </div>
 
-          <!-- Canvas Bottom Slider -->
-          <div class="w-full pt-3 mt-3 border-t border-slate-100 flex items-center gap-3">
-            <span class="text-[11px] font-mono text-slate-500 font-semibold">1</span>
+          <!-- Canvas Bottom Slider & Jump Controls -->
+          <div class="w-full pt-3 mt-3 border-t border-slate-200/80 flex items-center gap-3">
+            <span class="text-[11px] font-mono text-slate-500 font-semibold">Page 1</span>
             <input type="range" id="previewPageSlider" min="1" max="32" value="1" oninput="jumpToPreviewPage(this.value)" class="flex-1 accent-emerald-600 cursor-pointer h-1.5 bg-slate-200 rounded-lg">
             <span class="text-[11px] font-mono text-slate-500 font-semibold" id="previewMaxPageLabel">32</span>
           </div>
@@ -2391,25 +2614,88 @@
       }
 
       if (parsedSession && parsedSession.id) {
-        const { teachers, accountsMap } = await fetchTeachersAndAccountsFromBackend();
-        const verifiedTeacher = teachers.find(t => String(t.id) === String(parsedSession.id));
-        if (verifiedTeacher && isEligibleTeacherAccount(verifiedTeacher, accountsMap)) {
-          CURRENT_TEACHER = verifiedTeacher;
-          localStorage.setItem('alhuda_logged_in_teacher', JSON.stringify(verifiedTeacher));
-          sessionStorage.setItem('alhuda_teacher_session', JSON.stringify(verifiedTeacher));
+        try {
+          const { teachers, accountsMap } = await fetchTeachersAndAccountsFromBackend();
+          if (teachers && teachers.length > 0) {
+            const verifiedTeacher = teachers.find(t => String(t.id) === String(parsedSession.id));
+            if (verifiedTeacher && isEligibleTeacherAccount(verifiedTeacher, accountsMap)) {
+              CURRENT_TEACHER = normalizeTeacherSession(verifiedTeacher);
+              localStorage.setItem('alhuda_logged_in_teacher', JSON.stringify(CURRENT_TEACHER));
+              sessionStorage.setItem('alhuda_teacher_session', JSON.stringify(CURRENT_TEACHER));
+              showDashboardView();
+              return;
+            } else if (verifiedTeacher && !isEligibleTeacherAccount(verifiedTeacher, accountsMap)) {
+              // Genuinely deactivated by admin
+              localStorage.removeItem('alhuda_logged_in_teacher');
+              sessionStorage.removeItem('alhuda_teacher_session');
+              if (localStorage.getItem('alhuda_active_portal_role') === 'teacher') localStorage.removeItem('alhuda_active_portal_role');
+              CURRENT_TEACHER = null;
+            } else {
+              // Not matched in freshly returned teachers but might be offline/cached
+              CURRENT_TEACHER = normalizeTeacherSession(parsedSession);
+              showDashboardView();
+              return;
+            }
+          } else {
+            // Backend offline or empty response: fall back to cached session
+            CURRENT_TEACHER = normalizeTeacherSession(parsedSession);
+            showDashboardView();
+            return;
+          }
+        } catch (fetchErr) {
+          console.warn('[Teacher Session Init] Backend check offline, falling back to cached session:', fetchErr);
+          CURRENT_TEACHER = normalizeTeacherSession(parsedSession);
           showDashboardView();
           return;
-        } else {
-          // Invalid or deactivated session — clear and show Login
-          localStorage.removeItem('alhuda_logged_in_teacher');
-          sessionStorage.removeItem('alhuda_teacher_session');
-          if (localStorage.getItem('alhuda_active_portal_role') === 'teacher') localStorage.removeItem('alhuda_active_portal_role');
-          CURRENT_TEACHER = null;
         }
       }
 
       showLoginView();
     };
+
+    // Normalize Teacher Profile, Zoom link, and Account Metadata
+    function normalizeTeacherSession(teacherObj) {
+      if (!teacherObj) return null;
+      const t = { ...teacherObj };
+      const meta = parseEmployeeMeta(t.address);
+      let accountsMap = {};
+      try { accountsMap = JSON.parse(localStorage.getItem('alhuda_teacher_accounts') || '{}'); } catch(e) {}
+      const acc = (t.id && accountsMap[t.id]) ? accountsMap[t.id] : (meta.teacher_account || {});
+
+      // 1. Resolve Zoom Link with full fallback hierarchy (profile column -> address JSON -> accounts map -> meta)
+      let rawZoom = String(t.zoom_link || acc.zoom_link || meta.zoom_link || meta.teacher_account?.zoom_link || '').trim();
+      if (rawZoom) {
+        if (/^\d{8,11}$/.test(rawZoom)) {
+          rawZoom = `https://zoom.us/j/${rawZoom}`;
+        } else if (!rawZoom.startsWith('http://') && !rawZoom.startsWith('https://')) {
+          rawZoom = `https://${rawZoom}`;
+        }
+      }
+      t.zoom_link = rawZoom;
+
+      // 2. Resolve username, role, and shift
+      t.username = t.username || acc.username || meta.username || meta.teacher_account?.username || '';
+      t.working_shift = t.working_shift || acc.shift || meta.shift || meta.teacher_account?.shift || 'Shift Not Set';
+      t.portal_role = t.portal_role || acc.role || meta.role || meta.teacher_account?.role || 'teacher';
+      return t;
+    }
+
+    // Resolve Effective Zoom Link for Any Scheduled Class
+    function resolveEffectiveClassZoomLink(classSchedule, teacherObj = null) {
+      const activeTeacher = teacherObj || CURRENT_TEACHER;
+      let raw = String(classSchedule?.meeting_link || '').trim();
+      if (!raw && activeTeacher?.zoom_link) {
+        raw = String(activeTeacher.zoom_link).trim();
+      }
+      if (raw) {
+        if (/^\d{8,11}$/.test(raw)) {
+          raw = `https://zoom.us/j/${raw}`;
+        } else if (!raw.startsWith('http://') && !raw.startsWith('https://')) {
+          raw = `https://${raw}`;
+        }
+      }
+      return raw;
+    }
 
     function togglePassVisibility() {
       const p = document.getElementById('loginPassword');
@@ -2486,9 +2772,9 @@
       btn.innerHTML = '<i class="fa-solid fa-right-to-bracket"></i> Login to Teacher Portal';
 
       if (matchedTeacher) {
-        CURRENT_TEACHER = matchedTeacher;
-        localStorage.setItem('alhuda_logged_in_teacher', JSON.stringify(matchedTeacher));
-        sessionStorage.setItem('alhuda_teacher_session', JSON.stringify(matchedTeacher));
+        CURRENT_TEACHER = normalizeTeacherSession(matchedTeacher);
+        localStorage.setItem('alhuda_logged_in_teacher', JSON.stringify(CURRENT_TEACHER));
+        sessionStorage.setItem('alhuda_teacher_session', JSON.stringify(CURRENT_TEACHER));
         localStorage.setItem('alhuda_active_portal_role', 'teacher');
         localStorage.removeItem('alhuda_logged_in_manager');
         sessionStorage.removeItem('alhuda_manager_session');
@@ -2536,6 +2822,12 @@
       if (libBtn) {
         libBtn.classList.add('hidden');
         libBtn.classList.remove('flex');
+      }
+
+      // Restore desktop sidebar collapsed preference if on desktop
+      const savedCollapsed = localStorage.getItem('alhuda_teacher_sidebar_collapsed') === 'true';
+      if (window.innerWidth >= 1024) {
+        toggleDesktopSidebar(savedCollapsed);
       }
 
       // Populate hero
@@ -2672,11 +2964,11 @@
 
       document.getElementById('todayDateSubtitle').innerText = `${DAY_NAMES[currentDay]}, ${now.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })} (Asia/Karachi PKT)`;
 
-      // Refresh CURRENT_TEACHER's latest zoom_link from backend if updated
+      // Refresh CURRENT_TEACHER's latest zoom_link and profile from backend if updated
       try {
         const { data: freshTeacher } = await db.from('teachers').select('*').eq('id', CURRENT_TEACHER.id).single();
         if (freshTeacher && freshTeacher.id) {
-          CURRENT_TEACHER = { ...CURRENT_TEACHER, ...freshTeacher };
+          CURRENT_TEACHER = normalizeTeacherSession({ ...CURRENT_TEACHER, ...freshTeacher });
         }
       } catch (e) {}
 
@@ -3335,7 +3627,7 @@
           </button>
         ` : '';
 
-        const effectiveZoomLink = String(c.meeting_link || CURRENT_TEACHER?.zoom_link || '').trim();
+        const effectiveZoomLink = resolveEffectiveClassZoomLink(c, CURRENT_TEACHER);
         let zoomBtn = '<span class="px-2 py-1 rounded-lg text-[10px] font-bold bg-slate-100 text-slate-500 border border-slate-200">Zoom meeting not configured.</span>';
         if (effectiveZoomLink) {
           zoomBtn = `
@@ -3477,7 +3769,7 @@
         alert("Class record not found. Please refresh the page.");
         return;
       }
-      const zoomLink = String(c.meeting_link || CURRENT_TEACHER?.zoom_link || '').trim();
+      const zoomLink = resolveEffectiveClassZoomLink(c, CURRENT_TEACHER);
       launchTeacherZoomClass(c.id, zoomLink, c.students?.name || 'Student', c.student_id);
     }
 
@@ -4305,6 +4597,8 @@
       }
       if (maxLabel) maxLabel.textContent = totalPages;
 
+      PREVIEW_ZOOM = 1.0;
+      applyPreviewZoom();
       renderPreviewPage();
 
       const modal = document.getElementById('modalCourseMaterialPreview');
@@ -4313,6 +4607,48 @@
         modal.classList.add('flex');
         pushTeacherModalHistory('modalCourseMaterialPreview');
       }
+    }
+
+    let PREVIEW_ZOOM = 1.0;
+
+    function applyPreviewZoom() {
+      const img = document.getElementById('previewCanvasImg');
+      const lbl = document.getElementById('previewZoomLevel');
+      if (img) {
+        img.style.transform = `scale(${PREVIEW_ZOOM})`;
+        img.style.transformOrigin = 'center center';
+        img.style.transition = 'transform 0.15s ease-out';
+      }
+      if (lbl) {
+        lbl.textContent = `${Math.round(PREVIEW_ZOOM * 100)}%`;
+      }
+    }
+
+    function changePreviewZoom(delta) {
+      PREVIEW_ZOOM = Math.max(0.6, Math.min(2.5, Math.round((PREVIEW_ZOOM + delta) * 10) / 10));
+      applyPreviewZoom();
+    }
+
+    function resetPreviewZoom() {
+      PREVIEW_ZOOM = 1.0;
+      applyPreviewZoom();
+    }
+
+    function fitPreviewWidth() {
+      const container = document.getElementById('previewStageContainer');
+      const img = document.getElementById('previewCanvasImg');
+      if (!container || !img) {
+        PREVIEW_ZOOM = 1.0;
+      } else {
+        const cW = container.clientWidth - 48;
+        const nW = img.naturalWidth || img.clientWidth || 460;
+        if (cW > 0 && nW > 0) {
+          PREVIEW_ZOOM = Math.max(0.6, Math.min(2.5, Math.round((cW / nW) * 100) / 100));
+        } else {
+          PREVIEW_ZOOM = 1.0;
+        }
+      }
+      applyPreviewZoom();
     }
 
     function renderPreviewPage() {
@@ -4855,6 +5191,9 @@
         img.onload = () => {
           if (spinner) spinner.classList.add('hidden');
           applyReaderZoom();
+          if (typeof resizeAndSyncAnnotationCanvas === 'function') {
+            resizeAndSyncAnnotationCanvas();
+          }
           // Preload next & previous pages for instant flip
           if (typeof CURRICULUM_DATA !== 'undefined' && typeof CURRICULUM_DATA.getPageUrl === 'function') {
             if (CURRENT_READER_PAGE < maxPages) { new Image().src = CURRICULUM_DATA.getPageUrl(book.id, CURRENT_READER_PAGE + 1, CURRENT_READER_PARA, book.language); }
@@ -4877,6 +5216,9 @@
           img.src = fallback;
           if (spinner) spinner.classList.add('hidden');
           applyReaderZoom();
+          if (typeof resizeAndSyncAnnotationCanvas === 'function') {
+            resizeAndSyncAnnotationCanvas();
+          }
         };
         img.src = pageUrl;
       }
@@ -5011,10 +5353,532 @@
         if (AlHudaInteractiveQaida.closeMakharijTeethReferenceModal) AlHudaInteractiveQaida.closeMakharijTeethReferenceModal();
       }
       resetReaderZoom();
+      ANNOTATION_IS_DRAWING = false;
       document.getElementById('modalDigitalBookReader').classList.add('hidden');
       document.getElementById('modalDigitalBookReader').classList.remove('flex');
       CURRENT_READER_BOOK = null;
       if (popHistory) popTeacherModalHistory('modalDigitalBookReader');
+    }
+
+    // ============================================================
+    // WHITEBOARD & PAGE ANNOTATION ENGINE (TASKS 7, 8, 9)
+    // ============================================================
+    let ANNOTATION_ACTIVE = false;
+    let ANNOTATION_CURRENT_TOOL = 'pen'; // 'pen' | 'highlighter' | 'eraser' | 'line' | 'arrow' | 'rect' | 'circle' | 'text'
+    let ANNOTATION_CURRENT_COLOR = '#dc2626'; // default Red
+    let ANNOTATION_CURRENT_STROKE = 4; // 2, 4, 8, 16
+    let ANNOTATION_STORE = {}; // pageKey -> array of action objects
+    let ANNOTATION_UNDO_STACK = {}; // pageKey -> array of undone actions
+    let ANNOTATION_IS_DRAWING = false;
+    let ANNOTATION_STROKE_POINTS = [];
+    let ANNOTATION_SHAPE_START = null;
+    let ANNOTATION_SHAPE_END = null;
+    let ANNOTATION_LISTENERS_INITIALIZED = false;
+
+    function getReaderPageKey() {
+      const bId = CURRENT_READER_BOOK ? (CURRENT_READER_BOOK.id || 'book') : 'book';
+      const para = CURRENT_READER_PARA || 1;
+      const page = CURRENT_READER_PAGE || 1;
+      return `${bId}_para${para}_p${page}`;
+    }
+
+    function toggleReaderWhiteboard() {
+      ANNOTATION_ACTIVE = !ANNOTATION_ACTIVE;
+      const tb = document.getElementById('readerAnnotationToolbar');
+      const canvas = document.getElementById('readerAnnotationCanvas');
+      const btn = document.getElementById('btnToggleWhiteboard');
+
+      if (ANNOTATION_ACTIVE) {
+        if (tb) tb.classList.remove('hidden');
+        if (canvas) {
+          canvas.classList.remove('pointer-events-none');
+          canvas.classList.add('pointer-events-auto');
+        }
+        if (btn) {
+          btn.classList.add('bg-emerald-600', 'text-white', 'border-emerald-500');
+          btn.classList.remove('bg-zinc-800/80', 'text-zinc-300');
+        }
+        initAnnotationCanvasListeners();
+        resizeAndSyncAnnotationCanvas();
+      } else {
+        if (tb) tb.classList.add('hidden');
+        if (canvas) {
+          canvas.classList.add('pointer-events-none');
+          canvas.classList.remove('pointer-events-auto');
+        }
+        if (btn) {
+          btn.classList.remove('bg-emerald-600', 'text-white', 'border-emerald-500');
+          btn.classList.add('bg-zinc-800/80', 'text-zinc-300');
+        }
+      }
+    }
+
+    function selectAnnotationTool(toolName) {
+      ANNOTATION_CURRENT_TOOL = toolName;
+      document.querySelectorAll('.annotation-tool-btn').forEach(btn => {
+        btn.classList.remove('ring-2', 'ring-emerald-400', 'bg-zinc-700');
+        btn.classList.add('bg-zinc-800');
+      });
+
+      const map = {
+        'pen': 'toolBtnPen',
+        'highlighter': 'toolBtnHighlighter',
+        'eraser': 'toolBtnEraser',
+        'line': 'toolBtnLine',
+        'arrow': 'toolBtnArrow',
+        'rect': 'toolBtnRect',
+        'circle': 'toolBtnCircle',
+        'text': 'toolBtnText'
+      };
+      const activeEl = document.getElementById(map[toolName]);
+      if (activeEl) {
+        activeEl.classList.add('ring-2', 'ring-emerald-400', 'bg-zinc-700');
+        activeEl.classList.remove('bg-zinc-800');
+      }
+
+      const canvas = document.getElementById('readerAnnotationCanvas');
+      if (canvas) {
+        if (toolName === 'eraser') {
+          canvas.style.cursor = 'cell';
+        } else if (toolName === 'text') {
+          canvas.style.cursor = 'text';
+        } else {
+          canvas.style.cursor = 'crosshair';
+        }
+      }
+    }
+
+    function setAnnotationColor(hex) {
+      ANNOTATION_CURRENT_COLOR = hex;
+      document.querySelectorAll('.annotation-color-btn').forEach(b => {
+        if (b.getAttribute('data-color') === hex) {
+          b.classList.add('ring-2', 'ring-white', 'scale-110');
+        } else {
+          b.classList.remove('ring-2', 'ring-white', 'scale-110');
+        }
+      });
+    }
+
+    function setAnnotationStroke(val) {
+      ANNOTATION_CURRENT_STROKE = Number(val) || 4;
+    }
+
+    function resizeAndSyncAnnotationCanvas() {
+      const canvas = document.getElementById('readerAnnotationCanvas');
+      const img = document.getElementById('readerPageImg');
+      if (!canvas || !img) return;
+
+      const w = img.clientWidth;
+      const h = img.clientHeight;
+      if (w === 0 || h === 0) return;
+
+      const dpr = window.devicePixelRatio || 1;
+      canvas.width = Math.round(w * dpr);
+      canvas.height = Math.round(h * dpr);
+      canvas.style.width = `${w}px`;
+      canvas.style.height = `${h}px`;
+
+      redrawCurrentPageAnnotations();
+    }
+
+    function redrawCurrentPageAnnotations() {
+      const canvas = document.getElementById('readerAnnotationCanvas');
+      if (!canvas) return;
+      const ctx = canvas.getContext('2d');
+      const dpr = window.devicePixelRatio || 1;
+      const w = parseFloat(canvas.style.width) || (canvas.width / dpr);
+      const h = parseFloat(canvas.style.height) || (canvas.height / dpr);
+
+      ctx.resetTransform ? ctx.resetTransform() : ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.scale(dpr, dpr);
+
+      const pageKey = getReaderPageKey();
+      const actions = ANNOTATION_STORE[pageKey] || [];
+      actions.forEach(action => {
+        drawSingleAnnotationAction(ctx, action, w, h);
+      });
+    }
+
+    function drawSingleAnnotationAction(ctx, action, w, h) {
+      ctx.save();
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+
+      if (action.type === 'pen') {
+        ctx.strokeStyle = action.color;
+        ctx.lineWidth = action.strokeWidth;
+        const pts = action.points || [];
+        if (pts.length > 0) {
+          ctx.beginPath();
+          ctx.moveTo(pts[0].x * w, pts[0].y * h);
+          for (let i = 1; i < pts.length; i++) {
+            ctx.lineTo(pts[i].x * w, pts[i].y * h);
+          }
+          ctx.stroke();
+        }
+      } else if (action.type === 'highlighter') {
+        ctx.strokeStyle = action.color;
+        ctx.lineWidth = action.strokeWidth * 3.5;
+        ctx.globalAlpha = 0.35;
+        const pts = action.points || [];
+        if (pts.length > 0) {
+          ctx.beginPath();
+          ctx.moveTo(pts[0].x * w, pts[0].y * h);
+          for (let i = 1; i < pts.length; i++) {
+            ctx.lineTo(pts[i].x * w, pts[i].y * h);
+          }
+          ctx.stroke();
+        }
+      } else if (action.type === 'line') {
+        ctx.strokeStyle = action.color;
+        ctx.lineWidth = action.strokeWidth;
+        ctx.beginPath();
+        ctx.moveTo(action.start.x * w, action.start.y * h);
+        ctx.lineTo(action.end.x * w, action.end.y * h);
+        ctx.stroke();
+      } else if (action.type === 'arrow') {
+        ctx.strokeStyle = action.color;
+        ctx.fillStyle = action.color;
+        ctx.lineWidth = action.strokeWidth;
+        const sx = action.start.x * w, sy = action.start.y * h;
+        const ex = action.end.x * w, ey = action.end.y * h;
+        // Shaft
+        ctx.beginPath();
+        ctx.moveTo(sx, sy);
+        ctx.lineTo(ex, ey);
+        ctx.stroke();
+        // Head
+        const angle = Math.atan2(ey - sy, ex - sx);
+        const headLen = Math.max(12, action.strokeWidth * 3.2);
+        ctx.beginPath();
+        ctx.moveTo(ex, ey);
+        ctx.lineTo(ex - headLen * Math.cos(angle - Math.PI / 6), ey - headLen * Math.sin(angle - Math.PI / 6));
+        ctx.lineTo(ex - headLen * Math.cos(angle + Math.PI / 6), ey - headLen * Math.sin(angle + Math.PI / 6));
+        ctx.closePath();
+        ctx.fill();
+      } else if (action.type === 'rect') {
+        ctx.strokeStyle = action.color;
+        ctx.lineWidth = action.strokeWidth;
+        const rx = Math.min(action.start.x, action.end.x) * w;
+        const ry = Math.min(action.start.y, action.end.y) * h;
+        const rw = Math.abs(action.end.x - action.start.x) * w;
+        const rh = Math.abs(action.end.y - action.start.y) * h;
+        ctx.strokeRect(rx, ry, rw, rh);
+      } else if (action.type === 'circle') {
+        ctx.strokeStyle = action.color;
+        ctx.lineWidth = action.strokeWidth;
+        const cx = ((action.start.x + action.end.x) / 2) * w;
+        const cy = ((action.start.y + action.end.y) / 2) * h;
+        const rx = Math.abs(action.end.x - action.start.x) * w / 2;
+        const ry = Math.abs(action.end.y - action.start.y) * h / 2;
+        ctx.beginPath();
+        ctx.ellipse(cx, cy, Math.max(2, rx), Math.max(2, ry), 0, 0, 2 * Math.PI);
+        ctx.stroke();
+      } else if (action.type === 'text') {
+        ctx.fillStyle = action.color;
+        ctx.font = `bold ${action.fontSize || 18}px sans-serif`;
+        ctx.fillText(action.text, action.x * w, action.y * h);
+      }
+      ctx.restore();
+    }
+
+    function initAnnotationCanvasListeners() {
+      if (ANNOTATION_LISTENERS_INITIALIZED) return;
+      const canvas = document.getElementById('readerAnnotationCanvas');
+      if (!canvas) return;
+
+      const getNormPoint = (e) => {
+        const rect = canvas.getBoundingClientRect();
+        const cssX = e.clientX - rect.left;
+        const cssY = e.clientY - rect.top;
+        const x = Math.max(0, Math.min(1, cssX / rect.width));
+        const y = Math.max(0, Math.min(1, cssY / rect.height));
+        return { x, y, cssX, cssY, rectWidth: rect.width, rectHeight: rect.height };
+      };
+
+      const eraseNearCoords = (pt) => {
+        const pageKey = getReaderPageKey();
+        const actions = ANNOTATION_STORE[pageKey] || [];
+        if (actions.length === 0) return;
+
+        const threshold = 18;
+        const w = pt.rectWidth;
+        const h = pt.rectHeight;
+        let modified = false;
+
+        const filtered = actions.filter(action => {
+          let hits = false;
+          if (action.type === 'pen' || action.type === 'highlighter') {
+            for (let i = 0; i < action.points.length; i++) {
+              const px = action.points[i].x * w;
+              const py = action.points[i].y * h;
+              const dist = Math.hypot(px - pt.cssX, py - pt.cssY);
+              if (dist <= threshold) { hits = true; break; }
+            }
+          } else if (action.type === 'line' || action.type === 'arrow') {
+            const x1 = action.start.x * w, y1 = action.start.y * h;
+            const x2 = action.end.x * w, y2 = action.end.y * h;
+            const l2 = (x2 - x1) ** 2 + (y2 - y1) ** 2;
+            let dist = 999;
+            if (l2 === 0) {
+              dist = Math.hypot(pt.cssX - x1, pt.cssY - y1);
+            } else {
+              let t = ((pt.cssX - x1) * (x2 - x1) + (pt.cssY - y1) * (y2 - y1)) / l2;
+              t = Math.max(0, Math.min(1, t));
+              dist = Math.hypot(pt.cssX - (x1 + t * (x2 - x1)), pt.cssY - (y1 + t * (y2 - y1)));
+            }
+            if (dist <= threshold) hits = true;
+          } else if (action.type === 'rect') {
+            const rx = Math.min(action.start.x, action.end.x) * w;
+            const ry = Math.min(action.start.y, action.end.y) * h;
+            const rw = Math.abs(action.end.x - action.start.x) * w;
+            const rh = Math.abs(action.end.y - action.start.y) * h;
+            if (pt.cssX >= rx - 8 && pt.cssX <= rx + rw + 8 && pt.cssY >= ry - 8 && pt.cssY <= ry + rh + 8) {
+              hits = true;
+            }
+          } else if (action.type === 'circle') {
+            const cx = ((action.start.x + action.end.x) / 2) * w;
+            const cy = ((action.start.y + action.end.y) / 2) * h;
+            const rx = Math.abs(action.end.x - action.start.x) * w / 2;
+            const ry = Math.abs(action.end.y - action.start.y) * h / 2;
+            const normDist = ((pt.cssX - cx) ** 2) / ((rx + 10) ** 2) + ((pt.cssY - cy) ** 2) / ((ry + 10) ** 2);
+            if (normDist <= 1.25) hits = true;
+          } else if (action.type === 'text') {
+            const tx = action.x * w;
+            const ty = action.y * h;
+            if (Math.hypot(pt.cssX - tx, pt.cssY - ty) <= 30) hits = true;
+          }
+
+          if (hits) {
+            modified = true;
+            if (!ANNOTATION_UNDO_STACK[pageKey]) ANNOTATION_UNDO_STACK[pageKey] = [];
+            ANNOTATION_UNDO_STACK[pageKey].push(action);
+            return false;
+          }
+          return true;
+        });
+
+        if (modified) {
+          ANNOTATION_STORE[pageKey] = filtered;
+          redrawCurrentPageAnnotations();
+        }
+      };
+
+      canvas.addEventListener('pointerdown', (e) => {
+        if (!ANNOTATION_ACTIVE) return;
+        e.preventDefault();
+        try { canvas.setPointerCapture(e.pointerId); } catch(err) {}
+
+        const pt = getNormPoint(e);
+        ANNOTATION_IS_DRAWING = true;
+
+        if (ANNOTATION_CURRENT_TOOL === 'eraser') {
+          eraseNearCoords(pt);
+          return;
+        }
+
+        if (ANNOTATION_CURRENT_TOOL === 'text') {
+          ANNOTATION_IS_DRAWING = false;
+          const textInput = prompt('Enter annotation text label:');
+          if (textInput && textInput.trim()) {
+            const pageKey = getReaderPageKey();
+            if (!ANNOTATION_STORE[pageKey]) ANNOTATION_STORE[pageKey] = [];
+            ANNOTATION_STORE[pageKey].push({
+              id: Date.now() + Math.random(),
+              type: 'text',
+              text: textInput.trim(),
+              color: ANNOTATION_CURRENT_COLOR,
+              fontSize: ANNOTATION_CURRENT_STROKE * 4 + 10,
+              x: pt.x,
+              y: pt.y
+            });
+            ANNOTATION_UNDO_STACK[pageKey] = [];
+            redrawCurrentPageAnnotations();
+          }
+          return;
+        }
+
+        if (ANNOTATION_CURRENT_TOOL === 'pen' || ANNOTATION_CURRENT_TOOL === 'highlighter') {
+          ANNOTATION_STROKE_POINTS = [{ x: pt.x, y: pt.y }];
+        } else {
+          ANNOTATION_SHAPE_START = { x: pt.x, y: pt.y };
+          ANNOTATION_SHAPE_END = { x: pt.x, y: pt.y };
+        }
+      });
+
+      canvas.addEventListener('pointermove', (e) => {
+        if (!ANNOTATION_ACTIVE || !ANNOTATION_IS_DRAWING) return;
+        e.preventDefault();
+        const pt = getNormPoint(e);
+
+        if (ANNOTATION_CURRENT_TOOL === 'eraser') {
+          eraseNearCoords(pt);
+          return;
+        }
+
+        if (ANNOTATION_CURRENT_TOOL === 'pen' || ANNOTATION_CURRENT_TOOL === 'highlighter') {
+          ANNOTATION_STROKE_POINTS.push({ x: pt.x, y: pt.y });
+          redrawCurrentPageAnnotations();
+          // Draw in-progress stroke
+          const ctx = canvas.getContext('2d');
+          const dpr = window.devicePixelRatio || 1;
+          const w = parseFloat(canvas.style.width) || (canvas.width / dpr);
+          const h = parseFloat(canvas.style.height) || (canvas.height / dpr);
+          ctx.save();
+          ctx.scale(dpr, dpr);
+          drawSingleAnnotationAction(ctx, {
+            type: ANNOTATION_CURRENT_TOOL,
+            color: ANNOTATION_CURRENT_COLOR,
+            strokeWidth: ANNOTATION_CURRENT_STROKE,
+            points: ANNOTATION_STROKE_POINTS
+          }, w, h);
+          ctx.restore();
+        } else {
+          // Shape tools: live dynamic rubber-banding
+          ANNOTATION_SHAPE_END = { x: pt.x, y: pt.y };
+          redrawCurrentPageAnnotations();
+          const ctx = canvas.getContext('2d');
+          const dpr = window.devicePixelRatio || 1;
+          const w = parseFloat(canvas.style.width) || (canvas.width / dpr);
+          const h = parseFloat(canvas.style.height) || (canvas.height / dpr);
+          ctx.save();
+          ctx.scale(dpr, dpr);
+          drawSingleAnnotationAction(ctx, {
+            type: ANNOTATION_CURRENT_TOOL,
+            color: ANNOTATION_CURRENT_COLOR,
+            strokeWidth: ANNOTATION_CURRENT_STROKE,
+            start: ANNOTATION_SHAPE_START,
+            end: ANNOTATION_SHAPE_END
+          }, w, h);
+          ctx.restore();
+        }
+      });
+
+      const handlePointerEnd = (e) => {
+        if (!ANNOTATION_ACTIVE || !ANNOTATION_IS_DRAWING) return;
+        ANNOTATION_IS_DRAWING = false;
+        try { canvas.releasePointerCapture(e.pointerId); } catch(err) {}
+
+        const pageKey = getReaderPageKey();
+        if (!ANNOTATION_STORE[pageKey]) ANNOTATION_STORE[pageKey] = [];
+
+        if (ANNOTATION_CURRENT_TOOL === 'pen' || ANNOTATION_CURRENT_TOOL === 'highlighter') {
+          if (ANNOTATION_STROKE_POINTS.length > 1) {
+            ANNOTATION_STORE[pageKey].push({
+              id: Date.now() + Math.random(),
+              type: ANNOTATION_CURRENT_TOOL,
+              color: ANNOTATION_CURRENT_COLOR,
+              strokeWidth: ANNOTATION_CURRENT_STROKE,
+              points: [...ANNOTATION_STROKE_POINTS]
+            });
+            ANNOTATION_UNDO_STACK[pageKey] = [];
+          }
+          ANNOTATION_STROKE_POINTS = [];
+        } else if (['line', 'arrow', 'rect', 'circle'].includes(ANNOTATION_CURRENT_TOOL)) {
+          if (ANNOTATION_SHAPE_START && ANNOTATION_SHAPE_END) {
+            const dist = Math.hypot(ANNOTATION_SHAPE_END.x - ANNOTATION_SHAPE_START.x, ANNOTATION_SHAPE_END.y - ANNOTATION_SHAPE_START.y);
+            if (dist > 0.005) {
+              ANNOTATION_STORE[pageKey].push({
+                id: Date.now() + Math.random(),
+                type: ANNOTATION_CURRENT_TOOL,
+                color: ANNOTATION_CURRENT_COLOR,
+                strokeWidth: ANNOTATION_CURRENT_STROKE,
+                start: { ...ANNOTATION_SHAPE_START },
+                end: { ...ANNOTATION_SHAPE_END }
+              });
+              ANNOTATION_UNDO_STACK[pageKey] = [];
+            }
+          }
+          ANNOTATION_SHAPE_START = null;
+          ANNOTATION_SHAPE_END = null;
+        }
+
+        redrawCurrentPageAnnotations();
+      };
+
+      canvas.addEventListener('pointerup', handlePointerEnd);
+      canvas.addEventListener('pointercancel', handlePointerEnd);
+      window.addEventListener('resize', () => {
+        if (ANNOTATION_ACTIVE) resizeAndSyncAnnotationCanvas();
+      });
+
+      ANNOTATION_LISTENERS_INITIALIZED = true;
+    }
+
+    function undoAnnotation() {
+      const pageKey = getReaderPageKey();
+      if (!ANNOTATION_STORE[pageKey] || ANNOTATION_STORE[pageKey].length === 0) return;
+      if (!ANNOTATION_UNDO_STACK[pageKey]) ANNOTATION_UNDO_STACK[pageKey] = [];
+      const action = ANNOTATION_STORE[pageKey].pop();
+      if (action && action.type === 'batch_clear' && action.actions) {
+        ANNOTATION_STORE[pageKey] = action.actions;
+      } else if (action) {
+        ANNOTATION_UNDO_STACK[pageKey].push(action);
+      }
+      redrawCurrentPageAnnotations();
+    }
+
+    function redoAnnotation() {
+      const pageKey = getReaderPageKey();
+      if (!ANNOTATION_UNDO_STACK[pageKey] || ANNOTATION_UNDO_STACK[pageKey].length === 0) return;
+      const action = ANNOTATION_UNDO_STACK[pageKey].pop();
+      if (action) {
+        if (!ANNOTATION_STORE[pageKey]) ANNOTATION_STORE[pageKey] = [];
+        ANNOTATION_STORE[pageKey].push(action);
+      }
+      redrawCurrentPageAnnotations();
+    }
+
+    function clearAnnotationCanvas() {
+      const pageKey = getReaderPageKey();
+      if (!ANNOTATION_STORE[pageKey] || ANNOTATION_STORE[pageKey].length === 0) return;
+      if (!ANNOTATION_UNDO_STACK[pageKey]) ANNOTATION_UNDO_STACK[pageKey] = [];
+      ANNOTATION_UNDO_STACK[pageKey].push({ type: 'batch_clear', actions: [...ANNOTATION_STORE[pageKey]] });
+      ANNOTATION_STORE[pageKey] = [];
+      redrawCurrentPageAnnotations();
+    }
+
+    function downloadAnnotatedPage() {
+      const img = document.getElementById('readerPageImg');
+      if (!img) return;
+
+      const exportCanvas = document.createElement('canvas');
+      const natW = img.naturalWidth || img.clientWidth || 800;
+      const natH = img.naturalHeight || img.clientHeight || 1100;
+      exportCanvas.width = natW;
+      exportCanvas.height = natH;
+      const ctx = exportCanvas.getContext('2d');
+
+      // Draw base page image
+      try {
+        ctx.drawImage(img, 0, 0, natW, natH);
+      } catch (err) {
+        console.warn('Direct draw failed, drawing fallback:', err);
+      }
+
+      // Draw all annotations scaled to natural dimensions
+      const pageKey = getReaderPageKey();
+      const actions = ANNOTATION_STORE[pageKey] || [];
+      actions.forEach(action => {
+        drawSingleAnnotationAction(ctx, action, natW, natH);
+      });
+
+      // Trigger download
+      try {
+        const dataUrl = exportCanvas.toDataURL('image/png');
+        const bTitle = (CURRENT_READER_BOOK?.title || 'Course').replace(/[^a-zA-Z0-9_-]/g, '_');
+        const filename = `AlHuda_${bTitle}_Page_${CURRENT_READER_PAGE}_Annotated.png`;
+        const link = document.createElement('a');
+        link.download = filename;
+        link.href = dataUrl;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+      } catch (err) {
+        console.error('Download error:', err);
+        alert('Could not export annotated page: ' + err.message);
+      }
     }
 
     // Keyboard & Wheel controls for teacher reader
@@ -5040,6 +5904,40 @@
         } else if (e.key === 'Escape') {
           e.preventDefault();
           closeDigitalBookReader();
+        } else if ((e.ctrlKey || e.metaKey) && (e.key === 'z' || e.key === 'Z')) {
+          e.preventDefault();
+          if (e.shiftKey) redoAnnotation();
+          else undoAnnotation();
+        } else if ((e.ctrlKey || e.metaKey) && (e.key === 'y' || e.key === 'Y')) {
+          e.preventDefault();
+          redoAnnotation();
+        } else if (e.key === 'w' || e.key === 'W') {
+          e.preventDefault();
+          toggleReaderWhiteboard();
+        } else if (e.key === 'p' || e.key === 'P') {
+          e.preventDefault();
+          selectAnnotationTool('pen');
+        } else if (e.key === 'h' || e.key === 'H') {
+          e.preventDefault();
+          selectAnnotationTool('highlighter');
+        } else if (e.key === 'e' || e.key === 'E') {
+          e.preventDefault();
+          selectAnnotationTool('eraser');
+        } else if (e.key === 'l' || e.key === 'L') {
+          e.preventDefault();
+          selectAnnotationTool('line');
+        } else if (e.key === 'a' || e.key === 'A') {
+          e.preventDefault();
+          selectAnnotationTool('arrow');
+        } else if (e.key === 'r' || e.key === 'R') {
+          e.preventDefault();
+          selectAnnotationTool('rect');
+        } else if (e.key === 'c' || e.key === 'C') {
+          e.preventDefault();
+          selectAnnotationTool('circle');
+        } else if (e.key === 't' || e.key === 'T') {
+          e.preventDefault();
+          selectAnnotationTool('text');
         }
       }
     });
@@ -5102,51 +6000,186 @@
     }
 
     // Weekly Matrix Modal Handlers
+    // Weekly Matrix Modal Handlers & Dynamic Renderer
+    let CURRENT_MATRIX_FILTER_DAY = 'all';
+
     function openWeeklyMatrixModal() {
       const modal = document.getElementById('modalWeeklyMatrix');
-      const tbody = document.getElementById('weeklyMatrixBody');
-      if (!tbody || !CURRENT_TEACHER) return;
+      if (!modal || !CURRENT_TEACHER) return;
 
-      const groupedByDay = { 1: [], 2: [], 3: [], 4: [], 5: [], 6: [], 7: [] };
-      (ALL_TEACHER_SCHEDULES || []).forEach(s => {
-        const d = Number(s.day_of_week);
-        if (groupedByDay[d]) groupedByDay[d].push(s);
-      });
+      const shiftBadge = document.getElementById('matrixShiftBadge');
+      if (shiftBadge) shiftBadge.innerText = CURRENT_TEACHER.working_shift || 'Shift Active';
 
-      tbody.innerHTML = [1, 2, 3, 4, 5, 6, 7].map(dayNum => {
-        const dayName = DAY_NAMES[dayNum];
-        const dayScheds = groupedByDay[dayNum] || [];
-        dayScheds.sort((a, b) => (a.start_time || '').localeCompare(b.start_time || ''));
-
-        const slotsHtml = dayScheds.length > 0 ? dayScheds.map(s => {
-          const stStr = (s.start_time || '').slice(0, 5);
-          const etStr = (s.end_time || '').slice(0, 5);
-          const durMins = getTeacherSlotDurationMins(stStr, etStr);
-          const durBadge = durMins > 0 ? `${durMins}m` : '30m';
-          const zoomUrl = s.meeting_link || CURRENT_TEACHER?.zoom_link || '';
-          return `
-          <div class="p-2 bg-slate-50 border border-slate-200 rounded-lg inline-flex items-center gap-2 m-1">
-            <span class="font-mono font-bold text-brandDark bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">${stStr} - ${etStr} (${durBadge})</span>
-            <span class="font-bold text-slate-800">${s.students?.name || 'Student'}</span>
-            <button onclick="openTimeChangeRequestModal('${s.id}')" class="px-1.5 py-0.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-800 border border-indigo-200 rounded text-[10px] font-bold flex items-center gap-1 transition" title="Request Time Change for ${s.students?.name || 'Student'}">
-              <i class="fa-solid fa-clock-rotate-left text-indigo-600"></i> Change Time
-            </button>
-            ${zoomUrl ? `<button type="button" onclick="launchTeacherZoomClass('${s.id}', '${zoomUrl}', '${(s.students?.name || 'Student').split("'").join(" ")}', '${s.student_id}')" class="px-2 py-0.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded text-[10px] font-bold flex items-center gap-1" title="Start Zoom Class"><i class="fa-solid fa-video"></i> Zoom</button>` : ''}
-          </div>
-        `;
-        }).join('') : '<span class="text-slate-400 italic text-[11px] p-2 block">No classes scheduled for this day</span>';
-
-        return `
-          <tr>
-            <td class="p-3 font-extrabold text-slate-800 border-r border-slate-200 bg-slate-50/60 w-32">${dayName}</td>
-            <td class="p-2">${slotsHtml}</td>
-          </tr>
-        `;
-      }).join('');
+      renderWeeklyMatrixView();
 
       modal.classList.remove('hidden');
       modal.classList.add('flex');
       pushTeacherModalHistory('modalWeeklyMatrix');
+    }
+
+    function setWeeklyMatrixDayFilter(filterDay) {
+      CURRENT_MATRIX_FILTER_DAY = filterDay;
+      renderWeeklyMatrixView();
+    }
+
+    function renderWeeklyMatrixView() {
+      const container = document.getElementById('weeklyMatrixContainer');
+      const tabsContainer = document.getElementById('matrixDayTabs');
+      if (!container) return;
+
+      const schedules = ALL_TEACHER_SCHEDULES || [];
+      const groupedByDay = { 1: [], 2: [], 3: [], 4: [], 5: [], 6: [], 7: [] };
+      const uniqueStudents = new Set();
+      let totalMins = 0;
+
+      schedules.forEach(s => {
+        const d = Number(s.day_of_week);
+        if (groupedByDay[d]) groupedByDay[d].push(s);
+        if (s.student_id) uniqueStudents.add(s.student_id);
+        const st = (s.start_time || '').slice(0, 5);
+        const et = (s.end_time || '').slice(0, 5);
+        const dur = getTeacherSlotDurationMins(st, et) || 30;
+        totalMins += dur;
+      });
+
+      const now = new Date();
+      const todayDayNum = now.getDay() === 0 ? 7 : now.getDay();
+
+      // Update Metric Chips
+      const totalClassesEl = document.getElementById('matrixTotalClasses');
+      if (totalClassesEl) totalClassesEl.innerText = schedules.length;
+
+      const uniqueStuEl = document.getElementById('matrixUniqueStudents');
+      if (uniqueStuEl) uniqueStuEl.innerText = uniqueStudents.size;
+
+      const totalHoursEl = document.getElementById('matrixTotalHours');
+      if (totalHoursEl) {
+        const hrs = (totalMins / 60).toFixed(1);
+        totalHoursEl.innerText = `${hrs} hrs / wk`;
+      }
+
+      const todayLoadEl = document.getElementById('matrixTodayLoad');
+      if (todayLoadEl) {
+        const todayClassesCount = (groupedByDay[todayDayNum] || []).length;
+        todayLoadEl.innerText = `${todayClassesCount} Today`;
+      }
+
+      // Render Day Tabs with TODAY Highlight
+      if (tabsContainer) {
+        const tabDefs = [
+          { key: 'all', label: 'All 7 Days', count: schedules.length, isToday: false },
+          { key: 1, label: 'Mon', count: (groupedByDay[1] || []).length, isToday: todayDayNum === 1 },
+          { key: 2, label: 'Tue', count: (groupedByDay[2] || []).length, isToday: todayDayNum === 2 },
+          { key: 3, label: 'Wed', count: (groupedByDay[3] || []).length, isToday: todayDayNum === 3 },
+          { key: 4, label: 'Thu', count: (groupedByDay[4] || []).length, isToday: todayDayNum === 4 },
+          { key: 5, label: 'Fri', count: (groupedByDay[5] || []).length, isToday: todayDayNum === 5 },
+          { key: 6, label: 'Sat', count: (groupedByDay[6] || []).length, isToday: todayDayNum === 6 },
+          { key: 7, label: 'Sun', count: (groupedByDay[7] || []).length, isToday: todayDayNum === 7 },
+        ];
+
+        tabsContainer.innerHTML = tabDefs.map(t => {
+          const isActive = String(CURRENT_MATRIX_FILTER_DAY) === String(t.key);
+          let baseClass = isActive
+            ? 'bg-emerald-700 text-white shadow-xs font-black'
+            : 'bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold';
+          
+          let todayBadge = t.isToday
+            ? `<span class="ml-1 px-1.5 py-0.2 rounded-full text-[9px] font-black ${isActive ? 'bg-amber-300 text-emerald-950' : 'bg-emerald-100 text-emerald-800 border border-emerald-300'}">TODAY</span>`
+            : '';
+
+          return `
+            <button type="button" onclick="setWeeklyMatrixDayFilter('${t.key}')" class="px-3 py-1.5 rounded-xl text-xs flex items-center gap-1.5 whitespace-nowrap transition cursor-pointer ${baseClass}">
+              <span>${t.label}</span>
+              <span class="px-1.5 py-0.2 text-[10px] rounded-full ${isActive ? 'bg-white/20 text-white' : 'bg-slate-200 text-slate-600'}">${t.count}</span>
+              ${todayBadge}
+            </button>
+          `;
+        }).join('');
+      }
+
+      // Render Days Cards
+      const daysToRender = CURRENT_MATRIX_FILTER_DAY === 'all'
+        ? [1, 2, 3, 4, 5, 6, 7]
+        : [Number(CURRENT_MATRIX_FILTER_DAY)];
+
+      container.innerHTML = daysToRender.map(dayNum => {
+        const dayName = DAY_NAMES[dayNum];
+        const dayScheds = groupedByDay[dayNum] || [];
+        dayScheds.sort((a, b) => (a.start_time || '').localeCompare(b.start_time || ''));
+        const isToday = dayNum === todayDayNum;
+
+        let dayContentHtml = '';
+        if (dayScheds.length === 0) {
+          dayContentHtml = `
+            <div class="p-6 text-center text-slate-400 bg-slate-50/50 rounded-2xl border border-dashed border-slate-200">
+              <i class="fa-regular fa-calendar text-2xl text-slate-300 mb-1 block"></i>
+              <span class="text-xs font-medium">No class sessions scheduled for ${dayName}.</span>
+            </div>
+          `;
+        } else {
+          dayContentHtml = `
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2.5">
+              ${dayScheds.map(s => {
+                const st = (s.start_time || '').slice(0, 5);
+                const et = (s.end_time || '').slice(0, 5);
+                const dur = getTeacherSlotDurationMins(st, et) || 30;
+                const stuName = s.students?.name || 'Assigned Student';
+                const courseName = s.students?.course_id || 'Quran & Islamic Studies';
+                const effectiveZoom = resolveEffectiveClassZoomLink(s, CURRENT_TEACHER);
+                const safeName = stuName.replace(/'/g, "\\'");
+
+                return `
+                  <div class="p-3 bg-white hover:bg-slate-50/80 rounded-2xl border border-slate-200 shadow-2xs transition flex flex-col justify-between gap-2.5">
+                    <div>
+                      <div class="flex items-center justify-between gap-1.5 mb-1.5">
+                        <span class="font-mono text-xs font-extrabold text-emerald-900 bg-emerald-50 px-2 py-0.5 rounded-lg border border-emerald-200">
+                          ${st} – ${et} <span class="font-normal opacity-75">(${dur}m)</span>
+                        </span>
+                        <span class="px-2 py-0.5 rounded-md text-[10px] font-bold bg-slate-100 text-slate-600 border border-slate-200">
+                          ${s.status || 'Active'}
+                        </span>
+                      </div>
+                      <div class="font-black text-slate-900 text-sm truncate" title="${stuName}">${stuName}</div>
+                      <div class="text-[11px] text-slate-500 truncate mt-0.5">${courseName}</div>
+                    </div>
+
+                    <div class="pt-2 border-t border-slate-100 flex items-center justify-between gap-1.5">
+                      <button onclick="openTimeChangeRequestModal('${s.id}')" class="px-2 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-900 border border-indigo-200 rounded-lg text-[11px] font-bold flex items-center gap-1 transition" title="Request Time Change for ${safeName}">
+                        <i class="fa-solid fa-clock-rotate-left text-indigo-600"></i> Change Time
+                      </button>
+                      ${effectiveZoom ? `
+                        <button type="button" onclick="launchTeacherZoomClass('${s.id}', '${effectiveZoom}', '${safeName}', '${s.student_id}')" class="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-[11px] font-black flex items-center gap-1 shadow-2xs transition" title="Start Zoom Meeting">
+                          <i class="fa-solid fa-video"></i> Start Zoom
+                        </button>
+                      ` : `
+                        <span class="text-[10px] text-slate-400 font-medium italic">No Zoom</span>
+                      `}
+                    </div>
+                  </div>
+                `;
+              }).join('')}
+            </div>
+          `;
+        }
+
+        return `
+          <div class="rounded-2xl border ${isToday ? 'border-emerald-300 bg-gradient-to-b from-emerald-50/30 to-white shadow-xs' : 'border-slate-200 bg-white'} p-4 space-y-3">
+            <div class="flex items-center justify-between flex-wrap gap-2 pb-2 border-b border-slate-100">
+              <div class="flex items-center gap-2">
+                <span class="w-2.5 h-2.5 rounded-full ${isToday ? 'bg-emerald-500 animate-pulse' : 'bg-slate-300'}"></span>
+                <h4 class="font-black text-sm text-slate-900">${dayName}</h4>
+                <span class="text-xs font-mono font-bold text-slate-400">(${dayScheds.length} classes)</span>
+              </div>
+              ${isToday ? `
+                <span class="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-emerald-600 text-white uppercase tracking-wider shadow-2xs">
+                  ★ TODAY'S SCHEDULE
+                </span>
+              ` : ''}
+            </div>
+            ${dayContentHtml}
+          </div>
+        `;
+      }).join('');
     }
 
     function closeWeeklyMatrixModal(popHistory = true) {
@@ -5168,25 +6201,47 @@
     }
 
     function toggleTeacherSidebar(forceState = null) {
-      const sb = document.getElementById('teacherSidebar');
-      const bd = document.getElementById('teacherSidebarBackdrop');
-      if (!sb) return;
       const isMobile = window.innerWidth < 1024;
-      if (!isMobile) {
-        sb.classList.remove('-translate-x-full');
-        if (bd) bd.classList.add('hidden');
-        return;
+      if (isMobile) {
+        const sb = document.getElementById('teacherSidebar');
+        const bd = document.getElementById('teacherSidebarBackdrop');
+        if (!sb) return;
+        const isCurrentlyOpen = !sb.classList.contains('-translate-x-full');
+        const nextOpen = forceState !== null ? forceState : !isCurrentlyOpen;
+
+        if (nextOpen) {
+          sb.classList.remove('-translate-x-full');
+          if (bd) bd.classList.remove('hidden');
+        } else {
+          sb.classList.add('-translate-x-full');
+          if (bd) bd.classList.add('hidden');
+        }
+      } else {
+        toggleDesktopSidebar(forceState);
+      }
+    }
+
+    function toggleDesktopSidebar(forceState = null) {
+      const sb = document.getElementById('teacherSidebar');
+      if (!sb) return;
+      const isCurrentlyCollapsed = sb.classList.contains('is-collapsed');
+      const shouldCollapse = forceState !== null ? forceState : !isCurrentlyCollapsed;
+
+      if (shouldCollapse) {
+        sb.classList.add('is-collapsed');
+        try { localStorage.setItem('alhuda_teacher_sidebar_collapsed', 'true'); } catch (e) {}
+      } else {
+        sb.classList.remove('is-collapsed');
+        try { localStorage.setItem('alhuda_teacher_sidebar_collapsed', 'false'); } catch (e) {}
       }
 
-      const isCurrentlyOpen = !sb.classList.contains('-translate-x-full');
-      const nextOpen = forceState !== null ? forceState : !isCurrentlyOpen;
-
-      if (nextOpen) {
-        sb.classList.remove('-translate-x-full');
-        if (bd) bd.classList.remove('hidden');
-      } else {
-        sb.classList.add('-translate-x-full');
-        if (bd) bd.classList.add('hidden');
+      const icon = document.getElementById('desktopCollapseIcon');
+      if (icon) {
+        icon.className = shouldCollapse ? 'fa-solid fa-chevron-right text-xs' : 'fa-solid fa-chevron-left text-xs';
+      }
+      const collapseBtn = document.getElementById('btnCollapseDesktopSidebar');
+      if (collapseBtn) {
+        collapseBtn.title = shouldCollapse ? 'Expand Sidebar (Desktop)' : 'Collapse Sidebar (Desktop)';
       }
     }
 
@@ -5272,7 +6327,7 @@
     // =================================================================
     let CURRENT_TEACHER_ACTIVE_SLIP = null;
 
-    function loadTeacherPreviousSalaries() {
+    async function loadTeacherPreviousSalaries() {
       if (!CURRENT_TEACHER || !CURRENT_TEACHER.id) return;
 
       const tbody = document.getElementById('tSalariesTableBody');
@@ -5283,6 +6338,45 @@
         savedSalaries = JSON.parse(localStorage.getItem('alhuda_teacher_salaries') || '{}');
       } catch (e) {
         savedSalaries = {};
+      }
+
+      // 1. Authoritative Backend Sync: Query fresh teacher row and carrier family shared sync
+      try {
+        if (typeof db !== 'undefined' && db) {
+          const { data: tRow } = await db.from('teachers').select('id, address, working_shift, full_name').eq('id', CURRENT_TEACHER.id).maybeSingle();
+          if (tRow && tRow.address) {
+            const meta = parseEmployeeMeta(tRow.address);
+            if (meta && meta.salary_slips && typeof meta.salary_slips === 'object') {
+              Object.entries(meta.salary_slips).forEach(([k, v]) => {
+                if (v && typeof v === 'object') {
+                  savedSalaries[k] = { ...v, teacher_id: v.teacher_id || tRow.id };
+                }
+              });
+            }
+            CURRENT_TEACHER.address = tRow.address;
+          }
+
+          // Also check carrier family row for unified lms_shared_sync.teacher_salaries
+          const { data: carrierFams } = await db.from('families').select('id, notes').order('created_at', { ascending: true }).limit(5);
+          if (carrierFams && Array.isArray(carrierFams)) {
+            carrierFams.forEach(f => {
+              try {
+                const n = typeof f.notes === 'object' ? f.notes : JSON.parse(f.notes || '{}');
+                if (n && n.lms_shared_sync && n.lms_shared_sync.teacher_salaries && typeof n.lms_shared_sync.teacher_salaries === 'object') {
+                  Object.entries(n.lms_shared_sync.teacher_salaries).forEach(([k, v]) => {
+                    if (v && typeof v === 'object' && (String(v.teacher_id) === String(CURRENT_TEACHER.id) || k.startsWith(CURRENT_TEACHER.id + '_'))) {
+                      savedSalaries[k] = v;
+                    }
+                  });
+                }
+              } catch (err) {}
+            });
+          }
+
+          try { localStorage.setItem('alhuda_teacher_salaries', JSON.stringify(savedSalaries)); } catch (e) {}
+        }
+      } catch (cloudErr) {
+        console.warn('[Teacher Salaries Sync] Using cached vouchers:', cloudErr);
       }
 
       // Hydrate teacher address meta if contains salary slips

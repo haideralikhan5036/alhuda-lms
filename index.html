@@ -39,7 +39,26 @@
           return;
         }
 
-        // 3. Default Owner / Admin Portal (index.html): clear any stale teacher/parent lock so Admin Portal always opens cleanly
+        // 3. Check existing logged in session if no explicit URL param was passed
+        var activeRole = localStorage.getItem('alhuda_active_portal_role');
+        var teacherSession = localStorage.getItem('alhuda_logged_in_teacher');
+        var parentSession = localStorage.getItem('alhuda_logged_in_parent');
+        var managerSession = localStorage.getItem('alhuda_logged_in_manager');
+
+        if (activeRole === 'teacher' && teacherSession) {
+          window.location.replace('teacher.html');
+          return;
+        }
+        if (activeRole === 'parent' && parentSession) {
+          window.location.replace('parent.html');
+          return;
+        }
+        if (activeRole === 'manager' && managerSession) {
+          window.location.replace('manager.html');
+          return;
+        }
+
+        // 4. Default Owner / Admin Portal (index.html): clear any stale teacher/parent lock so Admin Portal always opens cleanly
         localStorage.setItem('alhuda_active_portal_role', 'owner');
       } catch (e) {}
     })();

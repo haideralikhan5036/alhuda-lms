@@ -6,8 +6,8 @@
     <title>Al-Huda Islamic Centre LMS</title>
     <link rel="icon" type="image/png" href="favicon.png">
     <script>
-      // Immediate clean redirect to main Al-Huda LMS entry point
-      window.location.replace("index.html");
+      // Immediate clean redirect to main Al-Huda LMS entry point preserving search params
+      window.location.replace("index.html" + (window.location.search || ''));
     </script>
 </head>
 <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; background: #f8fafc;">

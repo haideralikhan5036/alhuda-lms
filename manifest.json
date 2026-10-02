@@ -56,12 +56,12 @@
     },
     {
       "name": "Teacher Portal",
-      "url": "/teacher",
+      "url": "/teacher.html",
       "description": "Open Teacher Operations Portal"
     },
     {
       "name": "Parent Portal",
-      "url": "/parent",
+      "url": "/parent.html",
       "description": "Open Student & Parent Learning Portal"
     }
   ]
