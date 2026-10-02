@@ -13,6 +13,7 @@
     let CURRENT_CURRICULUM_CATEGORY = 'all';
     let CURRENT_READER_BOOK = null;
     let CURRENT_READER_PAGE = 1;
+    let CURRENT_READER_PARA = 1;
     let CURRENT_READER_ZOOM = 1.0;
     let CUSTOM_BOOKS_CACHE = [];
 
@@ -340,7 +341,7 @@
     // ============================================================
     // IN-LMS INTERACTIVE DIGITAL BOOK READER CONTROLLER
     // ============================================================
-    function openDigitalBookReader(bookId, startPage = 1) {
+    function openDigitalBookReader(bookId, startPage = 1, paraNum = null, language = null) {
       const allBooks = getAllAvailableBooks();
       const book = allBooks.find(b => b.id === bookId);
       if (!book) {
@@ -352,10 +353,32 @@
       CURRENT_READER_PAGE = Number(startPage) || 1;
       CURRENT_READER_ZOOM = 1.0;
 
+      const isParaBased = (book.category === 'quran' || book.category === 'tafseer' || !!book.paras_data || !!book.paras);
+      if (isParaBased) {
+        if (paraNum) {
+          CURRENT_READER_PARA = Number(paraNum) || 1;
+        } else if (book.paras && book.paras.length > 0) {
+          const matchP = book.paras.find(pr => CURRENT_READER_PAGE >= pr.page_start && CURRENT_READER_PAGE <= pr.page_end);
+          if (matchP) {
+            CURRENT_READER_PARA = matchP.para;
+            // Convert absolute page to para-relative page if appropriate
+            if (book.paras_data && book.paras_data[matchP.para]) {
+              CURRENT_READER_PAGE = Math.max(1, CURRENT_READER_PAGE - matchP.page_start + 1);
+            }
+          } else {
+            CURRENT_READER_PARA = 1;
+          }
+        } else {
+          CURRENT_READER_PARA = 1;
+        }
+      } else {
+        CURRENT_READER_PARA = 1;
+      }
+
       // Update Header Info
       const setT = (id, v) => { const el = document.getElementById(id); if (el) el.innerText = v; };
       setT('readerBookTitle', book.title);
-      setT('readerCategoryBadge', book.category_label || 'Curriculum');
+      setT('readerCategoryBadge', book.category_label || (book.category === 'tafseer' ? 'Tafseer' : 'Curriculum'));
 
       const iconEl = document.getElementById('readerBookIcon');
       if (iconEl && book.cover_icon) {
@@ -385,15 +408,35 @@
       let optionsHtml = '';
       const maxP = book.total_pages || book.totalPages || 32;
 
-      if (book.paras && book.paras.length > 0) {
-        // Quran by 30 Paras
-        optionsHtml = book.paras.map(p =>
-          `<option value="${p.page_start}">Para ${p.para} (Page ${p.page_start})</option>`
-        ).join('');
+      if (book.category === 'quran' || book.category === 'tafseer' || (book.paras && book.paras.length > 0)) {
+        // Quran & Tafseer 30 Paras Registry
+        const parasList = (typeof QURAN_PARAS_INFO !== 'undefined' && Array.isArray(QURAN_PARAS_INFO)) ? QURAN_PARAS_INFO : (book.paras || []);
+        optionsHtml = parasList.map(p => {
+          const pPages = (typeof getBookParaPages === 'function') ? getBookParaPages(book, p.para) : [];
+          const countStr = pPages.length > 0 ? ` (${pPages.length} Pages)` : ` (${p.total_pages || 18} Pages)`;
+          const pageTarget = p.page_start || 1;
+          return `<option value="${pageTarget}" data-para="${p.para}">Para ${p.para}: ${p.name_en || ('Para ' + p.para)} (${p.name_ur || p.name_ar || ''})${countStr}</option>`;
+        }).join('');
+
+        jumpSelect.onchange = function() {
+          const opt = this.options[this.selectedIndex];
+          const pNum = opt ? opt.getAttribute('data-para') : null;
+          if (pNum) {
+            CURRENT_READER_PARA = Number(pNum);
+            CURRENT_READER_PAGE = 1;
+          } else {
+            CURRENT_READER_PAGE = Number(this.value) || 1;
+          }
+          renderReaderCurrentPage();
+        };
       } else if (book.chapters && book.chapters.length > 0) {
         optionsHtml = book.chapters.map((ch, idx) =>
           `<option value="${ch.page_start || (idx + 1)}">${(ch.title || '').slice(0, 28)} (Page ${ch.page_start || (idx + 1)})</option>`
         ).join('');
+
+        jumpSelect.onchange = function() {
+          changeReaderPage(Number(this.value));
+        };
       } else if (maxP > 50) {
         const chunkSize = 10;
         const chunks = [];
@@ -402,10 +445,18 @@
           chunks.push(`<option value="${i}">Pages ${i}–${end}</option>`);
         }
         optionsHtml = chunks.join('');
+
+        jumpSelect.onchange = function() {
+          changeReaderPage(Number(this.value));
+        };
       } else {
         const pageOptions = [];
         for (let i = 1; i <= maxP; i++) pageOptions.push(`<option value="${i}">Page ${i}</option>`);
         optionsHtml = pageOptions.join('');
+
+        jumpSelect.onchange = function() {
+          changeReaderPage(Number(this.value));
+        };
       }
 
       jumpSelect.innerHTML = optionsHtml;
@@ -414,40 +465,66 @@
     function renderReaderCurrentPage() {
       if (!CURRENT_READER_BOOK) return;
       const book = CURRENT_READER_BOOK;
-      const maxPages = book.total_pages || (book.paras ? 548 : 32);
+      const isParaBased = (book.category === 'quran' || book.category === 'tafseer' || !!book.paras_data || !!book.paras);
+      const paraPages = isParaBased && typeof getBookParaPages === 'function' ? getBookParaPages(book, CURRENT_READER_PARA) : [];
+      const maxPages = isParaBased && paraPages.length > 0
+        ? paraPages.length
+        : (book.total_pages || (book.paras ? 548 : 32));
 
       // Clamp current page
       CURRENT_READER_PAGE = Math.max(1, Math.min(maxPages, CURRENT_READER_PAGE));
 
       // Update Page Indicator & Slider
       const ind = document.getElementById('readerPageIndicator');
-      if (ind) ind.innerText = `Page ${CURRENT_READER_PAGE} of ${maxPages}`;
+      if (ind) {
+        if (isParaBased) {
+          ind.innerText = `Para ${CURRENT_READER_PARA} • Page ${CURRENT_READER_PAGE} of ${maxPages}`;
+        } else {
+          ind.innerText = `Page ${CURRENT_READER_PAGE} of ${maxPages}`;
+        }
+      }
       const indTop = document.getElementById('readerPageIndicatorTop');
-      if (indTop) indTop.innerText = `${CURRENT_READER_PAGE} / ${maxPages}`;
+      if (indTop) {
+        if (isParaBased) {
+          indTop.innerText = `Juz ${CURRENT_READER_PARA} • P${CURRENT_READER_PAGE}`;
+        } else {
+          indTop.innerText = `${CURRENT_READER_PAGE} / ${maxPages}`;
+        }
+      }
 
       const slider = document.getElementById('readerPageSlider');
-      if (slider) slider.value = CURRENT_READER_PAGE;
+      if (slider) {
+        slider.min = 1;
+        slider.max = maxPages;
+        slider.value = CURRENT_READER_PAGE;
+      }
 
       const jumpSelect = document.getElementById('readerJumpSelect');
       if (jumpSelect) {
-        // Find closest matching option
-        const options = Array.from(jumpSelect.options);
-        let bestVal = options[0]?.value;
-        options.forEach(opt => {
-          if (Number(opt.value) <= CURRENT_READER_PAGE) bestVal = opt.value;
-        });
-        if (bestVal) jumpSelect.value = bestVal;
+        if (isParaBased) {
+          const opt = Array.from(jumpSelect.options).find(o => Number(o.getAttribute('data-para')) === CURRENT_READER_PARA);
+          if (opt) jumpSelect.value = opt.value;
+        } else {
+          const options = Array.from(jumpSelect.options);
+          let bestVal = options[0]?.value;
+          options.forEach(opt => {
+            if (Number(opt.value) <= CURRENT_READER_PAGE) bestVal = opt.value;
+          });
+          if (bestVal) jumpSelect.value = bestVal;
+        }
       }
 
       // Update Chapter / Topic subtitle
       const descEl = document.getElementById('readerChapterDesc');
       if (descEl) {
-        if (book.chapters) {
+        if (isParaBased) {
+          const parasList = (typeof QURAN_PARAS_INFO !== 'undefined' && Array.isArray(QURAN_PARAS_INFO)) ? QURAN_PARAS_INFO : (book.paras || []);
+          const matchPara = parasList.find(p => Number(p.para) === CURRENT_READER_PARA) || { name_en: 'Para ' + CURRENT_READER_PARA, name_ur: '' };
+          const langBadge = book.language ? ` [${book.language === 'ur' ? 'Urdu' : 'English'}]` : '';
+          descEl.innerText = `Para ${CURRENT_READER_PARA}: ${matchPara.name_en || ''} (${matchPara.name_ur || matchPara.name_ar || ''})${langBadge} — Page ${CURRENT_READER_PAGE}`;
+        } else if (book.chapters) {
           const matchCh = book.chapters.find(c => CURRENT_READER_PAGE >= (c.page_start || 1) && CURRENT_READER_PAGE <= (c.page_end || maxPages));
           descEl.innerText = matchCh ? `${matchCh.title} — ${matchCh.desc || ''}` : `Page ${CURRENT_READER_PAGE}`;
-        } else if (book.paras) {
-          const matchPara = book.paras.find(p => CURRENT_READER_PAGE >= p.page_start && CURRENT_READER_PAGE <= p.page_end);
-          descEl.innerText = matchPara ? `Para ${matchPara.para}: ${matchPara.name_ar} (${matchPara.name_ur}) — Pages ${matchPara.page_start} to ${matchPara.page_end}` : `Page ${CURRENT_READER_PAGE}`;
         } else {
           descEl.innerText = `${book.edition || 'Lesson'} • Page ${CURRENT_READER_PAGE}`;
         }
@@ -496,14 +573,16 @@
         img.style.transform = 'none';
         applyReaderZoom();
 
-        // Get URL
+        // Get URL with Content-Type awareness (Juz/Para + Language)
         let pageUrl = '';
-        if (typeof book.getPageUrl === 'function') {
-          pageUrl = book.getPageUrl(CURRENT_READER_PAGE);
+        if (typeof CURRICULUM_DATA !== 'undefined' && typeof CURRICULUM_DATA.getPageUrl === 'function') {
+          pageUrl = CURRICULUM_DATA.getPageUrl(book.id, CURRENT_READER_PAGE, CURRENT_READER_PARA, book.language);
+        } else if (typeof book.getPageUrl === 'function') {
+          pageUrl = book.getPageUrl(CURRENT_READER_PAGE, CURRENT_READER_PARA, book.language);
         } else if (book.pages && book.pages[CURRENT_READER_PAGE - 1]) {
           pageUrl = book.pages[CURRENT_READER_PAGE - 1];
         } else if (typeof generateDynamicSvgDataUri === 'function') {
-          pageUrl = generateDynamicSvgDataUri(book, CURRENT_READER_PAGE);
+          pageUrl = generateDynamicSvgDataUri(book, CURRENT_READER_PAGE, CURRENT_READER_PARA, book.language);
         } else {
           pageUrl = generateDynamicSvgPage(book, CURRENT_READER_PAGE);
         }
@@ -1395,15 +1474,98 @@
       alert(`✅ Direct Link for "${bookTitle}" Copied to Clipboard!\n\n${url}\n\nStudents or teachers can open this link to view the book directly in LMS.`);
     }
 
-    // Custom Book Upload Handling
+    // Custom Book Upload & Structure Handling
     let SELECTED_CUSTOM_FILES = [];
+
+    function populateAdminParaSelect(selectId, defaultPara = 1) {
+      const select = document.getElementById(selectId);
+      if (!select) return;
+      const paras = (typeof QURAN_PARAS_INFO !== 'undefined' && Array.isArray(QURAN_PARAS_INFO))
+        ? QURAN_PARAS_INFO
+        : Array.from({ length: 30 }, (_, i) => ({ para: i + 1, name_en: `Para ${i + 1}`, name_ur: `پارہ ${i + 1}` }));
+
+      select.innerHTML = paras.map(p => `
+        <option value="${p.para}">Para ${p.para}: ${p.name_en || ('Para ' + p.para)} (${p.name_ur || p.name_ar || ''})</option>
+      `).join('');
+      select.value = defaultPara || 1;
+    }
+
+    function onAdminUploadCategoryChanged(category) {
+      const row = document.getElementById('cbDynamicQuranTafseerRow');
+      const langCont = document.getElementById('cbLanguageContainer');
+      const paraCont = document.getElementById('cbParaContainer');
+      const paraSelect = document.getElementById('cbParaSelect');
+
+      if (!row) return;
+
+      if (category === 'quran') {
+        row.classList.remove('hidden');
+        if (langCont) langCont.classList.add('hidden');
+        if (paraCont) paraCont.classList.remove('hidden');
+        populateAdminParaSelect('cbParaSelect', 1);
+        updateUploadFileLabels();
+      } else if (category === 'tafseer') {
+        row.classList.remove('hidden');
+        if (langCont) langCont.classList.remove('hidden');
+        if (paraCont) paraCont.classList.remove('hidden');
+        populateAdminParaSelect('cbParaSelect', 1);
+        updateUploadFileLabels();
+      } else {
+        row.classList.add('hidden');
+        if (langCont) langCont.classList.add('hidden');
+        if (paraCont) paraCont.classList.add('hidden');
+        updateUploadFileLabels();
+      }
+    }
+
+    function onAdminUploadLanguageChanged(lang) {
+      updateUploadFileLabels();
+    }
+
+    function onAdminUploadParaChanged(paraNum) {
+      updateUploadFileLabels();
+    }
+
+    function updateUploadFileLabels() {
+      const cat = document.getElementById('cbCategory')?.value || 'qaida';
+      const fileLabel = document.getElementById('cbFileLabelText');
+      const fileHint = document.getElementById('cbFileSubHint');
+      const paraNum = document.getElementById('cbParaSelect')?.value || 1;
+      const lang = document.getElementById('cbLanguage')?.value || 'ur';
+      const langLabel = lang === 'ur' ? 'Urdu' : lang === 'ar' ? 'Arabic' : 'English';
+      const paraInfo = (typeof QURAN_PARAS_INFO !== 'undefined' && Array.isArray(QURAN_PARAS_INFO))
+        ? (QURAN_PARAS_INFO.find(p => Number(p.para) === Number(paraNum)) || { name_en: `Para ${paraNum}` })
+        : { name_en: `Para ${paraNum}` };
+
+      if (cat === 'quran') {
+        if (fileLabel) fileLabel.innerHTML = `<i class="fa-solid fa-quran text-brandEmerald"></i> Select Quran Pages for Para ${paraNum} (${paraInfo.name_ur || paraInfo.name_en}) *`;
+        if (fileHint) fileHint.innerText = `All selected page images will be stored exclusively for Para ${paraNum}. Exact page order is preserved.`;
+      } else if (cat === 'tafseer') {
+        if (fileLabel) fileLabel.innerHTML = `<i class="fa-solid fa-book-atlas text-brandEmerald"></i> Select ${langLabel} Tafseer Pages for Para ${paraNum} *`;
+        if (fileHint) fileHint.innerText = `Uploaded commentary/translation pages will be stored under ${langLabel} Tafseer for Para ${paraNum}.`;
+      } else if (cat === 'qaida') {
+        if (fileLabel) fileLabel.innerHTML = '<i class="fa-solid fa-book-open text-brandEmerald"></i> Select Qaida Pages (Photos / Scans) *';
+        if (fileHint) fileHint.innerText = 'Upload all Takhtis/pages in sequential order.';
+      } else {
+        if (fileLabel) fileLabel.innerHTML = '<i class="fa-solid fa-images text-brandEmerald"></i> Select Book Pages (Photos / Scans) *';
+        if (fileHint) fileHint.innerText = 'Upload all pages in sequential order.';
+      }
+    }
 
     function openCustomBookUploadModal() {
       SELECTED_CUSTOM_FILES = [];
       const fInput = document.getElementById('cbFileInput');
       if (fInput) fInput.value = '';
       const fCount = document.getElementById('cbSelectedFilesCount');
-      if (fCount) fCount.innerText = 'No files chosen yet. Select all pages in order.';
+      if (fCount) {
+        fCount.innerText = 'No files chosen yet. Select all pages in order.';
+        fCount.className = 'text-[10px] text-slate-500 font-medium';
+      }
+      const catSelect = document.getElementById('cbCategory');
+      if (catSelect) {
+        catSelect.value = 'qaida';
+        onAdminUploadCategoryChanged('qaida');
+      }
       openModal('modalUploadCustomBook');
     }
 
@@ -1412,7 +1574,7 @@
       const fCount = document.getElementById('cbSelectedFilesCount');
       if (fCount) {
         fCount.innerText = `${SELECTED_CUSTOM_FILES.length} pages selected. Auto-compression to WebP enabled.`;
-        fCount.classList.add('text-emerald-700', 'font-bold');
+        fCount.className = 'text-[10px] text-emerald-700 font-bold';
       }
     }
 
@@ -1423,6 +1585,8 @@
       const category = document.getElementById('cbCategory')?.value || 'qaida';
       const author = document.getElementById('cbAuthor')?.value.trim() || 'Al-Huda Academic Board';
       const description = document.getElementById('cbDescription')?.value.trim() || 'Custom Academy Course Material';
+      const paraNum = Number(document.getElementById('cbParaSelect')?.value || 1);
+      const language = (category === 'tafseer') ? (document.getElementById('cbLanguage')?.value || 'ur') : null;
 
       if (!title || SELECTED_CUSTOM_FILES.length === 0) {
         alert("Please provide a book title and select at least one page image.");
@@ -1439,33 +1603,123 @@
         for (let i = 0; i < SELECTED_CUSTOM_FILES.length; i++) {
           const file = SELECTED_CUSTOM_FILES[i];
           const dataUrl = await compressImageToWebP(file);
+          const safePrefix = `${title.replace(/[^a-zA-Z0-9_-]/g, '_')}_${category === 'quran' || category === 'tafseer' ? 'p' + paraNum + '_' : ''}page_${i + 1}`;
           const r2Url = (typeof window.uploadToCloudflareR2 === 'function')
-            ? await window.uploadToCloudflareR2(dataUrl, 'course_material', `${title.replace(/[^a-zA-Z0-9_-]/g, '_')}_page_${i + 1}.webp`)
+            ? await window.uploadToCloudflareR2(dataUrl, 'course_material', `${safePrefix}.webp`)
             : dataUrl;
           compressedPages.push(r2Url);
         }
 
-        const customBook = {
-          id: 'custom-' + Date.now(),
-          title,
-          title_ar,
-          category,
-          category_label: category === 'qaida' ? 'Qaida & Primers' : category === 'quran' ? 'The Holy Quran' : category === 'tafseer' ? 'Tafseer & Translation' : 'Islamic Studies',
-          author,
-          edition: 'Custom Academy Edition',
-          description,
-          total_pages: compressedPages.length,
-          pages: compressedPages,
-          cover_icon: 'fa-solid fa-book-bookmark',
-          cover_bg: 'from-slate-800 to-indigo-950',
-          created_at: new Date().toISOString()
-        };
+        let existingCustom = getCustomBooks();
 
-        const existingCustom = getCustomBooks();
-        existingCustom.unshift(customBook);
-        saveCustomBooks(existingCustom);
+        if (category === 'quran' || category === 'tafseer') {
+          // Check if custom book with same title & category (and matching language if Tafseer) already exists
+          let matchedBook = existingCustom.find(b =>
+            b.category === category &&
+            b.title.trim().toLowerCase() === title.toLowerCase() &&
+            (category !== 'tafseer' || (b.language || 'ur') === (language || 'ur'))
+          );
 
-        alert(`✅ Custom Book "${title}" Saved Successfully!\n\nTotal Pages: ${compressedPages.length}\nAdded to Course Material Library (Cloudflare R2 + D1).`);
+          if (matchedBook) {
+            // Update the existing book with pages for this Para
+            matchedBook.paras_data = matchedBook.paras_data || {};
+            matchedBook.paras_data[String(paraNum)] = compressedPages;
+
+            // Re-index metadata paras array
+            matchedBook.paras = matchedBook.paras || [];
+            const existingPIdx = matchedBook.paras.findIndex(p => Number(p.para) === paraNum);
+            const paraMetaObj = {
+              para: paraNum,
+              name_en: QURAN_PARAS_INFO[paraNum - 1]?.name_en || `Para ${paraNum}`,
+              name_ur: QURAN_PARAS_INFO[paraNum - 1]?.name_ur || `پارہ ${paraNum}`,
+              total_pages: compressedPages.length,
+              page_start: 1,
+              page_end: compressedPages.length
+            };
+            if (existingPIdx >= 0) matchedBook.paras[existingPIdx] = paraMetaObj;
+            else matchedBook.paras.push(paraMetaObj);
+            matchedBook.paras.sort((a, b) => Number(a.para) - Number(b.para));
+
+            // Recompute running page offsets & flattened pages array
+            let runningStart = 1;
+            const flattened = [];
+            matchedBook.paras.forEach(p => {
+              const pagesInP = matchedBook.paras_data[String(p.para)] || [];
+              p.page_start = runningStart;
+              p.page_end = runningStart + pagesInP.length - 1;
+              p.total_pages = pagesInP.length;
+              runningStart += pagesInP.length;
+              flattened.push(...pagesInP);
+            });
+            matchedBook.pages = flattened;
+            matchedBook.total_pages = flattened.length;
+            matchedBook.updated_at = new Date().toISOString();
+
+            saveCustomBooks(existingCustom);
+            alert(`✅ Material "${title}" Updated!\n\nAdded/Updated Para ${paraNum} (${compressedPages.length} pages).\nTotal Pages Across All Paras: ${flattened.length}`);
+          } else {
+            // Create New Quran / Tafseer Material
+            const customBook = {
+              id: 'custom-' + Date.now(),
+              title,
+              title_ar,
+              category,
+              content_type: category,
+              language: (category === 'tafseer') ? (language || 'ur') : null,
+              language_label: (category === 'tafseer') ? (language === 'ur' ? 'Urdu' : language === 'ar' ? 'Arabic' : 'English') : null,
+              category_label: category === 'quran' ? 'The Holy Quran' : 'Tafseer & Translation',
+              author,
+              edition: category === 'tafseer' ? `${language === 'ur' ? 'Urdu' : 'English'} Commentary Edition` : 'Custom Academy Edition',
+              description,
+              total_paras: 30,
+              paras_data: {
+                [String(paraNum)]: compressedPages
+              },
+              paras: [
+                {
+                  para: paraNum,
+                  name_en: QURAN_PARAS_INFO[paraNum - 1]?.name_en || `Para ${paraNum}`,
+                  name_ur: QURAN_PARAS_INFO[paraNum - 1]?.name_ur || `پارہ ${paraNum}`,
+                  total_pages: compressedPages.length,
+                  page_start: 1,
+                  page_end: compressedPages.length
+                }
+              ],
+              pages: compressedPages,
+              total_pages: compressedPages.length,
+              cover_icon: category === 'quran' ? 'fa-solid fa-book-quran' : 'fa-solid fa-book-atlas',
+              cover_bg: category === 'quran' ? 'from-amber-900 via-stone-900 to-slate-950' : 'from-indigo-950 via-slate-900 to-slate-950',
+              created_at: new Date().toISOString()
+            };
+
+            existingCustom.unshift(customBook);
+            saveCustomBooks(existingCustom);
+            alert(`✅ Custom ${category === 'quran' ? 'Quran' : 'Tafseer'} "${title}" Saved Successfully!\n\nPara ${paraNum}: ${compressedPages.length} pages uploaded.\nYou can add more Paras anytime by editing this material.`);
+          }
+        } else {
+          // Standard Page-Based Material (Qaida, Islamic Studies, Tajweed, etc.)
+          const customBook = {
+            id: 'custom-' + Date.now(),
+            title,
+            title_ar,
+            category,
+            content_type: category,
+            category_label: category === 'qaida' ? 'Qaida & Primers' : category === 'essentials' ? 'Islamic Essentials' : category === 'hadith' ? 'Hadith Collections' : 'Islamic Studies',
+            author,
+            edition: 'Custom Academy Edition',
+            description,
+            total_pages: compressedPages.length,
+            pages: compressedPages,
+            cover_icon: category === 'qaida' ? 'fa-solid fa-book-open' : 'fa-solid fa-book-bookmark',
+            cover_bg: 'from-slate-800 to-indigo-950',
+            created_at: new Date().toISOString()
+          };
+
+          existingCustom.unshift(customBook);
+          saveCustomBooks(existingCustom);
+          alert(`✅ Custom Book "${title}" Saved Successfully!\n\nTotal Pages: ${compressedPages.length}\nAdded to Course Material Library.`);
+        }
+
         closeModal('modalUploadCustomBook');
         loadCurriculumLibrary(category);
       } catch (err) {
@@ -1481,6 +1735,75 @@
     // ============================================================
     let EDIT_BOOK_APPEND_FILES = [];
 
+    function onAdminEditCategoryChanged(category, book = null) {
+      const row = document.getElementById('editBookQuranTafseerRow');
+      const langCont = document.getElementById('editBookLanguageContainer');
+      const paraCont = document.getElementById('editBookParaContainer');
+      const modeCont = document.getElementById('editBookUploadModeContainer');
+      const paraBadge = document.getElementById('editBookParaStatusBadge');
+      const appendLabel = document.getElementById('editBookAppendLabel');
+
+      if (!row) return;
+
+      if (category === 'quran' || category === 'tafseer') {
+        row.classList.remove('hidden');
+        if (category === 'tafseer') {
+          if (langCont) {
+            langCont.classList.remove('hidden');
+            if (book && book.language) document.getElementById('editBookLanguage').value = book.language;
+          }
+        } else {
+          if (langCont) langCont.classList.add('hidden');
+        }
+
+        if (paraCont) paraCont.classList.remove('hidden');
+        if (modeCont) modeCont.classList.remove('hidden');
+        if (paraBadge) paraBadge.classList.remove('hidden');
+
+        populateAdminParaSelect('editBookParaSelect', 1);
+        onAdminEditBookParaChanged(1);
+      } else {
+        row.classList.add('hidden');
+        if (langCont) langCont.classList.add('hidden');
+        if (paraCont) paraCont.classList.add('hidden');
+        if (modeCont) modeCont.classList.add('hidden');
+        if (paraBadge) paraBadge.classList.add('hidden');
+        if (appendLabel) appendLabel.innerText = 'Append More Page Scans (Optional):';
+      }
+    }
+
+    function onAdminEditBookParaChanged(paraNum) {
+      const bookId = document.getElementById('editBookId')?.value;
+      const allBooks = getAllAvailableBooks();
+      const book = allBooks.find(b => b.id === bookId);
+      const paraBadge = document.getElementById('editBookParaStatusBadge');
+      const appendLabel = document.getElementById('editBookAppendLabel');
+      const appendMsg = document.getElementById('editBookAppendMsg');
+
+      const pNum = Number(paraNum) || 1;
+      let count = 0;
+      if (book) {
+        if (book.paras_data && book.paras_data[String(pNum)]) {
+          count = book.paras_data[String(pNum)].length;
+        } else if (typeof getBookParaPages === 'function') {
+          count = getBookParaPages(book, pNum).length;
+        }
+      }
+
+      if (paraBadge) {
+        paraBadge.innerText = `Para ${pNum}: ${count} Pgs`;
+        paraBadge.className = count > 0
+          ? 'font-mono font-bold text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded text-[10px]'
+          : 'font-mono font-bold text-amber-800 bg-amber-100 px-2 py-0.5 rounded text-[10px]';
+      }
+      if (appendLabel) {
+        appendLabel.innerText = `Upload / Manage Pages for Para ${pNum}:`;
+      }
+      if (appendMsg) {
+        appendMsg.innerText = `Selected page scans will update Para ${pNum} according to the upload mode above.`;
+      }
+    }
+
     function openEditCustomBookModal(bookId) {
       const allBooks = getAllAvailableBooks();
       const book = allBooks.find(b => b.id === bookId);
@@ -1494,7 +1817,7 @@
       if (appendInput) appendInput.value = '';
       const appendMsg = document.getElementById('editBookAppendMsg');
       if (appendMsg) {
-        appendMsg.innerText = 'Select additional page scans to add at the end of this book.';
+        appendMsg.innerText = 'Select page scans to add or update.';
         appendMsg.className = 'text-[10px] text-slate-400 mt-1';
       }
 
@@ -1506,8 +1829,10 @@
       document.getElementById('editBookEdition').value = book.edition || '';
       document.getElementById('editBookDescription').value = book.description || '';
 
-      const pageCount = (book.pages && book.pages.length) || book.total_pages || (book.paras ? 548 : 0);
-      document.getElementById('editBookCurrentPagesCount').innerText = `${pageCount} Pages`;
+      const totalP = (book.pages && book.pages.length) || book.total_pages || (book.paras ? 548 : 0);
+      document.getElementById('editBookCurrentPagesCount').innerText = `${totalP} Pages Total`;
+
+      onAdminEditCategoryChanged(book.category || 'qaida', book);
 
       const delBtn = document.getElementById('btnDeleteCurriculumBookModal');
       if (delBtn) {
@@ -1521,7 +1846,7 @@
       EDIT_BOOK_APPEND_FILES = Array.from(input.files || []);
       const appendMsg = document.getElementById('editBookAppendMsg');
       if (appendMsg) {
-        appendMsg.innerText = `${EDIT_BOOK_APPEND_FILES.length} additional pages selected. They will be appended when you save.`;
+        appendMsg.innerText = `${EDIT_BOOK_APPEND_FILES.length} page scans selected. They will be processed upon saving.`;
         appendMsg.className = 'text-[10px] text-emerald-700 font-bold mt-1';
       }
     }
@@ -1535,6 +1860,10 @@
       const author = document.getElementById('editBookAuthor')?.value.trim() || '';
       const edition = document.getElementById('editBookEdition')?.value.trim() || '';
       const description = document.getElementById('editBookDescription')?.value.trim() || '';
+      const isParaBased = (category === 'quran' || category === 'tafseer');
+      const paraNum = Number(document.getElementById('editBookParaSelect')?.value || 1);
+      const uploadMode = document.getElementById('editBookUploadMode')?.value || 'replace';
+      const lang = (category === 'tafseer') ? (document.getElementById('editBookLanguage')?.value || 'ur') : null;
 
       if (!title) {
         alert("Please enter a book title.");
@@ -1549,15 +1878,16 @@
         let customBooks = getCustomBooks();
         let bookIndex = customBooks.findIndex(b => b.id === bookId);
 
-        // Compress any new appended pages and upload to Cloudflare R2 (10 GB Storage)
-        let appendedPages = [];
+        // Compress any new uploaded pages and upload to Cloudflare R2 (10 GB Storage)
+        let processedNewPages = [];
         if (EDIT_BOOK_APPEND_FILES.length > 0) {
           for (let i = 0; i < EDIT_BOOK_APPEND_FILES.length; i++) {
             const dataUrl = await compressImageToWebP(EDIT_BOOK_APPEND_FILES[i]);
+            const safePrefix = `${title.replace(/[^a-zA-Z0-9_-]/g, '_')}_${isParaBased ? 'p' + paraNum + '_' : ''}page_${i + 1}`;
             const r2Url = (typeof window.uploadToCloudflareR2 === 'function')
-              ? await window.uploadToCloudflareR2(dataUrl, 'course_material', `${title.replace(/[^a-zA-Z0-9_-]/g, '_')}_append_${i + 1}.webp`)
+              ? await window.uploadToCloudflareR2(dataUrl, 'course_material', `${safePrefix}.webp`)
               : dataUrl;
-            appendedPages.push(r2Url);
+            processedNewPages.push(r2Url);
           }
         }
 
@@ -1566,50 +1896,92 @@
                          category === 'tafseer' ? 'Tafseer & Translation' :
                          category === 'hadith' ? 'Hadith Collections' : 'Islamic Essentials';
 
-        if (bookIndex >= 0) {
-          // Existing custom book in localStorage
-          const targetBook = customBooks[bookIndex];
-          targetBook.title = title;
-          targetBook.title_ar = title_ar;
-          targetBook.category = category;
-          targetBook.category_label = catLabel;
-          targetBook.author = author;
-          targetBook.edition = edition;
-          targetBook.description = description;
+        let targetBook = null;
 
-          if (appendedPages.length > 0) {
-            targetBook.pages = [...(targetBook.pages || []), ...appendedPages];
-            targetBook.total_pages = targetBook.pages.length;
-          }
-          targetBook.updated_at = new Date().toISOString();
-          customBooks[bookIndex] = targetBook;
+        if (bookIndex >= 0) {
+          targetBook = customBooks[bookIndex];
         } else {
-          // Editing a standard book converts it into a customized copy in customBooks
+          // Editing a standard book converts it into a customized copy
           const allBooks = getAllAvailableBooks();
           const origBook = allBooks.find(b => b.id === bookId) || {};
-          const newCustomBook = {
+          targetBook = {
             ...origBook,
             id: 'custom-' + Date.now(),
-            title,
-            title_ar,
-            category,
-            category_label: catLabel,
-            author,
-            edition,
-            description,
-            pages: [...(origBook.pages || []), ...appendedPages],
-            total_pages: ((origBook.pages && origBook.pages.length) || origBook.total_pages || 0) + appendedPages.length,
-            updated_at: new Date().toISOString()
+            created_at: new Date().toISOString()
           };
-          customBooks.unshift(newCustomBook);
+          customBooks.unshift(targetBook);
+          bookIndex = 0;
 
-          // Mark standard book id as replaced/deleted
           const deletedIds = getDeletedBookIds();
           if (!deletedIds.includes(bookId)) {
             deletedIds.push(bookId);
             saveDeletedBookIds(deletedIds);
           }
         }
+
+        targetBook.title = title;
+        targetBook.title_ar = title_ar;
+        targetBook.category = category;
+        targetBook.content_type = category;
+        targetBook.category_label = catLabel;
+        targetBook.author = author;
+        targetBook.edition = edition;
+        targetBook.description = description;
+
+        if (category === 'tafseer') {
+          targetBook.language = lang || 'ur';
+          targetBook.language_label = (lang === 'ur' ? 'Urdu' : lang === 'ar' ? 'Arabic' : 'English');
+        }
+
+        if (isParaBased) {
+          targetBook.paras_data = targetBook.paras_data || {};
+          if (processedNewPages.length > 0) {
+            if (uploadMode === 'append') {
+              targetBook.paras_data[String(paraNum)] = [...(targetBook.paras_data[String(paraNum)] || []), ...processedNewPages];
+            } else {
+              targetBook.paras_data[String(paraNum)] = processedNewPages;
+            }
+          }
+
+          // Re-index metadata paras array
+          targetBook.paras = targetBook.paras || [];
+          const pIdx = targetBook.paras.findIndex(p => Number(p.para) === paraNum);
+          const currentPCount = (targetBook.paras_data[String(paraNum)] || []).length;
+          const paraMetaObj = {
+            para: paraNum,
+            name_en: QURAN_PARAS_INFO[paraNum - 1]?.name_en || `Para ${paraNum}`,
+            name_ur: QURAN_PARAS_INFO[paraNum - 1]?.name_ur || `پارہ ${paraNum}`,
+            total_pages: currentPCount,
+            page_start: 1,
+            page_end: currentPCount
+          };
+          if (pIdx >= 0) targetBook.paras[pIdx] = paraMetaObj;
+          else if (currentPCount > 0) targetBook.paras.push(paraMetaObj);
+          targetBook.paras.sort((a, b) => Number(a.para) - Number(b.para));
+
+          // Recompute running offsets and flattened pages
+          let runningOffset = 1;
+          const flatList = [];
+          targetBook.paras.forEach(p => {
+            const pCount = (targetBook.paras_data[String(p.para)] || []).length;
+            p.page_start = runningOffset;
+            p.page_end = runningOffset + pCount - 1;
+            p.total_pages = pCount;
+            runningOffset += pCount;
+            flatList.push(...(targetBook.paras_data[String(p.para)] || []));
+          });
+          targetBook.pages = flatList;
+          targetBook.total_pages = flatList.length;
+        } else {
+          // Page-based (Qaida, etc.)
+          if (processedNewPages.length > 0) {
+            targetBook.pages = [...(targetBook.pages || []), ...processedNewPages];
+            targetBook.total_pages = targetBook.pages.length;
+          }
+        }
+
+        targetBook.updated_at = new Date().toISOString();
+        customBooks[bookIndex] = targetBook;
 
         saveCustomBooks(customBooks);
         alert(`✅ Course Material "${title}" updated successfully!`);
@@ -1707,4 +2079,23 @@
         }, 800);
       }
     })();
+
+    // Export core curriculum functions to window for cross-portal access
+    if (typeof window !== 'undefined') {
+      window.onAdminUploadCategoryChanged = onAdminUploadCategoryChanged;
+      window.onAdminUploadLanguageChanged = onAdminUploadLanguageChanged;
+      window.onAdminUploadParaChanged = onAdminUploadParaChanged;
+      window.onAdminEditCategoryChanged = onAdminEditCategoryChanged;
+      window.onAdminEditBookParaChanged = onAdminEditBookParaChanged;
+      window.openCustomBookUploadModal = openCustomBookUploadModal;
+      window.handleCustomBookFileSelection = handleCustomBookFileSelection;
+      window.handleSaveCustomBook = handleSaveCustomBook;
+      window.openEditCustomBookModal = openEditCustomBookModal;
+      window.handleEditBookAppendFiles = handleEditBookAppendFiles;
+      window.handleUpdateCustomBook = handleUpdateCustomBook;
+      window.openDigitalBookReader = openDigitalBookReader;
+      window.renderReaderCurrentPage = renderReaderCurrentPage;
+      window.loadCurriculumLibrary = loadCurriculumLibrary;
+      window.filterCurriculumCategory = filterCurriculumCategory;
+    }
 

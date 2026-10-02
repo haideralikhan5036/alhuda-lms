@@ -922,6 +922,7 @@
     // Reader State
     let ACTIVE_READER_BOOK = null;
     let ACTIVE_READER_PAGE = 1;
+    let ACTIVE_READER_PARA = 1;
     let ACTIVE_READER_ZOOM = 1.0;
     let READER_IS_PANNING = false;
     let READER_PAN_START_X = 0;
@@ -1578,7 +1579,7 @@
                     <i class="fa-solid fa-book-open text-brandEmerald"></i> ${bookTitle}
                   </span>
                   <span class="text-xs font-bold px-2 py-0.5 rounded-md bg-amber-100 text-amber-900 border border-amber-300 font-mono">
-                    Takhti / Page ${pageNum}
+                    ${meta?.para ? `Para ${meta.para} &bull; ` : ''}Page ${pageNum}
                   </span>
                 </div>
                 ${meta?.remarks ? `
@@ -1589,7 +1590,7 @@
               </div>
 
               <div class="flex items-center justify-start md:justify-end">
-                <button onclick="openParentDigitalReader('${bookId}', ${pageNum})" class="w-full sm:w-auto px-4 py-2.5 rounded-xl bg-gradient-to-r from-emerald-800 to-teal-900 hover:from-emerald-700 hover:to-teal-800 text-white font-black text-xs shadow-sm hover:shadow-md transition flex items-center justify-center gap-1.5">
+                <button onclick="openParentDigitalReader('${bookId}', ${pageNum}, ${meta?.para || 'null'}, ${meta?.language ? `'${meta.language}'` : 'null'})" class="w-full sm:w-auto px-4 py-2.5 rounded-xl bg-gradient-to-r from-emerald-800 to-teal-900 hover:from-emerald-700 hover:to-teal-800 text-white font-black text-xs shadow-sm hover:shadow-md transition flex items-center justify-center gap-1.5">
                   <i class="fa-solid fa-book-open-reader text-brandGold"></i> Revise Page ${pageNum}
                 </button>
               </div>
@@ -1601,15 +1602,21 @@
       // Update Hero Sabaq Button
       const heroBtn = document.getElementById('btnOpenLatestSabaq');
       if (heroBtn && LATEST_SABAQ_META) {
-        heroBtn.innerHTML = `<i class="fa-solid fa-book-open"></i> Read Sabaq: ${LATEST_SABAQ_META.book_title || 'Lesson'} (Pg ${LATEST_SABAQ_META.page || 1})`;
+        const paraText = LATEST_SABAQ_META.para ? `Para ${LATEST_SABAQ_META.para} • ` : '';
+        heroBtn.innerHTML = `<i class="fa-solid fa-book-open"></i> Read Sabaq: ${LATEST_SABAQ_META.book_title || 'Lesson'} (${paraText}Pg ${LATEST_SABAQ_META.page || 1})`;
       }
     }
 
     function openLatestSabaqReader() {
       if (LATEST_SABAQ_META) {
-        openParentDigitalReader(LATEST_SABAQ_META.book_id || 'noorani-qaida', LATEST_SABAQ_META.page || 1);
+        openParentDigitalReader(
+          LATEST_SABAQ_META.book_id || 'holy-quran-16-line',
+          LATEST_SABAQ_META.page || 1,
+          LATEST_SABAQ_META.para || null,
+          LATEST_SABAQ_META.language || null
+        );
       } else {
-        openParentDigitalReader('noorani-qaida', 1);
+        openParentDigitalReader('holy-quran-16-line', 1);
       }
     }
 
@@ -1723,7 +1730,7 @@
             <td class="p-3.5 text-slate-600 truncate max-w-xs">${topic}</td>
             <td class="p-3.5 text-right">
               ${meta?.page ? `
-                <button onclick="openParentDigitalReader('${meta.book_id || 'noorani-qaida'}', ${meta.page})" class="px-2.5 py-1 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-800 font-bold text-[11px] transition">
+                <button onclick="openParentDigitalReader('${meta.book_id || 'holy-quran-16-line'}', ${meta.page}, ${meta.para || 'null'}, ${meta.language ? `'${meta.language}'` : 'null'})" class="px-2.5 py-1 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-800 font-bold text-[11px] transition">
                   <i class="fa-solid fa-book-open"></i> Read
                 </button>
               ` : '-'}
@@ -2385,7 +2392,7 @@
     // ==========================================
     // INTERACTIVE DIGITAL BOOK READER ENGINE
     // ==========================================
-    function openParentDigitalReader(bookId, pageNum = 1) {
+    function openParentDigitalReader(bookId, pageNum = 1, paraNum = null, language = null) {
       const allBooks = typeof getAllAvailableBooks === 'function' ? getAllAvailableBooks() : [];
       let book = allBooks.find(b => b.id === bookId);
 
@@ -2400,16 +2407,43 @@
       }
 
       ACTIVE_READER_BOOK = book;
-      const maxPages = book.total_pages || (book.paras ? 548 : 32);
-      ACTIVE_READER_PAGE = Math.max(1, Math.min(Number(pageNum) || 1, maxPages));
+      ACTIVE_READER_PAGE = Number(pageNum) || 1;
       ACTIVE_READER_ZOOM = 1.0;
+
+      const isParaBased = (book.category === 'quran' || book.category === 'tafseer' || !!book.paras_data || !!book.paras);
+      if (isParaBased) {
+        if (paraNum) {
+          ACTIVE_READER_PARA = Number(paraNum) || 1;
+        } else if (book.paras && book.paras.length > 0) {
+          const matchP = book.paras.find(pr => ACTIVE_READER_PAGE >= pr.page_start && ACTIVE_READER_PAGE <= pr.page_end);
+          if (matchP) {
+            ACTIVE_READER_PARA = matchP.para;
+            if (book.paras_data && book.paras_data[matchP.para]) {
+              ACTIVE_READER_PAGE = Math.max(1, ACTIVE_READER_PAGE - matchP.page_start + 1);
+            }
+          } else {
+            ACTIVE_READER_PARA = 1;
+          }
+        } else {
+          ACTIVE_READER_PARA = 1;
+        }
+      } else {
+        ACTIVE_READER_PARA = 1;
+      }
+
+      if (language) {
+        book.language = language;
+      }
 
       // Update Header Text & Badges
       const titleEl = document.getElementById('parentReaderBookTitle');
       if (titleEl) titleEl.innerText = book.title;
 
       const catBadge = document.getElementById('parentReaderCategoryBadge');
-      if (catBadge) catBadge.innerText = book.category_label || 'Curriculum';
+      if (catBadge) catBadge.innerText = book.category_label || (book.category === 'tafseer' ? 'Tafseer' : 'Curriculum');
+
+      const paraPages = isParaBased && typeof getBookParaPages === 'function' ? getBookParaPages(book, ACTIVE_READER_PARA) : [];
+      const maxPages = isParaBased && paraPages.length > 0 ? paraPages.length : (book.total_pages || (book.paras ? 548 : 32));
 
       // Populate Jump Select
       populateParentReaderJumpSelect(book, maxPages);
@@ -2437,14 +2471,38 @@
       if (!jumpSelect) return;
 
       let html = '';
-      if (book.paras && book.paras.length > 0) {
-        html = book.paras.map(p => `<option value="${p.page_start}">Para ${p.para} (Page ${p.page_start})</option>`).join('');
+      if (book.category === 'quran' || book.category === 'tafseer' || (book.paras && book.paras.length > 0)) {
+        const parasList = (typeof QURAN_PARAS_INFO !== 'undefined' && Array.isArray(QURAN_PARAS_INFO)) ? QURAN_PARAS_INFO : (book.paras || []);
+        html = parasList.map(p => {
+          const pPages = (typeof getBookParaPages === 'function') ? getBookParaPages(book, p.para) : [];
+          const countStr = pPages.length > 0 ? ` (${pPages.length} Pages)` : ` (${p.total_pages || 18} Pages)`;
+          const pageTarget = p.page_start || 1;
+          return `<option value="${pageTarget}" data-para="${p.para}">Para ${p.para}: ${p.name_en || ('Para ' + p.para)} (${p.name_ur || p.name_ar || ''})${countStr}</option>`;
+        }).join('');
+
+        jumpSelect.onchange = function() {
+          const opt = this.options[this.selectedIndex];
+          const pNum = opt ? opt.getAttribute('data-para') : null;
+          if (pNum) {
+            ACTIVE_READER_PARA = Number(pNum);
+            ACTIVE_READER_PAGE = 1;
+          } else {
+            ACTIVE_READER_PAGE = Number(this.value) || 1;
+          }
+          renderCurrentStudentReaderPage();
+        };
       } else if (book.chapters && book.chapters.length > 0) {
         html = book.chapters.map((ch, idx) => `<option value="${ch.page_start || (idx + 1)}">${(ch.title || '').slice(0, 24)} (Pg ${ch.page_start || (idx + 1)})</option>`).join('');
+        jumpSelect.onchange = function() {
+          parentReaderJumpToPage(this.value);
+        };
       } else {
         const pages = [];
         for (let i = 1; i <= Math.min(maxPages, 50); i++) pages.push(`<option value="${i}">Page ${i}</option>`);
         html = pages.join('');
+        jumpSelect.onchange = function() {
+          parentReaderJumpToPage(this.value);
+        };
       }
       jumpSelect.innerHTML = html;
     }
@@ -2468,24 +2526,57 @@
     function renderCurrentStudentReaderPage() {
       if (!ACTIVE_READER_BOOK) return;
       const book = ACTIVE_READER_BOOK;
-      const maxPages = book.total_pages || (book.paras ? 548 : 32);
+      const isParaBased = (book.category === 'quran' || book.category === 'tafseer' || !!book.paras_data || !!book.paras);
+      const paraPages = isParaBased && typeof getBookParaPages === 'function' ? getBookParaPages(book, ACTIVE_READER_PARA) : [];
+      const maxPages = isParaBased && paraPages.length > 0
+        ? paraPages.length
+        : (book.total_pages || (book.paras ? 548 : 32));
 
       ACTIVE_READER_PAGE = Math.max(1, Math.min(maxPages, ACTIVE_READER_PAGE));
 
       const pageBadge = document.getElementById('parentReaderPageBadge');
-      if (pageBadge) pageBadge.innerText = `Page ${ACTIVE_READER_PAGE} of ${maxPages}`;
+      if (pageBadge) {
+        if (isParaBased) {
+          pageBadge.innerText = `Para ${ACTIVE_READER_PARA} • Page ${ACTIVE_READER_PAGE} of ${maxPages}`;
+        } else {
+          pageBadge.innerText = `Page ${ACTIVE_READER_PAGE} of ${maxPages}`;
+        }
+      }
 
       const topInd = document.getElementById('parentReaderPageIndicatorTop');
-      if (topInd) topInd.innerText = `${ACTIVE_READER_PAGE} / ${maxPages}`;
+      if (topInd) {
+        if (isParaBased) {
+          topInd.innerText = `Juz ${ACTIVE_READER_PARA} • P${ACTIVE_READER_PAGE}`;
+        } else {
+          topInd.innerText = `${ACTIVE_READER_PAGE} / ${maxPages}`;
+        }
+      }
 
       const bottomInd = document.getElementById('parentReaderBottomPageInd');
-      if (bottomInd) bottomInd.innerText = `Page ${ACTIVE_READER_PAGE} of ${maxPages}`;
+      if (bottomInd) {
+        if (isParaBased) {
+          bottomInd.innerText = `Para ${ACTIVE_READER_PARA} • Page ${ACTIVE_READER_PAGE} of ${maxPages}`;
+        } else {
+          bottomInd.innerText = `Page ${ACTIVE_READER_PAGE} of ${maxPages}`;
+        }
+      }
 
       const slider = document.getElementById('parentReaderPageSlider');
-      if (slider) slider.value = ACTIVE_READER_PAGE;
+      if (slider) {
+        slider.min = 1;
+        slider.max = maxPages;
+        slider.value = ACTIVE_READER_PAGE;
+      }
 
       const jumpSelect = document.getElementById('parentReaderJumpSelect');
-      if (jumpSelect) jumpSelect.value = ACTIVE_READER_PAGE;
+      if (jumpSelect) {
+        if (isParaBased) {
+          const opt = Array.from(jumpSelect.options).find(o => Number(o.getAttribute('data-para')) === ACTIVE_READER_PARA);
+          if (opt) jumpSelect.value = opt.value;
+        } else {
+          jumpSelect.value = ACTIVE_READER_PAGE;
+        }
+      }
 
       if (book.is_interactive) {
         document.getElementById('parentReaderPageStage')?.classList.add('hidden');
@@ -2508,18 +2599,20 @@
         applyParentReaderZoom();
 
         let pageUrl = '';
-        if (typeof book.getPageUrl === 'function') {
-          pageUrl = book.getPageUrl(ACTIVE_READER_PAGE);
+        if (typeof CURRICULUM_DATA !== 'undefined' && typeof CURRICULUM_DATA.getPageUrl === 'function') {
+          pageUrl = CURRICULUM_DATA.getPageUrl(book.id, ACTIVE_READER_PAGE, ACTIVE_READER_PARA, book.language);
+        } else if (typeof book.getPageUrl === 'function') {
+          pageUrl = book.getPageUrl(ACTIVE_READER_PAGE, ACTIVE_READER_PARA, book.language);
         } else if (book.pages && book.pages[ACTIVE_READER_PAGE - 1]) {
           pageUrl = book.pages[ACTIVE_READER_PAGE - 1];
         } else if (typeof generateDynamicSvgDataUri === 'function') {
-          pageUrl = generateDynamicSvgDataUri(book, ACTIVE_READER_PAGE);
+          pageUrl = generateDynamicSvgDataUri(book, ACTIVE_READER_PAGE, ACTIVE_READER_PARA, book.language);
         }
 
         img.onload = () => { applyParentReaderZoom(); };
         img.onerror = () => {
           img.onerror = null;
-          img.src = typeof generateDynamicSvgDataUri === 'function' ? generateDynamicSvgDataUri(book, ACTIVE_READER_PAGE) : '';
+          img.src = typeof generateDynamicSvgDataUri === 'function' ? generateDynamicSvgDataUri(book, ACTIVE_READER_PAGE, ACTIVE_READER_PARA, book.language) : '';
         };
 
         img.src = pageUrl;
@@ -2532,7 +2625,9 @@
       if (typeof AlHudaInteractiveQaida !== 'undefined' && AlHudaInteractiveQaida.stopSequentialAudioTour) {
         AlHudaInteractiveQaida.stopSequentialAudioTour();
       }
-      const maxPages = ACTIVE_READER_BOOK.total_pages || (ACTIVE_READER_BOOK.paras ? 548 : 32);
+      const isParaBased = (ACTIVE_READER_BOOK.category === 'quran' || ACTIVE_READER_BOOK.category === 'tafseer' || !!ACTIVE_READER_BOOK.paras_data || !!ACTIVE_READER_BOOK.paras);
+      const paraPages = isParaBased && typeof getBookParaPages === 'function' ? getBookParaPages(ACTIVE_READER_BOOK, ACTIVE_READER_PARA) : [];
+      const maxPages = isParaBased && paraPages.length > 0 ? paraPages.length : (ACTIVE_READER_BOOK.total_pages || (ACTIVE_READER_BOOK.paras ? 548 : 32));
       if (ACTIVE_READER_PAGE < maxPages) {
         ACTIVE_READER_PAGE++;
         renderCurrentStudentReaderPage();

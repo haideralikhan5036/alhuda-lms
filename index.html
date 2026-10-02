@@ -5156,20 +5156,46 @@
             <input type="text" id="cbTitleAr" placeholder="e.g. Kitab At-Tajweed" class="w-full p-2.5 border rounded-xl font-semibold">
           </div>
           <div>
-            <label class="block font-bold mb-1 text-slate-700">Category *:</label>
-            <select id="cbCategory" required class="w-full p-2.5 border rounded-xl font-bold text-slate-800">
-              <option value="qaida">Qaida &amp; Primers</option>
-              <option value="quran">The Holy Quran</option>
-              <option value="tafseer">Tafseer &amp; Translation</option>
-              <option value="hadith">Hadith Collections</option>
-              <option value="essentials">Islamic Essentials &amp; Duas</option>
+            <label class="block font-bold mb-1 text-slate-700">Category / Content Type *:</label>
+            <select id="cbCategory" required onchange="onAdminUploadCategoryChanged(this.value)" class="w-full p-2.5 border rounded-xl font-bold text-slate-800 focus:outline-brandEmerald">
+              <option value="qaida">Qaida &amp; Primers (Page-Based)</option>
+              <option value="quran">The Holy Quran (30 Paras / Juz)</option>
+              <option value="tafseer">Tafseer &amp; Translation (Language + 30 Paras)</option>
+              <option value="essentials">Islamic Studies &amp; Essentials (Page-Based)</option>
+              <option value="hadith">Hadith Collections (Page-Based)</option>
+              <option value="tajweed">Tajweed Rules (Page-Based)</option>
+              <option value="other">Other Islamic Book (Page-Based)</option>
             </select>
+          </div>
+        </div>
+
+        <!-- DYNAMIC QURAN / TAFSEER STRUCTURE FIELDS -->
+        <div id="cbDynamicQuranTafseerRow" class="hidden grid grid-cols-1 sm:grid-cols-2 gap-3 p-3 bg-emerald-50/70 border border-emerald-200 rounded-xl">
+          <div id="cbLanguageContainer" class="hidden">
+            <label class="block font-bold mb-1 text-emerald-950 flex items-center gap-1">
+              <i class="fa-solid fa-language text-brandEmerald"></i> Tafseer Language *:
+            </label>
+            <select id="cbLanguage" onchange="onAdminUploadLanguageChanged(this.value)" class="w-full p-2.5 bg-white border border-emerald-300 rounded-xl font-bold text-slate-800 text-xs focus:outline-brandEmerald">
+              <option value="ur">Urdu Tafseer (اردو)</option>
+              <option value="en">English Tafseer (English)</option>
+              <option value="ar">Arabic Tafseer (العربية)</option>
+            </select>
+            <p class="text-[10px] text-slate-500 mt-1">Saved as real backend language metadata.</p>
+          </div>
+          <div id="cbParaContainer" class="hidden col-span-full sm:col-span-1">
+            <label class="block font-bold mb-1 text-emerald-950 flex items-center gap-1">
+              <i class="fa-solid fa-quran text-brandEmerald"></i> Target Juz / Para (1 - 30) *:
+            </label>
+            <select id="cbParaSelect" onchange="onAdminUploadParaChanged(this.value)" class="w-full p-2.5 bg-white border border-emerald-300 rounded-xl font-bold text-slate-800 text-xs focus:outline-brandEmerald">
+              <!-- Populated dynamically with 30 Paras -->
+            </select>
+            <p class="text-[10px] text-emerald-700 font-semibold mt-1" id="cbParaExistingHint">Select the Juz to upload pages for.</p>
           </div>
         </div>
 
         <div>
           <label class="block font-bold mb-1 text-slate-700">Author / Edition:</label>
-          <input type="text" id="cbAuthor" placeholder="e.g. Al-Huda Academic Board" class="w-full p-2.5 border rounded-xl">
+          <input type="text" id="cbAuthor" placeholder="e.g. Al-Huda Academic Board" class="w-full p-2.5 border rounded-xl font-semibold">
         </div>
 
         <div>
@@ -5180,7 +5206,7 @@
         <!-- MULTI-IMAGE FILE SELECTOR -->
         <div class="p-4 bg-slate-50 border-2 border-dashed border-slate-300 rounded-xl space-y-2">
           <div class="flex items-center justify-between">
-            <span class="font-black text-slate-700 uppercase tracking-wide text-[11px] flex items-center gap-1.5">
+            <span id="cbFileLabelText" class="font-black text-slate-700 uppercase tracking-wide text-[11px] flex items-center gap-1.5">
               <i class="fa-solid fa-images text-brandEmerald"></i> Select Book Pages (Photos / Scans) *
             </span>
             <span class="text-[10px] text-brandEmerald font-bold bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
@@ -5188,7 +5214,8 @@
             </span>
           </div>
           <input type="file" id="cbFileInput" multiple accept="image/*" onchange="handleCustomBookFileSelection(this)" required class="w-full text-xs text-slate-600 file:mr-3 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-brandDark file:text-white hover:file:bg-brandDarkest cursor-pointer">
-          <p class="text-[10px] text-slate-400" id="cbSelectedFilesCount">No files chosen yet. Select all pages in order.</p>
+          <p class="text-[10px] text-slate-500 font-medium" id="cbSelectedFilesCount">No files chosen yet. Select all pages in order.</p>
+          <p class="text-[10px] text-slate-400 italic" id="cbFileSubHint">Pages will be preserved in the exact order selected.</p>
         </div>
 
         <div class="flex justify-end gap-2 border-t pt-3">
@@ -5211,7 +5238,7 @@
           <h3 class="font-black text-base text-brandDark flex items-center gap-2">
             <i class="fa-solid fa-pen-to-square text-brandEmerald"></i> Edit Course Material
           </h3>
-          <p class="text-xs text-slate-500 mt-0.5">Update book details, syllabus information, or add more pages</p>
+          <p class="text-xs text-slate-500 mt-0.5">Update book details, syllabus information, or manage Juz / pages</p>
         </div>
         <button onclick="closeModal('modalEditCustomBook')" class="text-slate-400 hover:text-slate-600 text-xl font-bold">&times;</button>
       </div>
@@ -5230,13 +5257,37 @@
             <input type="text" id="editBookTitleAr" class="w-full p-2.5 border rounded-xl font-semibold">
           </div>
           <div>
-            <label class="block font-bold mb-1 text-slate-700">Category *:</label>
-            <select id="editBookCategory" required class="w-full p-2.5 border rounded-xl font-bold text-slate-800">
+            <label class="block font-bold mb-1 text-slate-700">Category / Content Type *:</label>
+            <select id="editBookCategory" required onchange="onAdminEditCategoryChanged(this.value)" class="w-full p-2.5 border rounded-xl font-bold text-slate-800">
               <option value="qaida">Qaida &amp; Primers</option>
               <option value="quran">The Holy Quran</option>
               <option value="tafseer">Tafseer &amp; Translation</option>
+              <option value="essentials">Islamic Studies &amp; Essentials</option>
               <option value="hadith">Hadith Collections</option>
-              <option value="essentials">Islamic Essentials &amp; Duas</option>
+              <option value="tajweed">Tajweed Rules</option>
+              <option value="other">Other Islamic Book</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- DYNAMIC EDIT SECTION FOR QURAN / TAFSEER -->
+        <div id="editBookQuranTafseerRow" class="hidden grid grid-cols-1 sm:grid-cols-2 gap-3 p-3 bg-emerald-50/70 border border-emerald-200 rounded-xl">
+          <div id="editBookLanguageContainer" class="hidden">
+            <label class="block font-bold mb-1 text-emerald-950 flex items-center gap-1">
+              <i class="fa-solid fa-language text-brandEmerald"></i> Tafseer Language *:
+            </label>
+            <select id="editBookLanguage" class="w-full p-2 bg-white border border-emerald-300 rounded-xl font-bold text-slate-800 text-xs focus:outline-brandEmerald">
+              <option value="ur">Urdu Tafseer (اردو)</option>
+              <option value="en">English Tafseer (English)</option>
+              <option value="ar">Arabic Tafseer (العربية)</option>
+            </select>
+          </div>
+          <div id="editBookParaContainer" class="hidden col-span-full sm:col-span-1">
+            <label class="block font-bold mb-1 text-emerald-950 flex items-center gap-1">
+              <i class="fa-solid fa-quran text-brandEmerald"></i> Manage Para / Juz (1 - 30):
+            </label>
+            <select id="editBookParaSelect" onchange="onAdminEditBookParaChanged(this.value)" class="w-full p-2 bg-white border border-emerald-300 rounded-xl font-bold text-slate-800 text-xs focus:outline-brandEmerald">
+              <!-- Populated dynamically with 30 Paras -->
             </select>
           </div>
         </div>
@@ -5257,19 +5308,30 @@
           <textarea id="editBookDescription" rows="2" class="w-full p-2.5 border rounded-xl"></textarea>
         </div>
 
-        <!-- CURRENT PAGES & APPEND MORE PAGES -->
+        <!-- CURRENT PAGES & MANAGE/APPEND PAGES -->
         <div class="p-3.5 bg-slate-50 border border-slate-200 rounded-xl space-y-2">
           <div class="flex items-center justify-between text-[11px]">
             <span class="font-bold text-slate-700 flex items-center gap-1.5">
-              <i class="fa-solid fa-copy text-brandEmerald"></i> Current Pages:
+              <i class="fa-solid fa-copy text-brandEmerald"></i> Pages Status:
             </span>
-            <span id="editBookCurrentPagesCount" class="font-mono font-bold text-brandDark bg-emerald-100/70 px-2 py-0.5 rounded">0 Pages</span>
+            <div class="flex items-center gap-1.5">
+              <span id="editBookParaStatusBadge" class="hidden font-mono font-bold text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded text-[10px]">Para 1: 0 Pgs</span>
+              <span id="editBookCurrentPagesCount" class="font-mono font-bold text-brandDark bg-slate-200 px-2 py-0.5 rounded text-[10px]">0 Pages Total</span>
+            </div>
+          </div>
+
+          <div id="editBookUploadModeContainer" class="hidden text-[11px] font-bold text-slate-700 pt-1">
+            <label class="block text-slate-600 mb-1">Upload Mode for Selected Para:</label>
+            <select id="editBookUploadMode" class="w-full p-1.5 bg-white border border-slate-300 rounded-lg text-xs font-semibold">
+              <option value="replace">Replace all pages of this Para with new upload</option>
+              <option value="append">Append new pages to existing pages of this Para</option>
+            </select>
           </div>
 
           <div>
-            <label class="block font-bold text-[10px] text-slate-500 mb-1">Append More Page Scans (Optional):</label>
+            <label id="editBookAppendLabel" class="block font-bold text-[10px] text-slate-500 mb-1">Upload / Append Page Scans (Optional):</label>
             <input type="file" id="editBookAppendFiles" multiple accept="image/*" onchange="handleEditBookAppendFiles(this)" class="w-full text-xs text-slate-600 file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-bold file:bg-slate-200 file:text-slate-800 hover:file:bg-slate-300 cursor-pointer">
-            <p class="text-[10px] text-slate-400 mt-1" id="editBookAppendMsg">Select additional page scans to add at the end of this book.</p>
+            <p class="text-[10px] text-slate-400 mt-1" id="editBookAppendMsg">Select page scans to add or update.</p>
           </div>
         </div>
 

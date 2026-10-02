@@ -1020,9 +1020,21 @@
               </select>
             </div>
 
-            <!-- Dynamic Para/Juz Selector for Quran Students -->
-            <div id="attQuranParaContainer" class="hidden">
+            <!-- Dynamic Tafseer Language Selector -->
+            <div id="attTafseerLanguageContainer" class="hidden">
               <label class="block font-bold text-slate-700 mb-1 flex items-center gap-1.5">
+                <i class="fa-solid fa-language text-brandEmerald"></i> Select Tafseer Language *:
+              </label>
+              <select id="attTafseerLanguageSelect" onchange="onTeacherTafseerLanguageChanged(this.value)" class="w-full p-2.5 bg-white border border-blue-300 rounded-xl font-bold text-slate-800 text-xs focus:outline-brandEmerald shadow-2xs">
+                <option value="ur">Urdu Tafseer (اردو)</option>
+                <option value="en">English Tafseer (English)</option>
+                <option value="ar">Arabic Tafseer (العربية)</option>
+              </select>
+            </div>
+
+            <!-- Dynamic Para/Juz Selector for Quran & Tafseer -->
+            <div id="attQuranParaContainer" class="hidden">
+              <label id="attParaLabelText" class="block font-bold text-slate-700 mb-1 flex items-center gap-1.5">
                 <i class="fa-solid fa-quran text-brandEmerald"></i> Select Para / Juz (1 - 30) *:
               </label>
               <select id="attQuranParaSelect" onchange="onTeacherQuranParaChanged(this.value)" class="w-full p-2.5 bg-white border border-emerald-300 rounded-xl font-bold text-slate-800 text-xs focus:outline-brandEmerald shadow-2xs">
@@ -1247,6 +1259,28 @@
               <label class="block font-bold text-slate-700 mb-1">Course Material / Book *:</label>
               <select id="advCourseBookSelect" onchange="onAdvanceCourseBookChanged(this.value)" class="w-full p-2.5 bg-white border border-slate-300 rounded-xl font-bold text-slate-800 text-xs focus:outline-purple-600 shadow-2xs">
                 <!-- Dynamically populated -->
+              </select>
+            </div>
+
+            <!-- Dynamic Tafseer Language Selector for Advance Class -->
+            <div id="advTafseerLanguageContainer" class="hidden">
+              <label class="block font-bold text-slate-700 mb-1 flex items-center gap-1.5">
+                <i class="fa-solid fa-language text-purple-700"></i> Select Tafseer Language *:
+              </label>
+              <select id="advTafseerLanguageSelect" onchange="onAdvanceTafseerLanguageChanged(this.value)" class="w-full p-2.5 bg-white border border-purple-300 rounded-xl font-bold text-slate-800 text-xs focus:outline-purple-600 shadow-2xs">
+                <option value="ur">Urdu Tafseer (اردو)</option>
+                <option value="en">English Tafseer (English)</option>
+                <option value="ar">Arabic Tafseer (العربية)</option>
+              </select>
+            </div>
+
+            <!-- Dynamic Para/Juz Selector for Advance Class -->
+            <div id="advQuranParaContainer" class="hidden">
+              <label id="advParaLabelText" class="block font-bold text-slate-700 mb-1 flex items-center gap-1.5">
+                <i class="fa-solid fa-quran text-purple-700"></i> Select Para / Juz (1 - 30) *:
+              </label>
+              <select id="advQuranParaSelect" onchange="onAdvanceQuranParaChanged(this.value)" class="w-full p-2.5 bg-white border border-purple-300 rounded-xl font-bold text-slate-800 text-xs focus:outline-purple-600 shadow-2xs">
+                <!-- Dynamically populated with 30 Paras -->
               </select>
             </div>
 
@@ -3228,12 +3262,12 @@
                 <div class="space-y-1">
                   <div class="flex items-center gap-1.5 flex-wrap">
                     <span class="px-2 py-0.5 rounded text-[10px] font-extrabold bg-emerald-50 text-brandDark border border-emerald-300 flex items-center gap-1">
-                      <i class="fa-solid fa-book-quran text-brandEmerald"></i> ${pMeta.book_title || 'Course'} &bull; Pg ${pMeta.page}
+                      <i class="fa-solid fa-book-quran text-brandEmerald"></i> ${pMeta.book_title || 'Course'} &bull; ${pMeta.para ? `Para ${pMeta.para} &bull; ` : ''}Pg ${pMeta.page}
                     </span>
                     <span class="px-1.5 py-0.5 rounded text-[9px] font-bold border ${passColor}">
                       ${pMeta.status || 'Done'}
                     </span>
-                    <button onclick="openDigitalBookReader('${pMeta.book_id || 'noorani-qaida-classic'}', ${pMeta.page || 1})" class="text-[10px] text-brandEmerald hover:text-brandDark font-extrabold flex items-center gap-0.5" title="Open Lesson in Digital Reader">
+                    <button onclick="openDigitalBookReader('${pMeta.book_id || 'holy-quran-16-line'}', ${pMeta.page || 1}, ${pMeta.para || 'null'}, ${pMeta.language ? `'${pMeta.language}'` : 'null'})" class="text-[10px] text-brandEmerald hover:text-brandDark font-extrabold flex items-center gap-0.5" title="Open Lesson in Digital Reader">
                       <i class="fa-solid fa-eye text-[9px]"></i> Read
                     </button>
                   </div>
@@ -3738,6 +3772,7 @@
     // ============================================================
     let CURRENT_READER_BOOK = null;
     let CURRENT_READER_PAGE = 1;
+    let CURRENT_READER_PARA = 1;
     let CURRENT_READER_ZOOM = 1.0;
 
     async function hydrateTeacherCustomBooksFromD1() {
@@ -3896,6 +3931,25 @@
       { para: 30, name: "Amma Yatasa'aloon (عمّ یتساءلون)", page_start: 525, page_end: 548 }
     ];
 
+    function onTeacherTafseerLanguageChanged(lang) {
+      const allBooks = getTeacherAllBooks();
+      const currentBookId = document.getElementById('attCourseBookSelect')?.value;
+      const currentBook = allBooks.find(b => b.id === currentBookId);
+
+      // If current book doesn't match selected language, switch to matching Tafseer book
+      if (currentBook && currentBook.category === 'tafseer' && (currentBook.language || 'ur') !== lang) {
+        const matchingBook = allBooks.find(b => b.category === 'tafseer' && (b.language || 'ur') === lang);
+        if (matchingBook) {
+          document.getElementById('attCourseBookSelect').value = matchingBook.id;
+          onTeacherCourseBookChanged(matchingBook.id, null, null, lang);
+          return;
+        }
+      }
+
+      const paraNum = document.getElementById('attQuranParaSelect')?.value || 1;
+      onTeacherQuranParaChanged(paraNum);
+    }
+
     function onTeacherQuranParaChanged(paraNum, targetPage = null) {
       const pageSelect = document.getElementById('attCoursePageSelect');
       if (!pageSelect) return;
@@ -3904,46 +3958,81 @@
       const bookId = document.getElementById('attCourseBookSelect')?.value || 'holy-quran-16-line';
       const book = allBooks.find(b => b.id === bookId) || allBooks[0];
 
-      let pStart = (pNum - 1) * 18 + 1;
-      let pEnd = pNum * 18;
-      const matchedPara = (book?.paras || QURAN_PARAS_LIST).find(p => Number(p.para) === pNum);
-      if (matchedPara) {
-        pStart = Number(matchedPara.page_start) || pStart;
-        pEnd = Number(matchedPara.page_end) || pEnd;
-      }
+      // Retrieve actual pages for this Para
+      const paraPages = (typeof getBookParaPages === 'function')
+        ? getBookParaPages(book, pNum)
+        : (book?.paras_data?.[String(pNum)] || []);
 
       const opts = [];
-      for (let i = pStart; i <= pEnd; i++) {
-        const offset = i - pStart + 1;
-        opts.push(`<option value="${i}">Page ${i} (Para ${pNum} &bull; Page ${offset})</option>`);
+      if (paraPages && paraPages.length > 0) {
+        // Real uploaded pages for this Juz!
+        for (let i = 1; i <= paraPages.length; i++) {
+          opts.push(`<option value="${i}">Page ${i} (Para ${pNum})</option>`);
+        }
+      } else {
+        // Fallback for standard 16-line Mushaf
+        let pStart = (pNum - 1) * 18 + 1;
+        let pEnd = pNum * 18;
+        const matchedPara = (book?.paras || (typeof QURAN_PARAS_INFO !== 'undefined' ? QURAN_PARAS_INFO : QURAN_PARAS_LIST)).find(p => Number(p.para) === pNum);
+        if (matchedPara) {
+          pStart = Number(matchedPara.page_start) || pStart;
+          pEnd = Number(matchedPara.page_end) || pEnd;
+        }
+        for (let i = pStart; i <= pEnd; i++) {
+          const offset = i - pStart + 1;
+          opts.push(`<option value="${offset}">Page ${offset} (Para ${pNum} &bull; Overall Pg ${i})</option>`);
+        }
       }
-      pageSelect.innerHTML = opts.join('');
 
-      if (targetPage && targetPage >= pStart && targetPage <= pEnd) {
+      pageSelect.innerHTML = opts.join('');
+      if (targetPage && targetPage <= opts.length) {
         pageSelect.value = targetPage;
       } else {
-        pageSelect.value = pStart;
+        pageSelect.value = 1;
       }
     }
 
-    function onTeacherCourseBookChanged(bookId, defaultPara = null, defaultPage = null) {
+    function onTeacherCourseBookChanged(bookId, defaultPara = null, defaultPage = null, defaultLang = null) {
       const pageSelect = document.getElementById('attCoursePageSelect');
       const paraContainer = document.getElementById('attQuranParaContainer');
       const paraSelect = document.getElementById('attQuranParaSelect');
+      const langContainer = document.getElementById('attTafseerLanguageContainer');
+      const langSelect = document.getElementById('attTafseerLanguageSelect');
+      const paraLabel = document.getElementById('attParaLabelText');
       if (!pageSelect) return;
 
       const allBooks = getTeacherAllBooks();
       const book = allBooks.find(b => b.id === bookId) || allBooks[0];
       if (!book) return;
 
-      const isQuran = (book.id === 'holy-quran-16-line' || book.id === 'quran-16-line' || book.category === 'quran' || (book.title && book.title.toLowerCase().includes('quran')) || !!book.paras);
+      const isQuran = (book.category === 'quran' || book.id === 'holy-quran-16-line' || book.id === 'quran-16-line' || (book.title && book.title.toLowerCase().includes('quran') && !book.title.toLowerCase().includes('tafseer')));
+      const isTafseer = (book.category === 'tafseer' || (book.title && book.title.toLowerCase().includes('tafseer')));
 
-      if (isQuran) {
+      if (isTafseer) {
+        if (langContainer) langContainer.classList.remove('hidden');
+        if (langSelect) {
+          langSelect.value = defaultLang || book.language || 'ur';
+        }
         if (paraContainer) paraContainer.classList.remove('hidden');
+        if (paraLabel) paraLabel.innerHTML = '<i class="fa-solid fa-scroll text-brandEmerald"></i> Select Tafseer Para / Juz (1 - 30) *:';
         if (paraSelect) {
-          const parasList = book.paras || QURAN_PARAS_LIST;
+          const parasList = (typeof QURAN_PARAS_INFO !== 'undefined' && Array.isArray(QURAN_PARAS_INFO)) ? QURAN_PARAS_INFO : (book.paras || QURAN_PARAS_LIST);
           paraSelect.innerHTML = parasList.map(p => `
-            <option value="${p.para}">Para ${p.para}: ${p.name || p.name_ur || ('Juz ' + p.para)} (Pages ${p.page_start}-${p.page_end})</option>
+            <option value="${p.para}">Para ${p.para}: ${p.name_en || p.name || ('Juz ' + p.para)} (${p.name_ur || p.name_ar || ''})</option>
+          `).join('');
+
+          let targetPara = defaultPara || 1;
+          paraSelect.value = targetPara;
+          onTeacherQuranParaChanged(targetPara, defaultPage);
+        }
+      } else if (isQuran) {
+        if (langContainer) langContainer.classList.add('hidden');
+        if (paraContainer) paraContainer.classList.remove('hidden');
+        if (paraLabel) paraLabel.innerHTML = '<i class="fa-solid fa-quran text-brandEmerald"></i> Select Quran Para / Juz (1 - 30) *:';
+        if (paraSelect) {
+          const parasList = (typeof QURAN_PARAS_INFO !== 'undefined' && Array.isArray(QURAN_PARAS_INFO)) ? QURAN_PARAS_INFO : (book.paras || QURAN_PARAS_LIST);
+          paraSelect.innerHTML = parasList.map(p => `
+            <option value="${p.para}">Para ${p.para}: ${p.name_en || p.name || ('Juz ' + p.para)} (${p.name_ur || p.name_ar || ''})</option>
           `).join('');
 
           let targetPara = defaultPara;
@@ -3951,12 +4040,12 @@
             const foundP = parasList.find(p => defaultPage >= p.page_start && defaultPage <= p.page_end);
             if (foundP) targetPara = foundP.para;
           }
-          if (targetPara) {
-            paraSelect.value = targetPara;
-          }
-          onTeacherQuranParaChanged(paraSelect.value || 1, defaultPage);
+          targetPara = targetPara || 1;
+          paraSelect.value = targetPara;
+          onTeacherQuranParaChanged(targetPara, defaultPage);
         }
       } else {
+        if (langContainer) langContainer.classList.add('hidden');
         if (paraContainer) paraContainer.classList.add('hidden');
         let html = '';
         if (book.chapters && book.chapters.length > 0) {
@@ -3964,10 +4053,10 @@
             <option value="${ch.page_start || (idx + 1)}">Page ${ch.page_start || (idx + 1)} &bull; ${ch.title.slice(0, 35)}</option>
           `).join('');
         } else {
-          const total = book.total_pages || 32;
+          const total = book.total_pages || (book.pages ? book.pages.length : 32);
           const opts = [];
           for (let i = 1; i <= total; i++) {
-            opts.push(`<option value="${i}">Page / Takhti ${i}</option>`);
+            opts.push(`<option value="${i}">Page / Lesson ${i}</option>`);
           }
           html = opts.join('');
         }
@@ -3979,9 +4068,14 @@
     }
 
     function previewTeacherSelectedMaterial() {
-      const bookId = document.getElementById('attCourseBookSelect')?.value || 'noorani-qaida-classic';
+      const bookId = document.getElementById('attCourseBookSelect')?.value || 'holy-quran-16-line';
+      const allBooks = getTeacherAllBooks();
+      const book = allBooks.find(b => b.id === bookId) || allBooks[0];
       const page = Number(document.getElementById('attCoursePageSelect')?.value || 1);
-      openDigitalBookReader(bookId, page);
+      const isParaBased = (book?.category === 'quran' || book?.category === 'tafseer' || !!book?.paras_data || !!book?.paras);
+      const para = isParaBased ? Number(document.getElementById('attQuranParaSelect')?.value || 1) : null;
+      const lang = (book?.category === 'tafseer') ? (document.getElementById('attTafseerLanguageSelect')?.value || book?.language || 'ur') : null;
+      openDigitalBookReader(bookId, page, para, lang);
     }
 
     // Modal History Navigation Helpers for Teacher Portal
@@ -4245,13 +4339,14 @@
       const page = PREVIEW_PAGE;
       closeCourseMaterialPreview(false);
       closeTeacherLibraryPicker(false);
-      openDigitalBookReader(bookId, page);
+      openDigitalBookReader(bookId, page, null, PREVIEW_BOOK.language || null);
     }
 
     function startClassLessonWithPreviewBook() {
       if (!PREVIEW_BOOK) return;
       const bookId = PREVIEW_BOOK.id;
       const page = PREVIEW_PAGE;
+      const lang = PREVIEW_BOOK.language || null;
       closeCourseMaterialPreview(false);
       closeTeacherLibraryPicker(false);
       openAdvanceClassModal();
@@ -4259,10 +4354,8 @@
         const bSel = document.getElementById('advCourseBookSelect');
         if (bSel) {
           bSel.value = bookId;
-          if (typeof onAdvanceCourseBookChanged === 'function') onAdvanceCourseBookChanged(bookId);
+          if (typeof onAdvanceCourseBookChanged === 'function') onAdvanceCourseBookChanged(bookId, null, page, lang);
         }
-        const pSel = document.getElementById('advCoursePageSelect');
-        if (pSel) pSel.value = page;
       }, 300);
     }
 
@@ -4422,12 +4515,16 @@
         const rating = Number(document.getElementById('attSabaqRating')?.value || 5);
         const remarks = (document.getElementById('attLessonNotes')?.value || '').trim();
 
-        const isQuran = (bookId === 'holy-quran-16-line' || bookId === 'quran-16-line' || book?.category === 'quran' || (book?.title && book.title.toLowerCase().includes('quran')) || !!book?.paras);
-        const selectedPara = isQuran ? Number(document.getElementById('attQuranParaSelect')?.value || 1) : null;
+        const isQuran = (book?.category === 'quran' || bookId === 'holy-quran-16-line' || bookId === 'quran-16-line' || (book?.title && book.title.toLowerCase().includes('quran') && !book?.title?.toLowerCase().includes('tafseer')));
+        const isTafseer = (book?.category === 'tafseer' || (book?.title && book.title.toLowerCase().includes('tafseer')));
+        const selectedLanguage = isTafseer ? (document.getElementById('attTafseerLanguageSelect')?.value || book?.language || 'ur') : null;
+        const selectedPara = (isQuran || isTafseer) ? Number(document.getElementById('attQuranParaSelect')?.value || 1) : null;
 
         const sabaqPayload = {
           book_id: bookId,
           book_title: book ? book.title : 'Course',
+          content_type: isQuran ? 'quran' : isTafseer ? 'tafseer' : (book?.category || 'qaida'),
+          language: selectedLanguage,
           para: selectedPara,
           page: page,
           line_range: line_range,
@@ -4492,7 +4589,7 @@
     // ============================================================
     // IN-LMS DIGITAL READER FOR TEACHER SCREEN SHARE
     // ============================================================
-    function openDigitalBookReader(bookId, startPage = 1) {
+    function openDigitalBookReader(bookId, startPage = 1, paraNum = null, language = null) {
       const allBooks = getTeacherAllBooks();
       const book = allBooks.find(b => b.id === bookId) || allBooks[0];
       if (!book) return;
@@ -4501,9 +4598,34 @@
       CURRENT_READER_PAGE = Number(startPage) || 1;
       CURRENT_READER_ZOOM = 1.0;
 
+      const isParaBased = (book.category === 'quran' || book.category === 'tafseer' || !!book.paras_data || !!book.paras);
+      if (isParaBased) {
+        if (paraNum) {
+          CURRENT_READER_PARA = Number(paraNum) || 1;
+        } else if (book.paras && book.paras.length > 0) {
+          const matchP = book.paras.find(pr => CURRENT_READER_PAGE >= pr.page_start && CURRENT_READER_PAGE <= pr.page_end);
+          if (matchP) {
+            CURRENT_READER_PARA = matchP.para;
+            if (book.paras_data && book.paras_data[matchP.para]) {
+              CURRENT_READER_PAGE = Math.max(1, CURRENT_READER_PAGE - matchP.page_start + 1);
+            }
+          } else {
+            CURRENT_READER_PARA = 1;
+          }
+        } else {
+          CURRENT_READER_PARA = 1;
+        }
+      } else {
+        CURRENT_READER_PARA = 1;
+      }
+
+      if (language) {
+        book.language = language;
+      }
+
       const setT = (id, v) => { const el = document.getElementById(id); if (el) el.innerText = v; };
       setT('readerBookTitle', book.title);
-      setT('readerCategoryBadge', book.category_label || 'Curriculum');
+      setT('readerCategoryBadge', book.category_label || (book.category === 'tafseer' ? 'Tafseer' : 'Curriculum'));
 
       const iconEl = document.getElementById('readerBookIcon');
       if (iconEl && book.cover_icon) {
@@ -4512,10 +4634,13 @@
 
       populateReaderJumpSelect(book);
 
+      const paraPages = isParaBased && typeof getBookParaPages === 'function' ? getBookParaPages(book, CURRENT_READER_PARA) : [];
+      const maxPages = isParaBased && paraPages.length > 0 ? paraPages.length : (book.total_pages || (book.paras ? 548 : 32));
+
       const slider = document.getElementById('readerPageSlider');
       if (slider) {
         slider.min = 1;
-        slider.max = book.total_pages || (book.paras ? 548 : 32);
+        slider.max = maxPages;
         slider.value = CURRENT_READER_PAGE;
       }
 
@@ -4532,15 +4657,34 @@
       let optionsHtml = '';
       const maxP = book.total_pages || book.totalPages || 32;
 
-      if (book.paras && book.paras.length > 0) {
-        // ✅ Quran (30 Paras = 30 options, not 604!) — massive performance win
-        optionsHtml = book.paras.map(p =>
-          `<option value="${p.page_start}">Para ${p.para} (Page ${p.page_start})</option>`
-        ).join('');
+      if (book.category === 'quran' || book.category === 'tafseer' || (book.paras && book.paras.length > 0)) {
+        // Quran & Tafseer 30 Paras Registry
+        const parasList = (typeof QURAN_PARAS_INFO !== 'undefined' && Array.isArray(QURAN_PARAS_INFO)) ? QURAN_PARAS_INFO : (book.paras || []);
+        optionsHtml = parasList.map(p => {
+          const pPages = (typeof getBookParaPages === 'function') ? getBookParaPages(book, p.para) : [];
+          const countStr = pPages.length > 0 ? ` (${pPages.length} Pages)` : ` (${p.total_pages || 18} Pages)`;
+          const pageTarget = p.page_start || 1;
+          return `<option value="${pageTarget}" data-para="${p.para}">Para ${p.para}: ${p.name_en || ('Para ' + p.para)} (${p.name_ur || p.name_ar || ''})${countStr}</option>`;
+        }).join('');
+
+        jumpSelect.onchange = function() {
+          const opt = this.options[this.selectedIndex];
+          const pNum = opt ? opt.getAttribute('data-para') : null;
+          if (pNum) {
+            CURRENT_READER_PARA = Number(pNum);
+            CURRENT_READER_PAGE = 1;
+          } else {
+            CURRENT_READER_PAGE = Number(this.value) || 1;
+          }
+          renderReaderCurrentPage();
+        };
       } else if (book.chapters && book.chapters.length > 0) {
         optionsHtml = book.chapters.map((ch, idx) =>
           `<option value="${ch.page_start || (idx + 1)}">${(ch.title || '').slice(0, 28)} (Pg ${ch.page_start || (idx + 1)})</option>`
         ).join('');
+        jumpSelect.onchange = function() {
+          changeReaderPage(Number(this.value));
+        };
       } else if (maxP > 50) {
         // Large books without chapters: group into chunks of 10 for performance
         const chunkSize = 10;
@@ -4550,11 +4694,17 @@
           chunks.push(`<option value="${i}">Pages ${i}–${end}</option>`);
         }
         optionsHtml = chunks.join('');
+        jumpSelect.onchange = function() {
+          changeReaderPage(Number(this.value));
+        };
       } else {
         // Small books: page-by-page
         const pageOptions = [];
         for (let i = 1; i <= maxP; i++) pageOptions.push(`<option value="${i}">Page ${i}</option>`);
         optionsHtml = pageOptions.join('');
+        jumpSelect.onchange = function() {
+          changeReaderPage(Number(this.value));
+        };
       }
       jumpSelect.innerHTML = optionsHtml;
     }
@@ -4563,36 +4713,63 @@
     function renderReaderCurrentPage() {
       if (!CURRENT_READER_BOOK) return;
       const book = CURRENT_READER_BOOK;
-      const maxPages = book.total_pages || (book.paras ? 548 : 32);
+      const isParaBased = (book.category === 'quran' || book.category === 'tafseer' || !!book.paras_data || !!book.paras);
+      const paraPages = isParaBased && typeof getBookParaPages === 'function' ? getBookParaPages(book, CURRENT_READER_PARA) : [];
+      const maxPages = isParaBased && paraPages.length > 0
+        ? paraPages.length
+        : (book.total_pages || (book.paras ? 548 : 32));
 
       CURRENT_READER_PAGE = Math.max(1, Math.min(maxPages, CURRENT_READER_PAGE));
 
       const ind = document.getElementById('readerPageIndicator');
-      if (ind) ind.innerText = `Page ${CURRENT_READER_PAGE} of ${maxPages}`;
+      if (ind) {
+        if (isParaBased) {
+          ind.innerText = `Para ${CURRENT_READER_PARA} • Page ${CURRENT_READER_PAGE} of ${maxPages}`;
+        } else {
+          ind.innerText = `Page ${CURRENT_READER_PAGE} of ${maxPages}`;
+        }
+      }
       const indTop = document.getElementById('readerPageIndicatorTop');
-      if (indTop) indTop.innerText = `${CURRENT_READER_PAGE} / ${maxPages}`;
+      if (indTop) {
+        if (isParaBased) {
+          indTop.innerText = `Juz ${CURRENT_READER_PARA} • P${CURRENT_READER_PAGE}`;
+        } else {
+          indTop.innerText = `${CURRENT_READER_PAGE} / ${maxPages}`;
+        }
+      }
 
       const slider = document.getElementById('readerPageSlider');
-      if (slider) slider.value = CURRENT_READER_PAGE;
+      if (slider) {
+        slider.min = 1;
+        slider.max = maxPages;
+        slider.value = CURRENT_READER_PAGE;
+      }
 
       const jumpSelect = document.getElementById('readerJumpSelect');
       if (jumpSelect) {
-        const options = Array.from(jumpSelect.options);
-        let bestVal = options[0]?.value;
-        options.forEach(opt => {
-          if (Number(opt.value) <= CURRENT_READER_PAGE) bestVal = opt.value;
-        });
-        if (bestVal) jumpSelect.value = bestVal;
+        if (isParaBased) {
+          const opt = Array.from(jumpSelect.options).find(o => Number(o.getAttribute('data-para')) === CURRENT_READER_PARA);
+          if (opt) jumpSelect.value = opt.value;
+        } else {
+          const options = Array.from(jumpSelect.options);
+          let bestVal = options[0]?.value;
+          options.forEach(opt => {
+            if (Number(opt.value) <= CURRENT_READER_PAGE) bestVal = opt.value;
+          });
+          if (bestVal) jumpSelect.value = bestVal;
+        }
       }
 
       const descEl = document.getElementById('readerChapterDesc');
       if (descEl) {
-        if (book.chapters) {
+        if (isParaBased) {
+          const parasList = (typeof QURAN_PARAS_INFO !== 'undefined' && Array.isArray(QURAN_PARAS_INFO)) ? QURAN_PARAS_INFO : (book.paras || []);
+          const matchPara = parasList.find(p => Number(p.para) === CURRENT_READER_PARA) || { name_en: 'Para ' + CURRENT_READER_PARA, name_ur: '' };
+          const langBadge = book.language ? ` [${book.language === 'ur' ? 'Urdu' : 'English'}]` : '';
+          descEl.innerText = `Para ${CURRENT_READER_PARA}: ${matchPara.name_en || ''} (${matchPara.name_ur || matchPara.name_ar || ''})${langBadge} — Page ${CURRENT_READER_PAGE}`;
+        } else if (book.chapters) {
           const matchCh = book.chapters.find(c => CURRENT_READER_PAGE >= (c.page_start || 1) && CURRENT_READER_PAGE <= (c.page_end || maxPages));
           descEl.innerText = matchCh ? `${matchCh.title} — ${matchCh.desc || ''}` : `Page ${CURRENT_READER_PAGE}`;
-        } else if (book.paras) {
-          const matchPara = book.paras.find(p => CURRENT_READER_PAGE >= p.page_start && CURRENT_READER_PAGE <= p.page_end);
-          descEl.innerText = matchPara ? `Para ${matchPara.para}: ${matchPara.name_ar} (${matchPara.name_ur})` : `Page ${CURRENT_READER_PAGE}`;
         } else {
           descEl.innerText = `${book.edition || 'Lesson'} • Page ${CURRENT_READER_PAGE}`;
         }
@@ -4637,12 +4814,14 @@
         img.src = '';
 
         let pageUrl = '';
-        if (typeof book.getPageUrl === 'function') {
-          pageUrl = book.getPageUrl(CURRENT_READER_PAGE);
+        if (typeof CURRICULUM_DATA !== 'undefined' && typeof CURRICULUM_DATA.getPageUrl === 'function') {
+          pageUrl = CURRICULUM_DATA.getPageUrl(book.id, CURRENT_READER_PAGE, CURRENT_READER_PARA, book.language);
+        } else if (typeof book.getPageUrl === 'function') {
+          pageUrl = book.getPageUrl(CURRENT_READER_PAGE, CURRENT_READER_PARA, book.language);
         } else if (book.pages && book.pages[CURRENT_READER_PAGE - 1]) {
           pageUrl = book.pages[CURRENT_READER_PAGE - 1];
         } else if (typeof generateDynamicSvgDataUri === 'function') {
-          pageUrl = generateDynamicSvgDataUri(book, CURRENT_READER_PAGE);
+          pageUrl = generateDynamicSvgDataUri(book, CURRENT_READER_PAGE, CURRENT_READER_PARA, book.language);
         } else {
           pageUrl = generateDynamicSvgPage(book, CURRENT_READER_PAGE);
         }
@@ -4651,19 +4830,21 @@
           if (spinner) spinner.classList.add('hidden');
           applyReaderZoom();
           // Preload next & previous pages for instant flip
-          if (typeof book.getPageUrl === 'function') {
-            const maxP = book.total_pages || book.totalPages || 32;
-            if (CURRENT_READER_PAGE < maxP) { new Image().src = book.getPageUrl(CURRENT_READER_PAGE + 1); }
+          if (typeof CURRICULUM_DATA !== 'undefined' && typeof CURRICULUM_DATA.getPageUrl === 'function') {
+            if (CURRENT_READER_PAGE < maxPages) { new Image().src = CURRICULUM_DATA.getPageUrl(book.id, CURRENT_READER_PAGE + 1, CURRENT_READER_PARA, book.language); }
+            if (CURRENT_READER_PAGE > 1) { new Image().src = CURRICULUM_DATA.getPageUrl(book.id, CURRENT_READER_PAGE - 1, CURRENT_READER_PARA, book.language); }
+          } else if (typeof book.getPageUrl === 'function') {
+            if (CURRENT_READER_PAGE < maxPages) { new Image().src = book.getPageUrl(CURRENT_READER_PAGE + 1); }
             if (CURRENT_READER_PAGE > 1) { new Image().src = book.getPageUrl(CURRENT_READER_PAGE - 1); }
           }
         };
         img.onerror = () => {
           img.onerror = null;
           let fallback = '';
-          if (typeof book.getFallbackPageUrl === 'function') {
+          if (typeof generateDynamicSvgDataUri === 'function') {
+            fallback = generateDynamicSvgDataUri(book, CURRENT_READER_PAGE, CURRENT_READER_PARA, book.language);
+          } else if (typeof book.getFallbackPageUrl === 'function') {
             fallback = book.getFallbackPageUrl(CURRENT_READER_PAGE);
-          } else if (typeof generateDynamicSvgDataUri === 'function') {
-            fallback = generateDynamicSvgDataUri(book, CURRENT_READER_PAGE);
           } else {
             fallback = generateDynamicSvgPage(book, CURRENT_READER_PAGE);
           }
@@ -6458,31 +6639,130 @@
       }
     }
 
-    function onAdvanceCourseBookChanged(bookId) {
+    function onAdvanceTafseerLanguageChanged(lang) {
+      const bSelect = document.getElementById('advCourseBookSelect');
+      const bookId = bSelect?.value;
+      const allBooks = getTeacherAllBooks();
+      const book = allBooks.find(b => b.id === bookId);
+      if (book) {
+        book.language = lang;
+      }
+      const para = Number(document.getElementById('advQuranParaSelect')?.value || 1);
+      onAdvanceQuranParaChanged(para);
+    }
+
+    function onAdvanceQuranParaChanged(paraNum, targetPage = null) {
+      const pageSelect = document.getElementById('advCoursePageSelect');
+      const bSelect = document.getElementById('advCourseBookSelect');
+      if (!pageSelect || !bSelect) return;
+
+      const allBooks = getTeacherAllBooks();
+      const book = allBooks.find(b => b.id === bSelect.value);
+      const pNum = Number(paraNum) || 1;
+
+      const paraPages = (typeof getBookParaPages === 'function') ? getBookParaPages(book, pNum) : [];
+      let opts = [];
+
+      if (paraPages && paraPages.length > 0) {
+        for (let i = 1; i <= paraPages.length; i++) {
+          opts.push(`<option value="${i}">Page ${i} (of ${paraPages.length} in Para ${pNum})</option>`);
+        }
+      } else {
+        // Fallback for standard 16-line Mushaf
+        let pStart = (pNum - 1) * 18 + 1;
+        let pEnd = pNum * 18;
+        const matchedPara = (book?.paras || (typeof QURAN_PARAS_INFO !== 'undefined' ? QURAN_PARAS_INFO : QURAN_PARAS_LIST)).find(p => Number(p.para) === pNum);
+        if (matchedPara) {
+          pStart = Number(matchedPara.page_start) || pStart;
+          pEnd = Number(matchedPara.page_end) || pEnd;
+        }
+        for (let i = pStart; i <= pEnd; i++) {
+          const offset = i - pStart + 1;
+          opts.push(`<option value="${offset}">Page ${offset} (Para ${pNum} &bull; Overall Pg ${i})</option>`);
+        }
+      }
+
+      pageSelect.innerHTML = opts.join('');
+      if (targetPage && targetPage <= opts.length) {
+        pageSelect.value = targetPage;
+      } else {
+        pageSelect.value = 1;
+      }
+    }
+
+    function onAdvanceCourseBookChanged(bookId, defaultPara = null, defaultPage = null, defaultLang = null) {
       const pSelect = document.getElementById('advCoursePageSelect');
+      const paraContainer = document.getElementById('advQuranParaContainer');
+      const paraSelect = document.getElementById('advQuranParaSelect');
+      const langContainer = document.getElementById('advTafseerLanguageContainer');
+      const langSelect = document.getElementById('advTafseerLanguageSelect');
+      const paraLabel = document.getElementById('advParaLabelText');
       if (!pSelect) return;
+
       const allBooks = getTeacherAllBooks();
       const book = allBooks.find(b => b.id === bookId) || allBooks[0];
       if (!book) return;
 
-      const maxP = book.total_pages || (book.paras ? 548 : 32);
-      const opts = [];
-      if (book.chapters && book.chapters.length > 0) {
-        book.chapters.forEach((ch, idx) => {
-          opts.push(`<option value="${ch.page_start || (idx + 1)}">Page ${ch.page_start || (idx + 1)} &bull; ${ch.title.slice(0, 35)}</option>`);
-        });
-      } else {
-        for (let i = 1; i <= Math.min(maxP, 120); i++) {
-          opts.push(`<option value="${i}">Page / Lesson ${i}</option>`);
+      const isQuran = (book.category === 'quran' || book.id === 'holy-quran-16-line' || book.id === 'quran-16-line' || (book.title && book.title.toLowerCase().includes('quran') && !book.title.toLowerCase().includes('tafseer')));
+      const isTafseer = (book.category === 'tafseer' || (book.title && book.title.toLowerCase().includes('tafseer')));
+
+      if (isTafseer) {
+        if (langContainer) langContainer.classList.remove('hidden');
+        if (langSelect) langSelect.value = defaultLang || book.language || 'ur';
+        if (paraContainer) paraContainer.classList.remove('hidden');
+        if (paraLabel) paraLabel.innerHTML = '<i class="fa-solid fa-scroll text-purple-700"></i> Select Tafseer Para / Juz (1 - 30) *:';
+        if (paraSelect) {
+          const parasList = (typeof QURAN_PARAS_INFO !== 'undefined' && Array.isArray(QURAN_PARAS_INFO)) ? QURAN_PARAS_INFO : (book.paras || QURAN_PARAS_LIST);
+          paraSelect.innerHTML = parasList.map(p => `
+            <option value="${p.para}">Para ${p.para}: ${p.name_en || p.name || ('Juz ' + p.para)} (${p.name_ur || p.name_ar || ''})</option>
+          `).join('');
+
+          let targetPara = defaultPara || 1;
+          paraSelect.value = targetPara;
+          onAdvanceQuranParaChanged(targetPara, defaultPage);
         }
+      } else if (isQuran) {
+        if (langContainer) langContainer.classList.add('hidden');
+        if (paraContainer) paraContainer.classList.remove('hidden');
+        if (paraLabel) paraLabel.innerHTML = '<i class="fa-solid fa-quran text-purple-700"></i> Select Quran Para / Juz (1 - 30) *:';
+        if (paraSelect) {
+          const parasList = (typeof QURAN_PARAS_INFO !== 'undefined' && Array.isArray(QURAN_PARAS_INFO)) ? QURAN_PARAS_INFO : (book.paras || QURAN_PARAS_LIST);
+          paraSelect.innerHTML = parasList.map(p => `
+            <option value="${p.para}">Para ${p.para}: ${p.name_en || p.name || ('Juz ' + p.para)} (${p.name_ur || p.name_ar || ''})</option>
+          `).join('');
+
+          let targetPara = defaultPara || 1;
+          paraSelect.value = targetPara;
+          onAdvanceQuranParaChanged(targetPara, defaultPage);
+        }
+      } else {
+        if (langContainer) langContainer.classList.add('hidden');
+        if (paraContainer) paraContainer.classList.add('hidden');
+        const opts = [];
+        if (book.chapters && book.chapters.length > 0) {
+          book.chapters.forEach((ch, idx) => {
+            opts.push(`<option value="${ch.page_start || (idx + 1)}">Page ${ch.page_start || (idx + 1)} &bull; ${ch.title.slice(0, 35)}</option>`);
+          });
+        } else {
+          const total = book.total_pages || (book.pages ? book.pages.length : 32);
+          for (let i = 1; i <= Math.min(total, 120); i++) {
+            opts.push(`<option value="${i}">Page / Lesson ${i}</option>`);
+          }
+        }
+        pSelect.innerHTML = opts.join('');
+        if (defaultPage) pSelect.value = defaultPage;
       }
-      pSelect.innerHTML = opts.join('');
     }
 
     function previewAdvanceSelectedMaterial() {
-      const bookId = document.getElementById('advCourseBookSelect')?.value || 'noorani-qaida-classic';
+      const bookId = document.getElementById('advCourseBookSelect')?.value || 'holy-quran-16-line';
+      const allBooks = getTeacherAllBooks();
+      const book = allBooks.find(b => b.id === bookId) || allBooks[0];
       const page = Number(document.getElementById('advCoursePageSelect')?.value || 1);
-      openDigitalBookReader(bookId, page);
+      const isParaBased = (book?.category === 'quran' || book?.category === 'tafseer' || !!book?.paras_data || !!book?.paras);
+      const para = isParaBased ? Number(document.getElementById('advQuranParaSelect')?.value || 1) : null;
+      const lang = (book?.category === 'tafseer') ? (document.getElementById('advTafseerLanguageSelect')?.value || book?.language || 'ur') : null;
+      openDigitalBookReader(bookId, page, para, lang);
     }
 
     async function handleAdvanceClassSubmit(event) {
@@ -6491,7 +6771,7 @@
       const studentId = document.getElementById('advStudentSelect')?.value;
       const targetDate = document.getElementById('advTargetDate')?.value;
       const reason = document.getElementById('advReasonSelect')?.value;
-      const bookId = document.getElementById('advCourseBookSelect')?.value || 'noorani-qaida-classic';
+      const bookId = document.getElementById('advCourseBookSelect')?.value || 'holy-quran-16-line';
       const page = Number(document.getElementById('advCoursePageSelect')?.value || 1);
       const lineRange = (document.getElementById('advLineRange')?.value || '').trim();
       const sabaqResult = document.getElementById('advSabaqResult')?.value || 'Pass';
@@ -6513,6 +6793,11 @@
         const bookTitle = book ? book.title : 'Course Syllabus';
         const teacherName = CURRENT_TEACHER?.full_name || 'Al-Huda Quran Instructor';
 
+        const isQuran = (book?.category === 'quran' || bookId === 'holy-quran-16-line' || bookId === 'quran-16-line' || (book?.title && book.title.toLowerCase().includes('quran') && !book?.title?.toLowerCase().includes('tafseer')));
+        const isTafseer = (book?.category === 'tafseer' || (book?.title && book.title.toLowerCase().includes('tafseer')));
+        const selectedLanguage = isTafseer ? (document.getElementById('advTafseerLanguageSelect')?.value || book?.language || 'ur') : null;
+        const selectedPara = (isQuran || isTafseer) ? Number(document.getElementById('advQuranParaSelect')?.value || 1) : null;
+
         // Find schedule ID matching student or fallback
         const matchedSched = (ALL_TEACHER_SCHEDULES || []).find(sch => String(sch.student_id || sch.students?.id) === String(studentId));
         const schedId = matchedSched ? matchedSched.id : ('adv-' + studentId + '-' + Date.now());
@@ -6520,6 +6805,9 @@
         const sabaqPayload = {
           book_id: bookId,
           book_title: bookTitle,
+          content_type: isQuran ? 'quran' : isTafseer ? 'tafseer' : (book?.category || 'qaida'),
+          language: selectedLanguage,
+          para: selectedPara,
           page: page,
           line_range: lineRange,
           status: sabaqResult,

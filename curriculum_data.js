@@ -19,15 +19,74 @@ const QAIDA_TAKHTIS = [
   { num: 12, title: "Takhti 12: Ahkam-e-Waqf o Rasm-ul-Khat (احکامِ وقف)", sub: "Stopping Rules and Quranic Orthography", letters: ["مـ (لازم)", "ط (مطلق)", "ج (جائز)", "ز (مجوز)", "ص (مرخص)", "قف (وقف)", "لا (عدم وقف)", "۝ (آیت مکمل)"] }
 ];
 
+// Master 30 Paras (Juz) Registry for Holy Quran & Tafseer
+const QURAN_PARAS_INFO = [
+  { para: 1, name_en: "Alif Lam Meem", name_ur: "الم", name_ar: "الم", page_start: 1, page_end: 18, total_pages: 18 },
+  { para: 2, name_en: "Sayaqool", name_ur: "سیقول", name_ar: "سيقول", page_start: 19, page_end: 36, total_pages: 18 },
+  { para: 3, name_en: "Tilka-r-Rusul", name_ur: "تلک الرسل", name_ar: "تلك الرسل", page_start: 37, page_end: 54, total_pages: 18 },
+  { para: 4, name_en: "Lan Tanaaloo", name_ur: "لن تنالوا", name_ar: "لن تنالوا", page_start: 55, page_end: 72, total_pages: 18 },
+  { para: 5, name_en: "Wal Mohsanat", name_ur: "والمحصنت", name_ar: "والمحصنات", page_start: 73, page_end: 90, total_pages: 18 },
+  { para: 6, name_en: "La Yuhibbullah", name_ur: "لا یحب اللہ", name_ar: "لا يحب الله", page_start: 91, page_end: 108, total_pages: 18 },
+  { para: 7, name_en: "Wa Iza Samiu", name_ur: "واذا سمعوا", name_ar: "وإذا سمعوا", page_start: 109, page_end: 126, total_pages: 18 },
+  { para: 8, name_en: "Wa Lau Annana", name_ur: "ولو اننا", name_ar: "ولو أننا", page_start: 127, page_end: 144, total_pages: 18 },
+  { para: 9, name_en: "Qalal Malao", name_ur: "قال الملاء", name_ar: "قال الملأ", page_start: 145, page_end: 162, total_pages: 18 },
+  { para: 10, name_en: "Wa A'lamoo", name_ur: "واعلموا", name_ar: "واعلموا", page_start: 163, page_end: 180, total_pages: 18 },
+  { para: 11, name_en: "Ya'taziroon", name_ur: "یعتذرون", name_ar: "يعتذرون", page_start: 181, page_end: 198, total_pages: 18 },
+  { para: 12, name_en: "Wa Mamin Da'abbat", name_ur: "ومامن دابة", name_ar: "وما من دابة", page_start: 199, page_end: 216, total_pages: 18 },
+  { para: 13, name_en: "Wa Ma Ubrioo", name_ur: "وما ابری", name_ar: "وما أبرئ", page_start: 217, page_end: 234, total_pages: 18 },
+  { para: 14, name_en: "Rubama", name_ur: "ربما", name_ar: "ربما", page_start: 235, page_end: 252, total_pages: 18 },
+  { para: 15, name_en: "Subhanallazi", name_ur: "سبحن الذی", name_ar: "سبحان الذي", page_start: 253, page_end: 270, total_pages: 18 },
+  { para: 16, name_en: "Qala Alam", name_ur: "قال الم", name_ar: "قال ألم", page_start: 271, page_end: 288, total_pages: 18 },
+  { para: 17, name_en: "Iqtaraba Lin-Nasi", name_ur: "اقترب للناس", name_ar: "اقترب للناس", page_start: 289, page_end: 306, total_pages: 18 },
+  { para: 18, name_en: "Qad Aflaha", name_ur: "قد افلح", name_ar: "قد أفلح", page_start: 307, page_end: 324, total_pages: 18 },
+  { para: 19, name_en: "Wa Qalal Lazina", name_ur: "وقال الذین", name_ar: "وقال الذين", page_start: 325, page_end: 342, total_pages: 18 },
+  { para: 20, name_en: "Am-man Khalaq", name_ur: "امن خلق", name_ar: "أمن خلق", page_start: 343, page_end: 360, total_pages: 18 },
+  { para: 21, name_en: "Utlu Ma Oohiya", name_ur: "اتل ما اوحی", name_ar: "اتل ما أوحي", page_start: 361, page_end: 378, total_pages: 18 },
+  { para: 22, name_en: "Wa Man Yaqnut", name_ur: "ومن یقنت", name_ar: "ومن يقنت", page_start: 379, page_end: 396, total_pages: 18 },
+  { para: 23, name_en: "Wa Maliya", name_ur: "ومالی", name_ar: "وما لي", page_start: 397, page_end: 414, total_pages: 18 },
+  { para: 24, name_en: "Fa-man Azlam", name_ur: "فمن اظلم", name_ar: "فمن أظلم", page_start: 415, page_end: 432, total_pages: 18 },
+  { para: 25, name_en: "Ilaihi Yuraddu", name_ur: "الیہ یرد", name_ar: "إليه يرد", page_start: 433, page_end: 450, total_pages: 18 },
+  { para: 26, name_en: "Ha-Meem", name_ur: "حم", name_ar: "حم", page_start: 451, page_end: 468, total_pages: 18 },
+  { para: 27, name_en: "Qala Fama Khatbukum", name_ur: "قال فما خطبکم", name_ar: "قال فما خطبكم", page_start: 469, page_end: 486, total_pages: 18 },
+  { para: 28, name_en: "Qad Sami Allah", name_ur: "قد سمع اللہ", name_ar: "قد سمع الله", page_start: 487, page_end: 504, total_pages: 18 },
+  { para: 29, name_en: "Tabarakallazi", name_ur: "تبارک الذی", name_ar: "تبارك الذي", page_start: 505, page_end: 524, total_pages: 20 },
+  { para: 30, name_en: "Amma Yatasa'aloon", name_ur: "عمّ یتساءلون", name_ar: "عم يتساءلون", page_start: 525, page_end: 548, total_pages: 24 }
+];
+
+// Helper to retrieve the actual page URLs array for a given Para of a book
+function getBookParaPages(book, paraNum) {
+  if (!book) return [];
+  const p = Number(paraNum) || 1;
+  // 1. If book has explicit paras_data dictionary:
+  if (book.paras_data) {
+    if (Array.isArray(book.paras_data[p])) return book.paras_data[p];
+    if (Array.isArray(book.paras_data[String(p)])) return book.paras_data[String(p)];
+  }
+  // 2. If book has paras metadata array:
+  const parasList = book.paras || QURAN_PARAS_INFO;
+  const match = parasList.find(item => Number(item.para) === p);
+  if (match) {
+    if (Array.isArray(match.pages) && match.pages.length > 0) return match.pages;
+    if (Array.isArray(book.pages) && book.pages.length > 0) {
+      const start = (match.page_start || 1) - 1;
+      const count = match.total_pages || (match.page_end ? match.page_end - match.page_start + 1 : 18);
+      return book.pages.slice(start, start + count);
+    }
+  }
+  return [];
+}
+
 // Vector SVG Data URI generator for instant, 100% offline, zero-network-failure rendering
-function generateDynamicSvgDataUri(book, pageNum) {
-  const p = Math.max(1, Math.min(book.total_pages || book.totalPages || 32, Number(pageNum) || 1));
+function generateDynamicSvgDataUri(book, pageNum, paraNum = null, language = null) {
+  const p = Math.max(1, Number(pageNum) || 1);
   const bTitle = (book.title || 'Course Material').replace(/&/g, '&amp;');
   const arTitle = (book.title_ar || book.urduTitle || 'الْقُرْآنُ الْكَرِيم').replace(/&/g, '&amp;');
   const totalP = book.total_pages || book.totalPages || 32;
 
   let bodyContent = '';
   const isQaida = (book.id === 'noorani-qaida' || book.category === 'qaida' || (book.title && book.title.toLowerCase().includes('qaida')));
+  const isQuran = (book.id === 'holy-quran-16-line' || book.category === 'quran' || (book.title && book.title.toLowerCase().includes('quran')));
+  const isTafseer = (book.category === 'tafseer' || (book.title && book.title.toLowerCase().includes('tafseer')));
   const takhti = isQaida ? QAIDA_TAKHTIS[Math.min(QAIDA_TAKHTIS.length - 1, p - 1)] : null;
 
   if (takhti && isQaida) {
@@ -74,6 +133,113 @@ function generateDynamicSvgDataUri(book, pageNum) {
           <rect width="530" height="48" rx="10" fill="#fefce8" stroke="#fef08a" stroke-width="1.2"/>
           <text x="265" y="22" font-family="sans-serif" font-size="11" font-weight="bold" fill="#854d0e" text-anchor="middle">💡 Tajweed Rule &amp; Instruction:</text>
           <text x="265" y="38" font-family="sans-serif" font-size="10" fill="#713f12" text-anchor="middle">Pronounce each letter from its correct Makhraj (articulation point) with full Makhaarij accuracy.</text>
+        </g>
+      </g>
+    `;
+  } else if (isQuran) {
+    // Determine target Para
+    let activeParaNum = Number(paraNum) || 1;
+    if (!paraNum && book.paras) {
+      const matchP = book.paras.find(pr => p >= pr.page_start && p <= pr.page_end);
+      if (matchP) activeParaNum = matchP.para;
+    }
+    const paraMeta = QURAN_PARAS_INFO.find(pr => pr.para === activeParaNum) || QURAN_PARAS_INFO[0];
+    const paraUr = paraMeta.name_ur || 'الم';
+    const paraEn = paraMeta.name_en || 'Alif Lam Meem';
+
+    bodyContent = `
+      <g transform="translate(50, 130)">
+        <rect width="600" height="760" rx="16" fill="#ffffff" stroke="#c5a880" stroke-width="2"/>
+        <rect x="12" y="12" width="576" height="736" rx="12" fill="none" stroke="#e2e8f0" stroke-width="1"/>
+
+        <!-- Quran Header Banner -->
+        <g transform="translate(35, 20)">
+          <rect width="530" height="65" rx="12" fill="#fdfbf7" stroke="#c5a880" stroke-width="1.5"/>
+          <text x="35" y="40" font-family="'Amiri', serif" font-size="18" font-weight="bold" fill="#047857">الجزء ${activeParaNum}: ${paraUr}</text>
+          <text x="500" y="38" font-family="'Cinzel', 'Plus Jakarta Sans', serif" font-size="14" font-weight="bold" fill="#b45309" text-anchor="end">Para ${activeParaNum} &bull; ${paraEn}</text>
+        </g>
+
+        <!-- Bismillah Header -->
+        <g transform="translate(35, 105)">
+          <rect width="530" height="60" rx="10" fill="#ecfdf5" stroke="#10b981" stroke-width="1.2"/>
+          <text x="265" y="42" font-family="'Amiri', 'Traditional Arabic', serif" font-size="28" font-weight="bold" fill="#064e3b" text-anchor="middle" direction="rtl">بِسْمِ اللَّهِ الرَّحْمَٰنِ الرَّحِيمِ</text>
+        </g>
+
+        <!-- 16-Line Authentic Quran Text Simulation -->
+        <g transform="translate(35, 185)">
+          <rect width="530" height="470" rx="12" fill="#faf8f5" stroke="#e2e8f0" stroke-width="1.2"/>
+          <text x="500" y="45" font-family="'Amiri', 'Traditional Arabic', serif" font-size="22" font-weight="bold" fill="#1e293b" text-anchor="end" direction="rtl">الْحَمْدُ لِلَّهِ رَبِّ الْعَالَمِينَ ۝ الرَّحْمَٰنِ الرَّحِيمِ ۝</text>
+          <text x="500" y="95" font-family="'Amiri', 'Traditional Arabic', serif" font-size="22" font-weight="bold" fill="#1e293b" text-anchor="end" direction="rtl">مَالِكِ يَوْمِ الدِّينِ ۝ إِيَّاكَ نَعْبُدُ وَإِيَّاكَ نَسْتَعِينُ ۝</text>
+          <text x="500" y="145" font-family="'Amiri', 'Traditional Arabic', serif" font-size="22" font-weight="bold" fill="#1e293b" text-anchor="end" direction="rtl">اهْدِنَا الصِّرَاطَ الْمُسْتَقِيمَ ۝ صِرَاطَ الَّذِينَ أَنْعَمْتَ عَلَيْهِمْ ۝</text>
+          <text x="500" y="195" font-family="'Amiri', 'Traditional Arabic', serif" font-size="22" font-weight="bold" fill="#1e293b" text-anchor="end" direction="rtl">غَيْرِ الْمَغْضُوبِ عَلَيْهِمْ وَلَا الضَّالِّينَ ۝</text>
+          <line x1="40" y1="220" x2="490" y2="220" stroke="#c5a880" stroke-width="1" stroke-dasharray="4,4"/>
+          <text x="500" y="260" font-family="'Amiri', 'Traditional Arabic', serif" font-size="22" font-weight="bold" fill="#1e293b" text-anchor="end" direction="rtl">الم ۝ ذَٰلِكَ الْكِتَابُ لَا رَيْبَ ۛ فِيهِ ۛ هُدًى لِّلْمُتَّقِينَ ۝</text>
+          <text x="500" y="310" font-family="'Amiri', 'Traditional Arabic', serif" font-size="22" font-weight="bold" fill="#1e293b" text-anchor="end" direction="rtl">الَّذِينَ يُؤْمِنُونَ بِالْغَيْبِ وَيُقِيمُونَ الصَّلَاةَ وَمِمَّا رَزَقْنَاهُمْ يُنفِقُونَ ۝</text>
+          <text x="500" y="360" font-family="'Amiri', 'Traditional Arabic', serif" font-size="22" font-weight="bold" fill="#1e293b" text-anchor="end" direction="rtl">وَالَّذِينَ يُؤْمِنُونَ بِمَا أُنزِلَ إِلَيْكَ وَمَا أُنزِلَ مِن قَبْلِكَ ۝</text>
+          <text x="500" y="410" font-family="'Amiri', 'Traditional Arabic', serif" font-size="22" font-weight="bold" fill="#1e293b" text-anchor="end" direction="rtl">وَبِالْآخِرَةِ هُمْ يُوقِنُونَ ۝ أُولَٰئِكَ عَلَىٰ هُدًى مِّن رَّبِّهِمْ ۝</text>
+        </g>
+
+        <!-- Tajweed Indicator Footer -->
+        <g transform="translate(35, 680)">
+          <rect width="530" height="48" rx="10" fill="#ecfdf5" stroke="#10b981" stroke-width="1.2"/>
+          <text x="265" y="22" font-family="sans-serif" font-size="11" font-weight="bold" fill="#047857" text-anchor="middle">📖 Holy Quran &bull; Tajweed Recitation Mode</text>
+          <text x="265" y="38" font-family="sans-serif" font-size="10" fill="#065f46" text-anchor="middle">Para ${activeParaNum}: ${paraEn} (${paraUr}) &bull; Page ${p}</text>
+        </g>
+      </g>
+    `;
+  } else if (isTafseer) {
+    const lang = (book.language || language || 'en').toLowerCase();
+    const isUrdu = lang === 'ur' || lang.includes('urdu');
+    const activeParaNum = Number(paraNum) || 1;
+    const paraMeta = QURAN_PARAS_INFO.find(pr => pr.para === activeParaNum) || QURAN_PARAS_INFO[0];
+
+    bodyContent = `
+      <g transform="translate(50, 130)">
+        <rect width="600" height="760" rx="16" fill="#ffffff" stroke="#c5a880" stroke-width="2"/>
+        <rect x="12" y="12" width="576" height="736" rx="12" fill="none" stroke="#e2e8f0" stroke-width="1"/>
+
+        <!-- Tafseer Language & Para Banner -->
+        <g transform="translate(35, 20)">
+          <rect width="530" height="65" rx="12" fill="#eff6ff" stroke="#3b82f6" stroke-width="1.5"/>
+          <text x="35" y="38" font-family="'Plus Jakarta Sans', sans-serif" font-size="13" font-weight="bold" fill="#1e40af">${isUrdu ? 'اردو تفسیر و ترجمہ' : 'English Tafseer & Exegesis'}</text>
+          <text x="500" y="38" font-family="'Amiri', 'Plus Jakarta Sans', serif" font-size="14" font-weight="bold" fill="#1e3a8a" text-anchor="end">Para ${activeParaNum}: ${isUrdu ? paraMeta.name_ur : paraMeta.name_en}</text>
+        </g>
+
+        <!-- Quran Ayah Arabic Context -->
+        <g transform="translate(35, 105)">
+          <rect width="530" height="110" rx="10" fill="#fdfbf7" stroke="#c5a880" stroke-width="1.2"/>
+          <text x="265" y="40" font-family="'Amiri', 'Traditional Arabic', serif" font-size="24" font-weight="bold" fill="#064e3b" text-anchor="middle" direction="rtl">بِسْمِ اللَّهِ الرَّحْمَٰنِ الرَّحِيمِ</text>
+          <text x="265" y="80" font-family="'Amiri', 'Traditional Arabic', serif" font-size="20" font-weight="bold" fill="#1e293b" text-anchor="middle" direction="rtl">الْحَمْدُ لِلَّهِ رَبِّ الْعَالَمِينَ ۝ الرَّحْمَٰنِ الرَّحِيمِ ۝</text>
+        </g>
+
+        <!-- Translation & Commentary Box -->
+        <g transform="translate(35, 235)">
+          <rect width="530" height="420" rx="12" fill="#f8fafc" stroke="#cbd5e1" stroke-width="1.2"/>
+          <text x="30" y="36" font-family="'Plus Jakarta Sans', sans-serif" font-size="13" font-weight="bold" fill="#0f172a">${isUrdu ? 'ترجمہ و تشریح:' : 'Verse Translation & Key Themes:'}</text>
+          <text x="30" y="70" font-family="${isUrdu ? "'Jameel Noori Nastaleeq', 'Amiri', serif" : "'Plus Jakarta Sans', sans-serif"}" font-size="${isUrdu ? '15' : '11.5'}" fill="#334155" ${isUrdu ? "direction='rtl' text-anchor='start'" : ""}>
+            ${isUrdu
+              ? 'تمام تعریفیں اللہ ہی کے لیے ہیں جو تمام جہانوں کا رب ہے۔ وہ نہایت مہربان، ہمیشہ رحم فرمانے والا ہے۔'
+              : 'All praise is due to Allah alone, the Cherisher and Sustainer of all the worlds. The Most Gracious, the Most Merciful.'}
+          </text>
+          <line x1="30" y1="110" x2="500" y2="110" stroke="#e2e8f0" stroke-width="1.2"/>
+          <text x="30" y="145" font-family="'Plus Jakarta Sans', sans-serif" font-size="13" font-weight="bold" fill="#0f172a">${isUrdu ? 'تفسیری فوائد و اسباب نزول:' : 'Tafseer Commentary & Exegesis:'}</text>
+          <text x="30" y="180" font-family="${isUrdu ? "'Amiri', serif" : "'Plus Jakarta Sans', sans-serif"}" font-size="${isUrdu ? '14' : '11'}" fill="#475569" ${isUrdu ? "direction='rtl'" : ""}>
+            ${isUrdu
+              ? 'یہ مبارک سورۃ تمام قرآن کا خلاصہ اور ام الکتاب ہے۔ بندہ اپنے رب کی حمد و ثنا بیان کر کے سیدھے راستے کی ہدایت مانگتا ہے۔'
+              : 'This noble chapter (Umm al-Kitab) embodies the essence of the entire Holy Quran. It opens with unconditioned gratitude, affirms Allah’s exclusive Lordship, and supplicates for the Straight Path (Sirat al-Mustaqeem).'}
+          </text>
+          <text x="30" y="240" font-family="${isUrdu ? "'Amiri', serif" : "'Plus Jakarta Sans', sans-serif"}" font-size="${isUrdu ? '14' : '11'}" fill="#475569" ${isUrdu ? "direction='rtl'" : ""}>
+            ${isUrdu
+              ? 'روز قیامت کی جزا و سزا کا تذکرہ اس لیے فرمایا تاکہ انسان کو احتساب کا احساس رہے اور وہ نیکی کی طرف راغب ہو۔'
+              : 'Emphasis is laid on the Day of Judgment (Yawm ad-Deen) so the servant remains vigilant of accountability, worshiping Allah with awe, love, and sincere devotion.'}
+          </text>
+        </g>
+
+        <!-- Teaching Footer -->
+        <g transform="translate(35, 680)">
+          <rect width="530" height="48" rx="10" fill="#fefce8" stroke="#fef08a" stroke-width="1.2"/>
+          <text x="265" y="22" font-family="sans-serif" font-size="11" font-weight="bold" fill="#854d0e" text-anchor="middle">💡 Tafseer Learning Note:</text>
+          <text x="265" y="38" font-family="sans-serif" font-size="10" fill="#713f12" text-anchor="middle">${isUrdu ? 'پارہ ' + activeParaNum + ' &bull; باقاعدہ فہم قرآن اور عملی رہنمائی' : 'Para ' + activeParaNum + ' &bull; Contextual Arabic Lexicology & Authentic Exegesis'}</text>
         </g>
       </g>
     `;
@@ -224,6 +390,54 @@ const ALHUDA_CURRICULUM = [
     }))
   },
   {
+    id: "tafseer-ibn-kathir-english",
+    title: "Tafseer Ibn Kathir (English)",
+    title_ar: "تفسير ابن كثير",
+    category: "tafseer",
+    content_type: "tafseer",
+    language: "en",
+    language_label: "English",
+    category_label: "Tafseer & Translation",
+    author: "Hafiz Ibn Kathir",
+    edition: "English Commentary Edition",
+    total_paras: 30,
+    total_pages: 548,
+    cover_bg: "from-sky-900 via-indigo-950 to-slate-900",
+    cover_icon: "fa-solid fa-book-atlas",
+    description: "Authentic verse-by-verse Quranic commentary by Hafiz Ibn Kathir in the English language with contextual historical analysis.",
+    paras: Array.from({ length: 30 }, (_, i) => ({
+      para: i + 1,
+      page_start: i * 18 + 1,
+      page_end: (i + 1) * 18,
+      name_en: QURAN_PARAS_INFO[i]?.name_en || `Para ${i + 1}`,
+      name_ur: QURAN_PARAS_INFO[i]?.name_ur || `پارہ ${i + 1}`
+    }))
+  },
+  {
+    id: "tafseer-bayan-ul-quran-urdu",
+    title: "Tafseer Bayan-ul-Quran (Urdu)",
+    title_ar: "بيان القرآن - مولانا أشرف علي تھانوي",
+    category: "tafseer",
+    content_type: "tafseer",
+    language: "ur",
+    language_label: "Urdu",
+    category_label: "Tafseer & Translation",
+    author: "Maulana Ashraf Ali Thanwi",
+    edition: "Standard Urdu Commentary",
+    total_paras: 30,
+    total_pages: 548,
+    cover_bg: "from-emerald-900 via-teal-950 to-slate-900",
+    cover_icon: "fa-solid fa-book-bookmark",
+    description: "Renowned Urdu Tafseer explaining subtle linguistic nuances, Fiqh guidance, and spiritual wisdom across all 30 Paras.",
+    paras: Array.from({ length: 30 }, (_, i) => ({
+      para: i + 1,
+      page_start: i * 18 + 1,
+      page_end: (i + 1) * 18,
+      name_en: QURAN_PARAS_INFO[i]?.name_en || `Para ${i + 1}`,
+      name_ur: QURAN_PARAS_INFO[i]?.name_ur || `پارہ ${i + 1}`
+    }))
+  },
+  {
     id: "namaz-wudu-guide",
     title: "Illustrated Namaz, Wudu & Duas",
     title_ar: "تعليم الصلاة والوضوء",
@@ -297,24 +511,41 @@ const CURRICULUM_DATA = {
   get books() {
     return getAllAvailableBooks();
   },
-  getPageUrl: function(bookId, pageNum) {
+  parasInfo: QURAN_PARAS_INFO,
+  getBookParaPages: getBookParaPages,
+  getPageUrl: function(bookId, pageNum, paraNum = null, language = null) {
     const b = getCurriculumBook(bookId);
     if (!b) return '';
-    if (typeof b.getPageUrl === 'function') return b.getPageUrl(pageNum);
-    if (b.pages && b.pages[pageNum - 1]) return b.pages[pageNum - 1];
-    return generateDynamicSvgDataUri(b, pageNum);
+    if (typeof b.getPageUrl === 'function') return b.getPageUrl(pageNum, paraNum, language);
+
+    const isParaBased = (b.category === 'quran' || b.category === 'tafseer' || !!b.paras_data || !!b.paras);
+    if (isParaBased && paraNum) {
+      const paraPages = getBookParaPages(b, paraNum);
+      const idx = (Number(pageNum) || 1) - 1;
+      if (paraPages && paraPages[idx]) {
+        return paraPages[idx];
+      }
+    }
+
+    if (b.pages && b.pages[(Number(pageNum) || 1) - 1]) {
+      return b.pages[(Number(pageNum) || 1) - 1];
+    }
+
+    return generateDynamicSvgDataUri(b, pageNum, paraNum, language);
   },
-  generateDynamicSvgPage: function(book, pageNum) {
-    return generateDynamicSvgDataUri(book, pageNum);
+  generateDynamicSvgPage: function(book, pageNum, paraNum = null, language = null) {
+    return generateDynamicSvgDataUri(book, pageNum, paraNum, language);
   }
 };
 
 // Export to window for browser access
 if (typeof window !== 'undefined') {
   window.QAIDA_TAKHTIS = QAIDA_TAKHTIS;
+  window.QURAN_PARAS_INFO = QURAN_PARAS_INFO;
   window.ALHUDA_CURRICULUM = ALHUDA_CURRICULUM;
   window.CURRICULUM_DATA = CURRICULUM_DATA;
   window.getCurriculumBook = getCurriculumBook;
+  window.getBookParaPages = getBookParaPages;
   window.generateDynamicSvgDataUri = generateDynamicSvgDataUri;
   window.getCustomBooks = getCustomBooks;
   window.saveCustomBooks = saveCustomBooks;
