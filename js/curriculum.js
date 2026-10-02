@@ -25,13 +25,13 @@
       }
     }
 
-    function saveCustomBooks(books) {
+    async function saveCustomBooks(books) {
       try {
         localStorage.setItem('alhuda_custom_books', JSON.stringify(books));
       } catch(e) {
         console.warn("Could not save custom books to storage:", e);
       }
-      syncCustomBooksToD1Chunked(books);
+      return await syncCustomBooksToD1Chunked(books);
     }
 
     async function syncCustomBooksToD1Chunked(books) {
@@ -60,20 +60,22 @@
           }
         }
 
-        rowsToUpsert.unshift({
+        // Upsert catalog index first to immediately update library across all portals
+        await db.from('system_settings').upsert({
           id: 'SYS-CUSTOM-BOOKS-INDEX',
           key: 'alhuda_custom_books_index',
           value: JSON.stringify(catalogIndex),
           updated_at: new Date().toISOString()
         });
 
-        rowsToUpsert.unshift({
+        await db.from('system_settings').upsert({
           id: 'SYS-CUSTOM-BOOKS-ALL',
           key: 'alhuda_custom_books',
           value: JSON.stringify(catalogIndex),
           updated_at: new Date().toISOString()
         });
 
+        // Upsert individual book pages
         for (const row of rowsToUpsert) {
           await db.from('system_settings').upsert(row);
         }
@@ -89,31 +91,72 @@
         if (!Array.isArray(allSettings) || allSettings.length === 0) return;
 
         const settingsMap = new Map(allSettings.map(r => [String(r.key), r.value]));
-        const rawIndex = settingsMap.get('alhuda_custom_books_index') || settingsMap.get('alhuda_custom_books');
-        if (!rawIndex) return;
 
-        const books = JSON.parse(rawIndex);
-        if (!Array.isArray(books) || books.length === 0) return;
-
-        books.forEach(b => {
-          const total = Number(b.total_pages) || 0;
-          if ((!b.pages || b.pages.length === 0) && total > 0) {
-            const hydratedPages = [];
-            for (let i = 0; i < total; i++) {
-              const pVal = settingsMap.get(`BOOK_PAGE_${b.id}_${i}`);
-              if (pVal) hydratedPages.push(pVal);
-            }
-            if (hydratedPages.length > 0) {
-              b.pages = hydratedPages;
-            }
+        // 1. Sync deleted books tombstone list bidirectionally
+        const remoteDeletedRaw = settingsMap.get('alhuda_deleted_books');
+        let remoteDeleted = [];
+        if (remoteDeletedRaw) {
+          try {
+            remoteDeleted = JSON.parse(remoteDeletedRaw);
+          } catch(e) {
+            remoteDeleted = [];
           }
-        });
+        }
+        if (!Array.isArray(remoteDeleted)) remoteDeleted = [];
 
-        localStorage.setItem('alhuda_custom_books', JSON.stringify(books));
+        let localDeleted = getDeletedBookIds();
+        if (!Array.isArray(localDeleted)) localDeleted = [];
+
+        const mergedDeleted = Array.from(new Set([...localDeleted, ...remoteDeleted]));
+        if (mergedDeleted.length > 0) {
+          localStorage.setItem('alhuda_deleted_books', JSON.stringify(mergedDeleted));
+          // If local has deleted IDs that the backend doesn't have yet, push to cloud immediately
+          if (mergedDeleted.length > remoteDeleted.length) {
+            await db.from('system_settings').upsert({
+              id: 'SYS-DELETED-BOOKS',
+              key: 'alhuda_deleted_books',
+              value: JSON.stringify(mergedDeleted),
+              updated_at: new Date().toISOString()
+            });
+          }
+        }
+
+        // 2. Sync custom books and purge any deleted books from local cache
+        const rawIndex = settingsMap.get('alhuda_custom_books_index') || settingsMap.get('alhuda_custom_books');
+        if (rawIndex !== undefined && rawIndex !== null) {
+          let books = [];
+          try {
+            books = JSON.parse(rawIndex);
+          } catch(e) {
+            books = [];
+          }
+
+          if (Array.isArray(books)) {
+            books.forEach(b => {
+              const total = Number(b.total_pages) || 0;
+              if ((!b.pages || b.pages.length === 0) && total > 0) {
+                const hydratedPages = [];
+                for (let i = 0; i < total; i++) {
+                  const pVal = settingsMap.get(`BOOK_PAGE_${b.id}_${i}`);
+                  if (pVal) hydratedPages.push(pVal);
+                }
+                if (hydratedPages.length > 0) {
+                  b.pages = hydratedPages;
+                }
+              }
+            });
+
+            const cleanBooks = books.filter(b => b && !mergedDeleted.includes(b.id));
+            localStorage.setItem('alhuda_custom_books', JSON.stringify(cleanBooks));
+          }
+        }
+
         if (typeof loadCurriculumLibrary === 'function') {
           loadCurriculumLibrary(CURRENT_CURRICULUM_CATEGORY || 'all');
         }
-      } catch (e) {}
+      } catch (e) {
+        console.warn('[Curriculum] Hydration notice:', e);
+      }
     }
     setTimeout(hydrateCustomBooksFromCloudflareD1, 600);
 
@@ -125,10 +168,22 @@
       }
     }
 
-    function saveDeletedBookIds(ids) {
+    async function saveDeletedBookIds(ids) {
       try {
         localStorage.setItem('alhuda_deleted_books', JSON.stringify(ids));
       } catch(e) {}
+      try {
+        if (typeof db !== 'undefined' && db && typeof db.from === 'function') {
+          await db.from('system_settings').upsert({
+            id: 'SYS-DELETED-BOOKS',
+            key: 'alhuda_deleted_books',
+            value: JSON.stringify(ids),
+            updated_at: new Date().toISOString()
+          });
+        }
+      } catch(e) {
+        console.warn('[Curriculum] Could not sync deleted books to cloud:', e);
+      }
     }
 
     function getAllAvailableBooks() {
@@ -2004,20 +2059,52 @@
         return;
       }
 
-      // 1. Remove from custom books if present
-      let customBooks = getCustomBooks();
-      const filteredCustom = customBooks.filter(b => b.id !== bookId);
-      saveCustomBooks(filteredCustom);
-
-      // 2. Mark ID as deleted so even default books stay removed
-      const deletedIds = getDeletedBookIds();
-      if (!deletedIds.includes(bookId)) {
-        deletedIds.push(bookId);
-        saveDeletedBookIds(deletedIds);
+      const modalDelBtn = document.getElementById('btnDeleteCurriculumBookModal');
+      if (modalDelBtn) {
+        modalDelBtn.disabled = true;
+        modalDelBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Deleting...';
       }
 
-      alert(`🗑️ "${bookTitle || 'Course material'}" has been deleted from library.`);
-      loadCurriculumLibrary(CURRENT_CURRICULUM_CATEGORY);
+      try {
+        // 1. Remove from custom books if present and await cloud sync
+        let customBooks = getCustomBooks();
+        const filteredCustom = customBooks.filter(b => b.id !== bookId);
+        await saveCustomBooks(filteredCustom);
+
+        // 2. Mark ID as deleted in tombstone list so all portals (Admin, Teacher, Parent) filter it out immediately
+        const deletedIds = getDeletedBookIds();
+        if (!deletedIds.includes(bookId)) {
+          deletedIds.push(bookId);
+        }
+        await saveDeletedBookIds(deletedIds);
+
+        // 3. Clean up any orphaned custom book page records in system_settings
+        if (typeof db !== 'undefined' && db && typeof db.from === 'function') {
+          try {
+            const { data: pageRows } = await db.from('system_settings').select('id, key');
+            if (Array.isArray(pageRows)) {
+              const prefix = `BOOK_PAGE_${bookId}_`;
+              const orphaned = pageRows.filter(r => r.key && r.key.startsWith(prefix));
+              for (const row of orphaned) {
+                await db.from('system_settings').delete().eq('id', row.id);
+              }
+            }
+          } catch(e) {
+            console.warn('[Curriculum] Page cleanup notice:', e);
+          }
+        }
+
+        alert(`🗑️ "${bookTitle || 'Course material'}" has been deleted from library across all portals.`);
+        loadCurriculumLibrary(CURRENT_CURRICULUM_CATEGORY);
+      } catch (err) {
+        console.error('Error deleting book:', err);
+        alert('Could not completely delete course material: ' + err.message);
+      } finally {
+        if (modalDelBtn) {
+          modalDelBtn.disabled = false;
+          modalDelBtn.innerHTML = '<i class="fa-solid fa-trash"></i> Delete Book';
+        }
+      }
     }
 
     function handleDeleteCurriculumBookFromModal() {

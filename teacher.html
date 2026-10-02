@@ -3781,22 +3781,42 @@
         const { data: allSettings } = await db.from('system_settings').select('*');
         if (!Array.isArray(allSettings) || allSettings.length === 0) return;
         const settingsMap = new Map(allSettings.map(r => [String(r.key), r.value]));
-        const rawIndex = settingsMap.get('alhuda_custom_books_index') || settingsMap.get('alhuda_custom_books');
-        if (!rawIndex) return;
-        const books = JSON.parse(rawIndex);
-        if (!Array.isArray(books)) return;
-        books.forEach(b => {
-          const total = Number(b.total_pages) || 0;
-          if ((!b.pages || b.pages.length === 0) && total > 0) {
-            const hydratedPages = [];
-            for (let i = 0; i < total; i++) {
-              const pVal = settingsMap.get(`BOOK_PAGE_${b.id}_${i}`);
-              if (pVal) hydratedPages.push(pVal);
+
+        // 1. Sync deleted books tombstone list from backend
+        const remoteDeletedRaw = settingsMap.get('alhuda_deleted_books');
+        if (remoteDeletedRaw) {
+          try {
+            const remoteDeleted = JSON.parse(remoteDeletedRaw);
+            if (Array.isArray(remoteDeleted)) {
+              localStorage.setItem('alhuda_deleted_books', JSON.stringify(remoteDeleted));
             }
-            if (hydratedPages.length > 0) b.pages = hydratedPages;
-          }
-        });
-        localStorage.setItem('alhuda_custom_books', JSON.stringify(books));
+          } catch(e) {}
+        }
+
+        // 2. Sync custom books and filter out any deleted IDs
+        const rawIndex = settingsMap.get('alhuda_custom_books_index') || settingsMap.get('alhuda_custom_books');
+        if (rawIndex !== undefined && rawIndex !== null) {
+          try {
+            const books = JSON.parse(rawIndex);
+            if (Array.isArray(books)) {
+              books.forEach(b => {
+                const total = Number(b.total_pages) || 0;
+                if ((!b.pages || b.pages.length === 0) && total > 0) {
+                  const hydratedPages = [];
+                  for (let i = 0; i < total; i++) {
+                    const pVal = settingsMap.get(`BOOK_PAGE_${b.id}_${i}`);
+                    if (pVal) hydratedPages.push(pVal);
+                  }
+                  if (hydratedPages.length > 0) b.pages = hydratedPages;
+                }
+              });
+              const deletedIds = JSON.parse(localStorage.getItem('alhuda_deleted_books') || '[]');
+              const cleanBooks = books.filter(b => b && !deletedIds.includes(b.id));
+              localStorage.setItem('alhuda_custom_books', JSON.stringify(cleanBooks));
+            }
+          } catch(e) {}
+        }
+
         // Re-render teacher course materials and dropdowns with fresh D1 books
         if (typeof renderTeacherLibraryGrid === 'function') {
           renderTeacherLibraryGrid(getTeacherAllBooks());
@@ -3806,6 +3826,8 @@
         }
       } catch (e) {}
     }
+    // Hydrate immediately and after startup delay
+    hydrateTeacherCustomBooksFromD1();
     setTimeout(hydrateTeacherCustomBooksFromD1, 500);
 
     function getTeacherAuthorizedCourses() {
@@ -4095,6 +4117,10 @@
     }
 
     function openTeacherDigitalLibrary() {
+      // Trigger background sync to ensure any newly deleted or added books are fresh
+      if (typeof hydrateTeacherCustomBooksFromD1 === 'function') {
+        hydrateTeacherCustomBooksFromD1();
+      }
       // Show the library picker modal (book grid) first, then reader opens on selection
       const allBooks = getTeacherAllBooks();
       renderTeacherLibraryGrid(allBooks);

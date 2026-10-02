@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Al-Huda Islamic Centre LMS — Digital Curriculum & Course Material Registry
  * Real-time unified syllabus engine supporting Noorani Qaida, Holy Quran, and custom uploaded books.
  */
@@ -526,6 +526,16 @@ function getDeletedBookIds() {
 function saveDeletedBookIds(ids) {
   try {
     localStorage.setItem('alhuda_deleted_books', JSON.stringify(ids));
+  } catch(e) {}
+  try {
+    if (typeof db !== 'undefined' && db && typeof db.from === 'function') {
+      db.from('system_settings').upsert({
+        id: 'SYS-DELETED-BOOKS',
+        key: 'alhuda_deleted_books',
+        value: JSON.stringify(ids),
+        updated_at: new Date().toISOString()
+      }).catch(err => console.warn('[CurriculumData] Sync deleted books notice:', err));
+    }
   } catch(e) {}
 }
 
