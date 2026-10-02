@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Al-Huda Islamic Centre LMS — Interactive E-Qaida & Digital Lab Engine
  * Complete 49-Lesson Native Multimedia Arabic Curriculum
  * High-fidelity Arabic typography, authentic audio speech synthesis,
@@ -514,47 +514,299 @@
     return audioContext;
   }
 
+  // =========================================================================
+  // 3. AUDIO ENGINE: LOCAL STUDIO RECORDINGS + CLOUD AUDIO + BROWSER TTS
+  // =========================================================================
+  const LETTER_AUDIO_MAP = {
+    'alif': 'audio/qaida/1_alif.mp3',
+    'baa': 'audio/qaida/2_baa.mp3',
+    'taa': 'audio/qaida/3_taa.mp3',
+    'thaa': 'audio/qaida/4_thaa.mp3',
+    'jeem': 'audio/qaida/5_jeem.mp3',
+    'hhaa': 'audio/qaida/6_haa.mp3',
+    'khaa': 'audio/qaida/7_khaa.mp3',
+    'daal': 'audio/qaida/8_daal.mp3',
+    'dhaal': 'audio/qaida/9_zaal.mp3',
+    'raa': 'audio/qaida/10_raa.mp3',
+    'zay': 'audio/qaida/11_zaa.mp3',
+    'seen': 'audio/qaida/12_seen.mp3',
+    'sheen': 'audio/qaida/13_sheen.mp3',
+    'saad': 'audio/qaida/14_saad.mp3',
+    'daad': 'audio/qaida/15_daad.mp3',
+    'ttaa': 'audio/qaida/16_taah.mp3',
+    'zaa': 'audio/qaida/17_zhaa.mp3',
+    'ayn': 'audio/qaida/18_ain.mp3',
+    'ghayn': 'audio/qaida/19_ghain.mp3',
+    'faa': 'audio/qaida/20_faa.mp3',
+    'qaaf': 'audio/qaida/21_qaaf.mp3',
+    'kaaf': 'audio/qaida/22_kaaf.mp3',
+    'laam': 'audio/qaida/23_laam.mp3',
+    'meem': 'audio/qaida/24_meem.mp3',
+    'noon': 'audio/qaida/25_noon.mp3',
+    'waaw': 'audio/qaida/27_waw.mp3',
+    'haa': 'audio/qaida/26_haah.mp3',
+    'hamzah': 'audio/qaida/28_hamzah.mp3',
+    'yaa': 'audio/qaida/30_yaa.mp3'
+  };
+
+  const ARABIC_GLYPH_AUDIO_MAP = {
+    'ا': 'audio/qaida/1_alif.mp3',
+    'أ': 'audio/qaida/1_alif.mp3',
+    'إ': 'audio/qaida/1_alif.mp3',
+    'آ': 'audio/qaida/1_alif.mp3',
+    'ب': 'audio/qaida/2_baa.mp3',
+    'ت': 'audio/qaida/3_taa.mp3',
+    'ث': 'audio/qaida/4_thaa.mp3',
+    'ج': 'audio/qaida/5_jeem.mp3',
+    'ح': 'audio/qaida/6_haa.mp3',
+    'خ': 'audio/qaida/7_khaa.mp3',
+    'د': 'audio/qaida/8_daal.mp3',
+    'ذ': 'audio/qaida/9_zaal.mp3',
+    'ر': 'audio/qaida/10_raa.mp3',
+    'ز': 'audio/qaida/11_zaa.mp3',
+    'س': 'audio/qaida/12_seen.mp3',
+    'ش': 'audio/qaida/13_sheen.mp3',
+    'ص': 'audio/qaida/14_saad.mp3',
+    'ض': 'audio/qaida/15_daad.mp3',
+    'ط': 'audio/qaida/16_taah.mp3',
+    'ظ': 'audio/qaida/17_zhaa.mp3',
+    'ع': 'audio/qaida/18_ain.mp3',
+    'غ': 'audio/qaida/19_ghain.mp3',
+    'ف': 'audio/qaida/20_faa.mp3',
+    'ق': 'audio/qaida/21_qaaf.mp3',
+    'ك': 'audio/qaida/22_kaaf.mp3',
+    'ل': 'audio/qaida/23_laam.mp3',
+    'م': 'audio/qaida/24_meem.mp3',
+    'ن': 'audio/qaida/25_noon.mp3',
+    'و': 'audio/qaida/27_waw.mp3',
+    'ه': 'audio/qaida/26_haah.mp3',
+    'هـ': 'audio/qaida/26_haah.mp3',
+    'ة': 'audio/qaida/3_taa.mp3',
+    'ء': 'audio/qaida/28_hamzah.mp3',
+    'لا': 'audio/qaida/29_laaa.mp3',
+    'لَا': 'audio/qaida/29_laaa.mp3',
+    'ي': 'audio/qaida/30_yaa.mp3',
+    'ى': 'audio/qaida/30_yaa.mp3'
+  };
+
+  const ARABIC_LETTER_SPOKEN_MAP = {
+    'ا': 'أَلِف',
+    'أ': 'أَلِف',
+    'إ': 'أَلِف',
+    'آ': 'أَلِف',
+    'ب': 'بَاء',
+    'ت': 'تَاء',
+    'ث': 'ثَاء',
+    'ج': 'جِيم',
+    'ح': 'حَاء',
+    'خ': 'خَاء',
+    'د': 'دَال',
+    'ذ': 'ذَال',
+    'ر': 'رَاء',
+    'ز': 'زَاي',
+    'س': 'سِين',
+    'ش': 'شِين',
+    'ص': 'صَاد',
+    'ض': 'ضَاد',
+    'ط': 'طَاء',
+    'ظ': 'ظَاء',
+    'ع': 'عَيْن',
+    'غ': 'غَيْن',
+    'ف': 'فَاء',
+    'ق': 'قَاف',
+    'ك': 'كَاف',
+    'ل': 'لَام',
+    'م': 'مِيم',
+    'ن': 'نُون',
+    'و': 'وَاو',
+    'هـ': 'هَاء',
+    'ه': 'هَاء',
+    'ة': 'تَاء',
+    'ء': 'هَمْزَة',
+    'لا': 'لَام أَلِف',
+    'لَا': 'لَام أَلِف',
+    'ي': 'يَاء',
+    'ى': 'يَاء'
+  };
+
+  // Populate metadata on ALPHABETS_29 for instant audio resolution
+  ALPHABETS_29.forEach(item => {
+    if (!item.speechText && item.name_ar) item.speechText = item.name_ar;
+    if (!item.audio && LETTER_AUDIO_MAP[item.id]) item.audio = LETTER_AUDIO_MAP[item.id];
+  });
+
+  let activeAudio = null;
+  let audioContextUnlocked = false;
+
+  function unlockAudioEngine() {
+    if (audioContextUnlocked) return;
+    try {
+      const ctx = getAudioContext();
+      if (ctx && ctx.state === 'suspended') ctx.resume();
+      audioContextUnlocked = true;
+    } catch (e) {}
+  }
+
+  function stopAllQaidaAudio() {
+    if (activeAudio) {
+      try {
+        activeAudio.pause();
+        activeAudio.currentTime = 0;
+      } catch (e) {}
+      activeAudio = null;
+    }
+    if ('speechSynthesis' in window) {
+      try { window.speechSynthesis.cancel(); } catch (e) {}
+    }
+  }
+
+  function playSoundWithFallback(urlList, onEnd, onAllFail) {
+    if (!urlList || urlList.length === 0) {
+      if (typeof onAllFail === 'function') onAllFail();
+      return;
+    }
+
+    const currentUrl = urlList[0];
+    const remainingUrls = urlList.slice(1);
+
+    try {
+      stopAllQaidaAudio();
+      const audio = new Audio();
+      activeAudio = audio;
+      audio.playbackRate = playbackRate || 1.0;
+      audio.preload = 'auto';
+
+      let ended = false;
+      const finish = () => {
+        if (ended) return;
+        ended = true;
+        if (activeAudio === audio) activeAudio = null;
+        if (typeof onEnd === 'function') onEnd();
+      };
+
+      const fail = () => {
+        if (ended) return;
+        ended = true;
+        if (activeAudio === audio) activeAudio = null;
+        playSoundWithFallback(remainingUrls, onEnd, onAllFail);
+      };
+
+      audio.onended = finish;
+      audio.onerror = fail;
+      audio.src = currentUrl;
+
+      const playPromise = audio.play();
+      if (playPromise !== undefined) {
+        playPromise.catch(fail);
+      }
+    } catch (err) {
+      playSoundWithFallback(remainingUrls, onEnd, onAllFail);
+    }
+  }
+
   /**
-   * High-Fidelity Arabic Speech Synthesis with Fallback
+   * High-Fidelity Arabic Pronunciation Engine:
+   * 1. Studio-grade offline MP3 recordings for individual letters
+   * 2. Remote CDN fallback for offline/embedded edge cases
+   * 3. Cloud Arabic native streaming audio for words, sentences & Duas
+   * 4. Device Web Speech Synthesis with Arabic voice auto-detection
+   * 5. Harmonic acoustic confirmation fallback
    */
   function playArabicPronunciation(text, itemObj, onEnd) {
-    if (!text && itemObj) text = itemObj.speechText || itemObj.letter || itemObj.name || itemObj.text;
+    unlockAudioEngine();
+    stopAllQaidaAudio();
+
+    if (!text && itemObj) {
+      text = itemObj.speechText || itemObj.name_ar || itemObj.letter || itemObj.name || itemObj.text;
+    }
     if (!text) return;
 
-    if (itemObj && itemObj.id) {
-      highlightActiveCard(itemObj.id);
+    const rawText = String(text).trim();
+    const cleanGlyph = rawText.replace(/[\u064B-\u065F\u0670\u0640]/g, '').trim();
+
+    // 1. Highlight visual active card
+    const cardId = (itemObj && itemObj.id) ? itemObj.id : null;
+    if (cardId) {
+      highlightActiveCard(cardId);
     }
 
-    if ('speechSynthesis' in window) {
-      window.speechSynthesis.cancel();
+    const wrapEnd = () => {
+      clearActiveCardHighlight();
+      if (typeof onEnd === 'function') onEnd();
+    };
 
-      const utterance = new SpeechSynthesisUtterance(text);
-      utterance.lang = 'ar-SA';
-      utterance.rate = playbackRate || 1.0;
-      utterance.pitch = 1.0;
+    // 2. Candidate audio URLs
+    const candidateUrls = [];
 
-      const voices = window.speechSynthesis.getVoices();
-      const arVoice = voices.find(v => v.lang && (v.lang.startsWith('ar') || v.lang.includes('AR')));
-      if (arVoice) utterance.voice = arVoice;
+    let localFile = null;
+    if (itemObj && itemObj.audio) {
+      localFile = itemObj.audio;
+    } else if (itemObj && itemObj.id && LETTER_AUDIO_MAP[itemObj.id]) {
+      localFile = LETTER_AUDIO_MAP[itemObj.id];
+    } else if (ARABIC_GLYPH_AUDIO_MAP[rawText]) {
+      localFile = ARABIC_GLYPH_AUDIO_MAP[rawText];
+    } else if (ARABIC_GLYPH_AUDIO_MAP[cleanGlyph]) {
+      localFile = ARABIC_GLYPH_AUDIO_MAP[cleanGlyph];
+    }
 
-      utterance.onend = () => {
-        clearActiveCardHighlight();
-        if (typeof onEnd === 'function') onEnd();
-      };
-      utterance.onerror = () => {
-        clearActiveCardHighlight();
-        playFallbackHarmonicChime(itemObj);
-        if (typeof onEnd === 'function') onEnd();
-      };
+    if (localFile) {
+      candidateUrls.push(localFile);
+      const fileName = localFile.split('/').pop();
+      candidateUrls.push('https://raw.githubusercontent.com/adnan/Arabic-Alphabet/master/sounds/' + fileName);
+    }
 
-      window.speechSynthesis.speak(utterance);
-    } else {
+    // 3. Spoken text for cloud TTS / speech synthesis
+    let spokenArabic = rawText;
+    if (ARABIC_LETTER_SPOKEN_MAP[rawText]) {
+      spokenArabic = ARABIC_LETTER_SPOKEN_MAP[rawText];
+    } else if (ARABIC_LETTER_SPOKEN_MAP[cleanGlyph]) {
+      spokenArabic = ARABIC_LETTER_SPOKEN_MAP[cleanGlyph];
+    } else if (itemObj && itemObj.name_ar) {
+      spokenArabic = itemObj.name_ar;
+    } else if (itemObj && itemObj.speechText) {
+      spokenArabic = itemObj.speechText;
+    }
+
+    // Cloud streaming Arabic TTS audio
+    candidateUrls.push('https://translate.google.com/translate_tts?ie=UTF-8&tl=ar&client=tw-ob&q=' + encodeURIComponent(spokenArabic));
+
+    // 4. Play candidate URLs with cascading fallback
+    playSoundWithFallback(candidateUrls, wrapEnd, () => {
+      speakBrowserSynthesis(spokenArabic, itemObj, wrapEnd);
+    });
+  }
+
+  function speakBrowserSynthesis(spokenArabic, itemObj, onEnd) {
+    if (!('speechSynthesis' in window)) {
       playFallbackHarmonicChime(itemObj);
-      setTimeout(() => {
-        clearActiveCardHighlight();
-        if (typeof onEnd === 'function') onEnd();
-      }, 700);
+      setTimeout(onEnd, 700);
+      return;
     }
+
+    window.speechSynthesis.cancel();
+    const utterance = new SpeechSynthesisUtterance(spokenArabic);
+    utterance.lang = 'ar-SA';
+    utterance.rate = playbackRate || 1.0;
+    utterance.pitch = 1.0;
+
+    const voices = window.speechSynthesis.getVoices() || [];
+    const arVoice = voices.find(v => v.lang && (v.lang.startsWith('ar') || v.lang.includes('AR'))) ||
+                    voices.find(v => v.name && /arabic|maged|tarik|laila|salma|zeina/i.test(v.name));
+
+    if (arVoice) {
+      utterance.voice = arVoice;
+    } else if (itemObj && (itemObj.transliteration || itemObj.name)) {
+      utterance.text = itemObj.transliteration || itemObj.name;
+      utterance.lang = 'en-US';
+    }
+
+    utterance.onend = onEnd;
+    utterance.onerror = () => {
+      playFallbackHarmonicChime(itemObj);
+      onEnd();
+    };
+
+    window.speechSynthesis.speak(utterance);
   }
 
   function playFallbackHarmonicChime(itemObj) {
@@ -647,9 +899,7 @@
       clearTimeout(sequentialTimer);
       sequentialTimer = null;
     }
-    if ('speechSynthesis' in window) {
-      window.speechSynthesis.cancel();
-    }
+    stopAllQaidaAudio();
     clearActiveCardHighlight();
     updateTourButtonState(false);
   }
@@ -679,7 +929,7 @@
     if (!item) return;
     const oldRate = playbackRate;
     playbackRate = 0.75;
-    playArabicPronunciation(item.letter, item, () => {
+    playArabicPronunciation(item.name_ar || item.speechText || item.letter, item, () => {
       playbackRate = oldRate;
     });
   }
@@ -691,7 +941,7 @@
     function next() {
       if (played < count) {
         played++;
-        playArabicPronunciation(item.letter, item, () => {
+        playArabicPronunciation(item.name_ar || item.speechText || item.letter, item, () => {
           setTimeout(next, 500);
         });
       }
@@ -706,7 +956,7 @@
     const item = ALPHABETS_29.find(l => l.id === letterId);
     if (!item) return;
 
-    playArabicPronunciation(item.letter, item);
+    playArabicPronunciation(item.name_ar || item.speechText || item.letter, item);
 
     let modal = document.getElementById('modalQaidaLetterDetail');
     if (!modal) {
@@ -743,7 +993,7 @@
             <span class="text-7xl sm:text-8xl font-black font-['Amiri',serif] text-transparent bg-clip-text bg-gradient-to-b from-amber-200 via-amber-300 to-amber-500 select-none drop-shadow-[0_4px_12px_rgba(245,158,11,0.4)]">
               ${item.letter}
             </span>
-            <button onclick="AlHudaInteractiveQaida.playArabicPronunciation('${item.letter}', AlHudaInteractiveQaida.getLetterById('${item.id}'))" class="absolute bottom-2 right-2 w-10 h-10 rounded-full bg-emerald-600 hover:bg-emerald-500 text-white flex items-center justify-center shadow-lg transition transform hover:scale-110 active:scale-95 border border-emerald-400" title="Replay Pronunciation">
+            <button onclick="AlHudaInteractiveQaida.playArabicPronunciation('${item.name_ar || item.speechText || item.letter}', AlHudaInteractiveQaida.getLetterById('${item.id}'))" class="absolute bottom-2 right-2 w-10 h-10 rounded-full bg-emerald-600 hover:bg-emerald-500 text-white flex items-center justify-center shadow-lg transition transform hover:scale-110 active:scale-95 border border-emerald-400" title="Replay Pronunciation">
               <i class="fa-solid fa-volume-high text-sm"></i>
             </button>
           </div>
@@ -777,7 +1027,7 @@
         </div>
 
         <div class="grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs">
-          <button onclick="AlHudaInteractiveQaida.playArabicPronunciation('${item.letter}', AlHudaInteractiveQaida.getLetterById('${item.id}'))" class="py-2.5 px-3 rounded-xl bg-emerald-700 hover:bg-emerald-600 text-white font-bold transition flex items-center justify-center gap-1.5 shadow-sm">
+          <button onclick="AlHudaInteractiveQaida.playArabicPronunciation('${item.name_ar || item.speechText || item.letter}', AlHudaInteractiveQaida.getLetterById('${item.id}'))" class="py-2.5 px-3 rounded-xl bg-emerald-700 hover:bg-emerald-600 text-white font-bold transition flex items-center justify-center gap-1.5 shadow-sm">
             <i class="fa-solid fa-play text-[11px]"></i> Normal (1.0x)
           </button>
           <button onclick="AlHudaInteractiveQaida.playLetterSlow('${item.id}')" class="py-2.5 px-3 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-amber-300 font-bold transition flex items-center justify-center gap-1.5 border border-zinc-700">
@@ -953,7 +1203,7 @@
 
           <div class="w-full flex items-center justify-between pt-2 border-t border-zinc-800 text-[10px] text-zinc-400">
             <span class="truncate max-w-[120px] text-zinc-400">${item.category_label.split(' ')[0]}</span>
-            <button onclick="event.stopPropagation(); AlHudaInteractiveQaida.playArabicPronunciation('${item.letter}', AlHudaInteractiveQaida.getLetterById('${item.id}'))" class="w-7 h-7 rounded-full bg-zinc-800 group-hover:bg-emerald-600 text-zinc-300 group-hover:text-white flex items-center justify-center transition shadow-xs">
+            <button onclick="event.stopPropagation(); AlHudaInteractiveQaida.playArabicPronunciation('${item.name_ar || item.speechText || item.letter}', AlHudaInteractiveQaida.getLetterById('${item.id}'))" class="w-7 h-7 rounded-full bg-zinc-800 group-hover:bg-emerald-600 text-zinc-300 group-hover:text-white flex items-center justify-center transition shadow-xs">
               <i class="fa-solid fa-volume-high text-xs"></i>
             </button>
           </div>
@@ -2083,9 +2333,11 @@
     `;
   }
 
+  let lastActiveContainerId = 'readerInteractiveContent';
+
   function switchWudhuTab(tab) {
     currentWudhuTab = tab;
-    renderInteractivePage('readerInteractiveContent', 49);
+    renderInteractivePage(lastActiveContainerId || 'readerInteractiveContent', 49);
   }
 
   // =========================================================================
@@ -2093,7 +2345,8 @@
   // =========================================================================
 
   function renderInteractivePage(containerId, pageNum) {
-    const container = document.getElementById(containerId);
+    if (containerId) lastActiveContainerId = containerId;
+    const container = document.getElementById(containerId || lastActiveContainerId);
     if (!container) return;
 
     const page = Math.max(1, Math.min(LESSONS_REGISTRY.length, Number(pageNum) || 1));
