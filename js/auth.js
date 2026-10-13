@@ -3,23 +3,72 @@
  * AL-HUDA ISLAMIC CENTRE LMS — MODULAR ARCHITECTURE
  * File: js/auth.js
  * Purpose: Role-Based Access Control (RBAC), Manager/Owner Security Switcher & Teacher Login
- * Extracted Line Range: 9858 – 10041 (184 lines)
+ * Extracted Line Range: 9858 â 10041 (184 lines)
  * ============================================================================
  */
 
     // ============================================================
     // OWNER / ADMIN PORTAL ROLE & SESSION MANAGEMENT
+    // SECURITY (2026-10-14): Owner authentication is verified SERVER-SIDE by
+    // the Cloudflare Worker (POST /api/auth/login). The browser only holds a
+    // signed, expiring session token in sessionStorage. There are NO
+    // hardcoded credentials in this file anymore, and no client-side session
+    // can be forged from DevTools. The worker is the real enforcer: every
+    // /api/db and /api/storage call re-validates the token server-side.
+    // If the worker is not deployed / not configured, owner login FAILS
+    // CLOSED with an explanatory message (see SECURITY-SETUP.md).
     // ============================================================
-    function getAuthenticatedOwnerSession() {
-      const raw = sessionStorage.getItem('alhuda_owner_session') || localStorage.getItem('alhuda_logged_in_owner');
-      if (!raw) return null;
+
+    function getWorkerBase() {
       try {
-        const parsed = JSON.parse(raw);
-        if (parsed && (parsed.role === 'owner' || parsed.username)) {
-          return parsed;
+        if (window.CLOUDFLARE_API_BASE_URL) {
+          return String(window.CLOUDFLARE_API_BASE_URL).replace(/\/+$/, '');
+        }
+        if (window.location && window.location.hostname.endsWith('.workers.dev')) {
+          return '';
         }
       } catch (e) {}
-      return null;
+      return 'https://alhuda-lms.ceoislamiccentre.workers.dev';
+    }
+
+    function getOwnerToken() {
+      try {
+        return sessionStorage.getItem('alhuda_owner_token') || null;
+      } catch (e) {
+        return null;
+      }
+    }
+
+    function decodeTokenPayload(token) {
+      try {
+        const parts = String(token).split('.');
+        if (parts.length !== 2 || !parts[0]) return null;
+        let b64 = parts[0].replace(/-/g, '+').replace(/_/g, '/');
+        const pad = b64.length % 4;
+        if (pad) b64 += '='.repeat(4 - pad);
+        return JSON.parse(atob(b64));
+      } catch (e) {
+        return null;
+      }
+    }
+
+    function getAuthenticatedOwnerSession() {
+      // Remove legacy forgeable session keys once (they must never be trusted again).
+      try {
+        localStorage.removeItem('alhuda_logged_in_owner');
+        localStorage.removeItem('alhuda_admin_account');
+      } catch (e) {}
+      const token = getOwnerToken();
+      if (!token) return null;
+      const payload = decodeTokenPayload(token);
+      if (!payload || payload.role !== 'owner') return null;
+      if (typeof payload.exp !== 'number' || Date.now() / 1000 >= payload.exp) {
+        try { sessionStorage.removeItem('alhuda_owner_token'); } catch (e) {}
+        return null;
+      }
+      // NOTE: expiry/role here is UX-only. The worker re-verifies the token
+      // signature on every privileged API call.
+      return { id: 'OWN-001', username: payload.sub, full_name: 'Owner', role: 'owner', token };
     }
 
     function showOwnerLoginView() {
@@ -61,7 +110,7 @@
       }
     }
 
-    function handleOwnerSignIn(e) {
+    async function handleOwnerSignIn(e) {
       if (e && e.preventDefault) e.preventDefault();
       const user = (document.getElementById('ownerLoginUsername')?.value || '').trim();
       const pass = (document.getElementById('ownerLoginPassword')?.value || '').trim();
@@ -70,39 +119,43 @@
 
       if (errBox) errBox.classList.add('hidden');
 
-      if (!user || !pass) {
+      function showError(msg) {
         if (errBox && errText) {
-          errText.innerText = 'Please enter both username and password.';
+          errText.innerText = msg;
           errBox.classList.remove('hidden');
         }
+      }
+
+      if (!user || !pass) {
+        showError('Please enter both username and password.');
         return;
       }
 
-      const uNorm = user.toLowerCase();
-      const validUsernames = ['alhuda_admin', 'admin', 'owner', 'haider'];
-      const validPasswords = ['alhuda_admin_123', '12345678', 'admin123', 'alhuda_admin'];
-
-      let customOwnerAcc = null;
+      // Server-side verification. NEVER check credentials in the browser.
+      let result;
       try {
-        customOwnerAcc = JSON.parse(localStorage.getItem('alhuda_admin_account') || 'null');
-      } catch (err) {}
+        const res = await fetch(getWorkerBase() + '/api/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username: user, password: pass })
+        });
+        if (res.status === 404 || res.status === 503) {
+          showError('Authentication server is not available. Please deploy the Cloudflare Worker first (see SECURITY-SETUP.md).');
+          return;
+        }
+        result = await res.json();
+      } catch (err) {
+        showError('Authentication server is not available. Please deploy the Cloudflare Worker first (see SECURITY-SETUP.md).');
+        return;
+      }
 
-      const isValid = (
-        (validUsernames.includes(uNorm) && validPasswords.includes(pass)) ||
-        (customOwnerAcc && uNorm === String(customOwnerAcc.username || '').toLowerCase() && pass === String(customOwnerAcc.password || ''))
-      );
-
-      if (isValid) {
-        const sessionPayload = {
-          id: 'OWN-001',
-          username: user,
-          full_name: 'Haider (Owner)',
-          role: 'owner',
-          authenticated_at: new Date().toISOString()
-        };
-        sessionStorage.setItem('alhuda_owner_session', JSON.stringify(sessionPayload));
-        localStorage.setItem('alhuda_logged_in_owner', JSON.stringify(sessionPayload));
-        localStorage.setItem('alhuda_active_portal_role', 'owner');
+      if (result && result.ok && result.token) {
+        try {
+          sessionStorage.setItem('alhuda_owner_token', result.token);
+        } catch (err) {}
+        try {
+          localStorage.setItem('alhuda_active_portal_role', 'owner');
+        } catch (err) {}
 
         showMainAppView();
         switchUserRole('owner');
@@ -113,19 +166,20 @@
           });
         }
       } else {
-        if (errBox && errText) {
-          errText.innerText = 'Invalid username or password.';
-          errBox.classList.remove('hidden');
-        }
+        showError('Invalid username or password.');
       }
     }
 
     function logoutOwnerPortal() {
-      sessionStorage.removeItem('alhuda_owner_session');
-      localStorage.removeItem('alhuda_logged_in_owner');
-      if (localStorage.getItem('alhuda_active_portal_role') === 'owner') {
-        localStorage.removeItem('alhuda_active_portal_role');
-      }
+      try {
+        sessionStorage.removeItem('alhuda_owner_token');
+        sessionStorage.removeItem('alhuda_owner_session');
+        localStorage.removeItem('alhuda_logged_in_owner');
+        localStorage.removeItem('alhuda_admin_account');
+        if (localStorage.getItem('alhuda_active_portal_role') === 'owner') {
+          localStorage.removeItem('alhuda_active_portal_role');
+        }
+      } catch (e) {}
       showOwnerLoginView();
       const userInp = document.getElementById('ownerLoginUsername');
       const passInp = document.getElementById('ownerLoginPassword');
@@ -183,6 +237,13 @@
         window.location.replace('parent.html');
         return;
       } else {
+        // SECURITY: the owner role now REQUIRES a valid worker-issued token.
+        // There is no unauthenticated path to owner privileges anymore.
+        const ownerSession = getAuthenticatedOwnerSession();
+        if (!ownerSession) {
+          showOwnerLoginView();
+          return;
+        }
         localStorage.setItem('alhuda_active_portal_role', 'owner');
       }
 
