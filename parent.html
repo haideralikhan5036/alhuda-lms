@@ -171,7 +171,7 @@
               AL-HUDA ISLAMIC CENTRE
               <span class="text-[10px] font-sans font-bold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">Student Portal</span>
             </div>
-            <p class="text-[11px] text-slate-300 hidden sm:block">Live Learning, Sabaq Progress &amp; Digital Library</p>
+            <p class="text-[11px] text-slate-300 hidden sm:block">Live Learning, Lesson Progress &amp; Digital Library</p>
           </div>
         </div>
 
@@ -263,7 +263,7 @@
           </div>
           <div>
             <h2 class="text-base sm:text-lg font-extrabold text-slate-900">Parent &amp; Student Login</h2>
-            <p class="text-xs text-slate-500">Sign in to view your family's authorized students, Sabaq &amp; fee ledger</p>
+            <p class="text-xs text-slate-500">Sign in to view your family's authorized students, Lesson &amp; fee ledger</p>
           </div>
         </div>
 
@@ -362,7 +362,7 @@
             </div>
             <h2 class="text-xl font-black text-slate-900" id="liveClassSubject">Quran Recitation &amp; Tajweed</h2>
             <p class="text-xs text-slate-600" id="liveClassMeta">
-              Assigned Teacher: <strong class="text-slate-800" id="liveClassTeacher">Qari / Ustadh</strong> | 
+              Assigned Teacher: <strong class="text-slate-800" id="liveClassTeacher">Teacher</strong> | 
               Time Slot: <strong class="text-slate-800 font-mono" id="liveClassTime">Flexible</strong>
             </p>
           </div>
@@ -528,7 +528,7 @@
                 <th class="p-3.5">Date</th>
                 <th class="p-3.5">Status</th>
                 <th class="p-3.5">Teacher</th>
-                <th class="p-3.5">Sabaq / Topic</th>
+                <th class="p-3.5">Lesson / Topic</th>
                 <th class="p-3.5 text-right">Action</th>
               </tr>
             </thead>
@@ -851,7 +851,7 @@
           </div>
           <div>
             <h3 class="font-black text-sm text-slate-900">Submit Leave Request / Notice</h3>
-            <span class="text-[10px] text-slate-400">Direct notification to Academy Ustadh</span>
+            <span class="text-[10px] text-slate-400">Direct notification to Academy Teacher</span>
           </div>
         </div>
         <button onclick="closeModal('modalLeaveRequest')" class="text-slate-400 hover:text-slate-700 text-xl font-bold">&times;</button>
@@ -1708,7 +1708,7 @@
               </div>
               <div>
                 <span class="text-[11px] font-bold px-2.5 py-0.5 rounded-lg border ${statusClass}">
-                  Sabaq: ${meta?.status || 'Done'}
+                  Lesson: ${meta?.status || 'Done'}
                 </span>
               </div>
             </div>
@@ -1744,7 +1744,7 @@
       const heroBtn = document.getElementById('btnOpenLatestSabaq');
       if (heroBtn && LATEST_SABAQ_META) {
         const paraText = LATEST_SABAQ_META.para ? `Para ${escapeHtml(LATEST_SABAQ_META.para)} • ` : '';
-        heroBtn.innerHTML = `<i class="fa-solid fa-book-open"></i> Read Sabaq: ${escapeHtml(LATEST_SABAQ_META.book_title || 'Lesson')} (${paraText}Pg ${Number(LATEST_SABAQ_META.page) || 1})`;
+        heroBtn.innerHTML = `<i class="fa-solid fa-book-open"></i> Read Lesson: ${escapeHtml(LATEST_SABAQ_META.book_title || 'Lesson')} (${paraText}Pg ${Number(LATEST_SABAQ_META.page) || 1})`;
       }
     }
 
@@ -2643,7 +2643,7 @@
           const pPages = (typeof getBookParaPages === 'function') ? getBookParaPages(book, p.para) : [];
           const countStr = pPages.length > 0 ? ` (${pPages.length} Pages)` : ` (${p.total_pages || 18} Pages)`;
           const pageTarget = p.page_start || 1;
-          return `<option value="${pageTarget}" data-para="${p.para}">Para ${p.para}: ${p.name_en || ('Para ' + p.para)} (${p.name_ur || p.name_ar || ''})${countStr}</option>`;
+          return `<option value="${pageTarget}" data-para="${p.para}">Para ${p.para}: ${p.name_en || ('Para ' + p.para)}${countStr}</option>`;
         }).join('');
 
         jumpSelect.onchange = function() {
@@ -3074,7 +3074,7 @@
         console.warn('[Parent Leave Sync] Notice:', err);
       }
 
-      alert(`✅ Leave Request Submitted & Synced Successfully!\n\nDate: ${date}\nReason: ${reason}\nStudent: ${CURRENT_STUDENT?.name || 'Student'}\n\nAdministration & your Ustadh have been notified in real time.`);
+      alert(`✅ Leave Request Submitted & Synced Successfully!\n\nDate: ${date}\nReason: ${reason}\nStudent: ${CURRENT_STUDENT?.name || 'Student'}\n\nAdministration & your Teacher have been notified in real time.`);
       closeModal('modalLeaveRequest');
       if (typeof switchStudentAccount === 'function' && CURRENT_STUDENT?.id) {
         switchStudentAccount(CURRENT_STUDENT.id);
