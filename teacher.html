@@ -23,7 +23,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Amiri:wght@400;700&family=Noto+Naskh+Arabic:wght@400;600;700&family=Cinzel:wght@600;700;800;900&family=Inter:wght@400;500;600;700;800;900&family=Outfit:wght@500;600;700;800;900&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-  
+  <link rel="stylesheet" href="css/number-typography.css">
   <!-- Supabase JS Client & Cloudflare D1/R2 Universal Engine -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="js/cloudflare-db.js"></script>
@@ -158,7 +158,7 @@
 
     /* Numbers Styling */
     .font-mono, td.font-mono, span.font-mono, div.font-mono {
-      font-family: 'JetBrains Mono', monospace !important;
+font-family: var(--font-num) !important;
       font-feature-settings: 'tnum' 1, 'zero' 1;
       letter-spacing: -0.02em;
     }
