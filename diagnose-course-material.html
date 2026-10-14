@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Course Material Diagnostic — Al-Huda LMS (Owner Tool)</title>
+<style>
+  body { font-family: system-ui, sans-serif; max-width: 900px; margin: 2rem auto; padding: 0 1rem; background: #f8fafc; color: #1e293b; }
+  .card { background: #fff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 1.5rem; margin-bottom: 1rem; }
+  h1 { font-size: 1.4rem; margin: 0 0 .5rem; }
+  h2 { font-size: 1.1rem; margin: 1rem 0 .5rem; }
+  input, button { font-size: 1rem; padding: .6rem .8rem; border-radius: 8px; border: 1px solid #cbd5e1; }
+  button { background: #0f766e; color: #fff; border: none; cursor: pointer; font-weight: 600; }
+  button:disabled { background: #94a3b8; cursor: wait; }
+  .hidden { display: none; }
+  table { width: 100%; border-collapse: collapse; font-size: .9rem; margin-top: .5rem; }
+  th, td { text-align: left; padding: .5rem; border-bottom: 1px solid #e2e8f0; vertical-align: top; }
+  th { background: #f1f5f9; }
+  .ok { color: #15803d; font-weight: 700; }
+  .bad { color: #b91c1c; font-weight: 700; }
+  .warn { color: #b45309; font-weight: 700; }
+  .mono { font-family: monospace; font-size: .8rem; word-break: break-all; }
+  #msg { padding: .75rem; border-radius: 8px; margin: .75rem 0; }
+  #msg.good { background: #dcfce7; color: #166534; }
+  #msg.err { background: #fee2e2; color: #991b1b; }
+  .note { font-size: .85rem; color: #64748b; }
+  img.thumb { max-width: 120px; border: 1px solid #e2e8f0; border-radius: 6px; }
+</style>
+</head>
+<body>
+
+<div class="card" id="stepLogin">
+  <h1>Course Material Diagnostic</h1>
+  <p class="note">Owner-only, <b>read-only</b> tool. It inspects your saved course books and their pages and reports exactly what is stored and what is broken. It does not change, delete, or re-upload anything.</p>
+  <div id="msg" class="hidden"></div>
+  <p><input id="ownerUser" type="text" placeholder="Owner username" autocomplete="username" style="width:100%;margin-bottom:.5rem"></p>
+  <p><input id="ownerPass" type="password" placeholder="Owner password" autocomplete="current-password" style="width:100%;margin-bottom:.5rem"></p>
+  <p><button id="btnLogin" onclick="ownerLogin()">Sign in &amp; run diagnostic</button></p>
+</div>
+
+<div class="card hidden" id="stepResults">
+  <h1>Diagnostic results</h1>
+  <div id="results"></div>
+  <p style="margin-top:1rem"><button onclick="ownerLogout()">Sign out</button></p>
+</div>
+
+<script>
+var API = 'https://alhuda-lms.ceoislamiccentre.workers.dev';
+var ownerToken = '';
+
+function showMsg(t, good) {
+  var m = document.getElementById('msg');
+  m.textContent = t;
+  m.className = good ? 'good' : 'err';
+  m.classList.remove('hidden');
+}
+function setBusy(id, busy, label) {
+  var b = document.getElementById(id);
+  if (b) { b.disabled = busy; b.innerText = busy ? 'Please wait…' : label; }
+}
+function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+
+async function dbSelect(table, selectCols) {
+  var res = await fetch(API + '/api/db', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + ownerToken },
+    body: JSON.stringify({ table: table, action: 'select', select: selectCols || '*' })
+  });
+  if (res.status === 401 || res.status === 403) throw new Error('SESSION_EXPIRED');
+  var data = await res.json().catch(function () { return {}; });
+  if (!res.ok) throw new Error('DB query failed: ' + (data.error || res.status));
+  return data.data || data.results || [];
+}
+
+window.ownerLogin = async function () {
+  var user = document.getElementById('ownerUser').value.trim();
+  var pass = document.getElementById('ownerPass').value;
+  if (!user || !pass) { showMsg('Please enter your owner username and password.', false); return; }
+  setBusy('btnLogin', true, 'Sign in');
+  try {
+    var res = await fetch(API + '/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: user, password: pass })
+    });
+    var data = await res.json().catch(function () { return {}; });
+    if (res.ok && data && data.ok && data.token) {
+      ownerToken = data.token;
+      document.getElementById('ownerPass').value = '';
+      document.getElementById('stepLogin').classList.add('hidden');
+      document.getElementById('stepResults').classList.remove('hidden');
+      await runDiagnostic();
+    } else {
+      showMsg('Owner sign-in failed. Check the username and password and try again.', false);
+    }
+  } catch (e) {
+    showMsg('Could not reach the server. Check your internet connection and try again.', false);
+  }
+  setBusy('btnLogin', false, 'Sign in & run diagnostic');
+};
+
+window.ownerLogout = function () {
+  ownerToken = '';
+  document.getElementById('stepResults').classList.add('hidden');
+  document.getElementById('stepLogin').classList.remove('hidden');
+  document.getElementById('results').innerHTML = '';
+};
+
+function pageKind(v) {
+  if (!v) return 'empty';
+  if (v.indexOf('data:') === 0) return 'embedded image (stored inside database)';
+  if (v.indexOf('/api/storage?key=') === 0 || v.indexOf('api/storage?key=') >= 0) return 'R2 file';
+  if (v.indexOf('http') === 0) return 'external URL';
+  return 'unknown format';
+}
+
+async function testUrl(u) {
+  // Test with a HEAD-like GET of the first bytes; for data: URLs just check decodability.
+  if (!u) return { status: 'missing', detail: 'no value stored' };
+  if (u.indexOf('data:') === 0) {
+    var ok = /^data:image\/[a-zA-Z0-9+.-]+;base64,[A-Za-z0-9+/=]+$/.test(u.slice(0, 200000)) && u.length > 100;
+    return ok ? { status: 'ok', detail: 'embedded image data looks valid (' + Math.round(u.length / 1024) + ' KB)' }
+              : { status: 'bad', detail: 'embedded image data looks corrupt or truncated' };
+  }
+  var fetchUrl = u.indexOf('http') === 0 ? u : (API + (u.charAt(0) === '/' ? u : '/' + u));
+  try {
+    var res = await fetch(fetchUrl, { headers: { 'Authorization': 'Bearer ' + ownerToken }, method: 'GET' });
+    if (res.ok) return { status: 'ok', detail: 'HTTP ' + res.status + ' — file opens' };
+    if (res.status === 403) return { status: 'bad', detail: 'HTTP 403 Forbidden — blocked by storage permissions' };
+    if (res.status === 404) return { status: 'bad', detail: 'HTTP 404 — file not found in storage' };
+    return { status: 'warn', detail: 'HTTP ' + res.status };
+  } catch (e) {
+    return { status: 'bad', detail: 'network error: ' + e.message };
+  }
+}
+
+async function runDiagnostic() {
+  var box = document.getElementById('results');
+  box.innerHTML = '<p>Reading saved course material…</p>';
+  try {
+    var rows = await dbSelect('system_settings', 'id, key');
+    var bookRows = rows.filter(function (r) { return r.key && (r.key.indexOf('alhuda_custom_books') === 0 || r.key.indexOf('BOOK_PAGE_') === 0 || r.key === 'alhuda_deleted_books'); });
+
+    var html = '<h2>1. What is stored</h2>';
+    html += '<p>Total book-related records in database: <b>' + bookRows.length + '</b></p>';
+
+    // Catalog
+    var catalogRows = await dbSelect('system_settings', 'id, key, value').then(function (all) {
+      return all.filter(function (r) { return r.key === 'alhuda_custom_books_index' || r.key === 'alhuda_custom_books'; });
+    });
+    var books = [];
+    catalogRows.forEach(function (r) {
+      try {
+        var parsed = JSON.parse(r.value);
+        if (Array.isArray(parsed) && parsed.length > books.length) books = parsed;
+      } catch (e) {}
+    });
+    html += '<p>Books in catalog: <b>' + books.length + '</b></p>';
+
+    // Deleted list
+    var delRows = rows.filter(function (r) { return r.key === 'alhuda_deleted_books'; });
+    html += '<p class="note">Deleted-book markers: ' + delRows.length + ' record(s). (These only matter if you deleted a book on purpose.)</p>';
+
+    if (books.length === 0) {
+      html += '<p class="warn">No books found in the catalog. If you uploaded material before, the catalog record may be missing — report this.</p>';
+      box.innerHTML = html;
+      return;
+    }
+
+    html += '<h2>2. Page check per book</h2>';
+    html += '<table><tr><th>Book</th><th>Expected pages</th><th>Page records found</th><th>Page storage type</th><th>Page 1 test</th></tr>';
+
+    // Need full rows (with values) for page keys — fetch in two passes to keep it light.
+    var allRows = await dbSelect('system_settings', 'id, key, value');
+    var byKey = {};
+    allRows.forEach(function (r) { byKey[String(r.key)] = r.value; });
+
+    for (var bi = 0; bi < books.length; bi++) {
+      var b = books[bi] || {};
+      var total = Number(b.total_pages) || (Array.isArray(b.pages) ? b.pages.length : 0);
+      var found = 0, kinds = {}, firstPageVal = '';
+      for (var i = 0; i < total; i++) {
+        var v = byKey['BOOK_PAGE_' + b.id + '_' + i];
+        if (v) { found++; kinds[pageKind(v)] = (kinds[pageKind(v)] || 0) + 1; if (i === 0) firstPageVal = v; }
+      }
+      // Fallback: pages embedded directly in the catalog entry
+      var embeddedCount = 0;
+      if (found === 0 && Array.isArray(b.pages) && b.pages.length > 0) {
+        embeddedCount = b.pages.length;
+        kinds[pageKind(b.pages[0])] = embeddedCount;
+        firstPageVal = b.pages[0];
+      }
+      var kindStr = Object.keys(kinds).map(function (k) { return k + ' ×' + kinds[k]; }).join(', ') || '—';
+      var countCell = (found === total || embeddedCount === total)
+        ? '<span class="ok">' + (found || embeddedCount) + ' / ' + total + '</span>'
+        : '<span class="bad">' + (found || embeddedCount) + ' / ' + total + ' MISSING PAGES</span>';
+
+      var t = firstPageVal ? await testUrl(firstPageVal) : { status: 'bad', detail: 'no page value to test' };
+      var testCell = t.status === 'ok' ? '<span class="ok">OK</span> — ' + esc(t.detail)
+        : t.status === 'warn' ? '<span class="warn">CHECK</span> — ' + esc(t.detail)
+        : '<span class="bad">BROKEN</span> — ' + esc(t.detail);
+
+      html += '<tr><td><b>' + esc(b.title || b.id) + '</b><div class="mono">' + esc(b.id || '') + ' · ' + esc(b.category || '') + '</div></td>'
+        + '<td>' + total + '</td><td>' + countCell + '</td><td>' + esc(kindStr) + '</td><td>' + testCell + '</td></tr>';
+    }
+    html += '</table>';
+
+    html += '<h2>3. What this means</h2><ul class="note">'
+      + '<li><b class="bad">BROKEN / 403</b> on an R2 file → the file exists but the current login cannot open it (usually a storage permission rule). This is repairable without touching your pages.</li>'
+      + '<li><b class="bad">MISSING PAGES</b> → some page records are not in the database. Do <b>not</b> delete the book — report the exact book and counts.</li>'
+      + '<li><b class="ok">OK</b> everywhere → your stored material is intact; the display problem is in the app code, not your data.</li></ul>';
+
+    box.innerHTML = html;
+  } catch (e) {
+    if (e.message === 'SESSION_EXPIRED') {
+      box.innerHTML = '<p class="bad">Your owner session expired. Please sign out and sign in again.</p>';
+      ownerLogout();
+    } else {
+      box.innerHTML = '<p class="bad">Diagnostic failed: ' + esc(e.message) + '</p>';
+    }
+  }
+}
+</script>
+</body>
+</html>

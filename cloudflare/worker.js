@@ -857,7 +857,11 @@ async function handleScopedStorageRequest(ctx, auth) {
 
   if (request.method === 'GET') {
     const key = String(url.searchParams.get('key') || '');
-    if (!key.startsWith(prefix)) {
+    // Shared published course material (uploaded by owner under course_material/)
+    // is readable by any authenticated role. Writes remain owner-only: the POST
+    // path below forces restricted roles into their own scoped folder.
+    const isSharedCourseMaterial = key.startsWith('course_material/');
+    if (!key.startsWith(prefix) && !isSharedCourseMaterial) {
       return forbidden(request, env);
     }
     return handleStorageRequest(ctx);
