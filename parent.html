@@ -52,6 +52,7 @@
   <!-- Al-Huda Curriculum & Course Material Registry Engine -->
   <script src="curriculum_data.js"></script>
   <script src="js/interactive_qaida.js"></script>
+    <script src="js/security.js"></script>
 
   <!-- High-Res Client-Side Invoice PDF Generation Libraries (html2canvas, jsPDF, html2pdf) -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
@@ -902,8 +903,13 @@
   <!-- ================= JAVASCRIPT APPLICATION CONTROLLER ================= -->
   <script>
     // Supabase Credentials
-    const SUPABASE_URL = "https://ldgzuyroejzrvktksugy.supabase.co";
-    const SUPABASE_KEY = "sb_publishable_rP38XXgYoYBTPJlCxtwMUg_RPupFrKg";
+    // SECURITY (2026-10-14): legacy Supabase credentials removed. The app now
+    // talks to Cloudflare D1/R2 through js/cloudflare-db.js, which overrides
+    // window.supabase.createClient and ignores these arguments. If the old
+    // Supabase project is still live, rotate its keys and enable deny-by-
+    // default RLS (see SUPABASE-RLS-GUIDE.md) so the retired key is useless.
+    const SUPABASE_URL = "";
+    const SUPABASE_KEY = "";
     const db = window.supabase ? window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY) : null;
 
     // State Variables
@@ -1109,6 +1115,76 @@
       setupStudentReaderKeyboard();
     });
 
+    // ============================================================
+    // SECURITY (2026-10-14): server-issued session tokens.
+    // Parent login is verified by the Cloudflare Worker
+    // (POST /api/auth/staff-login). The browser keeps only a signed,
+    // expiring token in sessionStorage. /api/db + /api/storage calls
+    // carry it automatically via js/cloudflare-db.js.
+    // ============================================================
+    function getParentWorkerBase() {
+      try {
+        if (window.CLOUDFLARE_API_BASE_URL) return String(window.CLOUDFLARE_API_BASE_URL).replace(/\/+$/, '');
+        if (window.location && window.location.hostname.endsWith('.workers.dev')) return '';
+      } catch (e) {}
+      return 'https://alhuda-lms.ceoislamiccentre.workers.dev';
+    }
+
+    function decodeParentJwtPayload(token) {
+      try {
+        const parts = String(token).split('.');
+        if (parts.length !== 2 || !parts[0]) return null;
+        let b64 = parts[0].replace(/-/g, '+').replace(/_/g, '/');
+        const pad = b64.length % 4;
+        if (pad) b64 += '='.repeat(4 - pad);
+        return JSON.parse(atob(b64));
+      } catch (e) { return null; }
+    }
+
+    function getParentToken() {
+      try { return sessionStorage.getItem('alhuda_parent_token') || null; }
+      catch (e) { return null; }
+    }
+
+    function clearParentToken() {
+      try {
+        sessionStorage.removeItem('alhuda_parent_token');
+        if (window.clearWorkerTokens) window.clearWorkerTokens();
+      } catch (e) {}
+    }
+
+    // Returns {ok, token, id} | {unauthorized:true} | {unreachable:true}
+    async function parentServerLogin(identifier, password) {
+      try {
+        const res = await fetch(getParentWorkerBase() + '/api/auth/staff-login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ role: 'parent', identifier, password })
+        });
+        if (res.status === 401) return { unauthorized: true };
+        if (!res.ok) return { unreachable: true };
+        const data = await res.json();
+        if (data && data.ok && data.token) return { ok: true, token: data.token, id: data.id };
+        return { unreachable: true };
+      } catch (e) {
+        return { unreachable: true };
+      }
+    }
+
+    function restoreParentLoginButton(btn) {
+      if (btn) {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fa-solid fa-right-to-bracket text-brandGold"></i> Login to Parent Portal';
+      }
+    }
+
+    function showParentLoginError(errBox, errText, msg) {
+      if (errBox && errText) {
+        errText.innerText = msg;
+        errBox.classList.remove('hidden');
+      }
+    }
+
     async function initializePortal() {
       // Never allow URL query parameters (?studentId=..., ?id=..., ?familyId=...) to select or override identity
       if (window.location.search) {
@@ -1130,6 +1206,26 @@
         }
       }
 
+      // Prefer the server-issued token: fetch ONLY our own family + students.
+      // (The Bearer token is attached automatically by js/cloudflare-db.js.)
+      const existingParentToken = getParentToken();
+      if (existingParentToken) {
+        const _pp = decodeParentJwtPayload(existingParentToken);
+        if (_pp && _pp.role === 'parent' && typeof _pp.exp === 'number' && Date.now() / 1000 < _pp.exp) {
+          try {
+            const _famRes = await db.from('families').select('*').eq('id', _pp.sub).single();
+            if (_famRes && _famRes.data && _famRes.data.id) {
+              const _stuRes = await db.from('students').select('*').eq('family_id', _pp.sub);
+              await showParentDashboardView(_famRes.data, (_stuRes && _stuRes.data) || [], parsedParent ? parsedParent.selected_student_id : null);
+              return;
+            }
+          } catch (err) {
+            console.warn('[Parent Session] Token session check failed, trying legacy session:', err);
+          }
+        } else {
+          clearParentToken();
+        }
+      }
       if (parsedParent && parsedParent.family_id) {
         const { families, students } = await fetchFamiliesAndStudentsForAuth();
         const verifiedFamily = families.find(f => String(f.id || '').trim().toUpperCase() === String(parsedParent.family_id || '').trim().toUpperCase());
@@ -1172,6 +1268,57 @@
         btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Authenticating...';
       }
 
+      // --- 1. Try server-side login first (when the worker is deployed) ---
+      // SECURITY: on success we fetch ONLY our own family + students, never
+      // the whole tables (fixes the broken object-level authorization).
+      const serverAttempt = await parentServerLogin(usernameInput, passwordInput);
+      if (serverAttempt.ok) {
+        try {
+          sessionStorage.setItem('alhuda_parent_token', serverAttempt.token);
+        } catch (err) {}
+        try {
+          const famRes = await db.from('families').select('*').eq('id', serverAttempt.id).single();
+          const stuRes = await db.from('students').select('*').eq('family_id', serverAttempt.id);
+          if (famRes && famRes.data && famRes.data.id) {
+            const authorizedStudents = (stuRes && stuRes.data) || [];
+            const sessionPayload = {
+              family_id: famRes.data.id,
+              parent_name: famRes.data.parent_name,
+              selected_student_id: authorizedStudents[0] ? authorizedStudents[0].id : null,
+              authenticated_at: new Date().toISOString(),
+              via: 'server'
+            };
+            try {
+              localStorage.setItem('alhuda_logged_in_parent', JSON.stringify(sessionPayload));
+              sessionStorage.setItem('alhuda_parent_session', JSON.stringify(sessionPayload));
+              localStorage.setItem('alhuda_active_portal_role', 'parent');
+              localStorage.removeItem('alhuda_logged_in_teacher');
+              sessionStorage.removeItem('alhuda_teacher_session');
+              localStorage.removeItem('alhuda_logged_in_manager');
+              sessionStorage.removeItem('alhuda_manager_session');
+            } catch (err) {}
+            document.getElementById('parentRoleMismatchBanner')?.classList.add('hidden');
+            restoreParentLoginButton(btn);
+            await showParentDashboardView(famRes.data, authorizedStudents, authorizedStudents[0] ? authorizedStudents[0].id : null);
+            return;
+          }
+        } catch (err) {
+          console.warn('[Parent Login] Could not load family profile:', err);
+        }
+        clearParentToken();
+        restoreParentLoginButton(btn);
+        showParentLoginError(errBox, errText, "Login succeeded but profile could not be loaded.");
+        return;
+      }
+      if (serverAttempt.unauthorized) {
+        // Server reachable and credentials rejected: authoritative, NO local fallback.
+        restoreParentLoginButton(btn);
+        showParentLoginError(errBox, errText, "Invalid username or password.");
+        return;
+      }
+      // --- 2. Server unreachable: legacy local login (pre-deploy compatibility) ---
+      console.warn('[Parent Login] Worker auth unavailable, using local login.');
+
       const { families, students, parentAccountsMap } = await fetchFamiliesAndStudentsForAuth();
       const uNorm = usernameInput.toLowerCase();
       const uPhone = usernameInput.replace(/[^0-9]/g, '');
@@ -1211,10 +1358,7 @@
         }
       }
 
-      if (btn) {
-        btn.disabled = false;
-        btn.innerHTML = '<i class="fa-solid fa-right-to-bracket text-brandGold"></i> Login to Parent Portal';
-      }
+      restoreParentLoginButton(btn);
 
       if (matchedFamily) {
         const famIdUpper = String(matchedFamily.id || '').trim().toUpperCase();
@@ -1240,10 +1384,7 @@
         document.getElementById('parentRoleMismatchBanner')?.classList.add('hidden');
         await showParentDashboardView(matchedFamily, authorizedStudents, matchedInitialStudentId);
       } else {
-        if (errBox && errText) {
-          errText.innerText = 'Invalid username or password.';
-          errBox.classList.remove('hidden');
-        }
+        showParentLoginError(errBox, errText, "Invalid username or password.");
       }
     }
 
@@ -1563,7 +1704,7 @@
               <div class="flex items-center gap-2 flex-wrap">
                 <span class="text-xs font-black text-slate-800 font-mono">${log.date}</span>
                 <span class="px-2.5 py-0.5 rounded-full text-[10px] font-black ${log.status === 'Present' ? 'bg-emerald-100 text-emerald-800 border border-emerald-300' : 'bg-rose-100 text-rose-800 border border-rose-300'}">${log.status || 'Recorded'}</span>
-                <span class="text-xs text-slate-500">Instructor: <strong class="text-slate-800">${teacherName}</strong></span>
+                <span class="text-xs text-slate-500">Instructor: <strong class="text-slate-800">${escapeHtml(teacherName)}</strong></span>
               </div>
               <div>
                 <span class="text-[11px] font-bold px-2.5 py-0.5 rounded-lg border ${statusClass}">
@@ -1576,22 +1717,22 @@
               <div class="md:col-span-2 space-y-1.5">
                 <div class="flex items-center gap-2 flex-wrap">
                   <span class="text-sm font-black text-slate-900 flex items-center gap-1.5">
-                    <i class="fa-solid fa-book-open text-brandEmerald"></i> ${bookTitle}
+                    <i class="fa-solid fa-book-open text-brandEmerald"></i> ${escapeHtml(bookTitle)}
                   </span>
                   <span class="text-xs font-bold px-2 py-0.5 rounded-md bg-amber-100 text-amber-900 border border-amber-300 font-mono">
-                    ${meta?.para ? `Para ${meta.para} &bull; ` : ''}Page ${pageNum}
+                    ${meta?.para ? `Para ${escapeHtml(meta.para)} &bull; ` : ''}Page ${Number(pageNum) || 1}
                   </span>
                 </div>
                 ${meta?.remarks ? `
                   <p class="text-xs text-slate-600 bg-slate-50/90 p-2.5 rounded-xl border border-slate-200/70 italic">
-                    "${meta.remarks}"
+                    "${escapeHtml(meta.remarks)}"
                   </p>
                 ` : ''}
               </div>
 
               <div class="flex items-center justify-start md:justify-end">
-                <button onclick="openParentDigitalReader('${bookId}', ${pageNum}, ${meta?.para || 'null'}, ${meta?.language ? `'${meta.language}'` : 'null'})" class="w-full sm:w-auto px-4 py-2.5 rounded-xl bg-gradient-to-r from-emerald-800 to-teal-900 hover:from-emerald-700 hover:to-teal-800 text-white font-black text-xs shadow-sm hover:shadow-md transition flex items-center justify-center gap-1.5">
-                  <i class="fa-solid fa-book-open-reader text-brandGold"></i> Revise Page ${pageNum}
+                <button onclick="openParentDigitalReader('${sanitizeBookId(bookId)}', ${Number(pageNum) || 1}, ${meta?.para ? Number(meta.para) : 'null'}, ${meta?.language ? `'${escapeJsAttr(meta.language)}'` : 'null'})" class="w-full sm:w-auto px-4 py-2.5 rounded-xl bg-gradient-to-r from-emerald-800 to-teal-900 hover:from-emerald-700 hover:to-teal-800 text-white font-black text-xs shadow-sm hover:shadow-md transition flex items-center justify-center gap-1.5">
+                  <i class="fa-solid fa-book-open-reader text-brandGold"></i> Revise Page ${Number(pageNum) || 1}
                 </button>
               </div>
             </div>
@@ -1602,8 +1743,8 @@
       // Update Hero Sabaq Button
       const heroBtn = document.getElementById('btnOpenLatestSabaq');
       if (heroBtn && LATEST_SABAQ_META) {
-        const paraText = LATEST_SABAQ_META.para ? `Para ${LATEST_SABAQ_META.para} • ` : '';
-        heroBtn.innerHTML = `<i class="fa-solid fa-book-open"></i> Read Sabaq: ${LATEST_SABAQ_META.book_title || 'Lesson'} (${paraText}Pg ${LATEST_SABAQ_META.page || 1})`;
+        const paraText = LATEST_SABAQ_META.para ? `Para ${escapeHtml(LATEST_SABAQ_META.para)} • ` : '';
+        heroBtn.innerHTML = `<i class="fa-solid fa-book-open"></i> Read Sabaq: ${escapeHtml(LATEST_SABAQ_META.book_title || 'Lesson')} (${paraText}Pg ${Number(LATEST_SABAQ_META.page) || 1})`;
       }
     }
 
@@ -1676,7 +1817,7 @@
             ${isActive ? `
               <div class="mt-2 pt-2 border-t border-emerald-200/60 space-y-1.5">
                 <div class="text-xs font-black font-mono text-emerald-800">${timeStr}</div>
-                <div class="text-[10px] text-slate-500 truncate">${teacherName}</div>
+                <div class="text-[10px] text-slate-500 truncate">${escapeHtml(teacherName)}</div>
                 ${slotZoom && /^https?:\/\//i.test(slotZoom) ? `
                   <a href="${slotZoom}" target="_blank" class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-brandDark hover:bg-brandDarkest text-white font-bold text-[10px] transition w-full justify-center">
                     <i class="fa-solid fa-video text-amber-300"></i> Join Zoom
@@ -1715,7 +1856,7 @@
           try { meta = typeof log.lesson_notes === 'string' ? JSON.parse(log.lesson_notes) : log.lesson_notes; } catch(e){}
         }
 
-        const topic = meta?.book_title ? `${meta.book_title} (Page ${meta.page || 1})` : (log.lesson_notes || 'Regular Class Attendance');
+        const topic = meta?.book_title ? `${escapeHtml(meta.book_title)} (Page ${Number(meta.page) || 1})` : escapeHtml(log.lesson_notes || 'Regular Class Attendance');
         const teacher = log.teachers?.full_name || defaultTeacher;
 
         return `
@@ -1726,11 +1867,11 @@
                 ${log.status}
               </span>
             </td>
-            <td class="p-3.5 font-semibold text-slate-700">${teacher}</td>
+            <td class="p-3.5 font-semibold text-slate-700">${escapeHtml(teacher)}</td>
             <td class="p-3.5 text-slate-600 truncate max-w-xs">${topic}</td>
             <td class="p-3.5 text-right">
               ${meta?.page ? `
-                <button onclick="openParentDigitalReader('${meta.book_id || 'holy-quran-16-line'}', ${meta.page}, ${meta.para || 'null'}, ${meta.language ? `'${meta.language}'` : 'null'})" class="px-2.5 py-1 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-800 font-bold text-[11px] transition">
+                <button onclick="openParentDigitalReader('${sanitizeBookId(meta.book_id || 'holy-quran-16-line')}', ${Number(meta.page) || 1}, ${meta.para ? Number(meta.para) : 'null'}, ${meta.language ? `'${escapeJsAttr(meta.language)}'` : 'null'})" class="px-2.5 py-1 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-800 font-bold text-[11px] transition">
                   <i class="fa-solid fa-book-open"></i> Read
                 </button>
               ` : '-'}
@@ -2941,6 +3082,7 @@
     }
 
     function handleParentLogout() {
+      clearParentToken();
       localStorage.removeItem('alhuda_logged_in_parent');
       localStorage.removeItem('alhuda_selected_student_id');
       sessionStorage.removeItem('alhuda_parent_session');

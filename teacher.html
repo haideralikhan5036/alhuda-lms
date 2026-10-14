@@ -33,6 +33,7 @@
   <!-- Al-Huda Curriculum & Digital Islamic Library Engine -->
   <script src="curriculum_data.js"></script>
   <script src="js/interactive_qaida.js"></script>
+  <script src="js/security.js"></script>
 
   <script>
     tailwind.config = {
@@ -2441,8 +2442,13 @@
   <!-- ================= JAVASCRIPT APPLICATION LOGIC ================= -->
   <script>
     // Supabase Configuration
-    const SUPABASE_URL = "https://ldgzuyroejzrvktksugy.supabase.co";
-    const SUPABASE_KEY = "sb_publishable_rP38XXgYoYBTPJlCxtwMUg_RPupFrKg";
+    // SECURITY (2026-10-14): legacy Supabase credentials removed. The app now
+    // talks to Cloudflare D1/R2 through js/cloudflare-db.js, which overrides
+    // window.supabase.createClient and ignores these arguments. If the old
+    // Supabase project is still live, rotate its keys and enable deny-by-
+    // default RLS (see SUPABASE-RLS-GUIDE.md) so the retired key is useless.
+    const SUPABASE_URL = "";
+    const SUPABASE_KEY = "";
     const db = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
     let CURRENT_TEACHER = null;
@@ -2602,7 +2608,27 @@
       const roleMismatchBanner = document.getElementById('roleMismatchBanner');
       if (roleMismatchBanner) roleMismatchBanner.classList.add('hidden');
 
-      // Check existing authenticated Teacher session
+      // Check existing authenticated Teacher session.
+      // Prefer the server-issued token; fall back to the legacy local session
+      // only when the worker auth service is unreachable (pre-deploy).
+      const existingToken = getTeacherToken();
+      if (existingToken) {
+        const _tp = decodeJwtPayload(existingToken);
+        if (_tp && _tp.role === 'teacher' && typeof _tp.exp === 'number' && Date.now() / 1000 < _tp.exp) {
+          try {
+            const _tRes = await db.from('teachers').select('*').eq('id', _tp.sub).single();
+            if (_tRes && _tRes.data && isEligibleTeacherAccount(_tRes.data, {})) {
+              CURRENT_TEACHER = normalizeTeacherSession(_tRes.data);
+              showDashboardView();
+              return;
+            }
+          } catch (err) {
+            console.warn('[Teacher Session] Token session check failed, trying legacy session:', err);
+          }
+        } else {
+          clearTeacherToken();
+        }
+      }
       const savedSessionRaw = sessionStorage.getItem('alhuda_teacher_session') || localStorage.getItem('alhuda_logged_in_teacher');
       let parsedSession = null;
       if (savedSessionRaw) {
@@ -2709,6 +2735,76 @@
       }
     }
 
+    // ============================================================
+    // SECURITY (2026-10-14): server-issued session tokens.
+    // Teacher login is verified by the Cloudflare Worker
+    // (POST /api/auth/staff-login). The browser keeps only a signed,
+    // expiring token in sessionStorage. /api/db + /api/storage calls
+    // carry it automatically via js/cloudflare-db.js.
+    // ============================================================
+    function getTeacherWorkerBase() {
+      try {
+        if (window.CLOUDFLARE_API_BASE_URL) return String(window.CLOUDFLARE_API_BASE_URL).replace(/\/+$/, '');
+        if (window.location && window.location.hostname.endsWith('.workers.dev')) return '';
+      } catch (e) {}
+      return 'https://alhuda-lms.ceoislamiccentre.workers.dev';
+    }
+
+    function decodeJwtPayload(token) {
+      try {
+        const parts = String(token).split('.');
+        if (parts.length !== 2 || !parts[0]) return null;
+        let b64 = parts[0].replace(/-/g, '+').replace(/_/g, '/');
+        const pad = b64.length % 4;
+        if (pad) b64 += '='.repeat(4 - pad);
+        return JSON.parse(atob(b64));
+      } catch (e) { return null; }
+    }
+
+    function getTeacherToken() {
+      try { return sessionStorage.getItem('alhuda_teacher_token') || null; }
+      catch (e) { return null; }
+    }
+
+    function clearTeacherToken() {
+      try {
+        sessionStorage.removeItem('alhuda_teacher_token');
+        if (window.clearWorkerTokens) window.clearWorkerTokens();
+      } catch (e) {}
+    }
+
+    // Returns {ok, token, id} | {unauthorized:true} | {unreachable:true}
+    async function teacherServerLogin(identifier, password) {
+      try {
+        const res = await fetch(getTeacherWorkerBase() + '/api/auth/staff-login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ role: 'teacher', identifier, password })
+        });
+        if (res.status === 401) return { unauthorized: true };
+        if (!res.ok) return { unreachable: true };
+        const data = await res.json();
+        if (data && data.ok && data.token) return { ok: true, token: data.token, id: data.id };
+        return { unreachable: true };
+      } catch (e) {
+        return { unreachable: true };
+      }
+    }
+
+    function restoreLoginButton(btn) {
+      if (btn) {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fa-solid fa-right-to-bracket"></i> Login to Teacher Portal';
+      }
+    }
+
+    function showTeacherLoginError(errBox, errText, msg) {
+      if (errBox && errText) {
+        errText.innerText = msg;
+        errBox.classList.remove('hidden');
+      }
+    }
+
     // Teacher Login Submission
     async function handleTeacherSignIn(e) {
       e.preventDefault();
@@ -2721,16 +2817,64 @@
       if (errBox) errBox.classList.add('hidden');
 
       if (!usernameInput || !passwordInput) {
-        if (errBox) {
-          errText.innerText = "Please enter both username and password.";
-          errBox.classList.remove('hidden');
-        }
+        showTeacherLoginError(errBox, errText, "Please enter both username and password.");
         return;
       }
 
       btn.disabled = true;
       btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Authenticating...';
 
+      // --- 1. Try server-side login first (when the worker is deployed) ---
+      const serverAttempt = await teacherServerLogin(usernameInput, passwordInput);
+      if (serverAttempt.ok) {
+        try {
+          sessionStorage.setItem('alhuda_teacher_token', serverAttempt.token);
+        } catch (err) {}
+        // Fetch our own teacher record through the authenticated API.
+        try {
+          const tRes = await db.from('teachers').select('*').eq('id', serverAttempt.id).single();
+          if (tRes && tRes.data && isEligibleTeacherAccount(tRes.data, {})) {
+            await completeTeacherLogin(tRes.data);
+            return;
+          }
+        } catch (err) {
+          console.warn('[Teacher Login] Could not load teacher profile:', err);
+        }
+        clearTeacherToken();
+        restoreLoginButton(btn);
+        showTeacherLoginError(errBox, errText, "Login succeeded but profile could not be loaded.");
+        return;
+      }
+      if (serverAttempt.unauthorized) {
+        // Server reachable and credentials rejected: authoritative, NO local fallback.
+        restoreLoginButton(btn);
+        showTeacherLoginError(errBox, errText, "Invalid username or password.");
+        return;
+      }
+      // --- 2. Server unreachable: legacy local login (pre-deploy compatibility) ---
+      console.warn('[Teacher Login] Worker auth unavailable, using local login.');
+
+      await handleTeacherSignInLocal(usernameInput, passwordInput, errBox, errText, btn);
+    }
+
+    async function completeTeacherLogin(matchedTeacher) {
+      CURRENT_TEACHER = normalizeTeacherSession(matchedTeacher);
+      try {
+        localStorage.setItem('alhuda_logged_in_teacher', JSON.stringify(CURRENT_TEACHER));
+        sessionStorage.setItem('alhuda_teacher_session', JSON.stringify(CURRENT_TEACHER));
+        localStorage.setItem('alhuda_active_portal_role', 'teacher');
+        localStorage.removeItem('alhuda_logged_in_manager');
+        sessionStorage.removeItem('alhuda_manager_session');
+        localStorage.removeItem('alhuda_logged_in_parent');
+        sessionStorage.removeItem('alhuda_parent_session');
+      } catch (err) {}
+      const roleMismatchBanner = document.getElementById('roleMismatchBanner');
+      if (roleMismatchBanner) roleMismatchBanner.classList.add('hidden');
+      showDashboardView();
+    }
+
+    // Legacy local login (used only when the worker auth service is unreachable).
+    async function handleTeacherSignInLocal(usernameInput, passwordInput, errBox, errText, btn) {
       const { teachers, accountsMap } = await fetchTeachersAndAccountsFromBackend();
       const eligibleTeachers = teachers.filter(t => isEligibleTeacherAccount(t, accountsMap));
 
@@ -2768,28 +2912,12 @@
         return passwordMatches;
       });
 
-      btn.disabled = false;
-      btn.innerHTML = '<i class="fa-solid fa-right-to-bracket"></i> Login to Teacher Portal';
+      restoreLoginButton(btn);
 
       if (matchedTeacher) {
-        CURRENT_TEACHER = normalizeTeacherSession(matchedTeacher);
-        localStorage.setItem('alhuda_logged_in_teacher', JSON.stringify(CURRENT_TEACHER));
-        sessionStorage.setItem('alhuda_teacher_session', JSON.stringify(CURRENT_TEACHER));
-        localStorage.setItem('alhuda_active_portal_role', 'teacher');
-        localStorage.removeItem('alhuda_logged_in_manager');
-        sessionStorage.removeItem('alhuda_manager_session');
-        localStorage.removeItem('alhuda_logged_in_parent');
-        sessionStorage.removeItem('alhuda_parent_session');
-
-        const roleMismatchBanner = document.getElementById('roleMismatchBanner');
-        if (roleMismatchBanner) roleMismatchBanner.classList.add('hidden');
-
-        showDashboardView();
+        await completeTeacherLogin(matchedTeacher);
       } else {
-        if (errBox) {
-          errText.innerText = "Invalid username or password.";
-          errBox.classList.remove('hidden');
-        }
+        showTeacherLoginError(errBox, errText, "Invalid username or password.");
       }
     }
 
@@ -2871,6 +2999,7 @@
     }
 
     function logoutTeacher() {
+      clearTeacherToken();
       localStorage.removeItem('alhuda_logged_in_teacher');
       sessionStorage.removeItem('alhuda_teacher_session');
       if (localStorage.getItem('alhuda_active_portal_role') === 'teacher') {
@@ -3242,7 +3371,7 @@
 
         if (liveClass) {
           const lStatus = liveClass.log?.status || 'Scheduled';
-          const safeStudentName = (liveClass.students?.name || 'Student').replace(/'/g, "\\'");
+          const safeStudentName = escapeJsAttr((liveClass.students?.name || 'Student'));
           if (slotEl) slotEl.innerText = `${liveClass.start_time.slice(0,5)} - ${liveClass.end_time.slice(0,5)} PKT (${liveClass.durationMins || 30}m)`;
           if (studentEl) studentEl.innerText = `${liveClass.students?.name || 'Student'} • ${liveClass.course || 'Quran Studies'}`;
 
@@ -3255,14 +3384,14 @@
             if (detailsEl) detailsEl.innerHTML = '<span class="text-emerald-200 font-extrabold">● Class is in session! Conduct your class and click COMPLETE CLASS when finished.</span>';
             if (actionsContainer) {
               actionsContainer.innerHTML = `
-                <button onclick="handleTeacherCompleteClass('${liveClass.id}', '${liveClass.student_id}', '${CURRENT_TEACHER.id}', '${safeStudentName}')" class="flex-1 sm:flex-none px-4 py-2.5 bg-white hover:bg-emerald-50 text-slate-950 font-black text-xs rounded-xl shadow-md transition flex items-center justify-center gap-1.5 whitespace-nowrap">
+                <button onclick="handleTeacherCompleteClass('${escapeJsAttr(liveClass.id)}', '${escapeJsAttr(liveClass.student_id)}', '${escapeJsAttr(CURRENT_TEACHER.id)}', '${safeStudentName}')" class="flex-1 sm:flex-none px-4 py-2.5 bg-white hover:bg-emerald-50 text-slate-950 font-black text-xs rounded-xl shadow-md transition flex items-center justify-center gap-1.5 whitespace-nowrap">
                   <i class="fa-solid fa-circle-check text-emerald-600"></i> COMPLETE CLASS
                 </button>
-                <button onclick="openLeaveAbsentModal('${liveClass.id}', '${liveClass.student_id}', '${CURRENT_TEACHER.id}', '${safeStudentName}')" class="flex-1 sm:flex-none px-3.5 py-2.5 bg-rose-600/90 hover:bg-rose-700 text-white font-extrabold text-xs rounded-xl border border-rose-400/40 shadow-sm transition flex items-center justify-center gap-1.5 whitespace-nowrap">
+                <button onclick="openLeaveAbsentModal('${escapeJsAttr(liveClass.id)}', '${escapeJsAttr(liveClass.student_id)}', '${escapeJsAttr(CURRENT_TEACHER.id)}', '${safeStudentName}')" class="flex-1 sm:flex-none px-3.5 py-2.5 bg-rose-600/90 hover:bg-rose-700 text-white font-extrabold text-xs rounded-xl border border-rose-400/40 shadow-sm transition flex items-center justify-center gap-1.5 whitespace-nowrap">
                   <i class="fa-solid fa-user-xmark"></i> LEAVE / ABSENT
                 </button>
                 ${liveClass.meeting_link ? `
-                  <button onclick="launchTeacherZoomClass('${liveClass.id}', '${liveClass.meeting_link}', '${safeStudentName}', '${liveClass.student_id}')" class="flex-1 sm:flex-none px-3 py-2.5 bg-white/15 hover:bg-white/25 text-white font-bold text-xs rounded-xl border border-white/20 transition flex items-center justify-center gap-1.5 whitespace-nowrap">
+                  <button onclick="launchTeacherZoomClass('${escapeJsAttr(liveClass.id)}', '${escapeJsAttr(liveClass.meeting_link)}', '${safeStudentName}', '${escapeJsAttr(liveClass.student_id)}')" class="flex-1 sm:flex-none px-3 py-2.5 bg-white/15 hover:bg-white/25 text-white font-bold text-xs rounded-xl border border-white/20 transition flex items-center justify-center gap-1.5 whitespace-nowrap">
                     <i class="fa-solid fa-video"></i> Zoom
                   </button>
                 ` : ''}
@@ -3277,14 +3406,14 @@
             if (detailsEl) detailsEl.innerHTML = '<span class="text-amber-200 font-extrabold animate-pulse">⏳ Zoom meeting launched • Waiting for student! When admitted, click START CLASS below.</span>';
             if (actionsContainer) {
               actionsContainer.innerHTML = `
-                <button onclick="handleTeacherStartClass('${liveClass.id}', '${liveClass.student_id}', '${CURRENT_TEACHER.id}')" class="flex-1 sm:flex-none px-4 py-2.5 bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-black text-xs rounded-xl shadow-md transition flex items-center justify-center gap-1.5 whitespace-nowrap animate-pulse">
+                <button onclick="handleTeacherStartClass('${escapeJsAttr(liveClass.id)}', '${escapeJsAttr(liveClass.student_id)}', '${escapeJsAttr(CURRENT_TEACHER.id)}')" class="flex-1 sm:flex-none px-4 py-2.5 bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-black text-xs rounded-xl shadow-md transition flex items-center justify-center gap-1.5 whitespace-nowrap animate-pulse">
                   <i class="fa-solid fa-play"></i> START CLASS
                 </button>
-                <button onclick="openLeaveAbsentModal('${liveClass.id}', '${liveClass.student_id}', '${CURRENT_TEACHER.id}', '${safeStudentName}')" class="flex-1 sm:flex-none px-3.5 py-2.5 bg-rose-600/90 hover:bg-rose-700 text-white font-extrabold text-xs rounded-xl border border-rose-400/40 shadow-sm transition flex items-center justify-center gap-1.5 whitespace-nowrap">
+                <button onclick="openLeaveAbsentModal('${escapeJsAttr(liveClass.id)}', '${escapeJsAttr(liveClass.student_id)}', '${escapeJsAttr(CURRENT_TEACHER.id)}', '${safeStudentName}')" class="flex-1 sm:flex-none px-3.5 py-2.5 bg-rose-600/90 hover:bg-rose-700 text-white font-extrabold text-xs rounded-xl border border-rose-400/40 shadow-sm transition flex items-center justify-center gap-1.5 whitespace-nowrap">
                   <i class="fa-solid fa-user-xmark"></i> LEAVE / ABSENT
                 </button>
                 ${liveClass.meeting_link ? `
-                  <button onclick="launchTeacherZoomClass('${liveClass.id}', '${liveClass.meeting_link}', '${safeStudentName}', '${liveClass.student_id}')" class="flex-1 sm:flex-none px-3 py-2.5 bg-white/15 hover:bg-white/25 text-white font-bold text-xs rounded-xl border border-white/20 transition flex items-center justify-center gap-1.5 whitespace-nowrap">
+                  <button onclick="launchTeacherZoomClass('${escapeJsAttr(liveClass.id)}', '${escapeJsAttr(liveClass.meeting_link)}', '${safeStudentName}', '${escapeJsAttr(liveClass.student_id)}')" class="flex-1 sm:flex-none px-3 py-2.5 bg-white/15 hover:bg-white/25 text-white font-bold text-xs rounded-xl border border-white/20 transition flex items-center justify-center gap-1.5 whitespace-nowrap">
                     <i class="fa-solid fa-video"></i> Re-open Zoom
                   </button>
                 ` : ''}
@@ -3301,14 +3430,14 @@
             if (actionsContainer) {
               actionsContainer.innerHTML = `
                 ${liveClass.meeting_link ? `
-                  <button onclick="launchTeacherZoomClass('${liveClass.id}', '${liveClass.meeting_link}', '${safeStudentName}', '${liveClass.student_id}')" class="flex-1 sm:flex-none px-4 py-2.5 bg-white hover:bg-emerald-50 text-brandDark font-extrabold text-xs rounded-xl shadow-md transition flex items-center justify-center gap-1.5 whitespace-nowrap">
+                  <button onclick="launchTeacherZoomClass('${escapeJsAttr(liveClass.id)}', '${escapeJsAttr(liveClass.meeting_link)}', '${safeStudentName}', '${escapeJsAttr(liveClass.student_id)}')" class="flex-1 sm:flex-none px-4 py-2.5 bg-white hover:bg-emerald-50 text-brandDark font-extrabold text-xs rounded-xl shadow-md transition flex items-center justify-center gap-1.5 whitespace-nowrap">
                     <i class="fa-solid fa-video text-emerald-600"></i> Start Zoom
                   </button>
                 ` : ''}
-                <button onclick="handleTeacherStartClass('${liveClass.id}', '${liveClass.student_id}', '${CURRENT_TEACHER.id}')" class="flex-1 sm:flex-none px-3.5 py-2.5 bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-black text-xs rounded-xl shadow-md transition flex items-center justify-center gap-1.5 whitespace-nowrap">
+                <button onclick="handleTeacherStartClass('${escapeJsAttr(liveClass.id)}', '${escapeJsAttr(liveClass.student_id)}', '${escapeJsAttr(CURRENT_TEACHER.id)}')" class="flex-1 sm:flex-none px-3.5 py-2.5 bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-black text-xs rounded-xl shadow-md transition flex items-center justify-center gap-1.5 whitespace-nowrap">
                   <i class="fa-solid fa-play"></i> START CLASS
                 </button>
-                <button onclick="openLeaveAbsentModal('${liveClass.id}', '${liveClass.student_id}', '${CURRENT_TEACHER.id}', '${safeStudentName}')" class="flex-1 sm:flex-none px-3.5 py-2.5 bg-rose-600/90 hover:bg-rose-700 text-white font-extrabold text-xs rounded-xl border border-rose-400/40 shadow-sm transition flex items-center justify-center gap-1.5 whitespace-nowrap">
+                <button onclick="openLeaveAbsentModal('${escapeJsAttr(liveClass.id)}', '${escapeJsAttr(liveClass.student_id)}', '${escapeJsAttr(CURRENT_TEACHER.id)}', '${safeStudentName}')" class="flex-1 sm:flex-none px-3.5 py-2.5 bg-rose-600/90 hover:bg-rose-700 text-white font-extrabold text-xs rounded-xl border border-rose-400/40 shadow-sm transition flex items-center justify-center gap-1.5 whitespace-nowrap">
                   <i class="fa-solid fa-user-xmark"></i> LEAVE / ABSENT
                 </button>
               `;
@@ -3316,7 +3445,7 @@
           }
         } else if (nextClass) {
           // 2. NEXT UPCOMING SESSION TODAY
-          const safeNextName = (nextClass.students?.name || 'Student').replace(/'/g, "\\'");
+          const safeNextName = escapeJsAttr((nextClass.students?.name || 'Student'));
           if (iconEl) iconEl.className = 'fa-solid fa-clock text-amber-300';
           if (badgeEl) {
             badgeEl.className = 'px-2.5 py-0.5 rounded-full bg-amber-400 text-slate-950 font-black text-[10px] tracking-wider uppercase shadow-xs';
@@ -3329,14 +3458,14 @@
           if (actionsContainer) {
             actionsContainer.innerHTML = `
               ${nextClass.meeting_link ? `
-                <button onclick="launchTeacherZoomClass('${nextClass.id}', '${nextClass.meeting_link}', '${safeNextName}', '${nextClass.student_id}')" class="flex-1 sm:flex-none px-4 py-2.5 bg-white hover:bg-emerald-50 text-brandDark font-extrabold text-xs rounded-xl shadow-md transition flex items-center justify-center gap-1.5 whitespace-nowrap">
+                <button onclick="launchTeacherZoomClass('${escapeJsAttr(nextClass.id)}', '${escapeJsAttr(nextClass.meeting_link)}', '${safeNextName}', '${escapeJsAttr(nextClass.student_id)}')" class="flex-1 sm:flex-none px-4 py-2.5 bg-white hover:bg-emerald-50 text-brandDark font-extrabold text-xs rounded-xl shadow-md transition flex items-center justify-center gap-1.5 whitespace-nowrap">
                   <i class="fa-solid fa-video text-emerald-600"></i> Start Zoom
                 </button>
               ` : ''}
-              <button onclick="handleTeacherStartClass('${nextClass.id}', '${nextClass.student_id}', '${CURRENT_TEACHER.id}')" class="flex-1 sm:flex-none px-3.5 py-2.5 bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-black text-xs rounded-xl shadow-md transition flex items-center justify-center gap-1.5 whitespace-nowrap">
+              <button onclick="handleTeacherStartClass('${escapeJsAttr(nextClass.id)}', '${escapeJsAttr(nextClass.student_id)}', '${escapeJsAttr(CURRENT_TEACHER.id)}')" class="flex-1 sm:flex-none px-3.5 py-2.5 bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-black text-xs rounded-xl shadow-md transition flex items-center justify-center gap-1.5 whitespace-nowrap">
                 <i class="fa-solid fa-play"></i> START CLASS
               </button>
-              <button onclick="openLeaveAbsentModal('${nextClass.id}', '${nextClass.student_id}', '${CURRENT_TEACHER.id}', '${safeNextName}')" class="flex-1 sm:flex-none px-3.5 py-2.5 bg-rose-600/90 hover:bg-rose-700 text-white font-extrabold text-xs rounded-xl border border-rose-400/40 shadow-sm transition flex items-center justify-center gap-1.5 whitespace-nowrap">
+              <button onclick="openLeaveAbsentModal('${escapeJsAttr(nextClass.id)}', '${escapeJsAttr(nextClass.student_id)}', '${escapeJsAttr(CURRENT_TEACHER.id)}', '${safeNextName}')" class="flex-1 sm:flex-none px-3.5 py-2.5 bg-rose-600/90 hover:bg-rose-700 text-white font-extrabold text-xs rounded-xl border border-rose-400/40 shadow-sm transition flex items-center justify-center gap-1.5 whitespace-nowrap">
                 <i class="fa-solid fa-user-xmark"></i> LEAVE / ABSENT
               </button>
             `;
@@ -3377,9 +3506,9 @@
             let retDate = '';
             try {
               const p = typeof st.notes === 'string' ? JSON.parse(st.notes) : st.notes;
-              if (p && p.return_date) retDate = ` (Returns: ${p.return_date})`;
+              if (p && p.return_date) retDate = ` (Returns: ${escapeHtml(p.return_date)})`;
             } catch (e) {}
-            return `<span class="px-2.5 py-0.5 rounded-full bg-blue-100 text-blue-900 border border-blue-300 font-bold text-[11px]">🏖️ ${st.name} (${st.id})${retDate}</span>`;
+            return `<span class="px-2.5 py-0.5 rounded-full bg-blue-100 text-blue-900 border border-blue-300 font-bold text-[11px]">🏖️ ${escapeHtml(st.name)} (${escapeHtml(st.id)})${retDate}</span>`;
           }).join('');
         } else {
           leaveBox.classList.add('hidden');
@@ -3437,38 +3566,38 @@
         }
 
         const todaySlot = TODAY_CLASSES.find(c => String(c.student_id) === String(st.id));
-        const safeStName = (st.name || 'Student').replace(/'/g, "\\'");
+        const safeStName = escapeJsAttr((st.name || 'Student'));
         let markLessonBtn = '';
 
         if (todaySlot) {
           const sStat = todaySlot.log?.status || 'Scheduled';
           if (sStat === 'Waiting') {
             markLessonBtn = `
-              <button onclick="handleTeacherStartClass('${todaySlot.id}', '${st.id}', '${CURRENT_TEACHER.id}')" class="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-black shadow-xs flex items-center gap-1 transition animate-pulse">
+              <button onclick="handleTeacherStartClass('${escapeJsAttr(todaySlot.id)}', '${escapeJsAttr(st.id)}', '${escapeJsAttr(CURRENT_TEACHER.id)}')" class="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-black shadow-xs flex items-center gap-1 transition animate-pulse">
                 <i class="fa-solid fa-play"></i> START CLASS
               </button>
-              <button onclick="openLeaveAbsentModal('${todaySlot.id}', '${st.id}', '${CURRENT_TEACHER.id}', '${safeStName}')" class="px-2 py-1 bg-rose-50 hover:bg-rose-100 text-rose-800 border border-rose-300 rounded-lg text-xs font-bold transition">
+              <button onclick="openLeaveAbsentModal('${escapeJsAttr(todaySlot.id)}', '${escapeJsAttr(st.id)}', '${escapeJsAttr(CURRENT_TEACHER.id)}', '${safeStName}')" class="px-2 py-1 bg-rose-50 hover:bg-rose-100 text-rose-800 border border-rose-300 rounded-lg text-xs font-bold transition">
                 <i class="fa-solid fa-user-xmark"></i> LEAVE / ABSENT
               </button>
             `;
           } else if (sStat === 'Running') {
             markLessonBtn = `
-              <button onclick="handleTeacherCompleteClass('${todaySlot.id}', '${st.id}', '${CURRENT_TEACHER.id}', '${safeStName}')" class="px-2.5 py-1 bg-brandDark hover:bg-brandDarkest text-white rounded-lg text-xs font-black shadow-xs flex items-center gap-1 transition">
+              <button onclick="handleTeacherCompleteClass('${escapeJsAttr(todaySlot.id)}', '${escapeJsAttr(st.id)}', '${escapeJsAttr(CURRENT_TEACHER.id)}', '${safeStName}')" class="px-2.5 py-1 bg-brandDark hover:bg-brandDarkest text-white rounded-lg text-xs font-black shadow-xs flex items-center gap-1 transition">
                 <i class="fa-solid fa-circle-check text-brandGold"></i> COMPLETE CLASS
               </button>
-              <button onclick="openLeaveAbsentModal('${todaySlot.id}', '${st.id}', '${CURRENT_TEACHER.id}', '${safeStName}')" class="px-2 py-1 bg-rose-50 hover:bg-rose-100 text-rose-800 border border-rose-300 rounded-lg text-xs font-bold transition">
+              <button onclick="openLeaveAbsentModal('${escapeJsAttr(todaySlot.id)}', '${escapeJsAttr(st.id)}', '${escapeJsAttr(CURRENT_TEACHER.id)}', '${safeStName}')" class="px-2 py-1 bg-rose-50 hover:bg-rose-100 text-rose-800 border border-rose-300 rounded-lg text-xs font-bold transition">
                 <i class="fa-solid fa-user-xmark"></i> LEAVE / ABSENT
               </button>
             `;
           } else if (sStat === 'Completed' || sStat === 'Present') {
             markLessonBtn = `
-              <button onclick="openAttendanceModal('${todaySlot.id}')" class="px-2.5 py-1 bg-slate-800 hover:bg-slate-900 text-white rounded-lg text-xs font-bold shadow-2xs flex items-center gap-1 transition">
+              <button onclick="openAttendanceModal('${escapeJsAttr(todaySlot.id)}')" class="px-2.5 py-1 bg-slate-800 hover:bg-slate-900 text-white rounded-lg text-xs font-bold shadow-2xs flex items-center gap-1 transition">
                 <i class="fa-solid fa-clipboard-check text-brandGold"></i> Record / Edit Lesson
               </button>
             `;
           } else {
             markLessonBtn = `
-              <button onclick="openAttendanceModal('${todaySlot.id}')" class="px-2.5 py-1 bg-brandDark hover:bg-brandDarkest text-white rounded-lg text-xs font-bold shadow-2xs flex items-center gap-1 transition">
+              <button onclick="openAttendanceModal('${escapeJsAttr(todaySlot.id)}')" class="px-2.5 py-1 bg-brandDark hover:bg-brandDarkest text-white rounded-lg text-xs font-bold shadow-2xs flex items-center gap-1 transition">
                 <i class="fa-solid fa-clipboard-check text-brandGold"></i> Mark Lesson
               </button>
             `;
@@ -3476,7 +3605,7 @@
         }
 
         const zoomActionBtn = studentZoomLink
-          ? `<button onclick="launchTeacherZoomClass('${todaySlot ? todaySlot.id : (firstScheduleId || 'stu-' + st.id)}', '${studentZoomLink}', '${(st.name || 'Student').split("'").join(" ")}', '${st.id}')" class="px-2.5 py-1 bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-700 hover:to-teal-800 text-white rounded-lg text-xs font-bold shadow-2xs flex items-center gap-1 transition" title="Start Zoom Class for ${st.name}">
+          ? `<button onclick="launchTeacherZoomClass('${escapeJsAttr(todaySlot ? todaySlot.id : (firstScheduleId || 'stu-' + st.id))}', '${escapeJsAttr(studentZoomLink)}', '${escapeJsAttr(st.name || 'Student')}', '${escapeJsAttr(st.id)}')" class="px-2.5 py-1 bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-700 hover:to-teal-800 text-white rounded-lg text-xs font-bold shadow-2xs flex items-center gap-1 transition" title="Start Zoom Class for ${escapeHtml(st.name)}">
                <i class="fa-solid fa-video"></i> Join Zoom
              </button>`
           : `<span class="px-2 py-1 rounded-lg bg-slate-100 text-slate-500 border border-slate-200 text-[10px] font-bold">Zoom meeting not configured.</span>`;
@@ -3485,8 +3614,8 @@
           <tr class="hover:bg-slate-50 transition">
             <td class="p-3.5 text-center font-extrabold text-slate-600 font-mono">${idx + 1}</td>
             <td class="p-3.5">
-              <div class="font-extrabold text-slate-900 text-[13.5px]">${st.name || 'Student'}</div>
-              <div class="lms-num-id text-slate-600 bg-slate-100 border border-slate-200/80 px-2 py-0.5 rounded inline-block mt-1">ID: ${st.id}</div>
+              <div class="font-extrabold text-slate-900 text-[13.5px]">${escapeHtml(st.name || 'Student')}</div>
+              <div class="lms-num-id text-slate-600 bg-slate-100 border border-slate-200/80 px-2 py-0.5 rounded inline-block mt-1">ID: ${escapeHtml(st.id)}</div>
             </td>
             <td class="p-3.5">
               <span class="px-2.5 py-1 rounded-lg bg-emerald-50 text-brandEmerald border border-emerald-200 font-bold text-xs inline-block">
@@ -3504,7 +3633,7 @@
             <td class="p-3.5 text-right">
               <div class="flex items-center justify-end gap-1.5 flex-wrap">
                 ${zoomActionBtn}
-                <button onclick="openTeacherAddScheduleModal('${st.id}')" class="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold shadow-2xs flex items-center gap-1 transition" title="Add or schedule weekly class slots for ${st.name}">
+                <button onclick="openTeacherAddScheduleModal('${escapeJsAttr(st.id)}')" class="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold shadow-2xs flex items-center gap-1 transition" title="Add or schedule weekly class slots for ${escapeHtml(st.name)}">
                   <i class="fa-solid fa-calendar-plus"></i> ${stuScheds.length > 0 ? '+ Add Slot' : '+ Add to Schedule'}
                 </button>
                 ${markLessonBtn}
@@ -3554,23 +3683,23 @@
                 <div class="space-y-1">
                   <div class="flex items-center gap-1.5 flex-wrap">
                     <span class="px-2 py-0.5 rounded text-[10px] font-extrabold bg-emerald-50 text-brandDark border border-emerald-300 flex items-center gap-1">
-                      <i class="fa-solid fa-book-quran text-brandEmerald"></i> ${pMeta.book_title || 'Course'} &bull; ${pMeta.para ? `Para ${pMeta.para} &bull; ` : ''}Pg ${pMeta.page}
+                      <i class="fa-solid fa-book-quran text-brandEmerald"></i> ${escapeHtml(pMeta.book_title || 'Course')} &bull; ${pMeta.para ? `Para ${escapeHtml(pMeta.para)} &bull; ` : ''}Pg ${escapeHtml(pMeta.page)}
                     </span>
                     <span class="px-1.5 py-0.5 rounded text-[9px] font-bold border ${passColor}">
-                      ${pMeta.status || 'Done'}
+                      ${escapeHtml(pMeta.status || 'Done')}
                     </span>
-                    <button onclick="openDigitalBookReader('${pMeta.book_id || 'holy-quran-16-line'}', ${pMeta.page || 1}, ${pMeta.para || 'null'}, ${pMeta.language ? `'${pMeta.language}'` : 'null'})" class="text-[10px] text-brandEmerald hover:text-brandDark font-extrabold flex items-center gap-0.5" title="Open Lesson in Digital Reader">
+                    <button onclick="openDigitalBookReader('${sanitizeBookId(pMeta.book_id || 'holy-quran-16-line')}', ${Number(pMeta.page) || 1}, ${pMeta.para ? Number(pMeta.para) : 'null'}, ${pMeta.language ? `'${escapeJsAttr(pMeta.language)}'` : 'null'})" class="text-[10px] text-brandEmerald hover:text-brandDark font-extrabold flex items-center gap-0.5" title="Open Lesson in Digital Reader">
                       <i class="fa-solid fa-eye text-[9px]"></i> Read
                     </button>
                   </div>
-                  ${pMeta.remarks ? `<div class="text-[11px] text-slate-600 truncate max-w-xs">${pMeta.remarks}</div>` : ''}
+                  ${pMeta.remarks ? `<div class="text-[11px] text-slate-600 truncate max-w-xs">${escapeHtml(pMeta.remarks)}</div>` : ''}
                 </div>
               `;
             } else {
-              sabaqNotes = `<span class="text-slate-800 font-semibold">${c.log.lesson_notes}</span>`;
+              sabaqNotes = `<span class="text-slate-800 font-semibold">${escapeHtml(c.log.lesson_notes)}</span>`;
             }
           } catch(e) {
-            sabaqNotes = `<span class="text-slate-800 font-semibold">${c.log.lesson_notes}</span>`;
+            sabaqNotes = `<span class="text-slate-800 font-semibold">${escapeHtml(c.log.lesson_notes)}</span>`;
           }
         }
 
@@ -3622,7 +3751,7 @@
         }
 
         const changeTimeBtn = !c.isAdvanceExtra ? `
-          <button onclick="openTimeChangeRequestModal('${c.id}')" class="px-2.5 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-900 border border-indigo-300 rounded-lg text-xs font-bold shadow-2xs flex items-center gap-1 transition" title="Request Manager / Owner to change this student's class timing">
+          <button onclick="openTimeChangeRequestModal('${escapeJsAttr(c.id)}')" class="px-2.5 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-900 border border-indigo-300 rounded-lg text-xs font-bold shadow-2xs flex items-center gap-1 transition" title="Request Manager / Owner to change this student's class timing">
             <i class="fa-solid fa-clock-rotate-left text-indigo-600"></i> Change Time
           </button>
         ` : '';
@@ -3631,7 +3760,7 @@
         let zoomBtn = '<span class="px-2 py-1 rounded-lg text-[10px] font-bold bg-slate-100 text-slate-500 border border-slate-200">Zoom meeting not configured.</span>';
         if (effectiveZoomLink) {
           zoomBtn = `
-            <button onclick="launchTeacherZoomClassById('${c.id}')" class="px-3 py-1 bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-700 hover:to-teal-800 text-white rounded-lg text-xs font-black shadow-xs flex items-center gap-1 transition">
+            <button onclick="launchTeacherZoomClassById('${escapeJsAttr(c.id)}')" class="px-3 py-1 bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-700 hover:to-teal-800 text-white rounded-lg text-xs font-black shadow-xs flex items-center gap-1 transition">
               <i class="fa-solid fa-video"></i> Start Class
             </button>
           `;
@@ -3647,18 +3776,18 @@
           `;
         } else {
           const stStatus = c.log?.status || 'Scheduled';
-          const safeStudentName = (c.students?.name || 'Student').replace(/'/g, "\\'");
+          const safeStudentName = escapeJsAttr((c.students?.name || 'Student'));
 
           if (stStatus === 'Waiting') {
             actionButtons = `
-              <button onclick="handleTeacherStartClass('${c.id}', '${c.student_id}', '${CURRENT_TEACHER.id}')" class="px-3 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-black shadow-xs flex items-center gap-1 transition animate-pulse">
+              <button onclick="handleTeacherStartClass('${escapeJsAttr(c.id)}', '${escapeJsAttr(c.student_id)}', '${escapeJsAttr(CURRENT_TEACHER.id)}')" class="px-3 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-black shadow-xs flex items-center gap-1 transition animate-pulse">
                 <i class="fa-solid fa-play"></i> START CLASS
               </button>
-              <button onclick="openLeaveAbsentModal('${c.id}', '${c.student_id}', '${CURRENT_TEACHER.id}', '${safeStudentName}')" class="px-2.5 py-1 bg-rose-50 hover:bg-rose-100 text-rose-800 border border-rose-300 rounded-lg text-xs font-bold shadow-2xs flex items-center gap-1 transition">
+              <button onclick="openLeaveAbsentModal('${escapeJsAttr(c.id)}', '${escapeJsAttr(c.student_id)}', '${escapeJsAttr(CURRENT_TEACHER.id)}', '${safeStudentName}')" class="px-2.5 py-1 bg-rose-50 hover:bg-rose-100 text-rose-800 border border-rose-300 rounded-lg text-xs font-bold shadow-2xs flex items-center gap-1 transition">
                 <i class="fa-solid fa-user-xmark"></i> LEAVE / ABSENT
               </button>
               ${effectiveZoomLink ? `
-                <button onclick="launchTeacherZoomClassById('${c.id}')" class="px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300 rounded-lg text-xs font-bold transition flex items-center gap-1" title="Re-open Zoom Meeting">
+                <button onclick="launchTeacherZoomClassById('${escapeJsAttr(c.id)}')" class="px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300 rounded-lg text-xs font-bold transition flex items-center gap-1" title="Re-open Zoom Meeting">
                   <i class="fa-solid fa-video text-emerald-600"></i> Zoom
                 </button>
               ` : ''}
@@ -3666,14 +3795,14 @@
             `;
           } else if (stStatus === 'Running') {
             actionButtons = `
-              <button onclick="handleTeacherCompleteClass('${c.id}', '${c.student_id}', '${CURRENT_TEACHER.id}', '${safeStudentName}')" class="px-3 py-1 bg-brandDark hover:bg-brandDarkest text-white rounded-lg text-xs font-black shadow-xs flex items-center gap-1 transition">
+              <button onclick="handleTeacherCompleteClass('${escapeJsAttr(c.id)}', '${escapeJsAttr(c.student_id)}', '${escapeJsAttr(CURRENT_TEACHER.id)}', '${safeStudentName}')" class="px-3 py-1 bg-brandDark hover:bg-brandDarkest text-white rounded-lg text-xs font-black shadow-xs flex items-center gap-1 transition">
                 <i class="fa-solid fa-circle-check text-brandGold"></i> COMPLETE CLASS
               </button>
-              <button onclick="openLeaveAbsentModal('${c.id}', '${c.student_id}', '${CURRENT_TEACHER.id}', '${safeStudentName}')" class="px-2.5 py-1 bg-rose-50 hover:bg-rose-100 text-rose-800 border border-rose-300 rounded-lg text-xs font-bold shadow-2xs flex items-center gap-1 transition">
+              <button onclick="openLeaveAbsentModal('${escapeJsAttr(c.id)}', '${escapeJsAttr(c.student_id)}', '${escapeJsAttr(CURRENT_TEACHER.id)}', '${safeStudentName}')" class="px-2.5 py-1 bg-rose-50 hover:bg-rose-100 text-rose-800 border border-rose-300 rounded-lg text-xs font-bold shadow-2xs flex items-center gap-1 transition">
                 <i class="fa-solid fa-user-xmark"></i> LEAVE / ABSENT
               </button>
               ${effectiveZoomLink ? `
-                <button onclick="launchTeacherZoomClassById('${c.id}')" class="px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300 rounded-lg text-xs font-bold transition flex items-center gap-1">
+                <button onclick="launchTeacherZoomClassById('${escapeJsAttr(c.id)}')" class="px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300 rounded-lg text-xs font-bold transition flex items-center gap-1">
                   <i class="fa-solid fa-video text-emerald-600"></i> Zoom
                 </button>
               ` : ''}
@@ -3681,11 +3810,11 @@
             `;
           } else if (stStatus === 'Completed' || stStatus === 'Present' || stStatus === 'Advance Class') {
             actionButtons = `
-              <button onclick="openAttendanceModal('${c.id}')" class="px-3 py-1 bg-slate-800 hover:bg-slate-900 text-white rounded-lg text-xs font-bold shadow-2xs flex items-center gap-1 transition" title="View or edit lesson notes for this completed class">
+              <button onclick="openAttendanceModal('${escapeJsAttr(c.id)}')" class="px-3 py-1 bg-slate-800 hover:bg-slate-900 text-white rounded-lg text-xs font-bold shadow-2xs flex items-center gap-1 transition" title="View or edit lesson notes for this completed class">
                 <i class="fa-solid fa-clipboard-check text-brandGold"></i> Record / Edit Lesson
               </button>
               ${changeTimeBtn}
-              <button onclick="openRescheduleRequestModal('${c.id}')" class="px-2 py-1 bg-orange-50 hover:bg-orange-100 text-orange-900 border border-orange-300 rounded-lg text-xs font-bold shadow-2xs flex items-center gap-1 transition" title="Request Admin to approve a status change">
+              <button onclick="openRescheduleRequestModal('${escapeJsAttr(c.id)}')" class="px-2 py-1 bg-orange-50 hover:bg-orange-100 text-orange-900 border border-orange-300 rounded-lg text-xs font-bold shadow-2xs flex items-center gap-1 transition" title="Request Admin to approve a status change">
                 <i class="fa-solid fa-rotate text-orange-600"></i> Status Change
               </button>
             `;
@@ -3694,7 +3823,7 @@
               <span class="px-2.5 py-1 rounded-lg text-xs font-extrabold border ${stStatus === 'Absent' ? 'bg-rose-100 text-rose-800 border-rose-300' : 'bg-blue-100 text-blue-800 border-blue-300'} flex items-center gap-1">
                 <i class="fa-solid fa-lock text-xs opacity-60"></i> ${stStatus} (Logged)
               </span>
-              <button onclick="openLeaveAbsentModal('${c.id}', '${c.student_id}', '${CURRENT_TEACHER.id}', '${safeStudentName}')" class="px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300 rounded-lg text-xs font-bold transition flex items-center gap-1" title="Adjust outcome">
+              <button onclick="openLeaveAbsentModal('${escapeJsAttr(c.id)}', '${escapeJsAttr(c.student_id)}', '${escapeJsAttr(CURRENT_TEACHER.id)}', '${safeStudentName}')" class="px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300 rounded-lg text-xs font-bold transition flex items-center gap-1" title="Adjust outcome">
                 <i class="fa-solid fa-pen-to-square"></i> Adjust
               </button>
               ${changeTimeBtn}
@@ -3703,14 +3832,14 @@
             // Scheduled / Free
             actionButtons = `
               ${effectiveZoomLink ? `
-                <button onclick="launchTeacherZoomClassById('${c.id}')" class="px-3 py-1 bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-700 hover:to-teal-800 text-white rounded-lg text-xs font-black shadow-xs flex items-center gap-1 transition">
+                <button onclick="launchTeacherZoomClassById('${escapeJsAttr(c.id)}')" class="px-3 py-1 bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-700 hover:to-teal-800 text-white rounded-lg text-xs font-black shadow-xs flex items-center gap-1 transition">
                   <i class="fa-solid fa-video"></i> Start Zoom
                 </button>
               ` : ''}
-              <button onclick="handleTeacherStartClass('${c.id}', '${c.student_id}', '${CURRENT_TEACHER.id}')" class="px-2.5 py-1 bg-emerald-100 hover:bg-emerald-200 text-emerald-900 border border-emerald-300 rounded-lg text-xs font-black transition flex items-center gap-1">
+              <button onclick="handleTeacherStartClass('${escapeJsAttr(c.id)}', '${escapeJsAttr(c.student_id)}', '${escapeJsAttr(CURRENT_TEACHER.id)}')" class="px-2.5 py-1 bg-emerald-100 hover:bg-emerald-200 text-emerald-900 border border-emerald-300 rounded-lg text-xs font-black transition flex items-center gap-1">
                 <i class="fa-solid fa-play text-emerald-700"></i> START CLASS
               </button>
-              <button onclick="openLeaveAbsentModal('${c.id}', '${c.student_id}', '${CURRENT_TEACHER.id}', '${safeStudentName}')" class="px-2.5 py-1 bg-rose-50 hover:bg-rose-100 text-rose-800 border border-rose-300 rounded-lg text-xs font-bold transition flex items-center gap-1">
+              <button onclick="openLeaveAbsentModal('${escapeJsAttr(c.id)}', '${escapeJsAttr(c.student_id)}', '${escapeJsAttr(CURRENT_TEACHER.id)}', '${safeStudentName}')" class="px-2.5 py-1 bg-rose-50 hover:bg-rose-100 text-rose-800 border border-rose-300 rounded-lg text-xs font-bold transition flex items-center gap-1">
                 <i class="fa-solid fa-user-xmark"></i> LEAVE / ABSENT
               </button>
               ${changeTimeBtn}
@@ -3780,6 +3909,19 @@
         return;
       }
 
+      // SECURITY (2026-10-14): only allow https: meeting links. Reject
+      // javascript:/data:/vbscript: schemes to prevent URL-based script execution.
+      try {
+        const _schemeCheck = new URL(String(rawMeetingLink));
+        if (_schemeCheck.protocol !== 'https:') {
+          alert("Invalid meeting link. Only secure (https) Zoom links are allowed.");
+          return;
+        }
+      } catch (e) {
+        alert("Invalid meeting link.");
+        return;
+      }
+
       const now = new Date();
       const timeStr = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
 
@@ -3811,12 +3953,15 @@
       // 3. Launch Native App & Web Fallback
       const iframe = document.createElement('iframe');
       iframe.style.display = 'none';
-      iframe.src = zoomAppUrl;
+      // SECURITY: iframe may only load https: or the zoommtg: app protocol.
+      if (/^https:/i.test(zoomAppUrl) || /^zoommtg:/i.test(zoomAppUrl)) {
+        iframe.src = zoomAppUrl;
+      }
       document.body.appendChild(iframe);
       setTimeout(() => { try { document.body.removeChild(iframe); } catch(e){} }, 3000);
 
       // Open standard web meeting in new tab as guaranteed fallback
-      window.open(rawMeetingLink, '_blank');
+      window.open(rawMeetingLink, '_blank', 'noopener');
 
       // Refresh today's list to update status in Teacher Portal
       if (typeof loadTeacherTodayClasses === 'function') {
@@ -4479,7 +4624,7 @@
         return `
           <div class="bg-slate-800 hover:bg-slate-750 border border-slate-700 hover:border-emerald-600 rounded-2xl p-0 overflow-hidden text-left transition group shadow-md hover:shadow-emerald-900/30 flex flex-col justify-between">
             <!-- Book Cover Gradient (clickable to open preview) -->
-            <div onclick="openCourseMaterialPreview('${b.id}', 1)" class="cursor-pointer bg-gradient-to-br ${gradFrom} h-28 flex flex-col items-center justify-center px-3 relative">
+            <div onclick="openCourseMaterialPreview('${escapeJsAttr(b.id)}', 1)" class="cursor-pointer bg-gradient-to-br ${gradFrom} h-28 flex flex-col items-center justify-center px-3 relative">
               <div class="w-12 h-12 rounded-xl bg-white/15 flex items-center justify-center text-2xl text-white mb-1 group-hover:scale-105 transition">
                 <i class="${icon}"></i>
               </div>
@@ -4488,14 +4633,14 @@
             <!-- Book Info & Actions -->
             <div class="p-3 flex-1 flex flex-col justify-between">
               <div>
-                <h4 onclick="openCourseMaterialPreview('${b.id}', 1)" class="cursor-pointer font-bold text-xs text-white leading-tight line-clamp-2 mb-1 group-hover:text-emerald-300 transition" title="Preview Syllabus">${b.title}</h4>
+                <h4 onclick="openCourseMaterialPreview('${escapeJsAttr(b.id)}', 1)" class="cursor-pointer font-bold text-xs text-white leading-tight line-clamp-2 mb-1 group-hover:text-emerald-300 transition" title="Preview Syllabus">${b.title}</h4>
                 ${b.author ? `<p class="text-[10px] text-slate-400 truncate mb-1">${b.author}</p>` : ''}
               </div>
               <div class="pt-2 mt-2 border-t border-slate-700/60 flex items-center justify-between gap-1.5">
-                <button onclick="openCourseMaterialPreview('${b.id}', 1)" class="px-2.5 py-1 bg-slate-700/90 hover:bg-slate-600 text-slate-200 text-[10px] font-bold rounded-lg transition flex items-center gap-1 shadow-xs" title="Preview Syllabus & Details">
+                <button onclick="openCourseMaterialPreview('${escapeJsAttr(b.id)}', 1)" class="px-2.5 py-1 bg-slate-700/90 hover:bg-slate-600 text-slate-200 text-[10px] font-bold rounded-lg transition flex items-center gap-1 shadow-xs" title="Preview Syllabus & Details">
                   <i class="fa-solid fa-eye text-emerald-400"></i> Preview
                 </button>
-                <button onclick="closeTeacherLibraryPicker(false); openDigitalBookReader('${b.id}', 1);" class="px-2.5 py-1 bg-emerald-700 hover:bg-emerald-600 text-white text-[10px] font-bold rounded-lg transition flex items-center gap-1 shadow-xs" title="Open Full Reader">
+                <button onclick="closeTeacherLibraryPicker(false); openDigitalBookReader('${escapeJsAttr(b.id)}', 1);" class="px-2.5 py-1 bg-emerald-700 hover:bg-emerald-600 text-white text-[10px] font-bold rounded-lg transition flex items-center gap-1 shadow-xs" title="Open Full Reader">
                   <i class="fa-solid fa-book-open"></i> Read
                 </button>
               </div>
@@ -6088,7 +6233,7 @@
             : '';
 
           return `
-            <button type="button" onclick="setWeeklyMatrixDayFilter('${t.key}')" class="px-3 py-1.5 rounded-xl text-xs flex items-center gap-1.5 whitespace-nowrap transition cursor-pointer ${baseClass}">
+            <button type="button" onclick="setWeeklyMatrixDayFilter('${escapeJsAttr(t.key)}')" class="px-3 py-1.5 rounded-xl text-xs flex items-center gap-1.5 whitespace-nowrap transition cursor-pointer ${baseClass}">
               <span>${t.label}</span>
               <span class="px-1.5 py-0.2 text-[10px] rounded-full ${isActive ? 'bg-white/20 text-white' : 'bg-slate-200 text-slate-600'}">${t.count}</span>
               ${todayBadge}
@@ -6126,7 +6271,7 @@
                 const stuName = s.students?.name || 'Assigned Student';
                 const courseName = s.students?.course_id || 'Quran & Islamic Studies';
                 const effectiveZoom = resolveEffectiveClassZoomLink(s, CURRENT_TEACHER);
-                const safeName = stuName.replace(/'/g, "\\'");
+                const safeName = escapeJsAttr(stuName);
 
                 return `
                   <div class="p-3 bg-white hover:bg-slate-50/80 rounded-2xl border border-slate-200 shadow-2xs transition flex flex-col justify-between gap-2.5">
@@ -6139,16 +6284,16 @@
                           ${s.status || 'Active'}
                         </span>
                       </div>
-                      <div class="font-black text-slate-900 text-sm truncate" title="${stuName}">${stuName}</div>
-                      <div class="text-[11px] text-slate-500 truncate mt-0.5">${courseName}</div>
+                      <div class="font-black text-slate-900 text-sm truncate" title="${escapeHtml(stuName)}">${escapeHtml(stuName)}</div>
+                      <div class="text-[11px] text-slate-500 truncate mt-0.5">${escapeHtml(courseName)}</div>
                     </div>
 
                     <div class="pt-2 border-t border-slate-100 flex items-center justify-between gap-1.5">
-                      <button onclick="openTimeChangeRequestModal('${s.id}')" class="px-2 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-900 border border-indigo-200 rounded-lg text-[11px] font-bold flex items-center gap-1 transition" title="Request Time Change for ${safeName}">
+                      <button onclick="openTimeChangeRequestModal('${escapeJsAttr(s.id)}')" class="px-2 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-900 border border-indigo-200 rounded-lg text-[11px] font-bold flex items-center gap-1 transition" title="Request Time Change for ${safeName}">
                         <i class="fa-solid fa-clock-rotate-left text-indigo-600"></i> Change Time
                       </button>
                       ${effectiveZoom ? `
-                        <button type="button" onclick="launchTeacherZoomClass('${s.id}', '${effectiveZoom}', '${safeName}', '${s.student_id}')" class="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-[11px] font-black flex items-center gap-1 shadow-2xs transition" title="Start Zoom Meeting">
+                        <button type="button" onclick="launchTeacherZoomClass('${escapeJsAttr(s.id)}', '${escapeJsAttr(effectiveZoom)}', '${safeName}', '${escapeJsAttr(s.student_id)}')" class="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-[11px] font-black flex items-center gap-1 shadow-2xs transition" title="Start Zoom Meeting">
                           <i class="fa-solid fa-video"></i> Start Zoom
                         </button>
                       ` : `
@@ -6491,10 +6636,10 @@
             <td class="p-3 text-center">${statusBadge}</td>
             <td class="p-3 text-right">
               <div class="inline-flex items-center gap-1.5 justify-end">
-                <button onclick="viewTeacherSalarySlip('${s.slipKey}')" class="px-3 py-1.5 rounded-lg text-xs font-bold bg-slate-100 hover:bg-slate-200 text-slate-700 transition flex items-center gap-1">
+                <button onclick="viewTeacherSalarySlip('${escapeJsAttr(s.slipKey)}')" class="px-3 py-1.5 rounded-lg text-xs font-bold bg-slate-100 hover:bg-slate-200 text-slate-700 transition flex items-center gap-1">
                   <i class="fa-solid fa-eye text-emerald-700"></i> View Voucher
                 </button>
-                <button onclick="downloadTeacherSalarySlipDirect('${s.slipKey}')" class="px-2.5 py-1.5 rounded-lg text-xs font-bold bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 transition flex items-center gap-1" title="Download PDF Voucher">
+                <button onclick="downloadTeacherSalarySlipDirect('${escapeJsAttr(s.slipKey)}')" class="px-2.5 py-1.5 rounded-lg text-xs font-bold bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 transition flex items-center gap-1" title="Download PDF Voucher">
                   <i class="fa-solid fa-file-pdf"></i>
                 </button>
               </div>
@@ -7151,29 +7296,29 @@
           <tr class="hover:bg-slate-50 transition">
             <td class="p-3 text-center font-bold text-slate-500 font-mono">${idx + 1}</td>
             <td class="p-3">
-              <div class="font-extrabold text-slate-900 text-xs">${tr.student_name || 'Prospective Student'}</div>
+              <div class="font-extrabold text-slate-900 text-xs">${escapeHtml(tr.student_name || 'Prospective Student')}</div>
               <div class="text-[11px] text-slate-500 flex items-center gap-1 mt-0.5">
-                <i class="fa-brands fa-whatsapp text-emerald-600"></i> ${tr.phone || '--'}
+                <i class="fa-brands fa-whatsapp text-emerald-600"></i> ${escapeHtml(tr.phone || '--')}
               </div>
             </td>
             <td class="p-3">
               <span class="px-2 py-0.5 rounded bg-purple-50 text-purple-900 border border-purple-200 font-bold text-[11px]">
-                ${tr.course || 'Quran Evaluation'}
+                ${escapeHtml(tr.course || 'Quran Evaluation')}
               </span>
             </td>
             <td class="p-3 font-mono text-xs">
-              <div class="font-bold text-slate-800">${tr.trial_dates || 'Day 1 - Day 3'}</div>
+              <div class="font-bold text-slate-800">${escapeHtml(tr.trial_dates || 'Day 1 - Day 3')}</div>
               <div class="text-[10px] text-slate-500">${tr.start_time ? tr.start_time.slice(0,5) : '18:00'} - ${tr.end_time ? tr.end_time.slice(0,5) : '18:30'} PKT</div>
             </td>
             <td class="p-3">
               ${statusBadge}
             </td>
             <td class="p-3 max-w-xs truncate text-xs text-slate-600">
-              ${tr.notes || '<span class="text-slate-400 italic">No trial notes logged</span>'}
+              ${tr.notes ? escapeHtml(tr.notes) : '<span class="text-slate-400 italic">No trial notes logged</span>'}
             </td>
             <td class="p-3 text-right">
               ${meetLink ? `
-                <button onclick="launchTeacherZoomClass('${tr.id}', '${meetLink}', '${(tr.student_name || 'Student').split("'").join(" ")}', '${tr.student_id || tr.id}')" class="px-3 py-1.5 bg-gradient-to-r from-purple-700 to-indigo-800 hover:from-purple-800 hover:to-indigo-900 text-white rounded-lg text-xs font-black shadow-xs flex items-center gap-1.5 ml-auto transition">
+                <button onclick="launchTeacherZoomClass('${escapeJsAttr(tr.id)}', '${escapeJsAttr(meetLink)}', '${escapeJsAttr(tr.student_name || 'Student')}', '${tr.student_id || tr.id}')" class="px-3 py-1.5 bg-gradient-to-r from-purple-700 to-indigo-800 hover:from-purple-800 hover:to-indigo-900 text-white rounded-lg text-xs font-black shadow-xs flex items-center gap-1.5 ml-auto transition">
                   <i class="fa-solid fa-video"></i> Start Trial Zoom
                 </button>
               ` : `
@@ -7712,7 +7857,7 @@
       }
 
       select.innerHTML = '<option value="">-- Choose Assigned Student --</option>' + studentsList.map(st => `
-        <option value="${st.id}">${st.name || 'Student'} (ID: ${st.id})</option>
+        <option value="${escapeHtml(st.id)}">${escapeHtml(st.name || 'Student')} (ID: ${escapeHtml(st.id)})</option>
       `).join('');
 
       if (preselectStudentId) {
@@ -7741,7 +7886,7 @@
       if (st && noticeBox && noticeText) {
         const course = st.course_id || 'Quran & Tajweed Studies';
         const phone = st.whatsapp || st.phone || 'No phone recorded';
-        noticeText.innerHTML = `Student: <strong>${st.name}</strong> • Course: <strong>${course}</strong> • Parent Contact: <strong>${phone}</strong>`;
+        noticeText.innerHTML = `Student: <strong>${escapeHtml(st.name)}</strong> • Course: <strong>${escapeHtml(course)}</strong> • Parent Contact: <strong>${escapeHtml(phone)}</strong>`;
         noticeBox.classList.remove('hidden');
 
         // Auto-select course book
