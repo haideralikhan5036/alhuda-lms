@@ -1,0 +1,197 @@
+/* ============================================================================
+   AL-HUDA LMS — Premium Number Typography System
+   One shared source for beautiful, consistent numerals across all portals.
+   Font: Plus Jakarta Sans (geometric-humanist, premium numerals) + Inter.
+   ============================================================================ */
+
+:root {
+  /* Core numeral font stack — premium, modern, highly readable */
+  --font-num: 'Plus Jakarta Sans', 'Inter', 'Segoe UI', system-ui, -apple-system, 'BlinkMacSystemFont', sans-serif;
+
+  /* Numeral hierarchy tokens */
+  --num-display-size: 2rem;
+  --num-display-weight: 800;
+  --num-stat-size: 1.375rem;
+  --num-stat-weight: 800;
+  --num-financial-weight: 700;
+  --num-badge-size: 0.78rem;
+  --num-badge-weight: 700;
+  --num-id-spacing: 0.04em;
+
+  /* Refined numeral rendering */
+  --num-tracking-tight: -0.02em;
+  --num-tracking-snug: -0.012em;
+}
+
+/* --------------------------------------------------------------------------
+   BASE: any element with .num gets premium numeral rendering.
+   Tabular + lining figures keep digits aligned and visually calm.
+   -------------------------------------------------------------------------- */
+.num {
+  font-family: var(--font-num) !important;
+  font-variant-numeric: tabular-nums lining-nums !important;
+  font-feature-settings: 'tnum' 1, 'lnum' 1 !important;
+  letter-spacing: var(--num-tracking-snug);
+}
+
+/* --------------------------------------------------------------------------
+   DISPLAY: hero statistics, dashboard headline figures.
+   Large, confident, tightly tracked.
+   -------------------------------------------------------------------------- */
+.num-display {
+  font-family: var(--font-num) !important;
+  font-size: var(--num-display-size) !important;
+  font-weight: var(--num-display-weight) !important;
+  letter-spacing: var(--num-tracking-tight) !important;
+  line-height: 1.1 !important;
+  font-variant-numeric: tabular-nums lining-nums !important;
+  font-feature-settings: 'tnum' 1, 'lnum' 1 !important;
+}
+
+/* --------------------------------------------------------------------------
+   STAT: KPI cards, dashboard counters.
+   -------------------------------------------------------------------------- */
+.num-stat {
+  font-family: var(--font-num) !important;
+  font-size: var(--num-stat-size) !important;
+  font-weight: var(--num-stat-weight) !important;
+  letter-spacing: var(--num-tracking-tight) !important;
+  line-height: 1.15 !important;
+  font-variant-numeric: tabular-nums lining-nums !important;
+  font-feature-settings: 'tnum' 1, 'lnum' 1 !important;
+}
+
+/* --------------------------------------------------------------------------
+   TABLE: table cells, aligned columns, pagination.
+   Strict tabular figures so columns line up perfectly.
+   -------------------------------------------------------------------------- */
+.num-table,
+table td.num,
+table th.num {
+  font-family: var(--font-num) !important;
+  font-variant-numeric: tabular-nums lining-nums !important;
+  font-feature-settings: 'tnum' 1, 'lnum' 1 !important;
+  letter-spacing: 0 !important;
+}
+
+/* --------------------------------------------------------------------------
+   FINANCIAL: fees, payments, salaries, invoice amounts.
+   Tabular + slightly heavier for scannability.
+   -------------------------------------------------------------------------- */
+.num-financial,
+.financial-val {
+  font-family: var(--font-num) !important;
+  font-weight: var(--num-financial-weight) !important;
+  font-variant-numeric: tabular-nums lining-nums !important;
+  font-feature-settings: 'tnum' 1, 'lnum' 1 !important;
+  letter-spacing: var(--num-tracking-snug);
+}
+
+/* --------------------------------------------------------------------------
+   BADGE: notification counts, small pill counters, step numbers.
+   Compact but legible.
+   -------------------------------------------------------------------------- */
+.num-badge {
+  font-family: var(--font-num) !important;
+  font-size: var(--num-badge-size) !important;
+  font-weight: var(--num-badge-weight) !important;
+  font-variant-numeric: tabular-nums lining-nums !important;
+  font-feature-settings: 'tnum' 1, 'lnum' 1 !important;
+  letter-spacing: 0.01em;
+  line-height: 1 !important;
+}
+
+/* --------------------------------------------------------------------------
+   ID: student/teacher/invoice IDs — distinguished but not "computer-like".
+   Uses the premium stack with gentle spacing instead of monospace.
+   -------------------------------------------------------------------------- */
+.num-id {
+  font-family: var(--font-num) !important;
+  font-variant-numeric: tabular-nums lining-nums !important;
+  font-feature-settings: 'tnum' 1, 'lnum' 1 !important;
+  letter-spacing: var(--num-id-spacing);
+  font-weight: 600 !important;
+}
+
+/* --------------------------------------------------------------------------
+   DATE/TIME: schedules, timestamps — tabular so lists align.
+   -------------------------------------------------------------------------- */
+.num-date {
+  font-family: var(--font-num) !important;
+  font-variant-numeric: tabular-nums lining-nums !important;
+  font-feature-settings: 'tnum' 1, 'lnum' 1 !important;
+}
+
+/* --------------------------------------------------------------------------
+   PERCENT: attendance rates, progress figures.
+   -------------------------------------------------------------------------- */
+.num-percent {
+  font-family: var(--font-num) !important;
+  font-weight: 700 !important;
+  font-variant-numeric: tabular-nums lining-nums !important;
+  font-feature-settings: 'tnum' 1, 'lnum' 1 !important;
+  letter-spacing: var(--num-tracking-snug);
+}
+
+/* --------------------------------------------------------------------------
+   FORM: numeric inputs keep premium numerals while staying usable.
+   -------------------------------------------------------------------------- */
+input.num-input,
+select.num-input {
+  font-family: var(--font-num) !important;
+  font-variant-numeric: tabular-nums lining-nums !important;
+}
+
+/* --------------------------------------------------------------------------
+   RETIRE the old "computer-like" monospace number styling.
+   Any legacy .font-mono used for numbers now renders in the premium stack.
+   (True code/mono contexts should use .code-mono instead.)
+   -------------------------------------------------------------------------- */
+.font-mono.num,
+.num.font-mono {
+  font-family: var(--font-num) !important;
+  font-feature-settings: 'tnum' 1, 'lnum' 1 !important;
+}
+
+.code-mono {
+  font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, monospace !important;
+}
+
+/* --------------------------------------------------------------------------
+   AUTO-ENHANCE: high-value number contexts get premium tabular numerals
+   without needing a class on every element. Scoped to avoid breaking prose.
+   -------------------------------------------------------------------------- */
+.stat-value,
+.kpi-value,
+.kpi-number,
+.dashboard-stat,
+.amount,
+.price,
+.balance,
+.total,
+.count {
+  font-family: var(--font-num);
+  font-variant-numeric: tabular-nums lining-nums;
+}
+
+/* Tables: numeric alignment by default for data cells.
+   Keeps financial columns and counts perfectly aligned. */
+table.data-table td,
+table td.numeric,
+td.amount,
+td.total,
+td.count {
+  font-family: var(--font-num);
+  font-variant-numeric: tabular-nums lining-nums;
+  font-feature-settings: 'tnum' 1, 'lnum' 1;
+}
+
+/* Responsive: keep large display numbers inside their cards on small screens */
+@media (max-width: 640px) {
+  .num-display {
+    font-size: 1.6rem !important;
+  }
+  .num-stat {
+    font-size: 1.2rem !important;
+  }
+}
