@@ -340,6 +340,73 @@
         btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Authenticating...';
       }
 
+      function restoreBtn() {
+        if (btn) {
+          btn.disabled = false;
+          btn.innerHTML = '<i class="fa-solid fa-right-to-bracket text-amber-400"></i> Login to Manager Portal';
+        }
+      }
+
+      function showLoginError(msg) {
+        if (errBox && errText) {
+          errText.innerText = msg;
+          errBox.classList.remove('hidden');
+        }
+      }
+
+      function workerBase() {
+        try {
+          if (window.CLOUDFLARE_API_BASE_URL) return String(window.CLOUDFLARE_API_BASE_URL).replace(/\/+$/, '');
+          if (window.location && window.location.hostname.endsWith('.workers.dev')) return '';
+        } catch (e) {}
+        return 'https://alhuda-lms.ceoislamiccentre.workers.dev';
+      }
+
+      // SECURITY (2026-10-14): try server-side login first. The worker
+      // verifies credentials against D1 and only accepts explicitly-set
+      // passwords (never the '12345678' default). On success we store a
+      // signed token; the worker re-validates it on every API call.
+      let serverAttempted = false;
+      let serverAvailable = false;
+      try {
+        const res = await fetch(workerBase() + '/api/auth/staff-login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ role: 'manager', identifier: usernameInput, password: passwordInput })
+        });
+        serverAttempted = true;
+        if (res.status === 503 || res.status === 404) {
+          serverAvailable = false; // worker not deployed/configured -> legacy fallback below
+        } else {
+          serverAvailable = true;
+          const data = await res.json().catch(() => ({}));
+          if (res.ok && data && data.ok && data.token) {
+            try {
+              sessionStorage.setItem('alhuda_manager_token', data.token);
+              sessionStorage.setItem('alhuda_manager_session', JSON.stringify({
+                id: data.id, role: 'manager', via: 'server',
+                authenticated_at: new Date().toISOString()
+              }));
+              localStorage.setItem('alhuda_active_portal_role', 'manager');
+            } catch (e) {}
+            restoreBtn();
+            window.location.replace('index.html?role=manager');
+            return;
+          }
+          // Server reachable but credentials rejected: do NOT fall back to
+          // local login (that would bypass the server's password policy).
+          restoreBtn();
+          showLoginError('Invalid username or password.');
+          return;
+        }
+      } catch (err) {
+        serverAvailable = false; // network error -> legacy fallback below
+      }
+
+      if (serverAttempted && !serverAvailable) {
+        console.warn('[Manager Login] Worker auth unavailable, using local login (degraded mode). Deploy the worker for server-side authentication.');
+      }
+
       const { managers, accountsMap } = await fetchManagersFromBackend();
       const uNorm = usernameInput.toLowerCase();
       const uPhone = usernameInput.replace(/[^0-9]/g, '');
@@ -369,10 +436,7 @@
         );
       });
 
-      if (btn) {
-        btn.disabled = false;
-        btn.innerHTML = '<i class="fa-solid fa-right-to-bracket text-amber-400"></i> Login to Manager Portal';
-      }
+      restoreBtn();
 
       if (matchedManager) {
         const creds = resolveManagerCredentials(matchedManager, accountsMap);

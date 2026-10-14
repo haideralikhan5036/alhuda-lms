@@ -1,44 +1,53 @@
 {
-  "version": 2,
   "cleanUrls": true,
   "routes": [
     {
-      "src": "/(.*)",
+      "continue": true,
       "headers": {
+        "Content-Security-Policy": "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; connect-src 'self' https:; frame-src 'self' https:; object-src 'none'; base-uri 'self'",
+        "Referrer-Policy": "strict-origin-when-cross-origin",
+        "Strict-Transport-Security": "max-age=31536000; includeSubDomains",
+        "X-Content-Type-Options": "nosniff",
+        "X-Frame-Options": "SAMEORIGIN",
         "cache-control": "no-cache, no-store, must-revalidate"
       },
-      "continue": true
+      "src": "/(.*)"
+    },
+    {
+      "src": "/functions/(.*)",
+      "status": 404
     },
     {
       "handle": "filesystem"
     },
     {
-      "src": "/",
-      "dest": "/index.html"
+      "dest": "/index.html",
+      "src": "/"
     },
     {
-      "src": "/admin",
-      "dest": "/admin.html"
+      "dest": "/admin.html",
+      "src": "/admin"
     },
     {
-      "src": "/manager",
-      "dest": "/manager.html"
+      "dest": "/manager.html",
+      "src": "/manager"
     },
     {
-      "src": "/teacher",
-      "dest": "/teacher.html"
+      "dest": "/teacher.html",
+      "src": "/teacher"
     },
     {
-      "src": "/parent",
-      "dest": "/parent.html"
+      "dest": "/parent.html",
+      "src": "/parent"
     },
     {
-      "src": "/class",
-      "dest": "/class.html"
+      "dest": "/class.html",
+      "src": "/class"
     },
     {
-      "src": "/auditor",
-      "dest": "/auditor.html"
+      "dest": "/auditor.html",
+      "src": "/auditor"
     }
-  ]
+  ],
+  "version": 2
 }

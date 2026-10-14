@@ -4,6 +4,12 @@
  * File: functions/api/db.js
  * Purpose: Zero-configuration Cloudflare Pages Function that automatically
  *          initializes D1 tables and executes Supabase-compatible queries.
+ *
+ * Security hardening (2026-10-14):
+ *  - CORS restricted to an allowlist via env.ALLOWED_ORIGINS (comma-separated).
+ *    No origins configured = no cross-origin access.
+ *  - update/delete with empty filters are rejected (400).
+ *  - Internal error details never leave the server (generic 500 responses).
  * ============================================================================
  */
 
@@ -18,6 +24,33 @@ const ALLOWED_TABLES = new Set([
   'trial_students',
   'system_settings'
 ]);
+
+/**
+ * Build CORS headers from an explicit allowlist.
+ * env.ALLOWED_ORIGINS: comma-separated list of exact origins, e.g.
+ *   "https://lms.example.com,https://admin.example.com"
+ * If unset or empty, cross-origin requests receive no ACAO header (denied).
+ * Authorization is kept in allowed headers for bearer-token auth handled
+ * upstream (cloudflare/worker.js).
+ */
+function buildCorsHeaders(request, env) {
+  const raw = String((env && env.ALLOWED_ORIGINS) || '').trim();
+  const allowed = raw.split(',').map(s => s.trim()).filter(Boolean);
+  const origin = request.headers.get('Origin') || '';
+
+  const headers = {
+    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    'Access-Control-Max-Age': '86400',
+    'Vary': 'Origin'
+  };
+
+  if (origin && allowed.includes(origin)) {
+    headers['Access-Control-Allow-Origin'] = origin;
+  }
+
+  return headers;
+}
 
 const SCHEMA_STATEMENTS = [
   `CREATE TABLE IF NOT EXISTS families (
@@ -293,14 +326,17 @@ async function getTableColumns(db, table) {
   return new Set((results || []).map(c => c.name));
 }
 
+function jsonResponse(obj, status, corsHeaders) {
+  return new Response(JSON.stringify(obj), {
+    status,
+    headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+  });
+}
+
 export async function onRequest(context) {
   const { request, env } = context;
 
-  const corsHeaders = {
-    'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type, Authorization'
-  };
+  const corsHeaders = buildCorsHeaders(request, env);
 
   if (request.method === 'OPTIONS') {
     return new Response(null, { status: 204, headers: corsHeaders });
@@ -308,22 +344,24 @@ export async function onRequest(context) {
 
   const d1 = env.DB || env.ALHUDA_DB;
   if (!d1) {
-    return new Response(
-      JSON.stringify({
+    return jsonResponse(
+      {
         ok: false,
         d1_bound: false,
         error: 'Cloudflare D1 database binding (DB) is not attached yet.'
-      }),
-      { status: 503, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      },
+      503,
+      corsHeaders
     );
   }
 
   await ensureSchema(d1);
 
   if (request.method === 'GET') {
-    return new Response(
-      JSON.stringify({ ok: true, d1_bound: true, engine: 'Cloudflare D1 SQLite' }),
-      { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    return jsonResponse(
+      { ok: true, d1_bound: true, engine: 'Cloudflare D1 SQLite' },
+      200,
+      corsHeaders
     );
   }
 
@@ -332,9 +370,10 @@ export async function onRequest(context) {
     const { table, action, select = '*', filters = [], orders = [], limit = null, values = null, single = false } = body || {};
 
     if (!ALLOWED_TABLES.has(table)) {
-      return new Response(
-        JSON.stringify({ data: null, error: { message: `Invalid table: ${table}` } }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      return jsonResponse(
+        { data: null, error: { message: `Invalid table: ${table}` } },
+        400,
+        corsHeaders
       );
     }
 
@@ -384,10 +423,7 @@ export async function onRequest(context) {
       }
 
       const data = single ? (hydrated[0] || null) : hydrated;
-      return new Response(JSON.stringify({ data, error: null }), {
-        status: 200,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-      });
+      return jsonResponse({ data, error: null }, 200, corsHeaders);
     }
 
     // 2. INSERT / UPSERT
@@ -439,13 +475,11 @@ export async function onRequest(context) {
       }
 
       const data = single ? (inserted[0] || null) : inserted;
-      return new Response(JSON.stringify({ data, error: null }), {
-        status: 200,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-      });
+      return jsonResponse({ data, error: null }, 200, corsHeaders);
     }
 
-    // 3. UPDATE
+    // 3. UPDATE — empty filters are rejected: an unscoped UPDATE would
+    // rewrite the entire table.
     if (action === 'update') {
       const patch = { ...(values || {}) };
       if (table === 'families') {
@@ -456,6 +490,15 @@ export async function onRequest(context) {
         }
       }
 
+      const { sql: whereSql, params: whereParams } = buildWhereClause(filters);
+      if (!whereSql) {
+        return jsonResponse(
+          { data: null, error: { message: 'update_requires_filter' } },
+          400,
+          corsHeaders
+        );
+      }
+
       const cols = Object.keys(patch).filter(k => validCols.has(k));
       if (cols.length > 0) {
         const setSql = cols.map(c => `${c} = ?`).join(', ');
@@ -464,12 +507,10 @@ export async function onRequest(context) {
           if (v !== null && typeof v === 'object') return JSON.stringify(v);
           return v === undefined ? null : v;
         });
-        const { sql: whereSql, params: whereParams } = buildWhereClause(filters);
         const updateSql = `UPDATE ${table} SET ${setSql}${whereSql}`;
         await d1.prepare(updateSql).bind(...setVals, ...whereParams).run();
       }
 
-      const { sql: whereSql, params: whereParams } = buildWhereClause(filters);
       const { results } = await d1.prepare(`SELECT * FROM ${table}${whereSql}`).bind(...whereParams).all();
       const rawResults = results || [];
       if (table === 'families') {
@@ -480,32 +521,36 @@ export async function onRequest(context) {
         });
       }
       const data = single ? (rawResults[0] || null) : rawResults;
-      return new Response(JSON.stringify({ data, error: null }), {
-        status: 200,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-      });
+      return jsonResponse({ data, error: null }, 200, corsHeaders);
     }
 
-    // 4. DELETE
+    // 4. DELETE — empty filters are rejected: an unscoped DELETE would
+    // wipe the entire table.
     if (action === 'delete') {
       const { sql: whereSql, params: whereParams } = buildWhereClause(filters);
-      if (whereSql) {
-        await d1.prepare(`DELETE FROM ${table}${whereSql}`).bind(...whereParams).run();
+      if (!whereSql) {
+        return jsonResponse(
+          { data: null, error: { message: 'delete_requires_filter' } },
+          400,
+          corsHeaders
+        );
       }
-      return new Response(JSON.stringify({ data: [], error: null }), {
-        status: 200,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-      });
+      await d1.prepare(`DELETE FROM ${table}${whereSql}`).bind(...whereParams).run();
+      return jsonResponse({ data: [], error: null }, 200, corsHeaders);
     }
 
-    return new Response(
-      JSON.stringify({ data: null, error: { message: `Unsupported action: ${action}` } }),
-      { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    return jsonResponse(
+      { data: null, error: { message: `Unsupported action: ${action}` } },
+      400,
+      corsHeaders
     );
   } catch (err) {
-    return new Response(
-      JSON.stringify({ data: null, error: { message: err.message || String(err) } }),
-      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    // Never leak internals (SQL, stack traces) to the client.
+    console.error('[db-api] request failed:', err);
+    return jsonResponse(
+      { data: null, error: { message: 'internal_error' } },
+      500,
+      corsHeaders
     );
   }
 }

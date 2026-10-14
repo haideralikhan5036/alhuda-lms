@@ -41,6 +41,35 @@
     return DEFAULT_CLOUDFLARE_BACKEND_URL;
   }
 
+  // SECURITY (2026-10-14): the worker now requires a signed session token
+  // for /api/db and /api/storage. Portal login handlers store the token in
+  // sessionStorage after a successful server-side login; every API call
+  // below attaches it. No token (or an expired one) -> the worker answers
+  // 401 and the wrapper safely falls back to the local mirror.
+  function getWorkerToken() {
+    try {
+      return sessionStorage.getItem('alhuda_owner_token')
+        || sessionStorage.getItem('alhuda_manager_token')
+        || sessionStorage.getItem('alhuda_teacher_token')
+        || sessionStorage.getItem('alhuda_parent_token')
+        || null;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  function authHeaders() {
+    const t = getWorkerToken();
+    return t ? { 'Authorization': 'Bearer ' + t } : {};
+  }
+
+  function clearWorkerTokens() {
+    try {
+      ['alhuda_owner_token', 'alhuda_manager_token', 'alhuda_teacher_token', 'alhuda_parent_token']
+        .forEach(function (k) { sessionStorage.removeItem(k); });
+    } catch (e) {}
+  }
+
   function generateLocalId(table) {
     const prefixMap = {
       families: 'FAM-',
@@ -299,7 +328,7 @@
       try {
         const res = await fetch(`${getApiBase()}/api/db`, {
           method: 'GET',
-          headers: { 'Accept': 'application/json' }
+          headers: Object.assign({ 'Accept': 'application/json' }, authHeaders())
         });
         if (!res.ok) {
           _d1Status = false;
@@ -337,7 +366,7 @@
         if (rows.length > 0) {
           await fetch(`${getApiBase()}/api/db`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: Object.assign({ 'Content-Type': 'application/json' }, authHeaders()),
             body: JSON.stringify({ table, action: 'upsert', values: rows })
           });
         }
@@ -404,9 +433,14 @@
       try {
         const res = await fetch(`${getApiBase()}/api/db`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: Object.assign({ 'Content-Type': 'application/json' }, authHeaders()),
           body: JSON.stringify(payload)
         });
+        if (res.status === 401) {
+          // Token invalid/expired: drop it so we stop sending a bad token,
+          // then fall through to the local mirror below.
+          clearWorkerTokens();
+        }
         if (res.ok) {
           const result = await res.json();
           // Also mirror writes into local store for instant offline backup
@@ -599,7 +633,7 @@
       if (typeof fileOrDataUrl === 'string' && fileOrDataUrl.startsWith('data:')) {
         const res = await fetch(`${base}/api/storage`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: Object.assign({ 'Content-Type': 'application/json' }, authHeaders()),
           body: JSON.stringify({ folder, filename, dataUrl: fileOrDataUrl })
         });
         if (res.ok) {
@@ -613,6 +647,7 @@
         formData.append('folder', folder);
         const res = await fetch(`${base}/api/storage`, {
           method: 'POST',
+          headers: authHeaders(),
           body: formData
         });
         if (res.ok) {
@@ -632,6 +667,9 @@
   window.createCloudflareLmsClient = function () {
     return cloudflareDbClient;
   };
+
+  // Exposed so portal logout handlers can drop worker session tokens.
+  window.clearWorkerTokens = clearWorkerTokens;
 
   // Override window.supabase.createClient so all portals (Admin, Manager, Teacher, Parent) automatically use Cloudflare D1 + R2
   window.supabase = {

@@ -251,21 +251,58 @@ Official Email: ${ACADEMY_OFFICIAL_EMAIL}`;
 
     const OFFICIAL_APPS_SCRIPT_EMAIL_RELAY = 'https://script.google.com/macros/s/AKfycbx5WjF-Cy23KwnXx4LoLciNz93MQZwvSoVOLj4hT8NwVQ8H2Pvn2k4w4QeVyvhNHygwEg/exec';
 
+    // ------------------------------------------------------------------
+    // EMAIL RELAY SECRET — please read this before going live.
+    // Right now ANYONE on the internet can use the relay address above to
+    // send emails from the academy's Gmail, because the relay asks for no
+    // password. To lock it down:
+    //   1. Make up a long random secret (32 or more random characters).
+    //   2. Paste it between the quotes below.
+    //   3. Save the SAME secret inside the Apps Script project as a Script
+    //      Property named RELAY_SECRET (step-by-step in SECURITY-SETUP.md).
+    // Until you do step 3, emails keep working exactly as before. Once the
+    // Apps Script starts checking the secret, this value MUST be filled in
+    // here or emails will be rejected.
+    // ------------------------------------------------------------------
+    const EMAIL_RELAY_SECRET = '';
+
+    // Internal flag so the "secret not set" warning is logged only once.
+    let __relaySecretWarningShown = false;
+
     async function sendViaOfficialEmailRelay({ to, subject, html, text, senderName }) {
       if (!to || !subject) return { success: false, error: 'Recipient or subject missing' };
+
+      // Warn once if the relay secret is not set yet. Sending still works —
+      // the owner switches the check on in the Apps Script when ready.
+      if (!EMAIL_RELAY_SECRET && !__relaySecretWarningShown) {
+        __relaySecretWarningShown = true;
+        console.warn('[Email Relay] EMAIL_RELAY_SECRET is empty — the relay currently accepts requests from anyone. Set a secret in js/email.js and in the Apps Script project (see SECURITY-SETUP.md).');
+      }
+
       try {
         const payload = JSON.stringify({
           to: String(to).trim(),
           subject: String(subject).trim(),
           html: html || text || '',
           text: text || '',
-          senderName: senderName || 'Al-Huda Islamic Centre'
+          senderName: senderName || 'Al-Huda Islamic Centre',
+          // The Apps Script checks this value. (Omitted entirely when empty.)
+          relaySecret: EMAIL_RELAY_SECRET || undefined
         });
+
+        // NOTE: this request uses mode 'no-cors', so the browser may silently
+        // drop the custom X-Relay-Secret header below. The relaySecret field
+        // in the body above is the reliable channel — the Apps Script MUST
+        // check the body field, not the header.
+        const headers = { 'Content-Type': 'text/plain;charset=utf-8' };
+        if (EMAIL_RELAY_SECRET) {
+          headers['X-Relay-Secret'] = EMAIL_RELAY_SECRET;
+        }
 
         await fetch(OFFICIAL_APPS_SCRIPT_EMAIL_RELAY, {
           method: 'POST',
           mode: 'no-cors',
-          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+          headers: headers,
           body: payload
         });
 
