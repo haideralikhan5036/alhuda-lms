@@ -46,7 +46,13 @@
   // sessionStorage after a successful server-side login; every API call
   // below attaches it. No token (or an expired one) -> the worker answers
   // 401 and the wrapper safely falls back to the local mirror.
+  //
+  // RESILIENCE (2026-10-15): some browsers block sessionStorage (privacy
+  // mode, extensions, cookie blocking). Keep an in-memory cache as well,
+  // so the token survives even when storage is unavailable.
+  let _memoryTokenCache = null;
   function getWorkerToken() {
+    if (_memoryTokenCache) return _memoryTokenCache;
     try {
       return sessionStorage.getItem('alhuda_owner_token')
         || sessionStorage.getItem('alhuda_manager_token')
@@ -56,6 +62,16 @@
     } catch (e) {
       return null;
     }
+  }
+
+  // Saves the token to memory AND sessionStorage (best effort).
+  // Call this after login instead of writing sessionStorage directly.
+  function setWorkerToken(token) {
+    _memoryTokenCache = token || null;
+    try {
+      if (token) sessionStorage.setItem('alhuda_owner_token', token);
+      else sessionStorage.removeItem('alhuda_owner_token');
+    } catch (e) {}
   }
 
   function authHeaders() {
@@ -636,6 +652,7 @@
   // Exposes the current portal's auth headers so the book reader can fetch
   // protected storage URLs (plain <img> tags cannot send Authorization headers).
   window.getLmsAuthHeaders = function () { return authHeaders(); };
+  window.setLmsAuthToken = function (token) { setWorkerToken(token); };
   window.uploadToCloudflareR2 = async function (fileOrDataUrl, folder = 'documents', filename = 'file.bin') {
     const base = getApiBase() || DEFAULT_CLOUDFLARE_BACKEND_URL;
     const normalizeUrl = (u) => {
