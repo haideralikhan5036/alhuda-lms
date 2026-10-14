@@ -3,20 +3,20 @@
  * Real-time unified syllabus engine supporting Noorani Qaida, Holy Quran, and custom uploaded books.
  */
 
-// Authentic Takhti data for Noorani Qaida
+// Authentic Lesson data for Noorani Qaida
 const QAIDA_TAKHTIS = [
-  { num: 1, title: "Takhti 1: Huroof-e-Mufradat (حروفِ مفردات)", sub: "Single Arabic Letters - Read from Right to Left", letters: ["ا", "ب", "ت", "ث", "ج", "ح", "خ", "د", "ذ", "ر", "ز", "س", "ش", "ص", "ض", "ط", "ظ", "ع", "غ", "ف", "ق", "ك", "ل", "م", "ن", "و", "هـ", "ء", "ي"] },
-  { num: 2, title: "Takhti 2: Huroof-e-Murakkabat (حروفِ مرکبات)", sub: "Compound Letters & Joint Shapes", letters: ["لا", "با", "بلب", "كعب", "نحم", "يست", "بنت", "ثبت", "يس", "طع", "عج", "فج", "قن", "كم", "لم", "نم"] },
-  { num: 3, title: "Takhti 3: Huroof-e-Muqatta'at (حروفِ مقطعات)", sub: "Mysterious Opening Letters in Holy Quran", letters: ["الم", "الر", "المر", "المص", "طسم", "طه", "طس", "يس", "حم", "حم عسق", "كهيعص", "ص", "ق", "ن"] },
-  { num: 4, title: "Takhti 4: Harakat (حركات: زبر، زیر، پیش)", sub: "Short Vowels: Fatha (a), Kasra (i), Damma (u)", letters: ["اَ", "اِ", "اُ", "بَ", "بِ", "بُ", "تَ", "تِ", "تُ", "ثَ", "ثِ", "ثُ", "جَ", "جِ", "جُ", "حَ", "حِ", "حُ"] },
-  { num: 5, title: "Takhti 5: Tanween (تنوين: دو زبر، دو زیر، دو پیش)", sub: "Double Vowels with Noon Sakin Sound", letters: ["اً", "اٍ", "اٌ", "بً", "بٍ", "بٌ", "تً", "تٍ", "تٌ", "ثً", "ثٍ", "ثٌ", "جً", "جٍ", "جٌ", "دً", "دٍ", "دٌ"] },
-  { num: 6, title: "Takhti 6: Mashq Harakat o Tanween (مشق حركات و تنوین)", sub: "Practice Words with Short & Double Vowels", letters: ["أَبَدًا", "أَحَدٌ", "أَخَذَ", "بَلَدٍ", "حَسَدَ", "خَلَقَ", "ذَكَرَ", "رَفَعَ", "سَفَرَةٍ", "صُحُفًا", "طَبَقًا", "عَدَسِهَا"] },
-  { num: 7, title: "Takhti 7: Khari Zabar, Khari Zer, Ulta Pesh (کھڑی حرکات)", sub: "Standing Vowels (Equivalent to 1 Alif)", letters: ["بٰ", "بٖ", "بٗ", "تٰ", "تٖ", "تٗ", "ثٰ", "ثٖ", "ثٗ", "جٰ", "جٖ", "جٗ", "دٰ", "دٖ", "دٗ", "رٰ", "رٖ", "رٗ"] },
-  { num: 8, title: "Takhti 8: Huroof-e-Maddah o Leen (حروفِ مدہ و لین)", sub: "Elongated & Soft Vowels", letters: ["بَا", "بُوْ", "بِيْ", "بَوْ", "بَيْ", "تَا", "تُوْ", "تِيْ", "تَوْ", "تَيْ", "ثَا", "ثُوْ", "ثِيْ", "جَا", "جُوْ", "جِيْ"] },
-  { num: 9, title: "Takhti 9: Mashq Maddah o Leen (مشق مدہ و لین)", sub: "Word Practice with Madd & Leen Letters", letters: ["جَاءَ", "جِيءَ", "سُوْءَ", "خَوْفٌ", "بَيْتٌ", "قَوْمٌ", "صَيْفٌ", "يَوْمٌ", "فِيْهِ", "تُوْبُوْا", "قَالُوْا", "كِيْلَ"] },
-  { num: 10, title: "Takhti 10: Sukoon / Jazm (سکون / جزم)", sub: "Silent Resting Mark Pronunciation", letters: ["أَبْ", "أَتْ", "أَثْ", "إِبْ", "إِتْ", "إِثْ", "أُبْ", "أُتْ", "أُثْ", "يَقْرَأُ", "تَعْلَمُوْنَ", "يَفْعَلُوْنَ", "نَعْبُدُ", "نَسْتَعِيْنُ"] },
-  { num: 11, title: "Takhti 11: Tashdeed (تشدید / مشدد)", sub: "Doubled Emphasized Letters", letters: ["أَبَّ", "أَبِّ", "أَبُّ", "إِبَّ", "إِبِّ", "إِبُّ", "أُبَّ", "أُبِّ", "أُبُّ", "حَقَّ", "رَبِّ", "مَدَّ", "عَمَّ", "إِنَّ"] },
-  { num: 12, title: "Takhti 12: Ahkam-e-Waqf o Rasm-ul-Khat (احکامِ وقف)", sub: "Stopping Rules and Quranic Orthography", letters: ["مـ (لازم)", "ط (مطلق)", "ج (جائز)", "ز (مجوز)", "ص (مرخص)", "قف (وقف)", "لا (عدم وقف)", "۝ (آیت مکمل)"] }
+  { num: 1, title: "Lesson 1: Huroof-e-Mufradat (حروفِ مفردات)", sub: "Single Arabic Letters - Read from Right to Left", letters: ["ا", "ب", "ت", "ث", "ج", "ح", "خ", "د", "ذ", "ر", "ز", "س", "ش", "ص", "ض", "ط", "ظ", "ع", "غ", "ف", "ق", "ك", "ل", "م", "ن", "و", "هـ", "ء", "ي"] },
+  { num: 2, title: "Lesson 2: Huroof-e-Murakkabat (حروفِ مرکبات)", sub: "Compound Letters & Joint Shapes", letters: ["لا", "با", "بلب", "كعب", "نحم", "يست", "بنت", "ثبت", "يس", "طع", "عج", "فج", "قن", "كم", "لم", "نم"] },
+  { num: 3, title: "Lesson 3: Huroof-e-Muqatta'at (حروفِ مقطعات)", sub: "Mysterious Opening Letters in Holy Quran", letters: ["الم", "الر", "المر", "المص", "طسم", "طه", "طس", "يس", "حم", "حم عسق", "كهيعص", "ص", "ق", "ن"] },
+  { num: 4, title: "Lesson 4: Harakat (حركات: زبر، زیر، پیش)", sub: "Short Vowels: Fatha (a), Kasra (i), Damma (u)", letters: ["اَ", "اِ", "اُ", "بَ", "بِ", "بُ", "تَ", "تِ", "تُ", "ثَ", "ثِ", "ثُ", "جَ", "جِ", "جُ", "حَ", "حِ", "حُ"] },
+  { num: 5, title: "Lesson 5: Tanween (تنوين: دو زبر، دو زیر، دو پیش)", sub: "Double Vowels with Noon Sakin Sound", letters: ["اً", "اٍ", "اٌ", "بً", "بٍ", "بٌ", "تً", "تٍ", "تٌ", "ثً", "ثٍ", "ثٌ", "جً", "جٍ", "جٌ", "دً", "دٍ", "دٌ"] },
+  { num: 6, title: "Lesson 6: Mashq Harakat o Tanween (مشق حركات و تنوین)", sub: "Practice Words with Short & Double Vowels", letters: ["أَبَدًا", "أَحَدٌ", "أَخَذَ", "بَلَدٍ", "حَسَدَ", "خَلَقَ", "ذَكَرَ", "رَفَعَ", "سَفَرَةٍ", "صُحُفًا", "طَبَقًا", "عَدَسِهَا"] },
+  { num: 7, title: "Lesson 7: Khari Zabar, Khari Zer, Ulta Pesh (کھڑی حرکات)", sub: "Standing Vowels (Equivalent to 1 Alif)", letters: ["بٰ", "بٖ", "بٗ", "تٰ", "تٖ", "تٗ", "ثٰ", "ثٖ", "ثٗ", "جٰ", "جٖ", "جٗ", "دٰ", "دٖ", "دٗ", "رٰ", "رٖ", "رٗ"] },
+  { num: 8, title: "Lesson 8: Huroof-e-Maddah o Leen (حروفِ مدہ و لین)", sub: "Elongated & Soft Vowels", letters: ["بَا", "بُوْ", "بِيْ", "بَوْ", "بَيْ", "تَا", "تُوْ", "تِيْ", "تَوْ", "تَيْ", "ثَا", "ثُوْ", "ثِيْ", "جَا", "جُوْ", "جِيْ"] },
+  { num: 9, title: "Lesson 9: Mashq Maddah o Leen (مشق مدہ و لین)", sub: "Word Practice with Madd & Leen Letters", letters: ["جَاءَ", "جِيءَ", "سُوْءَ", "خَوْفٌ", "بَيْتٌ", "قَوْمٌ", "صَيْفٌ", "يَوْمٌ", "فِيْهِ", "تُوْبُوْا", "قَالُوْا", "كِيْلَ"] },
+  { num: 10, title: "Lesson 10: Sukoon / Jazm (سکون / جزم)", sub: "Silent Resting Mark Pronunciation", letters: ["أَبْ", "أَتْ", "أَثْ", "إِبْ", "إِتْ", "إِثْ", "أُبْ", "أُتْ", "أُثْ", "يَقْرَأُ", "تَعْلَمُوْنَ", "يَفْعَلُوْنَ", "نَعْبُدُ", "نَسْتَعِيْنُ"] },
+  { num: 11, title: "Lesson 11: Tashdeed (تشدید / مشدد)", sub: "Doubled Emphasized Letters", letters: ["أَبَّ", "أَبِّ", "أَبُّ", "إِبَّ", "إِبِّ", "إِبُّ", "أُبَّ", "أُبِّ", "أُبُّ", "حَقَّ", "رَبِّ", "مَدَّ", "عَمَّ", "إِنَّ"] },
+  { num: 12, title: "Lesson 12: Ahkam-e-Waqf o Rasm-ul-Khat (احکامِ وقف)", sub: "Stopping Rules and Quranic Orthography", letters: ["مـ (لازم)", "ط (مطلق)", "ج (جائز)", "ز (مجوز)", "ص (مرخص)", "قف (وقف)", "لا (عدم وقف)", "۝ (آیت مکمل)"] }
 ];
 
 // Master 30 Paras (Juz) Registry for Holy Quran & Tafseer
@@ -90,7 +90,7 @@ function generateDynamicSvgDataUri(book, pageNum, paraNum = null, language = nul
   const takhti = isQaida ? QAIDA_TAKHTIS[Math.min(QAIDA_TAKHTIS.length - 1, p - 1)] : null;
 
   if (takhti && isQaida) {
-    // Generate Takhti Header & Arabic letter boxes grid
+    // Generate Lesson Header & Arabic letter boxes grid
     const letters = takhti.letters || [];
     const cols = letters.length <= 16 ? 4 : (letters.length <= 20 ? 4 : 5);
     const boxW = Math.floor(520 / cols);
@@ -120,7 +120,7 @@ function generateDynamicSvgDataUri(book, pageNum, paraNum = null, language = nul
         <rect width="600" height="760" rx="16" fill="#ffffff" stroke="#c5a880" stroke-width="2"/>
         <rect x="12" y="12" width="576" height="736" rx="12" fill="none" stroke="#e2e8f0" stroke-width="1"/>
 
-        <!-- Takhti Title Banner -->
+        <!-- Lesson Title Banner -->
         <rect x="35" y="24" width="530" height="74" rx="12" fill="#ecfdf5" stroke="#10b981" stroke-width="1.5"/>
         <text x="300" y="55" font-family="'Amiri', 'Plus Jakarta Sans', serif" font-size="21" font-weight="bold" fill="#047857" text-anchor="middle" direction="rtl">${takhti.title}</text>
         <text x="300" y="82" font-family="sans-serif" font-size="11" font-weight="600" fill="#b45309" text-anchor="middle">${takhti.sub}</text>
@@ -481,7 +481,7 @@ const ALHUDA_CURRICULUM = [
   },
   {
     id: "namaz-wudu-guide",
-    title: "Illustrated Namaz, Wudu & Duas",
+    title: "Illustrated Salah, Wudu & Duas",
     title_ar: "تعليم الصلاة والوضوء",
     category: "essentials",
     category_label: "Islamic Essentials",
