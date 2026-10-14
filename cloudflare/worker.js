@@ -1,6 +1,6 @@
 /**
  * ============================================================================
- * AL-HUDA ISLAMIC CENTRE LMS — UNIFIED CLOUDFLARE WORKER + STATIC ASSETS
+ * AL-HUDA ISLAMIC CENTRE LMS â UNIFIED CLOUDFLARE WORKER + STATIC ASSETS
  * File: cloudflare/worker.js
  * Purpose: Works directly with `npx wrangler deploy` on Cloudflare Workers.
  *          Handles /api/auth/* (logins), /api/db (Cloudflare D1),
@@ -12,7 +12,7 @@
  *     a signed, expiring session token (see cloudflare/auth.js).
  *   - /api/db and /api/storage REQUIRE a worker-issued Bearer token
  *     (any authenticated role). Anonymous access is denied.
- *   - Browser-side session checks are UX only — this worker is the enforcer.
+ *   - Browser-side session checks are UX only â this worker is the enforcer.
  *   - Phase 2 (2026-10-14): per-role DATA SCOPING is enforced in this file
  *     (see "Phase 2: per-role DATA SCOPING"). Owner = full access. Manager =
  *     full operational access (system_settings is read-only for managers;
@@ -27,7 +27,7 @@
  *     '12345678' default never authenticates. The owner migrates accounts
  *     via POST /api/auth/set-password.
  *
- * REQUIRED ENV VARS (set with `wrangler secret put <NAME>` — never in code):
+ * REQUIRED ENV VARS (set with `wrangler secret put <NAME>` â never in code):
  *   WORKER_AUTH_SECRET  - HMAC secret for session tokens (openssl rand -base64 48)
  *   OWNER_USERNAME      - owner login username
  *   OWNER_PASSWORD_HASH - sha256 hex of the owner password (echo -n 'pw' | sha256sum)
@@ -66,6 +66,12 @@ function corsHeadersFor(request, env) {
 }
 
 function json(request, env, data, status = 200) {
+  // 204 No Content must not carry a body — `new Response("{}", {status:204})`
+  // throws and turns every CORS preflight into a 500 (caught 2026-10-14:
+  // all browser logins were blocked at preflight). Return a null body.
+  if (status === 204) {
+    return new Response(null, { status, headers: corsHeadersFor(request, env) });
+  }
   return new Response(JSON.stringify(data), {
     status,
     headers: corsHeadersFor(request, env),
@@ -210,7 +216,7 @@ async function handleOwnerLogin(request, env) {
 
 // --- POST /api/auth/staff-login  { role, identifier, password } --------------
 // Verifies manager/teacher/parent credentials against D1. Only EXPLICITLY
-// set passwords are accepted — the '12345678' default and empty passwords
+// set passwords are accepted â the '12345678' default and empty passwords
 // NEVER authenticate here. If no explicit password exists for the account,
 // login fails and the owner must set one via the owner portal first.
 async function handleStaffLogin(request, env) {
@@ -477,7 +483,7 @@ function checkTableAccess(role, table, action) {
   if (role === 'teacher') {
     switch (table) {
       case 'students':
-        // update is notes-only (leave/reschedule requests) — enforced below.
+        // update is notes-only (leave/reschedule requests) â enforced below.
         return (action === 'select' || action === 'update') ? 'allow' : 'deny';
       case 'teachers':
         return action === 'select' ? 'allow' : 'deny';
@@ -498,7 +504,7 @@ function checkTableAccess(role, table, action) {
   if (role === 'parent') {
     switch (table) {
       case 'students':
-        // update is status/notes-only (mark-on-leave flow) — enforced below.
+        // update is status/notes-only (mark-on-leave flow) â enforced below.
         return (action === 'select' || action === 'update') ? 'allow' : 'deny';
       case 'families':
       case 'teachers': // reduced to safe subset in post-processing
@@ -591,7 +597,7 @@ function forceTeacherValues(values, sub) {
 }
 
 // Keep only whitelisted keys in an update patch (defense in depth: a teacher
-// may touch notes, a parent may touch status/notes — never ids or links).
+// may touch notes, a parent may touch status/notes â never ids or links).
 function whitelistPatch(values, allowedKeys) {
   const clean = {};
   const src = values || {};
@@ -676,7 +682,7 @@ function applyDbScope(body, role, sub, scope) {
     } else if (table === 'attendance_logs' || table === 'leave_requests' || table === 'class_schedules') {
       filters.push(scope.studentIds.length ? inList('student_id', scope.studentIds) : none());
     }
-    // teachers: no row filter — post-processing reduces to the safe subset.
+    // teachers: no row filter â post-processing reduces to the safe subset.
     scoped.filters = filters;
     return scoped;
   }
@@ -754,7 +760,7 @@ async function handleScopedDbRequest(ctx, auth) {
   const role = auth.role;
   const sub = String(auth.sub || '');
 
-  // Availability probe (GET) carries no table/action — pass through.
+  // Availability probe (GET) carries no table/action â pass through.
   if (request.method === 'GET') {
     return handleDbRequest(ctx);
   }
@@ -824,7 +830,7 @@ async function handleScopedDbRequest(ctx, auth) {
 // parent) get a server-enforced folder prefix; the client-supplied folder is
 // ignored for them. Reads are limited to the role's own prefix.
 // NOTE: files uploaded before this scoping (e.g. under "documents/") are NOT
-// under a scoped prefix, so restricted roles can no longer read them —
+// under a scoped prefix, so restricted roles can no longer read them â
 // manager/owner can. See PHASE2-NOTES.md for the one-time migration option.
 function scopedStorageFolder(role, sub) {
   const safeSub = String(sub || '').replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 60) || 'unknown';
@@ -838,7 +844,7 @@ async function handleScopedStorageRequest(ctx, auth) {
   const restricted = role === 'teacher' || role === 'parent';
   const url = new URL(request.url);
 
-  // Status probe (?key absent) — pass through.
+  // Status probe (?key absent) â pass through.
   if (request.method === 'GET' && !url.searchParams.get('key')) {
     return handleStorageRequest(ctx);
   }
