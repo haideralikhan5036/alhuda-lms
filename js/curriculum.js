@@ -470,7 +470,7 @@
           const pPages = (typeof getBookParaPages === 'function') ? getBookParaPages(book, p.para) : [];
           const countStr = pPages.length > 0 ? ` (${pPages.length} Pages)` : ` (${p.total_pages || 18} Pages)`;
           const pageTarget = p.page_start || 1;
-          return `<option value="${pageTarget}" data-para="${p.para}">Para ${p.para}: ${p.name_en || ('Para ' + p.para)} (${p.name_ur || p.name_ar || ''})${countStr}</option>`;
+          return `<option value="${pageTarget}" data-para="${p.para}">Para ${p.para}: ${p.name_en || ('Para ' + p.para)}${countStr}</option>`;
         }).join('');
 
         jumpSelect.onchange = function() {
@@ -576,7 +576,7 @@
           const parasList = (typeof QURAN_PARAS_INFO !== 'undefined' && Array.isArray(QURAN_PARAS_INFO)) ? QURAN_PARAS_INFO : (book.paras || []);
           const matchPara = parasList.find(p => Number(p.para) === CURRENT_READER_PARA) || { name_en: 'Para ' + CURRENT_READER_PARA, name_ur: '' };
           const langBadge = book.language ? ` [${book.language === 'ur' ? 'Urdu' : 'English'}]` : '';
-          descEl.innerText = `Para ${CURRENT_READER_PARA}: ${matchPara.name_en || ''} (${matchPara.name_ur || matchPara.name_ar || ''})${langBadge} — Page ${CURRENT_READER_PAGE}`;
+          descEl.innerText = `Para ${CURRENT_READER_PARA}: ${matchPara.name_en || ''}${langBadge} — Page ${CURRENT_READER_PAGE}`;
         } else if (book.chapters) {
           const matchCh = book.chapters.find(c => CURRENT_READER_PAGE >= (c.page_start || 1) && CURRENT_READER_PAGE <= (c.page_end || maxPages));
           descEl.innerText = matchCh ? `${matchCh.title} — ${matchCh.desc || ''}` : `Page ${CURRENT_READER_PAGE}`;
@@ -1540,7 +1540,7 @@
         : Array.from({ length: 30 }, (_, i) => ({ para: i + 1, name_en: `Para ${i + 1}`, name_ur: `پارہ ${i + 1}` }));
 
       select.innerHTML = paras.map(p => `
-        <option value="${p.para}">Para ${p.para}: ${p.name_en || ('Para ' + p.para)} (${p.name_ur || p.name_ar || ''})</option>
+        <option value="${p.para}">Para ${p.para}: ${p.name_en || ('Para ' + p.para)}</option>
       `).join('');
       select.value = defaultPara || 1;
     }
@@ -1593,7 +1593,7 @@
         : { name_en: `Para ${paraNum}` };
 
       if (cat === 'quran') {
-        if (fileLabel) fileLabel.innerHTML = `<i class="fa-solid fa-quran text-brandEmerald"></i> Select Quran Pages for Para ${paraNum} (${paraInfo.name_ur || paraInfo.name_en}) *`;
+        if (fileLabel) fileLabel.innerHTML = `<i class="fa-solid fa-quran text-brandEmerald"></i> Select Quran Pages for Para ${paraNum} (${paraInfo.name_en || ''}) *`;
         if (fileHint) fileHint.innerText = `All selected page images will be stored exclusively for Para ${paraNum}. Exact page order is preserved.`;
       } else if (cat === 'tafseer') {
         if (fileLabel) fileLabel.innerHTML = `<i class="fa-solid fa-book-atlas text-brandEmerald"></i> Select ${langLabel} Tafseer Pages for Para ${paraNum} *`;
