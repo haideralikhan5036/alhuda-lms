@@ -26,7 +26,8 @@
 
         // 2. Manager Portal Guard: require valid authenticated Manager session when ?role=manager is requested
         if (urlRole === 'manager' || mgrParam) {
-          var mgrRaw = sessionStorage.getItem('alhuda_manager_session') || localStorage.getItem('alhuda_logged_in_manager');
+          // Per-tab session only: a new tab must never inherit another tab's manager session.
+          var mgrRaw = sessionStorage.getItem('alhuda_manager_session');
           var mgrSession = null;
           if (mgrRaw) {
             try { mgrSession = JSON.parse(mgrRaw); } catch (e) { mgrSession = null; }
@@ -39,24 +40,12 @@
           return;
         }
 
-        // 3. Check existing logged in session if no explicit URL param was passed
-        var activeRole = localStorage.getItem('alhuda_active_portal_role');
-        var teacherSession = localStorage.getItem('alhuda_logged_in_teacher');
-        var parentSession = localStorage.getItem('alhuda_logged_in_parent');
-        var managerSession = localStorage.getItem('alhuda_logged_in_manager');
-
-        if (activeRole === 'teacher' && teacherSession) {
-          window.location.replace('teacher.html');
-          return;
-        }
-        if (activeRole === 'parent' && parentSession) {
-          window.location.replace('parent.html');
-          return;
-        }
-        if (activeRole === 'manager' && managerSession) {
-          window.location.replace('manager.html');
-          return;
-        }
+        // 3. SECURITY (2026-10-14): each portal gates ONLY on its own per-tab
+        // session. Never redirect away from the Admin Portal based on another
+        // portal's leftover state: localStorage is shared across tabs, so a
+        // teacher/parent/manager session from another tab must not decide
+        // navigation here. The Admin Portal always opens; its own gate below
+        // chooses between the owner login screen and the dashboard.
 
         // 4. Default Owner / Admin Portal (index.html): clear any stale teacher/parent lock so Admin Portal always opens cleanly
         localStorage.setItem('alhuda_active_portal_role', 'owner');

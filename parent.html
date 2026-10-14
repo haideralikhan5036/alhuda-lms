@@ -1196,7 +1196,8 @@
       const roleBanner = document.getElementById('parentRoleMismatchBanner');
       if (roleBanner) roleBanner.classList.add('hidden');
 
-      const savedParentRaw = sessionStorage.getItem('alhuda_parent_session') || localStorage.getItem('alhuda_logged_in_parent');
+      // Per-tab session only: closing the tab or opening a new one requires a fresh login.
+      const savedParentRaw = sessionStorage.getItem('alhuda_parent_session');
       let parsedParent = null;
       if (savedParentRaw) {
         try {
@@ -1289,7 +1290,7 @@
               via: 'server'
             };
             try {
-              localStorage.setItem('alhuda_logged_in_parent', JSON.stringify(sessionPayload));
+              // Per-tab session only: closing the tab or opening a new one requires a fresh login.
               sessionStorage.setItem('alhuda_parent_session', JSON.stringify(sessionPayload));
               localStorage.setItem('alhuda_active_portal_role', 'parent');
               localStorage.removeItem('alhuda_logged_in_teacher');
@@ -1373,7 +1374,7 @@
           authenticated_at: new Date().toISOString()
         };
 
-        localStorage.setItem('alhuda_logged_in_parent', JSON.stringify(sessionPayload));
+        // Per-tab session only: closing the tab or opening a new one requires a fresh login.
         sessionStorage.setItem('alhuda_parent_session', JSON.stringify(sessionPayload));
         localStorage.setItem('alhuda_active_portal_role', 'parent');
         localStorage.removeItem('alhuda_logged_in_teacher');
@@ -1422,10 +1423,9 @@
       CURRENT_STUDENT = student;
       localStorage.setItem('alhuda_selected_student_id', student.id);
       try {
-        const savedParent = JSON.parse(localStorage.getItem('alhuda_logged_in_parent') || '{}');
+        const savedParent = JSON.parse(sessionStorage.getItem('alhuda_parent_session') || '{}');
         if (savedParent && savedParent.family_id) {
           savedParent.selected_student_id = student.id;
-          localStorage.setItem('alhuda_logged_in_parent', JSON.stringify(savedParent));
           sessionStorage.setItem('alhuda_parent_session', JSON.stringify(savedParent));
         }
       } catch (e) {}

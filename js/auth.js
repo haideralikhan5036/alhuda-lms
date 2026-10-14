@@ -203,7 +203,9 @@
 
     // TEACHER & MANAGER PORTAL ROLE & SESSION MANAGEMENT
     function getAuthenticatedManagerSession() {
-      const raw = sessionStorage.getItem('alhuda_manager_session') || localStorage.getItem('alhuda_logged_in_manager');
+      // Per-tab session only (sessionStorage): a new tab must never inherit
+      // another tab's manager session via shared localStorage.
+      const raw = sessionStorage.getItem('alhuda_manager_session');
       if (!raw) return null;
       try {
         const parsed = JSON.parse(raw);
@@ -392,7 +394,7 @@
       }
 
       if (matchedTeacher) {
-        localStorage.setItem('alhuda_logged_in_teacher', JSON.stringify(matchedTeacher));
+        // Per-tab session only: closing the tab or opening a new one requires fresh login.
         sessionStorage.setItem('alhuda_teacher_session', JSON.stringify(matchedTeacher));
         localStorage.setItem('alhuda_active_portal_role', 'teacher');
         closeModal('modalTeacherLogin');
