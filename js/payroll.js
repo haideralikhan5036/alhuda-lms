@@ -88,7 +88,7 @@
         courseLabel = 'Weekend Quran (Saturday & Sunday)';
       } else {
         baseRate = 2200;
-        courseLabel = 'Noorani Qaida / Nazra Quran';
+        courseLabel = 'Noorani Qaida / Quran Reading';
       }
 
       const finalRate = baseRate + teacherIncrement;
