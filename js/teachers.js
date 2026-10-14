@@ -8,6 +8,9 @@
  */
 
     // TEACHER ACCOUNTS & CREDENTIALS STORAGE ENGINE
+    // Stash of the teacher's raw `address` DB value when the edit modal opens,
+    // so profile updates can preserve credential JSON (password hash) stored there.
+    let _editTeacherOrigAddress = '';
     function getTeacherAccounts() {
       return JSON.parse(localStorage.getItem('alhuda_teacher_accounts') || '{}');
     }
@@ -548,6 +551,7 @@
     function prepareAddTeacherModal() {
       const editIdInput = document.getElementById('editTeacherId');
       if (editIdInput) editIdInput.value = '';
+      _editTeacherOrigAddress = '';
 
       const titleEl = document.getElementById('modalTeacherTitle');
       if (titleEl) titleEl.innerHTML = '<i class="fa-solid fa-chalkboard-user text-brandEmerald"></i> Register Teacher Profile (Full Details)';
@@ -620,6 +624,7 @@
       const acc = accounts[teacherId] || {};
 
       document.getElementById('editTeacherId').value = teacher.id;
+      _editTeacherOrigAddress = teacher.address || '';
       const titleEl = document.getElementById('modalTeacherTitle');
       if (titleEl) titleEl.innerHTML = `<i class="fa-solid fa-pen-to-square text-amber-500"></i> Edit Teacher Profile: <span class="text-slate-900">${teacher.full_name}</span>`;
 
@@ -1247,9 +1252,23 @@
       const auto_sync_zoom = document.getElementById('tZoomAutoSync')?.checked;
 
       if (editTeacherId) {
-        // UPDATE MODE
+        // UPDATE MODE — preserve portal credentials (e.g. the login password
+        // hash) stored as JSON in teachers.address. Merge the plain-text
+        // residential address into the existing JSON instead of overwriting it.
+        let addressToSave = address;
+        try {
+          const origRaw = String(_editTeacherOrigAddress || '').trim();
+          if (origRaw.startsWith('{')) {
+            const origMeta = JSON.parse(origRaw);
+            if (origMeta && typeof origMeta === 'object' && !Array.isArray(origMeta)) {
+              origMeta.residential_address = address || origMeta.residential_address || origMeta.address || '';
+              origMeta.address = address || origMeta.address || '';
+              addressToSave = JSON.stringify(origMeta);
+            }
+          }
+        } catch (e) {}
         const { error } = await db.from('teachers').update({
-          full_name, father_name, phone, alt_phone, address, witness_name, witness_phone, rate_per_slot, working_shift
+          full_name, father_name, phone, alt_phone, address: addressToSave, witness_name, witness_phone, rate_per_slot, working_shift
         }).eq('id', editTeacherId);
 
         if (error) {
