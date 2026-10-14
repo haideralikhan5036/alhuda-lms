@@ -1296,7 +1296,7 @@ function _buildSelectedStudentWorkspaceHtml(family, student, famSchedules, famLo
                   </div>
                   ${p.hasLesson ? `
                     <div>
-                      <span class="text-[10px] font-bold text-slate-400 uppercase block">Book / Surah / Sabaq</span>
+                      <span class="text-[10px] font-bold text-slate-400 uppercase block">Book / Surah / Lesson</span>
                       <strong class="text-slate-900 block">${_esc360(p.bookTitle || p.summaryTitle)}</strong>
                     </div>
                     <div>
@@ -1325,7 +1325,7 @@ function _buildSelectedStudentWorkspaceHtml(family, student, famSchedules, famLo
 
   // SUB-VIEW 2: ACADEMIC PROGRESS REPORT
   else if (subView === 'report') {
-    const currentLevel = stuMeta.current_level || student.course_id || 'Noorani Qaida / Nazra Quran';
+    const currentLevel = stuMeta.current_level || student.course_id || 'Noorani Qaida / Quran Reading';
     const currentSabaq = stuMeta.current_sabaq || (stuLogs[0] ? _parseLessonDetails360(stuLogs[0]).summaryTitle : 'In Progress');
     const teacherEval = stuMeta.overall_evaluation || (attendancePct >= 85 ? 'Excellent Consistency' : 'Needs Regular Attendance');
 
@@ -1346,7 +1346,7 @@ function _buildSelectedStudentWorkspaceHtml(family, student, famSchedules, famLo
           <div class="p-3.5 rounded-xl bg-slate-50 border border-slate-200">
             <span class="text-[10px] font-bold text-slate-400 uppercase block">Current Syllabus / Level</span>
             <strong class="text-sm text-slate-900 block mt-0.5">${_esc360(currentLevel)}</strong>
-            <span class="text-slate-500 block mt-0.5">Latest Sabaq: ${_esc360(currentSabaq)}</span>
+            <span class="text-slate-500 block mt-0.5">Latest Lesson: ${_esc360(currentSabaq)}</span>
           </div>
           <div class="p-3.5 rounded-xl bg-slate-50 border border-slate-200">
             <span class="text-[10px] font-bold text-slate-400 uppercase block">Attendance Accuracy</span>
@@ -3641,7 +3641,7 @@ function openRecordDailyLessonModal(familyId, studentId, presetDate = '') {
         </div>
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div>
-            <label class="font-extrabold text-slate-700 block mb-1">Book / Surah / Sabaq *</label>
+            <label class="font-extrabold text-slate-700 block mb-1">Book / Surah / Lesson *</label>
             <input type="text" id="fwLessonBook" value="${_esc360(student.course_id || 'Surah Al-Baqarah / Noorani Qaida')}" required class="w-full p-2.5 rounded-xl border border-slate-300 font-bold text-slate-900">
           </div>
           <div>
@@ -3821,10 +3821,10 @@ function openUpdateStudentProgressModal(familyId, studentId) {
       <form onsubmit="submitUpdateStudentProgressForm(event, '${_esc360(familyId)}', '${_esc360(student.id)}')" class="space-y-4 text-xs">
         <div>
           <label class="font-extrabold text-slate-700 block mb-1">Current Level / Book *</label>
-          <input type="text" id="fwProgLevel" value="${_esc360(stuMeta.current_level || student.course_id || 'Nazra Quran')}" required class="w-full p-2.5 rounded-xl border border-slate-300 font-bold text-slate-900">
+          <input type="text" id="fwProgLevel" value="${_esc360(stuMeta.current_level || student.course_id || 'Quran Reading')}" required class="w-full p-2.5 rounded-xl border border-slate-300 font-bold text-slate-900">
         </div>
         <div>
-          <label class="font-extrabold text-slate-700 block mb-1">Current Sabaq (Para / Surah / Takhti) *</label>
+          <label class="font-extrabold text-slate-700 block mb-1">Current Lesson (Para / Surah / Lesson) *</label>
           <input type="text" id="fwProgSabaq" value="${_esc360(stuMeta.current_sabaq || 'Para 1 - Surah Al-Baqarah')}" required class="w-full p-2.5 rounded-xl border border-slate-300 font-bold text-slate-900">
         </div>
         <div>
