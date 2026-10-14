@@ -2141,7 +2141,7 @@
                   <i class="fa-solid fa-wallet"></i>
                 </div>
                 <div>
-                  <span class="text-[10px] font-black uppercase tracking-wider text-emerald-800 block">Available Advance Credit (فالتو جمع شدہ رقم / پیشگی بیلنس)</span>
+                  <span class="text-[10px] font-black uppercase tracking-wider text-emerald-800 block">Available Advance Credit (Excess Collected Amount / Advance Balance)</span>
                   <span class="text-xs font-extrabold text-emerald-950">
                     Previous overpayment available: <strong id="feeAdvanceCreditAvailableAmt" class="text-emerald-700 font-mono text-sm">--</strong>
                   </span>
@@ -2233,7 +2233,7 @@
               <div class="col-span-full bg-emerald-50/80 border border-emerald-300 p-3 rounded-2xl flex items-center justify-between flex-wrap gap-2.5 shadow-2xs">
                 <label class="flex items-center gap-2 cursor-pointer text-xs font-bold text-emerald-950 select-none">
                   <input type="checkbox" id="feeToggleAutoSendEmail" checked class="w-4 h-4 rounded text-emerald-700 accent-emerald-700">
-                  <span><i class="fa-solid fa-paper-plane text-emerald-700 mr-1"></i> Auto-Send Official Invoice Email on Payment (والدین کو ای میل بھیجیں)</span>
+                  <span><i class="fa-solid fa-paper-plane text-emerald-700 mr-1"></i> Auto-Send Official Invoice Email on Payment (Send Email to Parents)</span>
                 </label>
                 <div class="text-[11px] text-emerald-800 flex items-center gap-1.5">
                   <span>Sender / CC: <strong id="feeOfficialEmailDisplay" class="font-mono font-bold text-emerald-950">ceoislamiccentre@gmail.com</strong></span>
@@ -2932,7 +2932,7 @@
         </div>
 
         <div>
-          <label class="block font-bold mb-1 text-slate-700">Daily Sabaq & Lesson Progress Notes:</label>
+          <label class="block font-bold mb-1 text-slate-700">Daily Lesson & Progress Notes:</label>
           <textarea id="dashAttNotes" rows="2" placeholder="e.g. Surah Al-Baqarah v1-10, Tajweed Rules, Makharij practice" class="w-full p-2.5 border border-slate-300 rounded-lg text-xs"></textarea>
         </div>
 
@@ -3488,7 +3488,7 @@
             </div>
             <span class="text-[10px] bg-emerald-600 text-white px-2 py-0.5 rounded-full font-bold">Auto-Linked</span>
           </div>
-          <p class="text-[11px] text-slate-600">Parents can log into the LMS to track daily Sabaq, lesson notes, and fee receipts.</p>
+          <p class="text-[11px] text-slate-600">Parents can log into the LMS to track daily lessons, lesson notes, and fee receipts.</p>
 
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
@@ -3596,7 +3596,7 @@
               <select id="stuCourseSelect" required class="w-full p-2.5 border border-emerald-400 rounded-lg font-bold text-slate-800">
                 <option value="Noorani Qaida">1. Noorani Qaida</option>
                 <option value="Quran Reading with Tajweed">2. Quran Reading with Tajweed</option>
-                <option value="Quran Memorization / Hifz">3. Quran Memorization / Hifz</option>
+                <option value="Quran Memorization / Hifz">3. Quran Memorization</option>
                 <option value="Advanced Tajweed Rules">4. Advanced Tajweed Rules</option>
                 <option value="Tafseer-ul-Quran">5. Tafseer-ul-Quran</option>
                 <option value="Arabic Language & Grammar">6. Arabic Language & Grammar</option>
@@ -3951,7 +3951,7 @@
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label class="block font-bold mb-1">Teacher Full Name *:</label>
-              <input type="text" id="tFullName" required placeholder="Qari / Ustadha Full Name" oninput="autoSuggestTeacherUsername(this.value)" class="w-full p-2.5 border rounded-lg font-semibold">
+              <input type="text" id="tFullName" required placeholder="Teacher Full Name" oninput="autoSuggestTeacherUsername(this.value)" class="w-full p-2.5 border rounded-lg font-semibold">
             </div>
             <div>
               <label class="block font-bold mb-1">Father / Guardian Name:</label>
@@ -3969,7 +3969,7 @@
             </div>
             <div>
               <label class="block font-bold mb-1">Qualification & Ijazah:</label>
-              <input type="text" id="tQualification" placeholder="e.g. Hafiz-e-Quran / Dars-e-Nizami / Shahadat-ul-Almiyah" class="w-full p-2.5 border rounded-lg font-semibold">
+              <input type="text" id="tQualification" placeholder="e.g. Quran Memorizer / Dars-e-Nizami / Shahadat-ul-Almiyah" class="w-full p-2.5 border rounded-lg font-semibold">
             </div>
           </div>
 
@@ -4405,8 +4405,8 @@
               <label class="block font-bold mb-1 text-slate-700">Preferred Course *:</label>
               <select id="trialCourse" class="w-full p-2.5 bg-white border border-purple-300 rounded-lg font-bold text-purple-900">
                 <option value="Noorani Qaida & Basic Arabic">📖 Noorani Qaida & Basic Arabic</option>
-                <option value="Nazra Quran with Tajweed">🕌 Nazra Quran with Tajweed Rules</option>
-                <option value="Quran Memorization (Hifz-ul-Quran)">⭐ Quran Memorization (Hifz-ul-Quran)</option>
+                <option value="Nazra Quran with Tajweed">🕌 Quran Reading with Tajweed Rules</option>
+                <option value="Quran Memorization (Hifz-ul-Quran)">⭐ Quran Memorization</option>
                 <option value="Islamic Studies & Daily Duas">🤲 Islamic Studies & Daily Masnoon Duas</option>
                 <option value="Advanced Tajweed & Tarteel">✨ Advanced Tajweed & Tarteel</option>
               </select>
@@ -4415,8 +4415,8 @@
               <label class="block font-bold mb-1 text-slate-700">Preferred Teacher Gender:</label>
               <select id="trialTeacherGenderPref" class="w-full p-2.5 bg-white border border-slate-300 rounded-lg font-bold text-slate-800">
                 <option value="Any">No Preference (Any Qualified Instructor)</option>
-                <option value="Male">Male Qari / Ustad</option>
-                <option value="Female">Female Qariah / Alimah</option>
+                <option value="Male">Male Teacher</option>
+                <option value="Female">Female Teacher</option>
               </select>
             </div>
           </div>
