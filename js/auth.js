@@ -153,6 +153,13 @@
         try {
           sessionStorage.setItem('alhuda_owner_token', result.token);
         } catch (err) {}
+        // Fresh token: forget any pre-login "D1 unavailable" probe result
+        // so the next data call re-checks D1 WITH this token.
+        try {
+          if (typeof window.resetCloudflareD1Availability === 'function') {
+            window.resetCloudflareD1Availability();
+          }
+        } catch (err) {}
         try {
           localStorage.setItem('alhuda_active_portal_role', 'owner');
         } catch (err) {}

@@ -331,7 +331,11 @@
           headers: Object.assign({ 'Accept': 'application/json' }, authHeaders())
         });
         if (!res.ok) {
-          _d1Status = false;
+          // 401 = probe ran before login (no token yet). Do NOT cache this:
+          // after login the next probe retries WITH the token. Caching it
+          // (pre-fix behaviour) trapped the portal in local-mirror mode
+          // with 0 rows even after a successful login (caught 2026-10-14).
+          if (res.status !== 401) _d1Status = false;
           return false;
         }
         const json = await res.json();
@@ -350,6 +354,13 @@
 
     return _d1CheckPromise;
   }
+
+  // Called after any successful portal login: forget the old probe result
+  // so the next data call re-checks D1 WITH the fresh token.
+  window.resetCloudflareD1Availability = function () {
+    _d1Status = null;
+    _d1CheckPromise = null;
+  };
 
   async function syncLocalStoreToD1Once(force = false) {
     try {
