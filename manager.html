@@ -281,7 +281,8 @@
       if (roleBanner) roleBanner.classList.add('hidden');
 
       // Verify existing authenticated Manager session
-      const savedMgrRaw = sessionStorage.getItem('alhuda_manager_session') || localStorage.getItem('alhuda_logged_in_manager');
+      // Per-tab session only: closing the tab or opening a new one requires a fresh login.
+      const savedMgrRaw = sessionStorage.getItem('alhuda_manager_session');
       let parsedMgr = null;
       if (savedMgrRaw) {
         try {
@@ -304,7 +305,6 @@
             role_title: creds.role_title,
             authenticated_at: parsedMgr.authenticated_at || new Date().toISOString()
           };
-          localStorage.setItem('alhuda_logged_in_manager', JSON.stringify(sessionPayload));
           sessionStorage.setItem('alhuda_manager_session', JSON.stringify(sessionPayload));
           localStorage.setItem('alhuda_active_portal_role', 'manager');
           window.location.replace('index.html?role=manager');
@@ -449,7 +449,7 @@
           authenticated_at: new Date().toISOString()
         };
 
-        localStorage.setItem('alhuda_logged_in_manager', JSON.stringify(sessionPayload));
+        // Per-tab session only: closing the tab or opening a new one requires a fresh login.
         sessionStorage.setItem('alhuda_manager_session', JSON.stringify(sessionPayload));
         localStorage.setItem('alhuda_active_portal_role', 'manager');
         localStorage.removeItem('alhuda_logged_in_teacher');
