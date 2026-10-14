@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html><head><meta charset="UTF-8"><title>Auth Debug</title>
+<script src="js/cloudflare-db.js"></script>
+</head><body style="font-family:system-ui;padding:2rem">
+<h2>Auth Debug Test</h2>
+<div id="out">Testing...</div>
+<script>
+async function run() {
+  const out = document.getElementById('out');
+  let html = '';
+  
+  // 1. Check if function exists
+  html += '<p>1. getLmsAuthHeaders exists: <b>' + (typeof window.getLmsAuthHeaders === 'function') + '</b></p>';
+  
+  // 2. Check what it returns (without showing the token)
+  let headers = {};
+  try {
+    headers = window.getLmsAuthHeaders();
+    html += '<p>2. Headers returned: <b>' + JSON.stringify(Object.keys(headers)) + '</b></p>';
+    html += '<p>3. Has Authorization: <b>' + (!!headers['Authorization']) + '</b></p>';
+    if (headers['Authorization']) {
+      html += '<p>4. Token length: <b>' + headers['Authorization'].length + '</b> chars</p>';
+      html += '<p>5. Token prefix: <b>' + headers['Authorization'].substring(0, 20) + '...</b></p>';
+    }
+  } catch(e) {
+    html += '<p style="color:red">Error getting headers: ' + e.message + '</p>';
+  }
+  
+  // 3. Check sessionStorage directly
+  html += '<p>6. sessionStorage keys: <b>' + Object.keys(sessionStorage).join(', ') + '</b></p>';
+  
+  // 4. Try a test fetch if we have auth
+  if (headers['Authorization']) {
+    html += '<p>7. Testing fetch to /api/storage...</p>';
+    out.innerHTML = html;
+    try {
+      const testUrl = 'https://alhuda-lms.ceoislamiccentre.workers.dev/api/storage?key=course_material%2F1790853675775_Qaida_Nooraniya_Eng_page_1.webp';
+      const res = await fetch(testUrl, { headers: headers });
+      html += '<p>8. Fetch status: <b>' + res.status + '</b></p>';
+      if (res.ok) {
+        const blob = await res.blob();
+        html += '<p style="color:green">9. SUCCESS! Got ' + blob.size + ' bytes</p>';
+      } else {
+        html += '<p style="color:red">9. FAILED with HTTP ' + res.status + '</p>';
+      }
+    } catch(e) {
+      html += '<p style="color:red">8. Fetch error: ' + e.message + '</p>';
+    }
+  } else {
+    html += '<p style="color:orange">7. Skipping fetch test — no auth token available. Please log in to the Admin portal first, then open this page.</p>';
+  }
+  
+  out.innerHTML = html;
+}
+run();
+</script>
+</body></html>
