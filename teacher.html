@@ -393,7 +393,7 @@
           </div>
           <div>
             <h2 class="text-base sm:text-lg font-extrabold text-slate-900">Teacher Portal Login</h2>
-            <p class="text-xs text-slate-500">Sign in to access your authorized classes, roster &amp; Sabaq logs</p>
+            <p class="text-xs text-slate-500">Sign in to access your authorized classes, roster &amp; Lesson logs</p>
           </div>
         </div>
 
@@ -605,7 +605,7 @@
                   <span id="heroTeacherZoomStatus" class="px-2 py-0.5 bg-slate-100 text-slate-600 border border-slate-200 rounded-full font-bold text-[11px] sm:text-xs">Zoom Status</span>
                 </div>
                 <p class="text-xs text-slate-500 mt-1 line-clamp-2 sm:line-clamp-none">
-                  Your Al-Huda LMS operations cockpit. Manage today's live classes, record Sabaq progress, and review your weekly timetable.
+                  Your Al-Huda LMS operations cockpit. Manage today's live classes, record Lesson progress, and review your weekly timetable.
                 </p>
               </div>
             </div>
@@ -4358,36 +4358,36 @@
     }
 
     const QURAN_PARAS_LIST = [
-      { para: 1, name: "Alif Lam Meem (الم)", page_start: 1, page_end: 18 },
-      { para: 2, name: "Sayaqool (سیقول)", page_start: 19, page_end: 36 },
-      { para: 3, name: "Tilka-r-Rusul (تلک الرسل)", page_start: 37, page_end: 54 },
-      { para: 4, name: "Lan Tanaaloo (لن تنالوا)", page_start: 55, page_end: 72 },
-      { para: 5, name: "Wal Mohsanat (والمحصنت)", page_start: 73, page_end: 90 },
-      { para: 6, name: "La Yuhibbullah (لا یحب اللہ)", page_start: 91, page_end: 108 },
-      { para: 7, name: "Wa Iza Samiu (واذا سمعوا)", page_start: 109, page_end: 126 },
-      { para: 8, name: "Wa Lau Annana (ولو اننا)", page_start: 127, page_end: 144 },
-      { para: 9, name: "Qalal Malao (قال الملاء)", page_start: 145, page_end: 162 },
-      { para: 10, name: "Wa A'lamoo (واعلموا)", page_start: 163, page_end: 180 },
-      { para: 11, name: "Ya'taziroon (یعتذرون)", page_start: 181, page_end: 198 },
-      { para: 12, name: "Wa Mamin Da'abbat (ومامن دابة)", page_start: 199, page_end: 216 },
-      { para: 13, name: "Wa Ma Ubrioo (وما ابری)", page_start: 217, page_end: 234 },
-      { para: 14, name: "Rubama (ربما)", page_start: 235, page_end: 252 },
-      { para: 15, name: "Subhanallazi (سبحن الذی)", page_start: 253, page_end: 270 },
-      { para: 16, name: "Qala Alam (قال الم)", page_start: 271, page_end: 288 },
-      { para: 17, name: "Iqtaraba Lin-Nasi (اقترب للناس)", page_start: 289, page_end: 306 },
-      { para: 18, name: "Qad Aflaha (قد افلح)", page_start: 307, page_end: 324 },
-      { para: 19, name: "Wa Qalal Lazina (وقال الذین)", page_start: 325, page_end: 342 },
-      { para: 20, name: "Am-man Khalaq (امن خلق)", page_start: 343, page_end: 360 },
-      { para: 21, name: "Utlu Ma Oohiya (اتل ما اوحی)", page_start: 361, page_end: 378 },
-      { para: 22, name: "Wa Man Yaqnut (ومن یقنت)", page_start: 379, page_end: 396 },
-      { para: 23, name: "Wa Maliya (ومالی)", page_start: 397, page_end: 414 },
-      { para: 24, name: "Fa-man Azlam (فمن اظلم)", page_start: 415, page_end: 432 },
-      { para: 25, name: "Ilaihi Yuraddu (الیہ یرد)", page_start: 433, page_end: 450 },
-      { para: 26, name: "Ha-Meem (حم)", page_start: 451, page_end: 468 },
-      { para: 27, name: "Qala Fama Khatbukum (قال فما خطبکم)", page_start: 469, page_end: 486 },
-      { para: 28, name: "Qad Sami Allah (قد سمع اللہ)", page_start: 487, page_end: 504 },
-      { para: 29, name: "Tabarakallazi (تبارک الذی)", page_start: 505, page_end: 524 },
-      { para: 30, name: "Amma Yatasa'aloon (عمّ یتساءلون)", page_start: 525, page_end: 548 }
+      { para: 1, name: "Alif Lam Meem", page_start: 1, page_end: 18 },
+      { para: 2, name: "Sayaqool", page_start: 19, page_end: 36 },
+      { para: 3, name: "Tilka-r-Rusul", page_start: 37, page_end: 54 },
+      { para: 4, name: "Lan Tanaaloo", page_start: 55, page_end: 72 },
+      { para: 5, name: "Wal Mohsanat", page_start: 73, page_end: 90 },
+      { para: 6, name: "La Yuhibbullah", page_start: 91, page_end: 108 },
+      { para: 7, name: "Wa Iza Samiu", page_start: 109, page_end: 126 },
+      { para: 8, name: "Wa Lau Annana", page_start: 127, page_end: 144 },
+      { para: 9, name: "Qalal Malao", page_start: 145, page_end: 162 },
+      { para: 10, name: "Wa A'lamoo", page_start: 163, page_end: 180 },
+      { para: 11, name: "Ya'taziroon", page_start: 181, page_end: 198 },
+      { para: 12, name: "Wa Mamin Da'abbat", page_start: 199, page_end: 216 },
+      { para: 13, name: "Wa Ma Ubrioo", page_start: 217, page_end: 234 },
+      { para: 14, name: "Rubama", page_start: 235, page_end: 252 },
+      { para: 15, name: "Subhanallazi", page_start: 253, page_end: 270 },
+      { para: 16, name: "Qala Alam", page_start: 271, page_end: 288 },
+      { para: 17, name: "Iqtaraba Lin-Nasi", page_start: 289, page_end: 306 },
+      { para: 18, name: "Qad Aflaha", page_start: 307, page_end: 324 },
+      { para: 19, name: "Wa Qalal Lazina", page_start: 325, page_end: 342 },
+      { para: 20, name: "Am-man Khalaq", page_start: 343, page_end: 360 },
+      { para: 21, name: "Utlu Ma Oohiya", page_start: 361, page_end: 378 },
+      { para: 22, name: "Wa Man Yaqnut", page_start: 379, page_end: 396 },
+      { para: 23, name: "Wa Maliya", page_start: 397, page_end: 414 },
+      { para: 24, name: "Fa-man Azlam", page_start: 415, page_end: 432 },
+      { para: 25, name: "Ilaihi Yuraddu", page_start: 433, page_end: 450 },
+      { para: 26, name: "Ha-Meem", page_start: 451, page_end: 468 },
+      { para: 27, name: "Qala Fama Khatbukum", page_start: 469, page_end: 486 },
+      { para: 28, name: "Qad Sami Allah", page_start: 487, page_end: 504 },
+      { para: 29, name: "Tabarakallazi", page_start: 505, page_end: 524 },
+      { para: 30, name: "Amma Yatasa'aloon", page_start: 525, page_end: 548 }
     ];
 
     function onTeacherTafseerLanguageChanged(lang) {
@@ -4477,7 +4477,7 @@
         if (paraSelect) {
           const parasList = (typeof QURAN_PARAS_INFO !== 'undefined' && Array.isArray(QURAN_PARAS_INFO)) ? QURAN_PARAS_INFO : (book.paras || QURAN_PARAS_LIST);
           paraSelect.innerHTML = parasList.map(p => `
-            <option value="${p.para}">Para ${p.para}: ${p.name_en || p.name || ('Juz ' + p.para)} (${p.name_ur || p.name_ar || ''})</option>
+            <option value="${p.para}">Para ${p.para}: ${p.name_en || p.name || ('Juz ' + p.para)}</option>
           `).join('');
 
           let targetPara = defaultPara || 1;
@@ -4491,7 +4491,7 @@
         if (paraSelect) {
           const parasList = (typeof QURAN_PARAS_INFO !== 'undefined' && Array.isArray(QURAN_PARAS_INFO)) ? QURAN_PARAS_INFO : (book.paras || QURAN_PARAS_LIST);
           paraSelect.innerHTML = parasList.map(p => `
-            <option value="${p.para}">Para ${p.para}: ${p.name_en || p.name || ('Juz ' + p.para)} (${p.name_ur || p.name_ar || ''})</option>
+            <option value="${p.para}">Para ${p.para}: ${p.name_en || p.name || ('Juz ' + p.para)}</option>
           `).join('');
 
           let targetPara = defaultPara;
@@ -4691,7 +4691,7 @@
         let topics = [];
         if (book.id === 'holy-quran-16-line' && book.paras) {
           topics = book.paras.map(p => ({
-            title: `Para ${p.para} • ${p.name_ur || ''} (${p.name_ar || ''})`,
+            title: `Para ${p.para} • ${p.name_en || p.name || ''}`,
             page: p.page_start,
             sub: `Page ${p.page_start} - ${p.page_end}`
           }));
@@ -5171,7 +5171,7 @@
           const pPages = (typeof getBookParaPages === 'function') ? getBookParaPages(book, p.para) : [];
           const countStr = pPages.length > 0 ? ` (${pPages.length} Pages)` : ` (${p.total_pages || 18} Pages)`;
           const pageTarget = p.page_start || 1;
-          return `<option value="${pageTarget}" data-para="${p.para}">Para ${p.para}: ${p.name_en || ('Para ' + p.para)} (${p.name_ur || p.name_ar || ''})${countStr}</option>`;
+          return `<option value="${pageTarget}" data-para="${p.para}">Para ${p.para}: ${p.name_en || ('Para ' + p.para)}${countStr}</option>`;
         }).join('');
 
         jumpSelect.onchange = function() {
@@ -5273,7 +5273,7 @@
           const parasList = (typeof QURAN_PARAS_INFO !== 'undefined' && Array.isArray(QURAN_PARAS_INFO)) ? QURAN_PARAS_INFO : (book.paras || []);
           const matchPara = parasList.find(p => Number(p.para) === CURRENT_READER_PARA) || { name_en: 'Para ' + CURRENT_READER_PARA, name_ur: '' };
           const langBadge = book.language ? ` [${book.language === 'ur' ? 'Urdu' : 'English'}]` : '';
-          descEl.innerText = `Para ${CURRENT_READER_PARA}: ${matchPara.name_en || ''} (${matchPara.name_ur || matchPara.name_ar || ''})${langBadge} — Page ${CURRENT_READER_PAGE}`;
+          descEl.innerText = `Para ${CURRENT_READER_PARA}: ${matchPara.name_en || ''}${langBadge} — Page ${CURRENT_READER_PAGE}`;
         } else if (book.chapters) {
           const matchCh = book.chapters.find(c => CURRENT_READER_PAGE >= (c.page_start || 1) && CURRENT_READER_PAGE <= (c.page_end || maxPages));
           descEl.innerText = matchCh ? `${matchCh.title} — ${matchCh.desc || ''}` : `Page ${CURRENT_READER_PAGE}`;
@@ -7979,7 +7979,7 @@
         if (paraSelect) {
           const parasList = (typeof QURAN_PARAS_INFO !== 'undefined' && Array.isArray(QURAN_PARAS_INFO)) ? QURAN_PARAS_INFO : (book.paras || QURAN_PARAS_LIST);
           paraSelect.innerHTML = parasList.map(p => `
-            <option value="${p.para}">Para ${p.para}: ${p.name_en || p.name || ('Juz ' + p.para)} (${p.name_ur || p.name_ar || ''})</option>
+            <option value="${p.para}">Para ${p.para}: ${p.name_en || p.name || ('Juz ' + p.para)}</option>
           `).join('');
 
           let targetPara = defaultPara || 1;
@@ -7993,7 +7993,7 @@
         if (paraSelect) {
           const parasList = (typeof QURAN_PARAS_INFO !== 'undefined' && Array.isArray(QURAN_PARAS_INFO)) ? QURAN_PARAS_INFO : (book.paras || QURAN_PARAS_LIST);
           paraSelect.innerHTML = parasList.map(p => `
-            <option value="${p.para}">Para ${p.para}: ${p.name_en || p.name || ('Juz ' + p.para)} (${p.name_ur || p.name_ar || ''})</option>
+            <option value="${p.para}">Para ${p.para}: ${p.name_en || p.name || ('Juz ' + p.para)}</option>
           `).join('');
 
           let targetPara = defaultPara || 1;
@@ -8174,7 +8174,7 @@ ADVANCE CLASS SESSION DETAILS:
 ${remarks ? `• Teacher Remarks: ${remarks}\n` : ''}
 ══════════════════════════════════════
 
-The attendance and lesson Sabaq records have been updated in your Parent Portal.
+The attendance and lesson records have been updated in your Parent Portal.
 
 Jazakumullahu Khairan!
 Al-Huda Islamic Centre Management
