@@ -151,7 +151,13 @@
 
       if (result && result.ok && result.token) {
         try {
-          sessionStorage.setItem('alhuda_owner_token', result.token);
+          // Use the resilient setter (memory + sessionStorage) so the book
+          // reader can always access the token, even if storage is blocked.
+          if (typeof window.setLmsAuthToken === 'function') {
+            window.setLmsAuthToken(result.token);
+          } else {
+            sessionStorage.setItem('alhuda_owner_token', result.token);
+          }
         } catch (err) {}
         // Fresh token: forget any pre-login "D1 unavailable" probe result
         // so the next data call re-checks D1 WITH this token.
