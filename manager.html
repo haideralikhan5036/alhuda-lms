@@ -14,7 +14,6 @@
   <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700;800;900&family=Inter:wght@400;500;600;700;800;900&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <script src="https://cdn.tailwindcss.com"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="js/cloudflare-db.js"></script>
   <script>
     tailwind.config = {
@@ -119,9 +118,9 @@
   </main>
 
   <script>
-    const SUPABASE_URL = "https://ldgzuyroejzrvktksugy.supabase.co";
-    const SUPABASE_KEY = "sb_publishable_rP38XXgYoYBTPJlCxtwMUg_RPupFrKg";
-    const db = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+    // Cloudflare is the sole database backend (Supabase fully removed 2026-10-14).
+    // window.supabase.createClient is overridden by js/cloudflare-db.js to return the Cloudflare D1/R2 client.
+    const db = window.supabase.createClient();
 
     function parseEmployeeMeta(rawStr) {
       if (!rawStr) return {};

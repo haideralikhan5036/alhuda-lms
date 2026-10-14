@@ -7,9 +7,9 @@
  * ============================================================================
  */
 
-    const SUPABASE_URL = "https://ldgzuyroejzrvktksugy.supabase.co";
-    const SUPABASE_KEY = "sb_publishable_rP38XXgYoYBTPJlCxtwMUg_RPupFrKg";
-    const db = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+    // Cloudflare is the sole database backend (Supabase fully removed 2026-10-14).
+    // window.supabase.createClient is overridden by js/cloudflare-db.js to return the Cloudflare D1/R2 client.
+    const db = window.supabase.createClient();
 
     var ALL_TEACHERS = [];
     var ALL_STUDENTS = [];
