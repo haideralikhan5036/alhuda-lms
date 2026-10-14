@@ -26,21 +26,58 @@
     }
 
     async function saveCustomBooks(books) {
+      let localOk = true;
       try {
         localStorage.setItem('alhuda_custom_books', JSON.stringify(books));
       } catch(e) {
+        localOk = false;
         console.warn("Could not save custom books to storage:", e);
       }
-      return await syncCustomBooksToD1Chunked(books);
+      const cloudOk = await syncCustomBooksToD1Chunked(books);
+      return localOk && cloudOk === true;
+    }
+
+    // Reports the real save outcome: success only when the book is persisted.
+    // Never claims success if the save did not complete.
+    async function saveCustomBooksWithReport(books, successMsg) {
+      const ok = await saveCustomBooks(books);
+      if (ok) {
+        alert(successMsg);
+      } else {
+        alert('⚠️ The material was prepared but could NOT be saved reliably.\n\n'
+          + 'Your pages were not lost from this screen, but they may not appear after refresh or on other devices.\n'
+          + 'Please check your internet connection and try saving again. Nothing was deleted.');
+      }
+      return ok;
     }
 
     async function syncCustomBooksToD1Chunked(books) {
       try {
-        if (typeof db === 'undefined' || !db || typeof db.from !== 'function') return;
+        if (typeof db === 'undefined' || !db || typeof db.from !== 'function') return false;
+        const localBooks = Array.isArray(books) ? books : [];
+
+        // SAFETY (catalog-wipe protection): never overwrite the cloud catalog with
+        // an empty/stale local list. Merge cloud + local instead (local wins on
+        // conflict); explicit deletes are enforced via the tombstone list.
+        let cloudBooks = [];
+        try {
+          const { data: idxRows } = await db.from('system_settings').select('value').eq('key', 'alhuda_custom_books_index').limit(1);
+          if (Array.isArray(idxRows) && idxRows.length > 0 && idxRows[0].value) {
+            const parsed = JSON.parse(idxRows[0].value);
+            if (Array.isArray(parsed)) cloudBooks = parsed;
+          }
+        } catch (e) { /* keep cloudBooks empty on read failure */ }
+        const deletedIds = (typeof getDeletedBookIds === 'function') ? getDeletedBookIds() : [];
+        const merged = localBooks.slice();
+        cloudBooks.forEach(function (cb) {
+          if (cb && cb.id && !merged.some(function (lb) { return lb && lb.id === cb.id; })) merged.push(cb);
+        });
+        const effectiveBooks = merged.filter(function (b) { return b && !deletedIds.includes(b.id); });
+
         const catalogIndex = [];
         const rowsToUpsert = [];
 
-        for (const b of (books || [])) {
+        for (const b of effectiveBooks) {
           const pages = Array.isArray(b.pages) ? b.pages : [];
           const bookMeta = {
             ...b,
@@ -79,8 +116,10 @@
         for (const row of rowsToUpsert) {
           await db.from('system_settings').upsert(row);
         }
+        return true;
       } catch (e) {
         console.warn('[Course Material D1 Sync] Notice:', e);
+        return false;
       }
     }
 
@@ -135,12 +174,15 @@
             books.forEach(b => {
               const total = Number(b.total_pages) || 0;
               if ((!b.pages || b.pages.length === 0) && total > 0) {
-                const hydratedPages = [];
+                // Preserve page indices: a missing page record leaves a hole
+                // (honest "not available") instead of shifting later pages up.
+                const hydratedPages = new Array(total);
+                let found = 0;
                 for (let i = 0; i < total; i++) {
                   const pVal = settingsMap.get(`BOOK_PAGE_${b.id}_${i}`);
-                  if (pVal) hydratedPages.push(pVal);
+                  if (pVal) { hydratedPages[i] = pVal; found++; }
                 }
-                if (hydratedPages.length > 0) {
+                if (found > 0) {
                   b.pages = hydratedPages;
                 }
               }
@@ -470,7 +512,7 @@
           const pPages = (typeof getBookParaPages === 'function') ? getBookParaPages(book, p.para) : [];
           const countStr = pPages.length > 0 ? ` (${pPages.length} Pages)` : ` (${p.total_pages || 18} Pages)`;
           const pageTarget = p.page_start || 1;
-          return `<option value="${pageTarget}" data-para="${p.para}">Para ${p.para}: ${p.name_en || ('Para ' + p.para)}${countStr}</option>`;
+          return `<option value="${pageTarget}" data-para="${p.para}">Para ${p.para}: ${p.name_en || ('Para ' + p.para)} (${p.name_ur || p.name_ar || ''})${countStr}</option>`;
         }).join('');
 
         jumpSelect.onchange = function() {
@@ -576,7 +618,7 @@
           const parasList = (typeof QURAN_PARAS_INFO !== 'undefined' && Array.isArray(QURAN_PARAS_INFO)) ? QURAN_PARAS_INFO : (book.paras || []);
           const matchPara = parasList.find(p => Number(p.para) === CURRENT_READER_PARA) || { name_en: 'Para ' + CURRENT_READER_PARA, name_ur: '' };
           const langBadge = book.language ? ` [${book.language === 'ur' ? 'Urdu' : 'English'}]` : '';
-          descEl.innerText = `Para ${CURRENT_READER_PARA}: ${matchPara.name_en || ''}${langBadge} — Page ${CURRENT_READER_PAGE}`;
+          descEl.innerText = `Para ${CURRENT_READER_PARA}: ${matchPara.name_en || ''} (${matchPara.name_ur || matchPara.name_ar || ''})${langBadge} — Page ${CURRENT_READER_PAGE}`;
         } else if (book.chapters) {
           const matchCh = book.chapters.find(c => CURRENT_READER_PAGE >= (c.page_start || 1) && CURRENT_READER_PAGE <= (c.page_end || maxPages));
           descEl.innerText = matchCh ? `${matchCh.title} — ${matchCh.desc || ''}` : `Page ${CURRENT_READER_PAGE}`;
@@ -623,23 +665,37 @@
 
       if (img) {
         if (spinner) spinner.classList.remove('hidden');
+        // Clear any previous honest-error state before rendering the new page.
+        const prevErr = document.getElementById('readerPageError');
+        if (prevErr) prevErr.style.display = 'none';
+        img.style.display = '';
 
         // Reset individual image transform - wrapper handles uniform scaling
         img.style.transform = 'none';
         applyReaderZoom();
 
         // Get URL with Content-Type awareness (Juz/Para + Language)
+        // NOTE: custom books (id starts with 'custom-') hold authentic uploaded
+        // pages. Never substitute a generated placeholder for them: if the real
+        // page cannot be resolved, show an honest "not available" state instead.
         let pageUrl = '';
+        const isCustomBook = !!(book && book.id && String(book.id).indexOf('custom-') === 0);
         if (typeof CURRICULUM_DATA !== 'undefined' && typeof CURRICULUM_DATA.getPageUrl === 'function') {
-          pageUrl = CURRICULUM_DATA.getPageUrl(book.id, CURRENT_READER_PAGE, CURRENT_READER_PARA, book.language);
+          const resolved = CURRICULUM_DATA.getPageUrl(book.id, CURRENT_READER_PAGE, CURRENT_READER_PARA, book.language);
+          pageUrl = (isCustomBook && typeof resolved === 'string' && resolved.indexOf('data:image/svg') === 0) ? '' : resolved;
         } else if (typeof book.getPageUrl === 'function') {
           pageUrl = book.getPageUrl(CURRENT_READER_PAGE, CURRENT_READER_PARA, book.language);
         } else if (book.pages && book.pages[CURRENT_READER_PAGE - 1]) {
           pageUrl = book.pages[CURRENT_READER_PAGE - 1];
-        } else if (typeof generateDynamicSvgDataUri === 'function') {
+        } else if (!isCustomBook && typeof generateDynamicSvgDataUri === 'function') {
           pageUrl = generateDynamicSvgDataUri(book, CURRENT_READER_PAGE, CURRENT_READER_PARA, book.language);
-        } else {
+        } else if (!isCustomBook) {
           pageUrl = generateDynamicSvgPage(book, CURRENT_READER_PAGE);
+        }
+
+        if (!pageUrl && isCustomBook) {
+          showReaderPageError(img, spinner, book, CURRENT_READER_PAGE, 'Page not available.');
+          return;
         }
 
         img.onload = function() {
@@ -652,6 +708,11 @@
 
         img.onerror = function() {
           img.onerror = null; // Prevent infinite error loops
+          if (isCustomBook) {
+            // Authentic uploaded content: never fabricate a replacement page.
+            showReaderPageError(img, spinner, book, CURRENT_READER_PAGE, 'Could not load this page.');
+            return;
+          }
           let fallback = '';
           if (typeof book.getFallbackPageUrl === 'function') {
             fallback = book.getFallbackPageUrl(CURRENT_READER_PAGE);
@@ -668,8 +729,70 @@
           }, 60);
         };
 
-        img.src = pageUrl;
+        loadReaderPageImage(img, pageUrl, function () {
+          // Authenticated fetch failed: run the same honest error/fallback decision.
+          if (typeof img.onerror === 'function') {
+            const handler = img.onerror;
+            img.onerror = null;
+            handler.call(img);
+          }
+        });
       }
+    }
+
+    // Loads a reader page image. Storage URLs (/api/storage) require the portal's
+    // Bearer <redacted>, which a plain <img> tag cannot send, so those are fetched with
+    // auth and displayed via a blob URL. Data-URI pages are set directly.
+    // onFetchError is invoked when the authenticated fetch fails.
+    let READER_BLOB_URL = null;
+    function loadReaderPageImage(img, pageUrl, onFetchError) {
+      if (READER_BLOB_URL) {
+        try { URL.revokeObjectURL(READER_BLOB_URL); } catch (e) {}
+        READER_BLOB_URL = null;
+      }
+      if (!pageUrl || pageUrl.indexOf('data:') === 0 || pageUrl.indexOf('blob:') === 0) {
+        img.src = pageUrl || '';
+        return;
+      }
+      const headers = (typeof window.getLmsAuthHeaders === 'function') ? window.getLmsAuthHeaders() : {};
+      fetch(pageUrl, { headers: headers })
+        .then(function (res) {
+          if (!res.ok) throw new Error('HTTP ' + res.status);
+          return res.blob();
+        })
+        .then(function (blob) {
+          READER_BLOB_URL = URL.createObjectURL(blob);
+          img.src = READER_BLOB_URL;
+        })
+        .catch(function () {
+          if (typeof onFetchError === 'function') onFetchError();
+          else if (spinner) spinner.classList.add('hidden');
+        });
+    }
+
+    // Honest empty state for authentic custom-book pages that cannot be displayed.
+    // Never generates placeholder content.
+    function showReaderPageError(img, spinner, book, pageNum, reason) {
+      if (spinner) spinner.classList.add('hidden');
+      if (READER_BLOB_URL) {
+        try { URL.revokeObjectURL(READER_BLOB_URL); } catch (e) {}
+        READER_BLOB_URL = null;
+      }
+      img.removeAttribute('src');
+      img.alt = '';
+      img.style.display = 'none';
+      let errBox = document.getElementById('readerPageError');
+      if (!errBox) {
+        errBox = document.createElement('div');
+        errBox.id = 'readerPageError';
+        errBox.style.cssText = 'padding:3rem 1.5rem;text-align:center;color:#475569;';
+        img.parentNode.insertBefore(errBox, img.nextSibling);
+      }
+      errBox.style.display = 'block';
+      errBox.innerHTML = '<div style="font-size:2.2rem;margin-bottom:.75rem;">&#9888;&#65039;</div>'
+        + '<div style="font-weight:700;color:#1e293b;margin-bottom:.35rem;">' + String(reason || 'Page not available.') + '</div>'
+        + '<div style="font-size:.85rem;">' + String((book && book.title) || 'Course material')
+        + ' &mdash; page ' + Number(pageNum || 1) + '. Your uploaded pages are safe; please try again or contact the administrator.</div>';
     }
 
     function renderTafseerTextContent(book, surahOrPage) {
@@ -1540,7 +1663,7 @@
         : Array.from({ length: 30 }, (_, i) => ({ para: i + 1, name_en: `Para ${i + 1}`, name_ur: `پارہ ${i + 1}` }));
 
       select.innerHTML = paras.map(p => `
-        <option value="${p.para}">Para ${p.para}: ${p.name_en || ('Para ' + p.para)}</option>
+        <option value="${p.para}">Para ${p.para}: ${p.name_en || ('Para ' + p.para)} (${p.name_ur || p.name_ar || ''})</option>
       `).join('');
       select.value = defaultPara || 1;
     }
@@ -1593,7 +1716,7 @@
         : { name_en: `Para ${paraNum}` };
 
       if (cat === 'quran') {
-        if (fileLabel) fileLabel.innerHTML = `<i class="fa-solid fa-quran text-brandEmerald"></i> Select Quran Pages for Para ${paraNum} (${paraInfo.name_en || ''}) *`;
+        if (fileLabel) fileLabel.innerHTML = `<i class="fa-solid fa-quran text-brandEmerald"></i> Select Quran Pages for Para ${paraNum} (${paraInfo.name_ur || paraInfo.name_en}) *`;
         if (fileHint) fileHint.innerText = `All selected page images will be stored exclusively for Para ${paraNum}. Exact page order is preserved.`;
       } else if (cat === 'tafseer') {
         if (fileLabel) fileLabel.innerHTML = `<i class="fa-solid fa-book-atlas text-brandEmerald"></i> Select ${langLabel} Tafseer Pages for Para ${paraNum} *`;
@@ -1710,8 +1833,8 @@
             matchedBook.total_pages = flattened.length;
             matchedBook.updated_at = new Date().toISOString();
 
-            saveCustomBooks(existingCustom);
-            alert(`✅ Material "${title}" Updated!\n\nAdded/Updated Para ${paraNum} (${compressedPages.length} pages).\nTotal Pages Across All Paras: ${flattened.length}`);
+            saveCustomBooksWithReport(existingCustom,
+              `✅ Material "${title}" Updated!\n\nAdded/Updated Para ${paraNum} (${compressedPages.length} pages).\nTotal Pages Across All Paras: ${flattened.length}`);
           } else {
             // Create New Quran / Tafseer Material
             const customBook = {
@@ -1748,8 +1871,8 @@
             };
 
             existingCustom.unshift(customBook);
-            saveCustomBooks(existingCustom);
-            alert(`✅ Custom ${category === 'quran' ? 'Quran' : 'Tafseer'} "${title}" Saved Successfully!\n\nPara ${paraNum}: ${compressedPages.length} pages uploaded.\nYou can add more Paras anytime by editing this material.`);
+            saveCustomBooksWithReport(existingCustom,
+              `✅ Custom ${category === 'quran' ? 'Quran' : 'Tafseer'} "${title}" Saved Successfully!\n\nPara ${paraNum}: ${compressedPages.length} pages uploaded.\nYou can add more Paras anytime by editing this material.`);
           }
         } else {
           // Standard Page-Based Material (Qaida, Islamic Studies, Tajweed, etc.)
@@ -1771,8 +1894,8 @@
           };
 
           existingCustom.unshift(customBook);
-          saveCustomBooks(existingCustom);
-          alert(`✅ Custom Book "${title}" Saved Successfully!\n\nTotal Pages: ${compressedPages.length}\nAdded to Course Material Library.`);
+          saveCustomBooksWithReport(existingCustom,
+            `✅ Custom Book "${title}" Saved Successfully!\n\nTotal Pages: ${compressedPages.length}\nAdded to Course Material Library.`);
         }
 
         closeModal('modalUploadCustomBook');
@@ -2038,8 +2161,7 @@
         targetBook.updated_at = new Date().toISOString();
         customBooks[bookIndex] = targetBook;
 
-        saveCustomBooks(customBooks);
-        alert(`✅ Course Material "${title}" updated successfully!`);
+        saveCustomBooksWithReport(customBooks, `✅ Course Material "${title}" updated successfully!`);
         closeModal('modalEditCustomBook');
         loadCurriculumLibrary(category);
       } catch (err) {
