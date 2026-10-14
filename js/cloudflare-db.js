@@ -633,6 +633,9 @@
   };
 
   // Global helper to upload files/Base64 to Cloudflare R2 Storage (with dataUrl fallback if R2 not yet bound)
+  // Exposes the current portal's auth headers so the book reader can fetch
+  // protected storage URLs (plain <img> tags cannot send Authorization headers).
+  window.getLmsAuthHeaders = function () { return authHeaders(); };
   window.uploadToCloudflareR2 = async function (fileOrDataUrl, folder = 'documents', filename = 'file.bin') {
     const base = getApiBase() || DEFAULT_CLOUDFLARE_BACKEND_URL;
     const normalizeUrl = (u) => {
