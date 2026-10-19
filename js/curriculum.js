@@ -143,14 +143,31 @@
         }
         if (!Array.isArray(remoteDeleted)) remoteDeleted = [];
 
-        let localDeleted = getDeletedBookIds();
-        if (!Array.isArray(localDeleted)) localDeleted = [];
+       let localDeleted = getDeletedBookIds();
+if (!Array.isArray(localDeleted)) localDeleted = [];
 
-        const mergedDeleted = Array.from(new Set([...localDeleted, ...remoteDeleted]));
-        if (mergedDeleted.length > 0) {
-          localStorage.setItem('alhuda_deleted_books', JSON.stringify(mergedDeleted));
-          // If local has deleted IDs that the backend doesn't have yet, push to cloud immediately
-          if (mergedDeleted.length > remoteDeleted.length) {
+// RE-POISON GUARD (2026-10-19): a book that exists in the live catalog
+// can never count as deleted. A stale browser tombstone must neither
+// hide live books nor be pushed back into D1 (caught re-poisoning
+// alhuda_deleted_books three times in one evening via the merge below).
+let liveBookIds = new Set();
+try {
+  const rawLive = settingsMap.get('alhuda_custom_books_index') || settingsMap.get('alhuda_custom_books');
+  const liveBooks = rawLive ? JSON.parse(rawLive) : [];
+  if (Array.isArray(liveBooks)) {
+    liveBookIds = new Set(liveBooks.map(function (b) { return b && b.id; }).filter(Boolean));
+  }
+} catch (e) {}
+
+const mergedDeleted = Array.from(new Set([...localDeleted, ...remoteDeleted]))
+  .filter(function (id) { return !liveBookIds.has(String(id)); });
+if (mergedDeleted.length > 0) {
+  localStorage.setItem('alhuda_deleted_books', JSON.stringify(mergedDeleted));
+  // Push when the sanitized list differs from the backend's: either the
+  // browser genuinely deleted something new, or the guard just healed a
+  // poisoned backend list by stripping live-book IDs out of it.
+  if (mergedDeleted.length !== remoteDeleted.length) {
+
             await db.from('system_settings').upsert({
               id: 'SYS-DELETED-BOOKS',
               key: 'alhuda_deleted_books',
