@@ -249,75 +249,95 @@ Official Email: ${ACADEMY_OFFICIAL_EMAIL}`;
       window.open(`https://wa.me/${phone}?text=${body}`, '_blank');
     }
 
-    const OFFICIAL_APPS_SCRIPT_EMAIL_RELAY = 'https://script.google.com/macros/s/AKfycbx5WjF-Cy23KwnXx4LoLciNz93MQZwvSoVOLj4hT8NwVQ8H2Pvn2k4w4QeVyvhNHygwEg/exec';
-
     // ------------------------------------------------------------------
-    // EMAIL RELAY SECRET — please read this before going live.
-    // Right now ANYONE on the internet can use the relay address above to
-    // send emails from the academy's Gmail, because the relay asks for no
-    // password. To lock it down:
-    //   1. Make up a long random secret (32 or more random characters).
-    //   2. Paste it between the quotes below.
-    //   3. Save the SAME secret inside the Apps Script project as a Script
-    //      Property named RELAY_SECRET (step-by-step in SECURITY-SETUP.md).
-    // Until you do step 3, emails keep working exactly as before. Once the
-    // Apps Script starts checking the secret, this value MUST be filled in
-    // here or emails will be rejected.
+    // OFFICIAL EMAIL RELAY -- now routed through the Cloudflare Worker.
+    // The browser NEVER talks to the Apps Script directly: it POSTs to
+    // POST /api/email/send on the worker with the owner's session token,
+    // and the worker forwards server-side using the RELAY_URL /
+    // RELAY_SECRET worker secrets. No relay URL or secret lives in this
+    // file (or anywhere else in frontend code).
     // ------------------------------------------------------------------
-    const EMAIL_RELAY_SECRET = '';
 
-    // Internal flag so the "secret not set" warning is logged only once.
-    let __relaySecretWarningShown = false;
+    function resolveWorkerBaseForEmail() {
+      try {
+        if (typeof getWorkerBase === 'function') {
+          const b = getWorkerBase();
+          if (b) return String(b).replace(/\/+$/, '');
+        }
+      } catch (e) {}
+      return 'https://alhuda-lms.ceoislamiccentre.workers.dev';
+    }
+
+    function resolveOwnerTokenForEmail() {
+      // Owner token first (sessionStorage). Then the shared worker-token
+      // helper as a last resort -- if it is not a valid owner token, the
+      // worker answers 401/403 and we surface that truthfully below.
+      try {
+        if (typeof getOwnerToken === 'function') {
+          const t = getOwnerToken();
+          if (t) return t;
+        }
+      } catch (e) {}
+      try {
+        const t = sessionStorage.getItem('alhuda_owner_token');
+        if (t) return t;
+      } catch (e2) {}
+      try {
+        if (typeof getWorkerToken === 'function') {
+          const t = getWorkerToken();
+          if (t) return t;
+        }
+      } catch (e3) {}
+      return null;
+    }
 
     async function sendViaOfficialEmailRelay({ to, subject, html, text, senderName }) {
       if (!to || !subject) return { success: false, error: 'Recipient or subject missing' };
 
-      // Warn once if the relay secret is not set yet. Sending still works —
-      // the owner switches the check on in the Apps Script when ready.
-      if (!EMAIL_RELAY_SECRET && !__relaySecretWarningShown) {
-        __relaySecretWarningShown = true;
-        console.warn('[Email Relay] EMAIL_RELAY_SECRET is empty — the relay currently accepts requests from anyone. Set a secret in js/email.js and in the Apps Script project (see SECURITY-SETUP.md).');
-      }
+      const base = resolveWorkerBaseForEmail();
+      const token = resolveOwnerTokenForEmail();
 
       try {
-        const payload = JSON.stringify({
-          to: String(to).trim(),
-          subject: String(subject).trim(),
-          html: html || text || '',
-          text: text || '',
-          senderName: senderName || 'Al-Huda Islamic Centre',
-          // The Apps Script checks this value. (Omitted entirely when empty.)
-          relaySecret: EMAIL_RELAY_SECRET || undefined
-        });
+        const headers = { 'Content-Type': 'application/json' };
+        if (token) headers['Authorization'] = 'Bearer ' + token;
 
-        // NOTE: this request uses mode 'no-cors', so the browser may silently
-        // drop the custom X-Relay-Secret header below. The relaySecret field
-        // in the body above is the reliable channel — the Apps Script MUST
-        // check the body field, not the header.
-        const headers = { 'Content-Type': 'text/plain;charset=utf-8' };
-        if (EMAIL_RELAY_SECRET) {
-          headers['X-Relay-Secret'] = EMAIL_RELAY_SECRET;
-        }
-
-        await fetch(OFFICIAL_APPS_SCRIPT_EMAIL_RELAY, {
+        const res = await fetch(base + '/api/email/send', {
           method: 'POST',
-          mode: 'no-cors',
           headers: headers,
-          body: payload
+          body: JSON.stringify({
+            to: String(to).trim(),
+            subject: String(subject),
+            html: html || text || '',
+            text: text || ''
+          })
         });
 
-        return { success: true, sentTo: to };
+        let data = null;
+        try { data = await res.json(); } catch (e) { data = null; }
+
+        if (res.ok && data && data.ok) {
+          return { success: true, sentTo: to };
+        }
+        const errMsg = (data && data.error) || ('Email send failed (HTTP ' + res.status + ')');
+        return { success: false, error: errMsg };
       } catch (err) {
         console.warn('[Official Email Relay Notice]:', err);
-        return { success: false, error: err?.message || String(err) };
+        return { success: false, error: (err && err.message) || String(err) };
       }
     }
     window.sendViaOfficialEmailRelay = sendViaOfficialEmailRelay;
-    window.OFFICIAL_APPS_SCRIPT_EMAIL_RELAY = OFFICIAL_APPS_SCRIPT_EMAIL_RELAY;
 
     async function dispatchEmailNow() {
+      // Managers are blocked from direct external dispatch (same policy as
+      // the Gmail composer and WhatsApp dispatch above); the worker would
+      // also reject a non-owner token with 403.
+      if (typeof CURRENT_ROLE !== 'undefined' && CURRENT_ROLE === 'manager') {
+        alert("Access Denied: Direct external emailing from CEO account is restricted for Managers. Please use the automated send button.");
+        return;
+      }
+
       let toEmail = (document.getElementById('emailPreviewTo')?.value || '').trim();
-      if ((CURRENT_ROLE === 'manager' || toEmail.includes('••')) && CURRENT_EMAIL_PAYLOAD?.toEmail) {
+      if (toEmail.includes('••') && CURRENT_EMAIL_PAYLOAD?.toEmail) {
         toEmail = CURRENT_EMAIL_PAYLOAD.toEmail;
       }
       const subject = document.getElementById('emailPreviewSubject').value.trim();
@@ -336,8 +356,9 @@ Official Email: ${ACADEMY_OFFICIAL_EMAIL}`;
         btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Sending from ceoislamiccentre@gmail.com...';
       }
 
+      let result = null;
       try {
-        await sendViaOfficialEmailRelay({
+        result = await sendViaOfficialEmailRelay({
           to: toEmail,
           subject: subject,
           html: html,
@@ -346,22 +367,36 @@ Official Email: ${ACADEMY_OFFICIAL_EMAIL}`;
         });
       } catch(e) {
         console.warn('Background email dispatch notice:', e);
+        result = { success: false, error: (e && e.message) || String(e) };
       }
 
       if (btn) {
         btn.disabled = false;
-        btn.innerHTML = '<i class="fa-solid fa-check"></i> Dispatched!';
+        if (result && result.success) {
+          btn.innerHTML = '<i class="fa-solid fa-check"></i> Dispatched!';
+        } else {
+          btn.innerHTML = '<i class="fa-solid fa-triangle-exclamation"></i> Send Failed';
+        }
         setTimeout(() => {
           btn.innerHTML = '<i class="fa-solid fa-paper-plane"></i> Send Automated Email';
         }, 2500);
       }
 
-      alert(`✅ Official Welcome & Zoom Link Email Processed!\n\n` +
-        `📧 Official Sender: ${ACADEMY_OFFICIAL_EMAIL}\n` +
-        `👤 Recipient: ${toEmail}\n` +
-        `📝 Subject: ${subject}\n\n` +
-        `Dispatched via Al-Huda Official Email Relay (ceoislamiccentre@gmail.com).`
-      );
+      if (result && result.success) {
+        alert(`✅ Official Welcome & Zoom Link Email Sent!\n\n` +
+          `📧 Official Sender: ${ACADEMY_OFFICIAL_EMAIL}\n` +
+          `👤 Recipient: ${toEmail}\n` +
+          `📝 Subject: ${subject}\n\n` +
+          `Dispatched via Al-Huda Official Email Relay (ceoislamiccentre@gmail.com).`
+        );
+      } else {
+        alert(`❌ Email could not be sent.\n\n` +
+          `👤 Recipient: ${toEmail}\n` +
+          `📝 Subject: ${subject}\n\n` +
+          `Error: ${(result && result.error) || 'Unknown error'}\n\n` +
+          `Please check your owner login and try again.`
+        );
+      }
     }
 
     // TASK 6: Automatic Welcome Email Dispatch after Student/Family Creation
