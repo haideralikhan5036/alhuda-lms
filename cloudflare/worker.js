@@ -4,14 +4,19 @@
  * File: cloudflare/worker.js
  * Purpose: Works directly with `npx wrangler deploy` on Cloudflare Workers.
  *          Handles /api/auth/* (logins), /api/db (Cloudflare D1),
- *          /api/storage (Cloudflare R2), and serves static portal files
- *          via env.ASSETS.
+ *          /api/storage (Cloudflare R2), /api/email/send (owner-only email
+ *          relay), and serves static portal files via env.ASSETS.
  *
  * SECURITY MODEL (2026-10-14 hardening):
  *   - All logins are verified SERVER-SIDE here. The browser only ever holds
  *     a signed, expiring session token (see cloudflare/auth.js).
  *   - /api/db and /api/storage REQUIRE a worker-issued Bearer token
  *     (any authenticated role). Anonymous access is denied.
+ *   - /api/email/send (2026-10-19): owner role ONLY. Forwards to the
+ *     official email relay (Apps Script) server-side using the RELAY_URL /
+ *     RELAY_SECRET secrets. The browser never sees the relay URL.
+ *     Per-token rate limited; input validated; relay failures are reported
+ *     truthfully (no blind success).
  *   - Browser-side session checks are UX only â this worker is the enforcer.
  *   - Phase 2 (2026-10-14): per-role DATA SCOPING is enforced in this file
  *     (see "Phase 2: per-role DATA SCOPING"). Owner = full access. Manager =
@@ -32,6 +37,10 @@
  *   OWNER_USERNAME      - owner login username
  *   OWNER_PASSWORD_HASH - sha256 hex of the owner password (echo -n 'pw' | sha256sum)
  *   ALLOWED_ORIGINS     - comma-separated allowed CORS origins
+ *   RELAY_URL           - https URL of the official email relay (Apps Script web app)
+ *   RELAY_SECRET        - shared secret the relay checks (empty until the
+ *                         Apps Script is updated to verify it; the worker
+ *                         still forwards without it during transition)
  * ============================================================================
  */
 
@@ -99,6 +108,24 @@ function loginRateLimited(ip) {
 
 function clientIp(request) {
   return request.headers.get('cf-connecting-ip') || 'unknown';
+}
+
+// --- Email relay rate limiting: max 100 sends per token per 10 minutes. -----
+// Same in-memory Map-window approach as the login limiter. Sized for bulk
+// fee-reminder runs (up to ~85 sequential sends), not just single emails.
+const EMAIL_SEND_ATTEMPTS = new Map();
+const EMAIL_SEND_WINDOW_MS = 10 * 60 * 1000;
+const EMAIL_SEND_MAX_ATTEMPTS = 100;
+
+function emailSendRateLimited(key) {
+  const now = Date.now();
+  const rec = EMAIL_SEND_ATTEMPTS.get(key);
+  if (!rec || now - rec.start > EMAIL_SEND_WINDOW_MS) {
+    EMAIL_SEND_ATTEMPTS.set(key, { count: 1, start: now });
+    return false;
+  }
+  rec.count += 1;
+  return rec.count > EMAIL_SEND_MAX_ATTEMPTS;
 }
 
 function getDb(env) {
@@ -409,6 +436,130 @@ async function handleSetPassword(request, env) {
     console.error('[auth] set-password failed:', e);
     return json(request, env, { ok: false, error: 'Authentication service unavailable.' }, 503);
   }
+}
+
+// --- POST /api/email/send  { to, subject, html, text } -----------------------
+// Owner-only email relay. The browser never talks to the Apps Script
+// directly; this worker forwards server-side using the RELAY_URL /
+// RELAY_SECRET secrets. Until the Apps Script is updated to verify the
+// secret, the worker still works with the current open relay (the secret
+// fields are simply ignored by the old script).
+const EMAIL_ALLOWED_FIELDS = ['to', 'subject', 'html', 'text'];
+const EMAIL_MAX_SUBJECT = 500;
+const EMAIL_MAX_HTML = 200000;
+const EMAIL_MAX_TEXT = 100000;
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+async function handleEmailSend(request, env) {
+  if (request.method === 'OPTIONS') return json(request, env, {}, 204);
+  if (request.method !== 'POST') {
+    return json(request, env, { ok: false, error: 'Method not allowed.' }, 405);
+  }
+
+  // Owner role only. Managers/teachers/parents (and anonymous callers) are
+  // rejected here; managers are additionally blocked from external dispatch
+  // in the portal UI.
+  const auth = await requireApiAuth(request, env);
+  if (!auth) return unauthorized(request, env);
+  if (auth.role !== 'owner') {
+    return json(request, env, { ok: false, error: 'Only the owner can send email.' }, 403);
+  }
+
+  const rlKey = 'email:' + String(auth.sub || clientIp(request));
+  if (emailSendRateLimited(rlKey)) {
+    return json(request, env, { ok: false, error: 'Too many emails. Please try again later.' }, 429);
+  }
+
+  let body;
+  try {
+    body = await request.json();
+  } catch (e) {
+    return json(request, env, { ok: false, error: 'Invalid request body.' }, 400);
+  }
+  if (!body || typeof body !== 'object' || Array.isArray(body)) {
+    return json(request, env, { ok: false, error: 'Invalid request body.' }, 400);
+  }
+  for (const k of Object.keys(body)) {
+    if (EMAIL_ALLOWED_FIELDS.indexOf(k) === -1) {
+      return json(request, env, { ok: false, error: 'Unexpected field: ' + k + '.' }, 400);
+    }
+  }
+
+  const to = String(body.to || '').trim();
+  const subject = String(body.subject || '');
+  const html = String(body.html || '');
+  const text = String(body.text || '');
+
+  if (!to || to.length > 254 || /[,;]/.test(to) || !EMAIL_RE.test(to)) {
+    return json(request, env, { ok: false, error: 'A single valid recipient email address is required.' }, 400);
+  }
+  if (!subject || subject.length > EMAIL_MAX_SUBJECT) {
+    return json(request, env, { ok: false, error: 'Subject is required (max ' + EMAIL_MAX_SUBJECT + ' characters).' }, 400);
+  }
+  if ((!html && !text) || html.length > EMAIL_MAX_HTML || text.length > EMAIL_MAX_TEXT) {
+    return json(request, env, { ok: false, error: 'Email body is required and must be within size limits.' }, 400);
+  }
+
+  const relayUrl = String(env.RELAY_URL || '').trim();
+  if (!/^https:\/\//i.test(relayUrl)) {
+    return json(request, env, { ok: false, error: 'Email relay is not configured.' }, 503);
+  }
+  const relaySecret = String(env.RELAY_SECRET || '');
+
+  const forwardBody = JSON.stringify({
+    to: to,
+    subject: subject,
+    html: html || text,
+    text: text || '',
+    // Field names a relay may check; the current open script ignores
+    // unknown fields, so both are safe during transition.
+    secret: relaySecret,
+    relaySecret: relaySecret,
+  });
+
+  // Never log the secret, the relay URL, or email bodies. Metadata only.
+  // Follow redirects MANUALLY and re-POST the body on every hop: Apps
+  // Script web apps answer the first POST with "302 Found" (verified live
+  // 2026-10-19), and a spec-compliant fetch with redirect:'follow' would
+  // rewrite that into a bodyless GET -- silently losing the email. Re-POSTing
+  // to each Location keeps the payload intact on every hop.
+  let relayStatus = 0;
+  try {
+    let url = relayUrl;
+    let fwd = null;
+    for (let hop = 0; hop < 5; hop++) {
+      fwd = await fetch(url, {
+        method: 'POST',
+        redirect: 'manual',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: forwardBody,
+      });
+      const loc = fwd.headers.get('location');
+      if (fwd.status >= 300 && fwd.status < 400 && loc) {
+        try { await fwd.text(); } catch (e2) {}
+        const next = new URL(loc, url).toString();
+        if (!/^https:/i.test(next)) {
+          console.warn('[email] refusing non-https redirect');
+          return json(request, env, { ok: false, error: 'Email relay failed (insecure redirect).' }, 502);
+        }
+        url = next;
+        continue;
+      }
+      break;
+    }
+    relayStatus = fwd ? fwd.status : 0;
+    // Drain the body so the connection can be reused; its content is not needed.
+    try { await fwd.text(); } catch (e3) {}
+  } catch (e) {
+    console.warn('[email] relay unreachable');
+    return json(request, env, { ok: false, error: 'Email relay is unreachable. Please try again later.' }, 502);
+  }
+
+  console.log('[email] forwarded to=' + to + ' relayStatus=' + relayStatus);
+  if (relayStatus >= 200 && relayStatus < 300) {
+    return json(request, env, { ok: true, relayStatus: relayStatus });
+  }
+  return json(request, env, { ok: false, error: 'Email relay failed (HTTP ' + relayStatus + ').' }, 502);
 }
 
 // --- Auth middleware for privileged APIs ------------------------------------
@@ -926,6 +1077,13 @@ export default {
       const auth = await requireApiAuth(request, env);
       if (!auth) return unauthorized(request, env);
       return handleScopedStorageRequest({ request, env, ctx }, auth);
+    }
+
+    // 2b. Email relay (/api/email/send) -> official Apps Script relay.
+    // Owner role ONLY (handleEmailSend enforces this). CORS preflights never
+    // carry Authorization; answer them before auth like the other APIs.
+    if (url.pathname === '/api/email/send') {
+      return handleEmailSend(request, env);
     }
 
     // 3. Clean portal URLs without .html
