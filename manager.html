@@ -183,13 +183,14 @@
       const firstWord = (m.full_name || 'manager').trim().split(/\s+/)[0] || 'manager';
       const defaultUsername = firstWord.toLowerCase().replace(/[^a-z0-9]/g, '') || 'manager';
       const username = String(meta.username || acc.username || defaultUsername).trim();
-      const password = String(meta.password || acc.password || '12345678').trim();
       const roleTitle = String(meta.role_title || acc.role_title || 'Operations Manager').trim();
       const email = String(m.email || meta.email || acc.email || '').trim();
       return {
         emp_id: String(empId).trim().toUpperCase(),
         username,
-        password,
+        // Batch 1 hardening (B2/B3): never surface a usable password here.
+        // hasExplicitPassword below only reports whether a slot EXISTS.
+        password: '',
         role_title: roleTitle,
         email,
         hasExplicitPassword: Boolean(meta.password || acc.password)
@@ -242,6 +243,14 @@
           }
         });
 
+        // Batch 1 hardening (B5): merged account objects (shared-state blob,
+        // local cache, record meta) must never carry password material on
+        // this page - identifiers only.
+        Object.keys(mergedAccs).forEach(function (k) {
+          const a = mergedAccs[k];
+          if (a && typeof a === 'object') { delete a.password; }
+        });
+
         localStorage.setItem('alhuda_teacher_accounts', JSON.stringify(mergedAccs));
         const managers = employees.filter(emp => isEligibleManagerAccount(emp, mergedAccs));
         return { managers, accountsMap: mergedAccs };
@@ -264,6 +273,19 @@
       }
     }
 
+    // Batch 1 hardening (B4): decode (not verify) the server-issued token;
+    // the Worker verifies the signature on every API call.
+    function decodeJwtPayload(token) {
+      try {
+        const parts = String(token).split('.');
+        if (parts.length !== 2 || !parts[0]) return null;
+        let b64 = parts[0].replace(/-/g, '+').replace(/_/g, '/');
+        const pad = b64.length % 4;
+        if (pad) b64 += '='.repeat(4 - pad);
+        return JSON.parse(atob(b64));
+      } catch (e) { return null; }
+    }
+
     window.onload = async function() {
       setInterval(() => {
         const now = new Date();
@@ -281,40 +303,41 @@
       const roleBanner = document.getElementById('mgrRoleMismatchBanner');
       if (roleBanner) roleBanner.classList.add('hidden');
 
-      // Verify existing authenticated Manager session
-      const savedMgrRaw = sessionStorage.getItem('alhuda_manager_session') || localStorage.getItem('alhuda_logged_in_manager');
-      let parsedMgr = null;
-      if (savedMgrRaw) {
+      // Batch 1 hardening (B4): restore ONLY from a valid server token.
+      // Decode the token, confirm role + expiry, then revalidate the
+      // manager record against the backend before entering the portal.
+      // No token (or an invalid/expired one) -> stay on the login form.
+      let mgrToken = null;
+      try { mgrToken = sessionStorage.getItem('alhuda_manager_token'); } catch (e) {}
+      if (mgrToken) {
+        const payload = decodeJwtPayload(mgrToken);
+        if (payload && payload.role === 'manager' && typeof payload.exp === 'number' && Date.now() / 1000 < payload.exp) {
+          const { managers, accountsMap } = await fetchManagersFromBackend();
+          const verifiedMgr = managers.find(m => String(m.id) === String(payload.sub));
+          if (verifiedMgr && isEligibleManagerAccount(verifiedMgr, accountsMap)) {
+            const creds = resolveManagerCredentials(verifiedMgr, accountsMap);
+            const sessionPayload = {
+              id: verifiedMgr.id,
+              emp_id: creds.emp_id,
+              full_name: verifiedMgr.full_name,
+              username: creds.username,
+              role_title: creds.role_title,
+              authenticated_at: new Date().toISOString()
+            };
+            try {
+              sessionStorage.setItem('alhuda_manager_session', JSON.stringify(sessionPayload));
+              localStorage.setItem('alhuda_active_portal_role', 'manager');
+            } catch (e) {}
+            window.location.replace('index.html?role=manager');
+            return;
+          }
+        }
+        // Token invalid/expired, or the record is no longer an eligible
+        // manager: drop the token and stay on the login form.
         try {
-          parsedMgr = JSON.parse(savedMgrRaw);
-        } catch (e) {
-          parsedMgr = null;
-        }
-      }
-
-      if (parsedMgr && parsedMgr.id && parsedMgr.emp_id) {
-        const { managers, accountsMap } = await fetchManagersFromBackend();
-        const verifiedMgr = managers.find(m => String(m.id) === String(parsedMgr.id));
-        if (verifiedMgr && isEligibleManagerAccount(verifiedMgr, accountsMap)) {
-          const creds = resolveManagerCredentials(verifiedMgr, accountsMap);
-          const sessionPayload = {
-            id: verifiedMgr.id,
-            emp_id: creds.emp_id,
-            full_name: verifiedMgr.full_name,
-            username: creds.username,
-            role_title: creds.role_title,
-            authenticated_at: parsedMgr.authenticated_at || new Date().toISOString()
-          };
-          localStorage.setItem('alhuda_logged_in_manager', JSON.stringify(sessionPayload));
-          sessionStorage.setItem('alhuda_manager_session', JSON.stringify(sessionPayload));
-          localStorage.setItem('alhuda_active_portal_role', 'manager');
-          window.location.replace('index.html?role=manager');
-          return;
-        } else {
-          localStorage.removeItem('alhuda_logged_in_manager');
+          sessionStorage.removeItem('alhuda_manager_token');
           sessionStorage.removeItem('alhuda_manager_session');
-          if (localStorage.getItem('alhuda_active_portal_role') === 'manager') localStorage.removeItem('alhuda_active_portal_role');
-        }
+        } catch (e) {}
       }
     };
 
@@ -363,108 +386,78 @@
         return 'https://alhuda-lms.ceoislamiccentre.workers.dev';
       }
 
-      // SECURITY (2026-10-14): try server-side login first. The worker
-      // verifies credentials against D1 and only accepts explicitly-set
-      // passwords (never the '12345678' default). On success we store a
-      // signed token; the worker re-validates it on every API call.
-      let serverAttempted = false;
-      let serverAvailable = false;
+      // SECURITY (Batch 1 hardening, B4): server-side login ONLY. The
+      // worker verifies credentials against D1 and only accepts owner-set
+      // hashed passwords. There is NO local fallback: if the server cannot
+      // be reached, the login stops with a clear message.
+      let res = null;
       try {
-        const res = await fetch(workerBase() + '/api/auth/staff-login', {
+        res = await fetch(workerBase() + '/api/auth/staff-login', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ role: 'manager', identifier: usernameInput, password: passwordInput })
         });
-        serverAttempted = true;
-        if (res.status === 503 || res.status === 404) {
-          serverAvailable = false; // worker not deployed/configured -> legacy fallback below
-        } else {
-          serverAvailable = true;
-          const data = await res.json().catch(() => ({}));
-          if (res.ok && data && data.ok && data.token) {
-            try {
-              sessionStorage.setItem('alhuda_manager_token', data.token);
-              sessionStorage.setItem('alhuda_manager_session', JSON.stringify({
-                id: data.id, role: 'manager', via: 'server',
-                authenticated_at: new Date().toISOString()
-              }));
-              localStorage.setItem('alhuda_active_portal_role', 'manager');
-            } catch (e) {}
-            restoreBtn();
-            window.location.replace('index.html?role=manager');
-            return;
-          }
-          // Server reachable but credentials rejected: do NOT fall back to
-          // local login (that would bypass the server's password policy).
-          restoreBtn();
-          showLoginError('Invalid username or password.');
-          return;
-        }
       } catch (err) {
-        serverAvailable = false; // network error -> legacy fallback below
+        res = null; // network error -> unreachable below
       }
 
-      if (serverAttempted && !serverAvailable) {
-        console.warn('[Manager Login] Worker auth unavailable, using local login (degraded mode). Deploy the worker for server-side authentication.');
+      if (!res || res.status === 404 || res.status === 500 || res.status === 503) {
+        restoreBtn();
+        showLoginError('Cannot reach the server. Please try again.');
+        return;
       }
 
-      const { managers, accountsMap } = await fetchManagersFromBackend();
-      const uNorm = usernameInput.toLowerCase();
-      const uPhone = usernameInput.replace(/[^0-9]/g, '');
+      if (res.status === 401) {
+        const errData = await res.json().catch(() => ({}));
+        restoreBtn();
+        if (errData && errData.error === 'no_password_set') {
+          showLoginError('No password set. Ask the administrator to set one.');
+        } else {
+          showLoginError('Invalid username or password.');
+        }
+        return;
+      }
 
-      // Match against eligible Manager accounts ONLY (never Teachers, never default/first manager)
-      const matchedManager = managers.find(m => {
-        const creds = resolveManagerCredentials(m, accountsMap);
-        const fullNameLower = String(m.full_name || '').trim().toLowerCase();
-        const firstWordLower = fullNameLower.split(/\s+/)[0] || '';
-        const mPhone = String(m.phone || '').replace(/[^0-9]/g, '');
-
-        const identifierMatches = (
-          uNorm === creds.username.toLowerCase() ||
-          uNorm === creds.emp_id.toLowerCase() ||
-          uNorm === String(m.id || '').trim().toLowerCase() ||
-          uNorm === fullNameLower ||
-          (uNorm === firstWordLower && firstWordLower.length >= 2) ||
-          (creds.email && uNorm === creds.email.toLowerCase()) ||
-          (uPhone.length >= 7 && mPhone.length >= 7 && (mPhone === uPhone || mPhone.slice(-10) === uPhone.slice(-10)))
-        );
-
-        if (!identifierMatches) return false;
-
-        return (
-          passwordInput === creds.password ||
-          (!creds.hasExplicitPassword && passwordInput === '12345678')
-        );
-      });
-
-      restoreBtn();
-
-      if (matchedManager) {
-        const creds = resolveManagerCredentials(matchedManager, accountsMap);
-        const sessionPayload = {
-          id: matchedManager.id,
-          emp_id: creds.emp_id,
-          full_name: matchedManager.full_name,
-          username: creds.username,
-          role_title: creds.role_title,
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data && data.ok && data.token) {
+        try {
+          sessionStorage.setItem('alhuda_manager_token', data.token);
+        } catch (e) {}
+        // Build the COMPLETE session the index.html gate requires
+        // (id + emp_id) by fetching the manager record with the fresh
+        // token. If that fetch fails, still enter with the minimal
+        // session rather than stranding a verified login.
+        let sessionPayload = {
+          id: data.id, role: 'manager', via: 'server',
           authenticated_at: new Date().toISOString()
         };
-
-        localStorage.setItem('alhuda_logged_in_manager', JSON.stringify(sessionPayload));
-        sessionStorage.setItem('alhuda_manager_session', JSON.stringify(sessionPayload));
-        localStorage.setItem('alhuda_active_portal_role', 'manager');
-        localStorage.removeItem('alhuda_logged_in_teacher');
-        sessionStorage.removeItem('alhuda_teacher_session');
-        localStorage.removeItem('alhuda_logged_in_parent');
-        sessionStorage.removeItem('alhuda_parent_session');
-
+        try {
+          const fetched = await fetchManagersFromBackend();
+          const rec = (fetched.managers || []).find(m => String(m.id) === String(data.id));
+          if (rec) {
+            const creds = resolveManagerCredentials(rec, fetched.accountsMap);
+            sessionPayload = {
+              id: rec.id,
+              emp_id: creds.emp_id,
+              full_name: rec.full_name,
+              username: creds.username,
+              role_title: creds.role_title,
+              authenticated_at: new Date().toISOString()
+            };
+          }
+        } catch (e) {}
+        try {
+          sessionStorage.setItem('alhuda_manager_session', JSON.stringify(sessionPayload));
+          localStorage.setItem('alhuda_active_portal_role', 'manager');
+        } catch (e) {}
+        restoreBtn();
         window.location.replace('index.html?role=manager');
-      } else {
-        if (errBox && errText) {
-          errText.innerText = 'Invalid username or password.';
-          errBox.classList.remove('hidden');
-        }
+        return;
       }
+
+      // Any other response shape: treat as unreachable rather than guessing.
+      restoreBtn();
+      showLoginError('Cannot reach the server. Please try again.');
     }
   </script>
 </body>

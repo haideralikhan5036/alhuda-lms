@@ -2584,7 +2584,7 @@ font-family: var(--font-num) !important;
         teacher_id: String(assignedId).trim(),
         username: String(acc.username || meta.username || baseUser).trim(),
         cleanNameSlug,
-        password: String(acc.password || meta.password || '12345678').trim(),
+        password: '',
         hasExplicitPassword: Boolean(acc.password || meta.password)
       };
     }
@@ -2608,9 +2608,9 @@ font-family: var(--font-num) !important;
       const roleMismatchBanner = document.getElementById('roleMismatchBanner');
       if (roleMismatchBanner) roleMismatchBanner.classList.add('hidden');
 
-      // Check existing authenticated Teacher session.
-      // Prefer the server-issued token; fall back to the legacy local session
-      // only when the worker auth service is unreachable (pre-deploy).
+      // Check existing authenticated Teacher session (Batch 1 hardening, B4).
+      // ONLY a valid server-issued token restores a session; there is no
+      // localStorage session restore anymore.
       const existingToken = getTeacherToken();
       if (existingToken) {
         const _tp = decodeJwtPayload(existingToken);
@@ -2623,59 +2623,12 @@ font-family: var(--font-num) !important;
               return;
             }
           } catch (err) {
-            console.warn('[Teacher Session] Token session check failed, trying legacy session:', err);
+            console.warn('[Teacher Session] Token session check failed:', err);
           }
         } else {
           clearTeacherToken();
         }
       }
-      const savedSessionRaw = sessionStorage.getItem('alhuda_teacher_session') || localStorage.getItem('alhuda_logged_in_teacher');
-      let parsedSession = null;
-      if (savedSessionRaw) {
-        try {
-          parsedSession = JSON.parse(savedSessionRaw);
-        } catch (e) {
-          parsedSession = null;
-        }
-      }
-
-      if (parsedSession && parsedSession.id) {
-        try {
-          const { teachers, accountsMap } = await fetchTeachersAndAccountsFromBackend();
-          if (teachers && teachers.length > 0) {
-            const verifiedTeacher = teachers.find(t => String(t.id) === String(parsedSession.id));
-            if (verifiedTeacher && isEligibleTeacherAccount(verifiedTeacher, accountsMap)) {
-              CURRENT_TEACHER = normalizeTeacherSession(verifiedTeacher);
-              localStorage.setItem('alhuda_logged_in_teacher', JSON.stringify(CURRENT_TEACHER));
-              sessionStorage.setItem('alhuda_teacher_session', JSON.stringify(CURRENT_TEACHER));
-              showDashboardView();
-              return;
-            } else if (verifiedTeacher && !isEligibleTeacherAccount(verifiedTeacher, accountsMap)) {
-              // Genuinely deactivated by admin
-              localStorage.removeItem('alhuda_logged_in_teacher');
-              sessionStorage.removeItem('alhuda_teacher_session');
-              if (localStorage.getItem('alhuda_active_portal_role') === 'teacher') localStorage.removeItem('alhuda_active_portal_role');
-              CURRENT_TEACHER = null;
-            } else {
-              // Not matched in freshly returned teachers but might be offline/cached
-              CURRENT_TEACHER = normalizeTeacherSession(parsedSession);
-              showDashboardView();
-              return;
-            }
-          } else {
-            // Backend offline or empty response: fall back to cached session
-            CURRENT_TEACHER = normalizeTeacherSession(parsedSession);
-            showDashboardView();
-            return;
-          }
-        } catch (fetchErr) {
-          console.warn('[Teacher Session Init] Backend check offline, falling back to cached session:', fetchErr);
-          CURRENT_TEACHER = normalizeTeacherSession(parsedSession);
-          showDashboardView();
-          return;
-        }
-      }
-
       showLoginView();
     };
 
@@ -2773,7 +2726,7 @@ font-family: var(--font-num) !important;
       } catch (e) {}
     }
 
-    // Returns {ok, token, id} | {unauthorized:true} | {unreachable:true}
+    // Returns {ok, token, id} | {unauthorized:true, error} | {unreachable:true}
     async function teacherServerLogin(identifier, password) {
       try {
         const res = await fetch(getTeacherWorkerBase() + '/api/auth/staff-login', {
@@ -2781,7 +2734,10 @@ font-family: var(--font-num) !important;
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ role: 'teacher', identifier, password })
         });
-        if (res.status === 401) return { unauthorized: true };
+        if (res.status === 401) {
+          const errData = await res.json().catch(() => ({}));
+          return { unauthorized: true, error: (errData && errData.error) || '' };
+        }
         if (!res.ok) return { unreachable: true };
         const data = await res.json();
         if (data && data.ok && data.token) return { ok: true, token: data.token, id: data.id };
@@ -2848,19 +2804,21 @@ font-family: var(--font-num) !important;
       if (serverAttempt.unauthorized) {
         // Server reachable and credentials rejected: authoritative, NO local fallback.
         restoreLoginButton(btn);
-        showTeacherLoginError(errBox, errText, "Invalid username or password.");
+        if (serverAttempt.error === 'no_password_set') {
+          showTeacherLoginError(errBox, errText, "No password set. Ask the administrator to set one.");
+        } else {
+          showTeacherLoginError(errBox, errText, "Invalid username or password.");
+        }
         return;
       }
-      // --- 2. Server unreachable: legacy local login (pre-deploy compatibility) ---
-      console.warn('[Teacher Login] Worker auth unavailable, using local login.');
-
-      await handleTeacherSignInLocal(usernameInput, passwordInput, errBox, errText, btn);
+      // --- 2. Server unreachable: NO local fallback (Batch 1 hardening, B4) ---
+      restoreLoginButton(btn);
+      showTeacherLoginError(errBox, errText, "Cannot reach the server. Please try again.");
     }
 
     async function completeTeacherLogin(matchedTeacher) {
       CURRENT_TEACHER = normalizeTeacherSession(matchedTeacher);
       try {
-        localStorage.setItem('alhuda_logged_in_teacher', JSON.stringify(CURRENT_TEACHER));
         sessionStorage.setItem('alhuda_teacher_session', JSON.stringify(CURRENT_TEACHER));
         localStorage.setItem('alhuda_active_portal_role', 'teacher');
         localStorage.removeItem('alhuda_logged_in_manager');
@@ -2871,54 +2829,6 @@ font-family: var(--font-num) !important;
       const roleMismatchBanner = document.getElementById('roleMismatchBanner');
       if (roleMismatchBanner) roleMismatchBanner.classList.add('hidden');
       showDashboardView();
-    }
-
-    // Legacy local login (used only when the worker auth service is unreachable).
-    async function handleTeacherSignInLocal(usernameInput, passwordInput, errBox, errText, btn) {
-      const { teachers, accountsMap } = await fetchTeachersAndAccountsFromBackend();
-      const eligibleTeachers = teachers.filter(t => isEligibleTeacherAccount(t, accountsMap));
-
-      const uNorm = usernameInput.toLowerCase();
-      const uSlug = uNorm.replace(/[^a-z0-9]/g, '_').replace(/_+/g, '_').replace(/^_|_$/g, '');
-      const uPhone = usernameInput.replace(/[^0-9]/g, '');
-
-      // Strictly authenticate against eligible Teacher accounts only (never Managers, never substring fallback, never teachers[0])
-      const matchedTeacher = eligibleTeachers.find(t => {
-        const creds = resolveTeacherCreds(t, teachers, accountsMap);
-        const fullNameLower = String(t.full_name || '').trim().toLowerCase();
-        const firstWordLower = fullNameLower.split(/\s+/)[0] || '';
-        const tPhone = String(t.phone || '').replace(/[^0-9]/g, '');
-        const meta = parseEmployeeMeta(t.address);
-        const tEmail = String(t.email || meta.email || '').trim().toLowerCase();
-
-        const identifierMatches = (
-          uNorm === creds.username.toLowerCase() ||
-          uNorm === creds.teacher_id.toLowerCase() ||
-          uNorm === String(t.id || '').trim().toLowerCase() ||
-          uNorm === fullNameLower ||
-          (uSlug && uSlug === creds.cleanNameSlug) ||
-          (uNorm === firstWordLower && firstWordLower.length >= 2) ||
-          (tEmail && uNorm === tEmail) ||
-          (uPhone.length >= 7 && tPhone.length >= 7 && (tPhone === uPhone || tPhone.slice(-10) === uPhone.slice(-10)))
-        );
-
-        if (!identifierMatches) return false;
-
-        const passwordMatches = (
-          passwordInput === creds.password ||
-          (!creds.hasExplicitPassword && passwordInput === '12345678')
-        );
-
-        return passwordMatches;
-      });
-
-      restoreLoginButton(btn);
-
-      if (matchedTeacher) {
-        await completeTeacherLogin(matchedTeacher);
-      } else {
-        showTeacherLoginError(errBox, errText, "Invalid username or password.");
-      }
     }
 
     function showDashboardView() {
@@ -3005,6 +2915,7 @@ font-family: var(--font-num) !important;
       if (localStorage.getItem('alhuda_active_portal_role') === 'teacher') {
         localStorage.removeItem('alhuda_active_portal_role');
       }
+      if (window.clearAllLmsLocalState) { try { window.clearAllLmsLocalState(); } catch (e) {} }
       const toggleSbBtn = document.getElementById('btnToggleTeacherSidebar');
       if (toggleSbBtn) {
         toggleSbBtn.classList.add('hidden');

@@ -975,15 +975,10 @@
           }
         } catch (e) {}
       }
-      const baseUser = (family.parent_name || 'parent').toLowerCase().replace(/[^a-z0-9]/g, '_').replace(/_+/g, '_').replace(/^_|_$/g, '').slice(0, 15) || 'parent';
-      const stableDigits = String(family.whatsapp || family.id || '786').replace(/[^0-9]/g, '').slice(-3).padStart(3, '7');
-      return {
-        username: 'parent_' + baseUser,
-        password: 'alhuda_' + stableDigits,
-        parent_name: family.parent_name,
-        whatsapp: family.whatsapp,
-        email: family.email || family.parent_email || ''
-      };
+      // Batch 1 hardening (B3): NEVER fabricate credentials. A family with
+      // no owner-set portal password has no credentials yet and cannot log
+      // in until the administrator sets one.
+      return { username: '', password: '' };
     }
 
     async function fetchFamiliesAndStudentsForAuth() {
@@ -1153,7 +1148,7 @@
       } catch (e) {}
     }
 
-    // Returns {ok, token, id} | {unauthorized:true} | {unreachable:true}
+    // Returns {ok, token, id} | {unauthorized:true, error} | {unreachable:true}
     async function parentServerLogin(identifier, password) {
       try {
         const res = await fetch(getParentWorkerBase() + '/api/auth/staff-login', {
@@ -1161,7 +1156,10 @@
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ role: 'parent', identifier, password })
         });
-        if (res.status === 401) return { unauthorized: true };
+        if (res.status === 401) {
+          const errData = await res.json().catch(() => ({}));
+          return { unauthorized: true, error: (errData && errData.error) || '' };
+        }
         if (!res.ok) return { unreachable: true };
         const data = await res.json();
         if (data && data.ok && data.token) return { ok: true, token: data.token, id: data.id };
@@ -1220,28 +1218,12 @@
               return;
             }
           } catch (err) {
-            console.warn('[Parent Session] Token session check failed, trying legacy session:', err);
+            console.warn('[Parent Session] Token session check failed:', err);
           }
         } else {
           clearParentToken();
         }
       }
-      if (parsedParent && parsedParent.family_id) {
-        const { families, students } = await fetchFamiliesAndStudentsForAuth();
-        const verifiedFamily = families.find(f => String(f.id || '').trim().toUpperCase() === String(parsedParent.family_id || '').trim().toUpperCase());
-        if (verifiedFamily) {
-          const famIdUpper = String(verifiedFamily.id || '').trim().toUpperCase();
-          const familyStudents = students.filter(s => String(s.family_id || '').trim().toUpperCase() === famIdUpper);
-          await showParentDashboardView(verifiedFamily, familyStudents, parsedParent.selected_student_id);
-          return;
-        } else {
-          localStorage.removeItem('alhuda_logged_in_parent');
-          sessionStorage.removeItem('alhuda_parent_session');
-          localStorage.removeItem('alhuda_selected_student_id');
-          if (localStorage.getItem('alhuda_active_portal_role') === 'parent') localStorage.removeItem('alhuda_active_portal_role');
-        }
-      }
-
       showParentLoginView();
     }
 
@@ -1313,79 +1295,16 @@
       if (serverAttempt.unauthorized) {
         // Server reachable and credentials rejected: authoritative, NO local fallback.
         restoreParentLoginButton(btn);
-        showParentLoginError(errBox, errText, "Invalid username or password.");
+        if (serverAttempt.error === 'no_password_set') {
+          showParentLoginError(errBox, errText, "No password set. Ask the administrator to set one.");
+        } else {
+          showParentLoginError(errBox, errText, "Invalid username or password.");
+        }
         return;
       }
-      // --- 2. Server unreachable: legacy local login (pre-deploy compatibility) ---
-      console.warn('[Parent Login] Worker auth unavailable, using local login.');
-
-      const { families, students, parentAccountsMap } = await fetchFamiliesAndStudentsForAuth();
-      const uNorm = usernameInput.toLowerCase();
-      const uPhone = usernameInput.replace(/[^0-9]/g, '');
-
-      let matchedFamily = null;
-      let matchedInitialStudentId = null;
-
-      for (const f of families) {
-        const creds = resolveFamilyCredentials(f, parentAccountsMap);
-        const famIdLower = String(f.id || '').trim().toLowerCase();
-        const famIdUpper = String(f.id || '').trim().toUpperCase();
-        const parentNameLower = String(f.parent_name || '').trim().toLowerCase();
-        const famEmailLower = String(f.email || f.parent_email || creds.email || '').trim().toLowerCase();
-        const famPhone = String(f.whatsapp || '').replace(/[^0-9]/g, '');
-        const famChildren = students.filter(s => String(s.family_id || '').trim().toUpperCase() === famIdUpper);
-
-        const matchedChild = famChildren.find(s =>
-          String(s.id || '').trim().toLowerCase() === uNorm ||
-          String(s.name || '').trim().toLowerCase() === uNorm
-        );
-
-        const identifierMatches = (
-          uNorm === String(creds.username || '').trim().toLowerCase() ||
-          uNorm === famIdLower ||
-          uNorm === parentNameLower ||
-          (famEmailLower && uNorm === famEmailLower) ||
-          (uPhone.length >= 7 && famPhone.length >= 7 && (famPhone === uPhone || famPhone.slice(-10) === uPhone.slice(-10))) ||
-          Boolean(matchedChild)
-        );
-
-        if (!identifierMatches) continue;
-
-        if (passwordInput === String(creds.password || '').trim()) {
-          matchedFamily = f;
-          matchedInitialStudentId = matchedChild ? matchedChild.id : (famChildren[0] ? famChildren[0].id : null);
-          break;
-        }
-      }
-
+      // --- 2. Server unreachable: NO local fallback (Batch 1 hardening, B4) ---
       restoreParentLoginButton(btn);
-
-      if (matchedFamily) {
-        const famIdUpper = String(matchedFamily.id || '').trim().toUpperCase();
-        const authorizedStudents = students.filter(s => String(s.family_id || '').trim().toUpperCase() === famIdUpper);
-        const creds = resolveFamilyCredentials(matchedFamily, parentAccountsMap);
-
-        const sessionPayload = {
-          family_id: matchedFamily.id,
-          parent_name: matchedFamily.parent_name,
-          username: creds.username,
-          selected_student_id: matchedInitialStudentId,
-          authenticated_at: new Date().toISOString()
-        };
-
-        localStorage.setItem('alhuda_logged_in_parent', JSON.stringify(sessionPayload));
-        sessionStorage.setItem('alhuda_parent_session', JSON.stringify(sessionPayload));
-        localStorage.setItem('alhuda_active_portal_role', 'parent');
-        localStorage.removeItem('alhuda_logged_in_teacher');
-        sessionStorage.removeItem('alhuda_teacher_session');
-        localStorage.removeItem('alhuda_logged_in_manager');
-        sessionStorage.removeItem('alhuda_manager_session');
-
-        document.getElementById('parentRoleMismatchBanner')?.classList.add('hidden');
-        await showParentDashboardView(matchedFamily, authorizedStudents, matchedInitialStudentId);
-      } else {
-        showParentLoginError(errBox, errText, "Invalid username or password.");
-      }
+      showParentLoginError(errBox, errText, "Cannot reach the server. Please try again.");
     }
 
     function populateStudentDropdown() {
@@ -3167,6 +3086,7 @@
       if (localStorage.getItem('alhuda_active_portal_role') === 'parent') {
         localStorage.removeItem('alhuda_active_portal_role');
       }
+      if (window.clearAllLmsLocalState) { try { window.clearAllLmsLocalState(); } catch (e) {} }
       CURRENT_AUTH_FAMILY = null;
       CURRENT_STUDENT = null;
       ALL_STUDENTS = [];

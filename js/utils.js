@@ -79,6 +79,28 @@
       return { residential_address: str };
     }
 
+    // AUTH HARDENING (Batch 1): account maps must never carry password
+    // VALUES — not into localStorage, not into the lms_shared_sync blob,
+    // and not into teachers.address. Strip the key wherever it appears
+    // (top level or a nested teacher_account object) and keep only a
+    // hasExplicitPassword marker. Usernames/ids are identifiers, not
+    // secrets, and stay untouched.
+    function _lmsStripAccountPasswords(map) {
+      if (!map || typeof map !== 'object') return map || {};
+      Object.values(map).forEach(acc => {
+        if (!acc || typeof acc !== 'object') return;
+        if ('password' in acc) {
+          acc.hasExplicitPassword = !!acc.password || !!acc.hasExplicitPassword;
+          delete acc.password;
+        }
+        if (acc.teacher_account && typeof acc.teacher_account === 'object' && 'password' in acc.teacher_account) {
+          acc.hasExplicitPassword = !!acc.teacher_account.password || !!acc.hasExplicitPassword;
+          delete acc.teacher_account.password;
+        }
+      });
+      return map;
+    }
+
     async function hydrateGlobalSharedStateFromCloud(familiesList, teachersList) {
       if (IS_CLOUD_HYDRATING) return;
       IS_CLOUD_HYDRATING = true;
@@ -158,7 +180,7 @@
               ...(mergedTeacherAccs[t.id] || {}),
               ...(meta.emp_id ? { teacher_id: meta.emp_id, emp_id: meta.emp_id } : {}),
               ...(meta.username ? { username: meta.username } : {}),
-              ...(meta.password ? { password: meta.password } : {}),
+              ...(meta.password ? { hasExplicitPassword: true } : {}),
               ...(meta.joining_date ? { joining_date: meta.joining_date } : {}),
               ...(meta.employee_type ? { employee_type: meta.employee_type } : {})
             };
@@ -182,6 +204,10 @@
         }
 
         localStorage.setItem('alhuda_teacher_salaries', JSON.stringify(mergedSalaries));
+        // AUTH HARDENING (Batch 1): the cloud blob / address meta may
+        // still hold legacy password values — never let them land in
+        // localStorage; the cleaned map replaces them with a marker.
+        _lmsStripAccountPasswords(mergedTeacherAccs);
         localStorage.setItem('alhuda_teacher_accounts', JSON.stringify(mergedTeacherAccs));
 
         // 4. Hydrate & Merge Parent Accounts from families.notes + cloudSharedState
@@ -195,6 +221,7 @@
             }
           } catch (e) {}
         });
+        _lmsStripAccountPasswords(mergedParentAccs);
         localStorage.setItem('alhuda_parent_accounts', JSON.stringify(mergedParentAccs));
 
         // 5. Hydrate Announcements, Parent Complaints & Teacher Requests
@@ -242,6 +269,15 @@
         try { announcements = JSON.parse(localStorage.getItem('alhuda_official_announcements') || '[]'); } catch (e) {}
         try { complaints = JSON.parse(localStorage.getItem('alhuda_parent_complaints') || '[]'); } catch (e) {}
         try { teacherReqs = JSON.parse(localStorage.getItem('alhuda_local_teacher_requests') || '[]'); } catch (e) {}
+
+        // AUTH HARDENING (Batch 1): strip password values BEFORE anything
+        // is written to the cloud — this covers both the lms_shared_sync
+        // blob below and meta.teacher_account written into the teacher's
+        // address in step 1. (B5: the blob sits inside a family's notes
+        // and is readable by non-owner roles, so it must never carry
+        // password values or hashes.)
+        _lmsStripAccountPasswords(teacherAccs);
+        _lmsStripAccountPasswords(parentAccs);
 
         // 1. If a specific teacherId was passed, also update that teacher's address JSON in Supabase
         if (options.teacherId) {

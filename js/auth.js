@@ -39,6 +39,48 @@
       }
     }
 
+    // ============================================================
+    // AUTH HARDENING (Batch 1, 2026-10-21): account passwords live ONLY as
+    // salted hashes written by the owner-only Worker endpoint
+    // POST /api/auth/set-password. Frontend code must never embed a
+    // password in teachers.address / families.notes JSON, in a
+    // localStorage account map, or in the shared-state blob. UI save flows
+    // call this helper AFTER the record itself has been saved.
+    // Resolves { ok: true } on success; throws Error with a readable
+    // message otherwise (the caller must surface it to the owner).
+    // ============================================================
+    async function setAccountPasswordViaWorker(role, identifier, newPassword) {
+      const pw = String(newPassword || '');
+      if (pw.length < 10) {
+        throw new Error('Password must be at least 10 characters long.');
+      }
+      let token = null;
+      try {
+        if (typeof window.getLmsAuthToken === 'function') token = window.getLmsAuthToken();
+      } catch (e) {}
+      if (!token) token = getOwnerToken();
+      if (!token) {
+        throw new Error('Owner session not found. Please log in as the owner and try again.');
+      }
+      let res;
+      try {
+        res = await fetch(getWorkerBase() + '/api/auth/set-password', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+          body: JSON.stringify({ role: role, identifier: identifier, newPassword: pw })
+        });
+      } catch (err) {
+        throw new Error('Cannot reach the server. The password was NOT set.');
+      }
+      let data = null;
+      try { data = await res.json(); } catch (e) {}
+      if (!res.ok || !data || data.ok === false) {
+        throw new Error((data && (data.error || data.message)) || ('Password service error (HTTP ' + res.status + ').'));
+      }
+      return { ok: true };
+    }
+    window.setAccountPasswordViaWorker = setAccountPasswordViaWorker;
+
     function decodeTokenPayload(token) {
       try {
         const parts = String(token).split('.');
@@ -192,6 +234,16 @@
         if (localStorage.getItem('alhuda_active_portal_role') === 'owner') {
           localStorage.removeItem('alhuda_active_portal_role');
         }
+        // AUTH HARDENING (S5): also wipe the local DB mirror and every
+        // account/session key, so no dataset or credential material
+        // lingers in this browser after logout. Data caches that may hold
+        // the only copy of a record (fees, salaries, books) are NOT ours
+        // to clear here — clearAllLmsLocalState preserves them by design.
+        if (typeof window.clearAllLmsLocalState === 'function') {
+          window.clearAllLmsLocalState();
+        } else {
+          localStorage.removeItem('alhuda_cloudflare_local_db_v1');
+        }
       } catch (e) {}
       showOwnerLoginView();
       const userInp = document.getElementById('ownerLoginUsername');
@@ -228,6 +280,15 @@
       if (localStorage.getItem('alhuda_active_portal_role') === 'manager') {
         localStorage.removeItem('alhuda_active_portal_role');
       }
+      // AUTH HARDENING (S5): also wipe the local DB mirror and every
+      // account/session key (see logoutOwnerPortal).
+      try {
+        if (typeof window.clearAllLmsLocalState === 'function') {
+          window.clearAllLmsLocalState();
+        } else {
+          localStorage.removeItem('alhuda_cloudflare_local_db_v1');
+        }
+      } catch (e) {}
       ACTIVE_MANAGER_ID = null;
       window.ACTIVE_MANAGER_NAME = null;
       window.location.replace('manager.html');
@@ -372,45 +433,73 @@
       openModal('modalTeacherLogin');
     }
 
-    function fillTeacherLogin(user, pass) {
-      document.getElementById('tLoginUser').value = user;
-      document.getElementById('tLoginPass').value = pass;
+    function fillTeacherLogin(user) {
+      // AUTH HARDENING (Batch 1): quick entries may fill the USERNAME only.
+      // Nothing in this portal may fill or display a password anymore, and
+      // the quick-logins list is intentionally kept empty (see
+      // openTeacherLoginModal) because it existed only to share credentials.
+      document.getElementById('tLoginUser').value = user || '';
+      const passEl = document.getElementById('tLoginPass');
+      if (passEl) passEl.value = '';
     }
 
-    function handleTeacherLoginSubmit(e) {
+    async function handleTeacherLoginSubmit(e) {
       e.preventDefault();
       const user = document.getElementById('tLoginUser').value.trim();
       const pass = document.getElementById('tLoginPass').value.trim();
       const err = document.getElementById('teacherLoginError');
 
-      const eligibleTeachers = (typeof getEligibleTeachers === 'function')
-        ? getEligibleTeachers(ALL_TEACHERS)
-        : (ALL_TEACHERS || []);
-
-      let matchedTeacher = null;
-      for (let t of eligibleTeachers) {
-        const creds = getTeacherCreds(t);
-        if (
-          (creds.username.toLowerCase() === user.toLowerCase() || creds.teacher_id.toLowerCase() === user.toLowerCase() || (t.phone && t.phone === user)) &&
-          (creds.password === pass)
-        ) {
-          matchedTeacher = t;
-          break;
-        }
-      }
-
-      if (matchedTeacher) {
-        // Per-tab session only: closing the tab or opening a new one requires fresh login.
-        sessionStorage.setItem('alhuda_teacher_session', JSON.stringify(matchedTeacher));
-        localStorage.setItem('alhuda_active_portal_role', 'teacher');
-        closeModal('modalTeacherLogin');
-        window.location.replace('teacher.html');
-      } else {
+      function showErr(msg) {
         if (err) {
-          err.innerText = "Invalid username or password.";
+          err.innerText = msg;
           err.classList.remove('hidden');
         }
       }
+      if (err) err.classList.add('hidden');
+
+      if (!user || !pass) {
+        showErr('Please enter both username and password.');
+        return;
+      }
+
+      // AUTH HARDENING (Batch 1): server-side verification ONLY. The old
+      // in-browser plaintext comparison against locally mirrored records
+      // (which accepted the well-known default password) is removed. If the
+      // Worker cannot be reached, login fails closed with a clear message.
+      let res;
+      let data = null;
+      try {
+        res = await fetch(getWorkerBase() + '/api/auth/staff-login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ role: 'teacher', identifier: user, password: pass })
+        });
+        try { data = await res.json(); } catch (e2) {}
+      } catch (netErr) {
+        showErr('Cannot reach the server. Please try again.');
+        return;
+      }
+
+      if (res.ok && data && data.ok && data.token) {
+        try {
+          sessionStorage.setItem('alhuda_teacher_token', data.token);
+          sessionStorage.setItem('alhuda_teacher_session', JSON.stringify({ id: data.id }));
+          localStorage.setItem('alhuda_active_portal_role', 'teacher');
+        } catch (e3) {}
+        closeModal('modalTeacherLogin');
+        window.location.replace('teacher.html');
+        return;
+      }
+
+      if (res.status === 401 && data && data.error === 'no_password_set') {
+        showErr('No password set. Ask the administrator to set one.');
+        return;
+      }
+      if (res.status === 401) {
+        showErr('Invalid username or password.');
+        return;
+      }
+      showErr('Cannot reach the server. Please try again.');
     }
 
     function setTeacherSessionActive(teacher) {
