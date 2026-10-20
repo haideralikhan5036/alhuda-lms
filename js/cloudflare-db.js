@@ -506,6 +506,25 @@
       }
     }
 
+    // === WRITE GUARD (new): writes must never silently land in the local
+    // mirror while the UI reports success. Reads keep the offline fallback.
+    const isWrite = payload && payload.action && payload.action !== 'select';
+    if (isWrite) {
+      const reason = isD1Live ? 'session expired' : 'server unreachable';
+      console.error('[Cloudflare D1] WRITE blocked (' + reason + ') — refusing local fallback for',
+        payload.table, payload.action);
+      // Alert at most once per 10s so multi-row writes (e.g. family
+      // deactivation) don't spam the screen.
+      if (typeof window !== 'undefined') {
+        const lastAlert = window.__lmsWriteBlockedAlertAt || 0;
+        if (Date.now() - lastAlert > 10000) {
+          window.__lmsWriteBlockedAlertAt = Date.now();
+          alert('Session expired — please log in again. Aap ka change SAVE NAHI hua (koi data kharaab nahi hua).');
+        }
+      }
+      return { data: null, error: { message: 'Session expired — please log in again. Change was NOT saved.' } };
+    }
+
     return executeLocalQuery(payload);
   }
 
