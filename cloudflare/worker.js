@@ -242,10 +242,15 @@ async function handleOwnerLogin(request, env) {
 }
 
 // --- POST /api/auth/staff-login  { role, identifier, password } --------------
-// Verifies manager/teacher/parent credentials against D1. Only EXPLICITLY
-// set passwords are accepted â the '12345678' default and empty passwords
-// NEVER authenticate here. If no explicit password exists for the account,
-// login fails and the owner must set one via the owner portal first.
+// Verifies manager/teacher/parent credentials against D1. Batch-1 hardening
+// (B2/B3): an account may authenticate ONLY when the password slot login
+// would check holds an owner-set HASHED value (see isHashedPassword).
+// Legacy plaintext values, the '12345678' default, and missing/empty slots
+// NEVER authenticate here. When the identifier matches an account but no
+// honored slot holds a hashed value, the response is the distinct
+// { ok:false, error:'no_password_set' } so portals can tell the user to ask
+// the administrator to set a password. The owner sets/migrates passwords via
+// POST /api/auth/set-password.
 async function handleStaffLogin(request, env) {
   if (request.method === 'OPTIONS') return json(request, env, {}, 204);
   if (request.method !== 'POST') {
@@ -279,6 +284,11 @@ async function handleStaffLogin(request, env) {
 
   try {
     let recordId = null;
+    // Batch-1: track WHY login failed so an account that exists but has no
+    // owner-set (hashed) password gets the distinct 'no_password_set' error,
+    // while every other failure keeps the generic anti-enumeration message.
+    let matchedAccount = false;
+    let matchedHashed = false;
 
     if (role === 'parent') {
       const { results } = await db.prepare('SELECT id, parent_name, notes FROM families').all();
@@ -289,7 +299,13 @@ async function handleStaffLogin(request, env) {
         const derivedUser = ('parent_' + parentName).toLowerCase().replace(/[^a-z0-9_]/g, '');
         const usernames = [pc.username, derivedUser, String(f.id || '').toLowerCase()].filter(Boolean).map((u) => String(u).toLowerCase());
         if (!usernames.includes(identifier)) continue;
+        matchedAccount = true;
         const pw = pc.password;
+        // Only a hashed (owner-set) value may authenticate; legacy
+        // plaintext / default / missing slots fall through to
+        // 'no_password_set' below.
+        if (!isHashedPassword(pw)) continue;
+        matchedHashed = true;
         if (await verifyPassword(password, pw)) {
           recordId = f.id;
           break;
@@ -310,7 +326,14 @@ async function handleStaffLogin(request, env) {
           t.id,
         ].filter(Boolean).map((u) => String(u).toLowerCase());
         if (!usernames.includes(identifier)) continue;
+        matchedAccount = true;
+        // Slot precedence unchanged: address.password, then
+        // address.teacher_account.password, then notes.password — the first
+        // value present is the one login checks, and (Batch-1) it must be
+        // in hashed format for the account to authenticate at all.
         const pw = meta.password || acc.password || notesMeta.password;
+        if (!isHashedPassword(pw)) continue;
+        matchedHashed = true;
         if (await verifyPassword(password, pw)) {
           // For manager role, require the record to actually be a manager.
           if (role === 'manager') {
@@ -326,7 +349,14 @@ async function handleStaffLogin(request, env) {
     }
 
     if (!recordId) {
-      // Identical message for every failure: no enumeration.
+      if (matchedAccount && !matchedHashed) {
+        // The account exists but has no owner-set (hashed) password yet —
+        // distinct error so portals can show "No password set. Ask the
+        // administrator to set one." instead of a misleading credential
+        // error.
+        return json(request, env, { ok: false, error: 'no_password_set' }, 401);
+      }
+      // Identical message for every other failure: no enumeration.
       return json(request, env, { ok: false, error: 'Invalid username or password.' }, 401);
     }
 
@@ -697,6 +727,27 @@ async function resolveScopeIds(db, role, sub) {
   return scope;
 }
 
+// Recursively strip every `password` key within a subtree (bounded depth,
+// non-destructive). Used for the lms_shared_sync blob, whose nested account
+// maps carry password fields the flat checks in withoutPasswordKeys miss.
+function stripPasswordsDeep(value, depth) {
+  if (depth <= 0 || !value || typeof value !== 'object') return { changed: false, value };
+  let changed = false;
+  const out = Array.isArray(value) ? [...value] : { ...value };
+  if (!Array.isArray(out) && Object.prototype.hasOwnProperty.call(out, 'password')) {
+    delete out.password;
+    changed = true;
+  }
+  for (const key of Object.keys(out)) {
+    const child = out[key];
+    if (child && typeof child === 'object') {
+      const r = stripPasswordsDeep(child, depth - 1);
+      if (r.changed) { out[key] = r.value; changed = true; }
+    }
+  }
+  return { changed, value: out };
+}
+
 // Remove password-bearing keys from parsed JSON objects (non-destructive).
 function withoutPasswordKeys(obj) {
   let changed = false;
@@ -711,6 +762,35 @@ function withoutPasswordKeys(obj) {
     out.portal_credentials = { ...out.portal_credentials };
     delete out.portal_credentials.password;
     changed = true;
+  }
+  // Batch-1 (B5): the lms_shared_sync blob (families.notes) nests legacy
+  // account maps — teacher_accounts / parent_accounts, each an object of
+  // account objects that can carry their own `password` — plus other shared
+  // state. Strip every password inside the account maps explicitly, then run
+  // a bounded recursive strip (depth <= 4) over the whole blob so no other
+  // nested password survives either.
+  if (out.lms_shared_sync && typeof out.lms_shared_sync === 'object') {
+    const syncCopy = { ...out.lms_shared_sync };
+    for (const mapName of ['teacher_accounts', 'parent_accounts']) {
+      const map = syncCopy[mapName];
+      if (map && typeof map === 'object') {
+        const cleanMap = {};
+        for (const [k, acc] of Object.entries(map)) {
+          if (acc && typeof acc === 'object' && 'password' in acc) {
+            const cleanAcc = { ...acc };
+            delete cleanAcc.password;
+            cleanMap[k] = cleanAcc;
+            changed = true;
+          } else {
+            cleanMap[k] = acc;
+          }
+        }
+        syncCopy[mapName] = cleanMap;
+      }
+    }
+    const deep = stripPasswordsDeep(syncCopy, 4);
+    out.lms_shared_sync = deep.value;
+    if (deep.changed) changed = true;
   }
   return { changed, value: out };
 }

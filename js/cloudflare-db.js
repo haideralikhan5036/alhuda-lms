@@ -80,6 +80,9 @@
   }
 
   function clearWorkerTokens() {
+    // PR #11 follow-up (Batch 1): the in-memory token cache must be
+    // dropped too, or a dead token keeps being offered until reload.
+    _memoryTokenCache = null;
     try {
       ['alhuda_owner_token', 'alhuda_manager_token', 'alhuda_teacher_token', 'alhuda_parent_token']
         .forEach(function (k) { sessionStorage.removeItem(k); });
@@ -720,6 +723,42 @@
 
   // Exposed so portal logout handlers can drop worker session tokens.
   window.clearWorkerTokens = clearWorkerTokens;
+
+  // Batch 1 hardening (S5): full local sign-out wipe, called by the portal
+  // logout handlers. Removes the data mirror and every auth/session key
+  // from BOTH storages, and drops the in-memory token + D1 probe caches.
+  // Data caches that re-sync from D1 are intentionally NOT removed:
+  // alhuda_fee_records, alhuda_teacher_salaries, alhuda_custom_books,
+  // alhuda_official_announcements (a browser copy may be the only copy).
+  window.clearAllLmsLocalState = function () {
+    _memoryTokenCache = null;
+    _d1Status = null;
+    _d1CheckPromise = null;
+    const exactKeys = [
+      'alhuda_owner_token', 'alhuda_manager_token', 'alhuda_teacher_token', 'alhuda_parent_token',
+      'alhuda_logged_in_owner', 'alhuda_logged_in_manager', 'alhuda_logged_in_teacher', 'alhuda_logged_in_parent',
+      'alhuda_admin_account', 'alhuda_teacher_accounts', 'alhuda_parent_accounts',
+      'alhuda_active_portal_role', 'alhuda_selected_student_id'
+    ];
+    function wipe(storage) {
+      if (!storage) return;
+      try {
+        const keys = [];
+        for (let i = 0; i < storage.length; i++) {
+          const k = storage.key(i);
+          if (k) keys.push(k);
+        }
+        keys.forEach(function (k) {
+          if (k === LOCAL_DB_STORAGE_KEY || exactKeys.indexOf(k) !== -1 ||
+              (k.indexOf('alhuda_') === 0 && k.indexOf('_session') !== -1)) {
+            try { storage.removeItem(k); } catch (e) {}
+          }
+        });
+      } catch (e) {}
+    }
+    try { wipe(localStorage); } catch (e) {}
+    try { wipe(sessionStorage); } catch (e) {}
+  };
 
   // Override window.supabase.createClient so all portals (Admin, Manager, Teacher, Parent) automatically use Cloudflare D1 + R2
   window.supabase = {

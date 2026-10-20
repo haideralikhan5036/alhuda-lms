@@ -779,7 +779,7 @@ function _renderFamilyWorkspaceDOM() {
 
   const fNotes = _parseFamilyStructuredNotes(family);
   const bioMeta = fNotes.bio_meta || {};
-  const creds = (typeof getParentCreds === 'function') ? getParentCreds(family) : { username: 'parent_' + family.id, password: '123456' };
+  const creds = (typeof getParentCreds === 'function') ? getParentCreds(family) : { username: '', password: '', email: '', hasExplicitPassword: false };
   const payData = _getFamilyPaymentsList(family);
 
   const regDate = bioMeta.joining_date || (family.created_at ? family.created_at.slice(0, 10) : '2026-02-05');
@@ -1828,7 +1828,9 @@ function _buildFamilyBioDataTabHtml(family, fNotes, creds) {
   const cityVal = bio.city || _extractCityFromLegacyNotes(family.notes) || '--';
   const timezoneVal = bio.timezone || _inferTimezoneFromCountry(countryVal);
   const usernameVal = creds.username || family.parent_email || '--';
-  const passwordVal = _CURRENT_360_STATE.showPassword ? (creds.password || '123456') : '••••••••';
+  // AUTH HARDENING (Batch 1): the stored password is NEVER displayed (it
+  // is a server-side salted hash now) — show only whether one is set.
+  const passwordVal = creds.hasExplicitPassword ? 'Password set' : 'No password set';
 
   // 3-Column Structured Grid matching Screenshot 1 (WITHOUT WhatsApp ID!)
   const rows = [
@@ -1855,9 +1857,6 @@ function _buildFamilyBioDataTabHtml(family, fNotes, creds) {
         value: `
           <span class="inline-flex items-center gap-2">
             <span class="font-mono font-bold text-teal-800">${_esc360(passwordVal)}</span>
-            <button onclick="toggleBioDataPasswordVisibility()" class="text-xs text-indigo-600 hover:underline font-extrabold cursor-pointer">
-              ${_CURRENT_360_STATE.showPassword ? 'Hide' : 'Show'}
-            </button>
           </span>
         `
       },
@@ -3114,7 +3113,7 @@ function openEditFamilyProfileModal(familyId) {
 
   const fNotes = _parseFamilyStructuredNotes(family);
   const bio = fNotes.bio_meta || {};
-  const creds = (typeof getParentCreds === 'function') ? getParentCreds(family) : { username: 'parent_' + family.id, password: '123456' };
+  const creds = (typeof getParentCreds === 'function') ? getParentCreds(family) : { username: '', password: '', email: '', hasExplicitPassword: false };
 
   _openWorkspaceModal(
     `Edit Family Profile Information`,
@@ -3184,8 +3183,8 @@ function openEditFamilyProfileModal(familyId) {
             <input type="text" id="fwEditFamUser" value="${_esc360(creds.username)}" class="w-full p-2.5 rounded-xl border border-slate-300 font-mono font-bold text-slate-800">
           </div>
           <div>
-            <label class="font-extrabold text-slate-700 block mb-1">Portal Password</label>
-            <input type="text" id="fwEditFamPass" value="${_esc360(creds.password)}" class="w-full p-2.5 rounded-xl border border-slate-300 font-mono font-bold text-slate-800">
+            <label class="font-extrabold text-slate-700 block mb-1">Set New Portal Password (leave blank to keep current)</label>
+            <input type="password" id="fwEditFamPass" value="" placeholder="${creds.hasExplicitPassword ? 'Password is set — leave blank to keep it' : 'No password set — enter at least 10 characters'}" class="w-full p-2.5 rounded-xl border border-slate-300 font-mono font-bold text-slate-800">
           </div>
         </div>
 
@@ -3218,6 +3217,15 @@ async function submitEditFamilyProfileForm(e, familyId) {
   const username = document.getElementById('fwEditFamUser').value.trim();
   const password = document.getElementById('fwEditFamPass').value.trim();
 
+  // AUTH HARDENING (Batch 1): blank = keep the current password. A typed
+  // password must be at least 10 characters and, after the profile saves,
+  // is sent ONLY to the owner-only Worker endpoint — it is never stored
+  // in the account map or the family record.
+  if (password && password.length < 10) {
+    alert('New portal password must be at least 10 characters long (or leave it blank to keep the current one).');
+    return;
+  }
+
   const fNotes = _parseFamilyStructuredNotes(family);
   fNotes.bio_meta = {
     ...fNotes.bio_meta,
@@ -3239,11 +3247,27 @@ async function submitEditFamilyProfileForm(e, familyId) {
   });
 
   if (typeof saveParentAccount === 'function') {
-    saveParentAccount(family.id, { username, password, parent_name, whatsapp: telephone, email: parent_email, city, country, monthly_fee, currency });
+    saveParentAccount(family.id, { username, parent_name, whatsapp: telephone, email: parent_email, city, country, monthly_fee, currency });
+  }
+
+  // AUTH HARDENING (Batch 1): a newly typed password goes ONLY to the
+  // owner-only Worker endpoint (stored as a salted hash server-side). The
+  // profile above is saved either way; on failure, say so clearly.
+  let pwNote = '';
+  if (password) {
+    try {
+      if (typeof window.setAccountPasswordViaWorker !== 'function') throw new Error('Password helper unavailable.');
+      await window.setAccountPasswordViaWorker('parent', family.id, password);
+      if (typeof saveParentAccount === 'function') saveParentAccount(family.id, { hasExplicitPassword: true });
+      pwNote = ' Portal password updated.';
+    } catch (pwErr) {
+      alert('The family profile was SAVED, but the PASSWORD was NOT set.\n\nReason: ' + (pwErr.message || pwErr) + '\n\nPlease try again from the Edit Family form or the password tool.');
+      pwNote = ' Portal password was NOT updated — please set it via the password tool.';
+    }
   }
 
   _closeWorkspaceModal();
-  _notify360(`Family Profile for "${parent_name}" updated across the LMS!`);
+  _notify360(`Family Profile for "${parent_name}" updated across the LMS!${pwNote}`);
   _renderFamilyWorkspaceDOM();
 }
 
@@ -3886,11 +3910,21 @@ function _resolveTeacherCustomMeta(teacher) {
   } catch (e) {}
 
   const creds = (typeof getTeacherCreds === 'function') ? getTeacherCreds(teacher) : {};
+  // AUTH HARDENING (Batch 1): getTeacherCreds / getTeacherAccounts no
+  // longer carry a password VALUE ('' / stripped). Their password keys
+  // must NOT clobber the credential slot stored in the teacher's own
+  // address JSON (parsedAddr): that slot holds the server-side password
+  // hash and has to round-trip untouched when 360° edits are persisted
+  // (the PR #7 lesson). Strip the key from the sanitised sources only.
+  const safeCreds = { ...creds };
+  delete safeCreds.password;
+  const safeAcc = { ...acc };
+  delete safeAcc.password;
   return {
     ...parsedAddr,
     ...parsedNotes,
-    ...creds,
-    ...acc
+    ...safeCreds,
+    ...safeAcc
   };
 }
 

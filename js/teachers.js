@@ -12,12 +12,37 @@
     // so profile updates can preserve credential JSON (password hash) stored there.
     let _editTeacherOrigAddress = '';
     function getTeacherAccounts() {
-      return JSON.parse(localStorage.getItem('alhuda_teacher_accounts') || '{}');
+      // AUTH HARDENING (Batch 1): localStorage account maps must NOT hold
+      // password values. Legacy entries that still carry one are sanitised
+      // on read: the value is dropped, replaced by a hasExplicitPassword
+      // marker, and the cleaned map is written back.
+      let accounts = {};
+      try { accounts = JSON.parse(localStorage.getItem('alhuda_teacher_accounts') || '{}'); } catch (e) { accounts = {}; }
+      let changed = false;
+      Object.values(accounts || {}).forEach(acc => {
+        if (acc && typeof acc === 'object' && 'password' in acc) {
+          acc.hasExplicitPassword = !!acc.password || !!acc.hasExplicitPassword;
+          delete acc.password;
+          changed = true;
+        }
+      });
+      if (changed) {
+        try { localStorage.setItem('alhuda_teacher_accounts', JSON.stringify(accounts)); } catch (e) {}
+      }
+      return accounts || {};
     }
 
     function saveTeacherAccount(tId, creds) {
+      // AUTH HARDENING (Batch 1): never persist a password value. Passwords
+      // are set only via the owner-only /api/auth/set-password endpoint
+      // (see setAccountPasswordViaWorker in js/auth.js).
+      const cleanCreds = { ...(creds || {}) };
+      if ('password' in cleanCreds) {
+        cleanCreds.hasExplicitPassword = !!cleanCreds.password || !!cleanCreds.hasExplicitPassword;
+        delete cleanCreds.password;
+      }
       const accounts = getTeacherAccounts();
-      accounts[tId] = { ...(accounts[tId] || {}), ...creds };
+      accounts[tId] = { ...(accounts[tId] || {}), ...cleanCreds };
       localStorage.setItem('alhuda_teacher_accounts', JSON.stringify(accounts));
       if (typeof syncGlobalSharedStateToCloud === 'function') {
         syncGlobalSharedStateToCloud({ teacherId: tId });
@@ -58,35 +83,54 @@
     }
 
     function getTeacherCreds(t) {
+      // AUTH HARDENING (Batch 1): NEVER fabricate credentials and NEVER
+      // persist an invented account (the old behaviour invented a
+      // first-name username + the well-known default password and saved
+      // it). A password exists only as a salted hash on the server, set via
+      // /api/auth/set-password. This helper only reports identity plus
+      // whether a password exists; `password` is always ''.
       const accounts = getTeacherAccounts();
-      if (accounts[t.id] && accounts[t.id].teacher_id) return accounts[t.id];
+      const stored = accounts[t.id] || {};
 
-      // Assign sequential ID based on position in ALL_TEACHERS list
+      // Secondary stored source: credential meta inside the teacher record
+      // (address JSON -> teacher_account / top-level slots).
+      let addrMeta = {};
+      try {
+        if (t.address && String(t.address).trim().startsWith('{')) addrMeta = JSON.parse(t.address);
+      } catch (e) {}
+      const addrAccount = (addrMeta && typeof addrMeta.teacher_account === 'object' && addrMeta.teacher_account) ? addrMeta.teacher_account : {};
+
+      const hasExplicitPassword = !!(
+        stored.hasExplicitPassword ||
+        (addrMeta && addrMeta.password) ||
+        addrAccount.password
+      );
+
+      // Positional ID (display only — no longer persisted as a side effect)
       let seqNum = 1;
       if (ALL_TEACHERS && ALL_TEACHERS.length > 0) {
         const idx = ALL_TEACHERS.findIndex(item => item.id === t.id);
         seqNum = idx >= 0 ? (idx + 1) : 1;
       }
-      const assignedId = `TCH-${String(seqNum).padStart(3, '0')}`;
+      const positionalId = `TCH-${String(seqNum).padStart(3, '0')}`;
 
-      // Clean first name for username (e.g. "Gulfam" -> "gulfam")
+      // Clean first name for a suggested username (e.g. "Gulfam" -> "gulfam")
       const firstWord = (t.full_name || 'teacher').trim().split(/\s+/)[0];
       const baseUser = firstWord.toLowerCase().replace(/[^a-z0-9]/g, '') || 'teacher';
-      const cleanPhone = (t.phone || '').replace(/[^0-9]/g, '') || '9876543210';
 
-      const defaultCred = {
-        teacher_id: assignedId,
-        username: baseUser,
-        password: '12345678',
-        working_shift: t.working_shift || '10 Hours Shift (02:00 PM - 12:00 AM PKT)',
+      return {
+        ...stored,
+        teacher_id: stored.teacher_id || addrAccount.teacher_id || addrMeta.emp_id || positionalId,
+        username: stored.username || addrAccount.username || addrMeta.username || baseUser,
+        password: '',
+        hasExplicitPassword: hasExplicitPassword,
+        working_shift: stored.working_shift || t.working_shift || '10 Hours Shift (02:00 PM - 12:00 AM PKT)',
         full_name: t.full_name,
         phone: t.phone,
-        zoom_link: `https://zoom.us/j/${cleanPhone}?pwd=alhuda_${baseUser}`,
-        zoom_meeting_id: cleanPhone,
-        zoom_passcode: '123456'
+        zoom_link: stored.zoom_link || addrAccount.zoom_link || '',
+        zoom_meeting_id: stored.zoom_meeting_id || addrAccount.zoom_meeting_id || '',
+        zoom_passcode: stored.zoom_passcode || addrAccount.zoom_passcode || ''
       };
-      saveTeacherAccount(t.id, defaultCred);
-      return defaultCred;
     }
 
     // =========================================================================
@@ -246,15 +290,29 @@
       if (uInput) {
         uInput.value = clean || 'teacher';
       }
-      const pInput = document.getElementById('tPassword');
-      if (pInput && !pInput.value) {
-        pInput.value = '12345678';
+      // AUTH HARDENING (Batch 1): the password field is NEVER auto-filled.
+      // An empty field means "no password / leave unchanged".
+    }
+
+    // AUTH HARDENING (Batch 1): the old "generate" buttons filled the
+    // well-known default password. They now generate a genuinely random
+    // 16-character password, and only when the owner clicks them on purpose.
+    function staffGenerateStrongPassword() {
+      const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789!@#$%';
+      let out = '';
+      try {
+        const buf = new Uint32Array(16);
+        crypto.getRandomValues(buf);
+        buf.forEach(n => { out += alphabet[n % alphabet.length]; });
+      } catch (e) {
+        for (let i = 0; i < 16; i++) out += alphabet[Math.floor(Math.random() * alphabet.length)];
       }
+      return out;
     }
 
     function generateRandomTeacherPass() {
       const pInput = document.getElementById('tPassword');
-      if (pInput) pInput.value = '12345678';
+      if (pInput) pInput.value = staffGenerateStrongPassword();
     }
 
     function handleShiftChange(val) {
@@ -290,7 +348,11 @@
         uInput.value = '';
         delete uInput.dataset.manualEdited;
       }
-      generateRandomManagerPass();
+      // AUTH HARDENING (Batch 1): password field starts BLANK (it used to
+      // be auto-filled with the well-known default). Blank = no password
+      // set until the owner deliberately types or generates one.
+      const ntsPwInput = document.getElementById('ntsPassword');
+      if (ntsPwInput) ntsPwInput.value = '';
       document.getElementById('ntsGender').value = 'Male';
       const today = new Date().toISOString().slice(0,10);
       document.getElementById('ntsJoiningDate').value = today;
@@ -396,8 +458,11 @@
     }
 
     function generateRandomManagerPass() {
+      // AUTH HARDENING (Batch 1): generates a random password, never the
+      // old well-known default. Only runs when the owner clicks the
+      // generate button on purpose — the form no longer calls it on open.
       const pInput = document.getElementById('ntsPassword');
-      if (pInput) pInput.value = '12345678';
+      if (pInput) pInput.value = staffGenerateStrongPassword();
     }
 
     async function submitNonTeachingStaff(e) {
@@ -431,9 +496,15 @@
         username = firstWord.toLowerCase().replace(/[^a-z0-9]/g, '') || `${prefix.toLowerCase()}.user`;
       }
 
-      let password = document.getElementById('ntsPassword')?.value?.trim();
-      if (!password) {
-        password = '12345678';
+      let password = document.getElementById('ntsPassword')?.value?.trim() || '';
+      // AUTH HARDENING (Batch 1): the well-known default password is GONE.
+      // Blank = no password set. A typed Manager password must be at least
+      // 10 characters (the Worker enforces the same rule) and is set
+      // server-side AFTER the record is created — it is never stored in
+      // the record itself or in the local account map.
+      if (designation === 'Manager' && password && password.length < 10) {
+        alert('Manager password must be at least 10 characters long (or leave it blank to set it later).');
+        return;
       }
 
       // Build notes JSON
@@ -445,7 +516,6 @@
         joining_date,
         salary,
         username,
-        password,
         cnic: cnic || null,
         email: email || null,
         emergency_name: emgName || null,
@@ -482,7 +552,7 @@
           teacher_id: emp_id,
           emp_id: emp_id,
           username: username,
-          password: password,
+          hasExplicitPassword: !!password,
           role_title: role_title || designation,
           designation: designation,
           cnic: cnic || '',
@@ -498,6 +568,23 @@
         await loadTeachers();
 
         if (designation === 'Manager') {
+          // AUTH HARDENING (Batch 1): the password goes ONLY to the
+          // owner-only Worker endpoint (stored as a salted hash). It is
+          // never shown in the success modal and never sent over WhatsApp.
+          let mgrPasswordSet = false;
+          if (password) {
+            try {
+              if (typeof window.setAccountPasswordViaWorker !== 'function') throw new Error('Password helper unavailable.');
+              await window.setAccountPasswordViaWorker('manager', insertedId, password);
+              mgrPasswordSet = true;
+            } catch (pwErr) {
+              // Keep the local status marker honest: the account was saved
+              // with hasExplicitPassword from the typed value, but the
+              // server-side set failed, so no usable password exists.
+              saveTeacherAccount(insertedId, { hasExplicitPassword: false });
+              alert('The manager profile was SAVED, but the PASSWORD was NOT set.\n\nReason: ' + (pwErr.message || pwErr) + '\n\nPlease set it from the Edit form or the password tool.');
+            }
+          }
           // Open official Manager Provisioning Success Modal
           const portalUrl = `${window.location.origin}/manager.html`;
           const badgeEl = document.getElementById('succMgrIdBadge');
@@ -509,7 +596,7 @@
           const userEl = document.getElementById('succMgrUser');
           if (userEl) userEl.innerText = username;
           const passEl = document.getElementById('succMgrPass');
-          if (passEl) passEl.innerText = password;
+          if (passEl) passEl.innerText = mgrPasswordSet ? 'Password set — give it to the manager in person or by phone.' : 'No password set — set one via the Edit form or password tool.';
           const urlEl = document.getElementById('succMgrPortalUrl');
           if (urlEl) urlEl.value = portalUrl;
           const launchBtn = document.getElementById('succMgrLaunchBtn');
@@ -517,7 +604,7 @@
 
           // WhatsApp dispatch link
           const cleanPhone = (phone || '').replace(/[^0-9]/g, '');
-          const waMsg = `Assalamu Alaikum Respected ${full_name},\nWelcome to Al-Huda Islamic Centre Management Operations.\n\n🌐 *Your Dedicated Manager Portal Link:*\n${portalUrl}\n\n🆔 *Manager ID:* ${emp_id}\n👤 *Login Username:* ${username}\n🔑 *Login Password:* ${password}\n💼 *Role / Title:* ${role_title || 'Operations Manager'}\n\nPlease click your portal link to access all management tools, rosters, timetables, and system follow-ups.\nJazakum Allahu Khairan!`;
+          const waMsg = `Assalamu Alaikum Respected ${full_name},\nWelcome to Al-Huda Islamic Centre Management Operations.\n\n🌐 *Your Dedicated Manager Portal Link:*\n${portalUrl}\n\n🆔 *Manager ID:* ${emp_id}\n👤 *Login Username:* ${username}\n💼 *Role / Title:* ${role_title || 'Operations Manager'}\n\nYour password will be given to you by the administrator in person or by phone.\nPlease click your portal link to access all management tools, rosters, timetables, and system follow-ups.\nJazakum Allahu Khairan!`;
           const waUrl = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(waMsg)}`;
           const waBtn = document.getElementById('succMgrWhatsAppBtn');
           if (waBtn) waBtn.href = waUrl;
@@ -538,11 +625,12 @@
       const id = document.getElementById('succMgrIdBadge')?.innerText || '';
       const name = document.getElementById('succMgrName')?.innerText || '';
       const user = document.getElementById('succMgrUser')?.innerText || '';
-      const pass = document.getElementById('succMgrPass')?.innerText || '';
       const url = document.getElementById('succMgrPortalUrl')?.value || '';
-      const text = `Al-Huda Islamic Centre — Manager Portal Access Details\n\n👤 Manager: ${name}\n🆔 Manager ID: ${id}\n🌐 Portal Link: ${url}\n👤 Username: ${user}\n🔑 Password: ${pass}\n\nPlease keep your credentials confidential.`;
+      // AUTH HARDENING (Batch 1): copy tools copy the USERNAME only —
+      // passwords are never copied, displayed or messaged anymore.
+      const text = `Al-Huda Islamic Centre — Manager Portal Access Details\n\n👤 Manager: ${name}\n🆔 Manager ID: ${id}\n🌐 Portal Link: ${url}\n👤 Username: ${user}\n\nYour password will be given to you by the administrator in person or by phone.`;
       navigator.clipboard.writeText(text).then(() => {
-        alert('✅ Manager Portal Link & Credentials copied to clipboard!\n\n' + text);
+        alert('✅ Manager Portal Link & Username copied to clipboard!\n\n' + text);
       }).catch(() => {
         alert(text);
       });
@@ -608,7 +696,10 @@
       const portalId = document.getElementById('tPortalId');
       if (portalId) portalId.value = newId;
 
-      generateRandomTeacherPass();
+      // AUTH HARDENING (Batch 1): password field starts BLANK (it used to
+      // be auto-filled with the well-known default on every form open).
+      const newPwInput = document.getElementById('tPassword');
+      if (newPwInput) newPwInput.value = '';
       openModal('modalAddTeacher');
     }
 
@@ -663,7 +754,13 @@
       document.getElementById('tIncrementTier').value = acc.increment_tier || 'auto';
 
       document.getElementById('tUsername').value = creds.username || '';
-      document.getElementById('tPassword').value = creds.password || '12345678';
+      // AUTH HARDENING (Batch 1): the stored password is NEVER shown or
+      // refilled (it is a server-side hash now). Blank = keep current.
+      const editPwInput = document.getElementById('tPassword');
+      editPwInput.value = '';
+      editPwInput.placeholder = creds.hasExplicitPassword
+        ? 'Leave blank to keep current password'
+        : 'No password set — enter one (min 10 characters) to set it now';
 
       // Populate Zoom classroom fields
       const defaultMockZoom = `https://zoom.us/j/${teacher.phone ? teacher.phone.replace(/[^0-9]/g, '') : '9876543210'}?pwd=alhuda_${(teacher.full_name||'').toLowerCase().replace(/[^a-z]/g, '')}`;
@@ -797,9 +894,14 @@
           const displayId = meta.emp_id || (String(t.witness_name || '').startsWith('MGR-') ? t.witness_name : null) || acc.teacher_id || (String(t.id).startsWith('MGR-') ? t.id : 'MGR-001');
           const cleanPhone = (t.phone || '').replace(/[^0-9]/g, '');
           const mgrUsername = meta.username || acc.username || `mgr.${t.full_name.toLowerCase().replace(/[^a-z]/g, '').slice(0, 8)}`;
-          const mgrPassword = meta.password || acc.password || '12345678';
+          // AUTH HARDENING (Batch 1): never read or render a password value.
+          // meta/acc may still hold a legacy plaintext entry or the new
+          // server-side hash — either way only the STATUS is displayed.
+          const mgrPasswordStatus = (meta.password || acc.password || acc.hasExplicitPassword)
+            ? 'Password set'
+            : 'No password set — set one via the password tool';
           const directPortalUrl = `${window.location.origin}/manager.html`;
-          const waMsg = `Assalamu Alaikum Respected ${t.full_name},\nWelcome to Al-Huda Islamic Centre Management Operations.\n\n🌐 *Your Dedicated Manager Portal Link:*\n${directPortalUrl}\n\n🆔 *Manager ID:* ${displayId}\n👤 *Login Username:* ${mgrUsername}\n🔑 *Login Password:* ${mgrPassword}\n💼 *Role / Title:* ${meta.role_title || 'Operations Manager'}\n\nPlease click your portal link to access all management tools, rosters, timetables, and system follow-ups.\nJazakum Allahu Khairan!`;
+          const waMsg = `Assalamu Alaikum Respected ${t.full_name},\nWelcome to Al-Huda Islamic Centre Management Operations.\n\n🌐 *Your Dedicated Manager Portal Link:*\n${directPortalUrl}\n\n🆔 *Manager ID:* ${displayId}\n👤 *Login Username:* ${mgrUsername}\n💼 *Role / Title:* ${meta.role_title || 'Operations Manager'}\n\nYour password will be given to you by the administrator in person or by phone.\nPlease click your portal link to access all management tools, rosters, timetables, and system follow-ups.\nJazakum Allahu Khairan!`;
           const waUrl = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(waMsg)}`;
 
           return `
@@ -872,7 +974,7 @@
                 <div class="bg-gradient-to-r from-indigo-50 to-blue-50 p-2.5 rounded-xl border border-indigo-200 mb-3 space-y-1.5">
                   <div class="flex justify-between items-center text-[10px] font-bold text-indigo-900 uppercase tracking-wide">
                     <span class="flex items-center gap-1"><i class="fa-solid fa-key text-indigo-600"></i> LMS Login Credentials</span>
-                    <button onclick="copyManagerCredentials('${t.id}', '${mgrUsername}', '${mgrPassword}', '${t.full_name}', '${directPortalUrl}')" class="text-indigo-700 hover:text-indigo-900 font-bold" title="Copy Login Details">
+                    <button onclick="copyManagerCredentials('${t.id}', '${mgrUsername}', '${t.full_name}', '${directPortalUrl}')" class="text-indigo-700 hover:text-indigo-900 font-bold" title="Copy Login Details">
                       <i class="fa-regular fa-copy"></i> Copy
                     </button>
                   </div>
@@ -883,7 +985,7 @@
                     </div>
                     <div class="bg-white px-2 py-1 rounded border border-indigo-100 truncate">
                       <span class="text-[9px] text-slate-400 block">Password:</span>
-                      <strong class="text-indigo-950">${mgrPassword}</strong>
+                      <strong class="text-indigo-950">${mgrPasswordStatus}</strong>
                     </div>
                   </div>
                   <a href="${waUrl}" target="_blank" class="w-full py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-bold text-[11px] flex items-center justify-center gap-1.5 shadow-xs transition mt-1">
@@ -1000,7 +1102,7 @@
         const creds = getTeacherCreds(t);
         const cleanPhone = (t.phone || '').replace(/[^0-9]/g, '');
         const directPortalUrl = `${window.location.origin}/teacher.html`;
-        const waMsg = `Assalamu Alaikum Respected ${t.full_name},\nWelcome to the Al-Huda Islamic Centre Teacher Operations Portal.\n\n🌐 *Your Personal Portal Link:*\n${directPortalUrl}\n\n👤 *Username:* ${creds.username}\n🔑 *Password:* ${creds.password || '12345678'}\n🕒 *Assigned Shift:* ${t.working_shift || '10 Hours Shift'}\n💰 *Slot Rate:* ${t.rate_per_slot || 2200} PKR\n\nPlease tap the link above to view your timetable, Student List, and lesson logs.\nJazakum Allahu Khairan!`;
+        const waMsg = `Assalamu Alaikum Respected ${t.full_name},\nWelcome to the Al-Huda Islamic Centre Teacher Operations Portal.\n\n🌐 *Your Personal Portal Link:*\n${directPortalUrl}\n\n👤 *Username:* ${creds.username}\n🕒 *Assigned Shift:* ${t.working_shift || '10 Hours Shift'}\n💰 *Slot Rate:* ${t.rate_per_slot || 2200} PKR\n\nYour password will be given to you by the administrator in person or by phone.\nPlease tap the link above to view your timetable, Student List, and lesson logs.\nJazakum Allahu Khairan!`;
         const waUrl = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(waMsg)}`;
 
         // Seniority increment text
@@ -1099,7 +1201,7 @@
               <div class="bg-gradient-to-r from-emerald-50/80 to-amber-50/50 p-2.5 rounded-xl border border-brandEmerald/30 mb-3 space-y-1.5">
                 <div class="flex justify-between items-center text-[10px] font-bold text-slate-500 uppercase tracking-wide">
                   <span class="text-brandDark flex items-center gap-1"><i class="fa-solid fa-key text-brandGold"></i> LMS Login Credentials</span>
-                  <button onclick="copyTeacherCredentials('${creds.username}', '${creds.password}', '${t.full_name}')" class="text-brandEmerald hover:text-brandDark font-bold" title="Copy Login Details">
+                  <button onclick="copyTeacherCredentials('${creds.username}', '${t.full_name}')" class="text-brandEmerald hover:text-brandDark font-bold" title="Copy Login Details">
                     <i class="fa-regular fa-copy"></i> Copy
                   </button>
                 </div>
@@ -1110,7 +1212,7 @@
                   </div>
                   <div class="bg-white px-2 py-1 rounded border border-slate-200 truncate">
                     <span class="text-[9px] text-slate-400 block">Password:</span>
-                    <strong class="text-brandDark">${creds.password}</strong>
+                    <strong class="text-brandDark">${creds.hasExplicitPassword ? 'Password set' : 'No password set — set one via the password tool'}</strong>
                   </div>
                 </div>
                 <a href="${waUrl}" target="_blank" class="w-full py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-bold text-[11px] flex items-center justify-center gap-1.5 shadow-xs transition mt-1">
@@ -1170,16 +1272,19 @@
       }).join('');
     }
 
-    function copyTeacherCredentials(user, pass, teacherName) {
+    function copyTeacherCredentials(user, teacherName) {
+      // AUTH HARDENING (Batch 1): copy tools copy the USERNAME only —
+      // passwords are never copied, displayed or messaged anymore.
       const url = `${window.location.origin}/teacher.html`;
-      const txt = `Al-Huda Islamic Centre LMS - Teacher Portal\nTeacher: ${teacherName}\nPortal Link: ${url}\nUsername: ${user}\nPassword: ${pass}`;
+      const txt = `Al-Huda Islamic Centre LMS - Teacher Portal\nTeacher: ${teacherName}\nPortal Link: ${url}\nUsername: ${user}\nYour password will be given to you by the administrator in person or by phone.`;
       navigator.clipboard.writeText(txt);
       alert(`Copied to clipboard!\n\n${txt}`);
     }
 
-    function copyManagerCredentials(id, user, pass, managerName, portalUrl) {
+    function copyManagerCredentials(id, user, managerName, portalUrl) {
+      // AUTH HARDENING (Batch 1): copy tools copy the USERNAME only.
       const url = portalUrl || `${window.location.origin}/manager.html`;
-      const txt = `Al-Huda Islamic Centre LMS — Manager Portal\nManager: ${managerName}\nManager ID: ${id}\nPortal Link: ${url}\nUsername: ${user}\nPassword: ${pass}`;
+      const txt = `Al-Huda Islamic Centre LMS — Manager Portal\nManager: ${managerName}\nManager ID: ${id}\nPortal Link: ${url}\nUsername: ${user}\nYour password will be given to you by the administrator in person or by phone.`;
       navigator.clipboard.writeText(txt);
       alert(`Copied to clipboard!\n\n${txt}`);
     }
@@ -1214,8 +1319,14 @@
         return;
       }
 
-      if (!password) {
-        alert("Please enter Teacher Portal Password.");
+      // AUTH HARDENING (Batch 1): the password is OPTIONAL now. Blank
+      // means "leave the current password unchanged" (edit) or "no
+      // password set yet" (new record). A typed password must be at
+      // least 10 characters and, after the record saves, goes ONLY to
+      // the owner-only Worker endpoint — never into the record itself,
+      // the local account map, or any message.
+      if (password && password.length < 10) {
+        alert('Portal password must be at least 10 characters long (or leave it blank).');
         document.getElementById('tPassword').focus();
         return;
       }
@@ -1278,7 +1389,6 @@
         saveTeacherAccount(editTeacherId, {
           teacher_id: teacher_id_code,
           username,
-          password,
           qualification,
           cnic,
           gender,
@@ -1302,7 +1412,30 @@
         closeModal('modalAddTeacher');
         await loadTeachers();
 
-        alert(`✅ Teacher Profile Updated Successfully!\n\n👨‍🏫 Teacher: ${full_name}\n🆔 Teacher ID: ${teacher_id_code}\n👤 Portal Username: ${username}\n🔑 Portal Password: ${password}\n🕒 Shift: ${working_shift}\n📹 Zoom: ${zoom_link || 'Default Room'}`);
+        // AUTH HARDENING (Batch 1): a newly typed password goes ONLY to
+        // the owner-only Worker endpoint (stored as a salted hash). The
+        // profile above is saved either way; on failure, say so clearly.
+        let pwStatusLine = '🔑 Portal Password: Unchanged';
+        if (password) {
+          const existingRec = (ALL_TEACHERS || []).find(x => String(x.id) === String(editTeacherId));
+          let existingMeta = {};
+          try { if (existingRec && existingRec.address && String(existingRec.address).trim().startsWith('{')) existingMeta = JSON.parse(existingRec.address); } catch (e) {}
+          const pwRole = (existingMeta.employee_type === 'manager' || (existingMeta.teacher_account && existingMeta.teacher_account.employee_type === 'manager')) ? 'manager' : 'teacher';
+          const prevAcct = getTeacherAccounts()[editTeacherId] || {};
+          const prevHasPw = !!prevAcct.hasExplicitPassword || !!(existingMeta.password || (existingMeta.teacher_account && existingMeta.teacher_account.password));
+          try {
+            if (typeof window.setAccountPasswordViaWorker !== 'function') throw new Error('Password helper unavailable.');
+            await window.setAccountPasswordViaWorker(pwRole, editTeacherId, password);
+            saveTeacherAccount(editTeacherId, { hasExplicitPassword: true });
+            pwStatusLine = '🔑 Portal Password: Updated — give it to them in person or by phone';
+          } catch (pwErr) {
+            saveTeacherAccount(editTeacherId, { hasExplicitPassword: prevHasPw });
+            alert('The teacher profile was SAVED, but the PASSWORD was NOT set.\n\nReason: ' + (pwErr.message || pwErr) + '\n\nPlease set it again from the Edit form or the password tool.');
+            pwStatusLine = '🔑 Portal Password: NOT updated — please set it via the password tool';
+          }
+        }
+
+        alert(`✅ Teacher Profile Updated Successfully!\n\n👨‍🏫 Teacher: ${full_name}\n🆔 Teacher ID: ${teacher_id_code}\n👤 Portal Username: ${username}\n${pwStatusLine}\n🕒 Shift: ${working_shift}\n📹 Zoom: ${zoom_link || 'Default Room'}`);
       } else {
         // INSERT MODE
         const { data, error } = await db.from('teachers').insert([{
@@ -1314,7 +1447,6 @@
         saveTeacherAccount(insertedId, {
           teacher_id: teacher_id_code,
           username,
-          password,
           qualification,
           cnic,
           gender,
@@ -1338,7 +1470,22 @@
         closeModal('modalAddTeacher');
         await loadTeachers();
 
-        alert(`✅ Teacher Registered Successfully!\n\n👨‍🏫 Teacher: ${full_name}\n🆔 Teacher ID: ${teacher_id_code}\n👤 Portal Username: ${username}\n🔑 Portal Password: ${password}\n🕒 Shift: ${working_shift}\n🎓 Qualification: ${qualification || 'As Assigned'}\n\nTeacher can now log into Al-Huda Teacher Portal.`);
+        // AUTH HARDENING (Batch 1): same Worker-endpoint password flow as
+        // the update branch — the value itself is never stored or shown.
+        let newPwStatusLine = '🔑 Portal Password: Not set yet — set one via the Edit form or password tool';
+        if (password) {
+          try {
+            if (typeof window.setAccountPasswordViaWorker !== 'function') throw new Error('Password helper unavailable.');
+            await window.setAccountPasswordViaWorker('teacher', insertedId, password);
+            saveTeacherAccount(insertedId, { hasExplicitPassword: true });
+            newPwStatusLine = '🔑 Portal Password: Set — give it to the teacher in person or by phone';
+          } catch (pwErr) {
+            alert('The teacher was REGISTERED, but the PASSWORD was NOT set.\n\nReason: ' + (pwErr.message || pwErr) + '\n\nPlease set it from the Edit form or the password tool.');
+            newPwStatusLine = '🔑 Portal Password: NOT set — please set it via the password tool';
+          }
+        }
+
+        alert(`✅ Teacher Registered Successfully!\n\n👨‍🏫 Teacher: ${full_name}\n🆔 Teacher ID: ${teacher_id_code}\n👤 Portal Username: ${username}\n${newPwStatusLine}\n🕒 Shift: ${working_shift}\n🎓 Qualification: ${qualification || 'As Assigned'}\n\nTeacher can now log into Al-Huda Teacher Portal.`);
       }
     }
 

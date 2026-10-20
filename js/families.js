@@ -100,13 +100,37 @@
 
     // PARENT PORTAL ACCOUNTS & CREDENTIALS
     function getParentAccounts() {
-      const stored = localStorage.getItem('alhuda_parent_accounts');
-      return JSON.parse(stored || '{}');
+      // AUTH HARDENING (Batch 1): localStorage account maps must NOT hold
+      // password values. Legacy entries that still carry one are sanitised
+      // on read: the value is dropped, replaced by a hasExplicitPassword
+      // marker, and the cleaned map is written back.
+      let accounts = {};
+      try { accounts = JSON.parse(localStorage.getItem('alhuda_parent_accounts') || '{}'); } catch (e) { accounts = {}; }
+      let changed = false;
+      Object.values(accounts || {}).forEach(acc => {
+        if (acc && typeof acc === 'object' && 'password' in acc) {
+          acc.hasExplicitPassword = !!acc.password || !!acc.hasExplicitPassword;
+          delete acc.password;
+          changed = true;
+        }
+      });
+      if (changed) {
+        try { localStorage.setItem('alhuda_parent_accounts', JSON.stringify(accounts)); } catch (e) {}
+      }
+      return accounts || {};
     }
 
     function saveParentAccount(famId, creds) {
+      // AUTH HARDENING (Batch 1): never persist a password value. Passwords
+      // are set only via the owner-only /api/auth/set-password endpoint
+      // (see setAccountPasswordViaWorker in js/auth.js).
+      const cleanCreds = { ...(creds || {}) };
+      if ('password' in cleanCreds) {
+        cleanCreds.hasExplicitPassword = !!cleanCreds.password || !!cleanCreds.hasExplicitPassword;
+        delete cleanCreds.password;
+      }
       const accounts = getParentAccounts();
-      accounts[famId] = { ...(accounts[famId] || {}), ...creds };
+      accounts[famId] = { ...(accounts[famId] || {}), ...cleanCreds };
       localStorage.setItem('alhuda_parent_accounts', JSON.stringify(accounts));
       if (typeof syncGlobalSharedStateToCloud === 'function') {
         syncGlobalSharedStateToCloud();
@@ -114,38 +138,50 @@
     }
 
     function getParentCreds(family) {
-      if (!family) return { username: 'parent_user', password: 'alhuda_786', email: '' };
+      // AUTH HARDENING (Batch 1): NEVER fabricate credentials. The old
+      // fallback invented a username from the parent's name and a password
+      // derived from the last digits of the WhatsApp number — anyone who
+      // knew the number could guess the login. A password now exists only
+      // as a salted hash on the server, set via /api/auth/set-password.
+      // This helper reports identity + whether a password exists;
+      // `password` is always ''.
+      if (!family) return { username: '', password: '', email: '', hasExplicitPassword: false };
       const accounts = getParentAccounts();
       if (accounts[family.id] && accounts[family.id].username) {
-        if (!accounts[family.id].email && (family.email || family.parent_email)) {
-          accounts[family.id].email = family.email || family.parent_email;
+        const acc = { ...accounts[family.id] };
+        if (!acc.email && (family.email || family.parent_email)) {
+          acc.email = family.email || family.parent_email;
         }
-        return accounts[family.id];
+        acc.password = '';
+        acc.hasExplicitPassword = !!acc.hasExplicitPassword;
+        return acc;
       }
       if (family.notes) {
         try {
           const nObj = typeof family.notes === 'object' ? family.notes : JSON.parse(family.notes);
           if (nObj && nObj.portal_credentials && nObj.portal_credentials.username) {
-            accounts[family.id] = {
-              ...nObj.portal_credentials,
-              email: nObj.portal_credentials.email || family.email || family.parent_email || ''
+            const pc = nObj.portal_credentials;
+            const cleaned = {
+              username: pc.username,
+              parent_name: pc.parent_name || family.parent_name || '',
+              whatsapp: pc.whatsapp || family.whatsapp || '',
+              email: pc.email || family.email || family.parent_email || '',
+              hasExplicitPassword: !!pc.password
             };
-            localStorage.setItem('alhuda_parent_accounts', JSON.stringify(accounts));
-            return accounts[family.id];
+            // Persist only the cleaned copy (no password value) so the
+            // account map stays a non-secret identity cache.
+            saveParentAccount(family.id, cleaned);
+            return { ...cleaned, password: '' };
           }
         } catch (e) {}
       }
-      const baseUser = (family.parent_name || 'parent').toLowerCase().replace(/[^a-z0-9]/g, '_').replace(/_+/g, '_').replace(/^_|_$/g, '').slice(0, 15) || 'parent';
-      const stableDigits = String(family.whatsapp || family.id || '786').replace(/[^0-9]/g, '').slice(-3).padStart(3, '7');
-      const defaultCred = {
-        username: 'parent_' + baseUser,
-        password: 'alhuda_' + stableDigits,
-        parent_name: family.parent_name,
-        whatsapp: family.whatsapp,
-        email: family.email || family.parent_email || ''
+      // Nothing stored: report empty credentials and save NOTHING.
+      return {
+        username: '',
+        password: '',
+        email: family.email || family.parent_email || '',
+        hasExplicitPassword: false
       };
-      saveParentAccount(family.id, defaultCred);
-      return defaultCred;
     }
 
     function autoSuggestParentUsername(fullName) {
@@ -156,10 +192,26 @@
       }
     }
 
+    // AUTH HARDENING (Batch 1): the old generator produced a guessable
+    // 7-character pattern. It now generates a genuinely random
+    // 16-character password, and only when the owner clicks on purpose —
+    // the Add Family form no longer calls it on open.
+    function parentGenerateStrongPassword() {
+      const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789!@#$%';
+      let out = '';
+      try {
+        const buf = new Uint32Array(16);
+        crypto.getRandomValues(buf);
+        buf.forEach(n => { out += alphabet[n % alphabet.length]; });
+      } catch (e) {
+        for (let i = 0; i < 16; i++) out += alphabet[Math.floor(Math.random() * alphabet.length)];
+      }
+      return out;
+    }
+
     function generateRandomParentPass() {
-      const rand = Math.floor(100 + Math.random() * 900);
       const pInput = document.getElementById('famPassword');
-      if (pInput) pInput.value = 'alhuda_' + rand;
+      if (pInput) pInput.value = parentGenerateStrongPassword();
     }
 
     function getNextFamilyId() {
@@ -213,7 +265,10 @@
 
       populateCountryDropdown('United States');
       populateCurrencyDropdown('USD ($)');
-      generateRandomParentPass();
+      // AUTH HARDENING (Batch 1): password field starts BLANK (it used to
+      // be auto-filled with a guessable pattern on every form open).
+      const famPwInput = document.getElementById('famPassword');
+      if (famPwInput) famPwInput.value = '';
 
       openModal('modalAddFamily');
     }
@@ -402,8 +457,19 @@
         btn.innerText = 'Save Family & Generate LMS Account';
         return;
       }
-      if (!username || !password) {
-        lmsNotify("Parent Portal Username and Password are required.", { type: 'warning' });
+      if (!username) {
+        lmsNotify("Parent Portal Username is required.", { type: 'warning' });
+        btn.disabled = false;
+        btn.innerText = 'Save Family & Generate LMS Account';
+        return;
+      }
+      // AUTH HARDENING (Batch 1): the password is OPTIONAL now. Blank =
+      // no password set yet. A typed password must be at least 10
+      // characters and, after the family is saved, goes ONLY to the
+      // owner-only Worker endpoint — never into families.notes,
+      // portal_credentials, or the local account map.
+      if (password && password.length < 10) {
+        lmsNotify("Parent Portal Password must be at least 10 characters long (or leave it blank).", { type: 'warning' });
         btn.disabled = false;
         btn.innerText = 'Save Family & Generate LMS Account';
         return;
@@ -416,7 +482,6 @@
         custom_notes: city ? `City: ${city}` : '',
         portal_credentials: {
           username,
-          password,
           parent_name,
           whatsapp,
           email: email || ''
@@ -439,7 +504,6 @@
 
       saveParentAccount(id, {
         username,
-        password,
         parent_name,
         whatsapp,
         email: email || '',
@@ -456,6 +520,23 @@
       await loadFamiliesAndStudents(true);
       loadFeeBillingLedger();
 
+      // AUTH HARDENING (Batch 1): the password goes ONLY to the owner-only
+      // Worker endpoint (stored as a salted hash server-side). The family
+      // record above is saved either way; on failure, say so clearly.
+      let familyPwStatus = 'Password: Not set yet — set one via the Edit Family form or the password tool.';
+      if (password) {
+        try {
+          if (typeof window.setAccountPasswordViaWorker !== 'function') throw new Error('Password helper unavailable.');
+          await window.setAccountPasswordViaWorker('parent', id, password);
+          saveParentAccount(id, { hasExplicitPassword: true });
+          familyPwStatus = 'Password: Set — give it to the parent in person or by phone.';
+        } catch (pwErr) {
+          saveParentAccount(id, { hasExplicitPassword: false });
+          alert('The family was SAVED, but the portal PASSWORD was NOT set.\n\nReason: ' + (pwErr.message || pwErr) + '\n\nPlease set it from the Edit Family form or the password tool.');
+          familyPwStatus = 'Password: NOT set — please set it via the password tool.';
+        }
+      }
+
       // TASK 6: Automatically send welcome email if parent email exists
       let familyEmailNotice = '';
       if (email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) && typeof autoSendWelcomeEmailOnCreation === 'function') {
@@ -470,7 +551,7 @@
             teacherName: 'Not Assigned Yet',
             scheduleText: 'No classes scheduled.',
             zoomLink: '',
-            credentials: { username, password }
+            credentials: { username }
           });
           if (emailResult && emailResult.sent) {
             familyEmailNotice = `\n\n📧 Welcome email automatically sent to ${email}.`;
@@ -480,7 +561,7 @@
         }
       }
 
-      lmsNotify(`✅ Family Registered Successfully!\n\n👨‍👩‍👧 Family ID: ${id}\n👤 Parent Name: ${parent_name}\n📧 Email: ${email || 'Not Provided'}\n🌍 Location: ${city ? city + ', ' : ''}${country}\n💰 Agreed Fee: ${currency} ${monthly_fee}\n\n🔑 Parent Portal Login Credentials:\nUsername: ${username}\nPassword: ${password}\n\nParent can now log in to track children classes.${familyEmailNotice}`, { type: 'success' });
+      lmsNotify(`✅ Family Registered Successfully!\n\n👨‍👩‍👧 Family ID: ${id}\n👤 Parent Name: ${parent_name}\n📧 Email: ${email || 'Not Provided'}\n🌍 Location: ${city ? city + ', ' : ''}${country}\n💰 Agreed Fee: ${currency} ${monthly_fee}\n\n🔑 Parent Portal Login Credentials:\nUsername: ${username}\n${familyPwStatus}\n\nParent can now log in to track children classes.${familyEmailNotice}`, { type: 'success' });
     }
 
     let _IS_ENROLLING_STUDENT = false;
@@ -618,7 +699,7 @@
               scheduleText: scheduleText,
               zoomLink: zoomLink,
               joiningDate: joining_date,
-              credentials: creds ? { username: creds.username, password: creds.password } : null
+              credentials: creds ? { username: creds.username } : null
             });
             if (emailRes && emailRes.sent) {
               emailStatusSuffix = `\n\n📧 Welcome email sent to ${parentEmail}.`;
@@ -644,8 +725,10 @@
     }
     window.handleSaveStudent = handleSaveStudent;
 
-    function copyParentCredentials(user, pass) {
-      const txt = `Al-Huda LMS Parent Portal\nUsername: ${user}\nPassword: ${pass}`;
+    function copyParentCredentials(user) {
+      // AUTH HARDENING (Batch 1): copy tools copy the USERNAME only —
+      // passwords are never copied, displayed or messaged anymore.
+      const txt = `Al-Huda LMS Parent Portal\nUsername: ${user}\nYour password will be given to you by the administrator in person or by phone.`;
       navigator.clipboard.writeText(txt);
       alert(`Copied to clipboard!\n\n${txt}`);
     }
@@ -1059,7 +1142,7 @@
         const creds = getParentCreds(f);
         const cleanPhone = (f.whatsapp || '').replace(/[^0-9]/g, '');
         const currentUrl = window.location.origin + window.location.pathname;
-        const waMsg = `Assalam-o-Alaikum Respected ${f.parent_name},\nWelcome to *Al-Huda Islamic Centre LMS*.\nHere are your Parent / Student Portal Login Credentials:\n\n🌐 *Portal Link:* ${currentUrl}\n👨‍👩‍👧 *Family ID:* ${f.id}\n👤 *Username:* ${creds.username}\n🔑 *Password:* ${creds.password}\n💰 *Agreed Monthly Fee:* ${f.currency} ${f.monthly_fee}\n\nPlease sign in to monitor your children's daily Quran lessons and attendance.\nJazakAllahu Khairan!`;
+        const waMsg = `Assalam-o-Alaikum Respected ${f.parent_name},\nWelcome to *Al-Huda Islamic Centre LMS*.\nHere are your Parent / Student Portal Login Credentials:\n\n🌐 *Portal Link:* ${currentUrl}\n👨‍👩‍👧 *Family ID:* ${f.id}\n👤 *Username:* ${creds.username}\n💰 *Agreed Monthly Fee:* ${f.currency} ${f.monthly_fee}\n\nYour password will be given to you by the administrator in person or by phone.\nPlease sign in to monitor your children's daily Quran lessons and attendance.\nJazakAllahu Khairan!`;
         const waUrl = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(waMsg)}`;
         const studentsList = f.students || [];
         const isFamDeact = typeof isFamilyDeactivated === 'function' ? isFamilyDeactivated(f) : ['inactive', 'deactivated'].includes(String(f.status || '').toLowerCase());
@@ -1109,7 +1192,7 @@
               <div class="bg-gradient-to-r from-emerald-50/80 to-amber-50/50 p-2.5 rounded-xl border border-brandEmerald/30 mb-3 space-y-1.5">
                 <div class="flex justify-between items-center text-[10px] font-bold text-slate-500 uppercase tracking-wide">
                   <span class="text-brandDark flex items-center gap-1"><i class="fa-solid fa-key text-brandGold"></i> Parent Portal Login</span>
-                  <button onclick="copyParentCredentials('${creds.username}', '${creds.password}')" class="text-brandEmerald hover:text-brandDark font-bold" title="Copy Login Details">
+                  <button onclick="copyParentCredentials('${creds.username}')" class="text-brandEmerald hover:text-brandDark font-bold" title="Copy Login Details">
                     <i class="fa-regular fa-copy"></i> Copy
                   </button>
                 </div>
@@ -1120,7 +1203,7 @@
                   </div>
                   <div class="bg-white px-2 py-1 rounded border border-slate-200 truncate">
                     <span class="text-[9px] text-slate-400 block">Pass:</span>
-                    <strong class="text-brandDark">${creds.password}</strong>
+                    <strong class="text-brandDark">${creds.hasExplicitPassword ? 'Password set' : 'No password set'}</strong>
                   </div>
                 </div>
                 ${CURRENT_ROLE !== 'manager' ? `

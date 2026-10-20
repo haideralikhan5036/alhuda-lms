@@ -63,7 +63,7 @@ PARENT LMS PORTAL ACCESS:
 ══════════════════════════════════════
 Portal Link: ${portalUrl}
 Username: ${credentials.username}
-Password: ${credentials.password}
+Your password will be given to you by the administrator in person or by phone.
 ` : `
 ══════════════════════════════════════
 PARENT LMS PORTAL LINK:
@@ -122,7 +122,7 @@ Official Email: ${ACADEMY_OFFICIAL_EMAIL}`;
                 Portal Link: <a href="${portalUrl}" target="_blank" style="color: #047857; font-weight: bold;">${portalUrl}</a><br>
                 ${credentials ? `
                   Username: <code style="background: #e2e8f0; padding: 2px 6px; border-radius: 4px; font-weight: bold;">${credentials.username}</code><br>
-                  Password: <code style="background: #e2e8f0; padding: 2px 6px; border-radius: 4px; font-weight: bold;">${credentials.password}</code>
+                  Your password will be given to you by the administrator in person or by phone.
                 ` : ''}
               </div>
             </div>
@@ -494,8 +494,7 @@ Official Email: ${ACADEMY_OFFICIAL_EMAIL}`;
         scheduleText: scheduleText,
         zoomLink: meetingLink,
         credentials: {
-          username: creds.username,
-          password: creds.password
+          username: creds.username
         }
       });
     }
