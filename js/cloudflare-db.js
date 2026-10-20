@@ -454,6 +454,27 @@
     window.location.reload();
   };
 
+LMS silent split-brain fix — paste-ready
+=============================================
+Date prepared: 2026-10-20 (morning, PKT)
+Requested by: Haider Ali Khan, 2026-10-19 ("Read-only investigation... propose the smallest safe fix but do not apply it")
+Status: PROPOSED ONLY — nothing applied, nothing committed.
+
+Branch (suggested new branch): fix/splitbrain-write-guard
+File: js/cloudflare-db.js
+Replace: the whole function `executeCloudflareOrLocal` (currently L457–510)
+
+HOW TO APPLY (GitHub web editor, his usual flow):
+1. Repo: haideralikhan5036/alhuda-lms
+2. New branch: fix/splitbrain-write-guard (from main)
+3. Open js/cloudflare-db.js on that branch -> Edit (pencil icon)
+4. Select the FULL function from `async function executeCloudflareOrLocal(payload) {`
+   through its closing `}` (line ~510, just before `class CloudflareQueryBuilder`)
+   and replace it with the code block below.
+5. Commit -> open PR -> merge after review.
+
+PASTE THIS (replaces the old function 1:1 — only the tail changes):
+
   async function executeCloudflareOrLocal(payload) {
     const isD1Live = await checkCloudflareD1Available();
     if (isD1Live) {
@@ -506,8 +527,46 @@
       }
     }
 
+    // === WRITE GUARD (new): writes must never silently land in the local
+    // mirror while the UI reports success. Reads keep the offline fallback.
+    const isWrite = payload && payload.action && payload.action !== 'select';
+    if (isWrite) {
+      const reason = isD1Live ? 'session expired' : 'server unreachable';
+      console.error('[Cloudflare D1] WRITE blocked (' + reason + ') — refusing local fallback for',
+        payload.table, payload.action);
+      // Alert at most once per 10s so multi-row writes (e.g. family
+      // deactivation) don't spam the screen.
+      if (typeof window !== 'undefined') {
+        const lastAlert = window.__lmsWriteBlockedAlertAt || 0;
+        if (Date.now() - lastAlert > 10000) {
+          window.__lmsWriteBlockedAlertAt = Date.now();
+          alert('Session expired — please log in again. Aap ka change SAVE NAHI hua (koi data kharaab nahi hua).');
+        }
+      }
+      return { data: null, error: { message: 'Session expired — please log in again. Change was NOT saved.' } };
+    }
+
     return executeLocalQuery(payload);
   }
+
+WHAT THIS CHANGES (verified against callers):
+- When D1 is reachable AND the token is valid: zero change — the `res.ok` path returns before the guard.
+- When the token is expired (401) or the worker unreachable: READS still fall back to the local mirror (offline viewing preserved). WRITES now return { error } instead of a fake success.
+- Callers already handle { error }: _saveStudentRecordBackend (js/profiles360.js L178-189)
+  does `const { error } = await db.from('students').update(...); if (error) throw error;`
+  — so the deactivation/save will now throw a visible error instead of silently succeeding.
+- The alert() guarantees the user sees it even where a caller forgets to catch.
+
+VERIFY AFTER MERGE + DEPLOY:
+1. Normal login, do any small write (e.g. edit a student's notes) — should save exactly as before.
+2. The guard only activates when the session is dead — previously that case showed
+   "success" while D1 never got the change (this is the family-deactivation bug's root cause).
+   Now it shows the alert instead. Nothing else to test.
+
+SIDE EFFECTS NOTED (not fixed here):
+- The dead `db.channel(...)` Supabase Realtime block (teacher.html L8394-8400) is still
+  dead code — the teacher tab does not live-refresh. Deleting or replacing it is a separate change.
+
 
   class CloudflareQueryBuilder {
     constructor(table) {
