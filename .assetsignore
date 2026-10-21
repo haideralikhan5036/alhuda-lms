@@ -5,3 +5,16 @@ functions
 wrangler.toml
 vercel.json
 README.md
+
+# Batch 1B: never deploy internal files as public assets.
+# Project notes/docs (kept in the repo, not part of the app)
+*.md
+# Test suites (contain internal logic + seed data)
+test
+# Legacy standalone login page (unused; portals have their own logins)
+login.html
+# Local-only files
+.wrangler
+.env*
+teacher (1).html
+parent (1).html

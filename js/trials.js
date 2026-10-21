@@ -1015,7 +1015,12 @@
       // 2. Parent Account credentials
       const rawParent = (trial.parent_name || 'parent').toLowerCase().replace(/[^a-z0-9]/g, '');
       const username = rawParent.length > 2 ? rawParent : `parent_${canonicalFamId.toLowerCase()}`;
-      const password = 'alhuda_' + Math.floor(1000 + Math.random() * 9000);
+      // Batch 1B: NO password is generated here. Batch 1 removed this
+      // fabrication everywhere else; the generated value was never
+      // stored anywhere real (saveParentAccount strips passwords), so
+      // the password shown after conversion could never log anyone in.
+      // A portal password is set only via /api/auth/set-password
+      // (owner/manager), exactly like Add Family.
 
       const familyNotesPayload = JSON.stringify({
         is_trial: false,
@@ -1084,7 +1089,6 @@
 
         saveParentAccount(canonicalFamId, {
           username,
-          password,
           parent_name: trial.parent_name,
           whatsapp: trial.whatsapp,
           country: trial.country,
@@ -1225,9 +1229,10 @@
         `👤 Student: ${trial.student_name}\n` +
         `💰 Agreed Monthly Fee: ${currency} ${monthly_fee}\n` +
         `📅 Billing Due Day: ${billing_day}th of every month\n\n` +
-        `🔑 Parent Portal Credentials Generated:\n` +
+        `🔑 Parent Portal Access:\n` +
         `Username: ${username}\n` +
-        `Password: ${password}\n\n` +
+        `Password: NOT set. The parent will see "No password set. Ask the administrator to set one." if they try to log in.\n` +
+        `Set one via Edit Family or the Set Portal Passwords tool, and give it to the parent in person or by phone.\n\n` +
         `The trial timetable has been permanently activated as regular classes in the teacher's schedule!`
       );
 
@@ -1247,8 +1252,7 @@
             scheduleText: `${days_per_week} (${trial.pkt_slot || 'Regular Timetable'} PKT)`,
             zoomLink: permanent_zoom_link || trial.meeting_link || 'https://zoom.us/j/alhuda-class',
             credentials: {
-              username,
-              password
+              username
             }
           });
         }, 300);

@@ -1,0 +1,18 @@
+# Batch 1B: Vercel must serve ONLY the app. Everything listed here stays
+# in the repo but is excluded from the deployment (returns 404).
+# (vercel.json itself is deliberately NOT ignored — Vercel needs it for
+# the security headers and routes.)
+.git
+.gitignore
+.assetsignore
+.vercelignore
+cloudflare
+functions
+test
+*.md
+wrangler.toml
+login.html
+.wrangler
+.env*
+teacher (1).html
+parent (1).html

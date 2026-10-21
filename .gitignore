@@ -1,3 +1,8 @@
 # Local live hardlink hub & archived unused files
 01_MAIN_SOURCE_CODE/
 _archive_unused/
+
+# Batch 1B: local/deploy artefacts never belong in the repo
+.wrangler/
+.env*
+* (1).*
