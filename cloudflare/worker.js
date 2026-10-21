@@ -128,6 +128,25 @@ function emailSendRateLimited(key) {
   return rec.count > EMAIL_SEND_MAX_ATTEMPTS;
 }
 
+// --- Duplicate-check rate limiting: max 30 checks per token per 10 minutes. -
+// Same in-memory Map-window approach as the email limiter. The endpoint
+// answers "does this contact already exist", so the cap also bounds
+// probing for strangers' contact values by trial (Batch 3A, B15).
+const DUPCHECK_ATTEMPTS = new Map();
+const DUPCHECK_WINDOW_MS = 10 * 60 * 1000;
+const DUPCHECK_MAX_ATTEMPTS = 30;
+
+function dupCheckRateLimited(key) {
+  const now = Date.now();
+  const rec = DUPCHECK_ATTEMPTS.get(key);
+  if (!rec || now - rec.start > DUPCHECK_WINDOW_MS) {
+    DUPCHECK_ATTEMPTS.set(key, { count: 1, start: now });
+    return false;
+  }
+  rec.count += 1;
+  return rec.count > DUPCHECK_MAX_ATTEMPTS;
+}
+
 function getDb(env) {
   return env.DB || env.ALHUDA_DB || null;
 }
@@ -720,6 +739,129 @@ async function handleEmailNotifyParent(request, env) {
     return json(request, env, { ok: true, relayStatus: result.relayStatus });
   }
   return json(request, env, { ok: false, error: result.error }, result.httpStatus);
+}
+
+// --- POST /api/families/check-duplicates  { email?, phone?, whatsapp?, parentName? }
+// Batch 3A (B15): the Add Family duplicate warning must also work for
+// MANAGERS, who never see contact values (Batch 2) — so the comparison
+// happens here, server-side. The response names only the matching
+// families (id + parent name) and which SUBMITTED fields matched; a
+// stored contact value NEVER appears in it. Rate-limited so the check
+// cannot be used to probe for a stranger's number by trial.
+function normEmailForDup(v) {
+  return String(v || '').trim().toLowerCase();
+}
+
+function normPhoneForDup(v) {
+  const digits = String(v || '').replace(/\D+/g, '');
+  if (!digits) return '';
+  // Canonical form: the last 10 digits, so '0300-1234567',
+  // '+92 300 1234567' and '3001234567' all compare equal.
+  return digits.length > 10 ? digits.slice(-10) : digits;
+}
+
+function normNameForDup(v) {
+  return String(v || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
+// Every contact value a family record carries: the columns plus the
+// copies nested inside the notes JSON (portal_credentials, bio_meta and
+// the notes object's own top-level contact keys).
+function collectFamilyContactsForDup(row) {
+  const emails = new Set();
+  const phones = new Set();
+  const addEmail = (v) => { const n = normEmailForDup(v); if (n) emails.add(n); };
+  const addPhone = (v) => { const n = normPhoneForDup(v); if (n) phones.add(n); };
+  const scan = (obj, emailKeys, phoneKeys) => {
+    if (!obj || typeof obj !== 'object') return;
+    for (const k of emailKeys) addEmail(obj[k]);
+    for (const k of phoneKeys) addPhone(obj[k]);
+  };
+  addEmail(row.email);
+  addEmail(row.parent_email);
+  addPhone(row.phone);
+  addPhone(row.whatsapp);
+  const notes = parseJsonField(row.notes);
+  scan(notes, ['email'], ['phone', 'whatsapp', 'mobile', 'telephone']);
+  scan(notes.portal_credentials, ['email'], ['whatsapp']);
+  scan(notes.bio_meta, ['email'], ['phone', 'mobile', 'telephone']);
+  return { emails, phones };
+}
+
+async function handleFamilyDuplicateCheck(request, env) {
+  if (request.method === 'OPTIONS') return json(request, env, {}, 204);
+  if (request.method !== 'POST') {
+    return json(request, env, { ok: false, error: 'Method not allowed.' }, 405);
+  }
+
+  const auth = await requireApiAuth(request, env);
+  if (!auth) return unauthorized(request, env);
+  if (auth.role !== 'owner' && auth.role !== 'manager') {
+    return json(request, env, { ok: false, error: 'Access denied.' }, 403);
+  }
+
+  const rlKey = 'dupcheck:' + String(auth.sub || clientIp(request));
+  if (dupCheckRateLimited(rlKey)) {
+    return json(request, env, { ok: false, error: 'Too many checks. Please try again later.' }, 429);
+  }
+
+  let body;
+  try {
+    body = await request.json();
+  } catch (e) {
+    return json(request, env, { ok: false, error: 'Invalid request body.' }, 400);
+  }
+  if (!body || typeof body !== 'object' || Array.isArray(body)) {
+    return json(request, env, { ok: false, error: 'Invalid request body.' }, 400);
+  }
+  // Unknown fields are ignored; only these four are ever read.
+  const subEmail = normEmailForDup(body.email);
+  const subPhone = normPhoneForDup(body.phone);
+  const subWhatsapp = normPhoneForDup(body.whatsapp);
+  const subName = normNameForDup(body.parentName);
+  if (!subEmail && !subPhone && !subWhatsapp && !subName) {
+    return json(request, env, { ok: false, error: 'Provide at least one of email, phone, whatsapp or parentName.' }, 400);
+  }
+
+  const db = getDb(env);
+  if (!db) {
+    return json(request, env, { ok: false, error: 'Service unavailable.' }, 503);
+  }
+  let rows;
+  try {
+    const res = await db.prepare('SELECT id, parent_name, email, parent_email, phone, whatsapp, notes FROM families').all();
+    rows = res.results || [];
+  } catch (e) {
+    // Older databases may lack the parent_email alias column; retry
+    // without it (mirrors the notify-parent handler's fallback).
+    try {
+      const res = await db.prepare('SELECT id, parent_name, email, phone, whatsapp, notes FROM families').all();
+      rows = res.results || [];
+    } catch (e2) {
+      return json(request, env, { ok: false, error: 'Service unavailable.' }, 503);
+    }
+  }
+
+  const matches = [];
+  for (const row of rows) {
+    const matchedOn = [];
+    if (subEmail || subPhone || subWhatsapp) {
+      const stored = collectFamilyContactsForDup(row);
+      if (subEmail && stored.emails.has(subEmail)) matchedOn.push('email');
+      // Cross-channel: a submitted phone OR whatsapp matches ANY stored
+      // phone-like value (families often reuse one number for both).
+      if (subPhone && stored.phones.has(subPhone)) matchedOn.push('phone');
+      if (subWhatsapp && stored.phones.has(subWhatsapp)) matchedOn.push('whatsapp');
+    }
+    if (subName && normNameForDup(row.parent_name) === subName) matchedOn.push('parentName');
+    if (matchedOn.length) {
+      // ONLY the family id, its (non-contact) name and the submitted
+      // field names — never a stored contact value.
+      matches.push({ familyId: String(row.id), parentName: String(row.parent_name || ''), matchedOn });
+      if (matches.length >= 5) break;
+    }
+  }
+  return json(request, env, { ok: true, matches });
 }
 
 // --- Auth middleware for privileged APIs ------------------------------------
@@ -1779,6 +1921,15 @@ export default {
     // caller's role is enforced inside the handler.
     if (url.pathname === '/api/email/notify-parent') {
       return handleEmailNotifyParent(request, env);
+    }
+
+    // 2d. Duplicate check for Add Family (/api/families/check-duplicates).
+    // Owner/manager only (enforced in the handler); answers only WHETHER
+    // a contact/name already exists (family id + name + which submitted
+    // fields matched), never the stored contact value — so managers get
+    // duplicate warnings without ever seeing contacts (Batch 3A, B15).
+    if (url.pathname === '/api/families/check-duplicates') {
+      return handleFamilyDuplicateCheck(request, env);
     }
 
     // 3. Clean portal URLs without .html

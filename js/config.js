@@ -990,6 +990,27 @@
     window.ensureCoreLmsDataLoaded = ensureCoreLmsDataLoaded;
 
     let _CONSOLIDATION_PROMISE = null;
+    // ============================================================
+    // Batch 3A (B15): shared duplicate-detection helpers (pure).
+    // ============================================================
+    function normalizePersonName(name) {
+      return String(name || '').toLowerCase().replace(/[^a-z0-9\s]/gi, ' ').replace(/\s+/g, ' ').trim();
+    }
+    window.normalizePersonName = normalizePersonName;
+
+    // A student with the same (normalised) name in the SAME family, or
+    // null. The same name in a DIFFERENT family is normal and is never
+    // reported. Students carry family_id (db shape) or familyId.
+    function findDuplicateStudentName(students, familyId, name) {
+      const fam = String(familyId || '').toUpperCase();
+      const target = normalizePersonName(name);
+      if (!fam || !target) return null;
+      return (students || []).find(s => s &&
+        String(s.family_id || s.familyId || '').toUpperCase() === fam &&
+        normalizePersonName(s.name) === target) || null;
+    }
+    window.findDuplicateStudentName = findDuplicateStudentName;
+
     async function consolidateDuplicateTrialAndRegularRecords() {
       if (_CONSOLIDATION_PROMISE) return _CONSOLIDATION_PROMISE;
       _CONSOLIDATION_PROMISE = (async () => {

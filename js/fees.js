@@ -82,6 +82,90 @@
       }
     }
 
+    // ============================================================
+    // Batch 3A (B9): COLLISION-PROOF RECEIPT NUMBERS + SAFE INGEST
+    // Old format (stays valid forever, never renumbered):
+    //   AH-REC-<year>-<sequence from array length>  e.g. AH-REC-2026-0007
+    // New format:
+    //   AH-REC-<YYYYMMDD>-<6 random chars>          e.g. AH-REC-20261021-K7QX3M
+    // The full date keeps numbers readable and roughly sortable on the
+    // printed receipt and in emails; the random suffix is drawn from a
+    // 31-character unambiguous alphabet (no 0/O, 1/I/L — a parent can
+    // read it over the phone), giving 31^6 ≈ 888 million combinations
+    // per day. Two browsers minting in the same second, or a mint after
+    // deletions, therefore cannot collide in practice — with no server
+    // round-trip and no dependence on how many records exist.
+    // ============================================================
+    const RECEIPT_RANDOM_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
+
+    function generateReceiptNo(when) {
+      const d = (when instanceof Date) ? when : new Date();
+      const ymd = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`;
+      const bytes = new Uint8Array(6);
+      if (typeof crypto !== 'undefined' && crypto && typeof crypto.getRandomValues === 'function') {
+        crypto.getRandomValues(bytes);
+      } else {
+        for (let i = 0; i < bytes.length; i++) bytes[i] = Math.floor(Math.random() * 256);
+      }
+      let suffix = '';
+      for (let i = 0; i < 6; i++) suffix += RECEIPT_RANDOM_ALPHABET[bytes[i] % RECEIPT_RANDOM_ALPHABET.length];
+      return `${FEE_CONFIG.RECEIPT_PREFIX}${ymd}-${suffix}`;
+    }
+
+    // Cloud ingest identity: a receipt number alone is NOT unique — the
+    // same old-format number can legitimately exist for two families.
+    function feeRecordKey(r) {
+      return `${String((r && r.receiptNo) || '')}|${String((r && r.familyId) || '').toUpperCase()}`;
+    }
+
+    // Two records under one key are "the same record" (a fresher copy of
+    // one receipt) only when their substance matches; otherwise they are
+    // two different receipts that happen to share a number.
+    function feeRecordFingerprint(r) {
+      const x = r || {};
+      return [x.month || '', x.year || '', (x.amountPaid ?? ''), (x.totalPayable ?? ''), x.date || ''].join('|');
+    }
+
+    // Insert into the ingest map WITHOUT ever silently overwriting a
+    // different record. Returns 'added' | 'refreshed' | 'kept-both'.
+    // Collisions are pushed onto `warnings` for the caller to surface.
+    function ingestFeeRecord(map, record, warnings) {
+      if (!record || !record.receiptNo) return 'skipped';
+      const key = feeRecordKey(record);
+      const existing = map.get(key);
+      if (!existing) { map.set(key, record); return 'added'; }
+      if (feeRecordFingerprint(existing) === feeRecordFingerprint(record)) {
+        map.set(key, record);
+        return 'refreshed';
+      }
+      let n = 2;
+      while (map.has(`${key}#c${n}`)) n++;
+      map.set(`${key}#c${n}`, record);
+      if (Array.isArray(warnings)) {
+        warnings.push(`Receipt ${record.receiptNo} (${record.familyId}) already exists with different details — both records were kept. Please check the Fee Ledger.`);
+      }
+      return 'kept-both';
+    }
+
+    // Batch 3A (B15): an existing fee record for the same family + month.
+    // Cancelled records do not count — a cancelled month may be re-paid.
+    function findFeeMonthDuplicate(records, familyId, month, year) {
+      const fam = String(familyId || '').toUpperCase();
+      const mon = String(month || '').trim().toLowerCase();
+      const yr = parseInt(year, 10);
+      return (records || []).find(r => r &&
+        String(r.familyId || '').toUpperCase() === fam &&
+        String(r.month || '').trim().toLowerCase() === mon &&
+        parseInt(r.year, 10) === yr &&
+        String(r.status || '').toLowerCase() !== 'cancelled') || null;
+    }
+
+    window.generateReceiptNo = generateReceiptNo;
+    window.feeRecordKey = feeRecordKey;
+    window.feeRecordFingerprint = feeRecordFingerprint;
+    window.ingestFeeRecord = ingestFeeRecord;
+    window.findFeeMonthDuplicate = findFeeMonthDuplicate;
+
     async function ingestFeeDataFromFamilies(families) {
       try {
         const cloudRecordsMap = new Map();
@@ -96,16 +180,20 @@
         })();
 
         const familiesToMigrate = new Set();
+        const ingestWarnings = [];
 
         (families || []).forEach(f => {
           if (!f || !f.id) return;
           const notesObj = parseFamilyNotesData(f.notes);
 
-          // Ingest cloud fee receipts
+          // Ingest cloud fee receipts — keyed by receiptNo + familyId
+          // (Batch 3A): the same number on two families, or two
+          // different records sharing one number, can no longer
+          // overwrite each other silently.
           if (Array.isArray(notesObj.fee_history)) {
             notesObj.fee_history.forEach(r => {
               if (r && r.receiptNo) {
-                cloudRecordsMap.set(r.receiptNo, r);
+                ingestFeeRecord(cloudRecordsMap, r, ingestWarnings);
               }
             });
           }
@@ -117,9 +205,9 @@
 
           // Check if local device has receipts for this family that aren't yet in the cloud!
           const fIdUpper = String(f.id).toUpperCase();
-          const unmigratedLocal = localRecords.filter(r => String(r.familyId).toUpperCase() === fIdUpper && !cloudRecordsMap.has(r.receiptNo));
+          const unmigratedLocal = localRecords.filter(r => String(r.familyId).toUpperCase() === fIdUpper && !cloudRecordsMap.has(feeRecordKey(r)));
           if (unmigratedLocal.length > 0) {
-            unmigratedLocal.forEach(r => cloudRecordsMap.set(r.receiptNo, r));
+            unmigratedLocal.forEach(r => ingestFeeRecord(cloudRecordsMap, r, ingestWarnings));
             familiesToMigrate.add(f.id);
           }
 
@@ -133,6 +221,13 @@
             }
           });
         });
+
+        if (ingestWarnings.length > 0) {
+          ingestWarnings.forEach(w => console.warn('[Cloud Fee Sync] ' + w));
+          if (typeof showToastNotification === 'function') {
+            showToastNotification('⚠️ Duplicate receipt numbers were found and kept safe. Please check the Fee Ledger.');
+          }
+        }
 
         // Sort all records descending by date / receipt
         const combinedRecords = Array.from(cloudRecordsMap.values()).sort((a, b) => {
@@ -190,11 +285,23 @@
           notesObj.fee_history = [];
         }
 
-        // Prepend new records (avoiding duplicates by receiptNo)
+        // Prepend new records (avoiding duplicates by receiptNo). Batch
+        // 3A (B9): a matching receiptNo only replaces the stored record
+        // when it is the SAME record (same fingerprint). A different
+        // record carrying the same number is kept alongside — never
+        // overwritten — and the collision is surfaced.
         newRecords.forEach(nr => {
           const existsIdx = notesObj.fee_history.findIndex(r => r.receiptNo === nr.receiptNo);
           if (existsIdx >= 0) {
-            notesObj.fee_history[existsIdx] = nr;
+            if (feeRecordFingerprint(notesObj.fee_history[existsIdx]) === feeRecordFingerprint(nr)) {
+              notesObj.fee_history[existsIdx] = nr;
+            } else {
+              notesObj.fee_history.unshift(nr);
+              console.warn(`[Cloud Fee Sync] Receipt ${nr.receiptNo} already exists with different details for ${fId} — both records kept.`);
+              if (typeof showToastNotification === 'function') {
+                showToastNotification(`⚠️ Receipt ${nr.receiptNo} already exists with different details — both records were kept.`);
+              }
+            }
           } else {
             notesObj.fee_history.unshift(nr);
           }
@@ -1288,6 +1395,39 @@
         return;
       }
 
+      // Batch 3A (B15): warn — never hard-block — when a fee record for
+      // this family and month already exists. A second payment in one
+      // month can be legitimate; the user decides. Advance payments
+      // check every month they will cover. Cancelled records (Batch 2)
+      // do not count.
+      {
+        const existingRecords = getStoredFeeRecords();
+        const formMonth = document.getElementById('feeFormMonth').value;
+        const formYear = parseInt(document.getElementById('feeFormYear').value, 10);
+        const advOn = document.getElementById('feeToggleAdvance')?.checked || false;
+        const advCount = advOn ? (parseInt(document.getElementById('feeSelectAdvanceMonths').value, 10) || 1) : 1;
+        const startIdx = FEE_CONFIG.MONTHS.findIndex(m => m.toLowerCase() === String(formMonth).toLowerCase());
+        let dupHit = null;
+        for (let i = 0; i < advCount && !dupHit; i++) {
+          const idx = startIdx >= 0 ? (startIdx + i) % 12 : -1;
+          const mName = idx >= 0 ? FEE_CONFIG.MONTHS[idx] : formMonth;
+          const yVal = startIdx >= 0 ? formYear + Math.floor((startIdx + i) / 12) : formYear;
+          dupHit = findFeeMonthDuplicate(existingRecords, famId, mName, yVal);
+        }
+        if (dupHit) {
+          const proceed = (typeof lmsConfirm === 'function')
+            ? await lmsConfirm({
+                title: 'Possible Duplicate Fee Record',
+                message: `A fee record for this family already exists for ${dupHit.month} ${dupHit.year} (Receipt ${dupHit.receiptNo}, status: ${dupHit.status}).\n\nIf this is a separate payment, choose "Save Anyway". Otherwise choose "Cancel" and check the Fee Ledger first.`,
+                confirmText: 'Save Anyway',
+                cancelText: 'Cancel',
+                variant: 'warning'
+              })
+            : window.confirm(`A fee record for this family already exists for ${dupHit.month} ${dupHit.year} (Receipt ${dupHit.receiptNo}). Save anyway?`);
+          if (!proceed) return;
+        }
+      }
+
       const btn = document.getElementById('btnSubmitFeePayment');
       if (btn) {
         btn.disabled = true;
@@ -1295,9 +1435,11 @@
       }
 
       const todayStr = new Date().toISOString().slice(0, 10);
-      const curYear = document.getElementById('feeFormYear').value;
       const records = getStoredFeeRecords();
-      const receiptNo = `${FEE_CONFIG.RECEIPT_PREFIX}${curYear}-${String(records.length + 1).padStart(4, '0')}`;
+      // Batch 3A (B9): collision-proof receipt number (date + random
+      // suffix) — no longer derived from the record count, so deletions
+      // and parallel browsers cannot mint the same number twice.
+      const receiptNo = generateReceiptNo();
 
       const totalPayable = parseFloat(document.getElementById('feeFormTotalPayable').value || 0);
       const amountPaid = parseFloat(document.getElementById('feeFormAmountPaid').value || 0);
