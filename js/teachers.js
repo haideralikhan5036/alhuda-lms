@@ -356,11 +356,27 @@
       document.getElementById('ntsGender').value = 'Male';
       const today = new Date().toISOString().slice(0,10);
       document.getElementById('ntsJoiningDate').value = today;
-      selectNTSDesignation('Manager'); // default
+      // Batch 2: a signed-in MANAGER cannot create Manager accounts.
+      // Hide the Manager designation toggle and default to Other Staff
+      // (the form itself stays available for non-manager staff). The
+      // Worker denies manager-record writes for managers regardless.
+      const ntsMgrBtn = document.getElementById('btnNTSManager');
+      if (typeof CURRENT_ROLE !== 'undefined' && CURRENT_ROLE === 'manager') {
+        if (ntsMgrBtn) ntsMgrBtn.style.display = 'none';
+        selectNTSDesignation('Other Staff');
+      } else {
+        if (ntsMgrBtn) ntsMgrBtn.style.display = '';
+        selectNTSDesignation('Manager'); // default
+      }
       openModal('modalAddNonTeachingStaff');
     }
 
     function selectNTSDesignation(type) {
+      // Batch 2: defense in depth — the Manager designation can never be
+      // selected in a manager session (see openNonTeachingStaffModal).
+      if (type === 'Manager' && typeof CURRENT_ROLE !== 'undefined' && CURRENT_ROLE === 'manager') {
+        type = 'Other Staff';
+      }
       document.getElementById('ntsDesignation').value = type;
       const btnM = document.getElementById('btnNTSManager');
       const btnO = document.getElementById('btnNTSOther');
@@ -468,6 +484,12 @@
     async function submitNonTeachingStaff(e) {
       e.preventDefault();
       const designation = document.getElementById('ntsDesignation')?.value;
+      // Batch 2: managers register Other Staff only — creating a
+      // Manager account is owner-only (the Worker also denies it).
+      if (designation === 'Manager' && typeof CURRENT_ROLE !== 'undefined' && CURRENT_ROLE === 'manager') {
+        alert('Managers cannot create Manager accounts. Only the System Owner can create or change Manager accounts.');
+        return;
+      }
       const full_name   = document.getElementById('ntsFullName')?.value?.trim();
       const role_title  = document.getElementById('ntsRoleTitle')?.value?.trim();
       const phone       = document.getElementById('ntsPhone')?.value?.trim();
@@ -577,6 +599,15 @@
               if (typeof window.setAccountPasswordViaWorker !== 'function') throw new Error('Password helper unavailable.');
               await window.setAccountPasswordViaWorker('manager', insertedId, password);
               mgrPasswordSet = true;
+              // Batch 2: show-once display if the signed-in user is a
+              // manager (defensive — managers cannot normally create
+              // manager accounts; see the designation restriction). The
+              // form password field is cleared either way.
+              if (typeof CURRENT_ROLE !== 'undefined' && CURRENT_ROLE === 'manager' && typeof window.showPasswordOnce === 'function') {
+                window.showPasswordOnce({ label: 'Manager portal password', username: username, password: password });
+              }
+              const ntsPwField = document.getElementById('ntsPassword');
+              if (ntsPwField) ntsPwField.value = '';
             } catch (pwErr) {
               // Keep the local status marker honest: the account was saved
               // with hasExplicitPassword from the typed value, but the
@@ -776,7 +807,7 @@
 
     async function deleteTeacher(teacherId) {
       if (CURRENT_ROLE === 'manager') {
-        alert("Access Denied: Managers are not authorized to permanently delete employee records. Only the System Owner can perform permanent deletions.");
+        alert('Managers cannot delete staff records.');
         return;
       }
       const teacher = ALL_TEACHERS.find(t => t.id === teacherId);
@@ -886,6 +917,34 @@
 
         const isManager = meta.employee_type === 'manager' || t.working_shift === 'Manager' || String(t.id).startsWith('MGR-') || String(meta.emp_id || '').startsWith('MGR-') || String(acc.teacher_id || '').startsWith('MGR-') || String(t.witness_name || '').startsWith('MGR-');
         const isOtherStaff = meta.employee_type === 'other_staff' || (t.working_shift && t.working_shift.toLowerCase().includes('staff')) || String(t.id).startsWith('STF-') || String(meta.emp_id || '').startsWith('STF-') || String(acc.teacher_id || '').startsWith('STF-') || String(t.witness_name || '').startsWith('STF-');
+
+        // ==========================================
+        // CARD: MANAGER — PLAIN VIEW FOR MANAGER SESSIONS (Batch 2, B7)
+        // A signed-in manager must not see or act on Manager accounts:
+        // no contacts, no salary, no credential box, no edit/delete.
+        // The Worker enforces the same rule server-side.
+        // ==========================================
+        if (isManager && typeof CURRENT_ROLE !== 'undefined' && CURRENT_ROLE === 'manager') {
+          const mgrDisplayIdPlain = meta.emp_id || (String(t.witness_name || '').startsWith('MGR-') ? t.witness_name : null) || acc.teacher_id || (String(t.id).startsWith('MGR-') ? t.id : 'MGR-001');
+          return `
+            <div class="bg-white rounded-2xl border-2 border-indigo-200 shadow-sm p-5">
+              <div class="flex items-center gap-3 mb-3">
+                <div class="w-12 h-12 rounded-xl bg-indigo-100 border border-indigo-300 text-indigo-800 flex items-center justify-center font-black text-base">
+                  ${t.full_name.slice(0, 2).toUpperCase()}
+                </div>
+                <div>
+                  <div class="font-extrabold text-base text-slate-900 leading-tight">${t.full_name}</div>
+                  <p class="text-[11px] text-indigo-700 font-semibold">${meta.role_title || 'Operations Manager'} &bull; <span class="font-mono">${mgrDisplayIdPlain}</span></p>
+                </div>
+                <span class="ml-auto px-2 py-0.5 rounded text-[10px] font-extrabold bg-indigo-100 text-indigo-800 border border-indigo-200">Manager</span>
+              </div>
+              <div class="p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-[11px] text-slate-500 flex items-center gap-1.5">
+                <i class="fa-solid fa-lock text-indigo-500"></i>
+                <span>Manager account — managed by the owner only.</span>
+              </div>
+            </div>
+          `;
+        }
 
         // ==========================================
         // CARD: MANAGER (NON-TEACHING)
@@ -1428,6 +1487,14 @@
             await window.setAccountPasswordViaWorker(pwRole, editTeacherId, password);
             saveTeacherAccount(editTeacherId, { hasExplicitPassword: true });
             pwStatusLine = '🔑 Portal Password: Updated — give it to them in person or by phone';
+            // Batch 2: a signed-in MANAGER sees the new password exactly
+            // ONCE (show-once modal) so it can be handed over; the owner
+            // flow keeps the status line only. Clear the form field.
+            if (typeof CURRENT_ROLE !== 'undefined' && CURRENT_ROLE === 'manager' && typeof window.showPasswordOnce === 'function') {
+              window.showPasswordOnce({ label: pwRole === 'manager' ? 'Manager portal password' : 'Teacher portal password', username: username, password: password });
+            }
+            const pwFieldU = document.getElementById('tPassword');
+            if (pwFieldU) pwFieldU.value = '';
           } catch (pwErr) {
             saveTeacherAccount(editTeacherId, { hasExplicitPassword: prevHasPw });
             alert('The teacher profile was SAVED, but the PASSWORD was NOT set.\n\nReason: ' + (pwErr.message || pwErr) + '\n\nPlease set it again from the Edit form or the password tool.');
@@ -1479,6 +1546,13 @@
             await window.setAccountPasswordViaWorker('teacher', insertedId, password);
             saveTeacherAccount(insertedId, { hasExplicitPassword: true });
             newPwStatusLine = '🔑 Portal Password: Set — give it to the teacher in person or by phone';
+            // Batch 2: show-once for a signed-in manager (see update
+            // branch); the form password field is cleared either way.
+            if (typeof CURRENT_ROLE !== 'undefined' && CURRENT_ROLE === 'manager' && typeof window.showPasswordOnce === 'function') {
+              window.showPasswordOnce({ label: 'Teacher portal password', username: username, password: password });
+            }
+            const pwFieldI = document.getElementById('tPassword');
+            if (pwFieldI) pwFieldI.value = '';
           } catch (pwErr) {
             alert('The teacher was REGISTERED, but the PASSWORD was NOT set.\n\nReason: ' + (pwErr.message || pwErr) + '\n\nPlease set it from the Edit form or the password tool.');
             newPwStatusLine = '🔑 Portal Password: NOT set — please set it via the password tool';

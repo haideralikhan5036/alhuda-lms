@@ -59,6 +59,13 @@
         if (typeof window.getLmsAuthToken === 'function') token = window.getLmsAuthToken();
       } catch (e) {}
       if (!token) token = getOwnerToken();
+      // Batch 2: a signed-in MANAGER may also set/reset TEACHER and
+      // PARENT passwords through this helper (never manager/owner
+      // passwords — the Worker authorises the caller's role server-side
+      // and denies anything beyond it). Fall back to the manager token.
+      if (!token) {
+        try { token = sessionStorage.getItem('alhuda_manager_token') || null; } catch (e) {}
+      }
       if (!token) {
         throw new Error('Owner session not found. Please log in as the owner and try again.');
       }
@@ -80,6 +87,72 @@
       return { ok: true };
     }
     window.setAccountPasswordViaWorker = setAccountPasswordViaWorker;
+
+    // ============================================================
+    // Batch 2: SHOW-ONCE password display. After a password is set or
+    // reset, the new password may be shown exactly ONCE on screen (with
+    // a Copy button) so it can be handed to the person. It is NEVER
+    // written to localStorage/sessionStorage or the console, and
+    // closing the modal wipes the field and removes the whole overlay
+    // from the DOM, so it cannot be seen again.
+    // ============================================================
+    function showPasswordOnce(opts) {
+      const o = opts || {};
+      const label = String(o.label || 'Portal password');
+      const username = String(o.username || '');
+      const password = String(o.password || '');
+      const prev = document.getElementById('lmsShowPasswordOnceOverlay');
+      if (prev) prev.remove();
+      const overlay = document.createElement('div');
+      overlay.id = 'lmsShowPasswordOnceOverlay';
+      overlay.style.cssText = 'position:fixed;inset:0;background:rgba(2,32,22,0.72);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px;';
+      overlay.innerHTML = `
+        <div class="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-md overflow-hidden">
+          <div class="px-5 py-4 bg-gradient-to-r from-[#022c22] to-[#064e3b] text-white">
+            <h3 class="font-extrabold text-sm flex items-center gap-2"><i class="fa-solid fa-key text-amber-300"></i> Password set — shown only once</h3>
+            <p class="text-[11px] text-emerald-100/80 mt-0.5">${label}</p>
+          </div>
+          <div class="p-5 space-y-3 text-xs">
+            <div>
+              <span class="text-slate-400 text-[10px] font-bold uppercase tracking-wide block">Username</span>
+              <strong class="text-slate-900 font-mono text-sm" id="lmsShowOnceUser"></strong>
+            </div>
+            <div>
+              <span class="text-slate-400 text-[10px] font-bold uppercase tracking-wide block">New Password</span>
+              <div class="flex items-center gap-2 mt-1">
+                <input id="lmsShowOncePass" type="text" readonly class="flex-1 p-2.5 bg-slate-50 border border-slate-300 rounded-lg font-mono font-bold text-slate-900 text-sm">
+                <button type="button" id="lmsShowOnceCopy" class="px-3 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-extrabold text-xs transition flex items-center gap-1.5"><i class="fa-regular fa-copy"></i> Copy</button>
+              </div>
+            </div>
+            <p class="text-slate-500 leading-relaxed">Give this password to them in person or by phone. It will not be shown again.</p>
+            <button type="button" id="lmsShowOnceClose" class="w-full py-2.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl font-extrabold text-xs transition">Done — Close</button>
+          </div>
+        </div>`;
+      document.body.appendChild(overlay);
+      // Values are set via DOM properties, never interpolated into HTML.
+      const userEl = overlay.querySelector('#lmsShowOnceUser');
+      if (userEl) userEl.textContent = username;
+      const passEl = overlay.querySelector('#lmsShowOncePass');
+      if (passEl) passEl.value = password;
+      function closeOnce() {
+        if (passEl) passEl.value = '';
+        overlay.remove();
+      }
+      const copyBtn = overlay.querySelector('#lmsShowOnceCopy');
+      if (copyBtn) copyBtn.addEventListener('click', async () => {
+        try {
+          await navigator.clipboard.writeText(password);
+          copyBtn.innerHTML = '<i class="fa-solid fa-check"></i> Copied';
+        } catch (e) {
+          if (passEl) { passEl.focus(); passEl.select(); }
+          alert('Copy this password now (it will not be shown again):\n\n' + password);
+        }
+      });
+      const closeBtn = overlay.querySelector('#lmsShowOnceClose');
+      if (closeBtn) closeBtn.addEventListener('click', closeOnce);
+      overlay.addEventListener('click', (ev) => { if (ev.target === overlay) closeOnce(); });
+    }
+    window.showPasswordOnce = showPasswordOnce;
 
     function decodeTokenPayload(token) {
       try {

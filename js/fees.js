@@ -1742,6 +1742,12 @@
     }
 
     async function promptChangeOfficialEmail() {
+      // Batch 2: the official sender/CC email is email configuration —
+      // owner-only. Managers see the current value but cannot change it.
+      if (typeof CURRENT_ROLE !== 'undefined' && CURRENT_ROLE === 'manager') {
+        showToastNotification('The official academy email can only be changed by the Owner.');
+        return;
+      }
       const current = getOfficialAcademyEmail();
       const entered = await lmsPrompt("Enter Official Academy Email Address (used for invoice sender & CC):", current, {
         title: 'Official Academy Email Address',
@@ -1760,6 +1766,9 @@
       const email = getOfficialAcademyEmail();
       const el = document.getElementById('feeOfficialEmailDisplay');
       if (el) el.innerText = email;
+      // Batch 2: hide the email-config change control from managers.
+      const chBtn = document.getElementById('btnChangeOfficialEmail');
+      if (chBtn) chBtn.style.display = (typeof CURRENT_ROLE !== 'undefined' && CURRENT_ROLE === 'manager') ? 'none' : '';
     }
 
     // Official Invoice Email Dispatcher (Manual & Auto-Send)
@@ -1778,7 +1787,7 @@
         if (fam && fam.email) targetEmail = fam.email;
       }
 
-      if (!targetEmail && !isSilent) {
+      if (!targetEmail && !isSilent && CURRENT_ROLE !== 'manager') {
         const promptEmail = await lmsPrompt(`Please enter parent email address for ${r.parentName} (${r.familyId}):`, "", {
           title: 'Parent Email Required',
           subtitle: `${r.parentName} (${r.familyId})`,
@@ -1792,7 +1801,7 @@
         }
       }
 
-      if (!targetEmail || !targetEmail.includes('@')) {
+      if (CURRENT_ROLE !== 'manager' && (!targetEmail || !targetEmail.includes('@'))) {
         if (!isSilent) {
           alert(`No valid parent email address found for ${r.parentName}. Please specify parent email.`);
         }
@@ -1874,8 +1883,24 @@
 
       // Try background dispatch via Official Apps Script Relay (with EmailJS fallback)
       let dispatchedSuccessfully = false;
+      let managerSendError = '';
       try {
-        if (typeof sendViaOfficialEmailRelay === 'function' || window.sendViaOfficialEmailRelay) {
+        if (CURRENT_ROLE === 'manager') {
+          // Batch 2 (B16): the manager never sees or supplies the parent's
+          // address — the Worker resolves it server-side from the familyId.
+          if (typeof window.sendParentEmailViaNotify === 'function') {
+            const notifyRes = await window.sendParentEmailViaNotify({
+              familyId: r.familyId,
+              subject: subject,
+              text: plainText,
+              html: plainText.replace(/\n/g, '<br/>')
+            });
+            dispatchedSuccessfully = !!notifyRes.success;
+            if (!notifyRes.success) managerSendError = notifyRes.error || 'Send failed';
+          } else {
+            managerSendError = 'Secure email service unavailable.';
+          }
+        } else if (typeof sendViaOfficialEmailRelay === 'function' || window.sendViaOfficialEmailRelay) {
           const fn = window.sendViaOfficialEmailRelay || sendViaOfficialEmailRelay;
           const relayRes = await fn({
             to: targetEmail,
@@ -1904,7 +1929,13 @@
         btn.innerHTML = origHtml;
       }
 
-      if (!isSilent) {
+      if (CURRENT_ROLE === 'manager') {
+        // Batch 2 (B16): no Gmail compose for managers (it would expose
+        // the address), and the confirmation never names the recipient.
+        showToastNotification(dispatchedSuccessfully
+          ? '✅ Email sent to the parent.'
+          : '❌ Email could not be sent. ' + managerSendError);
+      } else if (!isSilent) {
         // Open Gmail compose with complete pre-filled details
         const gmailUrl = `https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(targetEmail)}&cc=${encodeURIComponent(offEmail)}&su=${encodeURIComponent(subject)}&body=${encodeURIComponent(plainText)}`;
         window.open(gmailUrl, '_blank');
@@ -2130,6 +2161,7 @@ Official Email: ${offEmail}`;
       if (typeof openEmailPreviewModal === 'function') {
         openEmailPreviewModal({
           type: 'fee_reminder',
+          familyId: item.familyId,
           toEmail: emailAddr,
           toPhone: item.whatsapp || '',
           recipientName: item.parentName,
@@ -2156,6 +2188,58 @@ Official Email: ${offEmail}`;
       if (list.length === 0) {
         if (!isAuto4thTrigger) {
           alert(`All clear! There are zero families with pending fees for ${periodStr}.`);
+        }
+        return;
+      }
+
+      // Batch 2 (B16): managers send per-family through the notify
+      // endpoint. They cannot see which families have an email on file —
+      // the Worker resolves each address server-side and reports only
+      // success/failure per family.
+      if (CURRENT_ROLE === 'manager') {
+        if (!isAuto4thTrigger) {
+          const confirmMsgMgr = `Remind All Parents — ${periodStr}\n\nTotal Pending Families: ${list.length}\n\nThe official ${periodStr} Pending Fee email will be sent securely to each family's saved email address. Addresses are never shown to managers.\n\nContinue?`;
+          if (!(await lmsConfirm(confirmMsgMgr))) return;
+        }
+        const btnM = document.getElementById('btnRemindAllPendingMonth');
+        const origHtmlM = btnM ? btnM.innerHTML : '';
+        if (btnM) {
+          btnM.disabled = true;
+          btnM.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> <span>Sending Reminders (0/${list.length})...</span>`;
+        }
+        let sentMgr = 0;
+        let failedMgr = 0;
+        const itemsMgr = list.slice(0, 85);
+        for (let i = 0; i < itemsMgr.length; i++) {
+          const item = itemsMgr[i];
+          if (btnM) {
+            btnM.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> <span>Sending (${i + 1}/${itemsMgr.length})...</span>`;
+          }
+          try {
+            const built = buildPendingMonthReminderEmail(item, targetMonth, targetYear);
+            if (typeof window.sendParentEmailViaNotify === 'function') {
+              const res = await window.sendParentEmailViaNotify({
+                familyId: item.familyId,
+                subject: built.subject,
+                text: built.plainText,
+                html: built.htmlBody || built.plainText.replace(/\n/g, '<br/>')
+              });
+              if (res.success) sentMgr++; else failedMgr++;
+            } else {
+              failedMgr++;
+            }
+          } catch (err) {
+            failedMgr++;
+          }
+        }
+        if (btnM) {
+          btnM.disabled = false;
+          btnM.innerHTML = origHtmlM;
+        }
+        localStorage.setItem(`alhuda_bulk_pending_reminder_${targetYear}_${targetMonth}`, new Date().toISOString());
+        if (!isAuto4thTrigger) {
+          showToastNotification(`✅ Processed ${itemsMgr.length} pending fee reminders for ${periodStr}!`);
+          alert(`✅ ${periodStr} Fee Reminders Processed!\n\n• Total Pending Families: ${list.length}\n• Emails Sent Securely: ${sentMgr}\n• Could Not Send (no email on file or an error): ${failedMgr}`);
         }
         return;
       }
@@ -2566,6 +2650,7 @@ Official Email: ${offEmail}`;
       if (typeof openEmailPreviewModal === 'function') {
         openEmailPreviewModal({
           type: 'defaulter_3plus_reminder',
+          familyId: item.familyId,
           toEmail: item.email || '',
           toPhone: item.whatsapp || '',
           recipientName: item.parentName,
@@ -2580,6 +2665,49 @@ Official Email: ${offEmail}`;
       const list = CACHED_THREE_MONTH_DEFAULTERS || [];
       if (list.length === 0) {
         alert('All clear! There are currently zero families in the 3+ Months Defaulters list.');
+        return;
+      }
+
+      // Batch 2 (B16): manager path — per-family notify endpoint. The
+      // Worker resolves each address server-side; the manager only sees
+      // aggregate counts, never an address or who has one on file.
+      if (CURRENT_ROLE === 'manager') {
+        if (!(await lmsConfirm(`Remind All 3+ Month Defaulters\n\nTotal 3+ Month Defaulter Families: ${list.length}\n\nThe urgent 3+ Months Overdue Fee Reminder will be sent securely to each family's saved email address. Addresses are never shown to managers.\n\nContinue?`))) {
+          return;
+        }
+        const btnM3 = document.getElementById('btnRemindAll3PlusDefaulters');
+        const origHtmlM3 = btnM3 ? btnM3.innerHTML : '';
+        if (btnM3) {
+          btnM3.disabled = true;
+          btnM3.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> <span>Sending Defaulter Notices...</span>`;
+        }
+        let sentM3 = 0;
+        let failedM3 = 0;
+        for (let i = 0; i < list.length; i++) {
+          const item = list[i];
+          try {
+            const built = buildDefaulter3PlusEmail(item);
+            if (typeof window.sendParentEmailViaNotify === 'function') {
+              const res = await window.sendParentEmailViaNotify({
+                familyId: item.familyId,
+                subject: built.subject,
+                text: built.plainText,
+                html: built.htmlBody || built.plainText.replace(/\n/g, '<br/>')
+              });
+              if (res.success) sentM3++; else failedM3++;
+            } else {
+              failedM3++;
+            }
+          } catch (err) {
+            failedM3++;
+          }
+        }
+        if (btnM3) {
+          btnM3.disabled = false;
+          btnM3.innerHTML = origHtmlM3;
+        }
+        showToastNotification(`🚨 Processed urgent 3+ month overdue notices for ${list.length} families!`);
+        alert(`🚨 3+ Months Defaulters Reminder Processed!\n\n• Total 3+ Month Defaulters: ${list.length}\n• Urgent Emails Sent Securely: ${sentM3}\n• Could Not Send (no email on file or an error): ${failedM3}`);
         return;
       }
 

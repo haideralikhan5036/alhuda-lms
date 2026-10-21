@@ -526,7 +526,9 @@ function _getFamilyPaymentsList(family) {
       paidDate: status === 'PAID' ? (r.date || new Date().toISOString().slice(0, 10)) : '--',
       feeAmount: feeAmt,
       currency: r.currency || currency,
-      status: status === 'PAID' ? 'PAID' : 'UNPAID',
+      // Batch 2: keep a manager-cancelled record visibly CANCELLED
+      // instead of silently re-labelling it UNPAID.
+      status: status === 'PAID' ? 'PAID' : (status === 'CANCELLED' ? 'CANCELLED' : 'UNPAID'),
       reason: r.reason || r.remarks || (isManual ? 'Manual Invoice' : 'Monthly Tuition Fee'),
       description: r.description || r.remarks || '',
       isManualInvoice: isManual,
@@ -1596,15 +1598,18 @@ function _buildFamilyPaymentsTabHtml(family, payData) {
                       ${_esc360(r.currency)} ${_esc360(r.feeAmount)}
                     </td>
 
-                    <!-- 5. Status (PAID / UNPAID) -->
+                    <!-- 5. Status (PAID / UNPAID / CANCELLED) -->
                     <td class="p-4">
                       <span class="px-2.5 py-1 rounded-md text-[10px] font-black uppercase tracking-wider ${
                         isPaid
                           ? 'bg-emerald-600 text-white'
-                          : 'bg-rose-100 text-rose-800 border border-rose-200'
+                          : (r.status === 'CANCELLED'
+                            ? 'bg-slate-200 text-slate-600 border border-slate-300'
+                            : 'bg-rose-100 text-rose-800 border border-rose-200')
                       }">
-                        ${isPaid ? 'PAID' : 'UNPAID'}
+                        ${isPaid ? 'PAID' : (r.status === 'CANCELLED' ? 'CANCELLED' : 'UNPAID')}
                       </span>
+                      ${(r.status === 'CANCELLED' && r.rawRecord && r.rawRecord.cancel_reason) ? `<span class="text-[10px] text-slate-500 font-bold block mt-1">Reason: ${_esc360(r.rawRecord.cancel_reason)}</span>` : ''}
                     </td>
 
                     <!-- 6. Required Payment Actions: Invoice Record, Edit, Email, Delete -->
@@ -1631,11 +1636,11 @@ function _buildFamilyPaymentsTabHtml(family, payData) {
                           <i class="fa-regular fa-envelope"></i>
                         </button>
 
-                        <!-- Delete Payment Entry -->
+                        <!-- Delete Payment Entry (Batch 2: managers CANCEL instead — see deleteFamilyPaymentRecord) -->
                         <button onclick="deleteFamilyPaymentRecord('${_esc360(family.id)}', '${_esc360(r.recordId)}', '${_esc360(r.month)}', '${_esc360(r.year)}')"
                                 class="w-8 h-8 rounded-lg border border-rose-300 bg-rose-50 hover:bg-rose-100 text-rose-700 flex items-center justify-center transition cursor-pointer"
-                                title="Delete This Payment Entry">
-                          <i class="fa-regular fa-trash-can"></i>
+                                title="${window.CURRENT_ROLE === 'manager' ? 'Cancel This Payment Entry' : 'Delete This Payment Entry'}">
+                          <i class="fa-regular ${window.CURRENT_ROLE === 'manager' ? 'fa-ban' : 'fa-trash-can'}"></i>
                         </button>
                       </div>
                     </td>
@@ -1827,7 +1832,12 @@ function _buildFamilyBioDataTabHtml(family, fNotes, creds) {
   const countryVal = family.country || 'United Kingdom';
   const cityVal = bio.city || _extractCityFromLegacyNotes(family.notes) || '--';
   const timezoneVal = bio.timezone || _inferTimezoneFromCountry(countryVal);
-  const usernameVal = creds.username || family.parent_email || '--';
+  // Batch 2: for managers the Portal Username must never fall back to
+  // the family EMAIL address — family contact data is hidden from
+  // managers everywhere, including this grid.
+  const usernameVal = (window.CURRENT_ROLE === 'manager')
+    ? (creds.username || '--')
+    : (creds.username || family.parent_email || '--');
   // AUTH HARDENING (Batch 1): the stored password is NEVER displayed (it
   // is a server-side salted hash now) — show only whether one is set.
   const passwordVal = creds.hasExplicitPassword ? 'Password set' : 'No password set';
@@ -2007,6 +2017,11 @@ function openFamilyCustomEmailModal(familyId) {
   if (!family) return;
 
   const toEmail = family.parent_email || family.email || '';
+  // Batch 2 (B16): a manager never sees the family email address — not
+  // in the subtitle, not pre-filled in the form (a local mirror may hold
+  // the real value). Sending routes through the notify endpoint, which
+  // resolves the address server-side from the family id.
+  const _isMgrCustomEmail = (typeof CURRENT_ROLE !== 'undefined' && CURRENT_ROLE === 'manager') || window.CURRENT_ROLE === 'manager';
   const defaultSubject = `Academic Update for ${family.parent_name} (${family.id}) — Al-Huda Islamic Centre`;
   const defaultBody =
 `Assalamu Alaikum Respected ${family.parent_name},
@@ -2021,12 +2036,12 @@ Al-Huda Islamic Centre`;
 
   _openWorkspaceModal(
     `Send Email to Family / Parent`,
-    `Recipient: ${family.parent_name} (${toEmail || 'Enter email below'})`,
+    `Recipient: ${family.parent_name} (${_isMgrCustomEmail ? 'Hidden' : (toEmail || 'Enter email below')})`,
     `
       <form onsubmit="executeSendFamilyCustomEmail(event, '${_esc360(family.id)}')" class="space-y-4 text-xs">
         <div>
           <label class="font-extrabold text-slate-700 block mb-1">To (Parent Email) *</label>
-          <input type="email" id="fwCustomEmailTo" value="${_esc360(toEmail)}" required placeholder="parent@example.com" class="w-full p-2.5 rounded-xl border border-slate-300 font-bold text-slate-900">
+          <input type="email" id="fwCustomEmailTo" value="${_isMgrCustomEmail ? '' : _esc360(toEmail)}" ${_isMgrCustomEmail ? 'readonly placeholder="Hidden — sent to the email address saved for this family"' : 'required placeholder="parent@example.com"'} class="w-full p-2.5 rounded-xl border border-slate-300 font-bold text-slate-900">
         </div>
         <div>
           <label class="font-extrabold text-slate-700 block mb-1">Subject *</label>
@@ -2037,9 +2052,9 @@ Al-Huda Islamic Centre`;
           <textarea id="fwCustomEmailBody" rows="7" required class="w-full p-3 rounded-xl border border-slate-300 text-xs text-slate-800">${_esc360(defaultBody)}</textarea>
         </div>
         <div class="flex items-center justify-between gap-2 pt-3 border-t border-slate-100 flex-wrap">
-          <button type="button" onclick="openGmailDirectFromWorkspace('fwCustomEmailTo','fwCustomEmailSub','fwCustomEmailBody')" class="px-3.5 py-2 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 font-extrabold">
+          ${_isMgrCustomEmail ? '' : `<button type="button" onclick="openGmailDirectFromWorkspace('fwCustomEmailTo','fwCustomEmailSub','fwCustomEmailBody')" class="px-3.5 py-2 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 font-extrabold">
             <i class="fa-brands fa-google mr-1"></i> Compose in Gmail
-          </button>
+          </button>`}
           <div class="flex items-center gap-2">
             <button type="button" onclick="_closeWorkspaceModal()" class="px-4 py-2 rounded-xl bg-slate-100 text-slate-700 font-bold">Cancel</button>
             <button type="submit" id="btnFwSendCustomEmail" class="px-5 py-2 rounded-xl bg-sky-600 hover:bg-sky-700 text-white font-extrabold">
@@ -2054,9 +2069,52 @@ Al-Huda Islamic Centre`;
 
 async function executeSendFamilyCustomEmail(e, familyId) {
   e.preventDefault();
-  const toEmail = document.getElementById('fwCustomEmailTo').value.trim();
   const subject = document.getElementById('fwCustomEmailSub').value.trim();
   const body = document.getElementById('fwCustomEmailBody').value.trim();
+
+  // Batch 2 (B16): a MANAGER sends through the Worker's notify endpoint —
+  // the family id only; the Worker resolves the address server-side and
+  // it never appears here. The communication log records 'Hidden', and
+  // no address column is written back.
+  const _isMgrSend = (typeof CURRENT_ROLE !== 'undefined' && CURRENT_ROLE === 'manager') || window.CURRENT_ROLE === 'manager';
+  if (_isMgrSend) {
+    const mgrFamily = (window.ALL_FAMILIES || []).find(f => String(f.id).toUpperCase() === String(familyId).toUpperCase());
+    if (mgrFamily) {
+      try {
+        const mfNotes = _parseFamilyStructuredNotes(mgrFamily);
+        mfNotes.communication_logs.unshift({
+          id: `EMAIL-LOG-${Date.now()}`,
+          type: 'email',
+          to: 'Hidden',
+          subject,
+          sent_at: new Date().toISOString().slice(0, 16).replace('T', ' ')
+        });
+        await _saveFamilyStructuredNotes(mgrFamily.id, mfNotes);
+      } catch (logErr) { console.warn('[360 Custom Email Log]:', logErr); }
+    }
+    let sentOk = false;
+    let sendErr = 'Secure email service unavailable.';
+    if (typeof window.sendParentEmailViaNotify === 'function') {
+      const notifyRes = await window.sendParentEmailViaNotify({
+        familyId: familyId,
+        subject: subject,
+        text: body,
+        html: body.replace(/\n/g, '<br/>')
+      });
+      sentOk = !!notifyRes.success;
+      if (!sentOk && notifyRes.error) sendErr = notifyRes.error;
+    }
+    _closeWorkspaceModal();
+    if (sentOk) {
+      _notify360('Email sent to the parent.');
+    } else {
+      alert('❌ Email could not be sent.\n\nError: ' + sendErr);
+    }
+    _renderFamilyWorkspaceDOM();
+    return;
+  }
+
+  const toEmail = document.getElementById('fwCustomEmailTo').value.trim();
 
   const family = (window.ALL_FAMILIES || []).find(f => String(f.id).toUpperCase() === String(familyId).toUpperCase());
   if (family) {
@@ -3115,6 +3173,17 @@ function openEditFamilyProfileModal(familyId) {
   const bio = fNotes.bio_meta || {};
   const creds = (typeof getParentCreds === 'function') ? getParentCreds(family) : { username: '', password: '', email: '', hasExplicitPassword: false };
 
+  // Batch 2: a signed-in MANAGER never sees family contact values —
+  // not even pre-filled in this edit form (a local mirror may still
+  // hold them). The three contact fields open BLANK with a 'Hidden'
+  // hint: typing a value replaces it, leaving it blank keeps the
+  // stored value (see submitEditFamilyProfileForm).
+  const _isMgrEdit360 = (typeof CURRENT_ROLE !== 'undefined' && CURRENT_ROLE === 'manager') || window.CURRENT_ROLE === 'manager';
+  const emailFieldVal360 = _isMgrEdit360 ? '' : _esc360(family.parent_email || family.email || '');
+  const telFieldVal360 = _isMgrEdit360 ? '' : _esc360(bio.telephone || family.whatsapp || '');
+  const mobileFieldVal360 = _isMgrEdit360 ? '' : _esc360(bio.mobile || '');
+  const contactHint360 = _isMgrEdit360 ? ' placeholder="Hidden — leave blank to keep unchanged"' : '';
+
   _openWorkspaceModal(
     `Edit Family Profile Information`,
     `Family ID: ${family.id} — Updates Family Header & Bio Data`,
@@ -3127,18 +3196,18 @@ function openEditFamilyProfileModal(familyId) {
           </div>
           <div>
             <label class="font-extrabold text-slate-700 block mb-1">Email Address</label>
-            <input type="text" inputmode="email" id="fwEditFamEmail" value="${_esc360(family.parent_email || family.email || '')}" oninput="this.value = this.value.replace(/\s+/g, '')" class="w-full p-2.5 rounded-xl border border-slate-300 font-bold text-slate-900 font-mono text-xs">
+            <input type="text" inputmode="email" id="fwEditFamEmail" value="${emailFieldVal360}"${contactHint360} oninput="this.value = this.value.replace(/\s+/g, '')" class="w-full p-2.5 rounded-xl border border-slate-300 font-bold text-slate-900 font-mono text-xs">
           </div>
         </div>
 
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div>
             <label class="font-extrabold text-slate-700 block mb-1">Telephone</label>
-            <input type="text" id="fwEditFamTel" value="${_esc360(bio.telephone || family.whatsapp || '')}" class="w-full p-2.5 rounded-xl border border-slate-300 font-bold text-slate-800">
+            <input type="text" id="fwEditFamTel" value="${telFieldVal360}"${contactHint360} class="w-full p-2.5 rounded-xl border border-slate-300 font-bold text-slate-800">
           </div>
           <div>
             <label class="font-extrabold text-slate-700 block mb-1">Mobile</label>
-            <input type="text" id="fwEditFamMobile" value="${_esc360(bio.mobile || '')}" class="w-full p-2.5 rounded-xl border border-slate-300 font-bold text-slate-800">
+            <input type="text" id="fwEditFamMobile" value="${mobileFieldVal360}"${contactHint360} class="w-full p-2.5 rounded-xl border border-slate-300 font-bold text-slate-800">
           </div>
         </div>
 
@@ -3205,9 +3274,22 @@ async function submitEditFamilyProfileForm(e, familyId) {
   if (!family) return;
 
   const parent_name = document.getElementById('fwEditFamName').value.trim();
-  const parent_email = document.getElementById('fwEditFamEmail').value.trim();
-  const telephone = document.getElementById('fwEditFamTel').value.trim();
-  const mobile = document.getElementById('fwEditFamMobile').value.trim();
+  let parent_email = document.getElementById('fwEditFamEmail').value.trim();
+  let telephone = document.getElementById('fwEditFamTel').value.trim();
+  let mobile = document.getElementById('fwEditFamMobile').value.trim();
+
+  // Batch 2: in a manager session the contact fields open blank (the
+  // values are hidden from managers). Blank — or the 'Hidden' mask
+  // itself — means UNCHANGED: substitute the family's existing stored
+  // values, so a manager edit can never wipe the family's email /
+  // telephone / mobile and the mask placeholder is never written back
+  // by this form. (The Worker independently rejects the placeholder.)
+  if ((typeof CURRENT_ROLE !== 'undefined' && CURRENT_ROLE === 'manager') || window.CURRENT_ROLE === 'manager') {
+    const _exBio360 = (_parseFamilyStructuredNotes(family).bio_meta || {});
+    if (!parent_email || parent_email === 'Hidden') parent_email = family.parent_email || family.email || '';
+    if (!telephone || telephone === 'Hidden') telephone = _exBio360.telephone || family.whatsapp || '';
+    if (!mobile || mobile === 'Hidden') mobile = _exBio360.mobile || '';
+  }
   const country = document.getElementById('fwEditFamCountry').value.trim();
   const city = document.getElementById('fwEditFamCity').value.trim();
   const timezone = document.getElementById('fwEditFamTz').value.trim();
@@ -3260,6 +3342,14 @@ async function submitEditFamilyProfileForm(e, familyId) {
       await window.setAccountPasswordViaWorker('parent', family.id, password);
       if (typeof saveParentAccount === 'function') saveParentAccount(family.id, { hasExplicitPassword: true });
       pwNote = ' Portal password updated.';
+      // Batch 2: a signed-in MANAGER sees the new password exactly ONCE
+      // (show-once modal) so it can be handed to the parent; the owner
+      // flow keeps the note only. The form field is cleared either way.
+      if (((typeof CURRENT_ROLE !== 'undefined' && CURRENT_ROLE === 'manager') || window.CURRENT_ROLE === 'manager') && typeof window.showPasswordOnce === 'function') {
+        window.showPasswordOnce({ label: 'Parent portal password', username: username, password: password });
+      }
+      const famPwField360 = document.getElementById('fwEditFamPass');
+      if (famPwField360) famPwField360.value = '';
     } catch (pwErr) {
       alert('The family profile was SAVED, but the PASSWORD was NOT set.\n\nReason: ' + (pwErr.message || pwErr) + '\n\nPlease try again from the Edit Family form or the password tool.');
       pwNote = ' Portal password was NOT updated — please set it via the password tool.';
@@ -3441,6 +3531,87 @@ function emailSpecificFamilyInvoice(familyId, recordId, month, year) {
 async function deleteFamilyPaymentRecord(familyId, recordId, month, year) {
   if (window.CURRENT_ROLE === 'teacher' || window.CURRENT_ROLE === 'student') {
     alert('Access Denied: Only Admin/Management can delete payment entries.');
+    return;
+  }
+
+  // Batch 2: a MANAGER never hard-deletes a payment record. The entry
+  // is CANCELLED instead: it stays on the record with status
+  // 'Cancelled' plus the reason and who cancelled it, and is saved
+  // through the same family-notes persistence path as a delete. The
+  // owner path below (real delete) is unchanged.
+  const _role360 = (typeof CURRENT_ROLE !== 'undefined' && CURRENT_ROLE) || window.CURRENT_ROLE || '';
+  if (_role360 === 'manager') {
+    const mgrFamily = (window.ALL_FAMILIES || []).find(f => String(f.id).toUpperCase() === String(familyId).toUpperCase());
+    if (!mgrFamily) return;
+
+    if (!(await lmsConfirm(`Cancel the payment/invoice entry for ${month} ${year}?\n\nManagers cannot permanently delete payment records. This entry will be kept on the record and marked as Cancelled.`))) return;
+    const cancelReason = window.prompt('Reason for cancellation (required):', '');
+    if (cancelReason === null) return;
+    if (!String(cancelReason).trim()) {
+      alert('A cancellation reason is required.');
+      return;
+    }
+    const reasonText = String(cancelReason).trim();
+    const cancelledAt = new Date().toISOString();
+
+    const mfNotes = _parseFamilyStructuredNotes(mgrFamily);
+    let found = false;
+    (mfNotes.fee_history || []).forEach(r => {
+      if (r && (r.receiptNo === recordId || (String(r.month).toLowerCase() === String(month).toLowerCase() && String(r.year) === String(year)))) {
+        r.status = 'Cancelled';
+        r.cancel_reason = reasonText;
+        r.cancelled_by = 'manager';
+        r.cancelled_at = cancelledAt;
+        found = true;
+      }
+    });
+    if (!found && String(recordId).startsWith('AUTO-')) {
+      // Auto-generated monthly row: no stored record exists yet, so
+      // persist an explicit Cancelled record for that month (it also
+      // stops the row regenerating as an ordinary unpaid month).
+      if (!Array.isArray(mfNotes.fee_history)) mfNotes.fee_history = [];
+      mfNotes.fee_history.push({
+        receiptNo: recordId,
+        month: month,
+        year: year,
+        status: 'Cancelled',
+        amount: parseFloat(mgrFamily.monthly_fee || 0) || 0,
+        currency: mgrFamily.currency || 'USD',
+        cancel_reason: reasonText,
+        cancelled_by: 'manager',
+        cancelled_at: cancelledAt
+      });
+      found = true;
+    }
+
+    // Mirror the cancellation onto the global fee-records copy of the
+    // same receipt so the two stores cannot disagree (mark, not delete).
+    if (typeof getStoredFeeRecords === 'function' && typeof saveStoredFeeRecords === 'function') {
+      const allRecs = getStoredFeeRecords() || [];
+      let gFound = false;
+      allRecs.forEach(r => {
+        if (r && r.receiptNo === recordId && String(r.familyId || '').toUpperCase() === String(mgrFamily.id).toUpperCase()) {
+          r.status = 'Cancelled';
+          r.cancel_reason = reasonText;
+          r.cancelled_by = 'manager';
+          r.cancelled_at = cancelledAt;
+          gFound = true;
+        }
+      });
+      if (gFound) saveStoredFeeRecords(allRecs);
+    }
+
+    if (!found) {
+      alert('That payment entry could not be found as a stored record, so nothing was cancelled.');
+      return;
+    }
+
+    await _saveFamilyStructuredNotes(mgrFamily.id, mfNotes);
+    if (typeof loadFeeDashboardStats === 'function') {
+      try { loadFeeDashboardStats(); } catch (err) {}
+    }
+    _notify360(`Payment entry for ${month} ${year} cancelled (kept on record).`);
+    _renderFamilyWorkspaceDOM();
     return;
   }
 
@@ -4373,6 +4544,19 @@ function _renderTeacher360WorkspaceDOM(teacher, tchSchedules, attLogs, activeTab
     documentsList
   } = state;
 
+  // Batch 2 (B7): a signed-in MANAGER viewing a MANAGER account must
+  // not see that account's payroll in any form — the salary tab, the
+  // deductions tab and the salary action buttons are owner-only for
+  // manager records. Teacher records are completely unaffected.
+  const mgrViewingManagerRecord = (typeof CURRENT_ROLE !== 'undefined' && CURRENT_ROLE === 'manager' && state.isManager);
+  const restrictedPayrollHtml = `
+    <div class="p-10 text-center bg-slate-50 rounded-2xl border border-slate-200">
+      <i class="fa-solid fa-lock text-3xl text-slate-300 mb-3"></i>
+      <h4 class="font-extrabold text-slate-700 text-sm">Payroll Restricted</h4>
+      <p class="text-xs text-slate-400 mt-1">Manager accounts and their payroll are managed by the System Owner only.</p>
+    </div>
+  `;
+
   const isAccountActive = String(teacher.status || 'Active').toLowerCase() === 'active';
   const statusBadgeStyle = isAccountActive
     ? 'bg-emerald-500/20 text-emerald-300 border-emerald-400/40'
@@ -4396,13 +4580,13 @@ function _renderTeacher360WorkspaceDOM(teacher, tchSchedules, attLogs, activeTab
   if (resolvedTab === 'students') {
     activeTabContentHtml = _buildTeacherStudentsListTabHtml(state, options);
   } else if (resolvedTab === 'deductions_leaves') {
-    activeTabContentHtml = _buildTeacherDeductionsAndLeavesTabHtml(state);
+    activeTabContentHtml = mgrViewingManagerRecord ? restrictedPayrollHtml : _buildTeacherDeductionsAndLeavesTabHtml(state);
   } else if (resolvedTab === 'biodata') {
     activeTabContentHtml = _buildTeacherBioDataTabHtml(state);
   } else if (resolvedTab === 'documents') {
     activeTabContentHtml = _buildTeacherDocumentsTabHtml(state);
   } else if (resolvedTab === 'salary') {
-    activeTabContentHtml = _buildTeacherSalaryDetailsTabHtml(state);
+    activeTabContentHtml = mgrViewingManagerRecord ? restrictedPayrollHtml : _buildTeacherSalaryDetailsTabHtml(state);
   } else {
     activeTabContentHtml = _buildTeacherStudentsListTabHtml(state, options);
   }
@@ -4472,12 +4656,14 @@ function _renderTeacher360WorkspaceDOM(teacher, tchSchedules, attLogs, activeTab
               <span>Student Details</span>
             </button>
 
+            ${mgrViewingManagerRecord ? '' : `
             <button onclick="switchTeacher360Tab('salary')"
                     class="h-9 px-3.5 rounded-xl ${isSalaryActive ? 'bg-amber-400 text-slate-950 border border-amber-300 font-black shadow-xs' : 'bg-white/10 hover:bg-white/15 border border-white/15 text-slate-100 font-bold'} text-xs transition inline-flex items-center justify-center gap-1.5 whitespace-nowrap cursor-pointer"
                     title="Open Teacher Salary Ledger & Monthly Payroll Slips">
               <i class="fa-solid fa-file-invoice-dollar ${isSalaryActive ? 'text-slate-950' : 'text-amber-300'}"></i>
               <span>Salary Record</span>
             </button>
+            `}
 
             <button onclick="openTeacherDedicatedScheduleFrom360('${_esc360(teacher.id)}')"
                     class="h-9 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-500 border border-indigo-400/50 text-white text-xs font-extrabold transition inline-flex items-center justify-center gap-1.5 whitespace-nowrap cursor-pointer shadow-xs"
@@ -4486,11 +4672,13 @@ function _renderTeacher360WorkspaceDOM(teacher, tchSchedules, attLogs, activeTab
               <span>Schedule</span>
             </button>
 
+            ${mgrViewingManagerRecord ? '' : `
             <button onclick="openTeacherSalaryAdjustmentModal('${_esc360(teacher.id)}')"
                     class="h-9 px-3.5 rounded-xl bg-white/10 hover:bg-white/15 border border-white/15 text-slate-100 text-xs font-bold transition inline-flex items-center justify-center gap-1.5 whitespace-nowrap cursor-pointer">
               <i class="fa-solid fa-sliders text-purple-300"></i>
               <span>Salary Adjustment</span>
             </button>
+            `}
 
             <button onclick="handleTeacher360ToggleAccountStatus('${_esc360(teacher.id)}')"
                     class="h-9 px-3.5 rounded-xl ${isAccountActive ? 'bg-rose-500/20 hover:bg-rose-600 border border-rose-400/50 text-rose-200 hover:text-white' : 'bg-emerald-500/20 hover:bg-emerald-600 border border-emerald-400/50 text-emerald-200 hover:text-white'} text-xs font-extrabold transition inline-flex items-center justify-center gap-1.5 whitespace-nowrap cursor-pointer">
@@ -4908,7 +5096,11 @@ function _buildTeacherLeavesTabHtml(state) {
 // ============================================================================
 function _buildTeacherBioDataTabHtml(state) {
   const { teacher, meta, joinDateStr, currentBaseSubtotal } = state;
-  const isAuthorizedForBank = (typeof CURRENT_ROLE === 'undefined' || CURRENT_ROLE === 'owner' || CURRENT_ROLE === 'manager');
+  // Batch 2 (B7): bank details and salary figures of a MANAGER account
+  // are owner-only — a signed-in manager sees 'Restricted' for them.
+  // (For teacher records, managers keep the existing access.)
+  const isAuthorizedForBank = !(typeof CURRENT_ROLE !== 'undefined' && CURRENT_ROLE === 'manager' && state.isManager)
+    && (typeof CURRENT_ROLE === 'undefined' || CURRENT_ROLE === 'owner' || CURRENT_ROLE === 'manager');
 
   const bioFields = [
     { label: 'Father Name:', value: teacher.father_name || meta.father_name || meta.emergency_name || '--' },

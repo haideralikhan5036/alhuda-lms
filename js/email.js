@@ -327,12 +327,90 @@ Official Email: ${ACADEMY_OFFICIAL_EMAIL}`;
     }
     window.sendViaOfficialEmailRelay = sendViaOfficialEmailRelay;
 
+    // ------------------------------------------------------------------
+    // MANAGER PARENT NOTIFICATION (Batch 2, B16): a manager may email a
+    // parent WITHOUT ever seeing the address. The client sends only the
+    // familyId + message to POST /api/email/notify-parent; the Worker
+    // resolves the recipient server-side and never returns it. Used by
+    // the email modal, the automatic welcome emails, and the fee
+    // reminder flows in js/fees.js (via window.sendParentEmailViaNotify).
+    // ------------------------------------------------------------------
+    function resolveManagerTokenForEmail() {
+      try {
+        if (typeof window.getLmsAuthHeaders === 'function') {
+          const h = window.getLmsAuthHeaders() || {};
+          const auth = h.Authorization || h.authorization || '';
+          if (typeof auth === 'string' && auth.toLowerCase().startsWith('bearer ')) return auth.slice(7);
+        }
+      } catch (e) {}
+      try {
+        const t = sessionStorage.getItem('alhuda_manager_token');
+        if (t) return t;
+      } catch (e2) {}
+      return null;
+    }
+
+    async function sendParentEmailViaNotify({ familyId, subject, text, html }) {
+      if (!familyId) return { success: false, error: 'No family is linked to this email.' };
+      if (!subject) return { success: false, error: 'Subject missing' };
+      const token = resolveManagerTokenForEmail();
+      if (!token) return { success: false, error: 'Manager session not found. Please log in again.' };
+      try {
+        const res = await fetch(resolveWorkerBaseForEmail() + '/api/email/notify-parent', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+          body: JSON.stringify({
+            familyId: String(familyId),
+            subject: String(subject),
+            text: text || '',
+            html: html || text || ''
+          })
+        });
+        let data = null;
+        try { data = await res.json(); } catch (e) { data = null; }
+        if (res.ok && data && data.ok) return { success: true };
+        return { success: false, error: (data && data.error) || ('Email send failed (HTTP ' + res.status + ')') };
+      } catch (err) {
+        return { success: false, error: 'Cannot reach the server. The email was NOT sent.' };
+      }
+    }
+    window.sendParentEmailViaNotify = sendParentEmailViaNotify;
+
     async function dispatchEmailNow() {
-      // Managers are blocked from direct external dispatch (same policy as
-      // the Gmail composer and WhatsApp dispatch above); the worker would
-      // also reject a non-owner token with 403.
+      // Batch 2 (B16): managers CAN send to a parent — but only through
+      // the Worker's notify endpoint, addressed by familyId. The parent's
+      // email address is resolved server-side and is never shown here.
+      // (The Gmail composer and WhatsApp dispatch above stay blocked for
+      // managers: both would expose the address/number.)
       if (typeof CURRENT_ROLE !== 'undefined' && CURRENT_ROLE === 'manager') {
-        alert("Access Denied: Direct external emailing from CEO account is restricted for Managers. Please use the automated send button.");
+        const familyId = (CURRENT_EMAIL_PAYLOAD && CURRENT_EMAIL_PAYLOAD.familyId) || '';
+        const subject = document.getElementById('emailPreviewSubject').value.trim();
+        const text = document.getElementById('emailPreviewPlainText').value.trim();
+        const html = document.getElementById('emailPreviewHtmlIframe')?.srcdoc || text;
+        const btn = document.getElementById('btnDispatchEmailNow');
+        if (!familyId) {
+          alert('This email is not linked to a family record, so it cannot be sent from the Manager portal.');
+          return;
+        }
+        if (btn) {
+          btn.disabled = true;
+          btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Sending...';
+        }
+        const result = await sendParentEmailViaNotify({ familyId, subject, text, html });
+        if (btn) {
+          btn.disabled = false;
+          btn.innerHTML = result.success
+            ? '<i class="fa-solid fa-check"></i> Dispatched!'
+            : '<i class="fa-solid fa-triangle-exclamation"></i> Send Failed';
+          setTimeout(() => {
+            btn.innerHTML = '<i class="fa-solid fa-paper-plane"></i> Send Automated Email';
+          }, 2500);
+        }
+        if (result.success) {
+          alert('✅ Email sent to the parent.');
+        } else {
+          alert('❌ Email could not be sent.\n\nError: ' + (result.error || 'Unknown error'));
+        }
         return;
       }
 
@@ -404,6 +482,25 @@ Official Email: ${ACADEMY_OFFICIAL_EMAIL}`;
       const toEmail = String(data?.toEmail || '').trim();
       if (!toEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(toEmail)) {
         return { skipped: true, reason: 'No valid parent email address' };
+      }
+
+      // Batch 2 (B16): a manager's automatic welcome email goes through
+      // the notify endpoint (familyId only — the Worker resolves the
+      // address server-side). Without a linked family record it is
+      // skipped; it is NEVER sent through the owner relay.
+      if (typeof CURRENT_ROLE !== 'undefined' && CURRENT_ROLE === 'manager') {
+        if (!data.familyId) {
+          return { skipped: true, reason: 'Manager welcome email needs a linked family record' };
+        }
+        const compiledMgr = generateWelcomeEmailContent(data);
+        const notifyRes = await sendParentEmailViaNotify({
+          familyId: data.familyId,
+          subject: compiledMgr.subject,
+          text: compiledMgr.plainText,
+          html: compiledMgr.htmlContent
+        });
+        if (notifyRes.success) return { sent: true };
+        return { sent: false, error: notifyRes.error || 'Failed to dispatch via notify endpoint' };
       }
 
       const compiled = generateWelcomeEmailContent(data);
@@ -485,6 +582,7 @@ Official Email: ${ACADEMY_OFFICIAL_EMAIL}`;
 
       openEmailPreviewModal({
         type: 'regular',
+        familyId: familyId,
         studentName: students.map(s => s.name).join(', ') || fam.parent_name,
         parentName: fam.parent_name,
         toEmail: fam.parent_email || '',

@@ -20,23 +20,21 @@
     var ACTIVE_MANAGER_ID = null;
 
     // STUDENT CONTACT PRIVACY GUARDS (MANDATORY FOR MANAGER ROLE)
+    // Batch 2: the canonical mask is the exact string 'Hidden' — the same
+    // value the Worker returns server-side for family/student contacts
+    // when the caller is a manager. Partial masks (bullets, visible
+    // prefixes) leaked information and could be written back over the
+    // real value on edit, so they are gone.
     function maskStudentPhone(phone) {
       if (CURRENT_ROLE !== 'manager') return phone || '--';
-      if (!phone) return '--';
-      const clean = String(phone).trim();
-      if (clean.length <= 5) return '••••••';
-      return clean.slice(0, 4) + ' ••• ••••';
+      if (!phone || !String(phone).trim()) return '--';
+      return 'Hidden';
     }
 
     function maskStudentEmail(email) {
       if (CURRENT_ROLE !== 'manager') return email || '--';
-      if (!email) return '--';
-      const parts = String(email).trim().split('@');
-      if (parts.length < 2) return '••••••';
-      const name = parts[0];
-      const domain = parts[1];
-      const prefix = name.length > 2 ? name.slice(0, 2) : name.slice(0, 1);
-      return `${prefix}•••••@${domain}`;
+      if (!email || !String(email).trim()) return '--';
+      return 'Hidden';
     }
     let CURRENT_MATRIX_TEACHER = null;
     let CURRENT_TEACHER_SCHEDULES = [];

@@ -291,7 +291,19 @@
       }
     });
 
+    // Batch 2: owner-only destinations. The app has no Settings/Backup
+    // tab UI; the one owner-only area is Managers (manager accounts are
+    // created and managed by the Owner only). The Worker enforces every
+    // restriction server-side — this guard is defense in depth so the
+    // tab cannot be opened by calling switchTab() directly or by
+    // flipping the CURRENT_ROLE global in the console.
+    const OWNER_ONLY_TABS = ['tab-owner-managers'];
+
     function switchTab(tabId) {
+      if (typeof CURRENT_ROLE !== 'undefined' && CURRENT_ROLE === 'manager' && OWNER_ONLY_TABS.includes(tabId)) {
+        alert('Access Denied: This area is available to the Owner only.');
+        tabId = 'tab-dashboard';
+      }
       const targetId = (tabId === 'tab-live-monitor') ? 'tab-dashboard' : tabId;
 
       const chartTooltip = document.getElementById('lmsModernChartTooltip');
