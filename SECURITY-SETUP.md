@@ -63,55 +63,109 @@ never email them or paste them into chat).
 
 ---
 
-## Step 3 — Lock the email relay (Apps Script)
+## Step 3 — Lock the email relay (Apps Script) — updated for Batch 5
 
 **The problem:** the website sends emails through a Google Apps Script web
-address. That address currently accepts email requests from *anyone*, so a
-stranger could send emails pretending to be the academy.
+address. Without a secret check, that address accepts email requests from
+*anyone*, so a stranger could send emails pretending to be the academy.
 
-**Fix it in two halves (both halves must match):**
+**How it works now (read this first):** the secret is **never** stored in any
+website file. It lives in exactly two places, and both must hold the *same*
+value:
 
-**Half A — the website (already prepared in the code):**
-1. Open `js/email.js` and find the line `const EMAIL_RELAY_SECRET = '';`
-2. Make up a long random secret (different from Step 1 — e.g. 32+ random
-   characters) and paste it between the quotes.
-3. Save the file. (Until you finish Half B, emails keep working as before —
-   the website just warns in the browser console that the secret is empty.)
+1. The Cloudflare Worker secret named `RELAY_SECRET` (the Worker also holds
+   `RELAY_URL` — the Apps Script web address itself).
+2. The Apps Script **Script Property** named `RELAY_SECRET`.
 
-**Half B — the Apps Script (you do this once):**
-1. Go to https://script.google.com and open the project behind the email relay
-   (the one whose web address is saved as `OFFICIAL_APPS_SCRIPT_EMAIL_RELAY`
-   in `js/email.js`).
-2. At the very top of the `doPost(e)` function, paste this check:
+For every email, the Worker sends a JSON body like
+`{ to, subject, html, text, secret }` — the secret travels in the field named
+**`secret`**. The script compares `body.secret` with its `RELAY_SECRET`
+property and only then sends. The script answers with JSON —
+`{ success: true, quotaRemaining: N }` or
+`{ success: false, error: "…", quotaRemaining: 0 }` — and the LMS reads that
+answer, so a rejected or over-quota email is reported in the portal as
+**not sent**, never as sent. (Apps Script always replies with HTTP status
+200; success and failure travel in the JSON body, not the status.)
+
+**Half A — the Worker secrets (once; use Anti Gravity or a terminal in the
+project folder):**
+1. `npx wrangler secret put RELAY_URL` → paste the Apps Script **/exec** web
+   address → Enter.
+2. Make up a long random secret (32+ characters). Keep it somewhere safe —
+   you will type the *same* value into the Apps Script in Half B. Never
+   paste it into a website file, a chat, or an email.
+3. `npx wrangler secret put RELAY_SECRET` → paste that secret → Enter.
+4. `npx wrangler deploy`
+
+**Half B — the Apps Script (once):**
+1. Go to https://script.google.com and open the project behind the email
+   relay (the one whose /exec address you saved as `RELAY_URL`).
+2. Store the secret: left sidebar → **Project Settings** → **Script
+   properties** → **Add script property** → name: `RELAY_SECRET`, value:
+   *the exact same secret as Half A* → **Save script properties**.
+3. Make `doPost(e)` follow this shape (keep your existing sending lines if
+   they differ — what matters is the secret check at the top and the JSON
+   answers):
 
 ```javascript
 function doPost(e) {
-  var SECRET = PropertiesService.getScriptProperties().getProperty('RELAY_SECRET');
-  var body = {};
-  try { body = JSON.parse(e.postData.contents); } catch (err) { /* not JSON, reject below */ }
-
-  if (!SECRET || body.relaySecret !== SECRET) {
-    // NOTE: Apps Script always replies with HTTP 200, so a real "403 status"
-    // is not possible here. We reject by sending an error message instead —
-    // the website treats this reply as a failed send.
-    return ContentService
-      .createTextOutput(JSON.stringify({ ok: false, error: 'Forbidden: bad or missing relay secret' }))
-      .setMimeType(ContentService.MimeType.JSON);
+  var out = { success: false };
+  try {
+    var body = JSON.parse(e.postData.contents);
+    var SECRET = PropertiesService.getScriptProperties().getProperty('RELAY_SECRET');
+    if (!SECRET || body.secret !== SECRET) {
+      out.error = 'Forbidden: bad or missing relay secret';
+      return reply_(out);
+    }
+    if (MailApp.getRemainingDailyQuota() <= 0) {
+      out.error = 'Daily email limit reached';
+      out.quotaRemaining = 0;
+      return reply_(out);
+    }
+    MailApp.sendEmail({
+      to: body.to,
+      subject: body.subject,
+      body: body.text || body.message || '',
+      htmlBody: body.html || body.message || ''
+    });
+    out.success = true;
+    out.quotaRemaining = MailApp.getRemainingDailyQuota();
+    return reply_(out);
+  } catch (err) {
+    out.error = String((err && err.message) || err);
+    return reply_(out);
   }
-
-  // ---- your existing email-sending code continues below ----
-  // it can use: body.to, body.subject, body.html, body.text, body.senderName
+}
+function reply_(obj) {
+  return ContentService
+    .createTextOutput(JSON.stringify(obj))
+    .setMimeType(ContentService.MimeType.JSON);
+}
 ```
 
-3. Save the script (**💾 Save**).
-4. Store the secret: left sidebar → **Project Settings** → **Script properties**
-   → **Add script property** → name: `RELAY_SECRET`, value: *the exact same
-   secret you pasted in `js/email.js`* → **Save script properties**.
-5. Publish the change: **Deploy** → **Manage deployments** → ✏️ edit the active
-   deployment → **Version: New version** → **Deploy**.
-6. Test: send a welcome email from the LMS. It should arrive normally. (If
-   emails stop, the two secrets don't match — compare them character by
-   character.)
+   The script may read: `body.secret`, `body.to`, `body.subject`,
+   `body.html` (or `body.message`), `body.text`.
+4. Save the script (**💾 Save**).
+5. Publish the change **without changing the web address**: **Deploy** →
+   **Manage deployments** → ✏️ edit the active deployment → **Version:
+   New version** → **Deploy**. ⚠️ Do **not** create a *new deployment* —
+   that makes a new /exec address and emails break until `RELAY_URL` is
+   updated too.
+
+**Live tests (after both halves):**
+1. **Owner:** send one welcome email from the Owner portal → it arrives and
+   the portal reports success.
+2. **Manager:** send one fee reminder from the Manager portal → it arrives.
+3. **Teacher:** complete an advance class in the Teacher portal → the parent
+   receives the advance-class email; the portal claims success only if the
+   email really went.
+4. **Wrong-secret test:** in Script Properties, change ONE character of
+   `RELAY_SECRET` → send a test email from the LMS → the portal must report
+   that the email was **NOT** sent. Restore the correct value (script
+   properties take effect immediately — no redeploy needed for this test).
+5. **Bulk test:** use *Remind All* for a month in the Owner portal → the
+   final message reports "X sent, Y not sent", and the numbers match what
+   actually arrived.
 
 ---
 
@@ -157,7 +211,7 @@ Until this is built, hand out initial passwords in person or by phone.
 Work through this list top to bottom before merging the security branch:
 
 - [ ] All code changes reviewed (no stray test code, no secrets in files)
-- [ ] `js/email.js` has the real `EMAIL_RELAY_SECRET` filled in (not empty)
+- [ ] Worker secrets `RELAY_URL` and `RELAY_SECRET` are set (`wrangler secret list`), and the Apps Script `RELAY_SECRET` script property matches the Worker secret
 - [ ] Apps Script updated, `RELAY_SECRET` script property set, new version deployed
 - [ ] Cloudflare secrets saved (`wrangler secret put` × 3) and worker deployed
 - [ ] `wrangler.toml` has the correct `ALLOWED_ORIGINS`
@@ -166,7 +220,7 @@ Work through this list top to bottom before merging the security branch:
 - [ ] Open `https://<your-site>/functions/api/db` in a browser — it must show
       a **404** page, not code
 - [ ] Check the browser console on each portal — no new red errors
-      (a yellow "EMAIL_RELAY_SECRET is empty" warning means Step 3 Half A
-      isn't done yet)
+      (if emails report failure right after the relay is locked, the two
+      `RELAY_SECRET` values do not match — see Step 3)
 - [ ] Merge the branch into `main`, wait for Vercel to deploy, and repeat the
       checks on the live site

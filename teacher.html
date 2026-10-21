@@ -8106,114 +8106,81 @@ font-family: var(--font-num) !important;
         const studentObj = ADVANCE_SELECTED_STUDENT || (ALL_TEACHER_SCHEDULES || []).find(x => String(x.student_id) === String(studentId))?.students;
         const studentName = studentObj?.name || 'Student';
 
-        // Resolve parent email & name
-        let parentEmail = (studentObj?.parent_email || studentObj?.email || '').trim();
-        let parentName = studentObj?.parent_name || 'Parent / Guardian';
-
-        if ((!parentEmail || !parentEmail.includes('@')) && studentObj?.family_id) {
-          try {
-            const cachedFams = JSON.parse(localStorage.getItem('alhuda_all_families_cache') || '[]');
-            const matchedFam = cachedFams.find(f => String(f.id).toUpperCase() === String(studentObj.family_id).toUpperCase());
-            if (matchedFam) {
-              if (matchedFam.parent_email) parentEmail = matchedFam.parent_email.trim();
-              if (matchedFam.parent_name) parentName = matchedFam.parent_name;
-            }
-          } catch(e) {}
-        }
-
-        if ((!parentEmail || !parentEmail.includes('@')) && studentObj?.family_id && typeof db !== 'undefined' && db) {
-          try {
-            const { data: famRecord } = await db.from('families').select('parent_email, parent_name').eq('id', studentObj.family_id).single();
-            if (famRecord?.parent_email) parentEmail = famRecord.parent_email.trim();
-            if (famRecord?.parent_name) parentName = famRecord.parent_name;
-          } catch(e) {}
-        }
-
-        // Idempotent Automated Email Dispatch
+        // Automated completion email — dispatched through the Worker
+        // (POST /api/email/advance-class). The Worker resolves the
+        // parent's email address server-side from the student record;
+        // the address is never resolved, sent to, or shown in this portal.
         let emailDispatched = false;
+        let emailErrorText = '';
         const dedupeKey = `adv_mail_${studentId}_${targetDate}_${todayDate}`;
         let sentEmailRegistry = {};
         try { sentEmailRegistry = JSON.parse(localStorage.getItem('alhuda_sent_advance_emails') || '{}'); } catch(e) {}
 
-        if (parentEmail && parentEmail.includes('@') && !sentEmailRegistry[dedupeKey]) {
-          sentEmailRegistry[dedupeKey] = {
-            sent_at: new Date().toISOString(),
-            student_id: studentId,
-            student_name: studentName,
-            parent_email: parentEmail,
-            target_date: targetDate
-          };
-          try { localStorage.setItem('alhuda_sent_advance_emails', JSON.stringify(sentEmailRegistry)); } catch(e) {}
-
-          const emailSubject = `🌟 Advance Class Completed: ${studentName} (${targetDate}) — Al-Huda Islamic Centre`;
-          const emailBody =
-`Assalamu Alaikum wa Rahmatullah ${parentName},
-
-We pray you are in the best of health and Iman.
-
-This is an official confirmation from Al-Huda Islamic Centre that the class for ${studentName} originally scheduled for ${targetDate} has been successfully conducted in advance today (${todayDate}).
-
-══════════════════════════════════════
-ADVANCE CLASS SESSION DETAILS:
-══════════════════════════════════════
-• Student Name: ${studentName}
-• Instructor: ${teacherName}
-• Course Material: ${bookTitle} (Page ${page}${lineRange ? ', Lines ' + lineRange : ''})
-• Scheduled Class Date: ${targetDate}
-• Conducted & Completed On: ${todayDate}
-• Performance: ${sabaqResult} (${rating} / 5 Stars)
-${remarks ? `• Teacher Remarks: ${remarks}\n` : ''}
-══════════════════════════════════════
-
-The attendance and lesson Sabaq records have been updated in your Parent Portal.
-
-Jazakumullahu Khairan!
-Al-Huda Islamic Centre Management
-Official Accounts Email: ceoislamiccentre@gmail.com`;
-
-          try {
-            if (typeof sendViaOfficialEmailRelay === 'function' || window.sendViaOfficialEmailRelay) {
-              const fn = window.sendViaOfficialEmailRelay || sendViaOfficialEmailRelay;
-              await fn({
-                to: parentEmail,
-                subject: emailSubject,
-                text: emailBody,
-                html: emailBody.replace(/\n/g, '<br/>'),
-                senderName: 'Al-Huda Islamic Centre (ceoislamiccentre@gmail.com)'
-              });
-              emailDispatched = true;
-            } else if (typeof emailjs !== 'undefined' && window.EMAILJS_PUBLIC_KEY) {
-              await emailjs.send(window.EMAILJS_SERVICE_ID, window.EMAILJS_TEMPLATE_ID, {
-                to: parentEmail,
-                subject: emailSubject,
-                message: emailBody,
-                from_name: 'Al-Huda Islamic Centre (ceoislamiccentre@gmail.com)'
-              });
-              emailDispatched = true;
-            } else {
-              await fetch('https://script.google.com/macros/s/AKfycbx5WjF-Cy23KwnXx4LoLciNz93MQZwvSoVOLj4hT8NwVQ8H2Pvn2k4w4QeVyvhNHygwEg/exec', {
-                method: 'POST',
-                mode: 'no-cors',
-                headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-                body: JSON.stringify({
-                  to: parentEmail,
-                  subject: emailSubject,
-                  text: emailBody,
-                  html: emailBody.replace(/\n/g, '<br/>'),
-                  senderName: 'Al-Huda Islamic Centre (ceoislamiccentre@gmail.com)'
-                })
-              });
-              emailDispatched = true;
-            }
-          } catch(eJsErr) {
-            console.warn("Advance class email dispatch notice:", eJsErr);
-          }
+        if (sentEmailRegistry[dedupeKey]) {
+          // Already dispatched by an earlier save of this same advance
+          // class — skip sending a duplicate.
           emailDispatched = true;
+        } else {
+          try {
+            const advPayload = {
+              studentId: studentId,
+              template: 'advance-class',
+              scheduledDate: targetDate,
+              bookTitle: bookTitle,
+              page: page,
+              lineRange: lineRange,
+              sabaqResult: sabaqResult,
+              rating: rating,
+              remarks: remarks
+            };
+            Object.keys(advPayload).forEach(k => { if (advPayload[k] === undefined) delete advPayload[k]; });
+
+            let advRes = null;
+            let advData = null;
+            if (typeof getTeacherToken === 'function' && getTeacherToken()) {
+              advRes = await fetch(getTeacherWorkerBase() + '/api/email/advance-class', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + getTeacherToken() },
+                body: JSON.stringify(advPayload)
+              });
+            } else if (typeof window.getLmsAuthHeaders === 'function') {
+              advRes = await fetch(getTeacherWorkerBase() + '/api/email/advance-class', {
+                method: 'POST',
+                headers: Object.assign({ 'Content-Type': 'application/json' }, window.getLmsAuthHeaders()),
+                body: JSON.stringify(advPayload)
+              });
+            }
+            if (advRes) {
+              try { advData = await advRes.json(); } catch(e) { advData = null; }
+              emailDispatched = !!(advRes.ok && advData && advData.ok === true);
+              if (!emailDispatched) {
+                emailErrorText = (advData && advData.error) ? String(advData.error) : 'the email service could not be reached';
+              }
+            } else {
+              emailErrorText = 'the email service could not be reached';
+            }
+          } catch (advMailErr) {
+            console.warn("Advance class email dispatch notice:", advMailErr);
+            emailDispatched = false;
+            emailErrorText = 'the email service could not be reached';
+          }
+
+          // Write the dedupe registry entry ONLY after the Worker
+          // confirms the send, so a failed send is retried on re-save.
+          if (emailDispatched) {
+            sentEmailRegistry[dedupeKey] = {
+              sent_at: new Date().toISOString(),
+              student_id: studentId,
+              student_name: studentName,
+              target_date: targetDate
+            };
+            try { localStorage.setItem('alhuda_sent_advance_emails', JSON.stringify(sentEmailRegistry)); } catch(e) {}
+          }
         }
 
         const emailNotice = emailDispatched
-          ? `\n\n📧 Automated completion email has been dispatched to parent (${parentEmail}).`
-          : (parentEmail ? '\n\n📧 Parent completion notice logged.' : '\n\nParent Portal has been updated with this advance session.');
+          ? `\n\n📧 Automated completion email has been dispatched to the parent.`
+          : `\n\n📧 The completion email could NOT be sent (${emailErrorText || 'the email service could not be reached'}). The class record was saved — please inform the parent directly.`;
 
         alert(`🌟 Advance Class Successfully Recorded!\n\n` +
           `Student: ${studentName}\n` +
