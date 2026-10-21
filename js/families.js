@@ -543,6 +543,7 @@
         try {
           const emailResult = await autoSendWelcomeEmailOnCreation({
             type: 'regular',
+            familyId: id,
             studentName: parent_name,
             parentName: parent_name,
             toEmail: email,
@@ -554,14 +555,16 @@
             credentials: { username }
           });
           if (emailResult && emailResult.sent) {
-            familyEmailNotice = `\n\n📧 Welcome email automatically sent to ${email}.`;
+            // Batch 2: a manager must never see the parent's email address,
+            // not even the one they just typed into the form.
+            familyEmailNotice = `\n\n📧 Welcome email automatically sent to ${CURRENT_ROLE === 'manager' ? maskStudentEmail(email) : email}.`;
           }
         } catch (err) {
           console.warn('[Welcome Email Notice]:', err);
         }
       }
 
-      lmsNotify(`✅ Family Registered Successfully!\n\n👨‍👩‍👧 Family ID: ${id}\n👤 Parent Name: ${parent_name}\n📧 Email: ${email || 'Not Provided'}\n🌍 Location: ${city ? city + ', ' : ''}${country}\n💰 Agreed Fee: ${currency} ${monthly_fee}\n\n🔑 Parent Portal Login Credentials:\nUsername: ${username}\n${familyPwStatus}\n\nParent can now log in to track children classes.${familyEmailNotice}`, { type: 'success' });
+      lmsNotify(`✅ Family Registered Successfully!\n\n👨‍👩‍👧 Family ID: ${id}\n👤 Parent Name: ${parent_name}\n📧 Email: ${CURRENT_ROLE === 'manager' ? (email ? maskStudentEmail(email) : 'Not Provided') : (email || 'Not Provided')}\n🌍 Location: ${city ? city + ', ' : ''}${country}\n💰 Agreed Fee: ${currency} ${monthly_fee}\n\n🔑 Parent Portal Login Credentials:\nUsername: ${username}\n${familyPwStatus}\n\nParent can now log in to track children classes.${familyEmailNotice}`, { type: 'success' });
     }
 
     let _IS_ENROLLING_STUDENT = false;
@@ -690,6 +693,7 @@
           try {
             const emailRes = await autoSendWelcomeEmailOnCreation({
               type: 'regular',
+              familyId: parentFam?.id || '',
               studentName: name,
               parentName: parentFam?.parent_name || 'Parent / Guardian',
               toEmail: parentEmail,
@@ -702,7 +706,8 @@
               credentials: creds ? { username: creds.username } : null
             });
             if (emailRes && emailRes.sent) {
-              emailStatusSuffix = `\n\n📧 Welcome email sent to ${parentEmail}.`;
+              // Batch 2: never show the parent's email address to a manager.
+              emailStatusSuffix = `\n\n📧 Welcome email sent to ${CURRENT_ROLE === 'manager' ? maskStudentEmail(parentEmail) : parentEmail}.`;
             }
           } catch (err) {
             console.warn('[Student Welcome Email]', err);

@@ -2237,7 +2237,7 @@
                 </label>
                 <div class="text-[11px] text-emerald-800 flex items-center gap-1.5">
                   <span>Sender / CC: <strong id="feeOfficialEmailDisplay" class="font-mono font-bold text-emerald-950">ceoislamiccentre@gmail.com</strong></span>
-                  <button type="button" onclick="promptChangeOfficialEmail()" class="px-2 py-0.5 bg-white border border-emerald-300 hover:bg-emerald-100 text-emerald-900 rounded-md text-[10px] font-extrabold transition">Change Email</button>
+                  <button type="button" id="btnChangeOfficialEmail" onclick="promptChangeOfficialEmail()" class="px-2 py-0.5 bg-white border border-emerald-300 hover:bg-emerald-100 text-emerald-900 rounded-md text-[10px] font-extrabold transition">Change Email</button>
                 </div>
               </div>
             </div>
@@ -3498,7 +3498,7 @@
             <div>
               <label class="block font-bold mb-1 text-slate-700">LMS Portal Password *:</label>
               <div class="relative">
-                <input type="text" id="famPassword" required value="alhuda_482" class="w-full p-2.5 bg-white border border-slate-300 rounded-lg font-mono font-bold text-slate-800 pr-8">
+                <input type="text" id="famPassword" placeholder="Set a password (min 10 characters)" class="w-full p-2.5 bg-white border border-slate-300 rounded-lg font-mono font-bold text-slate-800 pr-8">
                 <button type="button" onclick="generateRandomParentPass()" class="absolute right-2 top-2.5 text-slate-400 hover:text-brandDark font-bold" title="Generate New Password">
                   <i class="fa-solid fa-arrows-rotate"></i>
                 </button>
@@ -4086,7 +4086,7 @@
             <div>
               <label class="block font-bold mb-1 text-slate-700">Login Password *:</label>
               <div class="relative">
-                <input type="text" id="tPassword" required placeholder="Set a password (min 10 characters)" class="w-full p-2.5 bg-white border border-slate-300 rounded-lg font-mono font-bold text-slate-800 pr-8">
+                <input type="text" id="tPassword" placeholder="Set a password (min 10 characters)" class="w-full p-2.5 bg-white border border-slate-300 rounded-lg font-mono font-bold text-slate-800 pr-8">
               </div>
             </div>
           </div>

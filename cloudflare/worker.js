@@ -284,6 +284,8 @@ async function handleStaffLogin(request, env) {
 
   try {
     let recordId = null;
+    let recordFullName = null;
+    let recordEmpId = null;
     // Batch-1: track WHY login failed so an account that exists but has no
     // owner-set (hashed) password gets the distinct 'no_password_set' error,
     // while every other failure keeps the generic anti-enumeration message.
@@ -308,6 +310,7 @@ async function handleStaffLogin(request, env) {
         matchedHashed = true;
         if (await verifyPassword(password, pw)) {
           recordId = f.id;
+          recordFullName = f.parent_name || null;
           break;
         }
       }
@@ -343,6 +346,8 @@ async function handleStaffLogin(request, env) {
             if (!isManager) continue;
           }
           recordId = t.id;
+          recordFullName = t.full_name || null;
+          recordEmpId = meta.emp_id || acc.emp_id || acc.teacher_id || meta.teacher_id || String(t.id);
           break;
         }
       }
@@ -364,7 +369,13 @@ async function handleStaffLogin(request, env) {
       { sub: String(recordId), role },
       env.WORKER_AUTH_SECRET
     );
-    return json(request, env, { ok: true, token, id: recordId });
+    // Batch 2 (B6): the portals' session guards require emp_id + full_name
+    // alongside the id — return them so a server login can build a complete
+    // session in one round trip.
+    const loginPayload = { ok: true, token, id: recordId };
+    if (recordFullName) loginPayload.full_name = recordFullName;
+    if (role !== 'parent') loginPayload.emp_id = recordEmpId || String(recordId);
+    return json(request, env, loginPayload);
   } catch (e) {
     console.error('[auth] staff login failed:', e);
     return json(request, env, { ok: false, error: 'Authentication service unavailable.' }, 503);
@@ -372,8 +383,10 @@ async function handleStaffLogin(request, env) {
 }
 
 // --- POST /api/auth/set-password  { role, identifier, newPassword } ---------
-// Owner-only. Migrates one account's password to the hashed format, or sets
-// a fresh password. The owner finds the account by the same identifiers the
+// Owner-only originally; Batch 2 also lets a MANAGER caller set TEACHER or
+// PARENT passwords (never a manager record's — see the guards below).
+// Migrates one account's password to the hashed format, or sets
+// a fresh password. The caller finds the account by the same identifiers the
 // login accepts, then the hash is written to the canonical password slot:
 //   parent  -> families.notes JSON -> portal_credentials.password
 //   manager/teacher -> teachers.address JSON -> password  (the slot
@@ -386,7 +399,7 @@ async function handleSetPassword(request, env) {
   }
 
   const auth = await requireApiAuth(request, env);
-  if (!auth || auth.role !== 'owner') {
+  if (!auth || (auth.role !== 'owner' && auth.role !== 'manager')) {
     return json(request, env, { ok: false, error: 'Access denied.' }, 403);
   }
 
@@ -408,6 +421,11 @@ async function handleSetPassword(request, env) {
 
   if (!['manager', 'teacher', 'parent'].includes(role) || !identifier) {
     return json(request, env, { ok: false, error: 'Invalid request.' }, 400);
+  }
+  // Batch 2: a manager caller may set TEACHER or PARENT passwords only.
+  // Manager-account passwords remain owner-only.
+  if (auth.role === 'manager' && role !== 'teacher' && role !== 'parent') {
+    return json(request, env, { ok: false, error: 'Access denied.' }, 403);
   }
   if (!isStrongPassword(newPassword)) {
     return json(request, env, { ok: false, error: 'Password must be at least 10 characters and must not be a default password.' }, 400);
@@ -451,6 +469,11 @@ async function handleSetPassword(request, env) {
         t.id,
       ].filter(Boolean).map((u) => String(u).toLowerCase());
       if (!usernames.includes(identifier)) continue;
+      // Batch 2: a manager caller must never reset a manager record's
+      // password, even when asking via the 'teacher' role — such records
+      // are invisible to this endpoint for managers (404 if nothing else
+      // matches).
+      if (auth.role === 'manager' && isManagerStaffRecord(t)) continue;
       if (role === 'manager') {
         const empType = String(t.employee_type || meta.employee_type || meta.role || '').toLowerCase();
         const codeIds = [t.id, t.witness_name, meta.emp_id].map((s) => String(s || '').toUpperCase());
@@ -479,6 +502,72 @@ const EMAIL_MAX_SUBJECT = 500;
 const EMAIL_MAX_HTML = 200000;
 const EMAIL_MAX_TEXT = 100000;
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+// Shared relay forwarding for /api/email/send and /api/email/notify-parent.
+// Never logs the secret, the relay URL, the recipient, or email bodies —
+// metadata only. Returns { ok:true, relayStatus } on a 2xx relay response,
+// otherwise { ok:false, httpStatus, error, relayStatus } where relayStatus
+// is 0 when the relay never produced a response.
+async function forwardEmailViaRelay(env, { to, subject, html, text }) {
+  const relayUrl = String(env.RELAY_URL || '').trim();
+  if (!/^https:\/\//i.test(relayUrl)) {
+    return { ok: false, httpStatus: 503, error: 'Email relay is not configured.', relayStatus: 0 };
+  }
+  const relaySecret = String(env.RELAY_SECRET || '');
+
+  const forwardBody = JSON.stringify({
+    to: to,
+    subject: subject,
+    html: html || text,
+    text: text || '',
+    // Field names a relay may check; the current open script ignores
+    // unknown fields, so both are safe during transition.
+    secret: relaySecret,
+    relaySecret: relaySecret,
+  });
+
+  // Follow redirects MANUALLY and re-POST the body on every hop: Apps
+  // Script web apps answer the first POST with "302 Found" (verified live
+  // 2026-10-19), and a spec-compliant fetch with redirect:'follow' would
+  // rewrite that into a bodyless GET -- silently losing the email. Re-POSTing
+  // to each Location keeps the payload intact on every hop.
+  let relayStatus = 0;
+  try {
+    let url = relayUrl;
+    let fwd = null;
+    for (let hop = 0; hop < 5; hop++) {
+      fwd = await fetch(url, {
+        method: 'POST',
+        redirect: 'manual',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: forwardBody,
+      });
+      const loc = fwd.headers.get('location');
+      if (fwd.status >= 300 && fwd.status < 400 && loc) {
+        try { await fwd.text(); } catch (e2) {}
+        const next = new URL(loc, url).toString();
+        if (!/^https:/i.test(next)) {
+          console.warn('[email] refusing non-https redirect');
+          return { ok: false, httpStatus: 502, error: 'Email relay failed (insecure redirect).', relayStatus: 0 };
+        }
+        url = next;
+        continue;
+      }
+      break;
+    }
+    relayStatus = fwd ? fwd.status : 0;
+    // Drain the body so the connection can be reused; its content is not needed.
+    try { await fwd.text(); } catch (e3) {}
+  } catch (e) {
+    console.warn('[email] relay unreachable');
+    return { ok: false, httpStatus: 502, error: 'Email relay is unreachable. Please try again later.', relayStatus: 0 };
+  }
+
+  if (relayStatus >= 200 && relayStatus < 300) {
+    return { ok: true, relayStatus };
+  }
+  return { ok: false, httpStatus: 502, error: 'Email relay failed (HTTP ' + relayStatus + ').', relayStatus };
+}
 
 async function handleEmailSend(request, env) {
   if (request.method === 'OPTIONS') return json(request, env, {}, 204);
@@ -530,66 +619,107 @@ async function handleEmailSend(request, env) {
     return json(request, env, { ok: false, error: 'Email body is required and must be within size limits.' }, 400);
   }
 
-  const relayUrl = String(env.RELAY_URL || '').trim();
-  if (!/^https:\/\//i.test(relayUrl)) {
-    return json(request, env, { ok: false, error: 'Email relay is not configured.' }, 503);
+  const result = await forwardEmailViaRelay(env, { to, subject, html, text });
+  // This endpoint's own log line (owner path only): the recipient appears
+  // here because the owner supplied it. The shared helper never logs it,
+  // and the manager notify path below never sees the address at all.
+  if (result.relayStatus) {
+    console.log('[email] forwarded to=' + to + ' relayStatus=' + result.relayStatus);
   }
-  const relaySecret = String(env.RELAY_SECRET || '');
+  if (result.ok) {
+    return json(request, env, { ok: true, relayStatus: result.relayStatus });
+  }
+  return json(request, env, { ok: false, error: result.error }, result.httpStatus);
+}
 
-  const forwardBody = JSON.stringify({
-    to: to,
-    subject: subject,
-    html: html || text,
-    text: text || '',
-    // Field names a relay may check; the current open script ignores
-    // unknown fields, so both are safe during transition.
-    secret: relaySecret,
-    relaySecret: relaySecret,
-  });
+// --- POST /api/email/notify-parent  { familyId, subject, text?, html?, template? }
+// Batch 2 (B16): managers must be able to email a family (fee reminders,
+// invoices) WITHOUT ever seeing the address. The client names the family;
+// the Worker resolves the recipient server-side from D1 and forwards
+// through the same relay as the owner endpoint. The address never appears
+// in any response or log line from this handler.
+const NOTIFY_ALLOWED_FIELDS = ['familyId', 'subject', 'text', 'html', 'template'];
 
-  // Never log the secret, the relay URL, or email bodies. Metadata only.
-  // Follow redirects MANUALLY and re-POST the body on every hop: Apps
-  // Script web apps answer the first POST with "302 Found" (verified live
-  // 2026-10-19), and a spec-compliant fetch with redirect:'follow' would
-  // rewrite that into a bodyless GET -- silently losing the email. Re-POSTing
-  // to each Location keeps the payload intact on every hop.
-  let relayStatus = 0;
+async function handleEmailNotifyParent(request, env) {
+  if (request.method === 'OPTIONS') return json(request, env, {}, 204);
+  if (request.method !== 'POST') {
+    return json(request, env, { ok: false, error: 'Method not allowed.' }, 405);
+  }
+
+  const auth = await requireApiAuth(request, env);
+  if (!auth) return unauthorized(request, env);
+  if (auth.role !== 'manager' && auth.role !== 'owner') {
+    return json(request, env, { ok: false, error: 'Access denied.' }, 403);
+  }
+
+  const rlKey = 'notify:' + String(auth.sub || clientIp(request));
+  if (emailSendRateLimited(rlKey)) {
+    return json(request, env, { ok: false, error: 'Too many emails. Please try again later.' }, 429);
+  }
+
+  let body;
   try {
-    let url = relayUrl;
-    let fwd = null;
-    for (let hop = 0; hop < 5; hop++) {
-      fwd = await fetch(url, {
-        method: 'POST',
-        redirect: 'manual',
-        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-        body: forwardBody,
-      });
-      const loc = fwd.headers.get('location');
-      if (fwd.status >= 300 && fwd.status < 400 && loc) {
-        try { await fwd.text(); } catch (e2) {}
-        const next = new URL(loc, url).toString();
-        if (!/^https:/i.test(next)) {
-          console.warn('[email] refusing non-https redirect');
-          return json(request, env, { ok: false, error: 'Email relay failed (insecure redirect).' }, 502);
-        }
-        url = next;
-        continue;
-      }
-      break;
-    }
-    relayStatus = fwd ? fwd.status : 0;
-    // Drain the body so the connection can be reused; its content is not needed.
-    try { await fwd.text(); } catch (e3) {}
+    body = await request.json();
   } catch (e) {
-    console.warn('[email] relay unreachable');
-    return json(request, env, { ok: false, error: 'Email relay is unreachable. Please try again later.' }, 502);
+    return json(request, env, { ok: false, error: 'Invalid request body.' }, 400);
+  }
+  if (!body || typeof body !== 'object' || Array.isArray(body)) {
+    return json(request, env, { ok: false, error: 'Invalid request body.' }, 400);
+  }
+  for (const k of Object.keys(body)) {
+    if (NOTIFY_ALLOWED_FIELDS.indexOf(k) === -1) {
+      return json(request, env, { ok: false, error: 'Unexpected field: ' + k + '.' }, 400);
+    }
   }
 
-  console.log('[email] forwarded to=' + to + ' relayStatus=' + relayStatus);
-  if (relayStatus >= 200 && relayStatus < 300) {
-    return json(request, env, { ok: true, relayStatus: relayStatus });
+  const familyId = String(body.familyId || '').trim();
+  const subject = String(body.subject || '');
+  const html = String(body.html || '');
+  const template = String(body.template || '');
+  let text = String(body.text || '');
+  if (!text && !html && template) text = template;
+
+  if (!familyId || familyId.length > 200) {
+    return json(request, env, { ok: false, error: 'A family id is required.' }, 400);
   }
-  return json(request, env, { ok: false, error: 'Email relay failed (HTTP ' + relayStatus + ').' }, 502);
+  if (!subject || subject.length > EMAIL_MAX_SUBJECT) {
+    return json(request, env, { ok: false, error: 'Subject is required (max ' + EMAIL_MAX_SUBJECT + ' characters).' }, 400);
+  }
+  if ((!html && !text) || html.length > EMAIL_MAX_HTML || text.length > EMAIL_MAX_TEXT || template.length > EMAIL_MAX_TEXT) {
+    return json(request, env, { ok: false, error: 'Email body is required and must be within size limits.' }, 400);
+  }
+
+  const db = getDb(env);
+  if (!db) {
+    return json(request, env, { ok: false, error: 'Service unavailable.' }, 503);
+  }
+  let fam = null;
+  try {
+    fam = await db.prepare('SELECT email, parent_email FROM families WHERE id = ?').bind(familyId).first();
+  } catch (e) {
+    // Older databases may lack the parent_email alias column; the canonical
+    // email column alone is enough.
+    try {
+      fam = await db.prepare('SELECT email FROM families WHERE id = ?').bind(familyId).first();
+    } catch (e2) {
+      return json(request, env, { ok: false, error: 'Service unavailable.' }, 503);
+    }
+  }
+  if (!fam) {
+    return json(request, env, { ok: false, error: 'Family not found.' }, 404);
+  }
+  const to = String(fam.email || fam.parent_email || '').trim();
+  if (!to || !EMAIL_RE.test(to)) {
+    return json(request, env, { ok: false, error: 'No email address on file for this family.' }, 422);
+  }
+
+  const result = await forwardEmailViaRelay(env, { to, subject, html, text });
+  // Metadata only: family id + relay status. NEVER the address.
+  console.log('[email] notify-parent familyId=' + familyId + ' relayStatus=' + result.relayStatus);
+  if (result.ok) {
+    return json(request, env, { ok: true, relayStatus: result.relayStatus });
+  }
+  return json(request, env, { ok: false, error: result.error }, result.httpStatus);
 }
 
 // --- Auth middleware for privileged APIs ------------------------------------
@@ -655,9 +785,13 @@ function checkTableAccess(role, table, action) {
   const write = WRITE_ACTIONS.has(action);
 
   if (role === 'manager') {
-    // system_settings writes are owner-only (verified: manager portal never
-    // writes system_settings). Password fields are stripped separately.
-    if (table === 'system_settings' && write) return 'deny';
+    // Batch 2: hard deletes of core records are owner-only (the portals use
+    // cancel/reverse flows for managers instead). system_settings writes
+    // are no longer blanket-denied here: handleScopedDbRequest adjudicates
+    // them per key in the manager write guards (course-catalog keys only),
+    // which un-denies the manager curriculum upload path (S13). Password
+    // fields are stripped separately.
+    if (action === 'delete' && ['families', 'students', 'teachers', 'payments'].includes(table)) return 'deny';
     return 'allow';
   }
 
@@ -707,7 +841,7 @@ function checkTableAccess(role, table, action) {
 // students. Teachers: students assigned via students.assigned_teacher_id OR
 // via class_schedules.teacher_id (both assignment paths exist in the app).
 async function resolveScopeIds(db, role, sub) {
-  const scope = { studentIds: [] };
+  const scope = { studentIds: [], managerIds: [] };
   if (!db) return scope;
   try {
     if (role === 'parent') {
@@ -723,6 +857,18 @@ async function resolveScopeIds(db, role, sub) {
     }
   } catch (e) {
     console.error('[scope] resolve failed:', e);
+  }
+  // Batch 2: scrubRow needs the set of manager staff-record ids so manager
+  // payroll data can be hidden from manager callers. Resolved in its own
+  // try/catch so a failure here can never widen or narrow the
+  // teacher/parent scopes above (fail closed: empty list).
+  if (role === 'manager') {
+    try {
+      const { results } = await db.prepare('SELECT id, address, witness_name, notes FROM teachers').all();
+      scope.managerIds = (results || []).filter((r) => isManagerStaffRecord(r)).map((r) => String(r.id));
+    } catch (e) {
+      scope.managerIds = [];
+    }
   }
   return scope;
 }
@@ -838,6 +984,367 @@ function whitelistPatch(values, allowedKeys) {
   return clean;
 }
 
+// --- Batch 2: manager permission model ---------------------------------------
+// The Manager portal mirrors the Owner portal EXCEPT: no creating/editing
+// manager or owner accounts, no manager payroll visibility, no hard deletes
+// of core records, no family/student contact details on read, and
+// system_settings limited to the course-catalog keys. Everything below is
+// enforced server-side; the UI hiding is only a courtesy.
+const CONTACT_MASK = 'Hidden';
+const CONTACT_JSON_KEYS = new Set(['phone', 'whatsapp', 'email', 'parent_email', 'email_address', 'contact_phone', 'mobile', 'telephone']);
+const FAMILY_CONTACT_COLUMNS = ['email', 'parent_email', 'phone', 'whatsapp'];
+
+// True when a teachers-table row is really a MANAGER account. Mirrors the
+// detection handleStaffLogin / handleSetPassword already used (employee_type
+// or role in the address meta or the nested teacher_account, or an MGR-
+// code id), plus the nested/meta teacher_id slots.
+function isManagerStaffRecord(row) {
+  if (!row || typeof row !== 'object') return false;
+  const meta = parseJsonField(row.address);
+  const acc = (meta && typeof meta.teacher_account === 'object' && meta.teacher_account) ? meta.teacher_account : {};
+  const types = [row.employee_type, meta.employee_type, meta.role, acc.employee_type, acc.role];
+  for (const v of types) {
+    if (String(v || '').toLowerCase() === 'manager') return true;
+  }
+  const codes = [row.id, row.witness_name, meta.emp_id, meta.teacher_id, acc.emp_id, acc.teacher_id];
+  return codes.some((c) => String(c || '').toUpperCase().startsWith('MGR-'));
+}
+
+// system_settings keys a manager may read/write: the course catalog itself
+// (S13) plus the logo on read (rowInScope handles the logo separately).
+function isCatalogSettingsKey(key) {
+  const k = String(key || '');
+  return k === 'alhuda_custom_books' || k === 'alhuda_custom_books_index' || k.startsWith('BOOK_PAGE_');
+}
+
+// Remove contact keys whose value is exactly the mask placeholder. A
+// manager's edit form echoes the masked read back on save; the placeholder
+// must never overwrite the stored value. Real values pass through.
+function stripMaskPlaceholders(value, depth) {
+  if (depth <= 0 || !value || typeof value !== 'object') return value;
+  if (Array.isArray(value)) return value.map((v) => stripMaskPlaceholders(v, depth - 1));
+  const out = {};
+  for (const k of Object.keys(value)) {
+    const v = value[k];
+    if (CONTACT_JSON_KEYS.has(k.toLowerCase()) && v === CONTACT_MASK) continue;
+    out[k] = (v && typeof v === 'object') ? stripMaskPlaceholders(v, depth - 1) : v;
+  }
+  return out;
+}
+
+// For manager UPDATEs: contact values the manager never saw (they were
+// masked in the read) must survive the edit. Every contact key present in
+// the CURRENT stored JSON but absent from the submitted object is restored
+// at the same path; a submitted real value wins. Arrays stay as submitted.
+function restoreMaskedContacts(current, submitted, depth) {
+  if (depth <= 0 || !current || typeof current !== 'object' || Array.isArray(current) ||
+      !submitted || typeof submitted !== 'object' || Array.isArray(submitted)) {
+    return submitted;
+  }
+  const out = { ...submitted };
+  const submittedKeys = new Set(Object.keys(out).map((k) => k.toLowerCase()));
+  for (const k of Object.keys(current)) {
+    const cv = current[k];
+    if (CONTACT_JSON_KEYS.has(k.toLowerCase())) {
+      if (!submittedKeys.has(k.toLowerCase())) out[k] = cv;
+    } else if (cv && typeof cv === 'object' && !Array.isArray(cv)) {
+      const sk = Object.keys(out).find((x) => x.toLowerCase() === k.toLowerCase());
+      if (sk && out[sk] && typeof out[sk] === 'object' && !Array.isArray(out[sk])) {
+        out[sk] = restoreMaskedContacts(cv, out[sk], depth - 1);
+      }
+    }
+  }
+  return out;
+}
+
+// Deep-mask contact values for manager reads (non-empty strings only).
+function maskContactsDeep(value, depth) {
+  if (depth <= 0 || !value || typeof value !== 'object') return value;
+  if (Array.isArray(value)) return value.map((v) => maskContactsDeep(v, depth - 1));
+  const out = {};
+  for (const k of Object.keys(value)) {
+    const v = value[k];
+    if (CONTACT_JSON_KEYS.has(k.toLowerCase()) && typeof v === 'string' && v !== '') {
+      out[k] = CONTACT_MASK;
+    } else {
+      out[k] = (v && typeof v === 'object') ? maskContactsDeep(v, depth - 1) : v;
+    }
+  }
+  return out;
+}
+
+function maskNotesContactsForManager(row) {
+  const v = row.notes;
+  if (typeof v !== 'string' || !v.trim().startsWith('{')) return;
+  try {
+    const parsed = JSON.parse(v);
+    if (parsed && typeof parsed === 'object') {
+      row.notes = JSON.stringify(maskContactsDeep(parsed, 5));
+    }
+  } catch (e) {}
+}
+
+function maskFamilyRowForManager(row, scope) {
+  for (const col of FAMILY_CONTACT_COLUMNS) {
+    if (typeof row[col] === 'string' && row[col] !== '') row[col] = CONTACT_MASK;
+  }
+  const v = row.notes;
+  if (typeof v !== 'string' || !v.trim().startsWith('{')) return;
+  try {
+    const parsed = JSON.parse(v);
+    if (!parsed || typeof parsed !== 'object') return;
+    const masked = maskContactsDeep(parsed, 5);
+    // Manager payroll invisibility inside the shared blob: drop the
+    // lms_shared_sync.teacher_salaries entries keyed by manager records.
+    const sync = masked.lms_shared_sync;
+    if (sync && typeof sync === 'object' && sync.teacher_salaries && typeof sync.teacher_salaries === 'object') {
+      const mgrIds = (scope && scope.managerIds) || [];
+      const kept = {};
+      for (const [k, val] of Object.entries(sync.teacher_salaries)) {
+        if (!mgrIds.includes(String(k))) kept[k] = val;
+      }
+      masked.lms_shared_sync = { ...sync, teacher_salaries: kept };
+    }
+    row.notes = JSON.stringify(masked);
+  } catch (e) {}
+}
+
+function stripSalaryKeysFromObject(obj) {
+  if (!obj || typeof obj !== 'object') return;
+  for (const k of Object.keys(obj)) {
+    if (k.toLowerCase().includes('salary')) delete obj[k];
+  }
+  const acc = obj.teacher_account;
+  if (acc && typeof acc === 'object') {
+    for (const k of Object.keys(acc)) {
+      if (k.toLowerCase().includes('salary')) delete acc[k];
+    }
+  }
+}
+
+// Manager records keep their identity visible to managers, but their
+// payroll data (salary slips / any salary key in the address meta, and the
+// per-slot rate) is owner-only.
+function maskTeacherRowForManager(row) {
+  if (!isManagerStaffRecord(row)) return;
+  row.rate_per_slot = null;
+  const v = row.address;
+  if (typeof v !== 'string' || !v.trim().startsWith('{')) return;
+  try {
+    const parsed = JSON.parse(v);
+    if (parsed && typeof parsed === 'object') {
+      stripSalaryKeysFromObject(parsed);
+      row.address = JSON.stringify(parsed);
+    }
+  } catch (e) {}
+}
+
+function maskTrialRowForManager(row) {
+  if (typeof row.whatsapp === 'string' && row.whatsapp !== '') row.whatsapp = CONTACT_MASK;
+  maskNotesContactsForManager(row);
+}
+
+function filterIdValues(filters) {
+  const ids = [];
+  for (const f of Array.isArray(filters) ? filters : []) {
+    if (!f || String(f.column) !== 'id') continue;
+    if (f.op === 'eq' && f.value != null) ids.push(String(f.value));
+    if (f.op === 'in' && Array.isArray(f.value)) {
+      for (const v of f.value) ids.push(String(v));
+    }
+  }
+  return ids;
+}
+
+async function loadRowsByIds(db, table, ids) {
+  if (!db || !ids.length) return [];
+  const placeholders = ids.map(() => '?').join(', ');
+  const { results } = await db.prepare(`SELECT * FROM ${table} WHERE id IN (${placeholders})`).bind(...ids).all();
+  return results || [];
+}
+
+// Batch 2 manager write guards. Runs inside handleScopedDbRequest for
+// role==='manager' writes BEFORE delegation; returns true to allow, false
+// to deny (403). May transform body.values in place (mask write-back
+// protection, item (c)).
+async function applyManagerWriteGuards(db, body) {
+  const table = body.table;
+  const action = body.action;
+  const filters = Array.isArray(body.filters) ? body.filters : [];
+
+  // (a) system_settings: only course-catalog keys may be written. Inserts
+  // carry the key in every values row; updates/deletes must pin the key
+  // with an eq filter.
+  if (table === 'system_settings') {
+    if (action === 'insert' || action === 'upsert') {
+      const rows = Array.isArray(body.values) ? body.values : [body.values || {}];
+      return rows.every((row) => isCatalogSettingsKey(row && row.key));
+    }
+    if (action === 'update' || action === 'delete') {
+      const f = filters.find((x) => x && String(x.column) === 'key' && x.op === 'eq');
+      return !!f && isCatalogSettingsKey(f.value);
+    }
+    return true;
+  }
+
+  // (b) teachers: a manager can never create a manager record, modify a
+  // manager record, or turn any record into a manager.
+  if (table === 'teachers') {
+    if (action === 'insert' || action === 'upsert') {
+      const rows = Array.isArray(body.values) ? body.values : [body.values || {}];
+      return rows.every((row) => !isManagerStaffRecord(row || {}));
+    }
+    if (action === 'update') {
+      const ids = filterIdValues(filters);
+      if (!ids.length) return false; // unverifiable target: deny
+      const patch = body.values || {};
+      if (isManagerStaffRecord({ address: patch.address, employee_type: patch.employee_type })) return false;
+      const targets = await loadRowsByIds(db, 'teachers', ids);
+      if (targets.some((t) => isManagerStaffRecord(t))) return false;
+      return true;
+    }
+    return true; // delete already denied in checkTableAccess
+  }
+
+  // (c) Mask write-back protection for family/student contact data.
+  if (table === 'families' || table === 'students' || table === 'trial_students') {
+    const contactCols = table === 'families' ? FAMILY_CONTACT_COLUMNS
+      : table === 'trial_students' ? ['whatsapp'] : [];
+    const rows = Array.isArray(body.values) ? body.values : [body.values || {}];
+    const isUpdate = action === 'update';
+    let currentNotes = null;
+    let currentLoaded = false;
+    if (isUpdate) {
+      const ids = filterIdValues(filters);
+      if (ids.length) {
+        const cur = await loadRowsByIds(db, table, ids.slice(0, 1));
+        if (cur.length) { currentNotes = cur[0].notes; currentLoaded = true; }
+      }
+    }
+    for (const row of rows) {
+      if (!row || typeof row !== 'object') continue;
+      for (const col of contactCols) {
+        if (row[col] === CONTACT_MASK) delete row[col];
+      }
+      const parseObj = (s) => {
+        if (typeof s !== 'string' || !s.trim().startsWith('{')) return null;
+        try {
+          const o = JSON.parse(s);
+          return (o && typeof o === 'object' && !Array.isArray(o)) ? o : null;
+        } catch (e) { return null; }
+      };
+      const mergeCurrent = (submittedObj) => {
+        if (!isUpdate || !currentLoaded) return submittedObj;
+        const curObj = parseObj(currentNotes);
+        return curObj ? restoreMaskedContacts(curObj, submittedObj, 5) : submittedObj;
+      };
+      if (typeof row.notes === 'string') {
+        const parsed = parseObj(row.notes);
+        if (parsed) {
+          row.notes = JSON.stringify(mergeCurrent(stripMaskPlaceholders(parsed, 5)));
+        }
+        // Non-JSON notes strings: leave untouched.
+      } else if (row.notes && typeof row.notes === 'object' && !Array.isArray(row.notes)) {
+        row.notes = mergeCurrent(stripMaskPlaceholders(row.notes, 5));
+      }
+    }
+    return true;
+  }
+
+  return true;
+}
+
+function parseJsonObjectValue(raw) {
+  if (raw && typeof raw === 'object' && !Array.isArray(raw)) return raw;
+  if (typeof raw === 'string' && raw.trim().startsWith('{')) {
+    try {
+      const o = JSON.parse(raw);
+      return (o && typeof o === 'object' && !Array.isArray(o)) ? o : null;
+    } catch (e) { return null; }
+  }
+  return null;
+}
+
+// Batch 2 review fix: a manager's update payload is built from their
+// MASKED read, so it can never contain the credential slots the scrubber
+// hid (families.notes -> portal_credentials, teachers address/notes
+// password slots) or the manager-keyed salary entries masked out of the
+// shared sync blob. The write sanitiser strips password keys from manager
+// writes, so without this restore an ordinary manager edit would ERASE
+// the stored password (the PR #7 failure shape) or drop a manager's
+// salary entry from the blob. Runs on the SCOPED body (after the
+// sanitiser) and restores only slots the manager could not have seen;
+// the manager never supplies these values.
+async function restoreManagerUpdateHiddenSlots(db, scopedBody, scope) {
+  try {
+    const table = scopedBody.table;
+    if (table !== 'families' && table !== 'teachers') return;
+    const vals = scopedBody.values;
+    if (!vals || typeof vals !== 'object' || Array.isArray(vals)) return;
+    const ids = filterIdValues(scopedBody.filters);
+    if (!ids.length) return;
+    const current = await loadRowsByIds(db, table, ids.slice(0, 1));
+    if (!current.length) return;
+    const cur = current[0];
+    const fields = table === 'families' ? ['notes'] : ['address', 'notes'];
+    for (const field of fields) {
+      if (vals[field] == null || cur[field] == null) continue;
+      const sObj = parseJsonObjectValue(vals[field]);
+      const cObj = parseJsonObjectValue(cur[field]);
+      if (!sObj || !cObj) continue;
+      let changed = false;
+      const restorePw = (cHolder, sHolder) => {
+        if (cHolder && sHolder && typeof cHolder === 'object' && typeof sHolder === 'object' &&
+            typeof cHolder.password === 'string' && cHolder.password !== '' && !('password' in sHolder)) {
+          sHolder.password = cHolder.password;
+          return true;
+        }
+        return false;
+      };
+      if (table === 'families') {
+        const cPc = cObj.portal_credentials;
+        if (cPc && typeof cPc === 'object') {
+          if (!sObj.portal_credentials || typeof sObj.portal_credentials !== 'object') {
+            sObj.portal_credentials = cPc;
+            changed = true;
+          } else if (restorePw(cPc, sObj.portal_credentials)) {
+            changed = true;
+          }
+        }
+        const cSync = cObj.lms_shared_sync;
+        const sSync = sObj.lms_shared_sync;
+        if (cSync && sSync && typeof cSync === 'object' && typeof sSync === 'object' &&
+            cSync.teacher_salaries && typeof cSync.teacher_salaries === 'object') {
+          if (!sSync.teacher_salaries || typeof sSync.teacher_salaries !== 'object') sSync.teacher_salaries = {};
+          for (const k of Object.keys(cSync.teacher_salaries)) {
+            if (((scope && scope.managerIds) || []).includes(String(k)) && !(k in sSync.teacher_salaries)) {
+              sSync.teacher_salaries[k] = cSync.teacher_salaries[k];
+              changed = true;
+            }
+          }
+        }
+      } else {
+        if (restorePw(cObj, sObj)) changed = true;
+        const cAcc = cObj.teacher_account;
+        if (cAcc && typeof cAcc === 'object') {
+          if (!sObj.teacher_account || typeof sObj.teacher_account !== 'object') {
+            sObj.teacher_account = cAcc;
+            changed = true;
+          } else if (restorePw(cAcc, sObj.teacher_account)) {
+            changed = true;
+          }
+        }
+      }
+      if (changed) {
+        vals[field] = (typeof vals[field] === 'string') ? JSON.stringify(sObj) : sObj;
+      }
+    }
+  } catch (e) {
+    // Never let the restore step break a legitimate update.
+    console.warn('[scope] hidden-slot restore skipped:', e && e.message);
+  }
+}
+
 // Inject server-side filters so a client can never widen its own scope.
 // The db engine ANDs all filters, so injected constraints always apply.
 // Returns the scoped body, or null to deny.
@@ -857,7 +1364,12 @@ function applyDbScope(body, role, sub, scope) {
     // Managers keep full operational access, but can never read or write
     // stored passwords through this API (owner uses /api/auth/set-password).
     if (WRITE_ACTIONS.has(action)) {
-      scoped.values = sanitizeWriteValues(table, scoped.values);
+      const sanitized = sanitizeWriteValues(table, scoped.values);
+      // sanitizeWriteValues always returns an array of rows; an update
+      // patch must stay a single object or the db engine spreads the array
+      // into a keyless no-op (Batch 2 fix — manager updates were silently
+      // dropped). The sanitisation itself is unchanged.
+      scoped.values = action === 'update' ? (sanitized[0] || {}) : sanitized;
     }
     return scoped;
   }
@@ -949,12 +1461,27 @@ function rowInScope(role, sub, scope, table, row) {
       default: return false;
     }
   }
+  // Batch 2: managers may only ever receive course-catalog settings rows
+  // (plus the shared logo). All other keys are owner-only.
+  if (role === 'manager' && table === 'system_settings') {
+    return isCatalogSettingsKey(row.key) || String(row.key || '') === 'alhuda_logo';
+  }
   return true; // owner / manager
 }
 
 function scrubRow(role, sub, scope, table, row) {
   const r = { ...(row || {}) };
   if (role !== 'owner') stripCredentialFieldsFromRow(table, r);
+
+  // Batch 2: manager read masking (runs on the credential-stripped row).
+  // Family/student contact details are replaced with the mask; manager
+  // records lose their payroll data. Teacher contacts stay visible.
+  if (role === 'manager') {
+    if (table === 'families') maskFamilyRowForManager(r, scope);
+    else if (table === 'students') maskNotesContactsForManager(r);
+    else if (table === 'trial_students') maskTrialRowForManager(r);
+    else if (table === 'teachers') maskTeacherRowForManager(r);
+  }
 
   // Scrub hydrated relations: the db engine's joins pull full tables
   // server-side, so relations must be re-scoped here.
@@ -976,6 +1503,22 @@ function scrubRow(role, sub, scope, table, row) {
       r.teachers = { id: r.teachers.id, full_name: r.teachers.full_name, zoom_link: r.teachers.zoom_link };
     } else if (role !== 'owner') {
       stripCredentialFieldsFromRow('teachers', r.teachers);
+    }
+  }
+  // Batch 2: the same manager masking applies to hydrated relations
+  // (students of a family, the family of a student/payment, the teacher of
+  // a schedule) — contacts and manager payroll data must not leak sideways.
+  if (role === 'manager') {
+    if (Array.isArray(r.students)) {
+      r.students.forEach((s) => maskNotesContactsForManager(s));
+    } else if (r.students && typeof r.students === 'object') {
+      maskNotesContactsForManager(r.students);
+    }
+    if (r.families && typeof r.families === 'object') {
+      maskFamilyRowForManager(r.families, scope);
+    }
+    if (r.teachers && typeof r.teachers === 'object') {
+      maskTeacherRowForManager(r.teachers);
     }
   }
   // Parents may read the teachers table but only the public identity.
@@ -1011,9 +1554,22 @@ async function handleScopedDbRequest(ctx, auth) {
 
   const db = getDb(env);
   const scope = await resolveScopeIds(db, role, sub);
+  // Batch 2: manager write guards (manager-record identity, system_settings
+  // key allowlist, mask write-back protection) — deny BEFORE delegation.
+  if (role === 'manager' && WRITE_ACTIONS.has(action)) {
+    const guardOk = await applyManagerWriteGuards(db, body);
+    if (!guardOk) {
+      return forbidden(request, env);
+    }
+  }
   const scopedBody = applyDbScope(body, role, sub, scope);
   if (!scopedBody) {
     return forbidden(request, env);
+  }
+  // Batch 2 review fix: restore the credential/blob slots a manager's
+  // masked read could not contain, so their edit cannot erase them.
+  if (role === 'manager' && action === 'update') {
+    await restoreManagerUpdateHiddenSlots(db, scopedBody, scope);
   }
 
   const headers = new Headers(request.headers);
@@ -1164,6 +1720,13 @@ export default {
     // carry Authorization; answer them before auth like the other APIs.
     if (url.pathname === '/api/email/send') {
       return handleEmailSend(request, env);
+    }
+
+    // 2c. Manager/owner notify-a-parent relay (/api/email/notify-parent).
+    // The recipient is resolved server-side from the family id; the
+    // caller's role is enforced inside the handler.
+    if (url.pathname === '/api/email/notify-parent') {
+      return handleEmailNotifyParent(request, env);
     }
 
     // 3. Clean portal URLs without .html

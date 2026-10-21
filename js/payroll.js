@@ -321,6 +321,41 @@
     window.parsePayrollMonthBounds = parsePayrollMonthBounds;
     window.calculateStudentMonthlySalaryProration = calculateStudentMonthlySalaryProration;
 
+    // Batch 2 (B7): manager-record detection for payroll visibility.
+    // Mirrors the staff-grid detection (js/teachers.js): employee_type
+    // 'manager' in record meta or the account map, the 'Manager' shift,
+    // or any MGR- code id. A signed-in MANAGER must never see a Manager
+    // account's payroll — not in the table, not in totals, not in a slip.
+    function _payrollIsManagerRecord(t, accountsMap) {
+      if (!t) return false;
+      let meta = {};
+      try {
+        if (t.address && String(t.address).startsWith('{')) meta = JSON.parse(t.address);
+        else if (t.witness_name && String(t.witness_name).startsWith('{')) meta = JSON.parse(t.witness_name);
+        else if (t.notes && String(t.notes).startsWith('{')) meta = JSON.parse(t.notes);
+      } catch (e) {}
+      const acc = (accountsMap && accountsMap[t.id]) || {};
+      return meta.employee_type === 'manager' || acc.employee_type === 'manager' ||
+        t.working_shift === 'Manager' ||
+        String(t.id || '').startsWith('MGR-') ||
+        String(meta.emp_id || '').startsWith('MGR-') ||
+        String(acc.teacher_id || '').startsWith('MGR-') ||
+        String(t.witness_name || '').startsWith('MGR-');
+    }
+
+    function _payrollBlockManagerRecord(teacherId) {
+      if (typeof CURRENT_ROLE === 'undefined' || CURRENT_ROLE !== 'manager') return false;
+      const rec = (ALL_TEACHERS || []).find(t => String(t.id) === String(teacherId));
+      if (!rec) return false;
+      let accounts = {};
+      try { accounts = getTeacherAccounts(); } catch (e) {}
+      if (_payrollIsManagerRecord(rec, accounts)) {
+        alert('Manager accounts are managed by the owner only. Their payroll is not visible to managers.');
+        return true;
+      }
+      return false;
+    }
+
     async function calculateMonthlySalaries(forceRefresh = false) {
       const tbody = document.getElementById('salariesTableBody');
       if (!tbody) return;
@@ -373,6 +408,23 @@
       }
 
       const accounts = getTeacherAccounts();
+
+      // Batch 2 (B7): in a manager session, Manager accounts are
+      // excluded from the payroll table AND from every total/KPI, so
+      // their salaries never leak — not even as an aggregate figure.
+      if (typeof CURRENT_ROLE !== 'undefined' && CURRENT_ROLE === 'manager') {
+        teachers = (teachers || []).filter(t => !_payrollIsManagerRecord(t, accounts));
+        if (teachers.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="7" class="p-8 text-center text-slate-400">No teachers found in the academy database.</td></tr>';
+          const setEl0 = (id, val) => { const el = document.getElementById(id); if (el) el.innerText = val; };
+          setEl0('payrollKpiTotal', '0 PKR');
+          setEl0('payrollKpiTeachers', '0 Active');
+          setEl0('payrollKpiStudents', '0 Enrolled');
+          setEl0('payrollKpiDisbursed', '0 / 0 Paid');
+          return;
+        }
+      }
+
       ALL_TEACHER_SALARIES = {};
 
       let totalGrossPayroll = 0;
@@ -634,6 +686,8 @@
 
     // OPEN ITEMIZED & EDITABLE SALARY SLIP MODAL
     function openSalarySlipModal(teacherId) {
+      // Batch 2 (B7): a manager can never open a Manager account's slip.
+      if (_payrollBlockManagerRecord(teacherId)) return;
       const slipData = ALL_TEACHER_SALARIES[teacherId];
       if (!slipData) {
         alert("Salary data not available for this instructor.");
@@ -735,6 +789,8 @@
 
     function saveSalarySlipRecord() {
       if (!CURRENT_SLIP_DATA || !CURRENT_SLIP_TEACHER_ID) return;
+      // Batch 2 (B7): defense in depth — never save a Manager slip in a manager session.
+      if (_payrollBlockManagerRecord(CURRENT_SLIP_TEACHER_ID)) return;
 
       const { baseSubtotal, bonus, deduction, netPayable } = recalculateSlipNetTotal();
       const remarks = (document.getElementById('slipRemarks')?.value || '').trim();
@@ -796,6 +852,8 @@
 
     function toggleSalaryPaidStatus() {
       if (!CURRENT_SLIP_DATA || !CURRENT_SLIP_TEACHER_ID) return;
+      // Batch 2 (B7): defense in depth — never flip a Manager slip's status in a manager session.
+      if (_payrollBlockManagerRecord(CURRENT_SLIP_TEACHER_ID)) return;
 
       const nextStatus = (CURRENT_SLIP_DATA.status === 'Paid') ? 'Pending' : 'Paid';
       CURRENT_SLIP_DATA.status = nextStatus;
@@ -813,6 +871,8 @@
     }
 
     function quickToggleSalaryPaid(teacherId) {
+      // Batch 2 (B7): a manager can never change a Manager slip's status.
+      if (_payrollBlockManagerRecord(teacherId)) return;
       const slipData = ALL_TEACHER_SALARIES[teacherId];
       if (!slipData) return;
 

@@ -16,6 +16,10 @@
     let CURRENT_READER_PARA = 1;
     let CURRENT_READER_ZOOM = 1.0;
     let CUSTOM_BOOKS_CACHE = [];
+    // Batch 2 (S13): the REAL reason the last catalog cloud save failed
+    // (server error message), so the UI can show it instead of a generic
+    // "check your connection" while silently pretending success.
+    let _lastCatalogSyncError = '';
 
     function getCustomBooks() {
       try {
@@ -44,16 +48,23 @@
       if (ok) {
         alert(successMsg);
       } else {
+        // Batch 2 (S13): surface the REAL server error when there is one
+        // (e.g. a permission denial), not just a generic connection hint.
+        const realErr = _lastCatalogSyncError ? `\n\nServer said: ${_lastCatalogSyncError}` : '';
         alert('⚠️ The material was prepared but could NOT be saved reliably.\n\n'
           + 'Your pages were not lost from this screen, but they may not appear after refresh or on other devices.\n'
-          + 'Please check your internet connection and try saving again. Nothing was deleted.');
+          + 'Please check your internet connection and try saving again. Nothing was deleted.' + realErr);
       }
       return ok;
     }
 
     async function syncCustomBooksToD1Chunked(books) {
+      _lastCatalogSyncError = '';
       try {
-        if (typeof db === 'undefined' || !db || typeof db.from !== 'function') return false;
+        if (typeof db === 'undefined' || !db || typeof db.from !== 'function') {
+          _lastCatalogSyncError = 'Database connection unavailable.';
+          return false;
+        }
         const localBooks = Array.isArray(books) ? books : [];
 
         // SAFETY (catalog-wipe protection): never overwrite the cloud catalog with
@@ -97,27 +108,38 @@
           }
         }
 
+        // Batch 2 (S13): the db shim reports Worker denials as a returned
+        // { error } (it only throws for the offline WRITE GUARD). Every
+        // upsert result MUST be checked — an unchecked denial used to be
+        // swallowed here and the UI reported a save that never happened.
+        const _checkUpsert = function (res, what) {
+          if (res && res.error) {
+            throw new Error((res.error.message || res.error) + ` (while saving ${what})`);
+          }
+        };
+
         // Upsert catalog index first to immediately update library across all portals
-        await db.from('system_settings').upsert({
+        _checkUpsert(await db.from('system_settings').upsert({
           id: 'SYS-CUSTOM-BOOKS-INDEX',
           key: 'alhuda_custom_books_index',
           value: JSON.stringify(catalogIndex),
           updated_at: new Date().toISOString()
-        });
+        }), 'the catalog index');
 
-        await db.from('system_settings').upsert({
+        _checkUpsert(await db.from('system_settings').upsert({
           id: 'SYS-CUSTOM-BOOKS-ALL',
           key: 'alhuda_custom_books',
           value: JSON.stringify(catalogIndex),
           updated_at: new Date().toISOString()
-        });
+        }), 'the catalog');
 
         // Upsert individual book pages
         for (const row of rowsToUpsert) {
-          await db.from('system_settings').upsert(row);
+          _checkUpsert(await db.from('system_settings').upsert(row), 'a book page');
         }
         return true;
       } catch (e) {
+        _lastCatalogSyncError = (e && e.message) ? String(e.message) : String(e);
         console.warn('[Course Material D1 Sync] Notice:', e);
         return false;
       }
@@ -227,22 +249,34 @@ if (mergedDeleted.length > 0) {
       }
     }
 
+    // Returns true when the tombstone list is safely stored (locally AND
+    // on the server, when a db connection exists). Batch 2 (S13): a
+    // server denial (returned { error } or a thrown WRITE GUARD error)
+    // must surface to the caller instead of silently looking deleted.
     async function saveDeletedBookIds(ids) {
       try {
         localStorage.setItem('alhuda_deleted_books', JSON.stringify(ids));
       } catch(e) {}
       try {
         if (typeof db !== 'undefined' && db && typeof db.from === 'function') {
-          await db.from('system_settings').upsert({
+          const res = await db.from('system_settings').upsert({
             id: 'SYS-DELETED-BOOKS',
             key: 'alhuda_deleted_books',
             value: JSON.stringify(ids),
             updated_at: new Date().toISOString()
           });
+          if (res && res.error) {
+            _lastCatalogSyncError = (res.error.message || String(res.error)) + ' (while saving the deleted-books list)';
+            console.warn('[Curriculum] Could not sync deleted books to cloud:', res.error);
+            return false;
+          }
         }
       } catch(e) {
+        _lastCatalogSyncError = (e && e.message) ? String(e.message) : String(e);
         console.warn('[Curriculum] Could not sync deleted books to cloud:', e);
+        return false;
       }
+      return true;
     }
 
     function getAllAvailableBooks() {
@@ -2205,17 +2239,31 @@ if (mergedDeleted.length > 0) {
       }
 
       try {
-        // 1. Remove from custom books if present and await cloud sync
+        // 1. Remove from custom books if present and await cloud sync.
+        // Batch 2 (S13): if the server refuses the save, STOP and show
+        // the real error — never claim the book was deleted.
         let customBooks = getCustomBooks();
         const filteredCustom = customBooks.filter(b => b.id !== bookId);
-        await saveCustomBooks(filteredCustom);
+        const catalogSaved = await saveCustomBooks(filteredCustom);
+        if (!catalogSaved) {
+          alert('⚠️ Could NOT delete this course material on the server.\n\n'
+            + (_lastCatalogSyncError ? `Server said: ${_lastCatalogSyncError}\n\n` : '')
+            + 'The book has NOT been deleted. Please try again.');
+          return;
+        }
 
         // 2. Mark ID as deleted in tombstone list so all portals (Admin, Teacher, Parent) filter it out immediately
         const deletedIds = getDeletedBookIds();
         if (!deletedIds.includes(bookId)) {
           deletedIds.push(bookId);
         }
-        await saveDeletedBookIds(deletedIds);
+        const tombstoneSaved = await saveDeletedBookIds(deletedIds);
+        if (!tombstoneSaved) {
+          alert('⚠️ Could NOT record this deletion on the server.\n\n'
+            + (_lastCatalogSyncError ? `Server said: ${_lastCatalogSyncError}\n\n` : '')
+            + 'The book may reappear after refresh. Please try again.');
+          return;
+        }
 
         // 3. Clean up any orphaned custom book page records in system_settings
         if (typeof db !== 'undefined' && db && typeof db.from === 'function') {

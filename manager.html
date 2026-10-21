@@ -424,13 +424,18 @@
           sessionStorage.setItem('alhuda_manager_token', data.token);
         } catch (e) {}
         // Build the COMPLETE session the index.html gate requires
-        // (id + emp_id) by fetching the manager record with the fresh
-        // token. If that fetch fails, still enter with the minimal
-        // session rather than stranding a verified login.
+        // (id + emp_id). Batch 2 (B6): the Worker staff-login response
+        // now carries emp_id and full_name directly — prefer them, so
+        // the session is complete even if the record fetch below fails.
+        // The Batch-1 fetch-the-record enrichment stays as fallback for
+        // any field the response did not include.
         let sessionPayload = {
           id: data.id, role: 'manager', via: 'server',
           authenticated_at: new Date().toISOString()
         };
+        if (data.emp_id) sessionPayload.emp_id = String(data.emp_id);
+        if (data.full_name) sessionPayload.full_name = data.full_name;
+        if (data.username) sessionPayload.username = data.username;
         try {
           const fetched = await fetchManagersFromBackend();
           const rec = (fetched.managers || []).find(m => String(m.id) === String(data.id));
@@ -438,8 +443,8 @@
             const creds = resolveManagerCredentials(rec, fetched.accountsMap);
             sessionPayload = {
               id: rec.id,
-              emp_id: creds.emp_id,
-              full_name: rec.full_name,
+              emp_id: sessionPayload.emp_id || creds.emp_id,
+              full_name: sessionPayload.full_name || rec.full_name,
               username: creds.username,
               role_title: creds.role_title,
               authenticated_at: new Date().toISOString()
