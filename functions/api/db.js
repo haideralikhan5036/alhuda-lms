@@ -22,7 +22,10 @@ const ALLOWED_TABLES = new Set([
   'payments',
   'leave_requests',
   'trial_students',
-  'system_settings'
+  'system_settings',
+  // Batch 2.1: readable by the OWNER through this engine; the Worker
+  // denies it to every other role before delegation (see worker.js).
+  'audit_log'
 ]);
 
 /**
@@ -173,6 +176,17 @@ const SCHEMA_STATEMENTS = [
     key TEXT UNIQUE,
     value TEXT,
     updated_at TEXT DEFAULT (datetime('now'))
+  )`,
+  // Batch 2.1: append-only audit trail of manager writes (written by the
+  // Worker directly; owner-only through the API — see worker.js).
+  `CREATE TABLE IF NOT EXISTS audit_log (
+    id TEXT PRIMARY KEY,
+    actor_id TEXT,
+    actor_role TEXT,
+    action TEXT,
+    table_name TEXT,
+    record_id TEXT,
+    created_at TEXT DEFAULT (datetime('now'))
   )`
 ];
 
