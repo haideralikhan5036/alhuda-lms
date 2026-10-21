@@ -976,6 +976,42 @@
       const canonicalStuId = isLegacyStuId ? getNextStudentId() : trial.student_id;
       const convertedDateIso = new Date().toISOString().slice(0, 10);
 
+      // 1b. Batch 3A (B15): a student with the same name already enrolled
+      // in the family this trial converts into — warn and ask (never
+      // hard-block). The trial student's OWN Trial-status record (same
+      // canonical student id, created at trial registration) is not a
+      // duplicate, so if the match is that record, re-check without it.
+      let dupTrialStudent = null;
+      if (typeof window.findDuplicateStudentName === 'function') {
+        const allStudentsForDup = window.ALL_STUDENTS || [];
+        dupTrialStudent = window.findDuplicateStudentName(allStudentsForDup, canonicalFamId, trial.student_name);
+        if (dupTrialStudent && String(dupTrialStudent.id) === String(canonicalStuId)) {
+          dupTrialStudent = window.findDuplicateStudentName(
+            allStudentsForDup.filter(s => String(s.id) !== String(canonicalStuId)),
+            canonicalFamId,
+            trial.student_name
+          );
+        }
+      }
+      if (dupTrialStudent) {
+        const proceedDupTrial = (typeof lmsConfirm === 'function')
+          ? await lmsConfirm({
+              title: 'Possible Duplicate Student',
+              message: `A student named "${dupTrialStudent.name}" is already enrolled in the family this trial is being converted into.\n\nIf this is a different child with the same name, choose "Add Anyway". Otherwise choose "Cancel".`,
+              confirmText: 'Add Anyway',
+              cancelText: 'Cancel',
+              variant: 'warning'
+            })
+          : window.confirm(`A student named "${dupTrialStudent.name}" is already enrolled in the family this trial is being converted into. Add anyway?`);
+        if (!proceedDupTrial) {
+          if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fa-solid fa-circle-check text-brandGold"></i> Confirm & Enroll as Regular Student';
+          }
+          return;
+        }
+      }
+
       // 2. Parent Account credentials
       const rawParent = (trial.parent_name || 'parent').toLowerCase().replace(/[^a-z0-9]/g, '');
       const username = rawParent.length > 2 ? rawParent : `parent_${canonicalFamId.toLowerCase()}`;

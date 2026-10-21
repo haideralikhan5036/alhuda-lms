@@ -413,6 +413,97 @@
     }
     window.updateStudentModalTeacherZoom = updateStudentModalTeacherZoom;
 
+    // ============================================================
+    // Batch 3A (B15): duplicate-family warning before Add Family.
+    // The comparison happens SERVER-SIDE via POST
+    // /api/families/check-duplicates, because a signed-in manager must
+    // never receive another family's contact values — the endpoint
+    // returns only familyId, parentName and WHICH field matched.
+    // Base URL + token resolution mirror js/auth.js
+    // (setAccountPasswordViaWorker) and js/email.js
+    // (sendParentEmailViaNotify): getWorkerBase() when available, the
+    // shared auth token first, owner token, then manager token.
+    // FAILS OPEN: any failure (no session, network error, non-200, bad
+    // JSON) returns true so a check outage can never block enrolling a
+    // family. Contact values are never logged.
+    // ============================================================
+    async function checkFamilyDuplicatesBeforeSave({ parentName, email, whatsapp }) {
+      try {
+        const payload = {};
+        const em = String(email || '').trim();
+        const wa = String(whatsapp || '').trim();
+        const pn = String(parentName || '').trim();
+        if (em) payload.email = em;
+        if (wa) payload.whatsapp = wa;
+        if (pn) payload.parentName = pn;
+        if (!Object.keys(payload).length) return true;
+
+        let base = 'https://alhuda-lms.ceoislamiccentre.workers.dev';
+        try {
+          if (typeof getWorkerBase === 'function') {
+            const b = getWorkerBase();
+            if (b) base = String(b).replace(/\/+$/, '');
+          }
+        } catch (e) {}
+
+        let token = null;
+        try {
+          if (typeof window.getLmsAuthToken === 'function') token = window.getLmsAuthToken();
+        } catch (e) {}
+        if (!token) {
+          try { token = sessionStorage.getItem('alhuda_owner_token') || null; } catch (e) {}
+        }
+        if (!token) {
+          try { token = sessionStorage.getItem('alhuda_manager_token') || null; } catch (e) {}
+        }
+        if (!token) {
+          console.warn('[Duplicate Check] No session token for the family duplicate check; continuing without it.');
+          return true;
+        }
+
+        let res;
+        try {
+          res = await fetch(base + '/api/families/check-duplicates', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+            body: JSON.stringify(payload)
+          });
+        } catch (fetchErr) {
+          console.warn('[Duplicate Check] Family duplicate check unreachable; continuing without it.');
+          return true;
+        }
+        if (!res.ok) {
+          console.warn('[Duplicate Check] Family duplicate check unavailable (HTTP ' + res.status + '); continuing without it.');
+          return true;
+        }
+        let data = null;
+        try { data = await res.json(); } catch (e) { data = null; }
+        const matches = (data && Array.isArray(data.matches)) ? data.matches : [];
+        if (!matches.length) return true;
+
+        const labelFor = { email: 'email address', phone: 'phone number', whatsapp: 'WhatsApp number', parentName: 'parent name' };
+        const lines = matches.map(m => {
+          const labels = (Array.isArray(m.matchedOn) ? m.matchedOn : []).map(k => labelFor[k] || k).join(', ');
+          return `• ${m.parentName || 'Existing family'} (${m.familyId || ''}) — same ${labels}`;
+        });
+        const message = 'A family with the same contact details is already registered:\n\n' + lines.join('\n') + '\n\nReal families can share a phone number or name. If this is a different family, choose "Add Anyway". Otherwise choose "Cancel".';
+        if (typeof lmsConfirm === 'function') {
+          return await lmsConfirm({
+            title: 'Possible Duplicate Family',
+            message: message,
+            confirmText: 'Add Anyway',
+            cancelText: 'Cancel',
+            variant: 'warning'
+          });
+        }
+        return window.confirm('Possible Duplicate Family\n\n' + message);
+      } catch (err) {
+        console.warn('[Duplicate Check] Family duplicate check failed; continuing without it.');
+        return true;
+      }
+    }
+    window.checkFamilyDuplicatesBeforeSave = checkFamilyDuplicatesBeforeSave;
+
     async function handleSaveFamily(e) {
       e.preventDefault();
       const btn = document.getElementById('btnSaveFamily');
@@ -470,6 +561,15 @@
       // portal_credentials, or the local account map.
       if (password && password.length < 10) {
         lmsNotify("Parent Portal Password must be at least 10 characters long (or leave it blank).", { type: 'warning' });
+        btn.disabled = false;
+        btn.innerText = 'Save Family & Generate LMS Account';
+        return;
+      }
+
+      // Batch 3A (B15): duplicate-family warning — server-side check,
+      // warns and asks; never hard-blocks and fails open on any error.
+      const dupOk = await checkFamilyDuplicatesBeforeSave({ parentName: parent_name, email, whatsapp });
+      if (!dupOk) {
         btn.disabled = false;
         btn.innerText = 'Save Family & Generate LMS Account';
         return;
@@ -599,6 +699,24 @@
         if (!family_id) {
           lmsNotify("Please select Family / Parent.", { type: 'warning' });
           return;
+        }
+
+        // Batch 3A (B15): a student with the same name already enrolled
+        // in THIS family — warn and ask (never hard-block; different
+        // children can share a name). Declining returns inside the try,
+        // so the finally block resets the enroll flag and the button.
+        const dupStudent = (typeof window.findDuplicateStudentName === 'function') ? window.findDuplicateStudentName(ALL_STUDENTS || [], family_id, name) : null;
+        if (dupStudent) {
+          const proceedDupStudent = (typeof lmsConfirm === 'function')
+            ? await lmsConfirm({
+                title: 'Possible Duplicate Student',
+                message: `A student named "${dupStudent.name}" is already enrolled in this family.\n\nIf this is a different child with the same name, choose "Add Anyway". Otherwise choose "Cancel".`,
+                confirmText: 'Add Anyway',
+                cancelText: 'Cancel',
+                variant: 'warning'
+              })
+            : window.confirm(`A student named "${dupStudent.name}" is already enrolled in this family. Add anyway?`);
+          if (!proceedDupStudent) return;
         }
 
         if (assigned_teacher_id && typeof validateEligibleTeacherBackend === 'function') {
