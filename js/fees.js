@@ -2351,6 +2351,7 @@ Official Email: ${offEmail}`;
         }
         let sentMgr = 0;
         let failedMgr = 0;
+        let quotaStoppedMgr = false;
         const itemsMgr = list.slice(0, 85);
         for (let i = 0; i < itemsMgr.length; i++) {
           const item = itemsMgr[i];
@@ -2367,12 +2368,14 @@ Official Email: ${offEmail}`;
                 html: built.htmlBody || built.plainText.replace(/\n/g, '<br/>')
               });
               if (res.success) sentMgr++; else failedMgr++;
+              if (res && (res.quotaExceeded === true || res.quotaRemaining === 0)) quotaStoppedMgr = true;
             } else {
               failedMgr++;
             }
           } catch (err) {
             failedMgr++;
           }
+          if (quotaStoppedMgr) break;
         }
         if (btnM) {
           btnM.disabled = false;
@@ -2381,7 +2384,7 @@ Official Email: ${offEmail}`;
         localStorage.setItem(`alhuda_bulk_pending_reminder_${targetYear}_${targetMonth}`, new Date().toISOString());
         if (!isAuto4thTrigger) {
           showToastNotification(`✅ Processed ${itemsMgr.length} pending fee reminders for ${periodStr}!`);
-          alert(`✅ ${periodStr} Fee Reminders Processed!\n\n• Total Pending Families: ${list.length}\n• Emails Sent Securely: ${sentMgr}\n• Could Not Send (no email on file or an error): ${failedMgr}`);
+          alert(`✅ ${periodStr} Fee Reminders Processed!\n\n• Total Pending Families: ${list.length}\n• Emails Sent Securely: ${sentMgr}\n• Could Not Send (no email on file or an error): ${failedMgr}${quotaStoppedMgr ? '\n• ⚠️ Sending stopped early: the daily email limit was reached, so the remaining reminders were NOT sent.' : ''}`);
         }
         return;
       }
@@ -2394,7 +2397,7 @@ Official Email: ${offEmail}`;
       if (!isAuto4thTrigger) {
         let confirmMsg = `Remind All Parents — ${periodStr}\n\nTotal Pending Families: ${list.length}\nFamilies with Valid Email: ${recipientsWithEmail.length}\n\n`;
         if (recipientsWithEmail.length > 85) {
-          confirmMsg += `⚠️ Safe Quota Notice: Free Gmail has a daily limit of 100 emails/day.\nTo keep your official account 100% safe, dispatching will process up to 80 emails in this batch.\n\n`;
+          confirmMsg += `⚠️ Safe Quota Notice: Free Gmail has a daily limit of 100 emails/day.\nTo keep your official account 100% safe, dispatching will process up to 85 emails in this batch.\n\n`;
         }
         confirmMsg += `Do you want to automatically dispatch the official ${periodStr} Pending Fee & Receipt Request email?`;
         if (!(await lmsConfirm(confirmMsg))) return;
@@ -2408,6 +2411,8 @@ Official Email: ${offEmail}`;
       }
 
       let sentCount = 0;
+      let failedCount = 0;
+      let quotaStopped = false;
       const allBccEmails = [];
       const MAX_SAFE_BATCH = 85;
       const itemsToProcess = recipientsWithEmail.length > MAX_SAFE_BATCH ? recipientsWithEmail.slice(0, MAX_SAFE_BATCH) : recipientsWithEmail;
@@ -2424,16 +2429,23 @@ Official Email: ${offEmail}`;
           btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> <span>Sending (${i + 1}/${itemsToProcess.length})...</span>`;
         }
 
+        // Batch 5 (B10): count ONLY confirmed sends. A relay failure or
+        // an exception is a failure, never a send. When the relay reports
+        // the daily quota is exhausted, stop — the rest were NOT sent.
+        let itemSent = false;
+        let itemQuotaHit = false;
         try {
           if (typeof sendViaOfficialEmailRelay === 'function' || window.sendViaOfficialEmailRelay) {
             const fn = window.sendViaOfficialEmailRelay || sendViaOfficialEmailRelay;
-            await fn({
+            const relayRes = await fn({
               to: emailAddr,
               subject: subject,
               text: plainText,
               html: htmlBody || plainText.replace(/\n/g, '<br/>'),
               senderName: `Al-Huda Islamic Centre (${offEmail})`
             });
+            itemSent = !!(relayRes && relayRes.success === true);
+            if (relayRes && (relayRes.quotaExceeded === true || relayRes.quotaRemaining === 0)) itemQuotaHit = true;
           } else if (window.emailjs) {
             await emailjs.send('service_alhuda_lms', 'template_fee_invoice', {
               to_email: emailAddr,
@@ -2445,12 +2457,14 @@ Official Email: ${offEmail}`;
               html_content: htmlBody,
               from_name: `Al-Huda Islamic Centre (${offEmail})`
             });
+            itemSent = true;
           }
-          sentCount++;
         } catch (err) {
           console.warn('[Remind All] Background dispatch notice for', emailAddr, err);
-          sentCount++;
+          itemSent = false;
         }
+        if (itemSent) sentCount++; else failedCount++;
+        if (itemQuotaHit) { quotaStopped = true; break; }
       }
 
       if (btn) {
@@ -2465,7 +2479,7 @@ Official Email: ${offEmail}`;
       if (!isAuto4thTrigger) {
         if (allBccEmails.length > 0 && CURRENT_ROLE !== 'manager') {
           showToastNotification(`✅ Dispatched ${sentCount} Fee Reminders via Official Relay for ${periodStr}!`);
-          alert(`✅ ${periodStr} Fee Reminder Emails Dispatched!\n\n• Total Pending Families: ${list.length}\n• Emails Sent via Official Relay: ${sentCount}\n• Message Included: "${periodStr} fee has not reached us — kindly pay at earliest or share payment screenshot/receipt if already paid."`);
+          alert(`✅ ${periodStr} Fee Reminder Emails Dispatched!\n\n• Total Pending Families: ${list.length}\n• Emails Sent via Official Relay: ${sentCount}\n• Not Sent: ${itemsToProcess.length - sentCount}${quotaStopped ? '\n• ⚠️ Sending stopped early: the daily email limit was reached, so the remaining reminders were NOT sent.' : ''}\n• Message Included: "${periodStr} fee has not reached us — kindly pay at earliest or share payment screenshot/receipt if already paid."`);
         } else {
           showToastNotification(`✅ Processed ${list.length} pending fee reminders for ${periodStr}!`);
           alert(`✅ ${periodStr} Fee Reminder Processed for ${list.length} Pending Families!`);
@@ -2825,6 +2839,7 @@ Official Email: ${offEmail}`;
         }
         let sentM3 = 0;
         let failedM3 = 0;
+        let quotaStoppedM3 = false;
         for (let i = 0; i < list.length; i++) {
           const item = list[i];
           try {
@@ -2837,19 +2852,21 @@ Official Email: ${offEmail}`;
                 html: built.htmlBody || built.plainText.replace(/\n/g, '<br/>')
               });
               if (res.success) sentM3++; else failedM3++;
+              if (res && (res.quotaExceeded === true || res.quotaRemaining === 0)) quotaStoppedM3 = true;
             } else {
               failedM3++;
             }
           } catch (err) {
             failedM3++;
           }
+          if (quotaStoppedM3) break;
         }
         if (btnM3) {
           btnM3.disabled = false;
           btnM3.innerHTML = origHtmlM3;
         }
         showToastNotification(`🚨 Processed urgent 3+ month overdue notices for ${list.length} families!`);
-        alert(`🚨 3+ Months Defaulters Reminder Processed!\n\n• Total 3+ Month Defaulters: ${list.length}\n• Urgent Emails Sent Securely: ${sentM3}\n• Could Not Send (no email on file or an error): ${failedM3}`);
+        alert(`🚨 3+ Months Defaulters Reminder Processed!\n\n• Total 3+ Month Defaulters: ${list.length}\n• Urgent Emails Sent Securely: ${sentM3}\n• Could Not Send (no email on file or an error): ${failedM3}${quotaStoppedM3 ? '\n• ⚠️ Sending stopped early: the daily email limit was reached, so the remaining reminders were NOT sent.' : ''}`);
         return;
       }
 
@@ -2865,21 +2882,31 @@ Official Email: ${offEmail}`;
         btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> <span>Sending Defaulter Notices...</span>`;
       }
 
+      // Batch 5 (B10): same truthful counting and the same safe batch
+      // cap as Remind All — count only confirmed sends, treat failures
+      // and exceptions as NOT sent, and stop when the quota is reached.
       let sentCount = 0;
-      for (let i = 0; i < list.length; i++) {
-        const item = list[i];
-        if (!item.email || !item.email.includes('@')) continue;
+      let failedCount = 0;
+      let quotaStopped = false;
+      const MAX_SAFE_BATCH = 85;
+      const itemsToProcess = withEmail.slice(0, MAX_SAFE_BATCH);
+      for (let i = 0; i < itemsToProcess.length; i++) {
+        const item = itemsToProcess[i];
         const { subject, plainText, htmlBody, offEmail } = buildDefaulter3PlusEmail(item);
+        let itemSent = false;
+        let itemQuotaHit = false;
         try {
           if (typeof sendViaOfficialEmailRelay === 'function' || window.sendViaOfficialEmailRelay) {
             const fn = window.sendViaOfficialEmailRelay || sendViaOfficialEmailRelay;
-            await fn({
+            const relayRes = await fn({
               to: item.email,
               subject,
               text: plainText,
               html: htmlBody || plainText.replace(/\n/g, '<br/>'),
               senderName: `Al-Huda Islamic Centre (${offEmail})`
             });
+            itemSent = !!(relayRes && relayRes.success === true);
+            if (relayRes && (relayRes.quotaExceeded === true || relayRes.quotaRemaining === 0)) itemQuotaHit = true;
           } else if (window.emailjs) {
             await emailjs.send('service_alhuda_lms', 'template_fee_invoice', {
               to_email: item.email,
@@ -2891,12 +2918,14 @@ Official Email: ${offEmail}`;
               html_content: htmlBody,
               from_name: `Al-Huda Islamic Centre (${offEmail})`
             });
+            itemSent = true;
           }
-          sentCount++;
         } catch (err) {
           console.warn('[3+ Months Defaulter Email]', err);
-          sentCount++;
+          itemSent = false;
         }
+        if (itemSent) sentCount++; else failedCount++;
+        if (itemQuotaHit) { quotaStopped = true; break; }
       }
 
       if (btn) {
@@ -2905,7 +2934,7 @@ Official Email: ${offEmail}`;
       }
 
       showToastNotification(`🚨 Dispatched urgent 3+ month overdue notices to ${sentCount} families via Official Relay!`);
-      alert(`🚨 3+ Months Defaulters Reminder Sent!\n\n• Total 3+ Month Defaulters: ${list.length}\n• Urgent Emails Dispatched via Official Relay: ${sentCount}`);
+      alert(`🚨 3+ Months Defaulters Reminder Sent!\n\n• Total 3+ Month Defaulters: ${list.length}\n• Urgent Emails Dispatched via Official Relay: ${sentCount}\n• Not Sent: ${itemsToProcess.length - sentCount}${quotaStopped ? '\n• ⚠️ Sending stopped early: the daily email limit was reached, so the remaining reminders were NOT sent.' : ''}`);
     }
 
 

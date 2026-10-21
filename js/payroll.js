@@ -1213,16 +1213,24 @@ Official Accounts Email: ceoislamiccentre@gmail.com`;
         btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-1"></i> Sending...';
       }
 
+      // Batch 5 (B10): report the send truthfully. Only a confirmed
+      // relay success (or the EmailJS fallback resolving) counts as
+      // sent. On failure, say so — and only then open the Gmail compose
+      // window, as a manual fallback for the user to send it by hand.
+      let slipEmailSent = false;
+      let slipEmailError = '';
       try {
         if (typeof sendViaOfficialEmailRelay === 'function' || window.sendViaOfficialEmailRelay) {
           const fn = window.sendViaOfficialEmailRelay || sendViaOfficialEmailRelay;
-          await fn({
+          const relayRes = await fn({
             to: targetEmail,
             subject: subject,
             text: plainText,
             html: plainText.replace(/\n/g, '<br/>'),
             senderName: 'Al-Huda Islamic Centre Payroll (ceoislamiccentre@gmail.com)'
           });
+          slipEmailSent = !!(relayRes && relayRes.success === true);
+          if (!slipEmailSent) slipEmailError = (relayRes && relayRes.error) || 'Unknown error';
         } else if (typeof emailjs !== 'undefined' && window.EMAILJS_PUBLIC_KEY) {
           await emailjs.send(window.EMAILJS_SERVICE_ID, window.EMAILJS_TEMPLATE_ID, {
             to_email: targetEmail,
@@ -1230,9 +1238,14 @@ Official Accounts Email: ceoislamiccentre@gmail.com`;
             message: plainText,
             from_name: 'Al-Huda Islamic Centre Payroll (ceoislamiccentre@gmail.com)'
           });
+          slipEmailSent = true;
+        } else {
+          slipEmailError = 'No email service is available.';
         }
       } catch (eJsErr) {
         console.warn('Salary slip email dispatch notice:', eJsErr);
+        slipEmailSent = false;
+        slipEmailError = (eJsErr && eJsErr.message) || 'Unknown error';
       }
 
       if (btn) {
@@ -1240,13 +1253,16 @@ Official Accounts Email: ceoislamiccentre@gmail.com`;
         btn.innerHTML = origHtml;
       }
 
-      if (!isSilent) {
+      if (slipEmailSent) {
+        if (typeof lmsNotify === 'function') lmsNotify(`Official Salary Slip email dispatched to ${targetEmail}`, { type: 'success' });
+        else if (!isSilent) alert(`Official Salary Slip email dispatched to ${targetEmail}`);
+      } else if (!isSilent) {
+        if (typeof lmsNotify === 'function') lmsNotify(`Official Salary Slip email was NOT sent (${slipEmailError || 'Unknown error'}). Opening Gmail so you can send it manually.`, { type: 'error' });
+        else alert(`Official Salary Slip email was NOT sent (${slipEmailError || 'Unknown error'}). Opening Gmail so you can send it manually.`);
         const gmailUrl = `https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(targetEmail)}&cc=ceoislamiccentre@gmail.com&su=${encodeURIComponent(subject)}&body=${encodeURIComponent(plainText)}`;
         window.open(gmailUrl, '_blank');
-        if (typeof lmsNotify === 'function') lmsNotify(`Official Salary Slip email prepared for ${targetEmail}`, { type: 'success' });
-        else alert(`Official Salary Slip email prepared for ${targetEmail}`);
       } else {
-        if (typeof lmsNotify === 'function') lmsNotify(`Official Salary Slip email dispatched to ${targetEmail}`, { type: 'success' });
+        if (typeof lmsNotify === 'function') lmsNotify(`Official Salary Slip email was NOT sent to ${targetEmail} (${slipEmailError || 'Unknown error'}).`, { type: 'error' });
       }
     }
     window.sendSalarySlipEmailModal = sendSalarySlipEmailModal;

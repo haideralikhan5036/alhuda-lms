@@ -291,8 +291,18 @@ Official Email: ${ACADEMY_OFFICIAL_EMAIL}`;
       return null;
     }
 
+    // Batch 5 (B10): the Worker now reports the Apps Script relay's real
+    // quota state. Both send helpers pass it through on EVERY return so
+    // bulk callers can stop truthfully when the daily limit is reached.
+    function emailQuotaFields(data) {
+      return {
+        quotaRemaining: (data && typeof data.quotaRemaining === 'number') ? data.quotaRemaining : null,
+        quotaExceeded: !!(data && data.quotaExceeded === true)
+      };
+    }
+
     async function sendViaOfficialEmailRelay({ to, subject, html, text, senderName }) {
-      if (!to || !subject) return { success: false, error: 'Recipient or subject missing' };
+      if (!to || !subject) return { success: false, error: 'Recipient or subject missing', quotaRemaining: null, quotaExceeded: false };
 
       const base = resolveWorkerBaseForEmail();
       const token = resolveOwnerTokenForEmail();
@@ -316,13 +326,13 @@ Official Email: ${ACADEMY_OFFICIAL_EMAIL}`;
         try { data = await res.json(); } catch (e) { data = null; }
 
         if (res.ok && data && data.ok) {
-          return { success: true, sentTo: to };
+          return Object.assign({ success: true, sentTo: to }, emailQuotaFields(data));
         }
         const errMsg = (data && data.error) || ('Email send failed (HTTP ' + res.status + ')');
-        return { success: false, error: errMsg };
+        return Object.assign({ success: false, error: errMsg }, emailQuotaFields(data));
       } catch (err) {
         console.warn('[Official Email Relay Notice]:', err);
-        return { success: false, error: (err && err.message) || String(err) };
+        return { success: false, error: (err && err.message) || String(err), quotaRemaining: null, quotaExceeded: false };
       }
     }
     window.sendViaOfficialEmailRelay = sendViaOfficialEmailRelay;
@@ -351,10 +361,10 @@ Official Email: ${ACADEMY_OFFICIAL_EMAIL}`;
     }
 
     async function sendParentEmailViaNotify({ familyId, subject, text, html }) {
-      if (!familyId) return { success: false, error: 'No family is linked to this email.' };
-      if (!subject) return { success: false, error: 'Subject missing' };
+      if (!familyId) return { success: false, error: 'No family is linked to this email.', quotaRemaining: null, quotaExceeded: false };
+      if (!subject) return { success: false, error: 'Subject missing', quotaRemaining: null, quotaExceeded: false };
       const token = resolveManagerTokenForEmail();
-      if (!token) return { success: false, error: 'Manager session not found. Please log in again.' };
+      if (!token) return { success: false, error: 'Manager session not found. Please log in again.', quotaRemaining: null, quotaExceeded: false };
       try {
         const res = await fetch(resolveWorkerBaseForEmail() + '/api/email/notify-parent', {
           method: 'POST',
@@ -368,10 +378,10 @@ Official Email: ${ACADEMY_OFFICIAL_EMAIL}`;
         });
         let data = null;
         try { data = await res.json(); } catch (e) { data = null; }
-        if (res.ok && data && data.ok) return { success: true };
-        return { success: false, error: (data && data.error) || ('Email send failed (HTTP ' + res.status + ')') };
+        if (res.ok && data && data.ok) return Object.assign({ success: true }, emailQuotaFields(data));
+        return Object.assign({ success: false, error: (data && data.error) || ('Email send failed (HTTP ' + res.status + ')') }, emailQuotaFields(data));
       } catch (err) {
-        return { success: false, error: 'Cannot reach the server. The email was NOT sent.' };
+        return { success: false, error: 'Cannot reach the server. The email was NOT sent.', quotaRemaining: null, quotaExceeded: false };
       }
     }
     window.sendParentEmailViaNotify = sendParentEmailViaNotify;

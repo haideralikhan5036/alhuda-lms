@@ -147,6 +147,19 @@ function dupCheckRateLimited(key) {
   return rec.count > DUPCHECK_MAX_ATTEMPTS;
 }
 
+// --- Teacher email daily cap: max 30 advance-class emails per teacher per
+// UTC day (Batch 5, B10), on top of the shared 10-minute send limiter. The
+// UTC date inside the key is the window, in the same Map style as above.
+const TEACHER_EMAIL_DAILY_ATTEMPTS = new Map();
+const TEACHER_EMAIL_DAILY_MAX = 30;
+
+function teacherEmailDailyLimited(sub) {
+  const key = String(sub || '') + '|' + new Date().toISOString().slice(0, 10);
+  const count = (TEACHER_EMAIL_DAILY_ATTEMPTS.get(key) || 0) + 1;
+  TEACHER_EMAIL_DAILY_ATTEMPTS.set(key, count);
+  return count > TEACHER_EMAIL_DAILY_MAX;
+}
+
 function getDb(env) {
   return env.DB || env.ALHUDA_DB || null;
 }
@@ -522,15 +535,21 @@ const EMAIL_MAX_HTML = 200000;
 const EMAIL_MAX_TEXT = 100000;
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-// Shared relay forwarding for /api/email/send and /api/email/notify-parent.
+// Shared relay forwarding for the email endpoints (/api/email/send,
+// /api/email/notify-parent, /api/email/advance-class).
 // Never logs the secret, the relay URL, the recipient, or email bodies —
-// metadata only. Returns { ok:true, relayStatus } on a 2xx relay response,
-// otherwise { ok:false, httpStatus, error, relayStatus } where relayStatus
-// is 0 when the relay never produced a response.
+// metadata only. Returns { ok:true, relayStatus, quotaRemaining,
+// quotaExceeded } on success, otherwise { ok:false, httpStatus, error,
+// relayStatus, quotaRemaining, quotaExceeded } where relayStatus is 0 when
+// the relay never produced a response. Batch 5 (B10): the relay's JSON
+// verdict is read and honoured — { success:false, error, quotaRemaining }
+// means the email was NOT sent even when the HTTP status is 200, and a
+// success reply may carry the true remaining daily quota. The body is
+// parsed for those fields only and is never logged.
 async function forwardEmailViaRelay(env, { to, subject, html, text }) {
   const relayUrl = String(env.RELAY_URL || '').trim();
   if (!/^https:\/\//i.test(relayUrl)) {
-    return { ok: false, httpStatus: 503, error: 'Email relay is not configured.', relayStatus: 0 };
+    return { ok: false, httpStatus: 503, error: 'Email relay is not configured.', relayStatus: 0, quotaRemaining: null, quotaExceeded: false };
   }
   const relaySecret = String(env.RELAY_SECRET || '');
 
@@ -551,6 +570,7 @@ async function forwardEmailViaRelay(env, { to, subject, html, text }) {
   // rewrite that into a bodyless GET -- silently losing the email. Re-POSTing
   // to each Location keeps the payload intact on every hop.
   let relayStatus = 0;
+  let relayBodyText = '';
   try {
     let url = relayUrl;
     let fwd = null;
@@ -567,7 +587,7 @@ async function forwardEmailViaRelay(env, { to, subject, html, text }) {
         const next = new URL(loc, url).toString();
         if (!/^https:/i.test(next)) {
           console.warn('[email] refusing non-https redirect');
-          return { ok: false, httpStatus: 502, error: 'Email relay failed (insecure redirect).', relayStatus: 0 };
+          return { ok: false, httpStatus: 502, error: 'Email relay failed (insecure redirect).', relayStatus: 0, quotaRemaining: null, quotaExceeded: false };
         }
         url = next;
         continue;
@@ -575,17 +595,48 @@ async function forwardEmailViaRelay(env, { to, subject, html, text }) {
       break;
     }
     relayStatus = fwd ? fwd.status : 0;
-    // Drain the body so the connection can be reused; its content is not needed.
-    try { await fwd.text(); } catch (e3) {}
+    // Read the final body (the redirect hops above were already drained):
+    // the Batch 5 quota verdict lives in it. Parsed below, never logged.
+    try { relayBodyText = await fwd.text(); } catch (e3) {}
   } catch (e) {
     console.warn('[email] relay unreachable');
-    return { ok: false, httpStatus: 502, error: 'Email relay is unreachable. Please try again later.', relayStatus: 0 };
+    return { ok: false, httpStatus: 502, error: 'Email relay is unreachable. Please try again later.', relayStatus: 0, quotaRemaining: null, quotaExceeded: false };
   }
 
-  if (relayStatus >= 200 && relayStatus < 300) {
-    return { ok: true, relayStatus };
+  // Interpret the relay's JSON verdict when it sent one:
+  //   { success:true, quotaRemaining:N }                 -> sent, N left
+  //   { success:false, error:'...', quotaRemaining:0 }   -> NOT sent
+  // An Apps Script web app answers HTTP 200 for BOTH shapes, so the HTTP
+  // status alone can no longer be trusted. Unparseable/absent bodies fall
+  // back to the status-only judgement with quotaRemaining null.
+  let quotaRemaining = null;
+  let relayVerdict = null; // true | false | null (null = no JSON verdict)
+  let relayError = null;
+  if (relayBodyText) {
+    try {
+      const parsed = JSON.parse(relayBodyText);
+      if (parsed && typeof parsed === 'object') {
+        if (typeof parsed.quotaRemaining === 'number') quotaRemaining = parsed.quotaRemaining;
+        if (parsed.success === false || parsed.ok === false) {
+          relayVerdict = false;
+          relayError = (typeof parsed.error === 'string' && parsed.error)
+            ? parsed.error
+            : 'The email relay reported a failure.';
+        } else if (parsed.success === true || parsed.ok === true) {
+          relayVerdict = true;
+        }
+      }
+    } catch (e) { /* not JSON — fall back to the HTTP status alone */ }
   }
-  return { ok: false, httpStatus: 502, error: 'Email relay failed (HTTP ' + relayStatus + ').', relayStatus };
+
+  if (relayVerdict === false) {
+    const quotaExceeded = quotaRemaining === 0 || /limit|quota/i.test(relayError || '');
+    return { ok: false, httpStatus: 502, error: relayError, relayStatus, quotaRemaining, quotaExceeded };
+  }
+  if (relayStatus >= 200 && relayStatus < 300) {
+    return { ok: true, relayStatus, quotaRemaining, quotaExceeded: quotaRemaining === 0 };
+  }
+  return { ok: false, httpStatus: 502, error: 'Email relay failed (HTTP ' + relayStatus + ').', relayStatus, quotaRemaining, quotaExceeded: quotaRemaining === 0 };
 }
 
 async function handleEmailSend(request, env) {
@@ -646,9 +697,9 @@ async function handleEmailSend(request, env) {
     console.log('[email] forwarded to=' + to + ' relayStatus=' + result.relayStatus);
   }
   if (result.ok) {
-    return json(request, env, { ok: true, relayStatus: result.relayStatus });
+    return json(request, env, { ok: true, relayStatus: result.relayStatus, quotaRemaining: (typeof result.quotaRemaining === 'number' ? result.quotaRemaining : null), quotaExceeded: !!result.quotaExceeded });
   }
-  return json(request, env, { ok: false, error: result.error }, result.httpStatus);
+  return json(request, env, { ok: false, error: result.error, quotaRemaining: (typeof result.quotaRemaining === 'number' ? result.quotaRemaining : null), quotaExceeded: !!result.quotaExceeded }, result.httpStatus);
 }
 
 // --- POST /api/email/notify-parent  { familyId, subject, text?, html?, template? }
@@ -736,9 +787,171 @@ async function handleEmailNotifyParent(request, env) {
   // Metadata only: family id + relay status. NEVER the address.
   console.log('[email] notify-parent familyId=' + familyId + ' relayStatus=' + result.relayStatus);
   if (result.ok) {
-    return json(request, env, { ok: true, relayStatus: result.relayStatus });
+    return json(request, env, { ok: true, relayStatus: result.relayStatus, quotaRemaining: (typeof result.quotaRemaining === 'number' ? result.quotaRemaining : null), quotaExceeded: !!result.quotaExceeded });
   }
-  return json(request, env, { ok: false, error: result.error }, result.httpStatus);
+  return json(request, env, { ok: false, error: result.error, quotaRemaining: (typeof result.quotaRemaining === 'number' ? result.quotaRemaining : null), quotaExceeded: !!result.quotaExceeded }, result.httpStatus);
+}
+
+// --- POST /api/email/advance-class  { studentId, template?, scheduledDate, bookTitle?, page?, lineRange?, sabaqResult?, rating?, remarks? }
+// Batch 5 (B10): the teacher advance-class confirmation used to be posted
+// DIRECTLY from teacher.html to a hard-coded Apps Script /exec URL (no
+// secret, no-cors) and was marked sent unconditionally. It now goes
+// through this endpoint instead: a valid TEACHER token is required, the
+// student must be one of the teacher's own (resolveScopeIds), and the
+// recipient is resolved SERVER-SIDE from the student's family — the
+// parent's address never appears in any response or log line from this
+// handler. The browser sends only ids and lesson facts; the subject and
+// body are built here from the same template the portal used to render,
+// so no arbitrary HTML can be injected. Sent via the shared relay path.
+const ADVANCE_CLASS_ALLOWED_FIELDS = ['studentId', 'template', 'scheduledDate', 'bookTitle', 'page', 'lineRange', 'sabaqResult', 'rating', 'remarks'];
+
+async function handleTeacherAdvanceClassEmail(request, env) {
+  if (request.method === 'OPTIONS') return json(request, env, {}, 204);
+  if (request.method !== 'POST') {
+    return json(request, env, { ok: false, error: 'Method not allowed.' }, 405);
+  }
+
+  const auth = await requireApiAuth(request, env);
+  if (!auth) return unauthorized(request, env);
+  if (auth.role !== 'teacher') {
+    return json(request, env, { ok: false, error: 'Only teachers can send advance-class emails.' }, 403);
+  }
+
+  if (emailSendRateLimited('teacher-email:' + String(auth.sub)) ||
+      emailSendRateLimited('teacher-email-ip:' + clientIp(request))) {
+    return json(request, env, { ok: false, error: 'Too many emails. Please try again later.' }, 429);
+  }
+  if (teacherEmailDailyLimited(auth.sub)) {
+    return json(request, env, { ok: false, error: 'Daily email limit for teachers reached. Please try again tomorrow.' }, 429);
+  }
+
+  let body;
+  try {
+    body = await request.json();
+  } catch (e) {
+    return json(request, env, { ok: false, error: 'Invalid request body.' }, 400);
+  }
+  if (!body || typeof body !== 'object' || Array.isArray(body)) {
+    return json(request, env, { ok: false, error: 'Invalid request body.' }, 400);
+  }
+  for (const k of Object.keys(body)) {
+    if (ADVANCE_CLASS_ALLOWED_FIELDS.indexOf(k) === -1) {
+      return json(request, env, { ok: false, error: 'Unexpected field: ' + k + '.' }, 400);
+    }
+  }
+  if (body.template !== undefined && body.template !== null && String(body.template) !== '' && String(body.template) !== 'advance-class') {
+    return json(request, env, { ok: false, error: 'Unknown email template.' }, 400);
+  }
+
+  const studentId = (body.studentId === undefined || body.studentId === null) ? '' : String(body.studentId).trim();
+  if (!studentId || studentId.length > 64) {
+    return json(request, env, { ok: false, error: 'A student id is required.' }, 400);
+  }
+  const scheduledDate = String(body.scheduledDate || '').trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(scheduledDate)) {
+    return json(request, env, { ok: false, error: 'A scheduled date (YYYY-MM-DD) is required.' }, 400);
+  }
+  const bookTitleInput = (body.bookTitle === undefined || body.bookTitle === null) ? '' : String(body.bookTitle).trim();
+  if (bookTitleInput.length > 120) {
+    return json(request, env, { ok: false, error: 'Book title is too long (max 120 characters).' }, 400);
+  }
+  const bookTitle = bookTitleInput || 'Course Material';
+  const pageStr = (body.page === undefined || body.page === null) ? '' : String(body.page).trim();
+  if (pageStr.length > 20) {
+    return json(request, env, { ok: false, error: 'Page is too long (max 20 characters).' }, 400);
+  }
+  const lineRange = (body.lineRange === undefined || body.lineRange === null) ? '' : String(body.lineRange).trim();
+  if (lineRange.length > 30) {
+    return json(request, env, { ok: false, error: 'Line range is too long (max 30 characters).' }, 400);
+  }
+  const sabaqInput = (body.sabaqResult === undefined || body.sabaqResult === null) ? '' : String(body.sabaqResult).trim();
+  if (sabaqInput.length > 60) {
+    return json(request, env, { ok: false, error: 'Result is too long (max 60 characters).' }, 400);
+  }
+  const sabaqResult = sabaqInput || 'Completed';
+  let rating = 5;
+  if (body.rating !== undefined && body.rating !== null && body.rating !== '') {
+    const r = Number(body.rating);
+    if (!Number.isInteger(r) || r < 1 || r > 5) {
+      return json(request, env, { ok: false, error: 'Rating must be a whole number from 1 to 5.' }, 400);
+    }
+    rating = r;
+  }
+  const remarks = (body.remarks === undefined || body.remarks === null) ? '' : String(body.remarks).trim();
+  if (remarks.length > 300) {
+    return json(request, env, { ok: false, error: 'Remarks are too long (max 300 characters).' }, 400);
+  }
+
+  const db = getDb(env);
+  if (!db) {
+    return json(request, env, { ok: false, error: 'Service unavailable.' }, 503);
+  }
+
+  // The teacher may only email parents of their OWN students.
+  const scope = await resolveScopeIds(db, 'teacher', auth.sub);
+  if (!scope || !Array.isArray(scope.studentIds) || !scope.studentIds.includes(studentId)) {
+    return json(request, env, { ok: false, error: 'You can only email parents of your own students.' }, 403);
+  }
+
+  let student = null;
+  try {
+    student = await db.prepare('SELECT id, name, family_id FROM students WHERE id = ?').bind(studentId).first();
+  } catch (e) {
+    return json(request, env, { ok: false, error: 'Service unavailable.' }, 503);
+  }
+  if (!student) {
+    return json(request, env, { ok: false, error: 'Student not found.' }, 404);
+  }
+
+  let teacherName = 'Instructor';
+  try {
+    const t = await db.prepare('SELECT full_name FROM teachers WHERE id = ?').bind(auth.sub).first();
+    if (t && t.full_name) teacherName = String(t.full_name);
+  } catch (e) { /* keep the fallback name */ }
+
+  let fam = null;
+  try {
+    fam = await db.prepare('SELECT id, parent_name, email, parent_email, notes FROM families WHERE id = ?').bind(student.family_id).first();
+  } catch (e) {
+    // Older databases may lack the parent_email alias column; fall back to
+    // the canonical columns (mirrors the notify-parent handler).
+    try {
+      fam = await db.prepare('SELECT id, parent_name, email, notes FROM families WHERE id = ?').bind(student.family_id).first();
+    } catch (e2) {
+      return json(request, env, { ok: false, error: 'Service unavailable.' }, 503);
+    }
+  }
+  if (!fam) {
+    return json(request, env, { ok: false, error: 'Family not found.' }, 404);
+  }
+
+  // Recipient resolved server-side ONLY: family columns first, then any
+  // email nested in the family notes. Never returned to the caller.
+  let to = String(fam.email || '').trim() || String(fam.parent_email || '').trim();
+  if (!to) {
+    const contacts = collectFamilyContactsForDup(fam);
+    for (const candidate of contacts.emails) { to = candidate; break; }
+  }
+  if (!to || !EMAIL_RE.test(to)) {
+    return json(request, env, { ok: false, error: 'No email address on file for this family.' }, 422);
+  }
+
+  const studentName = String(student.name || 'Student');
+  const parentName = String(fam.parent_name || 'Parent / Guardian');
+  const conductedDate = new Date().toISOString().slice(0, 10);
+  const subject = `🌟 Advance Class Completed: ${studentName} (${scheduledDate}) — Al-Huda Islamic Centre`;
+  const text = `Assalamu Alaikum wa Rahmatullah ${parentName},\n\nWe pray you are in the best of health and Iman.\n\nThis is an official confirmation from Al-Huda Islamic Centre that the class for ${studentName} originally scheduled for ${scheduledDate} has been successfully conducted in advance today (${conductedDate}).\n\n══════════════════════════════════════\nADVANCE CLASS SESSION DETAILS:\n══════════════════════════════════════\n• Student Name: ${studentName}\n• Instructor: ${teacherName}\n• Course Material: ${bookTitle}${pageStr ? ` (Page ${pageStr}${lineRange ? ', Lines ' + lineRange : ''})` : ''}\n• Scheduled Class Date: ${scheduledDate}\n• Conducted & Completed On: ${conductedDate}\n• Performance: ${sabaqResult} (${rating} / 5 Stars)\n${remarks ? `• Teacher Remarks: ${remarks}\n` : ''}══════════════════════════════════════\n\nThe attendance and lesson Sabaq records have been updated in your Parent Portal.\n\nJazakumullahu Khairan!\nAl-Huda Islamic Centre Management\nOfficial Accounts Email: ceoislamiccentre@gmail.com`;
+  const html = text.replace(/\n/g, '<br/>');
+
+  const result = await forwardEmailViaRelay(env, { to, subject, html, text });
+  // Metadata only: student id + relay status. NEVER the address or body.
+  console.log('[teacher-email] student=' + studentId + ' relayStatus=' + result.relayStatus);
+  const quotaRemaining = (typeof result.quotaRemaining === 'number' ? result.quotaRemaining : null);
+  const quotaExceeded = !!result.quotaExceeded;
+  if (result.ok) {
+    return json(request, env, { ok: true, quotaRemaining, quotaExceeded });
+  }
+  return json(request, env, { ok: false, error: result.error, quotaRemaining, quotaExceeded }, result.httpStatus || 502);
 }
 
 // --- POST /api/families/check-duplicates  { email?, phone?, whatsapp?, parentName? }
@@ -1921,6 +2134,13 @@ export default {
     // caller's role is enforced inside the handler.
     if (url.pathname === '/api/email/notify-parent') {
       return handleEmailNotifyParent(request, env);
+    }
+
+    // 2e. Teacher advance-class email (/api/email/advance-class).
+    // Teacher role ONLY (enforced in the handler); the recipient is
+    // resolved server-side from the student's family and never returned.
+    if (url.pathname === '/api/email/advance-class') {
+      return handleTeacherAdvanceClassEmail(request, env);
     }
 
     // 2d. Duplicate check for Add Family (/api/families/check-duplicates).
