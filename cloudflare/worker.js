@@ -782,6 +782,10 @@ const WRITE_ACTIONS = new Set(['insert', 'upsert', 'update', 'delete']);
 // roles; the downstream handler still 400s unknown tables for owner/manager.
 function checkTableAccess(role, table, action) {
   if (role === 'owner') return 'allow';
+  // Batch 2.1: the audit log is owner-only through this API. The Worker
+  // itself writes entries directly (never through /api/db), so no other
+  // role may read, forge or erase the trail.
+  if (table === 'audit_log') return 'deny';
   const write = WRITE_ACTIONS.has(action);
 
   if (role === 'manager') {
@@ -1529,6 +1533,48 @@ function scrubRow(role, sub, scope, table, row) {
 }
 
 // Wraps the D1 handler: pre-check -> inject scope -> delegate -> scrub.
+// --- Batch 2.1: audit log ---------------------------------------------------
+// Append-only record of MANAGER writes through /api/db: who (actor id +
+// role), what (action + table), which record, when. Values and content
+// are NEVER logged — no contacts, no notes, no passwords. Written
+// directly against D1 (not through /api/db, which denies audit_log to
+// every non-owner role), and a logging failure must never break the
+// request it belongs to.
+function auditRecordIds(body) {
+  const ids = [];
+  const push = (v) => { if (v != null && v !== '' && ids.length < 20) ids.push(String(v).slice(0, 200)); };
+  const filters = Array.isArray(body && body.filters) ? body.filters : [];
+  const rows = Array.isArray(body && body.values) ? body.values : (body && body.values ? [body.values] : []);
+  if (body && body.table === 'system_settings') {
+    // For settings rows the meaningful identifier is the key.
+    for (const r of rows) push(r && r.key);
+    for (const f of filters) {
+      if (f && String(f.column) === 'key' && f.op === 'eq') push(f.value);
+    }
+    return [...new Set(ids)];
+  }
+  for (const id of filterIdValues(filters)) push(id);
+  for (const r of rows) push(r && r.id);
+  return [...new Set(ids)];
+}
+
+async function writeAuditLogEntries(db, auth, body) {
+  try {
+    if (!db || !body) return;
+    const ids = auditRecordIds(body);
+    const targets = ids.length ? ids : [''];
+    const now = new Date().toISOString();
+    for (const rid of targets) {
+      const entryId = 'AUD-' + now.replace(/[^0-9]/g, '').slice(0, 17) + '-' + Math.random().toString(36).slice(2, 8);
+      await db.prepare('INSERT INTO audit_log (id, actor_id, actor_role, action, table_name, record_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)')
+        .bind(entryId, String(auth.sub || ''), String(auth.role || ''), String(body.action || ''), String(body.table || ''), rid, now)
+        .run();
+    }
+  } catch (e) {
+    console.warn('[audit] log write skipped:', e && e.message);
+  }
+}
+
 async function handleScopedDbRequest(ctx, auth) {
   const { request, env } = ctx;
   const role = auth.role;
@@ -1594,6 +1640,12 @@ async function handleScopedDbRequest(ctx, auth) {
     payload = await resp.clone().json();
   } catch (e) {
     return resp;
+  }
+  // Batch 2.1: record successful MANAGER writes in the audit log.
+  // Denied or failed writes never reach this point as successes and are
+  // not logged.
+  if (role === 'manager' && WRITE_ACTIONS.has(action) && resp.status >= 200 && resp.status < 300 && !(payload && payload.error)) {
+    await writeAuditLogEntries(db, auth, body);
   }
   if (!payload || payload.error || payload.data == null || role === 'owner') {
     return resp;
