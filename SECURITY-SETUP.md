@@ -269,3 +269,24 @@ A complete backup has three parts:
 After any restore, sign in to each portal and confirm the dashboard, fees,
 payroll, and course material all load before telling users the system is
 back.
+
+## Finance tables flags (owner reference)
+
+The finance tables migration (Batches 6B–6D) is controlled by four switches
+stored in `system_settings`. Manage all of them from the owner tool page
+`backfill-finance-tables.html` — never from the browser console.
+
+- `fee_tables_v1` (Step "Finance tables flag" on the tool page): when `on`,
+  every new fee and salary slip also writes a copy into the `payments`,
+  `salary_slips`, and `salary_adjustments` tables. Keep it OFF while running
+  a backfill.
+- `fee_read_parent` (Step 5 switch): when `on`, the parent portal's fee
+  history reads from the `payments` table instead of the legacy stores.
+- `fee_read_360` (Step 5 switch): when `on`, the Family 360 payments list
+  reads its real records from the `payments` table.
+- `salary_read_v1` (Step 5 switch): reserved for the salary read switch
+  (Batch 6D-3).
+
+Read flags accept `off` / `compare` / `on`. Turning any flag back to `off`
+restores the previous behaviour immediately; portals read the flags once
+when they load, so refresh an open portal page after changing one.
