@@ -338,13 +338,26 @@
       // another tab's manager session via shared localStorage.
       const raw = sessionStorage.getItem('alhuda_manager_session');
       if (!raw) return null;
+      let parsed = null;
       try {
-        const parsed = JSON.parse(raw);
-        if (parsed && parsed.id && parsed.emp_id) {
-          return parsed;
-        }
+        parsed = JSON.parse(raw);
       } catch (e) {}
-      return null;
+      if (!parsed || !parsed.id || !parsed.emp_id) return null;
+      // Batch 7 (F3.7): the session object alone is NOT enough — the
+      // manager TOKEN must also be present, carry the manager role, and
+      // be unexpired (the same check the owner gate above and the
+      // manager.html restore already apply). Without it, an expired or
+      // cleared token left the portal sitting on stale local-mirror data
+      // with no route back to the login.
+      let token = null;
+      try {
+        token = sessionStorage.getItem('alhuda_manager_token') || null;
+      } catch (e) {}
+      if (!token) return null;
+      const payload = decodeTokenPayload(token);
+      if (!payload || payload.role !== 'manager') return null;
+      if (typeof payload.exp !== 'number' || Date.now() / 1000 >= payload.exp) return null;
+      return parsed;
     }
 
     function logoutManagerPortal() {

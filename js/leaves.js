@@ -637,6 +637,22 @@
         const { data: st } = await db.from('students').select('*').eq('id', studentId).single();
         if (!st) return;
 
+        // Batch 7 (F1.5): a leave return must never reactivate a student
+        // whose family is deactivated — the family must be reactivated
+        // first. (The backend guard enforces this too; check here for a
+        // clear message instead of a raw error.)
+        if (st.family_id) {
+          const famRec = (window.ALL_FAMILIES || []).find(f => String(f.id) === String(st.family_id))
+                      || (window.RAW_ALL_FAMILIES || []).find(f => String(f.id) === String(st.family_id));
+          const famDeact = famRec
+            ? (typeof isFamilyDeactivated === 'function' ? isFamilyDeactivated(famRec) : ['inactive', 'deactivated'].includes(String(famRec.status || '').toLowerCase()))
+            : false;
+          if (famDeact) {
+            alert("This student's family is deactivated. Reactivate the family first, then return the student from leave.");
+            return;
+          }
+        }
+
         let meta = {};
         try { meta = JSON.parse(st.notes || '{}'); } catch(e) { meta = { text: st.notes || '' }; }
 

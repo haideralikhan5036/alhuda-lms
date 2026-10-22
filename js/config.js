@@ -105,17 +105,20 @@
 
     function isFamilyDeactivated(f) {
       if (!f) return true;
+      // Batch 7 (F1.1): the family's OWN stored status is authoritative.
+      // An explicitly deactivated family stays deactivated regardless of
+      // student states; the student derivation below may only ADD
+      // deactivation (all students deactivated), never remove a stored one.
+      if (f.is_active === false) return true;
+      const ownStatus = String(f.status || '').trim().toLowerCase();
+      if (ownStatus === 'inactive' || ownStatus === 'deactivated') return true;
       const stuList = getFamilyRegularStudents(f);
       if (stuList.length > 0) {
-        // CORE BUSINESS RULE:
-        // IF AT LEAST ONE STUDENT IN A FAMILY IS ACTIVE -> FAMILY MUST BE ACTIVE (return false)
-        // IF ZERO STUDENTS IN A FAMILY ARE ACTIVE -> FAMILY MUST BE DEACTIVATED (return true)
+        // IF ZERO STUDENTS IN A FAMILY ARE ACTIVE -> FAMILY IS DEACTIVATED (return true)
         const hasAnyActiveStudent = stuList.some(s => !isStudentSelfDeactivated(s));
         return !hasAnyActiveStudent;
       }
-      if (f.is_active === false) return true;
-      const st = String(f.status || 'Active').trim().toLowerCase();
-      return st === 'inactive' || st === 'deactivated';
+      return false;
     }
 
     function isActiveFamilyRecord(f) {
@@ -846,6 +849,20 @@
     let _LAST_CORE_DATA_LOAD_TS = 0;
     const CORE_DATA_TTL_MS = 60000;
 
+    // Batch 7 (F3.4): settle one core-load branch independently with a
+    // timeout, so a single stalled query can no longer block every
+    // global (and every dashboard count) behind it.
+    const CORE_BRANCH_TIMEOUT_MS = 15000;
+    function settleCoreBranch(queryPromise) {
+      return Promise.race([
+        Promise.resolve(queryPromise).then(
+          (res) => ({ ok: true, res }),
+          () => ({ ok: false, res: null })
+        ),
+        new Promise((resolve) => setTimeout(() => resolve({ ok: false, res: null }), CORE_BRANCH_TIMEOUT_MS))
+      ]);
+    }
+
     function invalidateCoreLmsDataCache() {
       _LAST_CORE_DATA_LOAD_TS = 0;
     }
@@ -871,12 +888,19 @@
 
       _CORE_DATA_INFLIGHT_PROMISE = (async () => {
         try {
-          const [famRes, stdRes, tchRes, schRes] = await Promise.all([
-            db.from('families').select('*, students(*)').order('created_at', { ascending: false }),
-            db.from('students').select('*').order('created_at', { ascending: false }),
-            db.from('teachers').select('*').order('created_at', { ascending: false }),
-            db.from('class_schedules').select('*, teachers(*), students(*)')
+          // Batch 7 (F3.4): per-branch settlement + timeout. A failed or
+          // stalled branch degrades to its previous/fallback data instead
+          // of discarding the successful branches with it.
+          const [famSettled, stdSettled, tchSettled, schSettled] = await Promise.all([
+            settleCoreBranch(db.from('families').select('*, students(*)').order('created_at', { ascending: false })),
+            settleCoreBranch(db.from('students').select('*').order('created_at', { ascending: false })),
+            settleCoreBranch(db.from('teachers').select('*').order('created_at', { ascending: false })),
+            settleCoreBranch(db.from('class_schedules').select('*, teachers(*), students(*)'))
           ]);
+          const famRes = famSettled.ok ? famSettled.res : { data: (Array.isArray(RAW_ALL_FAMILIES) && RAW_ALL_FAMILIES.length > 0) ? RAW_ALL_FAMILIES : null };
+          const stdRes = stdSettled.ok ? stdSettled.res : { data: (Array.isArray(ALL_STUDENTS) && ALL_STUDENTS.length > 0) ? ALL_STUDENTS : null };
+          const tchRes = tchSettled.ok ? tchSettled.res : { data: null };
+          const schRes = schSettled.ok ? schSettled.res : { data: null };
 
           const rawFamilies = (famRes.data || []).map(f => {
             const em = String(f.parent_email || f.email || '').trim();
@@ -922,13 +946,14 @@
             if (stuArr.length > 0) {
               const hasActive = stuArr.some(s => !isStudentSelfDeactivated(s));
               const isCurrDeact = ['inactive', 'deactivated'].includes(String(syncedStatus).trim().toLowerCase());
-              if (hasActive && isCurrDeact) {
-                syncedStatus = 'Active';
-                db.from('families').update({ status: 'Active' }).eq('id', f.id).then(() => {});
-              } else if (!hasActive && !isCurrDeact) {
+              if (!hasActive && !isCurrDeact) {
                 syncedStatus = 'Inactive';
                 db.from('families').update({ status: 'Inactive' }).eq('id', f.id).then(() => {});
               }
+              // Batch 7 (F1.1): this reconciler may align a family TOWARDS
+              // Inactive, but it must NEVER flip a stored Inactive family
+              // back to Active. Only an explicit owner/manager reactivation
+              // action may do that (see isFamilyDeactivated).
             }
 
             return {
@@ -953,7 +978,12 @@
             });
           }
 
-          _LAST_CORE_DATA_LOAD_TS = Date.now();
+          // Batch 7 (F3.4): only a COMPLETE load earns the TTL timestamp —
+          // a partial load is retried by the next caller instead of being
+          // cached as if it were whole.
+          if (famSettled.ok && stdSettled.ok && tchSettled.ok && schSettled.ok) {
+            _LAST_CORE_DATA_LOAD_TS = Date.now();
+          }
 
           if (typeof ingestFeeDataFromFamilies === 'function') {
             try { await ingestFeeDataFromFamilies(rawFamilies); } catch (e) {}
@@ -1099,9 +1129,13 @@
                   await db.from('class_schedules').delete().eq('student_id', trStu.id);
                   await db.from('students').delete().eq('id', trStu.id);
                 } else if (!targetStu) {
+                  // Batch 7 (F1.5): never activate a student INTO a
+                  // deactivated canonical family — the moved student
+                  // stays Inactive until the family itself is reactivated.
+                  const canonicalDeact = ['inactive', 'deactivated'].includes(String(canonicalFam.status || '').trim().toLowerCase());
                   await db.from('students').update({
                     family_id: canonicalFam.id,
-                    status: 'Active'
+                    status: canonicalDeact ? 'Inactive' : 'Active'
                   }).eq('id', trStu.id);
                 }
               }
@@ -1178,12 +1212,16 @@
 
       if (typeof updateBackBtnVisibility === 'function') updateBackBtnVisibility();
 
-      // 1. Kick off core deduplicated data load & visible Dashboard in parallel (non-blocking!)
+      // 1. Batch 7 (F3.3): load the core data FIRST, then run the
+      // dashboard once — the same order the fresh-login path in auth.js
+      // already uses. Starting the dashboard in parallel made it compute
+      // from the pre-core empty state (the fee widget especially), with
+      // no guaranteed repaint afterwards.
       const corePromise = ensureCoreLmsDataLoaded();
-      loadDashboardData();
-
-      // 2. Hydrate background views from the shared in-memory cache once core data arrives
       corePromise.then(() => {
+        try { loadDashboardData(); } catch (e) {}
+
+        // 2. Hydrate background views from the shared in-memory cache
         setTimeout(() => {
           loadFamiliesAndStudents();
           loadTeachers();
@@ -1195,13 +1233,10 @@
         }, 120);
       });
 
-      setInterval(() => {
-        if (typeof getAuthenticatedOwnerSession === 'function' && getAuthenticatedOwnerSession()) {
-          loadDashboardData();
-        } else if (typeof getAuthenticatedManagerSession === 'function' && getAuthenticatedManagerSession()) {
-          loadDashboardData();
-        }
-      }, 60000);
+      // Batch 7 (F3.5): the periodic dashboard refresh lives in ONE
+      // place now — the 15-second timer in js/dashboard.js. (A second
+      // 60 s timer here made overlapping dashboard passes overwrite each
+      // other out of order.)
     };
 
     function toggleSidebar() {

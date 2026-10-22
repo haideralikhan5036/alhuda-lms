@@ -33,6 +33,34 @@
   let _d1Status = null; // null = unknown, true = Cloudflare D1 live, false = Local mirror mode
   let _d1CheckPromise = null;
 
+  // Batch 7 (F3.1): every D1 fetch gets an application-level timeout, and
+  // a failed probe is retried after a short cooldown instead of trapping
+  // the page in mirror mode for its whole lifetime.
+  const D1_FETCH_TIMEOUT_MS = 12000;
+  const D1_PROBE_RETRY_COOLDOWN_MS = 5000;
+  let _d1StatusFailedAt = 0;
+  let _d1LiveNoticePending = true;
+
+  function fetchWithTimeout(url, options, timeoutMs) {
+    const ms = timeoutMs || D1_FETCH_TIMEOUT_MS;
+    if (typeof AbortController === 'undefined') return fetch(url, options);
+    const controller = new AbortController();
+    const timer = setTimeout(() => { try { controller.abort(); } catch (e) {} }, ms);
+    const opts = Object.assign({}, options || {}, { signal: controller.signal });
+    return fetch(url, opts).then(
+      (res) => { clearTimeout(timer); return res; },
+      (err) => { clearTimeout(timer); throw err; }
+    );
+  }
+
+  // Batch 7 (F3.2): announce (once per degraded episode) that live D1
+  // data is available, so dashboards can repaint with real numbers.
+  function notifyD1Live() {
+    if (!_d1LiveNoticePending) return;
+    _d1LiveNoticePending = false;
+    try { window.dispatchEvent(new CustomEvent('alhuda-d1-live')); } catch (e) {}
+  }
+
   function getApiBase() {
     if (window.CLOUDFLARE_API_BASE_URL) {
       return String(window.CLOUDFLARE_API_BASE_URL).replace(/\/+$/, '');
@@ -344,12 +372,23 @@
   }
 
   async function checkCloudflareD1Available() {
-    if (_d1Status !== null) return _d1Status;
+    if (_d1Status !== null) {
+      // Batch 7 (F3.1): a failed probe is NOT cached for the page
+      // lifetime — once the cooldown has passed, the next data load
+      // re-probes D1. This is what un-sticks mirror mode (and its
+      // authoritative-looking zeros) without a manual refresh.
+      if (_d1Status === false && _d1StatusFailedAt && (Date.now() - _d1StatusFailedAt >= D1_PROBE_RETRY_COOLDOWN_MS)) {
+        _d1Status = null;
+        _d1StatusFailedAt = 0;
+      } else {
+        return _d1Status;
+      }
+    }
     if (_d1CheckPromise) return _d1CheckPromise;
 
     _d1CheckPromise = (async () => {
       try {
-        const res = await fetch(`${getApiBase()}/api/db`, {
+        const res = await fetchWithTimeout(`${getApiBase()}/api/db`, {
           method: 'GET',
           headers: Object.assign({ 'Accept': 'application/json' }, authHeaders())
         });
@@ -358,17 +397,28 @@
           // after login the next probe retries WITH the token. Caching it
           // (pre-fix behaviour) trapped the portal in local-mirror mode
           // with 0 rows even after a successful login (caught 2026-10-14).
-          if (res.status !== 401) _d1Status = false;
+          if (res.status !== 401) {
+            _d1Status = false;
+            _d1StatusFailedAt = Date.now();
+            _d1LiveNoticePending = true;
+          }
           return false;
         }
         const json = await res.json();
         _d1Status = Boolean(json && json.ok && json.d1_bound);
         if (_d1Status) {
+          _d1StatusFailedAt = 0;
+          notifyD1Live();
           syncLocalStoreToD1Once();
+        } else {
+          _d1StatusFailedAt = Date.now();
+          _d1LiveNoticePending = true;
         }
         return _d1Status;
       } catch (err) {
         _d1Status = false;
+        _d1StatusFailedAt = Date.now();
+        _d1LiveNoticePending = true;
         return false;
       } finally {
         _d1CheckPromise = null;
@@ -383,7 +433,44 @@
   window.resetCloudflareD1Availability = function () {
     _d1Status = null;
     _d1CheckPromise = null;
+    _d1StatusFailedAt = 0;
+    _d1LiveNoticePending = true;
   };
+
+  // Batch 7 (F3.2): dashboards use these to distinguish live data from
+  // mirror data, so mirror numbers are never presented as authoritative.
+  window.isCloudflareD1Live = function () { return _d1Status === true; };
+  window.isCloudflareD1Degraded = function () { return _d1Status === false; };
+
+  // Batch 7 (F3.1): when the network returns or the tab becomes visible
+  // again, forget the old probe result so the next data load re-checks D1.
+  if (typeof window !== 'undefined' && window.addEventListener) {
+    window.addEventListener('online', function () { window.resetCloudflareD1Availability(); });
+    if (typeof document !== 'undefined' && document.addEventListener) {
+      document.addEventListener('visibilitychange', function () {
+        if (!document.hidden) window.resetCloudflareD1Availability();
+      });
+    }
+  }
+
+  // Batch 7 (F1.3): read the ids that already exist in D1 for a table.
+  // Returns a Set of id strings, or null when they cannot be determined
+  // (offline / unauthorized) — callers must treat null as "do not push".
+  async function fetchExistingD1RowIds(table) {
+    try {
+      const res = await fetchWithTimeout(`${getApiBase()}/api/db`, {
+        method: 'POST',
+        headers: Object.assign({ 'Content-Type': 'application/json' }, authHeaders()),
+        body: JSON.stringify({ table, action: 'select', select: 'id' })
+      });
+      if (!res.ok) return null;
+      const json = await res.json();
+      if (!json || !Array.isArray(json.data)) return null;
+      return new Set(json.data.map(r => String(r && r.id)));
+    } catch (e) {
+      return null;
+    }
+  }
 
   async function syncLocalStoreToD1Once(force = false) {
     try {
@@ -396,14 +483,27 @@
       }
 
       for (const table of TABLES) {
-        const rows = store[table] || [];
-        if (rows.length > 0) {
-          await fetch(`${getApiBase()}/api/db`, {
-            method: 'POST',
-            headers: Object.assign({ 'Content-Type': 'application/json' }, authHeaders()),
-            body: JSON.stringify({ table, action: 'upsert', values: rows })
-          });
+        let rows = store[table] || [];
+        if (rows.length === 0) continue;
+
+        // Batch 7 (F1.3): students and families sync INSERT-IF-ABSENT
+        // only. A stale mirror copy must never overwrite a row that
+        // already exists in D1 — that whole-row upsert is how deactivated
+        // families/students were resurrected by a second browser/profile
+        // or a backup import. If the existing ids cannot be read, these
+        // two tables are skipped entirely rather than pushed blind.
+        if (table === 'students' || table === 'families') {
+          const existingIds = await fetchExistingD1RowIds(table);
+          if (!existingIds) continue;
+          rows = rows.filter(r => !r || !r.id || !existingIds.has(String(r.id)));
+          if (rows.length === 0) continue;
         }
+
+        await fetchWithTimeout(`${getApiBase()}/api/db`, {
+          method: 'POST',
+          headers: Object.assign({ 'Content-Type': 'application/json' }, authHeaders()),
+          body: JSON.stringify({ table, action: 'upsert', values: rows })
+        });
       }
       localStorage.setItem(D1_MIGRATED_FLAG_KEY, 'true');
       console.log('[Cloudflare D1] Local records automatically synced to Cloudflare D1!');
@@ -465,7 +565,7 @@
     const isD1Live = await checkCloudflareD1Available();
     if (isD1Live) {
       try {
-        const res = await fetch(`${getApiBase()}/api/db`, {
+        const res = await fetchWithTimeout(`${getApiBase()}/api/db`, {
           method: 'POST',
           headers: Object.assign({ 'Content-Type': 'application/json' }, authHeaders()),
           body: JSON.stringify(payload)
@@ -738,6 +838,8 @@
     _memoryTokenCache = null;
     _d1Status = null;
     _d1CheckPromise = null;
+    _d1StatusFailedAt = 0;
+    _d1LiveNoticePending = true;
     const exactKeys = [
       'alhuda_owner_token', 'alhuda_manager_token', 'alhuda_teacher_token', 'alhuda_parent_token',
       'alhuda_logged_in_owner', 'alhuda_logged_in_manager', 'alhuda_logged_in_teacher', 'alhuda_logged_in_parent',
