@@ -47,7 +47,7 @@
   </script>
 
   <!-- Supabase JS Client & Cloudflare D1/R2 Universal Engine -->
-  
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="js/cloudflare-db.js"></script>
   <!-- Al-Huda Curriculum & Course Material Registry Engine -->
   <script src="curriculum_data.js"></script>
@@ -171,7 +171,7 @@
               AL-HUDA ISLAMIC CENTRE
               <span class="text-[10px] font-sans font-bold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">Student Portal</span>
             </div>
-            <p class="text-[11px] text-slate-300 hidden sm:block">Live Learning, Sabaq Progress &amp; Digital Library</p>
+            <p class="text-[11px] text-slate-300 hidden sm:block">Live Learning, Lesson Progress &amp; Digital Library</p>
           </div>
         </div>
 
@@ -263,7 +263,7 @@
           </div>
           <div>
             <h2 class="text-base sm:text-lg font-extrabold text-slate-900">Parent &amp; Student Login</h2>
-            <p class="text-xs text-slate-500">Sign in to view your family's authorized students, Sabaq &amp; fee ledger</p>
+            <p class="text-xs text-slate-500">Sign in to view your family's authorized students, lesson progress &amp; fee ledger</p>
           </div>
         </div>
 
@@ -362,7 +362,7 @@
             </div>
             <h2 class="text-xl font-black text-slate-900" id="liveClassSubject">Quran Recitation &amp; Tajweed</h2>
             <p class="text-xs text-slate-600" id="liveClassMeta">
-              Assigned Teacher: <strong class="text-slate-800" id="liveClassTeacher">Qari / Ustadh</strong> | 
+              Assigned Teacher: <strong class="text-slate-800" id="liveClassTeacher">Teacher</strong> |
               Time Slot: <strong class="text-slate-800 font-mono" id="liveClassTime">Flexible</strong>
             </p>
           </div>
@@ -528,7 +528,7 @@
                 <th class="p-3.5">Date</th>
                 <th class="p-3.5">Status</th>
                 <th class="p-3.5">Teacher</th>
-                <th class="p-3.5">Sabaq / Topic</th>
+                <th class="p-3.5">Lesson / Topic</th>
                 <th class="p-3.5 text-right">Action</th>
               </tr>
             </thead>
@@ -851,16 +851,22 @@
           </div>
           <div>
             <h3 class="font-black text-sm text-slate-900">Submit Leave Request / Notice</h3>
-            <span class="text-[10px] text-slate-400">Direct notification to Academy Ustadh</span>
+            <span class="text-[10px] text-slate-400">Requests are reviewed by the administration.</span>
           </div>
         </div>
         <button onclick="closeModal('modalLeaveRequest')" class="text-slate-400 hover:text-slate-700 text-xl font-bold">&times;</button>
       </div>
 
       <form onsubmit="handleLeaveRequestSubmit(event)" class="space-y-3 text-xs">
-        <div>
-          <label class="block font-bold text-slate-700 mb-1">Leave Date:</label>
-          <input type="date" id="leaveDateInput" required class="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-xl font-semibold focus:outline-emerald-600">
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <label class="block font-bold text-slate-700 mb-1">Start Date:</label>
+            <input type="date" id="leaveDateInput" required class="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-xl font-semibold focus:outline-emerald-600">
+          </div>
+          <div>
+            <label class="block font-bold text-slate-700 mb-1">End Date:</label>
+            <input type="date" id="leaveEndDateInput" required class="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-xl font-semibold focus:outline-emerald-600">
+          </div>
         </div>
 
         <div>
@@ -887,6 +893,13 @@
           </button>
         </div>
       </form>
+
+      <div class="border-t border-slate-200 pt-3">
+        <h4 class="font-black text-xs text-slate-800 mb-2">Your Leave Requests</h4>
+        <div id="parentLeaveRequestsList" class="space-y-2 text-xs text-slate-600">
+          <p class="text-slate-400">No leave requests yet.</p>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -1351,6 +1364,38 @@
       await renderCurrentStudentData();
     }
 
+    // Derived display label for a student's status (Batch 4, Option B —
+    // date-scoped leave): the stored status is never rewritten for a leave
+    // window. A student reads 'On Leave' only when the stored status is a
+    // legacy leave value, or while TODAY falls inside the approved leave
+    // window recorded in notes: on_leave === true and
+    // leave_start_date (if set) <= today < return_date (if set).
+    // Dates are 'YYYY-MM-DD' strings, so plain string comparison is exact.
+    function parentStudentStatusLabel(s) {
+      if (!s) return 'Active';
+      const stored = String(s.status || 'Active').trim();
+      const storedLower = stored.toLowerCase();
+      if (storedLower === 'on leave' || storedLower === 'leave') return 'On Leave';
+      let notes = {};
+      if (s.notes) {
+        if (typeof s.notes === 'object') {
+          notes = s.notes;
+        } else {
+          try {
+            const parsed = JSON.parse(s.notes);
+            if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) notes = parsed;
+          } catch (e) {}
+        }
+      }
+      if (notes && notes.on_leave === true) {
+        const today = new Date().toISOString().slice(0, 10);
+        const start = notes.leave_start_date ? String(notes.leave_start_date).slice(0, 10) : '';
+        const ret = notes.return_date ? String(notes.return_date).slice(0, 10) : '';
+        if ((!start || today >= start) && (!ret || today < ret)) return 'On Leave';
+      }
+      return stored;
+    }
+
     // Render Data for Current Student
     async function renderCurrentStudentData() {
       if (!CURRENT_STUDENT) return;
@@ -1456,7 +1501,7 @@
           liveBtn.removeAttribute('target');
           liveBtn.onclick = (e) => { e.preventDefault(); return false; };
           liveBtn.className = 'w-full sm:w-auto px-5 py-3 rounded-2xl bg-slate-100 text-slate-500 border border-slate-200 font-bold text-xs flex items-center justify-center gap-2 text-center cursor-not-allowed';
-          liveBtn.innerHTML = '<i class="fa-solid fa-video-slash text-slate-400"></i> Zoom meeting not configured.';
+          liveBtn.innerHTML = '<i class="fa-solid fa-video-slash text-slate-400"></i> Class link not set yet';
         }
       }
 
@@ -1627,7 +1672,7 @@
               </div>
               <div>
                 <span class="text-[11px] font-bold px-2.5 py-0.5 rounded-lg border ${statusClass}">
-                  Sabaq: ${meta?.status || 'Done'}
+                  Lesson: ${meta?.status || 'Done'}
                 </span>
               </div>
             </div>
@@ -1663,7 +1708,7 @@
       const heroBtn = document.getElementById('btnOpenLatestSabaq');
       if (heroBtn && LATEST_SABAQ_META) {
         const paraText = LATEST_SABAQ_META.para ? `Para ${escapeHtml(LATEST_SABAQ_META.para)} • ` : '';
-        heroBtn.innerHTML = `<i class="fa-solid fa-book-open"></i> Read Sabaq: ${escapeHtml(LATEST_SABAQ_META.book_title || 'Lesson')} (${paraText}Pg ${Number(LATEST_SABAQ_META.page) || 1})`;
+        heroBtn.innerHTML = `<i class="fa-solid fa-book-open"></i> Read Lesson: ${escapeHtml(LATEST_SABAQ_META.book_title || 'Lesson')} (${paraText}Pg ${Number(LATEST_SABAQ_META.page) || 1})`;
       }
     }
 
@@ -1742,7 +1787,7 @@
                     <i class="fa-solid fa-video text-amber-300"></i> Join Zoom
                   </a>
                 ` : `
-                  <div class="text-[9px] font-semibold text-slate-400 italic">Zoom meeting not configured.</div>
+                  <div class="text-[9px] font-semibold text-slate-400 italic">Class link not set yet</div>
                 `}
               </div>
             ` : `
@@ -2377,7 +2422,9 @@
       try { deletedIds = JSON.parse(localStorage.getItem('alhuda_deleted_books') || '[]'); } catch(e){}
 
       const merged = Array.isArray(customBooks) ? [...customBooks] : [];
+      const builtinAllowlistP = Array.isArray(window.ALHUDA_BUILTIN_ALLOWLIST) ? window.ALHUDA_BUILTIN_ALLOWLIST : [];
       standardBooks.forEach(b => {
+        if (!builtinAllowlistP.includes(b.id)) return;
         if (!merged.some(m => m.id === b.id) && !deletedIds.includes(b.id)) {
           merged.push(b);
         }
@@ -2691,21 +2738,22 @@
         img.style.display = '';
 
         let pageUrl = '';
-        // Custom books hold authentic uploaded pages: never substitute a
-        // generated placeholder for them; show an honest state instead.
-        const isCustomBookP = !!(book && book.id && String(book.id).indexOf('custom-') === 0);
+        // Books hold authentic uploaded pages: never substitute a generated
+        // placeholder for them; show an honest state instead. The only
+        // exception is an explicitly allowlisted interactive built-in.
+        const isInteractiveBookP = !!((window.ALHUDA_BUILTIN_ALLOWLIST || []).includes(book && book.id));
         if (typeof CURRICULUM_DATA !== 'undefined' && typeof CURRICULUM_DATA.getPageUrl === 'function') {
-          const resolvedP = CURRICULUM_DATA.getPageUrl(book.id, ACTIVE_READER_PAGE, ACTIVE_READER_PARA, book.language);
-          pageUrl = (isCustomBookP && typeof resolvedP === 'string' && resolvedP.indexOf('data:image/svg') === 0) ? '' : resolvedP;
+          pageUrl = CURRICULUM_DATA.getPageUrl(book.id, ACTIVE_READER_PAGE, ACTIVE_READER_PARA, book.language);
         } else if (typeof book.getPageUrl === 'function') {
           pageUrl = book.getPageUrl(ACTIVE_READER_PAGE, ACTIVE_READER_PARA, book.language);
         } else if (book.pages && book.pages[ACTIVE_READER_PAGE - 1]) {
           pageUrl = book.pages[ACTIVE_READER_PAGE - 1];
-        } else if (!isCustomBookP && typeof generateDynamicSvgDataUri === 'function') {
-          pageUrl = generateDynamicSvgDataUri(book, ACTIVE_READER_PAGE, ACTIVE_READER_PARA, book.language);
+        }
+        if (!isInteractiveBookP && typeof pageUrl === 'string' && pageUrl.indexOf('data:image/svg') === 0) {
+          pageUrl = '';
         }
 
-        if (!pageUrl && isCustomBookP) {
+        if (!pageUrl && !isInteractiveBookP) {
           showParentReaderPageError(img, book, ACTIVE_READER_PAGE, 'Page not available.');
           return;
         }
@@ -2713,7 +2761,7 @@
         img.onload = () => { applyParentReaderZoom(); };
         img.onerror = () => {
           img.onerror = null;
-          if (isCustomBookP) {
+          if (!isInteractiveBookP) {
             // Authentic uploaded content: never fabricate a replacement page.
             showParentReaderPageError(img, book, ACTIVE_READER_PAGE, 'Could not load this page.');
             return;
@@ -3028,53 +3076,147 @@
     // LEAVE REQUEST & LOGOUT
     // ==========================================
     function openLeaveRequestModal() {
+      const today = new Date();
+      const todayStr = new Date(today.getTime() - (today.getTimezoneOffset() * 60000)).toISOString().slice(0, 10);
       const dInput = document.getElementById('leaveDateInput');
-      if (dInput) dInput.value = new Date().toISOString().slice(0, 10);
+      if (dInput) dInput.value = todayStr;
+      const endInput = document.getElementById('leaveEndDateInput');
+      if (endInput) endInput.value = todayStr;
+      renderParentLeaveRequests();
       openModal('modalLeaveRequest');
+    }
+
+    function getParentStudentNotes() {
+      if (!CURRENT_STUDENT) return {};
+      if (typeof CURRENT_STUDENT.notes === 'object' && CURRENT_STUDENT.notes !== null) {
+        return CURRENT_STUDENT.notes;
+      }
+      try {
+        const parsed = JSON.parse(CURRENT_STUDENT.notes || '{}');
+        return (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) ? parsed : {};
+      } catch (err) {
+        return CURRENT_STUDENT.notes ? { text: CURRENT_STUDENT.notes } : {};
+      }
+    }
+
+    function renderParentLeaveRequests() {
+      const container = document.getElementById('parentLeaveRequestsList');
+      if (!container) return;
+
+      const notesObj = getParentStudentNotes();
+      const requestsById = new Map();
+      const addRequest = (req) => {
+        if (!req || typeof req !== 'object') return;
+        const key = req.id || `${req.start_date || ''}|${req.return_date || req.end_date || ''}|${req.requested_at || req.created_at || ''}|${req.reason || ''}`;
+        requestsById.set(key, req);
+      };
+      if (Array.isArray(notesObj.leave_history)) notesObj.leave_history.forEach(addRequest);
+      // The current request is authoritative for its id because approval and
+      // decline update leave_request in the student's notes.
+      addRequest(notesObj.leave_request);
+
+      const requests = Array.from(requestsById.values()).sort((a, b) => {
+        const aTime = new Date(a.requested_at || a.created_at || 0).getTime() || 0;
+        const bTime = new Date(b.requested_at || b.created_at || 0).getTime() || 0;
+        return bTime - aTime;
+      });
+      if (requests.length === 0) {
+        container.innerHTML = '<p class="text-slate-400">No leave requests yet.</p>';
+        return;
+      }
+
+      container.innerHTML = requests.map(req => {
+        const rawStatus = String(req.status || 'pending').toLowerCase();
+        const statusLabel = rawStatus === 'approved' ? 'Approved' : (rawStatus === 'declined' || rawStatus === 'rejected') ? 'Rejected' : rawStatus === 'pending' ? 'Pending' : escapeHtml(req.status || 'Pending');
+        const statusClass = rawStatus === 'approved'
+          ? 'bg-emerald-100 text-emerald-800 border-emerald-200'
+          : (rawStatus === 'declined' || rawStatus === 'rejected')
+          ? 'bg-rose-100 text-rose-800 border-rose-200'
+          : 'bg-amber-100 text-amber-800 border-amber-200';
+        const endDate = req.return_date || req.end_date || req.start_date || '';
+        return `
+          <div class="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-1">
+            <div class="flex items-center justify-between gap-2 flex-wrap">
+              <span class="font-bold text-slate-800">${escapeHtml(req.start_date || '')} to ${escapeHtml(endDate)}</span>
+              <span class="px-2 py-0.5 rounded-full border text-[10px] font-black ${statusClass}">${statusLabel}</span>
+            </div>
+            <div><span class="font-bold text-slate-700">Reason:</span> ${escapeHtml(req.reason || 'Not specified')}</div>
+            ${(rawStatus === 'declined' || rawStatus === 'rejected') && req.decline_reason ? `<div><span class="font-bold text-rose-700">Decline reason:</span> ${escapeHtml(req.decline_reason)}</div>` : ''}
+          </div>
+        `;
+      }).join('');
     }
 
     async function handleLeaveRequestSubmit(e) {
       e.preventDefault();
-      const date = document.getElementById('leaveDateInput')?.value || new Date().toISOString().slice(0, 10);
+      const startDate = document.getElementById('leaveDateInput')?.value || '';
+      const endDate = document.getElementById('leaveEndDateInput')?.value || '';
       const reason = document.getElementById('leaveReasonSelect')?.value || 'Family / Personal';
       const msg = (document.getElementById('leaveMessageText')?.value || '').trim();
 
-      try {
-        if (typeof db !== 'undefined' && db && CURRENT_STUDENT && CURRENT_STUDENT.id) {
-          let notesObj = {};
-          try {
-            notesObj = typeof CURRENT_STUDENT.notes === 'object' && CURRENT_STUDENT.notes !== null
-              ? CURRENT_STUDENT.notes
-              : JSON.parse(CURRENT_STUDENT.notes || '{}');
-          } catch (err) {
-            notesObj = {};
-          }
-          const leaveEntry = {
-            leave_id: 'LV-PAR-' + Date.now(),
-            start_date: date,
-            return_date: date,
-            reason: reason,
-            notes: msg || 'Submitted via Student/Parent Portal',
-            status: 'Active',
-            created_at: new Date().toISOString()
-          };
-          notesObj.leave_info = leaveEntry;
-          if (!Array.isArray(notesObj.leave_history)) notesObj.leave_history = [];
-          notesObj.leave_history.unshift(leaveEntry);
-
-          await db.from('students').update({
-            status: 'On Leave',
-            notes: JSON.stringify(notesObj)
-          }).eq('id', CURRENT_STUDENT.id);
-        }
-      } catch (err) {
-        console.warn('[Parent Leave Sync] Notice:', err);
+      if (!startDate || !endDate) {
+        alert('Please select both a start date and an end date.');
+        return;
+      }
+      if (endDate < startDate) {
+        alert('End date cannot be before the start date.');
+        return;
+      }
+      const today = new Date();
+      const todayStr = new Date(today.getTime() - (today.getTimezoneOffset() * 60000)).toISOString().slice(0, 10);
+      if (startDate < todayStr) {
+        alert('Start date cannot be in the past.');
+        return;
       }
 
-      alert(`✅ Leave Request Submitted & Synced Successfully!\n\nDate: ${date}\nReason: ${reason}\nStudent: ${CURRENT_STUDENT?.name || 'Student'}\n\nAdministration & your Ustadh have been notified in real time.`);
-      closeModal('modalLeaveRequest');
-      if (typeof switchStudentAccount === 'function' && CURRENT_STUDENT?.id) {
-        switchStudentAccount(CURRENT_STUDENT.id);
+      try {
+        if (typeof db === 'undefined' || !db || !CURRENT_STUDENT || !CURRENT_STUDENT.id) {
+          throw new Error('Student record is not available.');
+        }
+
+        const { data: freshStudent, error: fetchError } = await db.from('students').select('*').eq('id', CURRENT_STUDENT.id).single();
+        if (fetchError) throw fetchError;
+        if (!freshStudent) throw new Error('Student record is not available.');
+
+        let notesObj = {};
+        if (typeof freshStudent.notes === 'object' && freshStudent.notes !== null && !Array.isArray(freshStudent.notes)) {
+          notesObj = freshStudent.notes;
+        } else {
+          try {
+            const parsed = JSON.parse(freshStudent.notes || '{}');
+            notesObj = (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) ? parsed : {};
+          } catch (err) {
+            notesObj = freshStudent.notes ? { text: freshStudent.notes } : {};
+          }
+        }
+
+        const leaveRequest = {
+          id: 'REQ-' + Date.now(),
+          student_id: CURRENT_STUDENT.id,
+          student_name: CURRENT_STUDENT.name || freshStudent.name || 'Student',
+          start_date: startDate,
+          return_date: endDate,
+          reason: reason,
+          notes: msg,
+          status: 'pending',
+          requested_at: new Date().toISOString(),
+          source: 'parent',
+          parent_name: CURRENT_AUTH_FAMILY?.parent_name || CURRENT_STUDENT?.parent_name || ''
+        };
+        notesObj.leave_request = leaveRequest;
+        if (!Array.isArray(notesObj.leave_history)) notesObj.leave_history = [];
+        notesObj.leave_history.push(leaveRequest);
+
+        const { error: updateError } = await db.from('students').update({
+          notes: JSON.stringify(notesObj)
+        }).eq('id', CURRENT_STUDENT.id);
+        if (updateError) throw updateError;
+
+        CURRENT_STUDENT.notes = notesObj;
+        renderParentLeaveRequests();
+        alert(`✅ Leave request sent.\n\nYour leave request has been sent to the administration for approval.\n\nStudent: ${leaveRequest.student_name}\nDates: ${startDate} to ${endDate}\nReason: ${reason}\nStatus: Pending`);
+      } catch (err) {
+        alert(`Your leave request could NOT be sent. Please check your connection and try again.\n\n${err?.message || err || 'Unknown error'}`);
       }
     }
 

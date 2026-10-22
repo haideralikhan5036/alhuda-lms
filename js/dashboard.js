@@ -2231,7 +2231,7 @@
             student_name: 'Zayd Khan',
             parent_name: 'Imran Khan (FAM-001)',
             teacher_id: 'TCH-001',
-            teacher_name: 'Qari Abdul Rehman',
+            teacher_name: 'Abdul Rehman',
             category: 'Class Duration (Short / Late Join)',
             message: 'Class started 6 minutes late yesterday. Please ensure full 30-minute duration for Tajweed revision.',
             created_at: '2026-09-25 18:30',
@@ -2541,7 +2541,7 @@
 
       let stuObj = (ALL_STUDENTS || []).find(s => s.id === stuId);
       if (!stuObj) {
-        stuObj = { id: stuId, name: 'Zayd Khan', course_id: 'Tajweed & Quran', teachers: { full_name: 'Qari Abdul Rehman' } };
+        stuObj = { id: stuId, name: 'Zayd Khan', course_id: 'Tajweed & Quran', teachers: { full_name: 'Abdul Rehman' } };
       }
 
       let requestPayload = {};

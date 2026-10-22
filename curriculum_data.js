@@ -329,6 +329,15 @@ function generateDynamicSvgDataUri(book, pageNum, paraNum = null, language = nul
   return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svgXml);
 }
 
+// Built-in books are listed ONLY if allowlisted here. All other built-ins
+// have no real uploaded pages (their "pages" were generated placeholder
+// SVGs) and must never be listed in any portal, regardless of what the
+// alhuda_deleted_books tombstone contains. The Interactive Qaida is the one
+// exception: it is real, hand-authored interactive lesson content
+// (js/interactive_qaida.js), not generated placeholder pages.
+const ALHUDA_BUILTIN_ALLOWLIST = ['interactive-madani-qaida'];
+if (typeof window !== 'undefined') window.ALHUDA_BUILTIN_ALLOWLIST = ALHUDA_BUILTIN_ALLOWLIST;
+
 // Master standard curriculum array containing core academy syllabus
 const ALHUDA_CURRICULUM = [
   {
@@ -545,6 +554,11 @@ function getAllAvailableBooks() {
   const deleted = getDeletedBookIds();
   const merged = [...custom];
   standard.forEach(b => {
+    // Batch 4 (B13): built-in books are listed ONLY when allowlisted above.
+    // Every other built-in has no real uploaded pages and must never appear
+    // in any portal, whatever the deleted-books tombstone says. The
+    // tombstone filter itself is unchanged and still governs custom books.
+    if (!ALHUDA_BUILTIN_ALLOWLIST.includes(b.id)) return;
     if (!merged.some(m => m.id === b.id) && !deleted.includes(b.id)) {
       merged.push(b);
     }
@@ -583,7 +597,10 @@ const CURRICULUM_DATA = {
       return b.pages[(Number(pageNum) || 1) - 1];
     }
 
-    return generateDynamicSvgDataUri(b, pageNum, paraNum, language);
+    // Batch 4 (B13): no real page exists for this book/page — return an
+    // empty result so readers show their honest "not available" state.
+    // NEVER fall back to a generated placeholder SVG.
+    return '';
   },
   generateDynamicSvgPage: function(book, pageNum, paraNum = null, language = null) {
     return generateDynamicSvgDataUri(book, pageNum, paraNum, language);

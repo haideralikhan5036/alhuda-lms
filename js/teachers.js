@@ -215,10 +215,17 @@
       document.getElementById('quickZoomTeacherName').innerText = `${teacher.full_name}'s Zoom Classroom`;
       document.getElementById('quickZoomTeacherId').innerText = `${creds.teacher_id} • ${teacher.working_shift || 'Shift'}`;
 
-      const defaultMock = `https://zoom.us/j/${teacher.phone ? teacher.phone.replace(/[^0-9]/g, '') : '9876543210'}?pwd=alhuda_${(teacher.full_name||'').toLowerCase().replace(/[^a-z]/g, '')}`;
-      document.getElementById('quickZoomLinkInput').value = acc.zoom_link || defaultMock;
-      document.getElementById('quickZoomPmiInput').value = acc.zoom_meeting_id || (teacher.phone ? teacher.phone.replace(/[^0-9]/g, '') : '');
-      document.getElementById('quickZoomPasscodeInput').value = acc.zoom_passcode || '123456';
+      // S8 (Batch 4): NEVER fabricate a Zoom link/meeting ID/passcode.
+      // Empty stays empty until a real link is typed in.
+      const quickZoomLinkInput = document.getElementById('quickZoomLinkInput');
+      quickZoomLinkInput.value = acc.zoom_link || '';
+      quickZoomLinkInput.placeholder = "Paste the teacher's real Zoom link";
+      const quickZoomPmiInput = document.getElementById('quickZoomPmiInput');
+      quickZoomPmiInput.value = acc.zoom_meeting_id || '';
+      quickZoomPmiInput.placeholder = 'Meeting ID (optional)';
+      const quickZoomPasscodeInput = document.getElementById('quickZoomPasscodeInput');
+      quickZoomPasscodeInput.value = acc.zoom_passcode || '';
+      quickZoomPasscodeInput.placeholder = 'Passcode (optional)';
 
       openModal('modalTeacherQuickZoom');
     }
@@ -274,7 +281,13 @@
       if (!teacher) return;
       const accounts = getTeacherAccounts();
       const acc = accounts[teacherId] || {};
-      const zoomLink = acc.zoom_link || `https://zoom.us/j/${teacher.phone ? teacher.phone.replace(/[^0-9]/g, '') : '9876543210'}?pwd=alhuda_${(teacher.full_name||'').toLowerCase().replace(/[^a-z]/g, '')}`;
+      const zoomLink = acc.zoom_link || '';
+
+      // S8 (Batch 4): no stored link = nothing to sync. Never sync a mock.
+      if (!zoomLink) {
+        alert('No Zoom link is saved for this teacher yet. Add the real link first.');
+        return;
+      }
 
       if (await lmsConfirm(`Cascade & sync Zoom link for "${teacher.full_name}" to all assigned students and weekly schedules now?\n\nLink: ${zoomLink}`)) {
         const res = await syncTeacherZoomToAllStudents(teacherId, zoomLink);
@@ -793,11 +806,18 @@
         ? 'Leave blank to keep current password'
         : 'No password set — enter one (min 10 characters) to set it now';
 
-      // Populate Zoom classroom fields
-      const defaultMockZoom = `https://zoom.us/j/${teacher.phone ? teacher.phone.replace(/[^0-9]/g, '') : '9876543210'}?pwd=alhuda_${(teacher.full_name||'').toLowerCase().replace(/[^a-z]/g, '')}`;
-      document.getElementById('tZoomLink').value = acc.zoom_link || defaultMockZoom;
-      document.getElementById('tZoomMeetingId').value = acc.zoom_meeting_id || (teacher.phone ? teacher.phone.replace(/[^0-9]/g, '') : '');
-      document.getElementById('tZoomPasscode').value = acc.zoom_passcode || '123456';
+      // Populate Zoom classroom fields.
+      // S8 (Batch 4): NEVER fabricate a Zoom link/meeting ID/passcode —
+      // empty stays empty (with a hint) until a real link is typed in.
+      const tZoomLinkInput = document.getElementById('tZoomLink');
+      tZoomLinkInput.value = acc.zoom_link || '';
+      tZoomLinkInput.placeholder = "Paste the teacher's real Zoom link";
+      const tZoomMeetingIdInput = document.getElementById('tZoomMeetingId');
+      tZoomMeetingIdInput.value = acc.zoom_meeting_id || '';
+      tZoomMeetingIdInput.placeholder = 'Meeting ID (optional)';
+      const tZoomPasscodeInput = document.getElementById('tZoomPasscode');
+      tZoomPasscodeInput.value = acc.zoom_passcode || '';
+      tZoomPasscodeInput.placeholder = 'Passcode (optional)';
       document.getElementById('tZoomHostKey').value = acc.zoom_host_key || '';
       const autoSyncCheck = document.getElementById('tZoomAutoSync');
       if (autoSyncCheck) autoSyncCheck.checked = true;
@@ -1284,16 +1304,20 @@
                 <div class="flex justify-between items-center text-[10px] font-bold text-blue-900 uppercase tracking-wide">
                   <span class="flex items-center gap-1"><i class="fa-solid fa-video text-blue-600"></i> Dedicated Zoom Classroom</span>
                   <span class="px-1.5 py-0.2 rounded text-[9px] font-extrabold ${acc.zoom_link ? 'bg-blue-600 text-white' : 'bg-slate-200 text-slate-600'}">
-                    ${acc.zoom_link ? 'CONFIGURED' : 'DEMO ROOM'}
+                    ${acc.zoom_link ? 'CONFIGURED' : 'NOT SET'}
                   </span>
                 </div>
                 <div class="bg-white p-1.5 rounded border border-blue-100 flex items-center justify-between gap-1 text-[11px] font-mono">
-                  <span class="truncate text-blue-950 font-bold max-w-[200px]" title="${acc.zoom_link || `https://zoom.us/j/${t.phone ? t.phone.replace(/[^0-9]/g, '') : '9876543210'}?pwd=alhuda_${(t.full_name||'').toLowerCase().replace(/[^a-z]/g, '')}`}">
-                    ${acc.zoom_link || `https://zoom.us/j/${t.phone ? t.phone.replace(/[^0-9]/g, '') : '9876543210'}?pwd=alhuda_${(t.full_name||'').toLowerCase().replace(/[^a-z]/g, '')}`}
+                  ${acc.zoom_link ? `
+                  <span class="truncate text-blue-950 font-bold max-w-[200px]" title="${acc.zoom_link}">
+                    ${acc.zoom_link}
                   </span>
-                  <button onclick="navigator.clipboard.writeText('${acc.zoom_link || `https://zoom.us/j/${t.phone ? t.phone.replace(/[^0-9]/g, '') : '9876543210'}?pwd=alhuda_${(t.full_name||'').toLowerCase().replace(/[^a-z]/g, '')}`}'); alert('Zoom link copied to clipboard!');" class="text-blue-600 hover:text-blue-800 font-bold text-[10px]" title="Copy Zoom Link">
+                  <button onclick="navigator.clipboard.writeText('${acc.zoom_link}'); alert('Zoom link copied to clipboard!');" class="text-blue-600 hover:text-blue-800 font-bold text-[10px]" title="Copy Zoom Link">
                     <i class="fa-regular fa-copy"></i>
                   </button>
+                  ` : `
+                  <span class="text-slate-500 font-bold">Class link not set yet</span>
+                  `}
                 </div>
                 <div class="grid grid-cols-2 gap-1.5 pt-0.5">
                   <button onclick="openQuickZoomModal('${t.id}')" class="py-1.5 px-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-bold text-[10px] flex items-center justify-center gap-1 shadow-2xs transition">
@@ -1502,7 +1526,7 @@
           }
         }
 
-        alert(`✅ Teacher Profile Updated Successfully!\n\n👨‍🏫 Teacher: ${full_name}\n🆔 Teacher ID: ${teacher_id_code}\n👤 Portal Username: ${username}\n${pwStatusLine}\n🕒 Shift: ${working_shift}\n📹 Zoom: ${zoom_link || 'Default Room'}`);
+        alert(`✅ Teacher Profile Updated Successfully!\n\n👨‍🏫 Teacher: ${full_name}\n🆔 Teacher ID: ${teacher_id_code}\n👤 Portal Username: ${username}\n${pwStatusLine}\n🕒 Shift: ${working_shift}\n📹 Zoom: ${zoom_link || 'Not set yet'}`);
       } else {
         // INSERT MODE
         const { data, error } = await db.from('teachers').insert([{

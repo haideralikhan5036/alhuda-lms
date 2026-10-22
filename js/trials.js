@@ -1250,7 +1250,9 @@
             course: trial.course,
             teacherName: teacherName,
             scheduleText: `${days_per_week} (${trial.pkt_slot || 'Regular Timetable'} PKT)`,
-            zoomLink: permanent_zoom_link || trial.meeting_link || 'https://zoom.us/j/alhuda-class',
+            // S8 (Batch 4): no fabricated fallback link — empty renders the
+            // email template's "Zoom meeting not configured." text instead.
+            zoomLink: permanent_zoom_link || trial.meeting_link || '',
             credentials: {
               username
             }

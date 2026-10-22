@@ -376,11 +376,9 @@
           if (meta.zoom_link) zoomLink = meta.zoom_link;
         } catch(e) {}
       }
-      if (!zoomLink && teacher && (teacher.phone || teacher.full_name)) {
-        const cleanPhone = (teacher.phone || '').replace(/[^0-9]/g, '') || '9876543210';
-        const cleanName = (teacher.full_name || '').toLowerCase().replace(/[^a-z]/g, '') || 'classroom';
-        zoomLink = `https://zoom.us/j/${cleanPhone}?pwd=alhuda_${cleanName}`;
-      }
+      // S8 (Batch 4): NEVER fabricate a Zoom link from the teacher's phone
+      // or name. No stored link anywhere = empty string, and callers show
+      // "Class link not set yet" instead of a fake room.
       return (zoomLink || '').trim();
     }
     window.getCanonicalTeacherZoomLink = getCanonicalTeacherZoomLink;
@@ -403,10 +401,10 @@
         }
         if (zoomWarn) zoomWarn.classList.add('hidden');
       } else {
-        zoomInp.value = zoomLink || '';
+        zoomInp.value = '';
         if (zoomBadge) {
           zoomBadge.className = "text-[10px] px-2 py-0.5 rounded-full font-extrabold bg-rose-100 text-rose-800 border border-rose-300";
-          zoomBadge.innerHTML = '<i class="fa-solid fa-triangle-exclamation text-rose-600 mr-1"></i> Missing Zoom Link';
+          zoomBadge.innerHTML = '<i class="fa-solid fa-triangle-exclamation text-rose-600 mr-1"></i> Class link not set yet';
         }
         if (zoomWarn) zoomWarn.classList.remove('hidden');
       }
@@ -729,7 +727,21 @@
 
         const zoomInputVal = (document.getElementById('stuTeacherZoomLink')?.value || '').trim();
         const teacherZoomCanonical = getCanonicalTeacherZoomLink(assigned_teacher_id);
-        const resolvedZoomLink = zoomInputVal || teacherZoomCanonical || '';
+        let resolvedZoomLink = zoomInputVal || teacherZoomCanonical || '';
+        if (!resolvedZoomLink) {
+          // S8 (Batch 4): an empty resolution must never ERASE a link the
+          // student already has stored — keep the existing student-level
+          // value when the teacher currently has none.
+          const existingStu = (window.ALL_STUDENTS || []).find(s => String(s.id) === String(id));
+          if (existingStu && existingStu.notes) {
+            try {
+              const existingMeta = typeof existingStu.notes === 'string' ? JSON.parse(existingStu.notes) : existingStu.notes;
+              if (existingMeta.meeting_link || existingMeta.zoom_link) {
+                resolvedZoomLink = existingMeta.meeting_link || existingMeta.zoom_link;
+              }
+            } catch(e) {}
+          }
+        }
 
         const notesMeta = JSON.stringify({
           language,
