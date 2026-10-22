@@ -25,8 +25,18 @@ const ALLOWED_TABLES = new Set([
   'system_settings',
   // Batch 2.1: readable by the OWNER through this engine; the Worker
   // denies it to every other role before delegation (see worker.js).
-  'audit_log'
+  'audit_log',
+  // Batch 6B: financial record tables (fee payments + payroll). See
+  // FINANCIAL_TABLES below for the stricter write semantics they get.
+  'salary_slips',
+  'salary_adjustments'
 ]);
+
+// Batch 6B: financial record tables. Inserts here are plain INSERTs — a
+// UNIQUE conflict must surface as an error, never silently replace an
+// existing record the way INSERT OR REPLACE would — and hard deletes are
+// rejected for every role: financial rows are cancelled, not deleted.
+const FINANCIAL_TABLES = new Set(['payments', 'salary_slips', 'salary_adjustments']);
 
 /**
  * Build CORS headers from an explicit allowlist.
@@ -126,18 +136,48 @@ const SCHEMA_STATEMENTS = [
     remarks TEXT,
     created_at TEXT DEFAULT (datetime('now'))
   )`,
+  // Batch 6B: full fee-payment shape (6A design). On pre-existing tables
+  // the extra columns arrive via the swallowed ALTERs in ensureSchema;
+  // receipt_no uniqueness arrives as a unique INDEX (see ensureSchema),
+  // because SQLite cannot add a UNIQUE column to an existing table.
   `CREATE TABLE IF NOT EXISTS payments (
     id TEXT PRIMARY KEY,
-    family_id TEXT,
-    amount REAL DEFAULT 0,
-    currency TEXT DEFAULT 'GBP',
-    payment_month TEXT,
+    family_id TEXT NOT NULL,
+    receipt_no TEXT,
+    record_kind TEXT DEFAULT 'payment',
+    billing_period TEXT,
+    month_label TEXT,
     payment_date TEXT,
+    amount_paid REAL DEFAULT 0,
+    amount REAL DEFAULT 0,
+    discount REAL DEFAULT 0,
+    total_payable REAL,
+    monthly_fee REAL,
+    previous_balance REAL DEFAULT 0,
+    credit_deducted REAL DEFAULT 0,
+    remaining_balance REAL,
+    excess_paid REAL DEFAULT 0,
+    currency TEXT DEFAULT 'GBP',
     payment_method TEXT DEFAULT 'Bank Transfer',
+    transaction_id TEXT,
     status TEXT DEFAULT 'Paid',
+    status_label TEXT,
+    is_prorated INTEGER DEFAULT 0,
+    is_advance INTEGER DEFAULT 0,
+    advance_months_count INTEGER DEFAULT 0,
+    active_days INTEGER DEFAULT 0,
+    joining_date TEXT,
+    students_names TEXT,
     receipt_url TEXT,
     notes TEXT,
-    created_at TEXT DEFAULT (datetime('now'))
+    created_by TEXT,
+    created_at TEXT DEFAULT (datetime('now')),
+    updated_at TEXT,
+    cancelled_at TEXT,
+    cancel_reason TEXT,
+    cancelled_by TEXT,
+    legacy_json TEXT,
+    legacy_source TEXT
   )`,
   `CREATE TABLE IF NOT EXISTS leave_requests (
     id TEXT PRIMARY KEY,
@@ -187,6 +227,56 @@ const SCHEMA_STATEMENTS = [
     table_name TEXT,
     record_id TEXT,
     created_at TEXT DEFAULT (datetime('now'))
+  )`,
+  // Batch 6B: one row per teacher per month. UNIQUE(teacher_id, period)
+  // is the database-level guarantee; slip_no gets its own unique index
+  // in ensureSchema.
+  `CREATE TABLE IF NOT EXISTS salary_slips (
+    id TEXT PRIMARY KEY,
+    teacher_id TEXT NOT NULL,
+    period TEXT NOT NULL,
+    slip_no TEXT,
+    month_label TEXT,
+    base_subtotal REAL DEFAULT 0,
+    bonus REAL DEFAULT 0,
+    deduction_total REAL DEFAULT 0,
+    advance_deducted REAL DEFAULT 0,
+    net_payable REAL DEFAULT 0,
+    status TEXT DEFAULT 'Pending',
+    paid_at TEXT,
+    remarks TEXT,
+    student_items_snapshot TEXT,
+    created_by TEXT,
+    created_at TEXT DEFAULT (datetime('now')),
+    updated_at TEXT,
+    cancelled_at TEXT,
+    cancel_reason TEXT,
+    cancelled_by TEXT,
+    legacy_json TEXT,
+    legacy_key TEXT,
+    UNIQUE (teacher_id, period)
+  )`,
+  // Batch 6B: itemised bonus / deduction / advance records that feed a
+  // month's slip (kind: 'bonus' | 'deduction' | 'advance'; the advance
+  // columns stay unused until advance tracking ships).
+  `CREATE TABLE IF NOT EXISTS salary_adjustments (
+    id TEXT PRIMARY KEY,
+    teacher_id TEXT NOT NULL,
+    period TEXT,
+    kind TEXT,
+    category TEXT,
+    amount REAL DEFAULT 0,
+    advance_remaining REAL,
+    recovery_per_month REAL,
+    reason TEXT,
+    adjustment_date TEXT,
+    status TEXT DEFAULT 'Applied',
+    created_by TEXT,
+    created_at TEXT DEFAULT (datetime('now')),
+    cancelled_at TEXT,
+    cancel_reason TEXT,
+    cancelled_by TEXT,
+    legacy_json TEXT
   )`
 ];
 
@@ -214,6 +304,50 @@ async function ensureSchema(db) {
   try { await db.prepare('ALTER TABLE attendance_logs ADD COLUMN started_at TEXT').run(); } catch (e) {}
   try { await db.prepare('ALTER TABLE attendance_logs ADD COLUMN completed_at TEXT').run(); } catch (e) {}
   try { await db.prepare('ALTER TABLE attendance_logs ADD COLUMN recorded_at TEXT').run(); } catch (e) {}
+  // Batch 6B: schema patches for the pre-existing payments table (fresh
+  // installs already carry these columns from the CREATE TABLE above;
+  // ADD COLUMN on an existing column errors and is swallowed, as above).
+  try { await db.prepare('ALTER TABLE payments ADD COLUMN receipt_no TEXT').run(); } catch (e) {}
+  try { await db.prepare("ALTER TABLE payments ADD COLUMN record_kind TEXT DEFAULT 'payment'").run(); } catch (e) {}
+  try { await db.prepare('ALTER TABLE payments ADD COLUMN billing_period TEXT').run(); } catch (e) {}
+  try { await db.prepare('ALTER TABLE payments ADD COLUMN month_label TEXT').run(); } catch (e) {}
+  try { await db.prepare('ALTER TABLE payments ADD COLUMN amount_paid REAL DEFAULT 0').run(); } catch (e) {}
+  try { await db.prepare('ALTER TABLE payments ADD COLUMN discount REAL DEFAULT 0').run(); } catch (e) {}
+  try { await db.prepare('ALTER TABLE payments ADD COLUMN total_payable REAL').run(); } catch (e) {}
+  try { await db.prepare('ALTER TABLE payments ADD COLUMN monthly_fee REAL').run(); } catch (e) {}
+  try { await db.prepare('ALTER TABLE payments ADD COLUMN previous_balance REAL DEFAULT 0').run(); } catch (e) {}
+  try { await db.prepare('ALTER TABLE payments ADD COLUMN credit_deducted REAL DEFAULT 0').run(); } catch (e) {}
+  try { await db.prepare('ALTER TABLE payments ADD COLUMN remaining_balance REAL').run(); } catch (e) {}
+  try { await db.prepare('ALTER TABLE payments ADD COLUMN excess_paid REAL DEFAULT 0').run(); } catch (e) {}
+  try { await db.prepare('ALTER TABLE payments ADD COLUMN transaction_id TEXT').run(); } catch (e) {}
+  try { await db.prepare('ALTER TABLE payments ADD COLUMN status_label TEXT').run(); } catch (e) {}
+  try { await db.prepare('ALTER TABLE payments ADD COLUMN is_prorated INTEGER DEFAULT 0').run(); } catch (e) {}
+  try { await db.prepare('ALTER TABLE payments ADD COLUMN is_advance INTEGER DEFAULT 0').run(); } catch (e) {}
+  try { await db.prepare('ALTER TABLE payments ADD COLUMN advance_months_count INTEGER DEFAULT 0').run(); } catch (e) {}
+  try { await db.prepare('ALTER TABLE payments ADD COLUMN active_days INTEGER DEFAULT 0').run(); } catch (e) {}
+  try { await db.prepare('ALTER TABLE payments ADD COLUMN joining_date TEXT').run(); } catch (e) {}
+  try { await db.prepare('ALTER TABLE payments ADD COLUMN students_names TEXT').run(); } catch (e) {}
+  try { await db.prepare('ALTER TABLE payments ADD COLUMN created_by TEXT').run(); } catch (e) {}
+  try { await db.prepare('ALTER TABLE payments ADD COLUMN updated_at TEXT').run(); } catch (e) {}
+  try { await db.prepare('ALTER TABLE payments ADD COLUMN cancelled_at TEXT').run(); } catch (e) {}
+  try { await db.prepare('ALTER TABLE payments ADD COLUMN cancel_reason TEXT').run(); } catch (e) {}
+  try { await db.prepare('ALTER TABLE payments ADD COLUMN cancelled_by TEXT').run(); } catch (e) {}
+  try { await db.prepare('ALTER TABLE payments ADD COLUMN legacy_json TEXT').run(); } catch (e) {}
+  try { await db.prepare('ALTER TABLE payments ADD COLUMN legacy_source TEXT').run(); } catch (e) {}
+  // Batch 6B: indexes for the financial tables. These run AFTER the
+  // payments ALTERs above so the indexed columns exist on pre-existing
+  // tables; IF NOT EXISTS makes them no-ops once present. A UNIQUE index
+  // (not a column constraint) is how receipt_no / slip_no uniqueness
+  // reaches tables created before those columns existed — and the index
+  // names deliberately contain the column name, because SQLite names the
+  // INDEX (not the column) in its UNIQUE-constraint error text for
+  // index-based constraints, and the engine maps errors by that text.
+  try { await db.prepare('CREATE UNIQUE INDEX IF NOT EXISTS idx_payments_receipt_no_unique ON payments (receipt_no)').run(); } catch (e) {}
+  try { await db.prepare('CREATE INDEX IF NOT EXISTS idx_payments_family_period ON payments (family_id, billing_period)').run(); } catch (e) {}
+  try { await db.prepare('CREATE INDEX IF NOT EXISTS idx_payments_status ON payments (status)').run(); } catch (e) {}
+  try { await db.prepare('CREATE UNIQUE INDEX IF NOT EXISTS idx_salary_slips_slip_no_unique ON salary_slips (slip_no)').run(); } catch (e) {}
+  try { await db.prepare('CREATE INDEX IF NOT EXISTS idx_salary_slips_teacher_period ON salary_slips (teacher_id, period)').run(); } catch (e) {}
+  try { await db.prepare('CREATE INDEX IF NOT EXISTS idx_salary_adjustments_teacher_period ON salary_adjustments (teacher_id, period)').run(); } catch (e) {}
 }
 
 function generateId(table) {
@@ -226,7 +360,9 @@ function generateId(table) {
     payments: 'PAY-',
     leave_requests: 'LVR-',
     trial_students: 'TRL-',
-    system_settings: 'SYS-'
+    system_settings: 'SYS-',
+    salary_slips: 'SAL-',
+    salary_adjustments: 'ADJ-'
   };
   const prefix = prefixMap[table] || 'ID-';
   return prefix + Date.now().toString(36).toUpperCase() + '-' + Math.random().toString(36).substring(2, 6).toUpperCase();
@@ -347,6 +483,28 @@ function jsonResponse(obj, status, corsHeaders) {
   });
 }
 
+// Batch 6B: map a UNIQUE-constraint failure on a financial table to a
+// clear, user-facing message (returned as HTTP 409 by the insert path).
+// SQLite names the failed column for table constraints
+// ("UNIQUE constraint failed: salary_slips.teacher_id, ...") and the
+// failed INDEX for index constraints ("... index 'idx_payments_receipt_no_unique'"),
+// so both spellings are matched. Returns null for anything else, and the
+// caller falls back to the existing generic-500 behaviour.
+function financialUniqueErrorMessage(table, err) {
+  const msg = String((err && err.message) || err || '');
+  if (!/UNIQUE constraint failed/i.test(msg)) return null;
+  if (table === 'payments') {
+    if (/receipt_no/.test(msg)) return 'Duplicate receipt number';
+    return null;
+  }
+  if (table === 'salary_slips') {
+    if (/teacher_id|period|slip_no/.test(msg)) return 'A slip already exists for this teacher and month';
+    return null;
+  }
+  if (table === 'salary_adjustments') return 'Record already exists';
+  return null;
+}
+
 export async function onRequest(context) {
   const { request, env } = context;
 
@@ -387,6 +545,18 @@ export async function onRequest(context) {
       return jsonResponse(
         { data: null, error: { message: `Invalid table: ${table}` } },
         400,
+        corsHeaders
+      );
+    }
+
+    // Batch 6B: financial records are never hard-deleted, by any role —
+    // they are cancelled with a reason instead. The Worker applies the
+    // same rule before delegating; this engine-level check is the
+    // guarantee even for a caller that reaches the engine directly.
+    if (action === 'delete' && FINANCIAL_TABLES.has(table)) {
+      return jsonResponse(
+        { error: 'Financial records cannot be deleted. Cancel the record instead.' },
+        403,
         corsHeaders
       );
     }
@@ -444,6 +614,23 @@ export async function onRequest(context) {
     if (action === 'insert' || action === 'upsert') {
       const rows = Array.isArray(values) ? values : [values || {}];
       const inserted = [];
+      const isFinancial = FINANCIAL_TABLES.has(table);
+
+      // Batch 6B: a payment must always name its family. The table cannot
+      // enforce NOT NULL on installs that predate the column, so the
+      // engine checks up front — before any row of the batch is written.
+      if (table === 'payments') {
+        for (const rawRow of rows) {
+          const fam = rawRow && rawRow.family_id != null ? String(rawRow.family_id).trim() : '';
+          if (!fam) {
+            return jsonResponse(
+              { error: 'family_id is required for payments' },
+              400,
+              corsHeaders
+            );
+          }
+        }
+      }
 
       for (const rawRow of rows) {
         const row = { ...rawRow };
@@ -483,8 +670,47 @@ export async function onRequest(context) {
           return v === undefined ? null : v;
         });
 
-        const sql = `INSERT OR REPLACE INTO ${table} (${cols.join(', ')}) VALUES (${placeholders})`;
-        await d1.prepare(sql).bind(...bindVals).run();
+        // Batch 6B: financial tables use plain INSERT — never REPLACE.
+        // INSERT OR REPLACE resolves a UNIQUE conflict by DELETING the
+        // conflicting row and inserting the new one, silently: one
+        // receipt could overwrite another. A plain INSERT instead fails
+        // and deletes NOTHING. An upsert on a financial table whose id
+        // already exists takes the true UPDATE-by-id path below.
+        let updateById = false;
+        if (isFinancial && action === 'upsert') {
+          const existing = await d1.prepare(`SELECT id FROM ${table} WHERE id = ?`).bind(row.id).first();
+          updateById = !!existing;
+        }
+
+        try {
+          if (updateById) {
+            const setCols = cols.filter(c => c !== 'id');
+            if (setCols.length > 0) {
+              const setSql = setCols.map(c => `${c} = ?`).join(', ');
+              const setVals = setCols.map(c => bindVals[cols.indexOf(c)]);
+              await d1.prepare(`UPDATE ${table} SET ${setSql} WHERE id = ?`).bind(...setVals, row.id).run();
+            }
+          } else {
+            const verb = isFinancial ? 'INSERT' : 'INSERT OR REPLACE';
+            const sql = `${verb} INTO ${table} (${cols.join(', ')}) VALUES (${placeholders})`;
+            await d1.prepare(sql).bind(...bindVals).run();
+          }
+        } catch (err) {
+          // A UNIQUE conflict on a financial table is a user error, not
+          // a server error: surface it as a clear 409. Nothing was
+          // deleted by the failed write (plain INSERT semantics).
+          if (isFinancial) {
+            const uniqueMsg = financialUniqueErrorMessage(table, err);
+            if (uniqueMsg) {
+              return jsonResponse(
+                { data: null, error: { message: uniqueMsg } },
+                409,
+                corsHeaders
+              );
+            }
+          }
+          throw err;
+        }
         inserted.push(row);
       }
 

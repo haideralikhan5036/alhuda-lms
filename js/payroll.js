@@ -832,6 +832,26 @@
         syncGlobalSharedStateToCloud({ teacherId: CURRENT_SLIP_TEACHER_ID });
       }
 
+      // Batch 6B dual-write (fee_tables_v1 flag; no-op when off): the slip
+      // is also written to the salary_slips table. The table mints the
+      // slip_no on first write; it is written back into the stored legacy
+      // record (same localStorage map this save already uses) so every
+      // legacy copy carries the number.
+      try {
+        if (window.FeeTables && typeof window.FeeTables.dualWriteSlip === 'function') {
+          const dwRecord = { ...savedSalaries[slipKey], slip_key: slipKey };
+          if (typeof CURRENT_SLIP_DATA.paid_at !== 'undefined') dwRecord.paid_at = CURRENT_SLIP_DATA.paid_at;
+          window.FeeTables.dualWriteSlip(CURRENT_SLIP_TEACHER_ID, dwRecord).then(function (res) {
+            try {
+              if (res && res.slipNo && !savedSalaries[slipKey].slip_no) {
+                savedSalaries[slipKey].slip_no = res.slipNo;
+                localStorage.setItem('alhuda_teacher_salaries', JSON.stringify(savedSalaries));
+              }
+            } catch (e) { /* slip_no write-back is best-effort */ }
+          }).catch(function () {});
+        }
+      } catch (e) { /* dual-write must never affect the legacy save */ }
+
       calculateMonthlySalaries();
       alert(`✅ Salary Slip Saved Successfully!\n\n👨‍🏫 Teacher: ${CURRENT_SLIP_DATA.teacher_name}\n💵 Base Teaching: ${baseSubtotal.toLocaleString()} PKR\n💰 Net Payable: ${netPayable.toLocaleString()} PKR\n📌 Status: ${savedSalaries[slipKey].status}`);
     }
@@ -857,9 +877,27 @@
 
       const nextStatus = (CURRENT_SLIP_DATA.status === 'Paid') ? 'Pending' : 'Paid';
       CURRENT_SLIP_DATA.status = nextStatus;
+      // Batch 6B: remembered so the dual-write below (and the one inside
+      // saveSalarySlipRecord) can stamp paid_at on the salary_slips row.
+      // Table-only: the legacy stored record does not gain this field.
+      CURRENT_SLIP_DATA.paid_at = nextStatus === 'Paid' ? new Date().toISOString() : null;
 
       updateSlipPaidButtonUI(nextStatus === 'Paid');
       saveSalarySlipRecord();
+
+      // Batch 6B dual-write (fee_tables_v1 flag; no-op when off).
+      try {
+        if (window.FeeTables && typeof window.FeeTables.dualWriteSlip === 'function') {
+          let dwSlip = null;
+          try {
+            const allSaved = JSON.parse(localStorage.getItem('alhuda_teacher_salaries') || '{}');
+            if (allSaved[CURRENT_SLIP_DATA.slip_key]) {
+              dwSlip = { ...allSaved[CURRENT_SLIP_DATA.slip_key], slip_key: CURRENT_SLIP_DATA.slip_key, status: nextStatus, paid_at: CURRENT_SLIP_DATA.paid_at };
+            }
+          } catch (e) { /* fall through without a slip */ }
+          if (dwSlip) window.FeeTables.dualWriteSlip(CURRENT_SLIP_TEACHER_ID, dwSlip);
+        }
+      } catch (e) { /* dual-write must never affect the legacy toggle */ }
 
       if (nextStatus === 'Paid') {
         setTimeout(async () => {
@@ -897,6 +935,14 @@
       if (typeof syncGlobalSharedStateToCloud === 'function') {
         syncGlobalSharedStateToCloud({ teacherId });
       }
+      // Batch 6B dual-write (fee_tables_v1 flag; no-op when off): paid_at is
+      // stamped on the salary_slips row only; the legacy record is unchanged.
+      try {
+        if (window.FeeTables && typeof window.FeeTables.dualWriteSlip === 'function') {
+          const dwSlip = { ...savedSalaries[slipKey], slip_key: slipKey, paid_at: newStatus === 'Paid' ? new Date().toISOString() : null };
+          window.FeeTables.dualWriteSlip(teacherId, dwSlip);
+        }
+      } catch (e) { /* dual-write must never affect the legacy toggle */ }
       calculateMonthlySalaries();
     }
 
