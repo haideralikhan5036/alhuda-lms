@@ -283,9 +283,16 @@ if (mergedDeleted.length > 0) {
       const customBooks = getCustomBooks();
       const standardBooks = (typeof ALHUDA_CURRICULUM !== 'undefined' && Array.isArray(ALHUDA_CURRICULUM)) ? ALHUDA_CURRICULUM : [];
       const deletedIds = getDeletedBookIds();
+      // Batch 4 (B13): built-in books are listed ONLY when allowlisted in
+      // curriculum_data.js (window.ALHUDA_BUILTIN_ALLOWLIST). Every other
+      // built-in has no real uploaded pages (its pages were generated
+      // placeholders) and must never be listed in any portal, regardless of
+      // what the deleted-books tombstone contains.
+      const builtinAllowlist = (typeof window !== 'undefined' && Array.isArray(window.ALHUDA_BUILTIN_ALLOWLIST)) ? window.ALHUDA_BUILTIN_ALLOWLIST : ['interactive-madani-qaida'];
 
       const merged = Array.isArray(customBooks) ? [...customBooks] : [];
       standardBooks.forEach(b => {
+        if (!builtinAllowlist.includes(b.id)) return;
         if (!merged.some(m => m.id === b.id) && !deletedIds.includes(b.id)) {
           merged.push(b);
         }
@@ -726,25 +733,31 @@ if (mergedDeleted.length > 0) {
         applyReaderZoom();
 
         // Get URL with Content-Type awareness (Juz/Para + Language)
-        // NOTE: custom books (id starts with 'custom-') hold authentic uploaded
-        // pages. Never substitute a generated placeholder for them: if the real
-        // page cannot be resolved, show an honest "not available" state instead.
+        // NOTE (Batch 4, B13): the honesty rule now applies to EVERY book,
+        // not only custom ones. Built-in books without real uploaded pages
+        // are no longer listed at all (see ALHUDA_BUILTIN_ALLOWLIST in
+        // curriculum_data.js), and a generated placeholder SVG must never
+        // be substituted for a missing page: if the real page cannot be
+        // resolved, show an honest "not available" state instead. The one
+        // exception is the Interactive Qaida, which is rendered by its own
+        // interactive renderer above and never reaches this image path.
         let pageUrl = '';
-        const isCustomBook = !!(book && book.id && String(book.id).indexOf('custom-') === 0);
+        const isInteractiveBook = !!(book && book.is_interactive);
         if (typeof CURRICULUM_DATA !== 'undefined' && typeof CURRICULUM_DATA.getPageUrl === 'function') {
-          const resolved = CURRICULUM_DATA.getPageUrl(book.id, CURRENT_READER_PAGE, CURRENT_READER_PARA, book.language);
-          pageUrl = (isCustomBook && typeof resolved === 'string' && resolved.indexOf('data:image/svg') === 0) ? '' : resolved;
+          pageUrl = CURRICULUM_DATA.getPageUrl(book.id, CURRENT_READER_PAGE, CURRENT_READER_PARA, book.language);
         } else if (typeof book.getPageUrl === 'function') {
           pageUrl = book.getPageUrl(CURRENT_READER_PAGE, CURRENT_READER_PARA, book.language);
         } else if (book.pages && book.pages[CURRENT_READER_PAGE - 1]) {
           pageUrl = book.pages[CURRENT_READER_PAGE - 1];
-        } else if (!isCustomBook && typeof generateDynamicSvgDataUri === 'function') {
-          pageUrl = generateDynamicSvgDataUri(book, CURRENT_READER_PAGE, CURRENT_READER_PARA, book.language);
-        } else if (!isCustomBook) {
-          pageUrl = generateDynamicSvgPage(book, CURRENT_READER_PAGE);
         }
 
-        if (!pageUrl && isCustomBook) {
+        // A resolved data:image/svg URL is a generated placeholder, not a
+        // real uploaded page — treat it as unavailable for every book.
+        if (!isInteractiveBook && typeof pageUrl === 'string' && pageUrl.indexOf('data:image/svg') === 0) {
+          pageUrl = '';
+        }
+
+        if (!pageUrl) {
           showReaderPageError(img, spinner, book, CURRENT_READER_PAGE, 'Page not available.');
           return;
         }
@@ -759,18 +772,17 @@ if (mergedDeleted.length > 0) {
 
         img.onerror = function() {
           img.onerror = null; // Prevent infinite error loops
-          if (isCustomBook) {
-            // Authentic uploaded content: never fabricate a replacement page.
-            showReaderPageError(img, spinner, book, CURRENT_READER_PAGE, 'Could not load this page.');
-            return;
-          }
+          // Batch 4 (B13): never fabricate a replacement page for ANY book.
+          // Only a real, book-provided fallback URL may be tried; a
+          // generated placeholder SVG is never an acceptable substitute.
+          // Anything else gets the honest error state.
           let fallback = '';
           if (typeof book.getFallbackPageUrl === 'function') {
             fallback = book.getFallbackPageUrl(CURRENT_READER_PAGE);
-          } else if (typeof generateDynamicSvgDataUri === 'function') {
-            fallback = generateDynamicSvgDataUri(book, CURRENT_READER_PAGE);
-          } else {
-            fallback = generateDynamicSvgPage(book, CURRENT_READER_PAGE);
+          }
+          if (!fallback || (typeof fallback === 'string' && fallback.indexOf('data:image/svg') === 0)) {
+            showReaderPageError(img, spinner, book, CURRENT_READER_PAGE, 'Could not load this page.');
+            return;
           }
           img.src = fallback;
           if (spinner) spinner.classList.add('hidden');
@@ -821,7 +833,8 @@ if (mergedDeleted.length > 0) {
         });
     }
 
-    // Honest empty state for authentic custom-book pages that cannot be displayed.
+    // Honest empty state for any book page that cannot be displayed
+    // (Batch 4, B13: applies to every book, not only custom ones).
     // Never generates placeholder content.
     function showReaderPageError(img, spinner, book, pageNum, reason) {
       if (spinner) spinner.classList.add('hidden');

@@ -5119,9 +5119,9 @@ function _buildTeacherBioDataTabHtml(state) {
     { label: 'Experience:', value: meta.experience || 'Certified Quran Instructor' },
     { label: 'Working Shift:', value: teacher.working_shift || 'Regular Shift' },
 
-    { label: 'Zoom:', value: meta.zoom_meeting_id || (teacher.phone ? teacher.phone.replace(/[^0-9]/g, '') : '--') },
-    { label: 'Zoom-Pass:', value: meta.zoom_passcode || '123456' },
-    { label: 'Zoom-Link:', value: meta.zoom_link || 'https://zoom.us/j/', isLink: true },
+    { label: 'Zoom:', value: meta.zoom_meeting_id || '--' },
+    { label: 'Zoom-Pass:', value: meta.zoom_passcode || '--' },
+    { label: 'Zoom-Link:', value: meta.zoom_link || 'Class link not set yet', isLink: !!meta.zoom_link },
 
     { label: 'Username:', value: meta.username || 'teacher' },
     { label: 'Password:', value: '•••••••• (Protected)' },

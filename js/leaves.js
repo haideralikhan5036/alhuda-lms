@@ -11,6 +11,19 @@
     // EXTENDED LEAVE & RETURN MANAGEMENT ENGINE
     // ==========================================
 
+    // Batch 4 Option B: leave is a date window, not a stored status. Approval/mark-leave record on_leave + leave_start_date + return_date in notes; the student is on leave only inside that window and returns automatically. Legacy rows whose stored status is Leave still count.
+    function isStudentOnLeaveNow(st, meta, todayStr) {
+      if (!st) return false;
+      // (a) Legacy rows: a stored 'Leave' status still counts as on leave.
+      if (st.status === 'Leave') return true;
+      // (b) Windowed leave: on leave only inside [leave_start_date, return_date).
+      if (!meta || meta.on_leave !== true) return false;
+      const t = todayStr || new Date().toISOString().slice(0, 10);
+      if (meta.leave_start_date && t < meta.leave_start_date) return false;
+      if (meta.return_date && t >= meta.return_date) return false;
+      return true;
+    }
+
     async function checkLeaveReturnAlertsAndRequests(autoPopup = true) {
       try {
         const { data: students, error } = await db.from('students').select('*, teachers(*), families(*)');
@@ -27,8 +40,8 @@
             try { meta = JSON.parse(st.notes); } catch(e) {}
           }
 
-          // Check if student is on leave
-          const isOnLeave = st.status === 'Leave' || (meta && meta.on_leave);
+          // Check if student is on leave (Batch 4 Option B: derived date window)
+          const isOnLeave = isStudentOnLeaveNow(st, meta, todayStr);
           if (isOnLeave) {
             totalActiveLeaves++;
             const returnDate = meta?.return_date;
@@ -289,7 +302,10 @@
           const rType = item.requestType || 'leave';
           const requestedAt = req.requested_at ? new Date(req.requested_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'Recently';
 
-          const typeTag = rType === 'time_change'
+          const isParentRequest = req.source === 'parent' || req.requested_by === 'parent';
+          const typeTag = isParentRequest
+            ? '<span class="px-2 py-0.5 rounded-full text-[10px] font-mono bg-violet-100 text-violet-900 font-extrabold border border-violet-300">Parent Request</span>'
+            : rType === 'time_change'
             ? '<span class="px-2 py-0.5 rounded-full text-[10px] font-mono bg-indigo-100 text-indigo-900 font-extrabold border border-indigo-300">🕒 Schedule Time Change Request</span>'
             : rType === 'reschedule'
             ? '<span class="px-2 py-0.5 rounded-full text-[10px] font-mono bg-orange-100 text-orange-800 font-bold border border-orange-300">🔄 Attendance Status Change</span>'
@@ -375,6 +391,9 @@
             : '<i class="fa-solid fa-check"></i> Approve &amp; Mark Leave';
 
           const borderColor = rType === 'time_change' ? 'border-indigo-300' : rType === 'reschedule' ? 'border-orange-200' : 'border-amber-200';
+          const requesterHtml = isParentRequest
+            ? `<span>Parent: <strong class="text-emerald-700 font-semibold">${req.parent_name || 'Parent / Guardian'}</strong></span>`
+            : `<span>Teacher: <strong class="text-emerald-700 font-semibold">${req.teacher_name || 'Teacher'}</strong> (${req.teacher_id || 'TCH'})</span>`;
 
           return `
             <div class="p-4 bg-white rounded-2xl border ${borderColor} shadow-xs space-y-3">
@@ -387,7 +406,7 @@
                   <div class="text-xs text-slate-500 flex items-center gap-2 mt-0.5">
                     <span>Student ID: <strong class="font-mono text-slate-700">${st.id}</strong></span>
                     <span>•</span>
-                    <span>Teacher: <strong class="text-emerald-700 font-semibold">${req.teacher_name || 'Teacher'}</strong> (${req.teacher_id || 'TCH'})</span>
+                    ${requesterHtml}
                   </div>
                 </div>
                 <div class="text-[11px] text-slate-400 font-mono">
@@ -531,12 +550,11 @@
           }
 
           const { error: upErr } = await db.from('students').update({
-            status: 'Leave',
             notes: JSON.stringify(meta)
           }).eq('id', studentId);
 
           if (upErr) throw upErr;
-          alert(`✅ Leave request approved for ${st.name}!\nReturn Date scheduled: ${returnDate}.\nTimetable slots are suspended until reactivation.`);
+          alert(`✅ Leave request approved for ${st.name}!\nOn leave from ${startDate}; returns on ${returnDate}.\nThe leave starts and ends automatically on these dates.`);
         }
 
         closeModal('modalAdminTeacherRequests');
@@ -715,7 +733,8 @@
           const hasLeaveHistory = st.status === 'Leave' || (meta && (meta.on_leave || meta.leave_start_date || meta.reactivated_at));
           if (hasLeaveHistory) {
             totalRecordsCount++;
-            const isOnLeave = st.status === 'Leave' || (meta && meta.on_leave);
+            const isOnLeave = isStudentOnLeaveNow(st, meta, today);
+            const hasLeaveWindow = !!(meta && meta.on_leave === true);
             const returnDate = meta?.return_date || '';
             const startDate = meta?.leave_start_date || '';
             const reason = meta?.leave_reason || 'Personal / Vacation';
@@ -738,6 +757,7 @@
               student: st,
               meta,
               isOnLeave,
+              hasLeaveWindow,
               startDate,
               returnDate,
               reason,
@@ -805,6 +825,8 @@
             const diffDays = Math.ceil((new Date(item.returnDate) - new Date(today)) / (1000 * 60 * 60 * 24));
             countdownBadge = `<span class="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-blue-100 text-blue-800 border border-blue-200">⏳ Returns in ${diffDays}d</span>`;
           }
+        } else if (item.hasLeaveWindow && item.startDate && item.startDate > today) {
+          countdownBadge = `<span class="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-violet-100 text-violet-800 border border-violet-300">🗓️ Upcoming Leave (from ${item.startDate})</span>`;
         } else {
           countdownBadge = '<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">✅ Active / Resumed</span>';
         }
@@ -832,7 +854,7 @@
             </td>
             <td class="p-3.5 text-right">
               <div class="flex items-center justify-end gap-1.5 flex-wrap">
-                ${item.isOnLeave ? `
+                ${(item.isOnLeave || item.hasLeaveWindow) ? `
                   <button onclick="reactivateStudentFromLeave('${st.id}')" class="px-3 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold transition flex items-center gap-1 shadow-xs">
                     <i class="fa-solid fa-user-check"></i> Reactivate
                   </button>
@@ -925,13 +947,12 @@
         meta.leave_marked_by = CURRENT_ROLE;
 
         const { error: upErr } = await db.from('students').update({
-          status: 'Leave',
           notes: JSON.stringify(meta)
         }).eq('id', studentId);
 
         if (upErr) throw upErr;
 
-        alert(`🏖️ ${st.name} is now marked on leave until ${returnDate}.\nSchedule slots are paused and return alert is set!`);
+        alert(`🏖️ Leave recorded for ${st.name}.\nOn leave from ${startDate}; returns on ${returnDate}.\nThe leave starts and ends automatically on these dates.`);
         closeModal('modalMarkLeave');
         await loadDashboardData();
         await checkLeaveReturnAlertsAndRequests(false);
