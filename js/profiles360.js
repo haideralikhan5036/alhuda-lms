@@ -477,6 +477,46 @@ async function openStudent360Profile(studentId, initialSubView = 'history') {
 }
 
 // ============================================================================
+// BATCH 6D-2: FAMILY 360 PAYMENTS — FINANCE-TABLES READ SWITCH (fee_read_360)
+// _getFamilyPaymentsList() stays synchronous. This prefetch warms a per-family
+// cache from the payments table (FeeTables.loadPaymentsForFamily returns the
+// rows already converted to legacy records) when the fee_read_360 read flag
+// is 'on'. Flag off/compare, FeeTables missing, or any load failure leaves
+// the cache empty and the legacy merge in _getFamilyPaymentsList runs as-is.
+// ============================================================================
+var _fee360TableCache = {};   // UPPERCASED familyId -> legacyRecord[]
+var _fee360TablePending = {}; // UPPERCASED familyId -> true while a load is in flight
+
+async function _prefetch360Payments(familyId) {
+  const key = String(familyId || '').toUpperCase();
+  if (!key || _fee360TableCache[key] || _fee360TablePending[key]) return;
+  _fee360TablePending[key] = true;
+  try {
+    if (window.FeeTables && typeof window.FeeTables.getReadMode === 'function' && typeof window.FeeTables.loadPaymentsForFamily === 'function') {
+      const mode = await window.FeeTables.getReadMode(window.FeeTables.READ_FLAG_360);
+      if (mode === 'on') {
+        const recs = await window.FeeTables.loadPaymentsForFamily(familyId);
+        if (Array.isArray(recs)) {
+          _fee360TableCache[key] = recs;
+          // If this family's workspace is currently on screen, repaint it so
+          // the payments data comes from the table — the same guarded
+          // re-render the background sync in openFamily360Profile uses.
+          // _renderFamilyWorkspaceDOM() never triggers this prefetch, so
+          // this cannot loop.
+          if (_CURRENT_360_STATE.type === 'family' && String(_CURRENT_360_STATE.id || '').toUpperCase() === key) {
+            _renderFamilyWorkspaceDOM();
+          }
+        }
+      }
+    }
+  } catch (e) {
+    // Never throws: any failure simply leaves the legacy read path in place.
+  } finally {
+    delete _fee360TablePending[key];
+  }
+}
+
+// ============================================================================
 // PAYMENT & FEE LEDGER ENGINE (ONE SOURCE OF TRUTH WITH fees.js)
 // ============================================================================
 function _getFamilyPaymentsList(family) {
@@ -487,20 +527,32 @@ function _getFamilyPaymentsList(family) {
   const agreedFee = parseFloat(family.monthly_fee || 0) || 0;
   const fNotes = _parseFamilyStructuredNotes(family);
 
-  let storedReceipts = [];
-  if (typeof getStoredFeeRecords === 'function') {
-    storedReceipts = (getStoredFeeRecords() || []).filter(r => String(r.familyId || '').toUpperCase() === famId);
-  }
-  // Merge with any records inside family.notes.fee_history
-  const mergedMap = new Map();
-  (fNotes.fee_history || []).forEach(r => {
-    if (r && r.receiptNo) mergedMap.set(r.receiptNo, r);
-  });
-  storedReceipts.forEach(r => {
-    if (r && r.receiptNo) mergedMap.set(r.receiptNo, r);
-  });
+  // Batch 6D-2: when the fee_read_360 flag is 'on', _prefetch360Payments has
+  // warmed _fee360TableCache with this family's payments-table records
+  // (already converted to legacy shape). Those records ARE the real-records
+  // list — including numberless ones, which the legacy receiptNo-keyed merge
+  // below silently drops. The AUTO-row generation further down is unchanged
+  // and runs either way. Empty cache -> legacy merge, exactly as before.
+  const _tableRecs360 = _fee360TableCache[famId];
+  let allReceipts;
+  if (Array.isArray(_tableRecs360)) {
+    allReceipts = _tableRecs360.slice();
+  } else {
+    let storedReceipts = [];
+    if (typeof getStoredFeeRecords === 'function') {
+      storedReceipts = (getStoredFeeRecords() || []).filter(r => String(r.familyId || '').toUpperCase() === famId);
+    }
+    // Merge with any records inside family.notes.fee_history
+    const mergedMap = new Map();
+    (fNotes.fee_history || []).forEach(r => {
+      if (r && r.receiptNo) mergedMap.set(r.receiptNo, r);
+    });
+    storedReceipts.forEach(r => {
+      if (r && r.receiptNo) mergedMap.set(r.receiptNo, r);
+    });
 
-  const allReceipts = Array.from(mergedMap.values());
+    allReceipts = Array.from(mergedMap.values());
+  }
   const defaultMethod = fNotes.bio_meta?.payment_method || (currency === 'GBP' ? 'UK Bank Transfer' : 'Bank Transfer');
 
   // Build unified payment rows from actual receipts + monthly billing schedule
@@ -681,6 +733,11 @@ async function openFamily360Profile(familyId, initialTab = 'students', skipHisto
     famSchedules: initialSchedules,
     famLogs: initialLogs
   };
+
+  // Batch 6D-2: warm the finance-tables payments cache for this family
+  // (fire-and-forget; _prefetch360Payments repaints via
+  // _renderFamilyWorkspaceDOM() when the table records arrive).
+  _prefetch360Payments(family.id);
 
   // Render Family Workspace DOM immediately (< 5ms, zero loading spinner!)
   _renderFamilyWorkspaceDOM();
@@ -2297,6 +2354,7 @@ async function submitFamilyManualInvoiceForm(e, familyId) {
     try { loadFeeDashboardStats(); } catch (err) {}
   }
 
+  delete _fee360TableCache[String(family.id || '').toUpperCase()]; // Batch 6D-2: this write makes the warmed table cache stale; drop it so the re-render below uses the fresh legacy record (next profile open re-warms from the table)
   _closeWorkspaceModal();
   _notify360(`Manual Invoice (${family.currency} ${amount} • ${status}) saved to Payments & Main Fee Ledger!`);
   _CURRENT_360_STATE.activeTab = 'payments';
@@ -3532,6 +3590,7 @@ async function submitEditFamilyPaymentForm(e, familyId, recordId, month, year) {
     try { loadFeeDashboardStats(); } catch (err) {}
   }
 
+  delete _fee360TableCache[String(family.id || '').toUpperCase()]; // Batch 6D-2: see manual-invoice save — drop the stale table cache before re-rendering
   _closeWorkspaceModal();
   _notify360(`Payment record for ${month} ${year} updated to ${status}!`);
   _renderFamilyWorkspaceDOM();
@@ -3632,6 +3691,7 @@ async function deleteFamilyPaymentRecord(familyId, recordId, month, year) {
     if (typeof loadFeeDashboardStats === 'function') {
       try { loadFeeDashboardStats(); } catch (err) {}
     }
+    delete _fee360TableCache[String(mgrFamily.id || '').toUpperCase()]; // Batch 6D-2: see manual-invoice save — drop the stale table cache before re-rendering
     _notify360(`Payment entry for ${month} ${year} cancelled (kept on record).`);
     _renderFamilyWorkspaceDOM();
     return;
@@ -3674,6 +3734,7 @@ async function deleteFamilyPaymentRecord(familyId, recordId, month, year) {
     try { loadFeeDashboardStats(); } catch (err) {}
   }
 
+  delete _fee360TableCache[String(family.id || '').toUpperCase()]; // Batch 6D-2: see manual-invoice save — drop the stale table cache before re-rendering
   _notify360(`Payment entry for ${month} ${year} deleted and financial totals updated.`);
   _renderFamilyWorkspaceDOM();
 }
