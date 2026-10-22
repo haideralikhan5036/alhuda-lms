@@ -56,6 +56,13 @@
 
   <div id="log" class="hidden"></div>
 
+  <h2>Finance tables flag (fee_tables_v1)</h2>
+  <p class="note">When this flag is ON, every new fee and salary slip also writes a copy into the new finance tables. Keep it OFF while backfilling. After changing it, refresh any open portal page — portals read the flag once when they load.</p>
+  <p>Current state: <b id="flagState">not checked yet</b></p>
+  <p><button id="btnFlagOn" onclick="setFeeTablesFlag('on')">Turn ON</button>
+     <button id="btnFlagOff" onclick="setFeeTablesFlag('off')">Turn OFF</button>
+     <button id="btnFlagRefresh" onclick="refreshFlagState()">Re-check</button></p>
+
   <h2>Step 1 — Load sources</h2>
   <p class="note">Reads every family's stored fee history and every teacher's stored records from the database, plus this browser's local fee records (<span class="mono">alhuda_fee_records</span>) and salary cache (<span class="mono">alhuda_teacher_salaries</span>), and the shared salary carrier stored in a family's notes.</p>
   <p><button id="btnLoad" onclick="loadSources()">Load sources</button></p>
@@ -196,6 +203,7 @@ window.ownerLogin = async function () {
       el('stepLogin').classList.add('hidden');
       el('stepTool').classList.remove('hidden');
       logLine('Signed in as owner.', 'ok');
+      if (typeof window.refreshFlagState === 'function') window.refreshFlagState();
     } else {
       showMsg('Owner sign-in failed. Check the username and password and try again.', false);
     }
@@ -484,6 +492,66 @@ window.downloadReport = function () {
   a.download = 'backfill-report-' + state.runId.replace(/[:.]/g, '-') + '.json';
   a.click();
   setTimeout(function () { URL.revokeObjectURL(a.href); }, 4000);
+};
+
+// ---------------------------------------------------------------------------
+// FLAG SWITCH — fee_tables_v1 in system_settings (owner only; this page is
+// owner-login gated). Exists so the owner never needs the browser console.
+// ---------------------------------------------------------------------------
+async function readFlagRaw() {
+  var client = dbClient();
+  if (!client) return { ok: false };
+  var res = await client.from('system_settings').select('value').eq('key', 'fee_tables_v1').limit(1);
+  if (!res || res.error) return { ok: false };
+  var rows = res.data || [];
+  if (!rows.length) return { ok: true, value: null };
+  return { ok: true, value: rows[0].value };
+}
+
+function flagValueIsOn(v) {
+  var s = String(v == null ? '' : v).trim().toLowerCase();
+  return s === 'on' || s === 'true' || s === '1';
+}
+
+window.refreshFlagState = async function () {
+  var stateEl = el('flagState');
+  if (!stateEl) return;
+  try {
+    var r = await readFlagRaw();
+    if (!r.ok) { stateEl.textContent = 'could not be read — press Re-check'; return; }
+    stateEl.textContent = r.value === null ? 'OFF (not set)' : (flagValueIsOn(r.value) ? 'ON' : 'OFF');
+  } catch (e) {
+    stateEl.textContent = 'could not be read — press Re-check';
+  }
+};
+
+window.setFeeTablesFlag = async function (which) {
+  var client = dbClient();
+  if (!client) { logLine('Flag change failed: the database client is not available. Reload the page and sign in again.', 'err'); return; }
+  setBusy('btnFlagOn', true, 'Turn ON');
+  setBusy('btnFlagOff', true, 'Turn OFF');
+  try {
+    var res = await client.from('system_settings').upsert({ key: 'fee_tables_v1', value: which });
+    if (res && res.error) {
+      logLine('Flag change failed: ' + (res.error.message || res.error), 'err');
+      return;
+    }
+    // FeeTables caches the flag per page load; clear that cache so this
+    // page's own Write-step guard sees the new value immediately.
+    try { if (window.FeeTables && typeof window.FeeTables._resetForTests === 'function') window.FeeTables._resetForTests(); } catch (e) {}
+    var r = await readFlagRaw();
+    if (r.ok && flagValueIsOn(r.value) === (which === 'on')) {
+      logLine('fee_tables_v1 is now ' + which.toUpperCase() + ' (confirmed by re-reading the database).', 'ok');
+    } else {
+      logLine('The flag change could not be confirmed. Press Re-check and do not continue until the state is clear.', 'err');
+    }
+  } catch (e) {
+    logLine('Flag change failed: ' + (e && e.message ? e.message : e), 'err');
+  } finally {
+    setBusy('btnFlagOn', false, 'Turn ON');
+    setBusy('btnFlagOff', false, 'Turn OFF');
+  }
+  await window.refreshFlagState();
 };
 
 // ---------------------------------------------------------------------------
