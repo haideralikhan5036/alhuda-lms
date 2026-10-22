@@ -49,6 +49,7 @@
   <!-- Supabase JS Client & Cloudflare D1/R2 Universal Engine -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="js/cloudflare-db.js"></script>
+  <script src="js/fee-tables.js"></script>
   <!-- Al-Huda Curriculum & Course Material Registry Engine -->
   <script src="curriculum_data.js"></script>
   <script src="js/interactive_qaida.js"></script>
@@ -1532,8 +1533,28 @@
       // 4. Fetch Real Fee Status & Invoices (No Fake Receipts)
       let feeHistory = [];
       let familyData = null;
+      let feeHistoryFromTables = false;
 
-      if (db && s.family_id) {
+      // Batch 6D-2: when the fee_read_parent flag is 'on', the fee history
+      // comes from the payments table (rows translated back to the legacy
+      // record shape by js/fee-tables.js). 'off'/'compare', a failed load,
+      // or a missing helper all fall through to the legacy source chain
+      // below, which runs exactly as before. ('compare' renders legacy on
+      // this page; comparing is done from the owner's tool.)
+      try {
+        if (window.FeeTables && typeof window.FeeTables.getReadMode === 'function' && typeof window.FeeTables.loadPaymentsForFamily === 'function') {
+          const parentReadMode = await window.FeeTables.getReadMode(window.FeeTables.READ_FLAG_PARENT);
+          if (parentReadMode === 'on') {
+            const tableFeeHistory = await window.FeeTables.loadPaymentsForFamily(s.family_id || CURRENT_AUTH_FAMILY?.id || '');
+            if (Array.isArray(tableFeeHistory)) {
+              feeHistory = tableFeeHistory;
+              feeHistoryFromTables = true;
+            }
+          }
+        }
+      } catch (e) { /* fall back to the legacy chain below */ }
+
+      if (!feeHistoryFromTables && db && s.family_id) {
         try {
           const { data } = await db.from('families').select('*').eq('id', s.family_id).single();
           if (data) {
@@ -1578,7 +1599,7 @@
       }
 
       // Fallback 1: check CURRENT_AUTH_FAMILY notes if feeHistory is empty
-      if (feeHistory.length === 0 && CURRENT_AUTH_FAMILY?.notes) {
+      if (!feeHistoryFromTables && feeHistory.length === 0 && CURRENT_AUTH_FAMILY?.notes) {
         try {
           const pNotes = typeof CURRENT_AUTH_FAMILY.notes === 'string' ? JSON.parse(CURRENT_AUTH_FAMILY.notes) : CURRENT_AUTH_FAMILY.notes;
           if (pNotes && Array.isArray(pNotes.fee_history)) feeHistory = pNotes.fee_history;
@@ -1586,7 +1607,7 @@
       }
 
       // Fallback 2: check localStorage alhuda_fee_records if feeHistory is empty
-      if (feeHistory.length === 0) {
+      if (!feeHistoryFromTables && feeHistory.length === 0) {
         try {
           const localFees = JSON.parse(localStorage.getItem('alhuda_fee_records') || '[]');
           if (Array.isArray(localFees) && localFees.length > 0) {

@@ -730,6 +730,34 @@
     }
   }
 
+  // --------------------------------------------------------------------------
+  // Batch 6D-2 — shared table-read loader for the read switches.
+  // Returns the family's payments rows converted back to the legacy record
+  // shape (paymentLegacyFromRow), in the order the query returned them.
+  // A parent session only ever receives its own family's rows (the Worker
+  // scopes the select server-side, Batch 6B); owner/manager sessions may
+  // pass any family id. Returns null on ANY failure (no db client, query
+  // error, exception) so callers fall back to the legacy stores. Never
+  // throws.
+  // --------------------------------------------------------------------------
+  async function loadPaymentsForFamily(familyId) {
+    try {
+      var client = getDb();
+      if (!client) return null;
+      var res;
+      if (typeof familyId === 'string' && familyId !== '') {
+        res = await client.from('payments').select('*').eq('family_id', familyId);
+      } else {
+        res = await client.from('payments').select('*');
+      }
+      if (!res || res.error) return null;
+      var rows = res.data || [];
+      return rows.map(function (row) { return paymentLegacyFromRow(row); });
+    } catch (e) {
+      return null;
+    }
+  }
+
   window.FeeTables = {
     FEE_TABLES_FLAG_KEY: FEE_TABLES_FLAG_KEY,
     isEnabled: isEnabled,
@@ -747,6 +775,7 @@
     READ_FLAG_360: READ_FLAG_360,
     READ_FLAG_SALARY: READ_FLAG_SALARY,
     getReadMode: getReadMode,
+    loadPaymentsForFamily: loadPaymentsForFamily,
     currentActor: currentActor,
     upsertPaymentRow: upsertPaymentRow,
     cancelPaymentRow: cancelPaymentRow,
