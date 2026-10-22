@@ -1,0 +1,810 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Finance Tables Backfill — Al-Huda LMS (Owner Tool)</title>
+<style>
+  body { font-family: system-ui, sans-serif; max-width: 900px; margin: 2rem auto; padding: 0 1rem; background: #f8fafc; color: #1e293b; }
+  .card { background: #fff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 1.5rem; margin-bottom: 1rem; }
+  h1 { font-size: 1.4rem; margin: 0 0 .5rem; }
+  h2 { font-size: 1.1rem; margin: 1.25rem 0 .5rem; }
+  input, button { font-size: 1rem; padding: .6rem .8rem; border-radius: 8px; border: 1px solid #cbd5e1; }
+  button { background: #0f766e; color: #fff; border: none; cursor: pointer; font-weight: 600; }
+  button:disabled { background: #94a3b8; cursor: not-allowed; }
+  .hidden { display: none; }
+  table { width: 100%; border-collapse: collapse; font-size: .9rem; margin-top: .5rem; }
+  th, td { text-align: left; padding: .5rem; border-bottom: 1px solid #e2e8f0; vertical-align: top; }
+  th { background: #f1f5f9; }
+  .ok { color: #15803d; font-weight: 700; }
+  .bad { color: #b91c1c; font-weight: 700; }
+  .warn { color: #b45309; font-weight: 700; }
+  .mono { font-family: monospace; font-size: .8rem; word-break: break-all; }
+  #msg { padding: .75rem; border-radius: 8px; margin: .75rem 0; }
+  #msg.good { background: #dcfce7; color: #166534; }
+  #msg.err { background: #fee2e2; color: #991b1b; }
+  .note { font-size: .85rem; color: #64748b; }
+  .warning { background: #fef3c7; border: 1px solid #f59e0b; color: #92400e; border-radius: 8px; padding: .75rem 1rem; margin: .75rem 0; font-size: .95rem; }
+  .verdict { padding: .75rem 1rem; border-radius: 8px; margin: .5rem 0; font-weight: 700; }
+  .verdict.good { background: #dcfce7; color: #166534; }
+  .verdict.bad { background: #fee2e2; color: #991b1b; }
+  .verdict.info { background: #e0f2fe; color: #075985; }
+  #log { font-family: monospace; font-size: .8rem; white-space: pre-wrap; word-break: break-word; background: #0f172a; color: #e2e8f0; border-radius: 8px; padding: .75rem 1rem; margin: .75rem 0; max-height: 260px; overflow-y: auto; }
+  #log .lerr { color: #fca5a5; }
+  #log .lok { color: #86efac; }
+  details { margin: .5rem 0; }
+  details pre { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: .75rem; overflow-x: auto; }
+  label.checkline { display: flex; gap: .5rem; align-items: flex-start; cursor: pointer; }
+  label.checkline input { margin-top: .2rem; }
+</style>
+</head>
+<body>
+
+<div class="card" id="stepLogin">
+  <h1>Finance Tables Backfill</h1>
+  <p class="note">Owner-only tool. It copies your existing fee receipts and salary records into the new finance tables (<span class="mono">payments</span>, <span class="mono">salary_slips</span>, <span class="mono">salary_adjustments</span>) so a later batch can start reading from them. It does not change, delete, or re-upload any existing record.</p>
+  <div id="msg" class="hidden"></div>
+  <p><input id="ownerUser" type="text" placeholder="Owner username" autocomplete="username" style="width:100%;margin-bottom:.5rem"></p>
+  <p><input id="ownerPass" type="password" placeholder="Owner password" autocomplete="current-password" style="width:100%;margin-bottom:.5rem"></p>
+  <p><button id="btnLogin" onclick="ownerLogin()">Sign in</button></p>
+</div>
+
+<div class="card hidden" id="stepTool">
+  <h1>Finance Tables Backfill</h1>
+
+  <div class="warning"><b>Before you start:</b> This tool copies existing fee and salary records into the new finance tables. It never changes or deletes the existing records. Run a dry-run first. Keep the fee_tables_v1 flag OFF while backfilling.</div>
+
+  <div id="log" class="hidden"></div>
+
+  <h2>Step 1 — Load sources</h2>
+  <p class="note">Reads every family's stored fee history and every teacher's stored records from the database, plus this browser's local fee records (<span class="mono">alhuda_fee_records</span>) and salary cache (<span class="mono">alhuda_teacher_salaries</span>), and the shared salary carrier stored in a family's notes.</p>
+  <p><button id="btnLoad" onclick="loadSources()">Load sources</button></p>
+  <div id="sourcesSummary"></div>
+
+  <h2>Step 2 — Dry-run (writes nothing)</h2>
+  <p class="note">Builds the full migration plan — including duplicate receipt-number handling and quarantined records — and checks that every total reconciles before anything is written.</p>
+  <p><button id="btnDry" onclick="runDryRun()" disabled>Run dry-run</button>
+     <button id="btnDownload" onclick="downloadReport()" disabled>Download report (JSON)</button></p>
+  <div id="dryResults"></div>
+
+  <h2>Step 3 — Write to tables</h2>
+  <p class="note">Available only when the dry-run reconciles. Writing is insert-only and idempotent: records already in the tables are detected and skipped, so an interrupted run is safe to repeat. If a record fails, the run stops at that record and tells you which one and why.</p>
+  <div id="quarantineBlock" class="warning hidden">
+    <label class="checkline"><input type="checkbox" id="chkQuarantine" onchange="updateGating()">
+      <span id="chkQuarantineLabel">Migrate the rest anyway</span></label>
+  </div>
+  <p><button id="btnWrite" onclick="writeTables()" disabled>Write to tables</button></p>
+  <p id="writeProgress" class="note"></p>
+
+  <h2>Step 4 — Verify</h2>
+  <p class="note">Re-reads the finance tables and compares them with the plan, total by total. You can run this before writing too — expect FAIL lines until the write run has completed.</p>
+  <p><button id="btnVerify" onclick="verifyTables()" disabled>Verify tables</button></p>
+  <div id="verifyResults"></div>
+
+  <p class="note" style="margin-top:1.5rem">Rollback: nothing in the portals reads these tables yet. A bad run is corrected by fixing the plan and re-running; rows are never deleted by this tool.</p>
+  <p style="margin-top:1rem"><button onclick="ownerLogout()">Sign out</button></p>
+</div>
+
+<script src="js/cloudflare-db.js"></script>
+<script src="js/fee-tables.js"></script>
+<script src="js/backfill-finance.js"></script>
+<script>
+var API = 'https://alhuda-lms.ceoislamiccentre.workers.dev';
+var ownerToken = '';
+
+var state = {
+  loaded: false,
+  families: [],          // [{ id, notes }] exactly as selected
+  teachers: [],          // [{ id, address }] exactly as selected
+  localRecords: [],      // parsed localStorage alhuda_fee_records
+  localSalaries: {},     // parsed localStorage alhuda_teacher_salaries
+  carrierSalaries: {},   // lms_shared_sync.teacher_salaries from a family's notes
+  carrierFamilyId: '',
+  runId: '',
+  payPlan: null,         // { rows, report }
+  salPlan: null,         // { slipRows, adjustmentRows, report }
+  dryRunDone: false,
+  wrote: false
+};
+
+function showMsg(t, good) {
+  var m = document.getElementById('msg');
+  m.textContent = t;
+  m.className = good ? 'good' : 'err';
+  m.classList.remove('hidden');
+}
+function setBusy(id, busy, label) {
+  var b = document.getElementById(id);
+  if (b) { b.disabled = busy; b.innerText = busy ? 'Please wait…' : label; }
+}
+function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+function el(id) { return document.getElementById(id); }
+
+function logLine(text, kind) {
+  var box = el('log');
+  box.classList.remove('hidden');
+  var div = document.createElement('div');
+  if (kind === 'err') div.className = 'lerr';
+  if (kind === 'ok') div.className = 'lok';
+  div.textContent = text;
+  box.appendChild(div);
+  box.scrollTop = box.scrollHeight;
+}
+
+function dbClient() {
+  try { if (window.db && typeof window.db.from === 'function') return window.db; } catch (e) {}
+  try { if (typeof window.createCloudflareLmsClient === 'function') return window.createCloudflareLmsClient(); } catch (e) {}
+  return null;
+}
+
+async function dbSelectAll(table, cols) {
+  var client = dbClient();
+  if (!client) throw new Error('Database client is not available. Reload the page and try again.');
+  var res = await client.from(table).select(cols || '*');
+  if (res && res.error) throw new Error(table + ': ' + (res.error.message || 'query failed'));
+  return (res && res.data) || [];
+}
+
+function parseJsonSafe(v, fallback) {
+  if (v == null) return fallback;
+  if (typeof v === 'object') return v;
+  try { return JSON.parse(String(v)); } catch (e) { return fallback; }
+}
+function readLocalArray(key) {
+  try {
+    var raw = localStorage.getItem(key);
+    if (!raw) return [];
+    var parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (e) { return []; }
+}
+function readLocalObject(key) {
+  try {
+    var raw = localStorage.getItem(key);
+    if (!raw) return {};
+    var parsed = JSON.parse(raw);
+    return (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) ? parsed : {};
+  } catch (e) { return {}; }
+}
+function num(v) { var n = Number(v); return isFinite(n) ? n : 0; }
+function fmt(n) { return (Math.round(num(n) * 100) / 100).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+function moneyEq(a, b) { return Math.abs(num(a) - num(b)) <= 0.01; }
+
+// ---------------------------------------------------------------------------
+// Owner sign-in — same mechanism as the other owner tools: POST
+// /api/auth/login returns a bearer token; the token is also handed to the
+// Cloudflare db client (window.db from js/cloudflare-db.js) via
+// window.setLmsAuthToken so every table call below is owner-authenticated.
+// ---------------------------------------------------------------------------
+window.ownerLogin = async function () {
+  var user = el('ownerUser').value.trim();
+  var pass = el('ownerPass').value;
+  if (!user || !pass) { showMsg('Please enter your owner username and password.', false); return; }
+  setBusy('btnLogin', true, 'Sign in');
+  try {
+    var res = await fetch(API + '/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: user, password: pass })
+    });
+    var data = await res.json().catch(function () { return {}; });
+    if (res.ok && data && data.ok && data.token) {
+      ownerToken = data.token;
+      try { if (typeof window.setLmsAuthToken === 'function') window.setLmsAuthToken(ownerToken); } catch (e) {}
+      try { if (typeof window.resetCloudflareD1Availability === 'function') window.resetCloudflareD1Availability(); } catch (e) {}
+      el('ownerPass').value = '';
+      el('stepLogin').classList.add('hidden');
+      el('stepTool').classList.remove('hidden');
+      logLine('Signed in as owner.', 'ok');
+    } else {
+      showMsg('Owner sign-in failed. Check the username and password and try again.', false);
+    }
+  } catch (e) {
+    showMsg('Could not reach the server. Check your internet connection and try again.', false);
+  }
+  setBusy('btnLogin', false, 'Sign in');
+};
+
+window.ownerLogout = function () {
+  ownerToken = '';
+  try { if (typeof window.setLmsAuthToken === 'function') window.setLmsAuthToken(null); } catch (e) {}
+  el('stepTool').classList.add('hidden');
+  el('stepLogin').classList.remove('hidden');
+  el('ownerPass').value = '';
+};
+
+el('ownerPass').addEventListener('keydown', function (e) {
+  if (e.key === 'Enter') ownerLogin();
+});
+
+// ---------------------------------------------------------------------------
+// Gating
+// ---------------------------------------------------------------------------
+function payReport() { return (state.payPlan && state.payPlan.report) || {}; }
+function salReport() { return (state.salPlan && state.salPlan.report) || {}; }
+function quarantineList() {
+  var q = payReport().quarantine;
+  return Array.isArray(q) ? q : [];
+}
+function bothReconciled() {
+  return payReport().reconciled === true && salReport().reconciled === true;
+}
+function updateGating() {
+  el('btnDry').disabled = !state.loaded;
+  el('btnDownload').disabled = !state.dryRunDone;
+  el('btnVerify').disabled = !state.loaded;
+  var q = quarantineList();
+  var qBlock = el('quarantineBlock');
+  if (state.dryRunDone && q.length > 0) {
+    qBlock.classList.remove('hidden');
+    el('chkQuarantineLabel').textContent = 'Migrate the rest anyway — ' + q.length + ' record' + (q.length === 1 ? ' is' : 's are') + ' quarantined and will stay only in the legacy store.';
+  } else {
+    qBlock.classList.add('hidden');
+  }
+  var ok = state.loaded && state.dryRunDone && bothReconciled()
+    && (q.length === 0 || el('chkQuarantine').checked);
+  el('btnWrite').disabled = !ok;
+}
+
+// ---------------------------------------------------------------------------
+// STEP 1 — Load sources
+// ---------------------------------------------------------------------------
+window.loadSources = async function () {
+  setBusy('btnLoad', true, 'Load sources');
+  try {
+    var famRows = await dbSelectAll('families', 'id, notes');
+    var tchRows = await dbSelectAll('teachers', 'id, address');
+    state.families = famRows.map(function (r) { return { id: r.id, notes: r.notes }; });
+    state.teachers = tchRows.map(function (r) { return { id: r.id, address: r.address }; });
+    state.localRecords = readLocalArray('alhuda_fee_records');
+    state.localSalaries = readLocalObject('alhuda_teacher_salaries');
+
+    // Carrier salaries: scan every family's notes for lms_shared_sync.
+    // First found wins, unless another carrier has a newer updated_at.
+    var best = null;
+    state.families.forEach(function (f) {
+      var notes = parseJsonSafe(f.notes, null);
+      if (!notes || typeof notes !== 'object') return;
+      var sync = notes.lms_shared_sync;
+      if (!sync || typeof sync !== 'object') return;
+      var salaries = sync.teacher_salaries;
+      if (!salaries || typeof salaries !== 'object' || Array.isArray(salaries)) return;
+      var upd = sync.updated_at != null ? String(sync.updated_at) : '';
+      if (!best || upd > best.updatedAt) best = { familyId: f.id, salaries: salaries, updatedAt: upd };
+    });
+    state.carrierSalaries = best ? best.salaries : {};
+    state.carrierFamilyId = best ? best.familyId : '';
+
+    // Reset any earlier plan: sources may have changed.
+    state.runId = '';
+    state.payPlan = null;
+    state.salPlan = null;
+    state.dryRunDone = false;
+    state.wrote = false;
+    el('dryResults').innerHTML = '';
+    el('verifyResults').innerHTML = '';
+    el('writeProgress').textContent = '';
+    el('chkQuarantine').checked = false;
+
+    state.loaded = true;
+    renderSourcesSummary();
+    updateGating();
+    logLine('Sources loaded: ' + state.families.length + ' families, ' + state.teachers.length + ' teachers, '
+      + state.localRecords.length + ' local fee records, ' + Object.keys(state.localSalaries).length + ' local salary entries, '
+      + Object.keys(state.carrierSalaries).length + ' carrier salary entries.', 'ok');
+  } catch (e) {
+    logLine('Load sources failed: ' + (e && e.message ? e.message : e), 'err');
+  }
+  setBusy('btnLoad', false, 'Load sources');
+};
+
+function renderSourcesSummary() {
+  var feeCount = 0, unparseable = 0;
+  state.families.forEach(function (f) {
+    var notes = parseJsonSafe(f.notes, null);
+    if (!notes || typeof notes !== 'object') { if (f.notes) unparseable++; return; }
+    if (Array.isArray(notes.fee_history)) feeCount += notes.fee_history.length;
+  });
+  var html = '<table><tr><th>Source</th><th>What was found</th></tr>';
+  html += '<tr><td>Database — families</td><td><b>' + state.families.length + '</b> families; <b>' + feeCount + '</b> fee records stored in their notes'
+    + (unparseable ? ' <span class="warn">(' + unparseable + ' family record(s) had notes that could not be parsed)</span>' : '') + '</td></tr>';
+  html += '<tr><td>Database — teachers</td><td><b>' + state.teachers.length + '</b> teachers (salary slips and deduction records live in their stored records)</td></tr>';
+  html += '<tr><td>This browser — local fee records</td><td><b>' + state.localRecords.length + '</b> records in <span class="mono">alhuda_fee_records</span></td></tr>';
+  html += '<tr><td>This browser — local salary cache</td><td><b>' + Object.keys(state.localSalaries).length + '</b> entries in <span class="mono">alhuda_teacher_salaries</span></td></tr>';
+  html += '<tr><td>Shared carrier (in a family\u2019s notes)</td><td>'
+    + (state.carrierFamilyId
+      ? '<b>' + Object.keys(state.carrierSalaries).length + '</b> salary entries, carried by family <span class="mono">' + esc(state.carrierFamilyId) + '</span>'
+      : '<span class="warn">No carrier salaries found in any family\u2019s notes.</span>')
+    + '</td></tr>';
+  html += '</table>';
+  el('sourcesSummary').innerHTML = html;
+}
+
+// ---------------------------------------------------------------------------
+// STEP 2 — Dry-run
+// ---------------------------------------------------------------------------
+function plannersAvailable() {
+  return !!(window.BackfillFinance
+    && typeof window.BackfillFinance.planPayments === 'function'
+    && typeof window.BackfillFinance.planSalaries === 'function');
+}
+
+function computePlans() {
+  if (!plannersAvailable()) {
+    throw new Error('The planner script (js/backfill-finance.js) did not load. Reload the page; if it keeps failing, report it — nothing was written.');
+  }
+  if (!state.runId) state.runId = 'B6C-' + new Date().toISOString();
+  state.payPlan = window.BackfillFinance.planPayments({
+    families: state.families,
+    localRecords: state.localRecords,
+    runId: state.runId
+  }) || {};
+  if (!Array.isArray(state.payPlan.rows)) state.payPlan.rows = [];
+  if (!state.payPlan.report || typeof state.payPlan.report !== 'object') state.payPlan.report = {};
+  state.salPlan = window.BackfillFinance.planSalaries({
+    teachers: state.teachers,
+    localSalaries: state.localSalaries,
+    carrierSalaries: state.carrierSalaries,
+    runId: state.runId
+  }) || {};
+  if (!Array.isArray(state.salPlan.slipRows)) state.salPlan.slipRows = [];
+  if (!Array.isArray(state.salPlan.adjustmentRows)) state.salPlan.adjustmentRows = [];
+  if (!state.salPlan.report || typeof state.salPlan.report !== 'object') state.salPlan.report = {};
+}
+
+window.runDryRun = async function () {
+  if (!state.loaded) { logLine('Load the sources first (Step 1).', 'err'); return; }
+  setBusy('btnDry', true, 'Run dry-run');
+  try {
+    state.runId = 'B6C-' + new Date().toISOString();
+    computePlans();
+    state.dryRunDone = true;
+    renderDryRun();
+    updateGating();
+    logLine('Dry-run ' + state.runId + ' complete: ' + state.payPlan.rows.length + ' payment rows, '
+      + state.salPlan.slipRows.length + ' salary slips, ' + state.salPlan.adjustmentRows.length + ' salary adjustments planned. '
+      + 'Payments ' + (payReport().reconciled === true ? 'RECONCILED' : 'NOT RECONCILED')
+      + '; salaries ' + (salReport().reconciled === true ? 'RECONCILED' : 'NOT RECONCILED') + '.',
+      bothReconciled() ? 'ok' : 'err');
+  } catch (e) {
+    state.dryRunDone = false;
+    logLine('Dry-run failed: ' + (e && e.message ? e.message : e), 'err');
+    updateGating();
+  }
+  setBusy('btnDry', false, 'Run dry-run');
+};
+
+function verdictHtml(label, report) {
+  var ok = report && report.reconciled === true;
+  return '<div class="verdict ' + (ok ? 'good' : 'bad') + '">' + esc(label) + ': ' + (ok ? 'RECONCILED' : 'NOT RECONCILED') + '</div>';
+}
+
+function currencySumsText(sums) {
+  var curs = Object.keys(sums).sort();
+  if (!curs.length) return '—';
+  return curs.map(function (c) { return esc(c || '(no currency)') + ' ' + fmt(sums[c]); }).join(' · ');
+}
+
+function listSectionHtml(title, items, cls) {
+  if (!Array.isArray(items) || !items.length) return '';
+  var html = '<h2>' + esc(title) + ' (' + items.length + ')</h2><ul>';
+  var shown = Math.min(items.length, 100);
+  for (var i = 0; i < shown; i++) {
+    var it = items[i];
+    var text = (typeof it === 'string') ? it : JSON.stringify(it);
+    if (text && text.length > 500) text = text.slice(0, 500) + '…';
+    html += '<li class="' + (cls || '') + '"><span class="mono">' + esc(text) + '</span></li>';
+  }
+  if (items.length > shown) html += '<li>… and ' + (items.length - shown) + ' more (see the downloaded report).</li>';
+  return html + '</ul>';
+}
+
+function rawSummaryHtml(label, report) {
+  var keys = ['counts', 'sums', 'totals', 'perFamily', 'perTeacher', 'byFamily', 'byTeacher'];
+  var html = '';
+  keys.forEach(function (k) {
+    if (report && report[k] != null && typeof report[k] === 'object') {
+      html += '<details><summary class="note">' + esc(label) + ' — planner summary (' + esc(k) + ')</summary><pre class="mono">' + esc(JSON.stringify(report[k], null, 2)) + '</pre></details>';
+    }
+  });
+  return html;
+}
+
+function renderDryRun() {
+  var html = '<p class="note">Run ID: <span class="mono">' + esc(state.runId) + '</span> — planned rows are counted from the plan itself; the planner\u2019s own report follows.</p>';
+
+  // Payments — per-family aggregates computed from the planned rows.
+  html += verdictHtml('Payments', payReport());
+  var famGroups = {};
+  state.payPlan.rows.forEach(function (r) {
+    var fid = String(r.family_id == null ? '' : r.family_id);
+    if (!famGroups[fid]) famGroups[fid] = { count: 0, sums: {} };
+    famGroups[fid].count++;
+    var cur = r.currency == null ? '' : String(r.currency);
+    famGroups[fid].sums[cur] = (famGroups[fid].sums[cur] || 0) + num(r.amount_paid);
+  });
+  var famIds = Object.keys(famGroups).sort();
+  html += '<p>Planned: <b>' + state.payPlan.rows.length + '</b> payment rows across <b>' + famIds.length + '</b> families.</p>';
+  if (famIds.length) {
+    html += '<table><tr><th>Family</th><th>Receipts</th><th>Amount paid (by currency)</th></tr>';
+    famIds.forEach(function (fid) {
+      html += '<tr><td class="mono">' + esc(fid) + '</td><td>' + famGroups[fid].count + '</td><td>' + currencySumsText(famGroups[fid].sums) + '</td></tr>';
+    });
+    html += '</table>';
+  }
+  html += listSectionHtml('Payments — differences', payReport().diffs, 'bad');
+  html += listSectionHtml('Payments — duplicate receipt numbers', payReport().duplicates, 'warn');
+  html += listSectionHtml('Payments — quarantined records (NOT migrated)', quarantineList(), 'warn');
+  html += listSectionHtml('Payments — warnings', payReport().warnings, 'warn');
+  html += rawSummaryHtml('Payments', payReport());
+
+  // Salaries — per-teacher aggregates computed from the planned slip rows.
+  html += verdictHtml('Salaries', salReport());
+  var tchGroups = {};
+  state.salPlan.slipRows.forEach(function (r) {
+    var tid = String(r.teacher_id == null ? '' : r.teacher_id);
+    if (!tchGroups[tid]) tchGroups[tid] = { count: 0, net: 0 };
+    tchGroups[tid].count++;
+    tchGroups[tid].net += num(r.net_payable);
+  });
+  var tchIds = Object.keys(tchGroups).sort();
+  html += '<p>Planned: <b>' + state.salPlan.slipRows.length + '</b> salary slips and <b>' + state.salPlan.adjustmentRows.length + '</b> salary adjustments.</p>';
+  if (tchIds.length) {
+    html += '<table><tr><th>Teacher</th><th>Slips</th><th>Net payable total</th></tr>';
+    tchIds.forEach(function (tid) {
+      html += '<tr><td class="mono">' + esc(tid) + '</td><td>' + tchGroups[tid].count + '</td><td>' + fmt(tchGroups[tid].net) + '</td></tr>';
+    });
+    html += '</table>';
+  }
+  html += listSectionHtml('Salaries — differences', salReport().diffs, 'bad');
+  html += listSectionHtml('Salaries — suppressed slips (deleted months, NOT migrated)', salReport().suppressed, 'warn');
+  html += listSectionHtml('Salaries — unparseable entries', salReport().unparseable, 'warn');
+  html += listSectionHtml('Salaries — warnings', salReport().warnings, 'warn');
+  html += rawSummaryHtml('Salaries', salReport());
+
+  el('dryResults').innerHTML = html;
+}
+
+window.downloadReport = function () {
+  if (!state.dryRunDone) { logLine('Run the dry-run first.', 'err'); return; }
+  var payload = {
+    runId: state.runId,
+    at: new Date().toISOString(),
+    plannedRows: {
+      payments: state.payPlan.rows.length,
+      salary_slips: state.salPlan.slipRows.length,
+      salary_adjustments: state.salPlan.adjustmentRows.length
+    },
+    payments: payReport(),
+    salaries: salReport()
+  };
+  var blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+  var a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'backfill-report-' + state.runId.replace(/[:.]/g, '-') + '.json';
+  a.click();
+  setTimeout(function () { URL.revokeObjectURL(a.href); }, 4000);
+};
+
+// ---------------------------------------------------------------------------
+// STEP 3 — Write to tables
+// ---------------------------------------------------------------------------
+async function flagIsOn() {
+  // The flag lives in system_settings (fee_tables_v1). Prefer the FeeTables
+  // helper; fall back to a direct read with the same value rules.
+  try {
+    if (window.FeeTables && typeof window.FeeTables.isEnabled === 'function') {
+      return (await window.FeeTables.isEnabled()) === true;
+    }
+  } catch (e) { /* fall through to the direct read */ }
+  try {
+    var client = dbClient();
+    if (!client) return false;
+    var res = await client.from('system_settings').select('value').eq('key', 'fee_tables_v1').limit(1);
+    if (!res || res.error) return false;
+    var rows = res.data || [];
+    if (!rows.length) return false;
+    var v = String(rows[0].value == null ? '' : rows[0].value).trim().toLowerCase();
+    return v === 'on' || v === 'true' || v === '1';
+  } catch (e) {
+    return false;
+  }
+}
+
+function insertPayload(row) {
+  // Insert without an id (the engine mints PAY-/SAL-/ADJ- ids, the codebase
+  // convention) and without planner bookkeeping keys (anything starting
+  // with "_", e.g. the _backfill stamp — its data also lives in legacy_json).
+  var clean = {};
+  Object.keys(row || {}).forEach(function (k) {
+    if (k === 'id') return;
+    if (k.charAt(0) === '_') return;
+    clean[k] = row[k];
+  });
+  return clean;
+}
+
+function legacyIdOf(row) {
+  try {
+    var parsed = JSON.parse((row && row.legacy_json) || '{}');
+    return (parsed && parsed.id != null) ? String(parsed.id) : null;
+  } catch (e) { return null; }
+}
+
+function stopError(table, label, cause) {
+  var err = new Error('Stopped at ' + table + ' record ' + label + ': ' + (cause && cause.message ? cause.message : cause)
+    + '. Records already written stay written — fix the problem and press \u201CWrite to tables\u201D again; records already in the tables are detected and skipped.');
+  err.__stop = true;
+  return err;
+}
+
+function renderProgress(s) {
+  el('writeProgress').textContent = 'Progress — payments: ' + s.payments.ins + ' inserted, ' + s.payments.present + ' already present'
+    + ' · salary slips: ' + s.slips.ins + ' inserted, ' + s.slips.present + ' already present'
+    + ' · salary adjustments: ' + s.adjustments.ins + ' inserted, ' + s.adjustments.present + ' already present.';
+}
+
+async function writePayments(client, stats) {
+  var rows = state.payPlan.rows;
+  for (var i = 0; i < rows.length; i++) {
+    var row = rows[i];
+    var label = row.receipt_no ? String(row.receipt_no) : '(no receipt number, row ' + (i + 1) + ' of ' + rows.length + ')';
+    try {
+      var exists = false;
+      if (row.receipt_no) {
+        var sel = await client.from('payments').select('id').eq('receipt_no', row.receipt_no).limit(1);
+        if (sel && sel.error) throw new Error(sel.error.message || 'payments lookup failed');
+        exists = !!((sel && sel.data) || []).length;
+      }
+      if (exists) { stats.payments.present++; }
+      else {
+        var ins = await client.from('payments').insert([insertPayload(row)]);
+        if (ins && ins.error) throw new Error(ins.error.message || 'payments insert failed');
+        stats.payments.ins++;
+      }
+    } catch (e) { throw stopError('payments', label, e); }
+    if ((i + 1) % 25 === 0) renderProgress(stats);
+  }
+  renderProgress(stats);
+  logLine('Payments done: ' + stats.payments.ins + ' inserted, ' + stats.payments.present + ' already present.');
+}
+
+async function writeSlips(client, stats) {
+  var rows = state.salPlan.slipRows;
+  for (var i = 0; i < rows.length; i++) {
+    var row = rows[i];
+    var label = (row.slip_no ? String(row.slip_no) : (String(row.teacher_id || '') + ' / ' + String(row.period || '')));
+    try {
+      var sel = await client.from('salary_slips').select('id')
+        .eq('teacher_id', row.teacher_id).eq('period', row.period).limit(1);
+      if (sel && sel.error) throw new Error(sel.error.message || 'salary_slips lookup failed');
+      if (((sel && sel.data) || []).length) { stats.slips.present++; }
+      else {
+        var ins = await client.from('salary_slips').insert([insertPayload(row)]);
+        if (ins && ins.error) throw new Error(ins.error.message || 'salary_slips insert failed');
+        stats.slips.ins++;
+      }
+    } catch (e) { throw stopError('salary_slips', label, e); }
+    if ((i + 1) % 25 === 0) renderProgress(stats);
+  }
+  renderProgress(stats);
+  logLine('Salary slips done: ' + stats.slips.ins + ' inserted, ' + stats.slips.present + ' already present.');
+}
+
+async function writeAdjustments(client, stats) {
+  var rows = state.salPlan.adjustmentRows;
+  for (var i = 0; i < rows.length; i++) {
+    var row = rows[i];
+    var label = String(row.teacher_id || '') + ' / ' + String(row.period || '') + ' / ' + String(row.kind || 'adjustment') + ' ' + fmt(row.amount);
+    try {
+      var want = legacyIdOf(row);
+      var exists = false;
+      if (want) {
+        var sel = await client.from('salary_adjustments').select('id, legacy_json')
+          .eq('teacher_id', row.teacher_id).eq('period', row.period);
+        if (sel && sel.error) throw new Error(sel.error.message || 'salary_adjustments lookup failed');
+        var candidates = (sel && sel.data) || [];
+        for (var j = 0; j < candidates.length; j++) {
+          if (legacyIdOf(candidates[j]) === want) { exists = true; break; }
+        }
+      }
+      if (exists) { stats.adjustments.present++; }
+      else {
+        var ins = await client.from('salary_adjustments').insert([insertPayload(row)]);
+        if (ins && ins.error) throw new Error(ins.error.message || 'salary_adjustments insert failed');
+        stats.adjustments.ins++;
+      }
+    } catch (e) { throw stopError('salary_adjustments', label, e); }
+    if ((i + 1) % 25 === 0) renderProgress(stats);
+  }
+  renderProgress(stats);
+  logLine('Salary adjustments done: ' + stats.adjustments.ins + ' inserted, ' + stats.adjustments.present + ' already present.');
+}
+
+window.writeTables = async function () {
+  if (!state.loaded || !state.dryRunDone) { logLine('Load sources and run the dry-run first.', 'err'); return; }
+  if (!bothReconciled()) { logLine('Write refused: the dry-run did not reconcile. Review the differences above, fix the cause, and run the dry-run again.', 'err'); return; }
+  var q = quarantineList();
+  if (q.length > 0 && !el('chkQuarantine').checked) {
+    logLine('Write refused: ' + q.length + ' record(s) are quarantined. Tick the confirmation box in Step 3 to migrate the rest anyway.', 'err');
+    return;
+  }
+  var client = dbClient();
+  if (!client) { logLine('Write refused: the database client is not available. Reload the page and sign in again.', 'err'); return; }
+
+  setBusy('btnWrite', true, 'Write to tables');
+  try {
+    if (await flagIsOn()) {
+      logLine('The fee_tables_v1 flag is ON. Turn it OFF before backfilling, then reload this page.', 'err');
+      setBusy('btnWrite', false, 'Write to tables');
+      updateGating();
+      return;
+    }
+    var stats = { payments: { ins: 0, present: 0 }, slips: { ins: 0, present: 0 }, adjustments: { ins: 0, present: 0 } };
+    renderProgress(stats);
+    logLine('Writing planned rows (run ' + state.runId + ')…');
+    await writePayments(client, stats);
+    await writeSlips(client, stats);
+    await writeAdjustments(client, stats);
+    state.wrote = true;
+    logLine('Write run complete: ' + (stats.payments.ins + stats.slips.ins + stats.adjustments.ins) + ' records inserted, '
+      + (stats.payments.present + stats.slips.present + stats.adjustments.present) + ' already present. Now run Step 4 — Verify.', 'ok');
+  } catch (e) {
+    logLine(e && e.message ? e.message : ('Write failed: ' + e), 'err');
+  }
+  setBusy('btnWrite', false, 'Write to tables');
+  updateGating();
+};
+
+// ---------------------------------------------------------------------------
+// STEP 4 — Verify
+// ---------------------------------------------------------------------------
+function groupBy(rows, keyFn) {
+  var map = {};
+  (rows || []).forEach(function (r) {
+    var k = keyFn(r);
+    if (!map[k]) map[k] = [];
+    map[k].push(r);
+  });
+  return map;
+}
+function sumGroups(rows, keyFn, valFn) {
+  var map = {};
+  (rows || []).forEach(function (r) {
+    var k = keyFn(r);
+    map[k] = (map[k] || 0) + num(valFn(r));
+  });
+  return map;
+}
+function compareMaps(label, planMap, tableMap, isMoney, failures) {
+  var keys = {};
+  Object.keys(planMap).forEach(function (k) { keys[k] = true; });
+  Object.keys(tableMap).forEach(function (k) { keys[k] = true; });
+  var bad = [];
+  Object.keys(keys).sort().forEach(function (k) {
+    var p = planMap[k], t = tableMap[k];
+    var same = isMoney ? moneyEq(p || 0, t || 0) : (p || 0) === (t || 0);
+    if (!same) bad.push(k + ' (table ' + (isMoney ? fmt(t || 0) : (t || 0)) + ' vs plan ' + (isMoney ? fmt(p || 0) : (p || 0)) + ')');
+  });
+  if (bad.length) failures.push(label + ': ' + bad.slice(0, 12).join('; ') + (bad.length > 12 ? '; … and ' + (bad.length - 12) + ' more' : ''));
+  return bad.length === 0;
+}
+
+window.verifyTables = async function () {
+  if (!state.loaded) { logLine('Load the sources first (Step 1).', 'err'); return; }
+  setBusy('btnVerify', true, 'Verify tables');
+  try {
+    if (!state.payPlan || !state.salPlan) {
+      computePlans();
+      logLine('No dry-run plan was present, so the plan was rebuilt from the loaded sources for this verification.');
+    }
+    var payAll = await dbSelectAll('payments', '*');
+    var slipAll = await dbSelectAll('salary_slips', '*');
+    var adjAll = await dbSelectAll('salary_adjustments', '*');
+
+    var failures = [];
+    var lines = [];
+    function line(ok, text) {
+      lines.push('<p>' + (ok ? '<span class="ok">PASS</span>' : '<span class="bad">FAIL</span>') + ' — ' + esc(text) + '</p>');
+      return ok;
+    }
+
+    // 1. Receipt count per family == planned count per family.
+    var c1f = [];
+    var ok1 = compareMaps('Receipt counts per family',
+      sumGroups(state.payPlan.rows, function (r) { return String(r.family_id == null ? '' : r.family_id); }, function () { return 1; }),
+      sumGroups(payAll, function (r) { return String(r.family_id == null ? '' : r.family_id); }, function () { return 1; }),
+      false, c1f);
+    line(ok1, '1. Receipt count per family matches the plan' + (ok1 ? ' (' + payAll.length + ' receipts in the table).' : '.'));
+    failures = failures.concat(c1f);
+
+    // 2. Sum amount_paid per family per currency == plan.
+    var famCur = function (r) { return String(r.family_id == null ? '' : r.family_id) + '|' + String(r.currency == null ? '' : r.currency); };
+    var c2f = [];
+    var ok2 = compareMaps('Amount paid per family/currency',
+      sumGroups(state.payPlan.rows, famCur, function (r) { return r.amount_paid; }),
+      sumGroups(payAll, famCur, function (r) { return r.amount_paid; }),
+      true, c2f);
+    line(ok2, '2. Total amount paid per family and currency matches the plan.');
+    failures = failures.concat(c2f);
+
+    // 3. Sum per billing_period per currency == plan.
+    var perCur = function (r) { return String(r.billing_period == null ? '' : r.billing_period) + '|' + String(r.currency == null ? '' : r.currency); };
+    var c3f = [];
+    var ok3 = compareMaps('Amount paid per billing period/currency',
+      sumGroups(state.payPlan.rows, perCur, function (r) { return r.amount_paid; }),
+      sumGroups(payAll, perCur, function (r) { return r.amount_paid; }),
+      true, c3f);
+    line(ok3, '3. Total amount paid per billing period and currency matches the plan.');
+    failures = failures.concat(c3f);
+
+    // 4. Receipt numbers unique in the table.
+    var seen = {}, dupNums = [];
+    payAll.forEach(function (r) {
+      if (r.receipt_no == null || String(r.receipt_no) === '') return;
+      var k = String(r.receipt_no);
+      if (seen[k]) { if (dupNums.indexOf(k) === -1) dupNums.push(k); }
+      seen[k] = true;
+    });
+    var ok4 = dupNums.length === 0;
+    line(ok4, '4. Receipt numbers are unique in the table' + (ok4 ? '.' : ' — duplicates: ' + dupNums.slice(0, 10).join(', ') + (dupNums.length > 10 ? ', …' : '')));
+    if (!ok4) failures.push('Duplicate receipt numbers in the table: ' + dupNums.slice(0, 10).join(', '));
+
+    // 5. Slips per teacher == planned; sum net_payable per teacher == planned.
+    var tchKey = function (r) { return String(r.teacher_id == null ? '' : r.teacher_id); };
+    var c5f = [];
+    var ok5a = compareMaps('Slip counts per teacher',
+      sumGroups(state.salPlan.slipRows, tchKey, function () { return 1; }),
+      sumGroups(slipAll, tchKey, function () { return 1; }), false, c5f);
+    var ok5b = compareMaps('Net payable per teacher',
+      sumGroups(state.salPlan.slipRows, tchKey, function (r) { return r.net_payable; }),
+      sumGroups(slipAll, tchKey, function (r) { return r.net_payable; }), true, c5f);
+    line(ok5a && ok5b, '5. Salary slips per teacher and net payable totals match the plan' + (ok5a && ok5b ? ' (' + slipAll.length + ' slips in the table).' : '.'));
+    failures = failures.concat(c5f);
+
+    // 6. Cancelled rows: counts match the plan and every one has a reason.
+    function cancelledStats(tableRows, planRows) {
+      var t = (tableRows || []).filter(function (r) { return String(r.status || '') === 'Cancelled'; });
+      var p = (planRows || []).filter(function (r) { return String(r.status || '') === 'Cancelled'; });
+      var noReason = t.filter(function (r) { return !r.cancel_reason || String(r.cancel_reason).trim() === ''; }).length;
+      return { table: t.length, plan: p.length, noReason: noReason };
+    }
+    var csPay = cancelledStats(payAll, state.payPlan.rows);
+    var csSlip = cancelledStats(slipAll, state.salPlan.slipRows);
+    var csAdj = cancelledStats(adjAll, state.salPlan.adjustmentRows);
+    var ok6 = csPay.table === csPay.plan && csSlip.table === csSlip.plan && csAdj.table === csAdj.plan
+      && csPay.noReason === 0 && csSlip.noReason === 0 && csAdj.noReason === 0;
+    line(ok6, '6. Cancelled rows match the plan and every cancelled row has a reason'
+      + ' (payments ' + csPay.table + '/' + csPay.plan + ', slips ' + csSlip.table + '/' + csSlip.plan + ', adjustments ' + csAdj.table + '/' + csAdj.plan
+      + '; missing reasons: ' + (csPay.noReason + csSlip.noReason + csAdj.noReason) + ').');
+    if (!ok6) failures.push('Cancelled-row check failed (see line 6).');
+
+    // 7. Zero rows with empty family_id / teacher_id.
+    var emptyFam = payAll.filter(function (r) { return r.family_id == null || String(r.family_id).trim() === ''; }).length;
+    var emptyTch = slipAll.concat(adjAll).filter(function (r) { return r.teacher_id == null || String(r.teacher_id).trim() === ''; }).length;
+    var ok7 = emptyFam === 0 && emptyTch === 0;
+    line(ok7, '7. No rows with an empty family or teacher' + (ok7 ? '.' : ' — empty family_id: ' + emptyFam + ', empty teacher_id: ' + emptyTch + '.'));
+    if (!ok7) failures.push('Rows with empty family_id (' + emptyFam + ') or teacher_id (' + emptyTch + ').');
+
+    // 8. Informational only: stored remaining_balance vs recomputed.
+    var snapDiff = 0;
+    payAll.forEach(function (r) {
+      if (r.remaining_balance == null) return;
+      var recomputed = Math.max(0, num(r.total_payable) - num(r.discount) - num(r.amount_paid));
+      if (Math.abs(num(r.remaining_balance) - recomputed) > 0.01) snapDiff++;
+    });
+    lines.push('<p><span class="warn">INFO</span> — 8. Known snapshot differences (informational): <b>' + snapDiff + '</b> receipt(s) store a remaining balance that differs from a fresh recomputation. This is expected for historical receipts and does not fail verification.</p>');
+
+    var verdict = failures.length === 0
+      ? '<div class="verdict good">ALL CHECKS PASSED — the finance tables match the plan.</div>'
+      : '<div class="verdict bad">CHECKS FAILED:<br>' + failures.map(function (f) { return esc(f); }).join('<br>') + '</div>';
+    el('verifyResults').innerHTML = verdict + lines.join('');
+    logLine(failures.length === 0 ? 'Verification: ALL CHECKS PASSED.' : 'Verification FAILED: ' + failures.length + ' problem(s). See Step 4.', failures.length === 0 ? 'ok' : 'err');
+  } catch (e) {
+    logLine('Verify failed: ' + (e && e.message ? e.message : e), 'err');
+  }
+  setBusy('btnVerify', false, 'Verify tables');
+};
+</script>
+</body>
+</html>
