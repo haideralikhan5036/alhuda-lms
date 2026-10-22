@@ -316,6 +316,14 @@
         } else {
           console.log(`[Cloud Fee Sync] Successfully synced ${newRecords.length} fee records for ${fId} to Supabase`);
           updateCloudSyncIndicator('synced');
+          // Batch 6B dual-write: with the fee_tables_v1 flag ON, each record
+          // is also copied into the payments table (one row per record,
+          // including every advance-split record). Flag OFF = no-op.
+          try {
+            if (window.FeeTables && typeof window.FeeTables.dualWritePayment === 'function') {
+              newRecords.forEach(function (nr) { window.FeeTables.dualWritePayment(nr, 'fee_form'); });
+            }
+          } catch (e) { /* dual-write must never affect the legacy sync */ }
         }
       } catch (e) {
         console.error("[Cloud Fee Sync] Fatal sync exception:", e);

@@ -2287,6 +2287,12 @@ async function submitFamilyManualInvoiceForm(e, familyId) {
   }
 
   await _saveFamilyStructuredNotes(family.id, fNotes);
+  // Batch 6B dual-write (fee_tables_v1 flag; no-op when off).
+  try {
+    if (window.FeeTables && typeof window.FeeTables.dualWritePayment === 'function') {
+      window.FeeTables.dualWritePayment(recordObj, 'manual_invoice');
+    }
+  } catch (e) { /* dual-write must never affect the legacy save */ }
   if (typeof loadFeeDashboardStats === 'function') {
     try { loadFeeDashboardStats(); } catch (err) {}
   }
@@ -3515,6 +3521,13 @@ async function submitEditFamilyPaymentForm(e, familyId, recordId, month, year) {
   }
 
   await _saveFamilyStructuredNotes(family.id, fNotes);
+  // Batch 6B dual-write (fee_tables_v1 flag; no-op when off). The persisted
+  // record is the merged entry (stored fields overlaid with the edit).
+  try {
+    if (window.FeeTables && typeof window.FeeTables.dualWritePayment === 'function') {
+      window.FeeTables.dualWritePayment(idx >= 0 ? fNotes.fee_history[idx] : updatedEntry, 'edit360');
+    }
+  } catch (e) { /* dual-write must never affect the legacy save */ }
   if (typeof loadFeeDashboardStats === 'function') {
     try { loadFeeDashboardStats(); } catch (err) {}
   }
@@ -3607,6 +3620,15 @@ async function deleteFamilyPaymentRecord(familyId, recordId, month, year) {
     }
 
     await _saveFamilyStructuredNotes(mgrFamily.id, mfNotes);
+    // Batch 6B dual-write (fee_tables_v1 flag; no-op when off): the table
+    // row is CANCELLED with the same reason — never deleted.
+    try {
+      if (window.FeeTables && typeof window.FeeTables.dualWritePaymentCancelled === 'function') {
+        const dwRec = (mfNotes.fee_history || []).find(r => r && r.cancelled_at === cancelledAt)
+          || { receiptNo: recordId, familyId: mgrFamily.id, month, year };
+        window.FeeTables.dualWritePaymentCancelled(dwRec, 'manager', reasonText);
+      }
+    } catch (e) { /* dual-write must never affect the legacy cancellation */ }
     if (typeof loadFeeDashboardStats === 'function') {
       try { loadFeeDashboardStats(); } catch (err) {}
     }
@@ -3640,6 +3662,14 @@ async function deleteFamilyPaymentRecord(familyId, recordId, month, year) {
   }
 
   await _saveFamilyStructuredNotes(family.id, fNotes);
+  // Batch 6B dual-write (fee_tables_v1 flag; no-op when off): the legacy
+  // hard delete above is unchanged, but the table row is only CANCELLED
+  // (reason "deleted by owner") — financial rows are never hard-deleted.
+  try {
+    if (window.FeeTables && typeof window.FeeTables.dualWritePaymentCancelled === 'function') {
+      window.FeeTables.dualWritePaymentCancelled({ receiptNo: recordId, familyId: family.id, month, year }, 'owner', 'deleted by owner');
+    }
+  } catch (e) { /* dual-write must never affect the legacy delete */ }
   if (typeof loadFeeDashboardStats === 'function') {
     try { loadFeeDashboardStats(); } catch (err) {}
   }
@@ -5511,6 +5541,13 @@ async function deleteTeacherSalaryMonthRecord360(teacherId, monthRaw, slipKey) {
     if (!deletedList.includes(monthRaw)) deletedList.push(monthRaw);
     await _persistTeacher360Updates(teacher.id, {}, { deleted_salary_months: deletedList });
   }
+  // Batch 6B dual-write (fee_tables_v1 flag; no-op when off): the legacy
+  // deletion above is unchanged, but the table slip is only CANCELLED.
+  try {
+    if (window.FeeTables && typeof window.FeeTables.dualWriteSlipCancelled === 'function') {
+      window.FeeTables.dualWriteSlipCancelled(teacherId, monthRaw);
+    }
+  } catch (e) { /* dual-write must never affect the legacy deletion */ }
   _notify360(`Salary record for ${monthRaw} removed.`);
   await openTeacher360Profile(teacherId, 'salary', true, { forceRefresh: true });
 }
@@ -5883,6 +5920,24 @@ async function submitTeacherSalaryAdjustment360(e, teacherId) {
     await _persistTeacher360Updates(teacher.id, {}, { current_bonus: existingSlip.bonus });
   }
 
+  // Batch 6B dual-write (fee_tables_v1 flag; no-op when off): the adjustment
+  // becomes a salary_adjustments row and the month's slip is refreshed.
+  try {
+    if (window.FeeTables && typeof window.FeeTables.dualWriteAdjustment === 'function') {
+      let dwAdj = null;
+      if (adjType === 'deduction') {
+        const freshMeta = _resolveTeacherCustomMeta(teacher);
+        const recs = Array.isArray(freshMeta.deduction_records) ? freshMeta.deduction_records : [];
+        dwAdj = recs.find(r => r && String(r.month) === month && Number(r.amount) === amount)
+          || { type: category, category, amount, date, month, reason: remarks || category, status: 'Applied' };
+      } else {
+        dwAdj = { kind: 'bonus', type: category, category, amount, date, month, reason: remarks || category, status: 'Applied' };
+      }
+      window.FeeTables.dualWriteAdjustment(teacherId, dwAdj);
+      window.FeeTables.dualWriteSlip(teacherId, { ...existingSlip, slip_key: slipKey });
+    }
+  } catch (e) { /* dual-write must never affect the legacy adjustment */ }
+
   if (typeof calculateMonthlySalaries === 'function') {
     calculateMonthlySalaries();
   }
@@ -5914,6 +5969,18 @@ async function deleteTeacherDeductionRecord360(teacherId, deductionId) {
   }
 
   await _persistTeacher360Updates(teacher.id, {}, { deduction_records: updated });
+  // Batch 6B dual-write (fee_tables_v1 flag; no-op when off): the table row
+  // is CANCELLED, never deleted, and the month's slip row is refreshed.
+  try {
+    if (window.FeeTables && typeof window.FeeTables.dualWriteAdjustmentCancelled === 'function' && target) {
+      window.FeeTables.dualWriteAdjustmentCancelled(teacherId, target);
+      try {
+        const ssNow = JSON.parse(localStorage.getItem('alhuda_teacher_salaries') || '{}');
+        const keyNow = `${teacher.id}_${(target.month || 'September 2026').replace(/\s+/g, '_')}`;
+        if (ssNow[keyNow]) window.FeeTables.dualWriteSlip(teacherId, { ...ssNow[keyNow], slip_key: keyNow });
+      } catch (e) { /* slip refresh is best-effort */ }
+    }
+  } catch (e) { /* dual-write must never affect the legacy removal */ }
   _notify360('Deduction removed and salary updated.');
   await openTeacher360Profile(teacherId, 'deductions', true, { forceRefresh: true });
 }

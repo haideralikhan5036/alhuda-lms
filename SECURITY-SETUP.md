@@ -224,3 +224,48 @@ Work through this list top to bottom before merging the security branch:
       `RELAY_SECRET` values do not match — see Step 3)
 - [ ] Merge the branch into `main`, wait for Vercel to deploy, and repeat the
       checks on the live site
+
+---
+
+## Backup and restore
+
+Backups are taken **before any change that touches how money or course
+material is stored**, and are kept in a dated folder **outside the git
+repository** (convention: `LMS-Backups/<YYYY-MM-DD>/` on the owner's
+computer, or `~/workspace/backups/<YYYY-MM-DD>-<batch>/` on the assistant's
+machine). A backup is never committed to the repository and never uploaded
+to a third-party file host: it contains student data and password hashes.
+
+A complete backup has three parts:
+
+1. **The D1 database** — either a `wrangler d1 export` SQL file or a full
+   dump of every table (all rows, taken with SELECT queries). Verify before
+   proceeding: the file is larger than zero bytes, and the row count of
+   every table in the backup equals the live count.
+2. **Snapshots of the JSON stores** — one JSON file with every family's
+   `notes` field and one with every teacher's `address` field. These two
+   fields hold the legacy fee history, salary records, and account metadata,
+   so they can be restored on their own without touching anything else.
+3. **The R2 bucket** (course material files) — a manifest of every object
+   (key, size, last modified) plus a full local copy of the objects with
+   their keys preserved (for example with `rclone copy`). Verify the local
+   copy by file count and total bytes against the manifest.
+
+**To restore:**
+
+- **Whole database:** apply the export/dump SQL to an *empty* database with
+  `npx wrangler d1 execute alhuda-lms-db --remote --file=<backup>.sql`, or
+  use D1 Time Travel to return the database to a recorded bookmark:
+  `npx wrangler d1 time-travel restore alhuda-lms-db --bookmark=<bookmark>`
+  (Time Travel retains 30 days of history; the bookmark for a backup is
+  recorded in that backup folder's README at backup time).
+- **One family's notes / one teacher's address:** run a single-row
+  `UPDATE` that sets the field back to the JSON string stored in the
+  snapshot file for that row's id.
+- **R2 bucket:** upload the local copy back with the keys unchanged, for
+  example `rclone copy <local-folder> r2:alhuda-islamic-centre-storage`,
+  or per file with `npx wrangler r2 object put`.
+
+After any restore, sign in to each portal and confirm the dashboard, fees,
+payroll, and course material all load before telling users the system is
+back.

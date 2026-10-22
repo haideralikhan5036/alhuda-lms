@@ -1136,6 +1136,10 @@ const WRITE_ACTIONS = new Set(['insert', 'upsert', 'update', 'delete']);
 // Decides table+action permission. Unknown tables fail closed for restricted
 // roles; the downstream handler still 400s unknown tables for owner/manager.
 function checkTableAccess(role, table, action) {
+  // Batch 6B: financial rows (fee receipts, salary slips, salary
+  // adjustments) are NEVER hard-deleted, by any role — the portals cancel
+  // them with a reason instead. This runs before the owner allow-all.
+  if (action === 'delete' && ['payments', 'salary_slips', 'salary_adjustments'].includes(table)) return 'deny';
   if (role === 'owner') return 'allow';
   // Batch 2.1: the audit log is owner-only through this API. The Worker
   // itself writes entries directly (never through /api/db), so no other
@@ -1150,7 +1154,7 @@ function checkTableAccess(role, table, action) {
     // them per key in the manager write guards (course-catalog keys only),
     // which un-denies the manager curriculum upload path (S13). Password
     // fields are stripped separately.
-    if (action === 'delete' && ['families', 'students', 'teachers', 'payments'].includes(table)) return 'deny';
+    if (action === 'delete' && ['families', 'students', 'teachers', 'payments', 'salary_slips', 'salary_adjustments'].includes(table)) return 'deny';
     return 'allow';
   }
 
@@ -1169,6 +1173,11 @@ function checkTableAccess(role, table, action) {
       case 'leave_requests':
         return (action === 'select' || action === 'insert' || action === 'upsert') ? 'allow' : 'deny';
       case 'trial_students':
+        return action === 'select' ? 'allow' : 'deny';
+      case 'salary_slips':
+      case 'salary_adjustments':
+        // Batch 6B: teachers may read their OWN salary rows only — row
+        // ownership is enforced in applyDbScope/rowInScope (teacher_id).
         return action === 'select' ? 'allow' : 'deny';
       default:
         return 'deny'; // families, payments, system_settings
@@ -1189,7 +1198,7 @@ function checkTableAccess(role, table, action) {
       case 'trial_students':
         return action === 'select' ? 'allow' : 'deny';
       default:
-        return 'deny'; // system_settings
+        return 'deny'; // system_settings, salary_slips, salary_adjustments (Batch 6B: parents have no salary access)
     }
   }
 
@@ -1376,6 +1385,17 @@ function isCatalogSettingsKey(key) {
   return k === 'alhuda_custom_books' || k === 'alhuda_custom_books_index' || k.startsWith('BOOK_PAGE_');
 }
 
+// Batch 6B: keys a manager may READ in system_settings = the catalog keys
+// above + the shared logo + the fee_tables_v1 dual-write flag (portals
+// must read the flag inside manager sessions too). WRITES stay
+// catalog-only: applyManagerWriteGuards adjudicates them with
+// isCatalogSettingsKey, which deliberately does NOT include the flag or
+// the logo — toggling fee_tables_v1 is owner-only.
+function isManagerReadableSettingsKey(key) {
+  const k = String(key || '');
+  return isCatalogSettingsKey(k) || k === 'alhuda_logo' || k === 'fee_tables_v1';
+}
+
 // Remove contact keys whose value is exactly the mask placeholder. A
 // manager's edit form echoes the masked read back on save; the placeholder
 // must never overwrite the stored value. Real values pass through.
@@ -1524,9 +1544,11 @@ async function loadRowsByIds(db, table, ids) {
 
 // Batch 2 manager write guards. Runs inside handleScopedDbRequest for
 // role==='manager' writes BEFORE delegation; returns true to allow, false
-// to deny (403). May transform body.values in place (mask write-back
-// protection, item (c)).
-async function applyManagerWriteGuards(db, body) {
+// to deny (403, generic message). May transform body.values in place
+// (mask write-back protection, item (c)). Batch 6B: a branch may instead
+// return { deny: '<message>' } to deny with that exact English error in
+// the 403 body (used by the salary-tables guard, item (d)).
+async function applyManagerWriteGuards(db, body, scope) {
   const table = body.table;
   const action = body.action;
   const filters = Array.isArray(body.filters) ? body.filters : [];
@@ -1608,6 +1630,37 @@ async function applyManagerWriteGuards(db, body) {
       }
     }
     return true;
+  }
+
+  // (d) Batch 6B: salary tables — a manager can never create or edit a
+  // salary slip or adjustment for a manager account (including their
+  // own). Rows are keyed on the real teacher_id column (not blob keys),
+  // against scope.managerIds resolved in resolveScopeIds.
+  if (table === 'salary_slips' || table === 'salary_adjustments') {
+    const managerIds = (scope && Array.isArray(scope.managerIds)) ? scope.managerIds : [];
+    const denyMsg = 'Managers cannot create or edit salary records for manager accounts.';
+    if (action === 'insert' || action === 'upsert' || action === 'update') {
+      const rows = Array.isArray(body.values) ? body.values : [body.values || {}];
+      for (const row of rows) {
+        if (row && row.teacher_id != null && managerIds.includes(String(row.teacher_id))) {
+          return { deny: denyMsg };
+        }
+      }
+      // An update/upsert that does not carry teacher_id in its values:
+      // check the STORED row it targets (same load-by-id pattern as the
+      // teachers guard above) before letting it through.
+      if (rows.some((row) => !row || row.teacher_id == null)) {
+        const ids = new Set(filterIdValues(filters));
+        for (const row of rows) { if (row && row.id != null) ids.add(String(row.id)); }
+        if (ids.size) {
+          const targets = await loadRowsByIds(db, table, [...ids]);
+          if (targets.some((t) => managerIds.includes(String(t.teacher_id)))) {
+            return { deny: denyMsg };
+          }
+        }
+      }
+    }
+    return true; // delete already denied in checkTableAccess
   }
 
   return true;
@@ -1743,6 +1796,10 @@ function applyDbScope(body, role, sub, scope) {
       }
     } else if (table === 'teachers' && action === 'select') {
       filters.push(eq('id', sub));
+    } else if ((table === 'salary_slips' || table === 'salary_adjustments') && action === 'select') {
+      // Batch 6B: a teacher reads only their own salary rows. (Writes by
+      // teachers on these tables are already denied in checkTableAccess.)
+      filters.push(eq('teacher_id', sub));
     } else if (table === 'class_schedules') {
       if (action === 'select' || action === 'delete') {
         filters.push(eq('teacher_id', sub));
@@ -1816,15 +1873,27 @@ function rowInScope(role, sub, scope, table, row) {
       case 'class_schedules':
       case 'attendance_logs':
       case 'leave_requests':
-      case 'trial_students': return String(row.teacher_id) === sub;
+      case 'trial_students':
+      case 'salary_slips':
+      case 'salary_adjustments': return String(row.teacher_id) === sub;
       default: return false;
     }
   }
   // Batch 2: managers may only ever receive course-catalog settings rows
   // (plus the shared logo). All other keys are owner-only.
   if (role === 'manager' && table === 'system_settings') {
-    return isCatalogSettingsKey(row.key) || String(row.key || '') === 'alhuda_logo';
+    return isManagerReadableSettingsKey(row.key);
   }
+  // Batch 6B: a manager never receives salary rows that belong to a
+  // manager account (including their own) — keyed on the real teacher_id
+  // column, not on blob keys. scope.managerIds is resolved for every
+  // manager request in resolveScopeIds; tolerate it being absent.
+  if (role === 'manager' && (table === 'salary_slips' || table === 'salary_adjustments')) {
+    const managerIds = (scope && Array.isArray(scope.managerIds)) ? scope.managerIds : [];
+    return !managerIds.includes(String(row.teacher_id));
+  }
+  // Batch 6B: payments rows ARE in scope for managers — their content is
+  // controlled by scrubRow (legacy_json blanking) below.
   return true; // owner / manager
 }
 
@@ -1840,6 +1909,15 @@ function scrubRow(role, sub, scope, table, row) {
     else if (table === 'students') maskNotesContactsForManager(r);
     else if (table === 'trial_students') maskTrialRowForManager(r);
     else if (table === 'teachers') maskTeacherRowForManager(r);
+    else if (table === 'payments') {
+      // Batch 6B: a payment row's legacy_json holds the original receipt
+      // record VERBATIM, including contact snapshots (WhatsApp / email).
+      // Managers must never receive it. scrubRow runs on EVERY row the
+      // pipeline returns — selects and insert/update responses alike —
+      // so blanking it here covers all response shapes. Only this copy
+      // is changed; the stored row is untouched.
+      r.legacy_json = null;
+    }
   }
 
   // Scrub hydrated relations: the db engine's joins pull full tables
@@ -1958,8 +2036,13 @@ async function handleScopedDbRequest(ctx, auth) {
   // Batch 2: manager write guards (manager-record identity, system_settings
   // key allowlist, mask write-back protection) — deny BEFORE delegation.
   if (role === 'manager' && WRITE_ACTIONS.has(action)) {
-    const guardOk = await applyManagerWriteGuards(db, body);
-    if (!guardOk) {
+    const guardResult = await applyManagerWriteGuards(db, body, scope);
+    if (guardResult !== true) {
+      // Batch 6B: a guard may deny with a specific English message
+      // ({ deny: '...' }); the 403 body keeps the standard shape.
+      if (guardResult && typeof guardResult === 'object' && guardResult.deny) {
+        return json(request, env, { ok: false, error: guardResult.deny }, 403);
+      }
       return forbidden(request, env);
     }
   }

@@ -21,6 +21,8 @@
     'class_schedules',
     'attendance_logs',
     'payments',
+    'salary_slips',
+    'salary_adjustments',
     'leave_requests',
     'trial_students',
     'system_settings'
@@ -97,6 +99,8 @@
       class_schedules: 'SCH-',
       attendance_logs: 'ATT-',
       payments: 'PAY-',
+      salary_slips: 'SAL-',
+      salary_adjustments: 'ADJ-',
       leave_requests: 'LVR-',
       trial_students: 'TRL-',
       system_settings: 'SYS-'
