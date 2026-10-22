@@ -2786,6 +2786,15 @@ font-family: var(--font-num) !important;
         try {
           sessionStorage.setItem('alhuda_teacher_token', serverAttempt.token);
         } catch (err) {}
+        // Batch 7 (F3.1): fresh token — forget any failed pre-login D1
+        // probe result (e.g. from the session-restore attempt above) so
+        // the profile fetch below re-checks D1 WITH this token. (The
+        // owner login already did this; teacher/manager did not.)
+        try {
+          if (typeof window.resetCloudflareD1Availability === 'function') {
+            window.resetCloudflareD1Availability();
+          }
+        } catch (err) {}
         // Fetch our own teacher record through the authenticated API.
         try {
           const tRes = await db.from('teachers').select('*').eq('id', serverAttempt.id).single();
@@ -3012,28 +3021,55 @@ font-family: var(--font-num) !important;
 
       document.getElementById('todayDateSubtitle').innerText = `${DAY_NAMES[currentDay]}, ${now.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })} (Asia/Karachi PKT)`;
 
-      // Refresh CURRENT_TEACHER's latest zoom_link and profile from backend if updated
-      try {
-        const { data: freshTeacher } = await db.from('teachers').select('*').eq('id', CURRENT_TEACHER.id).single();
-        if (freshTeacher && freshTeacher.id) {
-          CURRENT_TEACHER = normalizeTeacherSession({ ...CURRENT_TEACHER, ...freshTeacher });
-        }
-      } catch (e) {}
+      // Batch 7 (F3.6): the profile refresh and the four data fetches
+      // below are all independent (keyed on CURRENT_TEACHER.id) — run
+      // them in PARALLEL instead of the old serial waterfall, where a
+      // stall in any one step froze every count behind it. The profile
+      // refresh no longer blocks the data path; it is awaited only
+      // before the results are processed (its zoom_link feeds the slot
+      // resolution below).
+      const profileRefreshPromise = (async () => {
+        try {
+          const { data: freshTeacher } = await db.from('teachers').select('*').eq('id', CURRENT_TEACHER.id).single();
+          if (freshTeacher && freshTeacher.id) {
+            CURRENT_TEACHER = normalizeTeacherSession({ ...CURRENT_TEACHER, ...freshTeacher });
+          }
+        } catch (e) {}
+      })();
 
-      // 1. Fetch all assigned students for this teacher (including parent family status)
-      let assignedStudentsRaw = [];
-      const { data: assignedWithFam, error: stuFetchErr } = await db.from('students')
-        .select('*, families(id, parent_name, status)')
-        .eq('assigned_teacher_id', CURRENT_TEACHER.id);
-
-      if (!stuFetchErr && Array.isArray(assignedWithFam)) {
-        assignedStudentsRaw = assignedWithFam;
-      } else {
+      const studentsPromise = (async () => {
+        const { data: assignedWithFam, error: stuFetchErr } = await db.from('students')
+          .select('*, families(id, parent_name, status)')
+          .eq('assigned_teacher_id', CURRENT_TEACHER.id);
+        if (!stuFetchErr && Array.isArray(assignedWithFam)) return assignedWithFam;
         const { data: fallbackStu } = await db.from('students')
           .select('*')
           .eq('assigned_teacher_id', CURRENT_TEACHER.id);
-        assignedStudentsRaw = fallbackStu || [];
-      }
+        return fallbackStu || [];
+      })();
+      const schedulesPromise = db.from('class_schedules')
+        .select('*, students(*)')
+        .eq('teacher_id', CURRENT_TEACHER.id);
+      const todayLogsPromise = db.from('attendance_logs')
+        .select('*')
+        .eq('date', todayDate)
+        .eq('teacher_id', CURRENT_TEACHER.id);
+      const advanceLogsPromise = (async () => {
+        try {
+          const { data: advData } = await db.from('attendance_logs')
+            .select('*')
+            .eq('teacher_id', CURRENT_TEACHER.id)
+            .eq('status', 'Advance Class');
+          return advData || [];
+        } catch (e) { return []; }
+      })();
+
+      const [assignedStudentsRaw, schedFetchRes, todayLogsRes, advanceLogs] = await Promise.all([
+        studentsPromise, schedulesPromise, todayLogsPromise, advanceLogsPromise
+      ]);
+      await profileRefreshPromise;
+      const allScheds = schedFetchRes ? schedFetchRes.data : null;
+      const logs = todayLogsRes ? todayLogsRes.data : null;
 
       // Filter strictly to regular, non-deactivated students assigned to THIS teacher
       const regularNonDeactivated = (assignedStudentsRaw || []).filter(s =>
@@ -3063,11 +3099,7 @@ font-family: var(--font-num) !important;
       const listHeaderBadge = document.getElementById('studentListCountBadge');
       if (listHeaderBadge) listHeaderBadge.innerText = `${activeAssignedCount} Active Student${activeAssignedCount === 1 ? '' : 's'}`;
 
-      // 2. Fetch all schedules for this teacher and clean up any stale rows (deactivated or reassigned to another teacher)
-      const { data: allScheds } = await db.from('class_schedules')
-        .select('*, students(*)')
-        .eq('teacher_id', CURRENT_TEACHER.id);
-
+      // 2. Clean up any stale schedule rows in the fetched set (deactivated or reassigned to another teacher)
       const validSchedules = [];
       for (const slot of (allScheds || [])) {
         const stuObj = (assignedStudentsRaw || []).find(st => String(st.id) === String(slot.student_id)) || slot.students;
@@ -3092,24 +3124,12 @@ font-family: var(--font-num) !important;
       // 3. Filter today's schedules (excluding deactivated students)
       const todayScheds = ALL_TEACHER_SCHEDULES.filter(s => Number(s.day_of_week) === currentDay);
 
-      // 4. Fetch attendance logs for today
-      const { data: logs } = await db.from('attendance_logs')
-        .select('*')
-        .eq('date', todayDate)
-        .eq('teacher_id', CURRENT_TEACHER.id);
-
+      // 4. Attendance logs for today (fetched in parallel above)
       const logsMap = {};
       (logs || []).forEach(l => logsMap[l.schedule_id] = l);
 
-      // 4b. Fetch all advance class logs by this teacher to check if any class today was covered in advance
-      let advanceLogs = [];
-      try {
-        const { data: advData } = await db.from('attendance_logs')
-          .select('*')
-          .eq('teacher_id', CURRENT_TEACHER.id)
-          .eq('status', 'Advance Class');
-        advanceLogs = advData || [];
-      } catch(e) {}
+      // 4b. Advance class logs by this teacher (fetched in parallel
+      // above) — check if any class today was covered in advance
 
       // Also check localStorage advance records
       let localAdv = [];

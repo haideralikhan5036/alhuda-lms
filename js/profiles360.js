@@ -2533,16 +2533,27 @@ async function submitEditSingleStudentForm(e, familyId, studentId) {
     delete stuMeta.family_deactivated;
     delete stuMeta.deactivated_individually;
     stuMeta.reactivated_at = new Date().toISOString();
-  }
 
-  let effectiveTeacherId = assigned_teacher_id;
-  if (prevWasInactive && !nextWantsInactive && !effectiveTeacherId && stuMeta.previous_teacher_id_before_deactivation) {
-    const prevTchObj = (window.ALL_TEACHERS || []).find(t => String(t.id) === String(stuMeta.previous_teacher_id_before_deactivation));
-    const isPrevEligible = prevTchObj && (typeof isEligibleTeacherRecord === 'function' ? isEligibleTeacherRecord(prevTchObj) : true);
-    if (isPrevEligible) {
-      effectiveTeacherId = prevTchObj.id;
+    // Batch 7 (F2.3): a reactivated student starts with no timetable —
+    // delete any residual schedule rows for the student (defence in
+    // depth; deactivation normally removed them, this covers legacy
+    // data where rows survived).
+    try {
+      await db.from('class_schedules').delete().eq('student_id', student.id);
+      if (Array.isArray(window.ALL_CLASS_SCHEDULES)) {
+        window.ALL_CLASS_SCHEDULES = window.ALL_CLASS_SCHEDULES.filter(sc => String(sc.student_id) !== String(student.id));
+      }
+    } catch (err) {
+      console.warn('[Student 360] Residual schedule cleanup notice:', err);
     }
   }
+
+  // Batch 7 (F2.2): a blank teacher field stays blank (null). The
+  // previous teacher recorded in the notes archive is audit history
+  // (payroll proration reads it) and is NEVER auto-substituted back into
+  // a live assignment on an inactive -> active edit. An explicitly chosen
+  // teacher in the form remains a normal manual assignment.
+  const effectiveTeacherId = assigned_teacher_id;
 
   if (oldTeacherId && String(oldTeacherId) !== String(effectiveTeacherId || '')) {
     try {
@@ -2653,15 +2664,21 @@ async function syncFamilyStatusFromStudentsBackend(familyId, extraFamilyColumns 
   const activeStudentCount = activeStudents.length;
 
   let computedFamilyStatus = family.status || 'Active';
-  if (famStudents.length > 0) {
-    if (activeStudentCount >= 1) {
-      const currLower = String(computedFamilyStatus || '').trim().toLowerCase();
-      computedFamilyStatus = (currLower === 'inactive' || currLower === 'deactivated') ? 'Active' : (computedFamilyStatus || 'Active');
-    } else {
+  const explicitStatus = String(extraFamilyColumns.status || '').trim();
+  if (explicitStatus) {
+    // An explicit lifecycle instruction from an authorized flow (the
+    // family-level deactivate/reactivate handler) always wins.
+    computedFamilyStatus = explicitStatus;
+  } else if (famStudents.length > 0) {
+    const currLower = String(computedFamilyStatus || '').trim().toLowerCase();
+    if (currLower === 'inactive' || currLower === 'deactivated') {
+      // Batch 7 (F1.1): the stored family status is AUTHORITATIVE.
+      // Student activity alone must NEVER flip a deactivated family back
+      // to Active — only an explicit reactivation (above) may do that.
+      computedFamilyStatus = family.status;
+    } else if (activeStudentCount === 0) {
       computedFamilyStatus = 'Inactive';
     }
-  } else if (extraFamilyColumns.status) {
-    computedFamilyStatus = extraFamilyColumns.status;
   }
 
   const fNotes = _parseFamilyStructuredNotes(family);
@@ -2773,25 +2790,52 @@ async function toggleSingleStudentDeactivate(familyId, studentId) {
   delete stuMeta.on_leave;
   stuMeta.reactivated_at = new Date().toISOString();
 
-  const candidateTchId = student.assigned_teacher_id || stuMeta.previous_teacher_id_before_deactivation || null;
-  let restoredTeacherId = null;
-  if (candidateTchId) {
-    const tchObj = (window.ALL_TEACHERS || []).find(t => String(t.id) === String(candidateTchId));
-    const isEligible = tchObj && (typeof isEligibleTeacherRecord === 'function' ? isEligibleTeacherRecord(tchObj) : true);
-    if (isEligible) {
-      restoredTeacherId = tchObj.id;
+  // Batch 7 (F1.2): authorized reactivation protocol — when the family is
+  // deactivated, reactivate the FAMILY row first (this explicit
+  // owner/manager action), then the student. The backend guard rejects a
+  // student activation while the family is still deactivated.
+  if (famWasDeactivated) {
+    const { error: famReactErr } = await db.from('families').update({ status: 'Active' }).eq('id', familyId);
+    if (famReactErr) {
+      _notify360('Could not reactivate the family: ' + (famReactErr.message || famReactErr), 'error');
+      return;
     }
+    if (family) family.status = 'Active';
+  }
+
+  // Batch 7 (F2.1): the reactivated student returns with NO teacher
+  // assigned. The previous-teacher id kept in the notes archive is audit
+  // history (payroll proration reads it) and is NEVER promoted back into
+  // a live assignment — a teacher is assigned manually, exactly as the
+  // confirm dialog above already promises.
+  // Batch 7 (F2.3): also delete any residual schedule rows for this
+  // student (deactivation normally removed them; this covers legacy data
+  // where rows survived) so the old teacher keeps no timetable link or
+  // Worker-scope access to the student.
+  try {
+    await db.from('class_schedules').delete().eq('student_id', student.id);
+    if (Array.isArray(window.ALL_CLASS_SCHEDULES)) {
+      window.ALL_CLASS_SCHEDULES = window.ALL_CLASS_SCHEDULES.filter(sc => String(sc.student_id) !== String(student.id));
+    }
+  } catch (err) {
+    console.warn('[Student 360] Residual schedule cleanup notice:', err);
   }
 
   await _saveStudentRecordBackend(student.id, {
     status: 'Active',
-    assigned_teacher_id: restoredTeacherId,
+    assigned_teacher_id: null,
     notes: JSON.stringify(stuMeta)
   });
 
-  if (restoredTeacherId && typeof _TEACHER_360_MEM_CACHE === 'object') {
-    delete _TEACHER_360_MEM_CACHE[String(restoredTeacherId).toUpperCase()];
-  }
+  // Keep the local profile cache in step: no teacher assigned.
+  try {
+    const profiles = JSON.parse(localStorage.getItem('alhuda_student_profiles') || '{}');
+    if (profiles[student.id]) {
+      profiles[student.id].assigned_teacher_id = null;
+      localStorage.setItem('alhuda_student_profiles', JSON.stringify(profiles));
+    }
+  } catch (err) {}
+
   if (typeof invalidateCoreLmsDataCache === 'function') invalidateCoreLmsDataCache();
   if (typeof loadTeachers === 'function') loadTeachers();
 
@@ -2800,8 +2844,8 @@ async function toggleSingleStudentDeactivate(familyId, studentId) {
 
   _notify360(
     famWasDeactivated && famNowActive
-      ? `${student.name} reactivated — Family "${family?.parent_name || familyId}" is now automatically ACTIVE${restoredTeacherId ? ' and student restored to Teacher Student List' : ''}.`
-      : `${student.name} is now ACTIVE${restoredTeacherId ? ' and restored to Teacher Student List' : ''}.`
+      ? `${student.name} reactivated — Family "${family?.parent_name || familyId}" is now ACTIVE. No teacher assigned — assign one manually when ready.`
+      : `${student.name} is now ACTIVE. No teacher assigned — assign one manually when ready.`
   );
   await openFamily360Profile(familyId, 'students', true, { selectedStudentId: student.id });
 }
@@ -3086,6 +3130,21 @@ async function toggleSingleStudentLeave(familyId, studentId) {
   const isCurrentlyOnLeave = String(student.status || '').toLowerCase().includes('leave') || Boolean(stuMeta.on_leave);
   const newStatus = isCurrentlyOnLeave ? 'Active' : 'Leave';
 
+  if (newStatus === 'Active') {
+    // Batch 7 (F1.5): returning a student from leave must not activate
+    // them inside a deactivated family — the backend guard would reject
+    // the write anyway, so fail here with a clear message instead.
+    const famRec = (window.ALL_FAMILIES || []).find(f => String(f.id).toUpperCase() === String(familyId).toUpperCase())
+                || (window.RAW_ALL_FAMILIES || []).find(f => String(f.id).toUpperCase() === String(familyId).toUpperCase());
+    const famDeact = famRec
+      ? (typeof isFamilyDeactivated === 'function' ? isFamilyDeactivated(famRec) : ['inactive', 'deactivated'].includes(String(famRec.status || '').toLowerCase()))
+      : false;
+    if (famDeact) {
+      _notify360(`"${student.name}" belongs to a deactivated family. Reactivate the family first, then return the student from leave.`, 'error');
+      return;
+    }
+  }
+
   const msg = isCurrentlyOnLeave
     ? `Return student "${student.name}" from leave to Active status?`
     : `Place ONLY "${student.name}" (${student.id}) on Leave?\n\nThe Family and other sibling students will remain Active.`;
@@ -3146,42 +3205,79 @@ async function handleFamilyLevelDeactivate(familyId) {
     famStudents = (window.ALL_STUDENTS || []).filter(s => String(s.family_id || '').toUpperCase() === famKey);
   }
 
-  for (const stu of famStudents) {
-    if (String(stu.status || '').toLowerCase() === 'trial') continue;
-    const stuMeta = _parseStudentStructuredNotes(stu);
-    let nextStuStatus = targetStatus;
-    if (!isInactive) {
-      // Deactivating entire family -> ALL students must become DEACTIVATED ('Inactive'), record deactivation_date, and preserve previous teacher ID
-      const prevTch = stu.assigned_teacher_id || stuMeta.previous_teacher_id_before_deactivation || null;
-      stuMeta.prev_status_before_family_deactivation = stu.status || 'Active';
-      stuMeta.family_deactivated = true;
-      stuMeta.deactivation_date = familyDeactDate;
-      stuMeta.deactivated_at = new Date().toISOString();
-      if (prevTch) stuMeta.previous_teacher_id_before_deactivation = prevTch;
-      stu.deactivation_date = familyDeactDate;
-      nextStuStatus = 'Inactive';
-      if (typeof deactivateStudentScheduleAndTeacherBackend === 'function') {
-        const info = await deactivateStudentScheduleAndTeacherBackend(stu.id, stuMeta);
-        if (info.previousTeacherId && typeof _TEACHER_360_MEM_CACHE === 'object') {
-          delete _TEACHER_360_MEM_CACHE[String(info.previousTeacherId).toUpperCase()];
-        }
-      }
-    } else {
-      // Reactivating entire family -> restore students to Active WITHOUT auto-restoring old teacher or schedule
-      const prev = stuMeta.prev_status_before_family_deactivation;
-      nextStuStatus = (prev && !['inactive', 'deactivated'].includes(String(prev).toLowerCase())) ? prev : 'Active';
-      delete stuMeta.family_deactivated;
-      delete stuMeta.deactivated_individually;
-      stuMeta.reactivated_at = new Date().toISOString();
+  // Batch 7 (F1.2): authorized reactivation protocol — set the FAMILY row
+  // Active FIRST, then the students (the backend guard rejects student
+  // activations while the family is still deactivated).
+  if (isInactive) {
+    const { error: famReactErr } = await db.from('families').update({ status: 'Active' }).eq('id', family.id);
+    if (famReactErr) {
+      _notify360(`Could not reactivate family "${family.parent_name}": ${famReactErr.message || famReactErr}`, 'error');
+      return;
     }
-    await _saveStudentRecordBackend(stu.id, {
-      status: nextStuStatus,
-      assigned_teacher_id: null,
-      notes: JSON.stringify(stuMeta)
-    });
+    family.status = 'Active';
   }
 
-  await syncFamilyStatusFromStudentsBackend(family.id, { status: targetStatus });
+  // Batch 7 (F1.4): one student's failure must not silently abort the
+  // whole family action — record it, continue with the rest, and report
+  // the failures by name at the end.
+  const failedStudentNames = [];
+  for (const stu of famStudents) {
+    if (String(stu.status || '').toLowerCase() === 'trial') continue;
+    try {
+      const stuMeta = _parseStudentStructuredNotes(stu);
+      let nextStuStatus = targetStatus;
+      if (!isInactive) {
+        // Deactivating entire family -> ALL students must become DEACTIVATED ('Inactive'), record deactivation_date, and preserve previous teacher ID
+        const prevTch = stu.assigned_teacher_id || stuMeta.previous_teacher_id_before_deactivation || null;
+        stuMeta.prev_status_before_family_deactivation = stu.status || 'Active';
+        stuMeta.family_deactivated = true;
+        stuMeta.deactivation_date = familyDeactDate;
+        stuMeta.deactivated_at = new Date().toISOString();
+        if (prevTch) stuMeta.previous_teacher_id_before_deactivation = prevTch;
+        stu.deactivation_date = familyDeactDate;
+        nextStuStatus = 'Inactive';
+        if (typeof deactivateStudentScheduleAndTeacherBackend === 'function') {
+          const info = await deactivateStudentScheduleAndTeacherBackend(stu.id, stuMeta);
+          if (info.previousTeacherId && typeof _TEACHER_360_MEM_CACHE === 'object') {
+            delete _TEACHER_360_MEM_CACHE[String(info.previousTeacherId).toUpperCase()];
+          }
+        }
+      } else {
+        // Reactivating entire family -> restore students to Active WITHOUT auto-restoring old teacher or schedule
+        const prev = stuMeta.prev_status_before_family_deactivation;
+        nextStuStatus = (prev && !['inactive', 'deactivated'].includes(String(prev).toLowerCase())) ? prev : 'Active';
+        delete stuMeta.family_deactivated;
+        delete stuMeta.deactivated_individually;
+        stuMeta.reactivated_at = new Date().toISOString();
+        // Batch 7 (F2.3): assert no live schedule rows survive
+        // reactivation (deactivation deleted them; this covers legacy
+        // rows) so the old teacher keeps no timetable/Worker-scope link.
+        try {
+          await db.from('class_schedules').delete().eq('student_id', stu.id);
+          if (Array.isArray(window.ALL_CLASS_SCHEDULES)) {
+            window.ALL_CLASS_SCHEDULES = window.ALL_CLASS_SCHEDULES.filter(sc => String(sc.student_id) !== String(stu.id));
+          }
+        } catch (schedErr) {
+          console.warn('[FamilyLevelDeactivate] Residual schedule cleanup notice:', schedErr);
+        }
+      }
+      await _saveStudentRecordBackend(stu.id, {
+        status: nextStuStatus,
+        assigned_teacher_id: null,
+        notes: JSON.stringify(stuMeta)
+      });
+    } catch (err) {
+      console.error('[FamilyLevelDeactivate] Student update failed:', stu.id, err);
+      failedStudentNames.push(stu.name || stu.id);
+    }
+  }
+
+  // Batch 7 (F1.4): in the deactivate direction, if any student could not
+  // be saved, do NOT force the family status write — the derivation keeps
+  // the family Active until the remaining students are dealt with, and
+  // the user is told exactly which students failed (below).
+  const syncExtraCols = (!isInactive && failedStudentNames.length > 0) ? {} : { status: targetStatus };
+  await syncFamilyStatusFromStudentsBackend(family.id, syncExtraCols);
   if (typeof loadTeachers === 'function') {
     try { loadTeachers(); } catch (err) {}
   }
@@ -3189,7 +3285,28 @@ async function handleFamilyLevelDeactivate(familyId) {
     try { calculateMonthlySalaries(); } catch (err) {}
   }
 
-  _notify360(`Family "${family.parent_name}" and all linked students are now ${targetStatus === 'Inactive' ? 'DEACTIVATED' : 'ACTIVE'}.`);
+  // Batch 7 (F1.4): verify against a fresh read — never claim a
+  // deactivation/reactivation that only partially landed.
+  const stillWrongNames = [...failedStudentNames];
+  try {
+    const { data: freshStus } = await db.from('students').select('id, name, status').eq('family_id', family.id);
+    if (Array.isArray(freshStus)) {
+      freshStus.forEach(fs => {
+        if (String(fs.status || '').toLowerCase() === 'trial') return;
+        const stLower = String(fs.status || 'Active').trim().toLowerCase();
+        const isDeact = ['inactive', 'deactivated', 'deleted', 'left'].includes(stLower);
+        const wrong = isInactive ? isDeact : !isDeact;
+        const label = fs.name || fs.id;
+        if (wrong && !stillWrongNames.includes(label)) stillWrongNames.push(label);
+      });
+    }
+  } catch (e) {}
+
+  if (stillWrongNames.length > 0) {
+    _notify360(`Family "${family.parent_name}": these students could NOT be ${isInactive ? 'reactivated' : 'deactivated'}: ${stillWrongNames.join(', ')}. Please try again for them.`, 'error');
+  } else {
+    _notify360(`Family "${family.parent_name}" and all linked students are now ${targetStatus === 'Inactive' ? 'DEACTIVATED' : 'ACTIVE'}.`);
+  }
   const profTab = document.getElementById('tab-profile-360');
   if (profTab && !profTab.classList.contains('hidden')) {
     _renderFamilyWorkspaceDOM();

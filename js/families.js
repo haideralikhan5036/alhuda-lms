@@ -743,6 +743,19 @@
           }
         }
 
+        // Batch 7 (F1.5): adding a student to a DEACTIVATED family must
+        // never reactivate it — the new student starts Inactive and the
+        // family stays deactivated until explicitly reactivated. (The
+        // backend guard rejects an Active insert into a deactivated
+        // family, so the status is decided here, with a clear notice.)
+        const targetFamilyRec = (ALL_FAMILIES || []).find(f => String(f.id).toUpperCase() === String(family_id).toUpperCase())
+                             || (window.RAW_ALL_FAMILIES || []).find(f => String(f.id).toUpperCase() === String(family_id).toUpperCase());
+        const targetFamilyDeactivated = targetFamilyRec
+          ? (typeof isFamilyDeactivated === 'function' ? isFamilyDeactivated(targetFamilyRec)
+             : ['inactive', 'deactivated'].includes(String(targetFamilyRec.status || '').toLowerCase()))
+          : false;
+        const newStudentStatus = targetFamilyDeactivated ? 'Inactive' : 'Active';
+
         const notesMeta = JSON.stringify({
           language,
           days_per_week,
@@ -752,7 +765,7 @@
           zoom_link: resolvedZoomLink
         });
         const rawStudentRecord = {
-          id, family_id, name, age, gender, course_id, assigned_teacher_id, joining_date, notes: notesMeta, status: 'Active'
+          id, family_id, name, age, gender, course_id, assigned_teacher_id, joining_date, notes: notesMeta, status: newStudentStatus
         };
         const { dbPayload } = (typeof buildStudentDatabasePayload === 'function')
           ? buildStudentDatabasePayload(rawStudentRecord)
@@ -762,6 +775,10 @@
         if (stuInsertErr) {
           lmsNotify('Failed to enroll student: ' + stuInsertErr.message, { type: 'error' });
           return;
+        }
+
+        if (targetFamilyDeactivated) {
+          lmsNotify(`Student enrolled as INACTIVE because family "${targetFamilyRec.parent_name || family_id}" is deactivated. Reactivate the family to activate this student.`, { type: 'warning' });
         }
 
         // Cache student profile in localStorage with resolved meeting link

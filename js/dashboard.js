@@ -965,8 +965,79 @@
       }
     }
 
+    // Batch 7 (F3.5): overlapping dashboard passes used to let a slower,
+    // older pass overwrite a newer one, and two timers (15 s here, 60 s in
+    // config.js) fired them concurrently. Now: one pass at a time, a
+    // monotonically increasing run id, and only the latest run may paint.
+    let _dashLoadInflight = false;
+    let _dashRunSeq = 0;
+    let _dashRerunRequested = false;
+
+    // Batch 7 (F3.4): settle one dashboard branch independently with a
+    // timeout, so a single stalled query cannot block every count.
+    const DASH_BRANCH_TIMEOUT_MS = 15000;
+    function dashSettleBranch(branchPromise, fallbackData) {
+      return Promise.race([
+        Promise.resolve(branchPromise).then(
+          (res) => res || { data: fallbackData },
+          () => ({ data: fallbackData, error: { message: 'branch_failed' } })
+        ),
+        new Promise((resolve) => setTimeout(() => resolve({ data: fallbackData, error: { message: 'branch_timeout' } }), DASH_BRANCH_TIMEOUT_MS))
+      ]);
+    }
+
+    // Batch 7 (F3.2): while the client is in local-mirror mode, mirror
+    // numbers are stale/empty and must not be presented as authoritative
+    // zeros — show a pending marker instead; the 'alhuda-d1-live'
+    // repaint (bottom of this file) paints the real numbers when D1
+    // answers.
+    const DASH_PENDING_EL_IDS = ['kpiDashTotal', 'kpiDashCurrent', 'kpiDashRunning', 'kpiDashLive', 'kpiDashCompleted', 'kpiDashRemaining', 'kpiDashAbsent', 'kpiDashLeave', 'kpiDashTrial', 'kpiTotalToday', 'kpiLiveNow', 'kpiCompleted', 'kpiRemaining', 'kpiAbsent', 'kpiOnLeave', 'dashFeeWidgetPaidCount', 'dashFeeWidgetPendingCount', 'dashFeeWidgetLeaveCount', 'dashLiveActiveFamilies', 'dashLiveActiveStudents'];
+    function paintDashboardPendingState() {
+      DASH_PENDING_EL_IDS.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.innerText = '…';
+      });
+    }
+
     async function loadDashboardData() {
+      const myRun = ++_dashRunSeq;
+      if (_dashLoadInflight) {
+        // Never overlap passes; remember that a fresher pass is owed.
+        _dashRerunRequested = true;
+        return;
+      }
+      _dashLoadInflight = true;
+      try {
+        await _runDashboardLoad(myRun);
+      } catch (err) {
+        console.warn('[Dashboard] Load notice:', err);
+      } finally {
+        _dashLoadInflight = false;
+        if (_dashRerunRequested) {
+          _dashRerunRequested = false;
+          loadDashboardData();
+        }
+      }
+    }
+
+    async function _runDashboardLoad(myRun) {
       initDashboardCharts();
+
+      // Batch 7 (F3.3): wait for the shared core load (which includes
+      // fee ingestion) before computing anything, so no widget — the fee
+      // widget especially — paints from the pre-core empty state.
+      if (typeof ensureCoreLmsDataLoaded === 'function') {
+        try { await ensureCoreLmsDataLoaded(); } catch (e) {}
+      }
+      if (myRun !== _dashRunSeq) return; // superseded by a newer pass
+
+      // Batch 7 (F3.2): degraded (mirror-only) data is not authoritative.
+      // Checked AFTER the core await so the D1 probe has settled.
+      if (typeof window.isCloudflareD1Live === 'function' && !window.isCloudflareD1Live()) {
+        paintDashboardPendingState();
+        return;
+      }
+
       updateDashboardAnalytics();
       updateLiveActiveMetrics();
       updateExecutiveDashboardFeeWidget();
@@ -980,15 +1051,21 @@
         dateLabel.innerText = now.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
       }
 
-      // Execute schedule & attendance queries in 1 parallel Promise.all
+      // Execute schedule & attendance queries in parallel, each settled
+      // independently with a timeout (Batch 7 F3.4): one stalled branch
+      // can no longer suppress every Today's Classes count.
       const hasCachedSchedules = Array.isArray(window.ALL_CLASS_SCHEDULES) && window.ALL_CLASS_SCHEDULES.length > 0;
       const [schedRes, logsRes, advRes] = await Promise.all([
-        hasCachedSchedules
-          ? Promise.resolve({ data: window.ALL_CLASS_SCHEDULES.filter(sc => Number(sc.day_of_week) === Number(currentDay)) })
-          : db.from('class_schedules').select('*, students(*), teachers(*)').eq('day_of_week', currentDay),
-        db.from('attendance_logs').select('*').eq('date', todayDate),
-        db.from('attendance_logs').select('*').eq('status', 'Advance Class')
+        dashSettleBranch(
+          hasCachedSchedules
+            ? Promise.resolve({ data: window.ALL_CLASS_SCHEDULES.filter(sc => Number(sc.day_of_week) === Number(currentDay)) })
+            : db.from('class_schedules').select('*, students(*), teachers(*)').eq('day_of_week', currentDay),
+          []
+        ),
+        dashSettleBranch(db.from('attendance_logs').select('*').eq('date', todayDate), []),
+        dashSettleBranch(db.from('attendance_logs').select('*').eq('status', 'Advance Class'), [])
       ]);
+      if (myRun !== _dashRunSeq) return; // superseded while waiting
 
       const scheds = schedRes.data || [];
       const logs = logsRes.data || [];
@@ -3154,14 +3231,26 @@
         }
       });
 
-      // 15-second active heartbeat poll on Dashboard tab
+      // 15-second active heartbeat poll on Dashboard tab.
+      // Batch 7 (F3.5): this is now the ONLY periodic dashboard timer
+      // (the 60 s one in config.js was removed), and it is auth-gated
+      // like that one was — no dashboard loads on a logged-out screen.
       setInterval(() => {
         const dashTab = document.getElementById('tab-dashboard');
         const isDashActive = dashTab && !dashTab.classList.contains('hidden');
-        if (isDashActive && typeof loadDashboardData === 'function') {
+        if (!isDashActive || typeof loadDashboardData !== 'function') return;
+        const hasSession = (typeof getAuthenticatedOwnerSession === 'function' && getAuthenticatedOwnerSession())
+          || (typeof getAuthenticatedManagerSession === 'function' && getAuthenticatedManagerSession());
+        if (hasSession) loadDashboardData();
+      }, 15000);
+
+      // Batch 7 (F3.2): when D1 comes back after a degraded (mirror)
+      // start, repaint the dashboard once with the live numbers.
+      window.addEventListener('alhuda-d1-live', () => {
+        if (typeof loadDashboardData === 'function') {
           loadDashboardData();
         }
-      }, 15000);
+      });
     }
 
 

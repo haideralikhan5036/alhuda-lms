@@ -15,6 +15,7 @@
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <link rel="stylesheet" href="css/number-typography.css">
   <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="js/cloudflare-db.js"></script>
   <script>
     tailwind.config = {
@@ -119,9 +120,9 @@
   </main>
 
   <script>
-    // Cloudflare is the sole database backend (Supabase fully removed 2026-10-14).
-    // window.supabase.createClient is overridden by js/cloudflare-db.js to return the Cloudflare D1/R2 client.
-    const db = window.supabase.createClient();
+    const SUPABASE_URL = "https://ldgzuyroejzrvktksugy.supabase.co";
+    const SUPABASE_KEY = "sb_publishable_rP38XXgYoYBTPJlCxtwMUg_RPupFrKg";
+    const db = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
     function parseEmployeeMeta(rawStr) {
       if (!rawStr) return {};
@@ -421,6 +422,15 @@
       if (res.ok && data && data.ok && data.token) {
         try {
           sessionStorage.setItem('alhuda_manager_token', data.token);
+        } catch (e) {}
+        // Batch 7 (F3.1): fresh token — forget any failed pre-login D1
+        // probe result so the record fetch below re-checks D1 WITH this
+        // token. (The owner login already did this; teacher/manager
+        // did not.)
+        try {
+          if (typeof window.resetCloudflareD1Availability === 'function') {
+            window.resetCloudflareD1Availability();
+          }
         } catch (e) {}
         // Build the COMPLETE session the index.html gate requires
         // (id + emp_id). Batch 2 (B6): the Worker staff-login response

@@ -505,6 +505,29 @@ function financialUniqueErrorMessage(table, err) {
   return null;
 }
 
+// Batch 7 (F1.2): student/family lifecycle guard helpers. The deactivated
+// status set mirrors the client derivation in js/config.js
+// (isStudentSelfDeactivated): anything outside it counts as ACTIVE,
+// including a missing/empty status (which the derivation reads as
+// 'Active').
+const STUDENT_DEACTIVATED_STATUSES = new Set(['inactive', 'deactivated', 'deleted', 'left']);
+function studentStatusCountsAsActive(status) {
+  const st = String(status == null ? 'Active' : status).trim().toLowerCase();
+  return !STUDENT_DEACTIVATED_STATUSES.has(st);
+}
+async function familyRowIsDeactivated(d1, familyId) {
+  if (familyId == null || String(familyId).trim() === '') return false;
+  try {
+    const row = await d1.prepare('SELECT status FROM families WHERE id = ?').bind(String(familyId)).first();
+    if (!row) return false;
+    const st = String(row.status || '').trim().toLowerCase();
+    return st === 'inactive' || st === 'deactivated';
+  } catch (e) {
+    return false;
+  }
+}
+const STUDENT_ACTIVATION_BLOCKED_MESSAGE = 'This family is deactivated. Reactivate the family before activating its students.';
+
 export async function onRequest(context) {
   const { request, env } = context;
 
@@ -632,6 +655,29 @@ export async function onRequest(context) {
         }
       }
 
+      // Batch 7 (F1.2): a students insert/upsert whose resulting status is
+      // an "active" value is rejected while the student's family row is
+      // Inactive/Deactivated. Deactivation is enforced at the data layer
+      // so NO client path (stale mirror, old tab, direct call) can
+      // resurrect a student inside a deactivated family. Authorized
+      // reactivation sets the FAMILY row Active first, so legitimate
+      // flows pass. (An omitted status counts as active: the column
+      // default / derivation both read it as 'Active'.)
+      if (table === 'students') {
+        for (const rawRow of rows) {
+          if (!rawRow) continue;
+          const resultingStatus = rawRow.status == null ? 'Active' : rawRow.status;
+          if (!studentStatusCountsAsActive(resultingStatus)) continue;
+          if (await familyRowIsDeactivated(d1, rawRow.family_id)) {
+            return jsonResponse(
+              { error: STUDENT_ACTIVATION_BLOCKED_MESSAGE },
+              403,
+              corsHeaders
+            );
+          }
+        }
+      }
+
       for (const rawRow of rows) {
         const row = { ...rawRow };
         if (!row.id) row.id = generateId(table);
@@ -737,6 +783,31 @@ export async function onRequest(context) {
           400,
           corsHeaders
         );
+      }
+
+      // Batch 7 (F1.2): the same deactivation guard for updates that SET
+      // an active student status. Updates that do not touch `status`
+      // (e.g. a parent writing leave-request notes on their own child)
+      // are deliberately unaffected. The family is resolved from the
+      // patch when the write also moves the student, otherwise from the
+      // targeted rows themselves.
+      if (table === 'students' && Object.prototype.hasOwnProperty.call(patch, 'status') && studentStatusCountsAsActive(patch.status)) {
+        let guardFamilyIds;
+        if (patch.family_id != null && String(patch.family_id).trim() !== '') {
+          guardFamilyIds = [patch.family_id];
+        } else {
+          const { results: targets } = await d1.prepare(`SELECT family_id FROM students${whereSql}`).bind(...whereParams).all();
+          guardFamilyIds = [...new Set((targets || []).map(t => t && t.family_id).filter(Boolean))];
+        }
+        for (const famId of guardFamilyIds) {
+          if (await familyRowIsDeactivated(d1, famId)) {
+            return jsonResponse(
+              { error: STUDENT_ACTIVATION_BLOCKED_MESSAGE },
+              403,
+              corsHeaders
+            );
+          }
+        }
       }
 
       const cols = Object.keys(patch).filter(k => validCols.has(k));
