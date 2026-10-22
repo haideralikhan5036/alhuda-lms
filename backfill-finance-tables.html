@@ -11,6 +11,7 @@
   h2 { font-size: 1.1rem; margin: 1.25rem 0 .5rem; }
   input, button { font-size: 1rem; padding: .6rem .8rem; border-radius: 8px; border: 1px solid #cbd5e1; }
   button { background: #0f766e; color: #fff; border: none; cursor: pointer; font-weight: 600; }
+  button.small { padding: .3rem .6rem; font-size: .85rem; }
   button:disabled { background: #94a3b8; cursor: not-allowed; }
   .hidden { display: none; }
   table { width: 100%; border-collapse: collapse; font-size: .9rem; margin-top: .5rem; }
@@ -87,6 +88,27 @@
   <p class="note">Re-reads the finance tables and compares them with the plan, total by total. You can run this before writing too — expect FAIL lines until the write run has completed.</p>
   <p><button id="btnVerify" onclick="verifyTables()" disabled>Verify tables</button></p>
   <div id="verifyResults"></div>
+
+  <h2>Step 5 — Read compare (Batch 6D)</h2>
+  <p class="note">Compare reads the legacy stores and the new finance tables side by side and lists every difference. It changes nothing. A surface may be switched to the tables (Batch 6D-2/6D-3) only when its compare is clean.</p>
+  <p class="note">The three read flags below decide, per surface, where that surface reads from: <b>Off</b> = the legacy stores (today&rsquo;s behaviour), <b>Compare</b> = the legacy stores, with differences checked, <b>On</b> = the new finance tables. Change a flag only after its compare below is clean, and refresh any open portal page afterwards — portals read their flags once when they load.</p>
+  <p><b>Parent fee history</b> (<span class="mono">fee_read_parent</span>) — Current state: <b id="flagState_fee_read_parent">not checked yet</b><br>
+     <button class="small" onclick="setReadFlag('fee_read_parent', 'off', 'flagState_fee_read_parent')">Off</button>
+     <button class="small" onclick="setReadFlag('fee_read_parent', 'compare', 'flagState_fee_read_parent')">Compare</button>
+     <button class="small" onclick="setReadFlag('fee_read_parent', 'on', 'flagState_fee_read_parent')">On</button>
+     <button class="small" onclick="refreshReadFlagState('fee_read_parent')">Re-check</button></p>
+  <p><b>Family 360 payments</b> (<span class="mono">fee_read_360</span>) — Current state: <b id="flagState_fee_read_360">not checked yet</b><br>
+     <button class="small" onclick="setReadFlag('fee_read_360', 'off', 'flagState_fee_read_360')">Off</button>
+     <button class="small" onclick="setReadFlag('fee_read_360', 'compare', 'flagState_fee_read_360')">Compare</button>
+     <button class="small" onclick="setReadFlag('fee_read_360', 'on', 'flagState_fee_read_360')">On</button>
+     <button class="small" onclick="refreshReadFlagState('fee_read_360')">Re-check</button></p>
+  <p><b>Salary views</b> (<span class="mono">salary_read_v1</span>) — Current state: <b id="flagState_salary_read_v1">not checked yet</b><br>
+     <button class="small" onclick="setReadFlag('salary_read_v1', 'off', 'flagState_salary_read_v1')">Off</button>
+     <button class="small" onclick="setReadFlag('salary_read_v1', 'compare', 'flagState_salary_read_v1')">Compare</button>
+     <button class="small" onclick="setReadFlag('salary_read_v1', 'on', 'flagState_salary_read_v1')">On</button>
+     <button class="small" onclick="refreshReadFlagState('salary_read_v1')">Re-check</button></p>
+  <p><button id="btnCompare" onclick="runReadCompare()">Run read compare</button></p>
+  <div id="compareResults"></div>
 
   <p class="note" style="margin-top:1.5rem">Rollback: nothing in the portals reads these tables yet. A bad run is corrected by fixing the plan and re-running; rows are never deleted by this tool.</p>
   <p style="margin-top:1rem"><button onclick="ownerLogout()">Sign out</button></p>
@@ -204,6 +226,7 @@ window.ownerLogin = async function () {
       el('stepTool').classList.remove('hidden');
       logLine('Signed in as owner.', 'ok');
       if (typeof window.refreshFlagState === 'function') window.refreshFlagState();
+      if (typeof window.refreshAllReadFlagStates === 'function') window.refreshAllReadFlagStates();
     } else {
       showMsg('Owner sign-in failed. Check the username and password and try again.', false);
     }
@@ -291,6 +314,7 @@ window.loadSources = async function () {
     state.wrote = false;
     el('dryResults').innerHTML = '';
     el('verifyResults').innerHTML = '';
+    el('compareResults').innerHTML = '';
     el('writeProgress').textContent = '';
     el('chkQuarantine').checked = false;
 
@@ -872,6 +896,194 @@ window.verifyTables = async function () {
     logLine('Verify failed: ' + (e && e.message ? e.message : e), 'err');
   }
   setBusy('btnVerify', false, 'Verify tables');
+};
+
+// ---------------------------------------------------------------------------
+// STEP 5 — Read flags + read compare (Batch 6D)
+// Three read flags live in system_settings next to fee_tables_v1:
+// fee_read_parent, fee_read_360, salary_read_v1. Each stores 'off',
+// 'compare' or 'on'; anything else (or no row) displays as OFF. Compare
+// itself only reads — it never writes to the finance tables.
+// ---------------------------------------------------------------------------
+var READ_FLAG_KEYS = ['fee_read_parent', 'fee_read_360', 'salary_read_v1'];
+var READ_FLAG_LABELS = {
+  fee_read_parent: 'Parent fee history',
+  fee_read_360: 'Family 360 payments',
+  salary_read_v1: 'Salary views'
+};
+
+async function readKeyState(key) {
+  var client = dbClient();
+  if (!client) return { ok: false };
+  var res = await client.from('system_settings').select('value').eq('key', key).limit(1);
+  if (!res || res.error) return { ok: false };
+  var rows = res.data || [];
+  if (!rows.length) return { ok: true, value: null };
+  return { ok: true, value: rows[0].value };
+}
+
+function readFlagDisplay(v) {
+  var s = String(v == null ? '' : v).trim().toLowerCase();
+  if (s === 'on' || s === 'true' || s === '1') return 'ON';
+  if (s === 'compare') return 'COMPARE';
+  return 'OFF';
+}
+
+window.refreshReadFlagState = async function (key) {
+  var stateEl = el('flagState_' + key);
+  if (!stateEl) return;
+  try {
+    var r = await readKeyState(key);
+    if (!r.ok) { stateEl.textContent = 'could not be read — press Re-check'; return; }
+    stateEl.textContent = r.value === null ? 'OFF (not set)' : readFlagDisplay(r.value);
+  } catch (e) {
+    stateEl.textContent = 'could not be read — press Re-check';
+  }
+};
+
+window.refreshAllReadFlagStates = function () {
+  READ_FLAG_KEYS.forEach(function (key) { window.refreshReadFlagState(key); });
+};
+
+window.setReadFlag = async function (key, value, stateElId) {
+  var client = dbClient();
+  var label = READ_FLAG_LABELS[key] || key;
+  if (!client) { logLine('Read flag change failed (' + label + '): the database client is not available. Reload the page and sign in again.', 'err'); return; }
+  try {
+    var res = await client.from('system_settings').upsert({ key: key, value: value });
+    if (res && res.error) {
+      logLine('Read flag change failed (' + label + '): ' + (res.error.message || res.error), 'err');
+      return;
+    }
+    // FeeTables caches flag reads per page load; clear that cache so any
+    // other flag check on this page sees the new value immediately.
+    try { if (window.FeeTables && typeof window.FeeTables._resetForTests === 'function') window.FeeTables._resetForTests(); } catch (e) {}
+    var r = await readKeyState(key);
+    if (r.ok && readFlagDisplay(r.value) === readFlagDisplay(value)) {
+      logLine(label + ' read flag (' + key + ') is now ' + readFlagDisplay(value) + ' (confirmed by re-reading the database). Refresh any open portal page for it to take effect there.', 'ok');
+    } else {
+      logLine('The read flag change for ' + label + ' (' + key + ') could not be confirmed. Press Re-check and do not rely on the new state until it is clear.', 'err');
+    }
+  } catch (e) {
+    logLine('Read flag change failed (' + label + '): ' + (e && e.message ? e.message : e), 'err');
+  }
+  if (stateElId && el(stateElId)) await window.refreshReadFlagState(key);
+};
+
+function diffValueText(v) {
+  if (v == null) return '(empty)';
+  if (typeof v === 'object') {
+    try { return JSON.stringify(v); } catch (e) { return String(v); }
+  }
+  return String(v);
+}
+
+function fieldDiffsHtml(title, diffs) {
+  if (!Array.isArray(diffs) || !diffs.length) return '';
+  var html = '<h2>' + esc(title) + ' (' + diffs.length + ')</h2><ul>';
+  var shown = Math.min(diffs.length, 100);
+  for (var i = 0; i < shown; i++) {
+    var d = diffs[i] || {};
+    html += '<li class="bad"><span class="mono">' + esc(diffValueText(d.key)) + '</span> — field <span class="mono">' + esc(diffValueText(d.field)) + '</span>: legacy '
+      + esc(diffValueText(d.expected)) + ' &rarr; tables ' + esc(diffValueText(d.actual)) + '</li>';
+  }
+  if (diffs.length > shown) html += '<li>… and ' + (diffs.length - shown) + ' more.</li>';
+  return html + '</ul>';
+}
+
+function rawDetailHtml(label, obj) {
+  if (obj == null || typeof obj !== 'object' || !Object.keys(obj).length) return '';
+  return '<details><summary class="note">' + esc(label) + '</summary><pre class="mono">' + esc(JSON.stringify(obj, null, 2)) + '</pre></details>';
+}
+
+function compareBadge(label, clean) {
+  return '<div class="verdict ' + (clean ? 'good' : 'bad') + '">' + esc(label) + ': ' + (clean ? 'CLEAN' : 'DIFFERENCES FOUND') + '</div>';
+}
+
+function readinessHtml(label, clean) {
+  return '<div class="verdict ' + (clean ? 'good' : 'bad') + '">' + esc(label) + ': ' + (clean ? 'READY TO SWITCH' : 'NOT READY') + '</div>';
+}
+
+function renderReadCompare(payCmp, salCmp) {
+  payCmp = (payCmp && typeof payCmp === 'object') ? payCmp : {};
+  salCmp = (salCmp && typeof salCmp === 'object') ? salCmp : {};
+  var payClean = payCmp.clean === true;
+  var salClean = salCmp.clean === true;
+  var html = '';
+
+  // Payments
+  html += compareBadge('Payments', payClean);
+  html += '<p>Expected from the legacy stores: <b>' + num(payCmp.expectedCount) + '</b> receipt(s) · found in the tables: <b>' + num(payCmp.actualCount) + '</b>.';
+  if (typeof payCmp.unmatchedNumberless === 'number' && payCmp.unmatchedNumberless > 0) {
+    html += ' <span class="warn">' + payCmp.unmatchedNumberless + ' legacy receipt(s) have no receipt number and could not be matched one-to-one — they are covered by the per-family totals in the detail below.</span>';
+  }
+  html += '</p>';
+  html += listSectionHtml('Payments — missing from the tables', payCmp.missingInTables, 'bad');
+  html += listSectionHtml('Payments — in the tables but not in the legacy stores', payCmp.extraInTables, 'bad');
+  html += fieldDiffsHtml('Payments — field differences', payCmp.fieldDiffs);
+  html += listSectionHtml('Payments — informational', payCmp.informational, '');
+  html += rawDetailHtml('Payments — per-family detail', payCmp.perFamily);
+
+  // Salaries
+  html += compareBadge('Salaries', salClean);
+  var salExpected = 0, salActual = 0;
+  if (salCmp.perTeacher && typeof salCmp.perTeacher === 'object') {
+    Object.keys(salCmp.perTeacher).forEach(function (tid) {
+      var t = salCmp.perTeacher[tid] || {};
+      salExpected += num(t.expected != null ? t.expected : t.slips);
+      salActual += num(t.actual != null ? t.actual : t.tableSlips);
+    });
+  }
+  html += '<p>Expected from the legacy stores: <b>' + salExpected + '</b> salary slip(s) · found in the tables: <b>' + salActual + '</b>.</p>';
+  html += listSectionHtml('Salaries — missing from the tables', salCmp.missingSlips, 'bad');
+  html += listSectionHtml('Salaries — in the tables but not in the legacy stores', salCmp.extraSlips, 'bad');
+  html += fieldDiffsHtml('Salaries — field differences', salCmp.fieldDiffs);
+  var adj = (salCmp.adjustments && typeof salCmp.adjustments === 'object') ? salCmp.adjustments : {};
+  var adjMissing = Array.isArray(adj.missingIds) ? adj.missingIds : [];
+  html += '<p>Salary adjustments — expected from the legacy stores: <b>' + num(adj.expected) + '</b> · found in the tables: <b>' + num(adj.actual) + '</b>'
+    + (adjMissing.length ? ' <span class="bad">(' + adjMissing.length + ' missing)</span>' : '') + '.</p>';
+  html += listSectionHtml('Salaries — adjustment records missing from the tables', adjMissing, 'bad');
+  html += rawDetailHtml('Salaries — per-teacher detail', salCmp.perTeacher);
+
+  // Switch readiness — per surface, following its compare.
+  html += '<h2>Switch readiness</h2>';
+  html += readinessHtml('Parent fee history', payClean);
+  html += readinessHtml('Family 360 payments', payClean);
+  html += readinessHtml('Salary views', salClean);
+
+  el('compareResults').innerHTML = html;
+}
+
+window.runReadCompare = async function () {
+  if (!state.loaded) { logLine('Load the sources first (Step 1).', 'err'); return; }
+  if (!window.BackfillFinance
+    || typeof window.BackfillFinance.comparePayments !== 'function'
+    || typeof window.BackfillFinance.compareSalaries !== 'function') {
+    logLine('Read compare failed: the compare functions (js/backfill-finance.js) did not load. Reload the page; if it keeps failing, report it — nothing was changed.', 'err');
+    return;
+  }
+  setBusy('btnCompare', true, 'Run read compare');
+  try {
+    var payAll = await dbSelectAll('payments', '*');
+    var slipAll = await dbSelectAll('salary_slips', '*');
+    var adjAll = await dbSelectAll('salary_adjustments', '*');
+    var payCmp = window.BackfillFinance.comparePayments({
+      families: state.families,
+      localRecords: state.localRecords
+    }, payAll) || {};
+    var salCmp = window.BackfillFinance.compareSalaries({
+      teachers: state.teachers,
+      localSalaries: state.localSalaries,
+      carrierSalaries: state.carrierSalaries
+    }, slipAll, adjAll) || {};
+    renderReadCompare(payCmp, salCmp);
+    logLine('Read compare complete: payments ' + (payCmp.clean === true ? 'CLEAN' : 'DIFFERENCES FOUND')
+      + '; salaries ' + (salCmp.clean === true ? 'CLEAN' : 'DIFFERENCES FOUND') + '. See Step 5 for the details.',
+      (payCmp.clean === true && salCmp.clean === true) ? 'ok' : 'err');
+  } catch (e) {
+    logLine('Read compare failed: ' + (e && e.message ? e.message : e), 'err');
+  }
+  setBusy('btnCompare', false, 'Run read compare');
 };
 </script>
 </body>
