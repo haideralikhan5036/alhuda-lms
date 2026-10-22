@@ -8,6 +8,11 @@
 // reconciliation report, and — only when the report reconciles — writes the
 // planned rows itself.
 //
+// Batch 6D-1 adds the COMPARE engine (comparePayments / compareSalaries at
+// the bottom): it re-plans the expected rows from the same legacy sources
+// and diffs them against the rows actually stored in the finance tables,
+// which is the gate a surface must pass before its reads switch over.
+//
 // Every row is built through the Batch 6B builders in js/fee-tables.js
 // (window.FeeTables), so dual-write and backfill share ONE field mapping and
 // can never drift apart. Each planned row's legacy_json is stamped with
@@ -603,9 +608,346 @@
     return { slipRows: slipRows, adjustmentRows: adjustmentRows, report: report };
   }
 
+  // --------------------------------------------------------------------------
+  // Batch 6D-1 — COMPARE engine
+  //
+  // Re-plans the expected rows from the legacy sources (the very same
+  // planners the backfill used, runId 'compare') and diffs them ROW vs ROW
+  // against the rows actually stored in the finance tables. A surface may
+  // switch its reads to the tables only when its compare comes back clean.
+  // Like the planners: pure, deterministic, never throws — unusable input
+  // yields a report with clean=false and an `error` string.
+  // --------------------------------------------------------------------------
+  function strVal(v) { return v == null ? null : String(v); }
+
+  function strEq(a, b) {
+    return (a == null ? '' : String(a)) === (b == null ? '' : String(b));
+  }
+
+  function sortDiffs(diffs) {
+    diffs.sort(function (x, y) {
+      if (x.key < y.key) return -1;
+      if (x.key > y.key) return 1;
+      if (x.field < y.field) return -1;
+      if (x.field > y.field) return 1;
+      return 0;
+    });
+  }
+
+  function numberlessLabel(row) {
+    return familyKey(isObj(row) ? row.family_id : null) + ' ' +
+      (isObj(row) && row.billing_period != null ? String(row.billing_period) : 'no period') +
+      ' (no receipt number)';
+  }
+
+  function comparePayments(sources, tableRows) {
+    var report = {
+      clean: false,
+      expectedCount: 0,
+      actualCount: Array.isArray(tableRows) ? tableRows.length : 0,
+      missingInTables: [],
+      extraInTables: [],
+      fieldDiffs: [],
+      informational: [],
+      unmatchedNumberless: 0,
+      perFamily: {}
+    };
+    try {
+      if (!isObj(sources)) {
+        report.error = 'comparePayments: sources must be an object ({ families, localRecords }).';
+        return report;
+      }
+      if (!Array.isArray(tableRows)) {
+        report.error = 'comparePayments: tableRows must be an array of payments rows.';
+        return report;
+      }
+      if (!FT || typeof FT.paymentRowFromLegacy !== 'function') {
+        report.error = 'comparePayments: FeeTables builders are not available.';
+        return report;
+      }
+
+      var expected = planPayments({
+        families: sources.families,
+        localRecords: sources.localRecords,
+        runId: 'compare'
+      }).rows;
+      report.expectedCount = expected.length;
+
+      // Per-family counts over BOTH sides in full (matched or not).
+      function countFamily(row, side) {
+        var fid = familyKey(isObj(row) ? row.family_id : null);
+        if (!report.perFamily[fid]) report.perFamily[fid] = { expected: 0, actual: 0 };
+        report.perFamily[fid][side] += 1;
+      }
+      expected.forEach(function (row) { countFamily(row, 'expected'); });
+      tableRows.forEach(function (row) { countFamily(row, 'actual'); });
+
+      // Index the actual rows by receipt number (numbered rows only).
+      var used = {};
+      var ambiguous = {};
+      var actualByReceipt = {};
+      tableRows.forEach(function (row, idx) {
+        if (!isObj(row) || !hasText(row.receipt_no)) return;
+        var no = String(row.receipt_no);
+        if (!actualByReceipt[no]) actualByReceipt[no] = [];
+        actualByReceipt[no].push(idx);
+      });
+
+      var pairs = []; // { exp, act, key }
+
+      // Numbered expected rows match on receipt_no, one-to-one.
+      expected.forEach(function (exp) {
+        if (!hasText(exp.receipt_no)) return;
+        var no = String(exp.receipt_no);
+        var list = actualByReceipt[no] || [];
+        var found = -1;
+        for (var i = 0; i < list.length; i++) {
+          if (!used[list[i]]) { found = list[i]; break; }
+        }
+        if (found === -1) report.missingInTables.push(no);
+        else { used[found] = true; pairs.push({ exp: exp, act: tableRows[found], key: no }); }
+      });
+
+      // Numberless expected rows match numberless actual rows on
+      // family + billing period + amount paid. Zero candidates = missing;
+      // several = ambiguous (counted, never guessed); the ambiguous actual
+      // rows are not then reported as extra — they plausibly ARE the match.
+      expected.forEach(function (exp) {
+        if (hasText(exp.receipt_no)) return;
+        var candidates = [];
+        tableRows.forEach(function (act, idx) {
+          if (used[idx] || ambiguous[idx] || !isObj(act) || hasText(act.receipt_no)) return;
+          if (!strEq(act.family_id, exp.family_id)) return;
+          if (!strEq(act.billing_period, exp.billing_period)) return;
+          if (Math.abs(num(act.amount_paid) - num(exp.amount_paid)) > MONEY_TOLERANCE) return;
+          candidates.push(idx);
+        });
+        if (candidates.length === 1) {
+          used[candidates[0]] = true;
+          pairs.push({ exp: exp, act: tableRows[candidates[0]], key: numberlessLabel(exp) });
+        } else if (candidates.length === 0) {
+          report.missingInTables.push(numberlessLabel(exp));
+        } else {
+          report.unmatchedNumberless += 1;
+          candidates.forEach(function (idx) { ambiguous[idx] = true; });
+        }
+      });
+
+      // Actual rows nobody claimed (and not held as ambiguous) are extra.
+      tableRows.forEach(function (act, idx) {
+        if (used[idx] || ambiguous[idx]) return;
+        if (!isObj(act)) { report.extraInTables.push('(unreadable row)'); return; }
+        report.extraInTables.push(hasText(act.receipt_no) ? String(act.receipt_no) : numberlessLabel(act));
+      });
+
+      // Field-by-field comparison of every matched pair.
+      var MONEY_FIELDS = ['amount_paid', 'total_payable', 'discount', 'remaining_balance'];
+      var STRING_FIELDS = ['family_id', 'status', 'currency', 'billing_period', 'record_kind'];
+      pairs.forEach(function (pair) {
+        MONEY_FIELDS.forEach(function (f) {
+          if (Math.abs(num(pair.exp[f]) - num(pair.act[f])) > MONEY_TOLERANCE) {
+            report.fieldDiffs.push({ key: pair.key, field: f, expected: num(pair.exp[f]), actual: num(pair.act[f]) });
+          }
+        });
+        STRING_FIELDS.forEach(function (f) {
+          if (!strEq(pair.exp[f], pair.act[f])) {
+            report.fieldDiffs.push({ key: pair.key, field: f, expected: strVal(pair.exp[f]), actual: strVal(pair.act[f]) });
+          }
+        });
+        // cancel_reason: presence/value, with absent (null/empty) unified.
+        var eCr = pair.exp.cancel_reason == null ? '' : String(pair.exp.cancel_reason);
+        var aCr = pair.act.cancel_reason == null ? '' : String(pair.act.cancel_reason);
+        if (eCr !== aCr) {
+          report.fieldDiffs.push({
+            key: pair.key, field: 'cancel_reason',
+            expected: pair.exp.cancel_reason == null ? null : eCr,
+            actual: pair.act.cancel_reason == null ? null : aCr
+          });
+        }
+        // Informational only: a stored remaining_balance that disagrees with
+        // the ACTUAL row's own money fields is a pre-existing snapshot quirk
+        // the migration faithfully carried — it never affects `clean`.
+        var stored = num(pair.act.remaining_balance);
+        var recomputed = Math.max(0,
+          num(pair.act.total_payable) - num(pair.act.discount) - num(pair.act.amount_paid));
+        if (Math.abs(stored - recomputed) > 0.01) {
+          var subject = hasText(pair.exp.receipt_no) ? 'Receipt ' + pair.key : pair.key;
+          report.informational.push(subject + ': stored remaining balance ' + fmtNum(stored) +
+            ' differs from its own fields (' + fmtNum(recomputed) +
+            ') — pre-existing snapshot, not a migration difference.');
+        }
+      });
+
+      report.missingInTables.sort();
+      report.extraInTables.sort();
+      report.informational.sort();
+      sortDiffs(report.fieldDiffs);
+      report.clean = report.missingInTables.length === 0 &&
+        report.extraInTables.length === 0 &&
+        report.fieldDiffs.length === 0 &&
+        report.unmatchedNumberless === 0;
+      return report;
+    } catch (e) {
+      report.clean = false;
+      report.error = 'comparePayments: ' + (e && e.message ? e.message : String(e));
+      return report;
+    }
+  }
+
+  function compareSalaries(sources, slipRows, adjustmentRows) {
+    var report = {
+      clean: false,
+      missingSlips: [],
+      extraSlips: [],
+      fieldDiffs: [],
+      adjustments: {
+        expected: 0,
+        actual: Array.isArray(adjustmentRows) ? adjustmentRows.length : 0,
+        missingIds: []
+      },
+      perTeacher: {}
+    };
+    try {
+      if (!isObj(sources)) {
+        report.error = 'compareSalaries: sources must be an object ({ teachers, localSalaries, carrierSalaries }).';
+        return report;
+      }
+      if (!Array.isArray(slipRows)) {
+        report.error = 'compareSalaries: slipRows must be an array of salary_slips rows.';
+        return report;
+      }
+      if (!Array.isArray(adjustmentRows)) {
+        report.error = 'compareSalaries: adjustmentRows must be an array of salary_adjustments rows.';
+        return report;
+      }
+      if (!FT || typeof FT.slipRowFromLegacy !== 'function' || typeof FT.adjustmentRowFromLegacy !== 'function') {
+        report.error = 'compareSalaries: FeeTables builders are not available.';
+        return report;
+      }
+
+      var plan = planSalaries({
+        teachers: sources.teachers,
+        localSalaries: sources.localSalaries,
+        carrierSalaries: sources.carrierSalaries,
+        runId: 'compare'
+      });
+      var expSlips = plan.slipRows;
+      var expAdjs = plan.adjustmentRows;
+      report.adjustments.expected = expAdjs.length;
+
+      // Per-teacher slip counts over BOTH sides in full.
+      function countTeacher(row, side) {
+        var tid = isObj(row) && row.teacher_id != null ? String(row.teacher_id) : '(unknown)';
+        if (!report.perTeacher[tid]) report.perTeacher[tid] = { expected: 0, actual: 0 };
+        report.perTeacher[tid][side] += 1;
+      }
+      expSlips.forEach(function (row) { countTeacher(row, 'expected'); });
+      slipRows.forEach(function (row) { countTeacher(row, 'actual'); });
+
+      // Slips match on (teacher_id, period); pair off within each key.
+      function slipKey(row) {
+        return String(isObj(row) ? row.teacher_id : null) + '|' + String(isObj(row) ? row.period : null);
+      }
+      var expByKey = {};
+      var actByKey = {};
+      var keySet = {};
+      expSlips.forEach(function (row) {
+        var k = slipKey(row);
+        if (!expByKey[k]) expByKey[k] = [];
+        expByKey[k].push(row);
+        keySet[k] = true;
+      });
+      slipRows.forEach(function (row) {
+        var k = slipKey(row);
+        if (!actByKey[k]) actByKey[k] = [];
+        actByKey[k].push(row);
+        keySet[k] = true;
+      });
+      Object.keys(keySet).forEach(function (k) {
+        var es = expByKey[k] || [];
+        var as = actByKey[k] || [];
+        var n = Math.min(es.length, as.length);
+        for (var i = 0; i < n; i++) {
+          var exp = es[i];
+          var act = as[i];
+          if (Math.abs(num(exp.net_payable) - num(act.net_payable)) > MONEY_TOLERANCE) {
+            report.fieldDiffs.push({ key: k, field: 'net_payable', expected: num(exp.net_payable), actual: num(act.net_payable) });
+          }
+          if (!strEq(exp.status, act.status)) {
+            report.fieldDiffs.push({ key: k, field: 'status', expected: strVal(exp.status), actual: strVal(act.status) });
+          }
+          // Slip numbers: compare ONLY when the number comes from the legacy
+          // record itself. A legacy slip that never carried a number gets a
+          // fresh random one minted by the planner on every run (and the
+          // backfill minted yet another into the stored row), so comparing
+          // minted numbers would report a permanent false difference.
+          var expLegacyNo = null;
+          try {
+            var expParsed = exp.legacy_json ? JSON.parse(exp.legacy_json) : null;
+            if (expParsed && hasText(expParsed.slip_no)) expLegacyNo = String(expParsed.slip_no);
+            else if (expParsed && hasText(expParsed.slipNo)) expLegacyNo = String(expParsed.slipNo);
+          } catch (e) { /* unparsable snapshot: skip the number comparison */ }
+          var aNo = hasText(act.slip_no) ? String(act.slip_no) : null;
+          if (expLegacyNo != null && aNo !== expLegacyNo) {
+            report.fieldDiffs.push({ key: k, field: 'slip_no', expected: expLegacyNo, actual: aNo });
+          }
+        }
+        for (var e = n; e < es.length; e++) report.missingSlips.push(k);
+        for (var a = n; a < as.length; a++) report.extraSlips.push(k);
+      });
+
+      // Adjustments match on the ORIGINAL legacy record id, which lives
+      // inside each side's legacy_json (the row columns do not carry it).
+      function legacyId(row) {
+        if (!isObj(row)) return null;
+        var parsed = parseJsonMaybe(row.legacy_json);
+        if (parsed.ok && isObj(parsed.value) && parsed.value.id != null && String(parsed.value.id) !== '') {
+          return String(parsed.value.id);
+        }
+        return null;
+      }
+      var actAdjById = {};
+      adjustmentRows.forEach(function (row, idx) {
+        var id = legacyId(row);
+        if (id != null && !actAdjById[id]) actAdjById[id] = idx;
+      });
+      var usedAdj = {};
+      expAdjs.forEach(function (exp) {
+        var id = legacyId(exp);
+        if (id != null && actAdjById[id] != null && !usedAdj[actAdjById[id]]) {
+          var act = adjustmentRows[actAdjById[id]];
+          usedAdj[actAdjById[id]] = true;
+          if (Math.abs(num(exp.amount) - num(act.amount)) > MONEY_TOLERANCE) {
+            report.fieldDiffs.push({ key: id, field: 'amount', expected: num(exp.amount), actual: num(act.amount) });
+          }
+        } else {
+          report.adjustments.missingIds.push(id != null ? id
+            : '(no legacy id) ' + String(isObj(exp) ? exp.teacher_id : null) + '|' + String(isObj(exp) ? exp.period : null));
+        }
+      });
+
+      report.missingSlips.sort();
+      report.extraSlips.sort();
+      report.adjustments.missingIds.sort();
+      sortDiffs(report.fieldDiffs);
+      report.clean = report.missingSlips.length === 0 &&
+        report.extraSlips.length === 0 &&
+        report.fieldDiffs.length === 0 &&
+        report.adjustments.missingIds.length === 0 &&
+        report.adjustments.expected === report.adjustments.actual;
+      return report;
+    } catch (e) {
+      report.clean = false;
+      report.error = 'compareSalaries: ' + (e && e.message ? e.message : String(e));
+      return report;
+    }
+  }
+
   window.BackfillFinance = {
     planPayments: planPayments,
-    planSalaries: planSalaries
+    planSalaries: planSalaries,
+    comparePayments: comparePayments,
+    compareSalaries: compareSalaries
   };
 })();
 

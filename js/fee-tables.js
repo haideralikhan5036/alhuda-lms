@@ -100,30 +100,73 @@
   // NOTE: the Worker only lets manager sessions read catalog settings keys,
   // so a manager session sees this flag only if the Worker also allows the
   // fee_tables_v1 key (Batch 6B Worker part). Owner sessions always can.
+  //
+  // Batch 6D-1: the fetch + value normalisation now lives in
+  // _fetchSettingValue so the read-mode flags below share the exact same
+  // loader. isEnabled's behaviour is unchanged: it resolves true only for
+  // the normalised values 'on' / 'true' / '1'.
   // --------------------------------------------------------------------------
-  function isEnabled() {
-    if (_enabledPromise) return _enabledPromise;
-    _enabledPromise = (async function () {
+  // Fetches one system_settings value and returns it normalised (trimmed,
+  // JSON-unquoted when stored as a quoted string, lowercased). A stored
+  // boolean true normalises to 'true'. Returns null on ANY problem: no db
+  // client, query error, or missing row. Never throws, never rejects.
+  function _fetchSettingValue(key) {
+    return (async function () {
       try {
         var client = getDb();
-        if (!client) return false;
-        var res = await client.from('system_settings').select('value').eq('key', FEE_TABLES_FLAG_KEY).limit(1);
-        if (!res || res.error) return false;
+        if (!client) return null;
+        var res = await client.from('system_settings').select('value').eq('key', key).limit(1);
+        if (!res || res.error) return null;
         var rows = res.data || [];
-        if (!rows.length) return false;
+        if (!rows.length) return null;
         var raw = rows[0] ? rows[0].value : null;
-        if (raw === true) return true;
+        if (raw === true) return 'true';
         var v = String(raw == null ? '' : raw).trim();
         if (v.length >= 2 && v.charAt(0) === '"') {
           try { v = String(JSON.parse(v)).trim(); } catch (e) { /* keep raw */ }
         }
-        v = v.toLowerCase();
-        return v === 'on' || v === 'true' || v === '1';
+        return v.toLowerCase();
       } catch (e) {
-        return false;
+        return null;
       }
     })();
+  }
+
+  function isEnabled() {
+    if (_enabledPromise) return _enabledPromise;
+    _enabledPromise = _fetchSettingValue(FEE_TABLES_FLAG_KEY).then(function (v) {
+      return v === 'on' || v === 'true' || v === '1';
+    }, function () { return false; });
     return _enabledPromise;
+  }
+
+  // --------------------------------------------------------------------------
+  // Batch 6D-1 — read-mode flags. Each surface that will read from the new
+  // tables gets its own system_settings key holding 'off' (default — legacy
+  // reads), 'compare' (legacy renders, tables are read only to diff), or
+  // 'on' (tables are the read source). Cached per key per page load; ANY
+  // problem (absent key, junk value, query error) resolves to 'off'.
+  // --------------------------------------------------------------------------
+  var READ_FLAG_PARENT = 'fee_read_parent';
+  var READ_FLAG_360 = 'fee_read_360';
+  var READ_FLAG_SALARY = 'salary_read_v1';
+  var _readModePromises = {};
+
+  function getReadMode(flagKey) {
+    var key = String(flagKey || '');
+    if (!key) return Promise.resolve('off');
+    if (_readModePromises[key]) return _readModePromises[key];
+    _readModePromises[key] = (async function () {
+      try {
+        var v = await _fetchSettingValue(key);
+        if (v === 'on') return 'on';
+        if (v === 'compare') return 'compare';
+        return 'off';
+      } catch (e) {
+        return 'off';
+      }
+    })();
+    return _readModePromises[key];
   }
 
   // --------------------------------------------------------------------------
@@ -185,6 +228,27 @@
       if (p2) return p2;
     }
     return null;
+  }
+
+  // Full English month names by number (index 0 = January) — used by the
+  // Batch 6D-1 reverse translators to rebuild legacy month text.
+  var MONTH_LABELS = ['January', 'February', 'March', 'April', 'May', 'June',
+    'July', 'August', 'September', 'October', 'November', 'December'];
+
+  // 'YYYY-MM' → { year, monthNumber, monthName } or null.
+  function _periodParts(period) {
+    if (period == null) return null;
+    var m = String(period).trim().match(/^(\d{4})-(\d{1,2})/);
+    if (!m) return null;
+    var mo = parseInt(m[2], 10);
+    if (mo < 1 || mo > 12) return null;
+    return { year: parseInt(m[1], 10), monthNumber: mo, monthName: MONTH_LABELS[mo - 1] };
+  }
+
+  // 'YYYY-MM' → 'Month YYYY' (e.g. '2026-09' → 'September 2026') or null.
+  function _labelFromPeriod(period) {
+    var parts = _periodParts(period);
+    return parts ? (parts.monthName + ' ' + parts.year) : null;
   }
 
   // --------------------------------------------------------------------------
@@ -295,6 +359,157 @@
       // key used later to find this row again for cancellation.
       legacy_json: JSON.stringify(adj)
     };
+  }
+
+  // --------------------------------------------------------------------------
+  // Batch 6D-1 — REVERSE translators: rebuild a legacy-shaped record from a
+  // finance-table row. The row's legacy_json holds the complete original
+  // record, so it is the base; the row's own columns are authoritative and
+  // overlay it wherever they carry a value (they reflect later changes —
+  // cancels, edits — that the snapshot in legacy_json may predate). When
+  // legacy_json is absent (e.g. nulled for manager sessions), the record is
+  // built from columns alone and snapshot-only fields (whatsapp / email /
+  // parentName / country) simply come out absent.
+  // --------------------------------------------------------------------------
+  function _parseLegacyJson(row) {
+    if (!row || row.legacy_json == null) return {};
+    try {
+      var parsed = typeof row.legacy_json === 'string' ? JSON.parse(row.legacy_json) : row.legacy_json;
+      return parsed && typeof parsed === 'object' ? parsed : {};
+    } catch (e) {
+      return {};
+    }
+  }
+
+  function paymentLegacyFromRow(row) {
+    row = row || {};
+    var base = _parseLegacyJson(row);
+    var rec = Object.assign({}, base);
+
+    // Scalar overlays — the row's columns win whenever they carry a value.
+    if (row.receipt_no != null) rec.receiptNo = row.receipt_no;
+    if (row.family_id != null) rec.familyId = row.family_id;
+    if (row.amount_paid != null) rec.amountPaid = Number(row.amount_paid);
+    if (row.total_payable != null) rec.totalPayable = Number(row.total_payable);
+    if (row.discount != null) rec.discount = Number(row.discount);
+    if (row.remaining_balance != null) rec.remainingBalance = Number(row.remaining_balance);
+    if (row.currency != null) rec.currency = row.currency;
+    if (row.payment_method != null) rec.paymentMethod = row.payment_method;
+    if (row.transaction_id != null) rec.transactionId = row.transaction_id;
+    if (!rec.date && row.payment_date != null) rec.date = row.payment_date;
+    if (rec.notes == null && row.notes != null) rec.notes = row.notes;
+
+    // Month / year — keep the original text when present; else derive from
+    // the row's month_label, filling any gap from billing_period.
+    if (rec.month == null || rec.month === '' || rec.year == null || rec.year === '') {
+      var derivedMonth = null;
+      var derivedYear = null;
+      if (row.month_label != null) {
+        var mn = _monthNumber(row.month_label);
+        if (mn != null) derivedMonth = MONTH_LABELS[mn - 1];
+        var ym = String(row.month_label).match(/\d{4}/);
+        if (ym) derivedYear = parseInt(ym[0], 10);
+      }
+      var pp = _periodParts(row.billing_period);
+      if (pp) {
+        if (derivedMonth == null) derivedMonth = pp.monthName;
+        if (derivedYear == null) derivedYear = pp.year;
+      }
+      if ((rec.month == null || rec.month === '') && derivedMonth != null) rec.month = derivedMonth;
+      if ((rec.year == null || rec.year === '') && derivedYear != null) rec.year = derivedYear;
+    }
+
+    // Record kind — keep the table's classification on the record and restore
+    // the legacy boolean flags the forward builder derived it from.
+    if (row.record_kind != null) rec.recordKind = row.record_kind;
+    if (row.record_kind === 'manual_invoice') rec.isManualInvoice = true;
+    // Advances are marked by the is_advance column (the forward builder
+    // never emits an 'advance_installment' record_kind).
+    if (row.is_advance === 1 || row.is_advance === true || row.is_advance === '1') rec.isAdvancePayment = true;
+
+    // Status — the careful part. A cancelled row always wins (its cancel
+    // columns are the latest truth). Otherwise, if the money has not moved
+    // since the snapshot, the snapshot's own status text is the most
+    // faithful legacy value and is kept verbatim. Only when neither applies
+    // do we translate the row's normalised status back to legacy text.
+    if (row.status === 'Cancelled' || row.cancel_reason != null) {
+      rec.status = 'Cancelled';
+      rec.cancel_reason = row.cancel_reason != null ? row.cancel_reason : base.cancel_reason;
+      rec.cancelled_by = row.cancelled_by != null ? row.cancelled_by : base.cancelled_by;
+      rec.cancelled_at = row.cancelled_at != null ? row.cancelled_at : base.cancelled_at;
+    } else if (typeof base.status === 'string' && base.status !== '' &&
+        Number(base.amountPaid) === Number(row.amount_paid)) {
+      rec.status = base.status;
+    } else if (row.status === 'Paid') {
+      rec.status = 'Paid in Full';
+    } else if (row.status === 'Partial') {
+      rec.status = 'Partial (Balance Remaining)';
+    } else if (row.status === 'Advance') {
+      rec.status = 'Paid in Advance';
+    }
+    return rec;
+  }
+
+  function slipLegacyFromRow(row) {
+    row = row || {};
+    var base = _parseLegacyJson(row);
+    var rec = Object.assign({}, base);
+
+    if (row.teacher_id != null) rec.teacher_id = row.teacher_id;
+    if (row.slip_no != null) { rec.slip_no = row.slip_no; rec.slipNo = row.slip_no; }
+    if (row.status != null) rec.status = row.status;
+    if (row.paid_at != null) rec.paid_at = row.paid_at;
+    if (row.base_subtotal != null) rec.base_subtotal = Number(row.base_subtotal);
+    if (row.bonus != null) rec.bonus = Number(row.bonus);
+    // The forward builder stored legacy `deduction` in `deduction_total`.
+    if (row.deduction_total != null) rec.deduction = Number(row.deduction_total);
+    if (row.net_payable != null) rec.net_payable = Number(row.net_payable);
+
+    // Month — original label when present (month_label column holds it
+    // verbatim), else the English label derived from the period.
+    if (rec.month == null || rec.month === '') {
+      if (row.month_label != null && row.month_label !== '') {
+        rec.month = row.month_label;
+      } else {
+        var label = _labelFromPeriod(row.period);
+        if (label) rec.month = label;
+      }
+    }
+
+    // Slip key — the consumers' map key. Prefer the snapshot's own key,
+    // then the row's stored legacy_key (the forward builder put the key
+    // there), else rebuild it exactly as the forward builder does.
+    if (rec.slip_key == null || rec.slip_key === '') {
+      if (row.legacy_key != null && row.legacy_key !== '') {
+        rec.slip_key = row.legacy_key;
+      } else if (rec.teacher_id != null && rec.month) {
+        rec.slip_key = String(rec.teacher_id) + '_' + String(rec.month).replace(/\s+/g, '_');
+      }
+    }
+    return rec;
+  }
+
+  function adjustmentLegacyFromRow(row) {
+    row = row || {};
+    var base = _parseLegacyJson(row);
+    var rec = Object.assign({}, base);
+    // NOTE: base.id is deliberately kept — it is the original deduction
+    // record id that consumers match on. The table row's own id is NOT a
+    // legacy field and is never copied onto the record.
+
+    if (row.teacher_id != null) rec.teacher_id = row.teacher_id;
+    if (row.amount != null) rec.amount = Number(row.amount);
+    // The forward builder mapped legacy `type` into the row's `kind`.
+    if (row.kind != null) rec.type = row.kind;
+    if (row.status === 'Cancelled') {
+      rec.status = 'Cancelled';
+      if (row.cancel_reason != null) rec.cancel_reason = row.cancel_reason;
+    }
+    if (rec.month == null || rec.month === '') {
+      var label = _labelFromPeriod(row.period);
+      if (label) rec.month = label;
+    }
+    return rec;
   }
 
   // --------------------------------------------------------------------------
@@ -525,6 +740,13 @@
     generateSlipNo: generateSlipNo,
     slipRowFromLegacy: slipRowFromLegacy,
     adjustmentRowFromLegacy: adjustmentRowFromLegacy,
+    paymentLegacyFromRow: paymentLegacyFromRow,
+    slipLegacyFromRow: slipLegacyFromRow,
+    adjustmentLegacyFromRow: adjustmentLegacyFromRow,
+    READ_FLAG_PARENT: READ_FLAG_PARENT,
+    READ_FLAG_360: READ_FLAG_360,
+    READ_FLAG_SALARY: READ_FLAG_SALARY,
+    getReadMode: getReadMode,
     currentActor: currentActor,
     upsertPaymentRow: upsertPaymentRow,
     cancelPaymentRow: cancelPaymentRow,
@@ -538,7 +760,7 @@
     dualWriteSlipCancelled: dualWriteSlipCancelled,
     dualWriteAdjustment: dualWriteAdjustment,
     dualWriteAdjustmentCancelled: dualWriteAdjustmentCancelled,
-    // Test support only: clears the per-page-load flag cache and warning latch.
-    _resetForTests: function () { _enabledPromise = null; _warned = false; }
+    // Test support only: clears the per-page-load flag caches and warning latch.
+    _resetForTests: function () { _enabledPromise = null; _readModePromises = {}; _warned = false; }
   };
 })();
