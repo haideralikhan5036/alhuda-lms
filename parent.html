@@ -1681,6 +1681,7 @@
         const bookId = meta?.book_id || 'noorani-qaida';
         const bookTitle = meta?.book_title || 'Lesson Material';
         const pageNum = meta?.page || 1;
+        const isAddCourse = meta?.book_id === 'additional-course';
         const statusClass = meta?.status === 'Pass' ? 'bg-emerald-100 text-emerald-800 border-emerald-300' : 'bg-amber-100 text-amber-800 border-amber-300';
 
         return `
@@ -1705,7 +1706,7 @@
                     <i class="fa-solid fa-book-open text-brandEmerald"></i> ${escapeHtml(bookTitle)}
                   </span>
                   <span class="text-xs font-bold px-2 py-0.5 rounded-md bg-amber-100 text-amber-900 border border-amber-300 font-mono">
-                    ${meta?.para ? `Para ${escapeHtml(meta.para)} &bull; ` : ''}Page ${Number(pageNum) || 1}
+                    ${isAddCourse ? escapeHtml(meta.lesson_name || 'Lesson') : `${meta?.para ? `Para ${escapeHtml(meta.para)} &bull; ` : ''}Page ${Number(pageNum) || 1}`}
                   </span>
                 </div>
                 ${meta?.remarks ? `
@@ -1716,24 +1717,32 @@
               </div>
 
               <div class="flex items-center justify-start md:justify-end">
+                ${isAddCourse ? '' : `
                 <button onclick="openParentDigitalReader('${sanitizeBookId(bookId)}', ${Number(pageNum) || 1}, ${meta?.para ? Number(meta.para) : 'null'}, ${meta?.language ? `'${escapeJsAttr(meta.language)}'` : 'null'})" class="w-full sm:w-auto px-4 py-2.5 rounded-xl bg-gradient-to-r from-emerald-800 to-teal-900 hover:from-emerald-700 hover:to-teal-800 text-white font-black text-xs shadow-sm hover:shadow-md transition flex items-center justify-center gap-1.5">
                   <i class="fa-solid fa-book-open-reader text-brandGold"></i> Revise Page ${Number(pageNum) || 1}
                 </button>
+                `}
               </div>
             </div>
           </div>
         `;
       }).join('');
 
-      // Update Hero Sabaq Button
+      // Update Hero Sabaq Button (hidden for Additional Course: no book to open)
       const heroBtn = document.getElementById('btnOpenLatestSabaq');
       if (heroBtn && LATEST_SABAQ_META) {
-        const paraText = LATEST_SABAQ_META.para ? `Para ${escapeHtml(LATEST_SABAQ_META.para)} • ` : '';
-        heroBtn.innerHTML = `<i class="fa-solid fa-book-open"></i> Read Lesson: ${escapeHtml(LATEST_SABAQ_META.book_title || 'Lesson')} (${paraText}Pg ${Number(LATEST_SABAQ_META.page) || 1})`;
+        const isAddHero = LATEST_SABAQ_META.book_id === 'additional-course';
+        heroBtn.style.display = isAddHero ? 'none' : '';
+        if (!isAddHero) {
+          const paraText = LATEST_SABAQ_META.para ? `Para ${escapeHtml(LATEST_SABAQ_META.para)} • ` : '';
+          heroBtn.innerHTML = `<i class="fa-solid fa-book-open"></i> Read Lesson: ${escapeHtml(LATEST_SABAQ_META.book_title || 'Lesson')} (${paraText}Pg ${Number(LATEST_SABAQ_META.page) || 1})`;
+        }
       }
     }
 
     function openLatestSabaqReader() {
+      // Additional Course has no book to open.
+      if (LATEST_SABAQ_META?.book_id === 'additional-course') return;
       if (LATEST_SABAQ_META) {
         openParentDigitalReader(
           LATEST_SABAQ_META.book_id || 'holy-quran-16-line',
@@ -1841,7 +1850,11 @@
           try { meta = typeof log.lesson_notes === 'string' ? JSON.parse(log.lesson_notes) : log.lesson_notes; } catch(e){}
         }
 
-        const topic = meta?.book_title ? `${escapeHtml(meta.book_title)} (Page ${Number(meta.page) || 1})` : escapeHtml(log.lesson_notes || 'Regular Class Attendance');
+        const topic = meta?.book_title
+          ? (meta.book_id === 'additional-course'
+            ? `${escapeHtml(meta.book_title)}${meta.lesson_name ? ` — ${escapeHtml(meta.lesson_name)}` : ''}`
+            : `${escapeHtml(meta.book_title)} (Page ${Number(meta.page) || 1})`)
+          : escapeHtml(log.lesson_notes || 'Regular Class Attendance');
         const teacher = log.teachers?.full_name || defaultTeacher;
 
         return `
@@ -2549,6 +2562,10 @@
     // INTERACTIVE DIGITAL BOOK READER ENGINE
     // ==========================================
     function openParentDigitalReader(bookId, pageNum = 1, paraNum = null, language = null) {
+      // Additional Course has no book to open — never fall back to a
+      // catalogue book's reader for it (defence in depth; buttons are
+      // already suppressed for the sentinel).
+      if (bookId === 'additional-course') return;
       const allBooks = typeof getAllAvailableBooks === 'function' ? getAllAvailableBooks() : [];
       let book = allBooks.find(b => b.id === bookId);
 

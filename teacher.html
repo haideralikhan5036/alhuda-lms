@@ -1084,6 +1084,18 @@ font-family: var(--font-num) !important;
               </select>
             </div>
 
+            <!-- Additional Course inputs (shown only when "Additional Course" is selected) -->
+            <div id="attAdditionalCourseContainer" class="hidden space-y-2">
+              <div>
+                <label class="block font-bold text-slate-700 mb-1">Additional Course Name *:</label>
+                <input type="text" id="attAdditionalCourseName" placeholder="e.g. Arabic Grammar Basics" class="w-full p-2.5 bg-white border border-slate-300 rounded-xl font-bold text-slate-800 text-xs focus:outline-brandEmerald">
+              </div>
+              <div>
+                <label class="block font-bold text-slate-700 mb-1">Lesson Name / Description *:</label>
+                <input type="text" id="attAdditionalLessonName" placeholder="e.g. Lesson 5: Past Tense Verbs" class="w-full p-2.5 bg-white border border-slate-300 rounded-xl font-medium text-slate-800 text-xs focus:outline-brandEmerald">
+              </div>
+            </div>
+
             <!-- Dynamic Tafseer Language Selector -->
             <div id="attTafseerLanguageContainer" class="hidden">
               <label class="block font-bold text-slate-700 mb-1 flex items-center gap-1.5">
@@ -1324,6 +1336,18 @@ font-family: var(--font-num) !important;
               <select id="advCourseBookSelect" onchange="onAdvanceCourseBookChanged(this.value)" class="w-full p-2.5 bg-white border border-slate-300 rounded-xl font-bold text-slate-800 text-xs focus:outline-purple-600 shadow-2xs">
                 <!-- Dynamically populated -->
               </select>
+            </div>
+
+            <!-- Additional Course inputs (shown only when "Additional Course" is selected) -->
+            <div id="advAdditionalCourseContainer" class="hidden space-y-2">
+              <div>
+                <label class="block font-bold text-slate-700 mb-1">Additional Course Name *:</label>
+                <input type="text" id="advAdditionalCourseName" placeholder="e.g. Arabic Grammar Basics" class="w-full p-2.5 bg-white border border-slate-300 rounded-xl font-bold text-slate-800 text-xs focus:outline-purple-600">
+              </div>
+              <div>
+                <label class="block font-bold text-slate-700 mb-1">Lesson Name / Description *:</label>
+                <input type="text" id="advAdditionalLessonName" placeholder="e.g. Lesson 5: Past Tense Verbs" class="w-full p-2.5 bg-white border border-slate-300 rounded-xl font-medium text-slate-800 text-xs focus:outline-purple-600">
+              </div>
             </div>
 
             <!-- Dynamic Tafseer Language Selector for Advance Class -->
@@ -3645,18 +3669,27 @@ font-family: var(--font-num) !important;
             const pMeta = JSON.parse(c.log.lesson_notes);
             if (pMeta.book_title || pMeta.page) {
               const passColor = pMeta.status === 'Pass' ? 'bg-emerald-100 text-emerald-800 border-emerald-300' : 'bg-amber-100 text-amber-800 border-amber-300';
+              // Additional Course: show the custom lesson name (never a
+              // "Pg null" label) and no reader button — there is no book
+              // to open for a teacher-entered course.
+              const isAddCourseHist = pMeta.book_id === 'additional-course';
+              const lessonMetaLabel = isAddCourseHist
+                ? escapeHtml(pMeta.lesson_name || 'Lesson')
+                : `${pMeta.para ? `Para ${escapeHtml(pMeta.para)} &bull; ` : ''}Pg ${escapeHtml(pMeta.page)}`;
+              const lessonReadBtn = isAddCourseHist ? '' : `
+                    <button onclick="openDigitalBookReader('${sanitizeBookId(pMeta.book_id || 'holy-quran-16-line')}', ${Number(pMeta.page) || 1}, ${pMeta.para ? Number(pMeta.para) : 'null'}, ${pMeta.language ? `'${escapeJsAttr(pMeta.language)}'` : 'null'})" class="text-[10px] text-brandEmerald hover:text-brandDark font-extrabold flex items-center gap-0.5" title="Open Lesson in Digital Reader">
+                      <i class="fa-solid fa-eye text-[9px]"></i> Read
+                    </button>`;
               sabaqNotes = `
                 <div class="space-y-1">
                   <div class="flex items-center gap-1.5 flex-wrap">
                     <span class="px-2 py-0.5 rounded text-[10px] font-extrabold bg-emerald-50 text-brandDark border border-emerald-300 flex items-center gap-1">
-                      <i class="fa-solid fa-book-quran text-brandEmerald"></i> ${escapeHtml(pMeta.book_title || 'Course')} &bull; ${pMeta.para ? `Para ${escapeHtml(pMeta.para)} &bull; ` : ''}Pg ${escapeHtml(pMeta.page)}
+                      <i class="fa-solid fa-book-quran text-brandEmerald"></i> ${escapeHtml(pMeta.book_title || 'Course')} &bull; ${lessonMetaLabel}
                     </span>
                     <span class="px-1.5 py-0.5 rounded text-[9px] font-bold border ${passColor}">
                       ${escapeHtml(pMeta.status || 'Done')}
                     </span>
-                    <button onclick="openDigitalBookReader('${sanitizeBookId(pMeta.book_id || 'holy-quran-16-line')}', ${Number(pMeta.page) || 1}, ${pMeta.para ? Number(pMeta.para) : 'null'}, ${pMeta.language ? `'${escapeJsAttr(pMeta.language)}'` : 'null'})" class="text-[10px] text-brandEmerald hover:text-brandDark font-extrabold flex items-center gap-0.5" title="Open Lesson in Digital Reader">
-                      <i class="fa-solid fa-eye text-[9px]"></i> Read
-                    </button>
+                    ${lessonReadBtn}
                   </div>
                   ${pMeta.remarks ? `<div class="text-[11px] text-slate-600 truncate max-w-xs">${escapeHtml(pMeta.remarks)}</div>` : ''}
                 </div>
@@ -4403,6 +4436,72 @@ font-family: var(--font-num) !important;
       return merged.filter(b => b && !deletedIds.includes(b.id) && isMaterialAuthorizedForTeacher(b));
     }
 
+    // Additional Course (Task 1): a teacher-entered course is NOT a catalogue
+    // book. It is stored as a sentinel book_id inside the lesson_notes JSON
+    // only — never as a catalogue entry, never as a fake course.
+    const ADDITIONAL_COURSE_ID = 'additional-course';
+
+    // Toggle a lesson form between a catalogue book and the Additional Course
+    // inputs. `prefix` is 'att' (attendance modal) or 'adv' (advance form).
+    // For the sentinel: hide the page cell (select + View button) and the
+    // para/language containers, show the custom inputs. For a catalogue
+    // book: hide the custom inputs and restore the page cell; para/language
+    // visibility is then decided by the caller's branch logic.
+    function setAdditionalCourseMode(prefix, isAdditional) {
+      const pageSelect = document.getElementById(prefix + 'CoursePageSelect');
+      const pageCell = pageSelect ? pageSelect.closest('div.flex')?.parentElement : null;
+      if (pageCell) pageCell.style.display = isAdditional ? 'none' : '';
+      const addC = document.getElementById(prefix + 'AdditionalCourseContainer');
+      if (addC) {
+        addC.classList.toggle('hidden', !isAdditional);
+        if (!isAdditional) {
+          const nameInp = document.getElementById(prefix + 'AdditionalCourseName');
+          const lessonInp = document.getElementById(prefix + 'AdditionalLessonName');
+          if (nameInp) nameInp.value = '';
+          if (lessonInp) lessonInp.value = '';
+        }
+      }
+      if (isAdditional) {
+        const langC = document.getElementById(prefix + 'TafseerLanguageContainer');
+        const paraC = document.getElementById(prefix + 'QuranParaContainer');
+        if (langC) langC.classList.add('hidden');
+        if (paraC) paraC.classList.add('hidden');
+      }
+    }
+
+    // Dynamic page options (Task 2): a book's chapters must not shadow its
+    // authoritative page count. When total_pages exceeds the chapters'
+    // largest page_start, options are 1..total_pages; otherwise the chapter
+    // options are kept. Nothing is hardcoded: counts always come from the
+    // book record. `maxTotal` caps the numeric range only (the advance
+    // form's existing 120 cap); chapters are never capped.
+    function buildLessonPageOptions(book, maxTotal) {
+      if (!book) return '';
+      const cap = (typeof maxTotal === 'number' && maxTotal > 0) ? maxTotal : Infinity;
+      if (book.chapters && book.chapters.length > 0) {
+        let maxStart = 0;
+        book.chapters.forEach(ch => {
+          const s = Number(ch.page_start) || 0;
+          if (s > maxStart) maxStart = s;
+        });
+        const total = Number(book.total_pages) || 0;
+        if (total > maxStart) {
+          const n = Math.min(total, cap);
+          const opts = [];
+          for (let i = 1; i <= n; i++) opts.push(`<option value="${i}">Page / Lesson ${i}</option>`);
+          return opts.join('');
+        }
+        return book.chapters.map((ch, idx) => `
+          <option value="${ch.page_start || (idx + 1)}">Page ${ch.page_start || (idx + 1)} &bull; ${ch.title.slice(0, 35)}</option>
+        `).join('');
+      }
+      const total = book.total_pages || (book.pages ? book.pages.length : 32);
+      const n = Math.min(total, cap);
+      const opts = [];
+      for (let i = 1; i <= n; i++) opts.push(`<option value="${i}">Page / Lesson ${i}</option>`);
+      return opts.join('');
+    }
+
     function populateTeacherCourseBooks(defaultBookId = null) {
       const bSelect = document.getElementById('attCourseBookSelect');
       if (!bSelect) return;
@@ -4410,7 +4509,7 @@ font-family: var(--font-num) !important;
 
       bSelect.innerHTML = allBooks.map(b => `
         <option value="${b.id}">${b.title} (${b.category_label || 'Course'})</option>
-      `).join('');
+      `).join('') + `<option value="${ADDITIONAL_COURSE_ID}">Additional Course</option>`;
 
       if (defaultBookId) {
         bSelect.value = defaultBookId;
@@ -4521,6 +4620,15 @@ font-family: var(--font-num) !important;
       const paraLabel = document.getElementById('attParaLabelText');
       if (!pageSelect) return;
 
+      // Additional Course: no catalogue book, no para/page/View — show the
+      // custom inputs only. Branch BEFORE the allBooks[0] fallback so the
+      // sentinel can never be resolved to the first catalogue book.
+      if (bookId === ADDITIONAL_COURSE_ID) {
+        setAdditionalCourseMode('att', true);
+        return;
+      }
+      setAdditionalCourseMode('att', false);
+
       const allBooks = getTeacherAllBooks();
       const book = allBooks.find(b => b.id === bookId) || allBooks[0];
       if (!book) return;
@@ -4567,20 +4675,7 @@ font-family: var(--font-num) !important;
       } else {
         if (langContainer) langContainer.classList.add('hidden');
         if (paraContainer) paraContainer.classList.add('hidden');
-        let html = '';
-        if (book.chapters && book.chapters.length > 0) {
-          html = book.chapters.map((ch, idx) => `
-            <option value="${ch.page_start || (idx + 1)}">Page ${ch.page_start || (idx + 1)} &bull; ${ch.title.slice(0, 35)}</option>
-          `).join('');
-        } else {
-          const total = book.total_pages || (book.pages ? book.pages.length : 32);
-          const opts = [];
-          for (let i = 1; i <= total; i++) {
-            opts.push(`<option value="${i}">Page / Lesson ${i}</option>`);
-          }
-          html = opts.join('');
-        }
-        pageSelect.innerHTML = html;
+        pageSelect.innerHTML = buildLessonPageOptions(book);
         if (defaultPage) {
           pageSelect.value = defaultPage;
         }
@@ -4589,6 +4684,9 @@ font-family: var(--font-num) !important;
 
     function previewTeacherSelectedMaterial() {
       const bookId = document.getElementById('attCourseBookSelect')?.value || 'holy-quran-16-line';
+      // Additional Course has no book to open — never fall through to a
+      // catalogue book's reader for it (the View button is hidden too).
+      if (bookId === ADDITIONAL_COURSE_ID) return;
       const allBooks = getTeacherAllBooks();
       const book = allBooks.find(b => b.id === bookId) || allBooks[0];
       const page = Number(document.getElementById('attCoursePageSelect')?.value || 1);
@@ -4981,7 +5079,23 @@ font-family: var(--font-num) !important;
       const badge = document.getElementById('attLastSabaqBadge');
       let resumePara = parsedNotes?.para || null;
       let nextPage = 1;
-      if (parsedNotes && parsedNotes.page) {
+      if (parsedNotes && parsedNotes.book_id === ADDITIONAL_COURSE_ID) {
+        // Additional Course restore: refill the custom inputs and show the
+        // custom course/lesson on the badge (never a "Page N" label). The
+        // change handler below (sentinel branch) reveals the container.
+        const addName = document.getElementById('attAdditionalCourseName');
+        const addLesson = document.getElementById('attAdditionalLessonName');
+        if (addName) addName.value = parsedNotes.book_title || '';
+        if (addLesson) addLesson.value = parsedNotes.lesson_name || '';
+        if (badge) {
+          badge.innerHTML = `<i class="fa-solid fa-bookmark text-emerald-600"></i> Resuming: ${escapeHtml(parsedNotes.book_title || 'Additional Course')}${parsedNotes.lesson_name ? ' — ' + escapeHtml(parsedNotes.lesson_name) : ''}`;
+          badge.className = 'text-[10px] font-bold text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded-md border border-emerald-300';
+        }
+        document.getElementById('attLineRange').value = parsedNotes.line_range || '';
+        document.getElementById('attSabaqResult').value = parsedNotes.status || 'Pass';
+        document.getElementById('attSabaqRating').value = parsedNotes.rating || '5';
+        document.getElementById('attLessonNotes').value = parsedNotes.remarks || '';
+      } else if (parsedNotes && parsedNotes.page) {
         nextPage = Number(parsedNotes.page);
         if (parsedNotes.status === 'Pass') {
           nextPage += 1;
@@ -5085,33 +5199,63 @@ font-family: var(--font-num) !important;
 
         const bookId = document.getElementById('attCourseBookSelect')?.value || 'holy-quran-16-line';
         const allBooks = getTeacherAllBooks();
-        const book = allBooks.find(b => b.id === bookId) || allBooks[0];
-        const page = Number(document.getElementById('attCoursePageSelect')?.value || 1);
         const line_range = (document.getElementById('attLineRange')?.value || '').trim();
         const sabaq_result = document.getElementById('attSabaqResult')?.value || 'Pass';
         const rating = Number(document.getElementById('attSabaqRating')?.value || 5);
         const remarks = (document.getElementById('attLessonNotes')?.value || '').trim();
 
-        const isQuran = (book?.category === 'quran' || bookId === 'holy-quran-16-line' || bookId === 'quran-16-line' || (book?.title && book.title.toLowerCase().includes('quran') && !book?.title?.toLowerCase().includes('tafseer')));
-        const isTafseer = (book?.category === 'tafseer' || (book?.title && book.title.toLowerCase().includes('tafseer')));
-        const selectedLanguage = isTafseer ? (document.getElementById('attTafseerLanguageSelect')?.value || book?.language || 'ur') : null;
-        const selectedPara = (isQuran || isTafseer) ? Number(document.getElementById('attQuranParaSelect')?.value || 1) : null;
+        let sabaqPayload;
+        if (bookId === ADDITIONAL_COURSE_ID) {
+          // Additional Course branch (BEFORE the book lookup, so the
+          // sentinel can never resolve to allBooks[0]). Course + lesson
+          // names are required; page is null, never a fake "Page 1".
+          const customCourse = (document.getElementById('attAdditionalCourseName')?.value || '').trim();
+          const customLesson = (document.getElementById('attAdditionalLessonName')?.value || '').trim();
+          if (!customCourse || !customLesson) {
+            alert("Please enter both the additional course name and the lesson name.");
+            return;
+          }
+          sabaqPayload = {
+            book_id: ADDITIONAL_COURSE_ID,
+            book_title: customCourse,
+            content_type: 'additional',
+            lesson_name: customLesson,
+            language: null,
+            para: null,
+            page: null,
+            line_range: line_range,
+            status: sabaq_result,
+            rating: rating,
+            remarks: remarks,
+            is_advance_class: (selectedStatus === 'Advance Class'),
+            advance_target_date: targetDate,
+            recorded_at: new Date().toISOString()
+          };
+        } else {
+          const book = allBooks.find(b => b.id === bookId) || allBooks[0];
+          const page = Number(document.getElementById('attCoursePageSelect')?.value || 1);
 
-        const sabaqPayload = {
-          book_id: bookId,
-          book_title: book ? book.title : 'Course',
-          content_type: isQuran ? 'quran' : isTafseer ? 'tafseer' : (book?.category || 'qaida'),
-          language: selectedLanguage,
-          para: selectedPara,
-          page: page,
-          line_range: line_range,
-          status: sabaq_result,
-          rating: rating,
-          remarks: remarks,
-          is_advance_class: (selectedStatus === 'Advance Class'),
-          advance_target_date: targetDate,
-          recorded_at: new Date().toISOString()
-        };
+          const isQuran = (book?.category === 'quran' || bookId === 'holy-quran-16-line' || bookId === 'quran-16-line' || (book?.title && book.title.toLowerCase().includes('quran') && !book?.title?.toLowerCase().includes('tafseer')));
+          const isTafseer = (book?.category === 'tafseer' || (book?.title && book.title.toLowerCase().includes('tafseer')));
+          const selectedLanguage = isTafseer ? (document.getElementById('attTafseerLanguageSelect')?.value || book?.language || 'ur') : null;
+          const selectedPara = (isQuran || isTafseer) ? Number(document.getElementById('attQuranParaSelect')?.value || 1) : null;
+
+          sabaqPayload = {
+            book_id: bookId,
+            book_title: book ? book.title : 'Course',
+            content_type: isQuran ? 'quran' : isTafseer ? 'tafseer' : (book?.category || 'qaida'),
+            language: selectedLanguage,
+            para: selectedPara,
+            page: page,
+            line_range: line_range,
+            status: sabaq_result,
+            rating: rating,
+            remarks: remarks,
+            is_advance_class: (selectedStatus === 'Advance Class'),
+            advance_target_date: targetDate,
+            recorded_at: new Date().toISOString()
+          };
+        }
 
         lesson_notes = JSON.stringify(sabaqPayload);
       } else {
@@ -5167,6 +5311,10 @@ font-family: var(--font-num) !important;
     // IN-LMS DIGITAL READER FOR TEACHER SCREEN SHARE
     // ============================================================
     function openDigitalBookReader(bookId, startPage = 1, paraNum = null, language = null) {
+      // Additional Course has no book to open — never resolve it to the
+      // first catalogue book's reader (defence in depth; buttons are
+      // already suppressed for the sentinel).
+      if (bookId === ADDITIONAL_COURSE_ID) return;
       const allBooks = getTeacherAllBooks();
       const book = allBooks.find(b => b.id === bookId) || allBooks[0];
       if (!book) return;
@@ -7962,7 +8110,7 @@ font-family: var(--font-num) !important;
         const allBooks = getTeacherAllBooks();
         bSelect.innerHTML = allBooks.map(b => `
           <option value="${b.id}">${b.title} (${b.category_label || 'Course'})</option>
-        `).join('');
+        `).join('') + `<option value="${ADDITIONAL_COURSE_ID}">Additional Course</option>`;
         onAdvanceCourseBookChanged(allBooks[0]?.id || 'noorani-qaida-classic');
       }
 
@@ -8110,6 +8258,13 @@ font-family: var(--font-num) !important;
       const paraLabel = document.getElementById('advParaLabelText');
       if (!pSelect) return;
 
+      // Additional Course: same sentinel short-circuit as the main modal.
+      if (bookId === ADDITIONAL_COURSE_ID) {
+        setAdditionalCourseMode('adv', true);
+        return;
+      }
+      setAdditionalCourseMode('adv', false);
+
       const allBooks = getTeacherAllBooks();
       const book = allBooks.find(b => b.id === bookId) || allBooks[0];
       if (!book) return;
@@ -8149,24 +8304,15 @@ font-family: var(--font-num) !important;
       } else {
         if (langContainer) langContainer.classList.add('hidden');
         if (paraContainer) paraContainer.classList.add('hidden');
-        const opts = [];
-        if (book.chapters && book.chapters.length > 0) {
-          book.chapters.forEach((ch, idx) => {
-            opts.push(`<option value="${ch.page_start || (idx + 1)}">Page ${ch.page_start || (idx + 1)} &bull; ${ch.title.slice(0, 35)}</option>`);
-          });
-        } else {
-          const total = book.total_pages || (book.pages ? book.pages.length : 32);
-          for (let i = 1; i <= Math.min(total, 120); i++) {
-            opts.push(`<option value="${i}">Page / Lesson ${i}</option>`);
-          }
-        }
-        pSelect.innerHTML = opts.join('');
+        pSelect.innerHTML = buildLessonPageOptions(book, 120);
         if (defaultPage) pSelect.value = defaultPage;
       }
     }
 
     function previewAdvanceSelectedMaterial() {
       const bookId = document.getElementById('advCourseBookSelect')?.value || 'holy-quran-16-line';
+      // Additional Course has no book to open (View button is hidden too).
+      if (bookId === ADDITIONAL_COURSE_ID) return;
       const allBooks = getTeacherAllBooks();
       const book = allBooks.find(b => b.id === bookId) || allBooks[0];
       const page = Number(document.getElementById('advCoursePageSelect')?.value || 1);
@@ -8194,14 +8340,24 @@ font-family: var(--font-num) !important;
         return;
       }
 
+      // Additional Course: course + lesson names are required (validated
+      // before any save work, matching the student/date check above).
+      const isAdditionalCourse = bookId === ADDITIONAL_COURSE_ID;
+      const customCourse = (document.getElementById('advAdditionalCourseName')?.value || '').trim();
+      const customLesson = (document.getElementById('advAdditionalLessonName')?.value || '').trim();
+      if (isAdditionalCourse && (!customCourse || !customLesson)) {
+        alert("Please enter both the additional course name and the lesson name.");
+        return;
+      }
+
       btn.disabled = true;
       btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Saving Advance Class...';
 
       try {
         const todayDate = new Date().toISOString().slice(0, 10);
         const allBooks = getTeacherAllBooks();
-        const book = allBooks.find(b => b.id === bookId) || allBooks[0];
-        const bookTitle = book ? book.title : 'Course Syllabus';
+        const book = isAdditionalCourse ? null : (allBooks.find(b => b.id === bookId) || allBooks[0]);
+        const bookTitle = isAdditionalCourse ? customCourse : (book ? book.title : 'Course Syllabus');
         const teacherName = CURRENT_TEACHER?.full_name || 'Al-Huda Quran Instructor';
 
         const isQuran = (book?.category === 'quran' || bookId === 'holy-quran-16-line' || bookId === 'quran-16-line' || (book?.title && book.title.toLowerCase().includes('quran') && !book?.title?.toLowerCase().includes('tafseer')));
@@ -8216,10 +8372,11 @@ font-family: var(--font-num) !important;
         const sabaqPayload = {
           book_id: bookId,
           book_title: bookTitle,
-          content_type: isQuran ? 'quran' : isTafseer ? 'tafseer' : (book?.category || 'qaida'),
+          content_type: isAdditionalCourse ? 'additional' : (isQuran ? 'quran' : isTafseer ? 'tafseer' : (book?.category || 'qaida')),
+          lesson_name: isAdditionalCourse ? customLesson : undefined,
           language: selectedLanguage,
           para: selectedPara,
-          page: page,
+          page: isAdditionalCourse ? null : page,
           line_range: lineRange,
           status: sabaqResult,
           rating: rating,
@@ -8282,7 +8439,7 @@ font-family: var(--font-num) !important;
               template: 'advance-class',
               scheduledDate: targetDate,
               bookTitle: bookTitle,
-              page: page,
+              page: isAdditionalCourse ? undefined : page,
               lineRange: lineRange,
               sabaqResult: sabaqResult,
               rating: rating,
@@ -8340,7 +8497,7 @@ font-family: var(--font-num) !important;
         alert(`🌟 Advance Class Successfully Recorded!\n\n` +
           `Student: ${studentName}\n` +
           `Advance Target Date: ${targetDate}\n` +
-          `Lesson: ${bookTitle} (Page ${page})\n` +
+          `Lesson: ${bookTitle}${isAdditionalCourse ? ` (${customLesson})` : ` (Page ${page})`}\n` +
           `Status: 🌟 Advance Class Completed${emailNotice}`
         );
 
