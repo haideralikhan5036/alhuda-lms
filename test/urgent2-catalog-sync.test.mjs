@@ -147,7 +147,12 @@ for (const [id, key, value] of SEED_SETTINGS) {
 }
 {
   const r = await dbPost(TOK.owner, { table: 'system_settings', action: 'select' });
-  check('owner SELECT unchanged (all keys)', keySet(r).length === SEED_SETTINGS.length, JSON.stringify(keySet(r)));
+  // SLOW-CLASSES FIX: ensureSchema now records a 'schema_version'
+  // marker row in system_settings (the cold-isolate fast path), so
+  // the owner-visible key set is the seeds PLUS that one legitimate
+  // row. The check stays an exact full-set equality — nothing else
+  // may appear or disappear.
+  check('owner SELECT unchanged (all keys + schema_version marker)', JSON.stringify(keySet(r)) === JSON.stringify([...SEED_SETTINGS.map(s => s[1]), 'schema_version'].sort()), JSON.stringify(keySet(r)));
 }
 {
   const r = await dbPost(TOK.parent, { table: 'system_settings', action: 'select' });

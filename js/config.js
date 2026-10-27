@@ -849,18 +849,55 @@
     let _LAST_CORE_DATA_LOAD_TS = 0;
     const CORE_DATA_TTL_MS = 60000;
 
+    // SLOW-CLASSES FIX: PKT day/date/minutes for the admin portal (the
+    // teacher PR #32 convention, copied here so admin and teacher
+    // agree on "today"). Fallback is browser-local time, never UTC,
+    // so a fallback cannot reintroduce the UTC-date join bug.
+    function getAdminPktNowParts() {
+      try {
+        const parts = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Karachi', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).formatToParts(new Date());
+        const get = t => parts.find(p => p.type === t)?.value;
+        const y = Number(get('year')), m = Number(get('month')), d = Number(get('day'));
+        const dow = new Date(Date.UTC(y, m - 1, d, 12)).getUTCDay();
+        return { date: `${get('year')}-${get('month')}-${get('day')}`, minutes: Number(get('hour')) * 60 + Number(get('minute')), day: dow === 0 ? 7 : dow };
+      } catch (e) {
+        const now = new Date();
+        const pad = n => String(n).padStart(2, '0');
+        return { date: `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`, minutes: now.getHours() * 60 + now.getMinutes(), day: now.getDay() === 0 ? 7 : now.getDay() };
+      }
+    }
+    // Exposed like ensureCoreLmsDataLoaded below: config.js runs inside
+    // a wrapper scope, so dashboard.js can only see this via window.
+    window.getAdminPktNowParts = getAdminPktNowParts;
+
     // Batch 7 (F3.4): settle one core-load branch independently with a
     // timeout, so a single stalled query can no longer block every
     // global (and every dashboard count) behind it.
+    // SLOW-CLASSES FIX: the 15 s clock starts AFTER the D1 probe
+    // settles (window.waitForD1ProbeSettled). The old race measured
+    // from branch start, so a slow-but-live Worker lost its race to
+    // the 12 s probe time inside the budget.
     const CORE_BRANCH_TIMEOUT_MS = 15000;
     function settleCoreBranch(queryPromise) {
-      return Promise.race([
-        Promise.resolve(queryPromise).then(
-          (res) => ({ ok: true, res }),
-          () => ({ ok: false, res: null })
-        ),
-        new Promise((resolve) => setTimeout(() => resolve({ ok: false, res: null }), CORE_BRANCH_TIMEOUT_MS))
-      ]);
+      return (async () => {
+        try { if (typeof window.waitForD1ProbeSettled === 'function') await window.waitForD1ProbeSettled(); } catch (e) {}
+        let timer;
+        const timeoutP = new Promise((resolve) => { timer = setTimeout(() => resolve({ ok: false, res: null }), CORE_BRANCH_TIMEOUT_MS); });
+        try {
+          const res = await Promise.race([
+            Promise.resolve(queryPromise).then(
+              (res) => ({ ok: true, res }),
+              () => ({ ok: false, res: null })
+            ),
+            timeoutP
+          ]);
+          clearTimeout(timer);
+          return res;
+        } catch (e) {
+          clearTimeout(timer);
+          return { ok: false, res: null };
+        }
+      })();
     }
 
     function invalidateCoreLmsDataCache() {
@@ -1192,7 +1229,14 @@
 
     const DAY_NAMES = ['', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 
-    window.onload = async function() {
+    // SLOW-CLASSES FIX: boot used to wait for window.onload — every
+    // render-blocking CDN asset in <head> (Tailwind, fonts, chart.js,
+    // …) with NO timeout — before any data load started. A slow or
+    // hung CDN asset stalled the entire portal with no error. Boot
+    // now starts on DOMContentLoaded: every portal script sits at the
+    // end of <body>, so the DOM this boot touches is already parsed,
+    // and slow CDN assets can delay widgets, never the data.
+    async function runAdminBoot() {
       const isAuth = (typeof initRoleFromUrl === 'function') ? initRoleFromUrl() : true;
 
       setInterval(() => {
@@ -1206,7 +1250,10 @@
         return;
       }
 
-      const today = new Date().toISOString().slice(0, 10);
+      // SLOW-CLASSES FIX: same UTC-date bug as the dashboard (see
+      // dashboard.js) — the attendance input defaulted to the UTC
+      // date, so 00:00–05:00 PKT it pointed at yesterday.
+      const today = getAdminPktNowParts().date;
       const attDateInput = document.getElementById('attendanceDateSelect');
       if (attDateInput) attDateInput.value = today;
 
@@ -1237,7 +1284,16 @@
       // place now — the 15-second timer in js/dashboard.js. (A second
       // 60 s timer here made overlapping dashboard passes overwrite each
       // other out of order.)
-    };
+    }
+
+    // DOMContentLoaded trigger for runAdminBoot (see the note above
+    // it). If this script ever runs after parsing (defer/async), run
+    // immediately instead of waiting for an event that already fired.
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', runAdminBoot);
+    } else {
+      runAdminBoot();
+    }
 
     function toggleSidebar() {
       const sidebar = document.getElementById('mainAppSidebar');

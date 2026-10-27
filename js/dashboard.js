@@ -975,15 +975,32 @@
 
     // Batch 7 (F3.4): settle one dashboard branch independently with a
     // timeout, so a single stalled query cannot block every count.
+    // SLOW-CLASSES FIX: the 15 s clock starts AFTER the D1 probe
+    // settles (window.waitForD1ProbeSettled). The old race measured
+    // from branch start, so a slow-but-live Worker lost its race to
+    // the 12 s probe time inside the budget and settled to [] — the
+    // false "No Classes Scheduled Today".
     const DASH_BRANCH_TIMEOUT_MS = 15000;
     function dashSettleBranch(branchPromise, fallbackData) {
-      return Promise.race([
-        Promise.resolve(branchPromise).then(
-          (res) => res || { data: fallbackData },
-          () => ({ data: fallbackData, error: { message: 'branch_failed' } })
-        ),
-        new Promise((resolve) => setTimeout(() => resolve({ data: fallbackData, error: { message: 'branch_timeout' } }), DASH_BRANCH_TIMEOUT_MS))
-      ]);
+      return (async () => {
+        try { if (typeof window.waitForD1ProbeSettled === 'function') await window.waitForD1ProbeSettled(); } catch (e) {}
+        let timer;
+        const timeoutP = new Promise((resolve) => { timer = setTimeout(() => resolve({ data: fallbackData, error: { message: 'branch_timeout' } }), DASH_BRANCH_TIMEOUT_MS); });
+        try {
+          const res = await Promise.race([
+            Promise.resolve(branchPromise).then(
+              (res) => res || { data: fallbackData },
+              () => ({ data: fallbackData, error: { message: 'branch_failed' } })
+            ),
+            timeoutP
+          ]);
+          clearTimeout(timer);
+          return res;
+        } catch (e) {
+          clearTimeout(timer);
+          return { data: fallbackData, error: { message: 'branch_failed' } };
+        }
+      })();
     }
 
     // Batch 7 (F3.2): while the client is in local-mirror mode, mirror
@@ -997,6 +1014,18 @@
         const el = document.getElementById(id);
         if (el) el.innerText = '…';
       });
+    }
+
+    // SLOW-CLASSES FIX: load-failure state for Today's Classes. null =
+    // last pass was live and clean; otherwise { kind: 'session' |
+    // 'mirror' | 'error' }. renderDashboardClassesTable turns this
+    // into an error/pending banner instead of "No Classes Scheduled
+    // Today". Re-login helper (admin boot halts at the login view
+    // when no token exists, so clear + reload lands on login).
+    let DASH_CLASSES_DEGRADED = null;
+    function dashReLoginFromClasses() {
+      try { if (typeof window.clearWorkerTokens === 'function') window.clearWorkerTokens(); } catch (e) {}
+      window.location.reload();
     }
 
     async function loadDashboardData() {
@@ -1031,20 +1060,31 @@
       }
       if (myRun !== _dashRunSeq) return; // superseded by a newer pass
 
-      // Batch 7 (F3.2): degraded (mirror-only) data is not authoritative.
-      // Checked AFTER the core await so the D1 probe has settled.
-      if (typeof window.isCloudflareD1Live === 'function' && !window.isCloudflareD1Live()) {
+      // SLOW-CLASSES FIX: the old gate returned here when D1 was not
+      // live, so the class table never rendered in a degraded pass —
+      // an empty table with '…' KPIs and no error. Decoupled: KPI /
+      // analytics widgets stay pending (paintDashboardPendingState),
+      // but the class table below still renders from cache/mirror with
+      // a visible stale/offline badge, and a failed/empty load renders
+      // an error state with Retry — never "No Classes Scheduled Today".
+      const dashD1Live = (typeof window.isCloudflareD1Live !== 'function') || window.isCloudflareD1Live();
+      if (!dashD1Live) {
         paintDashboardPendingState();
-        return;
+      } else {
+        updateDashboardAnalytics();
+        updateLiveActiveMetrics();
+        updateExecutiveDashboardFeeWidget();
       }
 
-      updateDashboardAnalytics();
-      updateLiveActiveMetrics();
-      updateExecutiveDashboardFeeWidget();
-
+      // SLOW-CLASSES FIX (admin UTC-date bug): todayDate used to be UTC
+      // while weekday/minutes were local, so 00:00–05:00 PKT the logs
+      // query joined the wrong date (wrong statuses/counts). Day,
+      // date and minutes now all come from the same PKT parts (the
+      // teacher PR #32 convention, via getAdminPktNowParts in config.js).
+      const _pkt = (typeof getAdminPktNowParts === 'function') ? getAdminPktNowParts() : null;
       const now = new Date();
-      const currentDay = now.getDay() === 0 ? 7 : now.getDay();
-      const todayDate = now.toISOString().slice(0, 10);
+      const currentDay = _pkt ? _pkt.day : (now.getDay() === 0 ? 7 : now.getDay());
+      const todayDate = _pkt ? _pkt.date : now.toISOString().slice(0, 10);
 
       const dateLabel = document.getElementById('dashTodayDateLabel');
       if (dateLabel) {
@@ -1067,6 +1107,21 @@
       ]);
       if (myRun !== _dashRunSeq) return; // superseded while waiting
 
+      // SLOW-CLASSES FIX: degradation for the class table. A session
+      // expiry beats everything (login prompt); otherwise any
+      // mirror-served or failed/timed-out branch degrades the table.
+      // The cached-schedules path carries no provenance, so a pass
+      // that started in mirror mode counts as degraded even when the
+      // cache served rows.
+      const _dashBranchResults = [schedRes, logsRes, advRes];
+      if (_dashBranchResults.some(r => r && r.error && r.error.code === 'SESSION_EXPIRED')) {
+        DASH_CLASSES_DEGRADED = { kind: 'session' };
+      } else if (!dashD1Live || _dashBranchResults.some(r => r && (r._lmsSource === 'mirror' || r.error))) {
+        DASH_CLASSES_DEGRADED = { kind: (!dashD1Live || _dashBranchResults.some(r => r && r._lmsSource === 'mirror')) ? 'mirror' : 'error' };
+      } else {
+        DASH_CLASSES_DEGRADED = null;
+      }
+
       const scheds = schedRes.data || [];
       const logs = logsRes.data || [];
       const logsMap = {};
@@ -1088,7 +1143,7 @@
         }
       } catch(e){}
 
-      let currentMinutes = now.getHours() * 60 + now.getMinutes();
+      let currentMinutes = _pkt ? _pkt.minutes : (now.getHours() * 60 + now.getMinutes());
 
       let totalToday = 0;
       let liveCount = 0;
@@ -1223,13 +1278,18 @@
       const currentSlotTotal = DASHBOARD_CLASSES.filter(c => c.isCurrentSlot).length;
       const runningMarkedTotal = DASHBOARD_CLASSES.filter(c => c.isRunningMarked).length;
 
-      const setEl = (id, val) => { const el = document.getElementById(id); if (el) el.innerText = val; };
+      // SLOW-CLASSES FIX: in a mirror-mode pass the KPI counts would
+      // come from stale mirror data, so keep the '…' pending markers
+      // painted above instead of overwriting them with mirror counts.
+      const setEl = (id, val) => { if (!dashD1Live) return; const el = document.getElementById(id); if (el) el.innerText = val; };
       setEl('kpiDashTotal', totalToday);
       setEl('kpiDashCurrent', currentSlotTotal);
       setEl('kpiDashRunning', runningMarkedTotal);
       setEl('kpiDashLive', currentSlotTotal);
       const wBadge = document.getElementById('kpiDashWaitingBadge');
-      if (wBadge) {
+      if (!dashD1Live) {
+        if (wBadge) wBadge.classList.add('hidden');
+      } else if (wBadge) {
         if (waitingCount > 0) {
           wBadge.innerText = `${waitingCount} Waiting`;
           wBadge.classList.remove('hidden');
@@ -1446,6 +1506,32 @@
       });
 
       if (countBadge) countBadge.innerText = `${filtered.length} Classes`;
+
+      // SLOW-CLASSES FIX: never render a failed/mirror-served load as
+      // "no classes". Empty + degraded => error banner with Retry
+      // (login button for expired sessions), normal empty state kept
+      // hidden. Non-empty + degraded => rows render with a
+      // stale/incomplete banner on top.
+      const dashBanner = document.getElementById('dashClassesStatusBanner');
+      if (DASH_CLASSES_DEGRADED) {
+        if (dashBanner) {
+          dashBanner.classList.remove('hidden');
+          if (DASH_CLASSES_DEGRADED.kind === 'session') {
+            dashBanner.innerHTML = '<div class="rounded-xl border border-rose-300 bg-rose-50 px-4 py-3 text-xs text-rose-800 flex flex-wrap items-center gap-2"><span class="font-extrabold">Session expired — please log in again.</span><span>Today\'s classes could not be loaded because the login session is no longer valid.</span><button onclick="dashReLoginFromClasses()" class="ml-auto px-3 py-1.5 rounded-lg bg-rose-600 text-white font-extrabold">Log in again</button></div>';
+          } else if (filtered.length === 0) {
+            dashBanner.innerHTML = '<div class="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-xs text-amber-800 flex flex-wrap items-center gap-2"><span class="font-extrabold">Could not load today\'s classes from the server.</span><span>This is not "no classes" — the server could not be reached or the request timed out.</span><button onclick="loadDashboardData()" class="ml-auto px-3 py-1.5 rounded-lg bg-amber-600 text-white font-extrabold">Retry</button></div>';
+          } else {
+            dashBanner.innerHTML = '<div class="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-xs text-amber-800 flex flex-wrap items-center gap-2"><span class="font-extrabold">Showing an offline / incomplete copy.</span><span>Some class details may be out of date.</span><button onclick="loadDashboardData()" class="ml-auto px-3 py-1.5 rounded-lg bg-amber-600 text-white font-extrabold">Retry</button></div>';
+          }
+        }
+        if (filtered.length === 0) {
+          tbody.innerHTML = '';
+          if (emptyState) emptyState.classList.add('hidden');
+          return;
+        }
+      } else if (dashBanner) {
+        dashBanner.classList.add('hidden');
+      }
 
       if (filtered.length === 0) {
         tbody.innerHTML = '';
@@ -3259,6 +3345,25 @@
           loadDashboardData();
         }
       });
+
+      // SLOW-CLASSES FIX: recovery used to depend on the 15 s timer
+      // (dashboard-tab-gated) or a manual refresh. The probe reset on
+      // online / visibility-return (cloudflare-db.js) cleared state
+      // but never refetched — reset alone healed nothing. Now coming
+      // back online, or returning to a visible dashboard tab, refetches
+      // the dashboard. (Switching back to the dashboard tab already
+      // refetches via switchTab in navigation.js — verified, not
+      // duplicated here.) loadDashboardData collapses overlapping
+      // calls (inflight lock + owed rerun), so these listeners cannot
+      // stampede.
+      const _dashRefetchIfVisible = () => {
+        const dashTab = document.getElementById('tab-dashboard');
+        if (dashTab && !dashTab.classList.contains('hidden') && typeof loadDashboardData === 'function') loadDashboardData();
+      };
+      window.addEventListener('online', _dashRefetchIfVisible);
+      if (typeof document !== 'undefined' && document.addEventListener) {
+        document.addEventListener('visibilitychange', () => { if (!document.hidden) _dashRefetchIfVisible(); });
+      }
     }
 
 
