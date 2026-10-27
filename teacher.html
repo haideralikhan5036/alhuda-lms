@@ -2596,6 +2596,11 @@ font-family: var(--font-num) !important;
         const now = new Date();
         const el = document.getElementById('liveClock');
         if (el) el.innerText = now.toLocaleTimeString('en-US', { timeZone: 'Asia/Karachi' }) + ' PKT';
+        // URGENT FIX (Issue 1): expiry watcher — fires within a second of
+        // a teacher-started class passing its end time, with no refresh
+        // needed. Guarded inside (modal closed, tab visible, not typing,
+        // one-shot marker); the typeof check covers script load order.
+        try { if (typeof maybeAutoCompleteExpiredClasses === 'function') maybeAutoCompleteExpiredClasses(); } catch (e) {}
       }, 1000);
 
       // Strip any URL query parameters (?teacherId=..., ?t=..., ?id=...) so URL parameters NEVER select or identify a user
@@ -3010,16 +3015,38 @@ font-family: var(--font-num) !important;
       return 'Quran Studies & Tajweed';
     }
 
+    // URGENT FIX (Issue 1, F1.4): slots are PKT wall-clock strings
+    // ('HH:MM' with a PKT label), so the day, date and minutes used by the
+    // today-classes computation must all come from Asia/Karachi. The old
+    // code used the browser local clock and the UTC date, which disagreed
+    // on non-PKT devices and queried yesterday's logs between 00:00-04:59
+    // PKT. Falls back to the local clock only if Intl/timezone data is
+    // unavailable (never expected in a browser).
+    function getPktNowParts() {
+      try {
+        const parts = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Karachi', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).formatToParts(new Date());
+        const get = t => parts.find(p => p.type === t)?.value;
+        const y = Number(get('year')), m = Number(get('month')), d = Number(get('day'));
+        const dow = new Date(Date.UTC(y, m - 1, d, 12)).getUTCDay();
+        return { date: `${get('year')}-${get('month')}-${get('day')}`, minutes: Number(get('hour')) * 60 + Number(get('minute')), day: dow === 0 ? 7 : dow };
+      } catch (e) {
+        const now = new Date();
+        return { date: now.toISOString().slice(0, 10), minutes: now.getHours() * 60 + now.getMinutes(), day: now.getDay() === 0 ? 7 : now.getDay() };
+      }
+    }
+
     // Load Teacher's Live Data from Supabase
     async function loadTeacherPortalData() {
       if (!CURRENT_TEACHER) return;
 
       const now = new Date();
-      const currentDay = now.getDay() === 0 ? 7 : now.getDay();
-      const todayDate = now.toISOString().slice(0, 10);
-      const currentMinutes = now.getHours() * 60 + now.getMinutes();
+      // URGENT FIX (Issue 1, F1.4): PKT day/date/minutes (see getPktNowParts).
+      const _pkt = getPktNowParts();
+      const currentDay = _pkt.day;
+      const todayDate = _pkt.date;
+      const currentMinutes = _pkt.minutes;
 
-      document.getElementById('todayDateSubtitle').innerText = `${DAY_NAMES[currentDay]}, ${now.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })} (Asia/Karachi PKT)`;
+      document.getElementById('todayDateSubtitle').innerText = `${DAY_NAMES[currentDay]}, ${now.toLocaleDateString('en-US', { timeZone: 'Asia/Karachi', month: 'short', day: 'numeric', year: 'numeric' })} (Asia/Karachi PKT)`;
 
       // Batch 7 (F3.6): the profile refresh and the four data fetches
       // below are all independent (keyed on CURRENT_TEACHER.id) — run
@@ -3940,7 +3967,11 @@ font-family: var(--font-num) !important;
         return { success: false, error: 'Missing schedule or student ID' };
       }
 
-      const todayDate = new Date().toISOString().slice(0, 10);
+      // URGENT FIX (Issue 1, F1.4): the log date must be the PKT date, so it
+      // matches the PKT date used by the today's-classes query. The old UTC
+      // date wrote 00:00-04:59 PKT completions under yesterday's date,
+      // where the (now PKT) query could never find them.
+      const todayDate = getPktNowParts().date;
       const nowIso = new Date().toISOString();
       const tid = teacherId || CURRENT_TEACHER?.id;
 
@@ -4046,6 +4077,82 @@ font-family: var(--font-num) !important;
         await loadTeacherPortalData();
         // Immediately open post-class lesson recording form
         openAttendanceModal(scheduleId, studentName, '', studentId, 'Completed', '');
+      }
+    }
+
+    // URGENT FIX (Issue 1, F1.1-F1.3): automatic post-class preview.
+    // There was no auto-end mechanism: expiry only flipped a row badge to
+    // "Slot Ended". This watcher reuses the canonical manual path
+    // (transition -> openAttendanceModal) for teacher-started classes whose
+    // slot has passed. It NEVER auto-completes a never-started class (no
+    // log, or log 'Scheduled'): auto-completing one would fabricate
+    // attendance. It never marks lesson content — the modal opens with
+    // empty/Smart-Resume fields exactly as after a manual complete, and
+    // the teacher marks the lesson.
+    // One-shot semantics: the marker is date-scoped (schedule_id:date) and
+    // stored in localStorage, NOT sessionStorage, because sessionStorage is
+    // per-tab — a second open tab would otherwise fire a second preview
+    // for the same class. The (schedule_id, date) upsert key and the
+    // no-revert guard already prevent duplicate completion rows.
+    const AUTO_PREVIEW_KEY_PREFIX = 'alhuda_auto_preview_shown:';
+    let _autoPreviewInFlight = false;
+    function _isTeacherAttendanceModalOpen() {
+      const m = document.getElementById('modalTeacherAttendance');
+      return !!(m && !m.classList.contains('hidden'));
+    }
+    function _isTeacherTyping() {
+      const tag = document.activeElement ? document.activeElement.tagName : '';
+      return ['INPUT', 'TEXTAREA', 'SELECT'].includes(tag);
+    }
+    async function maybeAutoCompleteExpiredClasses() {
+      if (_autoPreviewInFlight) return;
+      if (typeof document !== 'undefined' && document.visibilityState && document.visibilityState !== 'visible') return;
+      if (_isTeacherAttendanceModalOpen() || _isTeacherTyping()) return;
+      if (!Array.isArray(TODAY_CLASSES) || TODAY_CLASSES.length === 0 || !CURRENT_TEACHER) return;
+      const pkt = getPktNowParts();
+      const candidate = TODAY_CLASSES.find(c => {
+        if (c.isAdvanceExtra) return false;
+        if (typeof c.endMin !== 'number') return false;
+        if (pkt.minutes < c.endMin) return false;
+        const st = c.log?.status;
+        if (st !== 'Running' && st !== 'Waiting') return false;
+        const key = AUTO_PREVIEW_KEY_PREFIX + String(c.id) + ':' + pkt.date;
+        try { if (localStorage.getItem(key)) return false; } catch (e) {}
+        return true;
+      });
+      if (!candidate) return;
+      const markerKey = AUTO_PREVIEW_KEY_PREFIX + String(candidate.id) + ':' + pkt.date;
+      try { localStorage.setItem(markerKey, '1'); } catch (e) {}
+      _autoPreviewInFlight = true;
+      try {
+        const timeStr = new Date().toLocaleTimeString('en-US', { timeZone: 'Asia/Karachi', hour: '2-digit', minute: '2-digit', hour12: true });
+        await transitionClassSessionState({
+          scheduleId: candidate.id,
+          studentId: candidate.student_id,
+          teacherId: CURRENT_TEACHER.id,
+          targetStatus: 'Completed',
+          notes: `Class ended automatically at ${timeStr} PKT`
+        });
+        // Honest verification: transitionClassSessionState reports success
+        // even on DB error, so confirm the Completed row exists before
+        // opening the preview. On failure, show the error and do NOT open
+        // it — the teacher can still use the row's COMPLETE CLASS button.
+        let verified = false;
+        try {
+          const { data } = await db.from('attendance_logs').select('status').eq('schedule_id', candidate.id).eq('date', pkt.date);
+          verified = (data || []).some(r => r.status === 'Completed');
+        } catch (e) { verified = false; }
+        if (!verified) {
+          alert('The class time ended, but the completion could not be saved. Please use COMPLETE CLASS to finish it manually.');
+          return;
+        }
+        await loadTeacherPortalData();
+        openAttendanceModal(candidate.id, candidate.students?.name || 'Student', '', candidate.student_id, 'Completed', '');
+      } catch (e) {
+        console.error('Auto class completion failed:', e);
+        alert('The class time ended, but the completion could not be saved. Please use COMPLETE CLASS to finish it manually.');
+      } finally {
+        _autoPreviewInFlight = false;
       }
     }
 
@@ -4164,7 +4271,17 @@ font-family: var(--font-num) !important;
           try {
             const remoteDeleted = JSON.parse(remoteDeletedRaw);
             if (Array.isArray(remoteDeleted)) {
-              localStorage.setItem('alhuda_deleted_books', JSON.stringify(remoteDeleted));
+              // URGENT FIX (Issue 2): same allowlist protection as the
+              // admin re-poison guard — an allowlisted built-in (e.g.
+              // e-Qaida) must never be hidden by a stale D1 tombstone,
+              // even before the admin-side guard heals the D1 list.
+              // Teachers cannot write system_settings, so this only
+              // protects the teacher's local copy; the D1 heal happens
+              // on the next owner admin load. Other tombstoned ids pass
+              // through untouched.
+              const allowlist = (typeof window !== 'undefined' && Array.isArray(window.ALHUDA_BUILTIN_ALLOWLIST)) ? window.ALHUDA_BUILTIN_ALLOWLIST : ['interactive-madani-qaida'];
+              const healed = remoteDeleted.filter(id => !allowlist.includes(String(id)));
+              localStorage.setItem('alhuda_deleted_books', JSON.stringify(healed));
             }
           } catch(e) {}
         }

@@ -1174,13 +1174,19 @@ function checkTableAccess(role, table, action) {
         return (action === 'select' || action === 'insert' || action === 'upsert') ? 'allow' : 'deny';
       case 'trial_students':
         return action === 'select' ? 'allow' : 'deny';
+      case 'system_settings':
+        // URGENT FIX (Issue 2): teachers may SELECT course-catalog settings
+        // rows only — the key filter lives in rowInScope
+        // (isTeacherReadableSettingsKey). Every teacher write to
+        // system_settings stays denied, as do all other keys.
+        return action === 'select' ? 'allow' : 'deny';
       case 'salary_slips':
       case 'salary_adjustments':
         // Batch 6B: teachers may read their OWN salary rows only — row
         // ownership is enforced in applyDbScope/rowInScope (teacher_id).
         return action === 'select' ? 'allow' : 'deny';
       default:
-        return 'deny'; // families, payments, system_settings
+        return 'deny'; // families, payments
     }
   }
 
@@ -1394,6 +1400,19 @@ function isCatalogSettingsKey(key) {
 function isManagerReadableSettingsKey(key) {
   const k = String(key || '');
   return isCatalogSettingsKey(k) || k === 'alhuda_logo' || k === 'fee_tables_v1';
+}
+
+// URGENT FIX (Issue 2): keys a teacher may READ in system_settings = the
+// course-catalog keys + the deleted-books tombstone, so the teacher
+// portal's catalog hydrate converges with the admin portal's (before this,
+// the teacher select was denied outright and the portal silently fell back
+// to a per-browser local mirror). WRITES stay denied in checkTableAccess,
+// and every other key stays denied via rowInScope. This read exposes no
+// contacts, notes, flags, or credentials — catalog rows and the tombstone
+// only.
+function isTeacherReadableSettingsKey(key) {
+  const k = String(key || '');
+  return isCatalogSettingsKey(k) || k === 'alhuda_deleted_books';
 }
 
 // Remove contact keys whose value is exactly the mask placeholder. A
@@ -1870,6 +1889,10 @@ function rowInScope(role, sub, scope, table, row) {
     switch (table) {
       case 'students': return scope.studentIds.includes(String(row.id));
       case 'teachers': return String(row.id) === sub;
+      case 'system_settings':
+        // URGENT FIX (Issue 2): catalog keys + tombstone only; all other
+        // keys (flags, logo, anything else) stay denied for teachers.
+        return isTeacherReadableSettingsKey(row.key);
       case 'class_schedules':
       case 'attendance_logs':
       case 'leave_requests':
