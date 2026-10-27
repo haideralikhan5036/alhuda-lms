@@ -49,6 +49,7 @@
   <!-- Supabase JS Client & Cloudflare D1/R2 Universal Engine -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="js/cloudflare-db.js"></script>
+  <script src="js/lesson-history.js"></script>
   <script src="js/fee-tables.js"></script>
   <!-- Al-Huda Curriculum & Course Material Registry Engine -->
   <script src="curriculum_data.js"></script>
@@ -414,9 +415,16 @@
             </p>
           </div>
 
-          <button onclick="renderCurrentStudentData()" class="px-3.5 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition flex items-center gap-1.5 shadow-2xs">
-            <i class="fa-solid fa-arrows-rotate"></i> Refresh Logs
-          </button>
+          <div class="flex items-center gap-2 flex-wrap">
+            <input type="date" id="parentLessonDateInput" onchange="setParentLessonDate(this.value)"
+                   class="px-2.5 py-2 rounded-xl border border-slate-200 bg-white text-slate-700 text-xs font-bold" title="Show a specific day">
+            <button id="parentLessonAllDatesBtn" onclick="setParentLessonDate('')" class="hidden px-3 py-2 rounded-xl bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 text-xs font-bold transition">
+              Show full history
+            </button>
+            <button onclick="renderCurrentStudentData()" class="px-3.5 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition flex items-center gap-1.5 shadow-2xs">
+              <i class="fa-solid fa-arrows-rotate"></i> Refresh Logs
+            </button>
+          </div>
         </div>
 
         <!-- Container for dynamic lesson cards -->
@@ -938,6 +946,34 @@
     let CURRENT_PORTAL_CATEGORY = 'all';
     let CURRENT_FEE_MODAL_RECEIPT = null;
     let CURRENT_FEE_HISTORY = [];
+    // Lesson History: per-child date filter ('' = full history), schedule
+    // map for labelled scheduled durations, blob URLs for lesson images.
+    let PARENT_LESSON_DATE = '';
+    let PARENT_SCHEDULE_MAP = {};
+    let PARENT_LESSON_BLOB_URLS = [];
+    function setParentLessonDate(v) {
+      PARENT_LESSON_DATE = v || '';
+      const inp = document.getElementById('parentLessonDateInput');
+      if (inp && inp.value !== PARENT_LESSON_DATE) inp.value = PARENT_LESSON_DATE;
+      const allBtn = document.getElementById('parentLessonAllDatesBtn');
+      if (allBtn) allBtn.classList.toggle('hidden', !PARENT_LESSON_DATE);
+      renderCurrentStudentData();
+    }
+    function hydrateParentLessonImages() {
+      if (!window.LessonHistory) return;
+      PARENT_LESSON_BLOB_URLS.forEach(u => { try { URL.revokeObjectURL(u); } catch (e) {} });
+      PARENT_LESSON_BLOB_URLS = [];
+      document.querySelectorAll('img[data-lh-img-key]').forEach(async (img) => {
+        const key = img.getAttribute('data-lh-img-key');
+        if (!key) return;
+        const url = await window.LessonHistory.loadLessonImageBlobUrl(key);
+        if (url && img.isConnected) {
+          PARENT_LESSON_BLOB_URLS.push(url);
+          img.src = url;
+          img.classList.remove('hidden');
+        }
+      });
+    }
 
     // Reader State
     let ACTIVE_READER_BOOK = null;
@@ -1642,11 +1678,28 @@
         if (feeMonthEl) feeMonthEl.innerText = 'No data available yet.';
       }
 
+      // Lesson History: dedupe re-saves via the shared reader (latest
+      // created_at per schedule+date wins), then apply the per-child date
+      // filter (exact stored-date match; '' = full history). Schedules
+      // feed the labelled scheduled durations in the cards.
+      PARENT_SCHEDULE_MAP = {};
+      (schedules || []).forEach(sc => { if (sc && sc.id) PARENT_SCHEDULE_MAP[String(sc.id)] = sc; });
+      let lessonDisplayLogs = attLogs;
+      if (window.LessonHistory) {
+        try {
+          const entries = window.LessonHistory.dedupeLessonRows(attLogs);
+          lessonDisplayLogs = entries.map(en => ({ ...(en.raw || {}), _lhEntry: en }));
+          if (PARENT_LESSON_DATE) lessonDisplayLogs = lessonDisplayLogs.filter(l => String(l.date) === String(PARENT_LESSON_DATE));
+        } catch (e) { lessonDisplayLogs = attLogs; }
+      } else if (PARENT_LESSON_DATE) {
+        lessonDisplayLogs = attLogs.filter(l => String(l.date) === String(PARENT_LESSON_DATE));
+      }
       // Render Sub-Sections
-      renderRecentSabaqLogs(attLogs, teacherName);
+      renderRecentSabaqLogs(lessonDisplayLogs, teacherName);
       renderWeeklyTimetable(schedules, teacherName, effectiveZoomLink);
-      renderAttendanceTable(attLogs, teacherName);
+      renderAttendanceTable(lessonDisplayLogs, teacherName);
       renderFeeInvoicesTable(feeHistory);
+      setTimeout(hydrateParentLessonImages, 0);
     }
 
     // Render Recent Lesson Progress Cards
@@ -1677,12 +1730,40 @@
 
         if (!LATEST_SABAQ_META && meta) LATEST_SABAQ_META = meta;
 
+        const en = log._lhEntry || null;
         const teacherName = log.teachers?.full_name || defaultTeacher;
-        const bookId = meta?.book_id || 'noorani-qaida';
+        // Lesson History: NO first-book fallback -- an unknown/missing book
+        // id means no reader button, never another book's reader.
+        const bookId = meta?.book_id || null;
         const bookTitle = meta?.book_title || 'Lesson Material';
-        const pageNum = meta?.page || 1;
+        const pageVal = (en && en.page !== null && en.page !== undefined) ? en.page : (meta?.page ?? null);
         const isAddCourse = meta?.book_id === 'additional-course';
         const statusClass = meta?.status === 'Pass' ? 'bg-emerald-100 text-emerald-800 border-emerald-300' : 'bg-amber-100 text-amber-800 border-amber-300';
+        // Progress badge: para/page/line ONLY when present -- never a
+        // fake "Page 1" when the record carries no page.
+        const progressBits = [];
+        if (!isAddCourse) {
+          if (en && en.para) progressBits.push(`Para ${escapeHtml(en.para)}`);
+          else if (meta?.para) progressBits.push(`Para ${escapeHtml(meta.para)}`);
+          if (pageVal !== null && pageVal !== undefined && String(pageVal) !== '') progressBits.push(`Page ${escapeHtml(pageVal)}`);
+          const lr = (en && en.lineRange) || meta?.line_range;
+          if (lr) progressBits.push(escapeHtml(lr));
+        }
+        const progressBadge = isAddCourse
+          ? escapeHtml(meta.lesson_name || 'Lesson')
+          : (progressBits.length ? progressBits.join(' &bull; ') : '');
+        const additionalLesson = (en && en.additionalLesson) || meta?.additional_lesson || null;
+        const actualDur = (window.LessonHistory && en) ? window.LessonHistory.formatActualDuration(en) : 'not recorded';
+        let schedText = '';
+        const sched = log.schedule_id ? PARENT_SCHEDULE_MAP[String(log.schedule_id)] : null;
+        if (sched) {
+          const mins = sched.duration_mins || (sched.start_time && sched.end_time
+            ? Math.round((new Date('2000-01-01T' + sched.end_time) - new Date('2000-01-01T' + sched.start_time)) / 60000)
+            : 30);
+          schedText = `Scheduled: ${mins} min`;
+        }
+        const imageKey = (en && en.imageKey) || meta?.image_key || null;
+        const canRead = !isAddCourse && bookId && pageVal !== null && pageVal !== undefined && String(pageVal) !== '';
 
         return `
           <div class="bg-gradient-to-r from-emerald-50/40 via-white to-white border border-slate-200/90 rounded-2xl p-4 sm:p-5 shadow-xs hover:shadow-md transition">
@@ -1705,48 +1786,62 @@
                   <span class="text-sm font-black text-slate-900 flex items-center gap-1.5">
                     <i class="fa-solid fa-book-open text-brandEmerald"></i> ${escapeHtml(bookTitle)}
                   </span>
+                  ${progressBadge ? `
                   <span class="text-xs font-bold px-2 py-0.5 rounded-md bg-amber-100 text-amber-900 border border-amber-300 font-mono">
-                    ${isAddCourse ? escapeHtml(meta.lesson_name || 'Lesson') : `${meta?.para ? `Para ${escapeHtml(meta.para)} &bull; ` : ''}Page ${Number(pageNum) || 1}`}
+                    ${progressBadge}
                   </span>
+                  ` : ''}
                 </div>
+                ${additionalLesson ? `
+                  <p class="text-xs text-slate-700">Additional lesson: <strong>${escapeHtml(additionalLesson)}</strong></p>
+                ` : ''}
                 ${meta?.remarks ? `
                   <p class="text-xs text-slate-600 bg-slate-50/90 p-2.5 rounded-xl border border-slate-200/70 italic">
                     "${escapeHtml(meta.remarks)}"
                   </p>
                 ` : ''}
+                <p class="text-[11px] text-slate-500">Actual duration: <strong>${escapeHtml(actualDur)}</strong>${schedText ? ` • ${escapeHtml(schedText)}` : ''}</p>
+                ${imageKey ? `
+                  <img data-lh-img-key="${escapeHtml(imageKey)}" class="hidden max-h-40 rounded-xl border border-slate-200" alt="Lesson image">
+                ` : ''}
               </div>
 
               <div class="flex items-center justify-start md:justify-end">
-                ${isAddCourse ? '' : `
-                <button onclick="openParentDigitalReader('${sanitizeBookId(bookId)}', ${Number(pageNum) || 1}, ${meta?.para ? Number(meta.para) : 'null'}, ${meta?.language ? `'${escapeJsAttr(meta.language)}'` : 'null'})" class="w-full sm:w-auto px-4 py-2.5 rounded-xl bg-gradient-to-r from-emerald-800 to-teal-900 hover:from-emerald-700 hover:to-teal-800 text-white font-black text-xs shadow-sm hover:shadow-md transition flex items-center justify-center gap-1.5">
-                  <i class="fa-solid fa-book-open-reader text-brandGold"></i> Revise Page ${Number(pageNum) || 1}
+                ${canRead ? `
+                <button onclick="openParentDigitalReader('${sanitizeBookId(bookId)}', ${Number(pageVal)}, ${meta?.para ? Number(meta.para) : 'null'}, ${meta?.language ? `'${escapeJsAttr(meta.language)}'` : 'null'})" class="w-full sm:w-auto px-4 py-2.5 rounded-xl bg-gradient-to-r from-emerald-800 to-teal-900 hover:from-emerald-700 hover:to-teal-800 text-white font-black text-xs shadow-sm hover:shadow-md transition flex items-center justify-center gap-1.5">
+                  <i class="fa-solid fa-book-open-reader text-brandGold"></i> Revise Page ${escapeHtml(pageVal)}
                 </button>
-                `}
+                ` : ''}
               </div>
             </div>
           </div>
         `;
       }).join('');
 
-      // Update Hero Sabaq Button (hidden for Additional Course: no book to open)
+      // Update Hero Sabaq Button: hidden for Additional Course AND for any
+      // record without a real book + page (no fallback reader anymore).
       const heroBtn = document.getElementById('btnOpenLatestSabaq');
       if (heroBtn && LATEST_SABAQ_META) {
         const isAddHero = LATEST_SABAQ_META.book_id === 'additional-course';
-        heroBtn.style.display = isAddHero ? 'none' : '';
-        if (!isAddHero) {
+        const heroReadable = !isAddHero && LATEST_SABAQ_META.book_id
+          && LATEST_SABAQ_META.page !== null && LATEST_SABAQ_META.page !== undefined && String(LATEST_SABAQ_META.page) !== '';
+        heroBtn.style.display = heroReadable ? '' : 'none';
+        if (heroReadable) {
           const paraText = LATEST_SABAQ_META.para ? `Para ${escapeHtml(LATEST_SABAQ_META.para)} • ` : '';
-          heroBtn.innerHTML = `<i class="fa-solid fa-book-open"></i> Read Lesson: ${escapeHtml(LATEST_SABAQ_META.book_title || 'Lesson')} (${paraText}Pg ${Number(LATEST_SABAQ_META.page) || 1})`;
+          heroBtn.innerHTML = `<i class="fa-solid fa-book-open"></i> Read Lesson: ${escapeHtml(LATEST_SABAQ_META.book_title || 'Lesson')} (${paraText}Pg ${escapeHtml(LATEST_SABAQ_META.page)})`;
         }
       }
     }
 
     function openLatestSabaqReader() {
-      // Additional Course has no book to open.
+      // Additional Course has no book to open; a record without a real
+      // book + page opens nothing (no fallback book, no fake Page 1).
       if (LATEST_SABAQ_META?.book_id === 'additional-course') return;
       if (LATEST_SABAQ_META) {
+        if (!LATEST_SABAQ_META.book_id || LATEST_SABAQ_META.page === null || LATEST_SABAQ_META.page === undefined || String(LATEST_SABAQ_META.page) === '') return;
         openParentDigitalReader(
-          LATEST_SABAQ_META.book_id || 'holy-quran-16-line',
-          LATEST_SABAQ_META.page || 1,
+          LATEST_SABAQ_META.book_id,
+          LATEST_SABAQ_META.page,
           LATEST_SABAQ_META.para || null,
           LATEST_SABAQ_META.language || null
         );
@@ -1850,12 +1945,16 @@
           try { meta = typeof log.lesson_notes === 'string' ? JSON.parse(log.lesson_notes) : log.lesson_notes; } catch(e){}
         }
 
+        // Lesson History: no fake "Page 1", no first-book fallback.
+        const en = log._lhEntry || null;
+        const pageVal = (en && en.page !== null && en.page !== undefined) ? en.page : (meta?.page ?? null);
         const topic = meta?.book_title
           ? (meta.book_id === 'additional-course'
             ? `${escapeHtml(meta.book_title)}${meta.lesson_name ? ` — ${escapeHtml(meta.lesson_name)}` : ''}`
-            : `${escapeHtml(meta.book_title)} (Page ${Number(meta.page) || 1})`)
+            : `${escapeHtml(meta.book_title)}${meta?.para ? ` • Para ${escapeHtml(meta.para)}` : ''}${pageVal !== null && pageVal !== undefined && String(pageVal) !== '' ? ` (Page ${escapeHtml(pageVal)})` : ''}${((en && en.additionalLesson) || meta?.additional_lesson) ? ` • + ${escapeHtml((en && en.additionalLesson) || meta.additional_lesson)}` : ''}`)
           : escapeHtml(log.lesson_notes || 'Regular Class Attendance');
         const teacher = log.teachers?.full_name || defaultTeacher;
+        const canRead = meta?.book_id && meta.book_id !== 'additional-course' && pageVal !== null && pageVal !== undefined && String(pageVal) !== '';
 
         return `
           <tr class="hover:bg-slate-50 transition">
@@ -1868,8 +1967,8 @@
             <td class="p-3.5 font-semibold text-slate-700">${escapeHtml(teacher)}</td>
             <td class="p-3.5 text-slate-600 truncate max-w-xs">${topic}</td>
             <td class="p-3.5 text-right">
-              ${meta?.page ? `
-                <button onclick="openParentDigitalReader('${sanitizeBookId(meta.book_id || 'holy-quran-16-line')}', ${Number(meta.page) || 1}, ${meta.para ? Number(meta.para) : 'null'}, ${meta.language ? `'${escapeJsAttr(meta.language)}'` : 'null'})" class="px-2.5 py-1 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-800 font-bold text-[11px] transition">
+              ${canRead ? `
+                <button onclick="openParentDigitalReader('${sanitizeBookId(meta.book_id)}', ${Number(pageVal)}, ${meta.para ? Number(meta.para) : 'null'}, ${meta.language ? `'${escapeJsAttr(meta.language)}'` : 'null'})" class="px-2.5 py-1 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-800 font-bold text-[11px] transition">
                   <i class="fa-solid fa-book-open"></i> Read
                 </button>
               ` : '-'}

@@ -27,6 +27,7 @@
   <!-- Supabase JS Client & Cloudflare D1/R2 Universal Engine -->
 
   <script src="js/cloudflare-db.js"></script>
+  <script src="js/lesson-history.js"></script>
   <!-- High-Res Client-Side PDF Generation Libraries (html2canvas, jsPDF) -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
@@ -517,6 +518,12 @@ font-family: var(--font-num) !important;
                   <span id="sbBadgeTodayCount" class="sidebar-badge ml-auto text-[10px] font-mono px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 font-extrabold border border-emerald-200">0</span>
                 </button>
 
+                <!-- Lesson History -->
+                <button id="sbNavHistory" onclick="switchTeacherPortalTab('history'); toggleTeacherSidebar(false);" class="sidebar-nav-btn w-full text-left px-3 py-2.5 flex items-center gap-2.5" title="Lesson History">
+                  <span class="sidebar-icon-box"><i class="fa-solid fa-clock-rotate-left"></i></span>
+                  <span class="sidebar-text truncate">Lesson History</span>
+                </button>
+
                 <!-- Full Week Schedule -->
                 <button id="sbNavWeekSchedule" onclick="openWeeklyMatrixModal(); toggleTeacherSidebar(false);" class="sidebar-nav-btn w-full text-left px-3 py-2.5 flex items-center gap-2.5" title="Full Week Schedule">
                   <span class="sidebar-icon-box"><i class="fa-solid fa-table-cells"></i></span>
@@ -819,6 +826,47 @@ font-family: var(--font-num) !important;
                 <span>Assigned Students Currently on Leave (Temporarily Paused):</span>
               </div>
               <div id="teacherLeaveStudentsPills" class="flex items-center gap-1.5 flex-wrap"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- LESSON HISTORY (Unified): full per-student history for assigned
+           students, plus the teacher's own recordings for students who have
+           since shifted away (UNION scope, server-enforced). -->
+      <div id="sectionTeacherLessonHistory" class="hidden space-y-4">
+        <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+          <div class="p-4 sm:p-5 border-b border-slate-200 flex flex-wrap justify-between items-center gap-3 bg-emerald-50/40">
+            <div>
+              <h3 class="font-extrabold text-slate-900 text-base flex items-center gap-2">
+                <i class="fa-solid fa-clock-rotate-left text-brandEmerald"></i>
+                Lesson History
+              </h3>
+              <p class="text-xs text-slate-500">Full past performance for your students — newest first, one record per class per day</p>
+            </div>
+            <button onclick="renderTeacherLessonHistory(true)" class="px-3 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-white text-[11px] font-extrabold transition cursor-pointer">
+              <i class="fa-solid fa-rotate"></i> Refresh
+            </button>
+          </div>
+          <div class="p-4 space-y-3">
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+              <div>
+                <label class="block font-bold text-slate-700 mb-1 text-xs">Student</label>
+                <select id="lhTeacherStudentSelect" onchange="renderTeacherLessonHistory(false)" class="w-full p-2.5 bg-white border border-slate-300 rounded-xl font-bold text-slate-800 text-xs"></select>
+              </div>
+              <div>
+                <label class="block font-bold text-slate-700 mb-1 text-xs">Specific day (leave empty for full history)</label>
+                <input type="date" id="lhTeacherDateInput" onchange="renderTeacherLessonHistory(false)" class="w-full p-2.5 bg-white border border-slate-300 rounded-xl font-bold text-slate-800 text-xs">
+              </div>
+              <div class="flex items-end">
+                <button onclick="document.getElementById('lhTeacherDateInput').value=''; renderTeacherLessonHistory(false);" class="w-full sm:w-auto px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300 rounded-xl font-bold text-xs transition">Show full history</button>
+              </div>
+            </div>
+            <div id="lhTeacherHistoryList" class="space-y-3">
+              <p class="text-xs text-slate-400 text-center py-6">Loading lesson history...</p>
+            </div>
+            <div class="text-center">
+              <button id="lhTeacherLoadMoreBtn" onclick="lhTeacherLoadMore()" class="hidden px-4 py-2 bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 rounded-xl font-bold text-xs transition">Load older records</button>
             </div>
           </div>
         </div>
@@ -1159,12 +1207,40 @@ font-family: var(--font-num) !important;
           </div>
         </div>
 
+        <!-- Additional Lesson (supplementary: Namaz, Duas, Islamic Studies).
+             Saved as the ONE key `additional_lesson` in lesson_notes JSON.
+             Distinct from the Additional Course `lesson_name` above. -->
+        <div>
+          <label class="block font-bold text-slate-700 mb-1.5">
+            Additional Lesson (Optional):
+          </label>
+          <input type="text" id="attAdditionalLesson" placeholder="e.g. Namaz: Surah Fatiha, Duas: Morning Duas"
+            class="w-full p-3 border border-slate-300 rounded-xl font-medium text-slate-800 text-xs focus:outline-brandEmerald focus:border-brandEmerald">
+          <p class="text-[10px] text-slate-400 mt-1">Supplementary lesson taught alongside the main lesson (shown separately in Lesson History).</p>
+        </div>
+
+        <!-- Lesson Image (Optional): uploaded via /api/storage BEFORE save;
+             only the R2 key is stored in lesson_notes (image_key). -->
+        <div>
+          <label class="block font-bold text-slate-700 mb-1.5">
+            Lesson Image (Optional):
+          </label>
+          <input type="file" id="attLessonImageFile" accept="image/jpeg,image/png,image/webp"
+            class="w-full p-2 border border-slate-300 rounded-xl font-medium text-slate-800 text-xs focus:outline-brandEmerald">
+          <input type="hidden" id="attLessonImageKey" value="">
+          <div id="attLessonImagePreviewBox" class="hidden mt-2 flex items-center gap-2">
+            <img id="attLessonImagePreview" class="max-h-28 rounded-xl border border-slate-200" alt="Attached lesson image">
+            <button type="button" onclick="clearTeacherLessonImage()" class="px-2.5 py-1 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-lg text-[11px] font-bold">Remove image</button>
+          </div>
+          <p class="text-[10px] text-slate-400 mt-1">Visible to the student's parent and to teachers assigned to this student. Upload failure stops the save (no partial record).</p>
+        </div>
+
         <!-- Lesson Notes Input -->
         <div>
           <label class="block font-bold text-slate-700 mb-1.5">
             Teacher Lesson Remarks &amp; Tajweed Guidance:
           </label>
-          <textarea id="attLessonNotes" rows="3" placeholder="e.g. Pronounced articulation points very well. Ensure proper nasalization on Noon Mushaddad." 
+          <textarea id="attLessonNotes" rows="3" placeholder="e.g. Pronounced articulation points very well. Ensure proper nasalization on Noon Mushaddad."
             class="w-full p-3 border border-slate-300 rounded-xl font-medium text-slate-800 text-xs focus:outline-brandEmerald focus:border-brandEmerald"></textarea>
           <p class="text-[10px] text-slate-400 mt-1">These notes and exact material page are permanently saved and directly accessible to student on their portal.</p>
         </div>
@@ -1418,8 +1494,26 @@ font-family: var(--font-num) !important;
           <label class="block font-bold text-slate-700 mb-1.5">
             Teacher Lesson Remarks &amp; Tajweed Guidance:
           </label>
-          <textarea id="advLessonNotes" rows="2" placeholder="e.g. Completed tomorrow's session today with great focus. Pronounced Makharij smoothly." 
+          <textarea id="advLessonNotes" rows="2" placeholder="e.g. Completed tomorrow's session today with great focus. Pronounced Makharij smoothly."
             class="w-full p-3 border border-slate-300 rounded-xl font-medium text-slate-800 text-xs focus:outline-purple-600 focus:border-purple-600"></textarea>
+        </div>
+
+        <!-- Additional Lesson + Lesson Image (same keys as the main modal) -->
+        <div>
+          <label class="block font-bold text-slate-700 mb-1.5">
+            Additional Lesson (Optional):
+          </label>
+          <input type="text" id="advAdditionalLesson" placeholder="e.g. Namaz: Surah Fatiha, Duas: Morning Duas"
+            class="w-full p-3 border border-slate-300 rounded-xl font-medium text-slate-800 text-xs focus:outline-purple-600 focus:border-purple-600">
+        </div>
+        <div>
+          <label class="block font-bold text-slate-700 mb-1.5">
+            Lesson Image (Optional):
+          </label>
+          <input type="file" id="advLessonImageFile" accept="image/jpeg,image/png,image/webp"
+            class="w-full p-2 border border-slate-300 rounded-xl font-medium text-slate-800 text-xs focus:outline-purple-600">
+          <input type="hidden" id="advLessonImageKey" value="">
+          <p class="text-[10px] text-slate-400 mt-1">Uploaded before saving; only the image reference is stored with the lesson.</p>
         </div>
 
         <!-- Automated Parent Email Notification Notice -->
@@ -3626,6 +3720,9 @@ font-family: var(--font-num) !important;
                 <button onclick="openTeacherAddScheduleModal('${escapeJsAttr(st.id)}')" class="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold shadow-2xs flex items-center gap-1 transition" title="Add or schedule weekly class slots for ${escapeHtml(st.name)}">
                   <i class="fa-solid fa-calendar-plus"></i> ${stuScheds.length > 0 ? '+ Add Slot' : '+ Add to Schedule'}
                 </button>
+                <button onclick="openTeacherLessonHistoryForStudent('${escapeJsAttr(st.id)}')" class="px-2.5 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-800 border border-indigo-200 rounded-lg text-xs font-bold shadow-2xs flex items-center gap-1 transition" title="Full lesson history for ${escapeHtml(st.name)}">
+                  <i class="fa-solid fa-clock-rotate-left"></i> History
+                </button>
                 ${markLessonBtn}
               </div>
             </td>
@@ -5035,6 +5132,35 @@ font-family: var(--font-num) !important;
     }
 
     // Attendance & Sabaq Modal Handlers
+    // Lesson History: prior lesson JSON for the currently open modal record
+    // (preserved on status change), plus the live preview blob URL.
+    let _ATT_PRIOR_NOTES = null;
+    let _ATT_PREVIEW_BLOB_URL = null;
+    function clearTeacherLessonImage() {
+      if (_ATT_PREVIEW_BLOB_URL) { try { URL.revokeObjectURL(_ATT_PREVIEW_BLOB_URL); } catch (e) {} _ATT_PREVIEW_BLOB_URL = null; }
+      const keyInp = document.getElementById('attLessonImageKey');
+      if (keyInp) keyInp.value = '';
+      const fileInp = document.getElementById('attLessonImageFile');
+      if (fileInp) fileInp.value = '';
+      const box = document.getElementById('attLessonImagePreviewBox');
+      if (box) box.classList.add('hidden');
+      const img = document.getElementById('attLessonImagePreview');
+      if (img) img.removeAttribute('src');
+    }
+    async function showTeacherLessonImagePreview(key) {
+      const box = document.getElementById('attLessonImagePreviewBox');
+      const img = document.getElementById('attLessonImagePreview');
+      if (_ATT_PREVIEW_BLOB_URL) { try { URL.revokeObjectURL(_ATT_PREVIEW_BLOB_URL); } catch (e) {} _ATT_PREVIEW_BLOB_URL = null; }
+      if (!box || !img) return;
+      if (!key) { box.classList.add('hidden'); img.removeAttribute('src'); return; }
+      if (!window.LessonHistory) { box.classList.add('hidden'); return; }
+      const url = await window.LessonHistory.loadLessonImageBlobUrl(key);
+      if (!url) { box.classList.add('hidden'); return; }
+      _ATT_PREVIEW_BLOB_URL = url;
+      img.src = url;
+      box.classList.remove('hidden');
+    }
+
     function openAttendanceModal(scheduleId, studentName, timeSlot, studentId, currentStatus, currentNotes) {
       let matchedClass = null;
       if (!studentName && scheduleId) {
@@ -5123,6 +5249,18 @@ font-family: var(--font-num) !important;
         document.getElementById('attLessonNotes').value = currentNotes || '';
       }
 
+      // Lesson History: refill the supplementary lesson + image reference,
+      // and stash the prior JSON so a status change to Absent/Leave
+      // preserves it instead of wiping lesson_notes with raw text.
+      _ATT_PRIOR_NOTES = (parsedNotes && typeof parsedNotes === 'object') ? parsedNotes : null;
+      const _addLessonInp = document.getElementById('attAdditionalLesson');
+      if (_addLessonInp) _addLessonInp.value = parsedNotes?.additional_lesson || '';
+      const _imgKeyInp = document.getElementById('attLessonImageKey');
+      if (_imgKeyInp) _imgKeyInp.value = parsedNotes?.image_key || '';
+      const _imgFileInp = document.getElementById('attLessonImageFile');
+      if (_imgFileInp) _imgFileInp.value = '';
+      showTeacherLessonImagePreview(parsedNotes?.image_key || null);
+
       populateTeacherCourseBooks(suggestedBook);
       onTeacherCourseBookChanged(suggestedBook, resumePara, nextPage);
 
@@ -5183,7 +5321,10 @@ font-family: var(--font-num) !important;
       const student_id = document.getElementById('attStudentId').value;
       const selectedStatus = document.getElementById('attSelectedStatus').value;
       const dbStatus = selectedStatus === 'Present' ? 'Completed' : selectedStatus;
-      const date = new Date().toISOString().slice(0, 10);
+      // Lesson History: PKT date on every write path (the transition path
+      // already stamps PKT; the old UTC stamp split one class across two
+      // dates in the 00:00-05:00 PKT window).
+      const date = getPktNowParts().date;
 
       let lesson_notes = '';
 
@@ -5203,6 +5344,25 @@ font-family: var(--font-num) !important;
         const sabaq_result = document.getElementById('attSabaqResult')?.value || 'Pass';
         const rating = Number(document.getElementById('attSabaqRating')?.value || 5);
         const remarks = (document.getElementById('attLessonNotes')?.value || '').trim();
+        // Lesson History: supplementary lesson (ONE key `additional_lesson`,
+        // distinct from the Additional Course `lesson_name`) + image.
+        const additionalLesson = (document.getElementById('attAdditionalLesson')?.value || '').trim();
+        // Image upload happens BEFORE save and fails LOUDLY: a failed
+        // upload aborts the save (never a dataUrl blob in lesson_notes).
+        let lessonImageKey = (document.getElementById('attLessonImageKey')?.value || '').trim() || null;
+        const lessonImageFile = document.getElementById('attLessonImageFile')?.files?.[0] || null;
+        if (lessonImageFile) {
+          if (!window.LessonHistory) {
+            alert("Lesson image cannot be uploaded right now (history module missing). Nothing was saved.");
+            return;
+          }
+          try {
+            lessonImageKey = await window.LessonHistory.uploadLessonImageOrThrow(lessonImageFile);
+          } catch (uploadErr) {
+            alert("Lesson image upload failed. Nothing was saved. Please try again. (" + (uploadErr?.message || uploadErr) + ")");
+            return;
+          }
+        }
 
         let sabaqPayload;
         if (bookId === ADDITIONAL_COURSE_ID) {
@@ -5227,6 +5387,8 @@ font-family: var(--font-num) !important;
             status: sabaq_result,
             rating: rating,
             remarks: remarks,
+            additional_lesson: additionalLesson || null,
+            image_key: lessonImageKey,
             is_advance_class: (selectedStatus === 'Advance Class'),
             advance_target_date: targetDate,
             recorded_at: new Date().toISOString()
@@ -5251,6 +5413,8 @@ font-family: var(--font-num) !important;
             status: sabaq_result,
             rating: rating,
             remarks: remarks,
+            additional_lesson: additionalLesson || null,
+            image_key: lessonImageKey,
             is_advance_class: (selectedStatus === 'Advance Class'),
             advance_target_date: targetDate,
             recorded_at: new Date().toISOString()
@@ -5259,7 +5423,19 @@ font-family: var(--font-num) !important;
 
         lesson_notes = JSON.stringify(sabaqPayload);
       } else {
-        lesson_notes = (document.getElementById('attLessonNotes')?.value || '').trim();
+        // Lesson History: a status change to Absent/Leave must PRESERVE the
+        // prior lesson JSON (course, page, image, additional lesson) --
+        // the old code replaced it with raw remarks text, wiping the
+        // record. Only the remarks/status are refreshed.
+        if (_ATT_PRIOR_NOTES && typeof _ATT_PRIOR_NOTES === 'object') {
+          const preserved = { ..._ATT_PRIOR_NOTES };
+          const typedRemarks = (document.getElementById('attLessonNotes')?.value || '').trim();
+          if (typedRemarks) preserved.remarks = typedRemarks;
+          preserved.status = dbStatus;
+          lesson_notes = JSON.stringify(preserved);
+        } else {
+          lesson_notes = (document.getElementById('attLessonNotes')?.value || '').trim();
+        }
       }
 
       const btn = document.getElementById('btnSaveAttendance');
@@ -6689,6 +6865,7 @@ font-family: var(--font-num) !important;
         dashboard: 'sbNavDashboard',
         today: 'sbNavToday',
         students: 'sbNavStudents',
+        history: 'sbNavHistory',
         trials: 'sbNavTrials',
         salaries: 'sbNavSalaries'
       };
@@ -6710,6 +6887,7 @@ font-family: var(--font-num) !important;
       const secKpi = document.getElementById('sectionTeacherKpiGrid');
       const secToday = document.getElementById('sectionTeacherToday');
       const secStudents = document.getElementById('sectionTeacherStudentList');
+      const secHistory = document.getElementById('sectionTeacherLessonHistory');
       const secTrials = document.getElementById('sectionTeacherTrials');
       const secSalaries = document.getElementById('sectionTeacherSalaries');
 
@@ -6717,6 +6895,7 @@ font-family: var(--font-num) !important;
         if (secKpi) secKpi.classList.remove('hidden');
         if (secToday) secToday.classList.remove('hidden');
         if (secStudents) secStudents.classList.add('hidden'); // Clean dashboard: no Student List here, available via Sidebar -> Students
+        if (secHistory) secHistory.classList.add('hidden');
         if (secTrials) secTrials.classList.add('hidden');
         if (secSalaries) secSalaries.classList.add('hidden');
       } else if (tab === 'today') {
@@ -6726,6 +6905,7 @@ font-family: var(--font-num) !important;
           secToday.scrollIntoView({ behavior: 'smooth', block: 'start' });
         }
         if (secStudents) secStudents.classList.add('hidden');
+        if (secHistory) secHistory.classList.add('hidden');
         if (secTrials) secTrials.classList.add('hidden');
         if (secSalaries) secSalaries.classList.add('hidden');
       } else if (tab === 'students') {
@@ -6735,13 +6915,26 @@ font-family: var(--font-num) !important;
           secStudents.classList.remove('hidden');
           secStudents.scrollIntoView({ behavior: 'smooth', block: 'start' });
         }
+        if (secHistory) secHistory.classList.add('hidden');
         if (secTrials) secTrials.classList.add('hidden');
         if (secSalaries) secSalaries.classList.add('hidden');
         renderTeacherStudentListTable();
+      } else if (tab === 'history') {
+        if (secKpi) secKpi.classList.add('hidden');
+        if (secToday) secToday.classList.add('hidden');
+        if (secStudents) secStudents.classList.add('hidden');
+        if (secHistory) {
+          secHistory.classList.remove('hidden');
+          secHistory.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+        if (secTrials) secTrials.classList.add('hidden');
+        if (secSalaries) secSalaries.classList.add('hidden');
+        renderTeacherLessonHistory(false);
       } else if (tab === 'trials') {
         if (secKpi) secKpi.classList.add('hidden');
         if (secToday) secToday.classList.add('hidden');
         if (secStudents) secStudents.classList.add('hidden');
+        if (secHistory) secHistory.classList.add('hidden');
         if (secTrials) {
           secTrials.classList.remove('hidden');
           secTrials.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -6752,6 +6945,7 @@ font-family: var(--font-num) !important;
         if (secKpi) secKpi.classList.add('hidden');
         if (secToday) secToday.classList.add('hidden');
         if (secStudents) secStudents.classList.add('hidden');
+        if (secHistory) secHistory.classList.add('hidden');
         if (secTrials) secTrials.classList.add('hidden');
         if (secSalaries) {
           secSalaries.classList.remove('hidden');
@@ -6759,6 +6953,131 @@ font-family: var(--font-num) !important;
         }
         loadTeacherPreviousSalaries();
       }
+    }
+
+    // =================================================================
+    // TEACHER LESSON HISTORY (Unified) — reads ONLY via the shared
+    // LessonHistory reader over attendance_logs. The Worker UNION scope
+    // returns the teacher's own recordings plus currently assigned
+    // students' rows (including a shifted student's older teachers' rows).
+    // =================================================================
+    let _LH_TEACHER_LIMIT = 100;
+    let _LH_TEACHER_BLOB_URLS = [];
+    function _lhTeacherRevokeBlobs() {
+      _LH_TEACHER_BLOB_URLS.forEach(u => { try { URL.revokeObjectURL(u); } catch (e) {} });
+      _LH_TEACHER_BLOB_URLS = [];
+    }
+    function lhTeacherLoadMore() {
+      _LH_TEACHER_LIMIT = _LH_TEACHER_LIMIT >= 1000 ? 1000 : (_LH_TEACHER_LIMIT === 100 ? 300 : 1000);
+      renderTeacherLessonHistory(false);
+    }
+    // Open history pre-filtered to one student (used by the Student List).
+    function openTeacherLessonHistoryForStudent(studentId) {
+      const sel = document.getElementById('lhTeacherStudentSelect');
+      if (sel) sel.value = String(studentId || 'all');
+      switchTeacherPortalTab('history');
+    }
+    async function renderTeacherLessonHistory(forceRefresh) {
+      const listEl = document.getElementById('lhTeacherHistoryList');
+      const selEl = document.getElementById('lhTeacherStudentSelect');
+      const dateEl = document.getElementById('lhTeacherDateInput');
+      const moreBtn = document.getElementById('lhTeacherLoadMoreBtn');
+      if (!listEl || !window.LessonHistory) return;
+      if (forceRefresh) _LH_TEACHER_LIMIT = 100;
+
+      // Student options: assigned students first, then any other student
+      // appearing in the teacher's visible logs (e.g. shifted away but
+      // recorded by this teacher). Names fall back to the id -- never
+      // invented.
+      const nameById = {};
+      (ACTIVE_ASSIGNED_STUDENTS || []).forEach(s => { nameById[String(s.id)] = s.name || String(s.id); });
+      (LEAVE_ASSIGNED_STUDENTS || []).forEach(s => { nameById[String(s.id)] = s.name || String(s.id); });
+      (ALL_TEACHER_SCHEDULES || []).forEach(sc => {
+        if (sc.students && sc.students.id) nameById[String(sc.students.id)] = sc.students.name || String(sc.students.id);
+      });
+
+      let rows = [];
+      try {
+        const res = await db.from('attendance_logs').select('*, teachers(full_name)')
+          .order('date', { ascending: false }).limit(_LH_TEACHER_LIMIT);
+        rows = (res && res.data) || [];
+      } catch (e) {
+        listEl.innerHTML = '<p class="text-xs text-rose-600 text-center py-6">Could not load lesson history. Please try again.</p>';
+        return;
+      }
+      const teacherNameById = {};
+      if (CURRENT_TEACHER && CURRENT_TEACHER.id) teacherNameById[String(CURRENT_TEACHER.id)] = CURRENT_TEACHER.full_name;
+      rows.forEach(r => { if (r.teacher_id && !nameById[String(r.student_id)] && r.students) nameById[String(r.student_id)] = r.students.name || String(r.student_id); });
+      const entries = window.LessonHistory.dedupeLessonRows(rows, teacherNameById);
+      entries.forEach(e => { if (!nameById[String(e.studentId)]) nameById[String(e.studentId)] = String(e.studentId); });
+
+      // Rebuild the student dropdown (preserve the current selection).
+      const prevSel = selEl ? selEl.value : 'all';
+      if (selEl) {
+        const opts = ['<option value="all">All students</option>'] +
+          Object.keys(nameById).sort((a, b) => String(nameById[a]).localeCompare(String(nameById[b]))).map(id =>
+            `<option value="${escapeHtml(id)}">${escapeHtml(nameById[id])}</option>`).join('');
+        selEl.innerHTML = opts;
+        selEl.value = (prevSel && (prevSel === 'all' || nameById[prevSel])) ? prevSel : 'all';
+      }
+      const studentFilter = selEl ? selEl.value : 'all';
+      const dateFilter = dateEl ? dateEl.value : '';
+      let visible = entries;
+      if (studentFilter && studentFilter !== 'all') visible = visible.filter(e => String(e.studentId) === String(studentFilter));
+      if (dateFilter) visible = window.LessonHistory.filterLessonEntries(visible, dateFilter);
+      if (moreBtn) moreBtn.classList.toggle('hidden', !(_LH_TEACHER_LIMIT < 1000 && rows.length >= _LH_TEACHER_LIMIT));
+
+      _lhTeacherRevokeBlobs();
+      if (visible.length === 0) {
+        listEl.innerHTML = '<p class="text-xs text-slate-400 text-center py-6">No lesson history found for this selection.</p>';
+        return;
+      }
+
+      // Scheduled durations from the teacher's own schedules (labelled).
+      const schedById = {};
+      (ALL_TEACHER_SCHEDULES || []).forEach(sc => { schedById[String(sc.id)] = sc; });
+      const cards = [];
+      for (const e of visible) {
+        const sched = e.scheduleId ? schedById[String(e.scheduleId)] : null;
+        let schedText = '';
+        if (sched) {
+          const mins = sched.duration_mins || (sched.start_time && sched.end_time
+            ? Math.round((new Date('2000-01-01T' + sched.end_time) - new Date('2000-01-01T' + sched.start_time)) / 60000)
+            : 30);
+          schedText = `Scheduled: ${mins} min`;
+        }
+        const progress = [];
+        if (e.para) progress.push(`Para ${escapeHtml(e.para)}`);
+        if (e.page !== null && e.page !== undefined) progress.push(`Page ${escapeHtml(e.page)}`);
+        if (e.lineRange) progress.push(escapeHtml(e.lineRange));
+        const progressText = progress.join(' • ');
+        let imgHtml = '';
+        if (e.imageKey) {
+          const url = await window.LessonHistory.loadLessonImageBlobUrl(e.imageKey);
+          if (url) {
+            _LH_TEACHER_BLOB_URLS.push(url);
+            imgHtml = `<a href="${url}" target="_blank" rel="noopener"><img src="${url}" class="max-h-40 rounded-xl border border-slate-200" alt="Lesson image"></a>`;
+          }
+        }
+        cards.push(`
+          <div class="border border-slate-200 rounded-2xl p-4 space-y-1.5">
+            <div class="flex flex-wrap items-center gap-2 text-xs">
+              <span class="font-mono font-black text-slate-900">${escapeHtml(e.date || '')}</span>
+              <span class="px-2 py-0.5 rounded text-[10px] font-extrabold bg-slate-100 text-slate-700 border border-slate-200">${escapeHtml(e.status || 'Recorded')}</span>
+              <span class="text-slate-500">Student: <strong class="text-slate-800">${escapeHtml(nameById[String(e.studentId)] || String(e.studentId))}</strong></span>
+              ${e.teacherName ? `<span class="text-slate-500">Teacher: <strong class="text-slate-800">${escapeHtml(e.teacherName)}</strong></span>` : ''}
+            </div>
+            ${window.LessonHistory.entryTitle(e) ? `<div class="text-sm font-black text-slate-900">${escapeHtml(window.LessonHistory.entryTitle(e))}</div>` : ''}
+            ${progressText ? `<div class="text-xs font-bold text-amber-900">${progressText}</div>` : ''}
+            ${e.result ? `<div class="text-xs text-slate-600">Result: <strong>${escapeHtml(e.result)}</strong></div>` : ''}
+            ${e.additionalLesson ? `<div class="text-xs text-slate-700">Additional lesson: <strong>${escapeHtml(e.additionalLesson)}</strong></div>` : ''}
+            ${e.remarks ? `<p class="text-xs text-slate-600 bg-slate-50 p-2.5 rounded-xl border border-slate-200/70 italic">"${escapeHtml(e.remarks)}"</p>` : ''}
+            <div class="text-[11px] text-slate-500">Actual duration: <strong>${escapeHtml(window.LessonHistory.formatActualDuration(e))}</strong>${schedText ? ` • ${escapeHtml(schedText)}` : ''}</div>
+            ${imgHtml}
+          </div>
+        `);
+      }
+      listEl.innerHTML = cards.join('');
     }
 
     // =================================================================
@@ -8096,6 +8415,12 @@ font-family: var(--font-num) !important;
 
       populateAdvanceClassStudents(preselectStudentId);
 
+      // Lesson History: fresh image state on every open (no stale carry).
+      const advImgFile = document.getElementById('advLessonImageFile');
+      if (advImgFile) advImgFile.value = '';
+      const advImgKey = document.getElementById('advLessonImageKey');
+      if (advImgKey) advImgKey.value = '';
+
       // Default target date to Tomorrow
       const tomorrow = new Date();
       tomorrow.setDate(tomorrow.getDate() + 1);
@@ -8354,7 +8679,30 @@ font-family: var(--font-num) !important;
       btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Saving Advance Class...';
 
       try {
-        const todayDate = new Date().toISOString().slice(0, 10);
+        // Lesson History: PKT date (same fix as the main modal save).
+        const todayDate = getPktNowParts().date;
+        // Lesson History: supplementary lesson + image (same keys as the
+        // main modal). Image upload fails LOUDLY and aborts the save --
+        // handled here (not by the outer catch, which reports success).
+        const advAdditionalLesson = (document.getElementById('advAdditionalLesson')?.value || '').trim();
+        let advLessonImageKey = (document.getElementById('advLessonImageKey')?.value || '').trim() || null;
+        const advLessonImageFile = document.getElementById('advLessonImageFile')?.files?.[0] || null;
+        if (advLessonImageFile) {
+          if (!window.LessonHistory) {
+            alert("Lesson image cannot be uploaded right now (history module missing). Nothing was saved.");
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fa-solid fa-floppy-disk"></i> Confirm & Save Advance Class';
+            return;
+          }
+          try {
+            advLessonImageKey = await window.LessonHistory.uploadLessonImageOrThrow(advLessonImageFile);
+          } catch (uploadErr) {
+            alert("Lesson image upload failed. Nothing was saved. Please try again. (" + (uploadErr?.message || uploadErr) + ")");
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fa-solid fa-floppy-disk"></i> Confirm & Save Advance Class';
+            return;
+          }
+        }
         const allBooks = getTeacherAllBooks();
         const book = isAdditionalCourse ? null : (allBooks.find(b => b.id === bookId) || allBooks[0]);
         const bookTitle = isAdditionalCourse ? customCourse : (book ? book.title : 'Course Syllabus');
@@ -8381,6 +8729,8 @@ font-family: var(--font-num) !important;
           status: sabaqResult,
           rating: rating,
           remarks: remarks,
+          additional_lesson: advAdditionalLesson || null,
+          image_key: advLessonImageKey,
           is_advance_class: true,
           advance_target_date: targetDate,
           advance_reason: reason,

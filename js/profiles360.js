@@ -754,7 +754,17 @@ async function openFamily360Profile(familyId, initialTab = 'students', skipHisto
       needScheduleFetch
         ? db.from('class_schedules').select('*, teachers(*)').in('student_id', studentIds)
         : Promise.resolve({ data: initialSchedules }),
-      db.from('attendance_logs').select('*').in('student_id', studentIds).order('date', { ascending: false }).limit(120)
+      // Lesson History: PER-STUDENT caps (500 each) replace the old
+      // family-wide 120 cap, which silently truncated one child's older
+      // history in multi-child families.
+      Promise.all(studentIds.map(sid =>
+        db.from('attendance_logs').select('*').eq('student_id', sid).order('date', { ascending: false }).limit(500)
+      )).then(parts => {
+        const merged = [];
+        (parts || []).forEach(p => { (p.data || []).forEach(r => merged.push(r)); });
+        merged.sort((a, b) => String(b.date || '') < String(a.date || '') ? -1 : (String(b.date || '') > String(a.date || '') ? 1 : 0));
+        return { data: merged };
+      })
     ]);
 
     const famSchedules = schedRes.data || initialSchedules;
@@ -1020,6 +1030,9 @@ function _renderFamilyWorkspaceDOM() {
     <!-- DEDICATED ACTION MODAL CONTAINER FOR FAMILY WORKSPACE OPERATIONS -->
     <div id="familyWorkspaceActionModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-[9990] hidden items-center justify-center p-4"></div>
   `;
+
+  // Lesson History: fill any lesson-image placeholders rendered above.
+  setTimeout(_hydrate360LessonImages, 0);
 }
 
 // ============================================================================
@@ -1217,7 +1230,20 @@ function _buildFamilyStudentsTabHtml(family, familyStudents, famSchedules, famLo
  */
 function _buildSelectedStudentWorkspaceHtml(family, student, famSchedules, famLogs, subView) {
   const stuId = student.id;
-  const stuLogs = (famLogs || []).filter(l => String(l.student_id).toUpperCase() === String(stuId).toUpperCase());
+  const stuLogsRaw = (famLogs || []).filter(l => String(l.student_id).toUpperCase() === String(stuId).toUpperCase());
+  // Lesson History: dedupe re-saves via the shared reader (latest
+  // created_at per schedule+date wins; paired timestamps give the actual
+  // duration). Display rows keep the merged row's raw fields; the
+  // normalized entry rides along as _lhEntry for the full inspector.
+  const _lhTeacherNameById = {};
+  (window.ALL_TEACHERS || []).forEach(t => { if (t.id) _lhTeacherNameById[String(t.id)] = t.full_name || null; });
+  let stuLogs = stuLogsRaw;
+  if (window.LessonHistory) {
+    try {
+      stuLogs = window.LessonHistory.dedupeLessonRows(stuLogsRaw, _lhTeacherNameById)
+        .map(en => ({ ...(en.raw || {}), _lhEntry: en }));
+    } catch (e) { stuLogs = stuLogsRaw; }
+  }
   const stuSchedules = (famSchedules || []).filter(sc => String(sc.student_id).toUpperCase() === String(stuId).toUpperCase());
   const assignedTeacher = (window.ALL_TEACHERS || []).find(t => String(t.id) === String(student.assigned_teacher_id));
   const stuMeta = _parseStudentStructuredNotes(student);
@@ -1245,13 +1271,20 @@ function _buildSelectedStudentWorkspaceHtml(family, student, famSchedules, famLo
   // SUB-VIEW 1: STUDENT HISTORY / ATTENDANCE & DAILY LESSONS
   if (subView === 'history') {
     const filterStatus = _CURRENT_360_STATE.attFilterStatus || 'all';
+    // Lesson History: date selector (exact stored-date match) combines
+    // with the status filter; empty = full history.
+    const lhDateFilter = _CURRENT_360_STATE.lessonHistoryDate || '';
     const filteredLogs = stuLogs.filter(l => {
-      if (filterStatus === 'all') return true;
-      return String(l.status || '').toLowerCase() === filterStatus.toLowerCase();
+      if (filterStatus !== 'all' && String(l.status || '').toLowerCase() !== filterStatus.toLowerCase()) return false;
+      if (lhDateFilter && String(l.date) !== lhDateFilter) return false;
+      return true;
     });
 
     const selectedDate = _CURRENT_360_STATE.selectedLessonDate || (stuLogs[0]?.date || null);
-    const activeLessonLog = stuLogs.find(l => l.date === selectedDate) || stuLogs[0] || null;
+    // Lesson History: ALL entries for the selected date (same-day
+    // multiples are all shown, never find-first only).
+    const activeLessonLogs = selectedDate ? stuLogs.filter(l => l.date === selectedDate) : [];
+    const activeLessonLog = activeLessonLogs[0] || stuLogs[0] || null;
 
     bodyHtml = `
       <div class="p-5 space-y-4">
@@ -1286,6 +1319,16 @@ function _buildSelectedStudentWorkspaceHtml(family, student, famSchedules, famLo
                     ${st === 'all' ? 'All Dates' : st}
                   </button>
                 `).join('')}
+              </div>
+              <div class="flex items-center gap-1.5">
+                <input type="date" value="${_esc360(lhDateFilter)}" onchange="set360LessonHistoryDate(this.value)"
+                       class="px-2 py-1 rounded-lg text-[11px] font-bold border border-slate-200 bg-white text-slate-700" title="Show a specific day">
+                ${lhDateFilter ? `
+                  <button onclick="clear360LessonHistoryDate()"
+                          class="px-2.5 py-1 rounded-lg text-[11px] font-extrabold bg-white border border-slate-200 text-slate-600 hover:bg-slate-100 transition cursor-pointer">
+                    All dates
+                  </button>
+                ` : ''}
               </div>
               <button onclick="openRecordDailyLessonModal('${_esc360(family.id)}', '${_esc360(student.id)}')"
                       class="px-3 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-extrabold transition cursor-pointer inline-flex items-center gap-1 whitespace-nowrap">
@@ -1341,10 +1384,86 @@ function _buildSelectedStudentWorkspaceHtml(family, student, famSchedules, famLo
             `}
           </div>
 
-          <!-- Selected Date Lesson Inspector -->
+          <!-- Selected Date Lesson Inspector (FULL entry, all same-day records) -->
           <div class="rounded-xl border border-slate-200 bg-slate-50/60 p-4 flex flex-col justify-between">
             ${activeLessonLog ? (() => {
-              const p = _parseLessonDetails360(activeLessonLog);
+              const schedById = {};
+              (famSchedules || []).forEach(sc => { schedById[String(sc.id)] = sc; });
+              const entriesHtml = activeLessonLogs.map(log => {
+                const p = _parseLessonDetails360(log);
+                const en = log._lhEntry || null;
+                const title = (window.LessonHistory && en) ? window.LessonHistory.entryTitle(en) : p.summaryTitle;
+                const progressBits = [];
+                if (en && en.para) progressBits.push(`Para ${en.para}`);
+                if (en && en.page !== null && en.page !== undefined) progressBits.push(`Page ${en.page}`);
+                else if (p.page) progressBits.push(String(p.page));
+                if (en && en.lineRange) progressBits.push(en.lineRange);
+                else if (p.lineRange) progressBits.push(p.lineRange);
+                // Teacher attribution ONLY from the record itself (never
+                // the student's current teacher -- a shifted student's old
+                // records belong to their previous teacher).
+                const teacherName = (en && en.teacherName) || (log.teacher_id ? (_lhTeacherNameById[String(log.teacher_id)] || null) : null);
+                const actualDur = (window.LessonHistory && en) ? window.LessonHistory.formatActualDuration(en) : 'not recorded';
+                let schedText = '';
+                const sched = log.schedule_id ? schedById[String(log.schedule_id)] : null;
+                if (sched) {
+                  const mins = sched.duration_mins || (sched.start_time && sched.end_time
+                    ? Math.round((new Date('2000-01-01T' + sched.end_time) - new Date('2000-01-01T' + sched.start_time)) / 60000)
+                    : 30);
+                  schedText = `Scheduled: ${mins} min`;
+                }
+                const imageKey = (en && en.imageKey) || p.imageKey || null;
+                const result = (en && en.result) || p.assessment || null;
+                const additionalLesson = (en && en.additionalLesson) || p.additionalLesson || null;
+                const remarks = (en && en.remarks) || p.remarks || '';
+                return `
+                  <div class="space-y-2.5 pb-3 mb-3 border-b border-slate-200 last:border-b-0 last:pb-0 last:mb-0">
+                    ${title ? `
+                      <div>
+                        <span class="text-[10px] font-bold text-slate-400 uppercase block">Book / Surah / Lesson</span>
+                        <strong class="text-slate-900 block">${_esc360(title)}</strong>
+                      </div>
+                    ` : ''}
+                    ${progressBits.length ? `
+                      <div>
+                        <span class="text-[10px] font-bold text-slate-400 uppercase block">Progress</span>
+                        <strong class="text-amber-900 block">${_esc360(progressBits.join(' • '))}</strong>
+                      </div>
+                    ` : ''}
+                    ${result ? `
+                      <div>
+                        <span class="text-[10px] font-bold text-slate-400 uppercase block">Result</span>
+                        <strong class="text-slate-900 block">${_esc360(result)}</strong>
+                      </div>
+                    ` : ''}
+                    ${additionalLesson ? `
+                      <div>
+                        <span class="text-[10px] font-bold text-slate-400 uppercase block">Additional Lesson</span>
+                        <strong class="text-slate-900 block">${_esc360(additionalLesson)}</strong>
+                      </div>
+                    ` : ''}
+                    ${teacherName ? `
+                      <div>
+                        <span class="text-[10px] font-bold text-slate-400 uppercase block">Teacher</span>
+                        <strong class="text-slate-900 block">${_esc360(teacherName)}</strong>
+                      </div>
+                    ` : ''}
+                    <div>
+                      <span class="text-[10px] font-bold text-slate-400 uppercase block">Duration</span>
+                      <span class="text-slate-700 block">Actual: <strong>${_esc360(actualDur)}</strong>${schedText ? ` • ${_esc360(schedText)}` : ''}</span>
+                    </div>
+                    ${remarks ? `
+                      <div>
+                        <span class="text-[10px] font-bold text-slate-400 uppercase block">Teacher Remarks</span>
+                        <p class="text-slate-700 mt-0.5">${_esc360(remarks)}</p>
+                      </div>
+                    ` : ''}
+                    ${imageKey ? `
+                      <img data-lh-img-key="${_esc360(imageKey)}" class="lh-360-lesson-img hidden max-h-40 rounded-xl border border-slate-200" alt="Lesson image">
+                    ` : ''}
+                  </div>
+                `;
+              }).join('');
               return `
                 <div class="space-y-2.5 text-xs">
                   <div class="flex items-center justify-between border-b border-slate-200 pb-2">
@@ -1353,16 +1472,7 @@ function _buildSelectedStudentWorkspaceHtml(family, student, famSchedules, famLo
                       ${_esc360(activeLessonLog.status || 'Present')}
                     </span>
                   </div>
-                  ${p.hasLesson ? `
-                    <div>
-                      <span class="text-[10px] font-bold text-slate-400 uppercase block">Book / Surah / Lesson</span>
-                      <strong class="text-slate-900 block">${_esc360(p.bookTitle || p.summaryTitle)}</strong>
-                    </div>
-                    <div>
-                      <span class="text-[10px] font-bold text-slate-400 uppercase block">Teacher Remarks</span>
-                      <p class="text-slate-700 mt-0.5">${_esc360(p.remarks || p.summaryTitle)}</p>
-                    </div>
-                  ` : `
+                  ${entriesHtml || `
                     <div class="py-6 text-center text-slate-400">No lesson recorded for ${_esc360(activeLessonLog.date)}.</div>
                   `}
                 </div>
@@ -1561,9 +1671,12 @@ function _parseLessonDetails360(log) {
         hasLesson: true,
         bookTitle,
         page: parsed.page || '',
+        para: parsed.para || null,
         lineRange: parsed.line_range || '',
         assessment: parsed.status || parsed.result || 'Completed',
         remarks: parsed.remarks || parsed.notes || '',
+        additionalLesson: parsed.additional_lesson || null,
+        imageKey: parsed.image_key || null,
         summaryTitle: `${bookTitle}${lessonStr}${pageStr}`
       };
     }
@@ -1572,11 +1685,46 @@ function _parseLessonDetails360(log) {
     hasLesson: true,
     bookTitle: 'Daily Quran Lesson',
     page: '',
+    para: null,
     lineRange: '',
     assessment: 'Completed',
     remarks: String(raw),
+    additionalLesson: null,
+    imageKey: null,
     summaryTitle: String(raw)
   };
+}
+
+// Lesson History: date-selector state for the 360 history view.
+function set360LessonHistoryDate(v) {
+  _CURRENT_360_STATE.lessonHistoryDate = v || '';
+  if (v) _CURRENT_360_STATE.selectedLessonDate = v;
+  _renderFamilyWorkspaceDOM();
+}
+function clear360LessonHistoryDate() {
+  _CURRENT_360_STATE.lessonHistoryDate = '';
+  _renderFamilyWorkspaceDOM();
+}
+
+// Lesson History: fill 360 inspector image placeholders via auth-fetch
+// blob URLs (plain <img> tags cannot send Authorization headers). Old
+// blob URLs are revoked on every re-render (the <img> elements are
+// replaced by innerHTML anyway); in-flight loads check isConnected.
+let _LH_360_BLOB_URLS = [];
+function _hydrate360LessonImages() {
+  if (!window.LessonHistory) return;
+  _LH_360_BLOB_URLS.forEach(u => { try { URL.revokeObjectURL(u); } catch (e) {} });
+  _LH_360_BLOB_URLS = [];
+  document.querySelectorAll('img[data-lh-img-key]').forEach(async (img) => {
+    const key = img.getAttribute('data-lh-img-key');
+    if (!key) return;
+    const url = await window.LessonHistory.loadLessonImageBlobUrl(key);
+    if (url && img.isConnected) {
+      _LH_360_BLOB_URLS.push(url);
+      img.src = url;
+      img.classList.remove('hidden');
+    }
+  });
 }
 
 function filterStudentAttendanceInFamily(status) {
@@ -4056,6 +4204,10 @@ function openRecordDailyLessonModal(familyId, studentId, presetDate = '') {
           </div>
         </div>
         <div>
+          <label class="font-extrabold text-slate-700 block mb-1">Additional Lesson (Optional)</label>
+          <input type="text" id="fwLessonAdditional" placeholder="e.g. Namaz: Surah Fatiha, Duas: Morning Duas" class="w-full p-2.5 rounded-xl border border-slate-300 font-bold text-slate-800">
+        </div>
+        <div>
           <label class="font-extrabold text-slate-700 block mb-1">Teacher's Lesson Notes &amp; Evaluation *</label>
           <textarea id="fwLessonRemarks" rows="3" required placeholder="Enter detailed daily lesson recited by the student..." class="w-full p-2.5 rounded-xl border border-slate-300 text-xs text-slate-900"></textarea>
         </div>
@@ -4068,27 +4220,67 @@ function openRecordDailyLessonModal(familyId, studentId, presetDate = '') {
   );
 }
 
+// Lesson History: the recording user, for the 360-form writer fix.
+// Manager portal: the manager session id (a real teacher-row id, so rows
+// the manager records become visible to that teacher). Owner portal:
+// the owner token sub. Null when neither session is present (key omitted).
+function _current360ActorId() {
+  try {
+    if (typeof window.getAuthenticatedManagerSession === 'function') {
+      const mgr = window.getAuthenticatedManagerSession();
+      if (mgr && mgr.id) return String(mgr.id);
+    }
+  } catch (e) {}
+  try {
+    const raw = sessionStorage.getItem('alhuda_manager_session');
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (parsed && parsed.id) return String(parsed.id);
+    }
+  } catch (e) {}
+  try {
+    if (sessionStorage.getItem('alhuda_owner_token')) return 'owner1';
+  } catch (e) {}
+  return null;
+}
+
 async function submitRecordDailyLessonForm(e, familyId, studentId) {
   e.preventDefault();
   const date = document.getElementById('fwLessonDate').value;
   const status = document.getElementById('fwLessonStatus').value;
   const book_title = document.getElementById('fwLessonBook').value.trim();
   const page = document.getElementById('fwLessonPage').value.trim();
+  const additional_lesson = (document.getElementById('fwLessonAdditional')?.value || '').trim();
   const remarks = document.getElementById('fwLessonRemarks').value.trim();
 
+  // Lesson History writer fix: full payload shape (incl. the ONE
+  // additional_lesson key) + teacher_id (previously missing, which made
+  // these rows invisible to EVERY teacher under Worker scoping) +
+  // schedule_id when a schedule for this student is known.
   const lesson_notes = JSON.stringify({
     book_title,
     page,
     status: 'Completed',
-    remarks
+    remarks,
+    additional_lesson: additional_lesson || null
   });
 
-  await db.from('attendance_logs').upsert([{
+  const upsertRow = {
     student_id: studentId,
     date,
     status,
     lesson_notes
-  }], { onConflict: 'student_id,date' });
+  };
+  const actorId = _current360ActorId();
+  if (actorId) upsertRow.teacher_id = actorId;
+  try {
+    const cache = window._LAST_FAMILY_360_CACHE;
+    const sched = (cache && cache.famSchedules ? cache.famSchedules : [])
+      .find(sc => String(sc.student_id) === String(studentId));
+    if (sched && sched.id) upsertRow.schedule_id = sched.id;
+  } catch (e) {}
+
+  await db.from('attendance_logs').upsert([upsertRow], { onConflict: 'student_id,date' });
 
   _closeWorkspaceModal();
   _CURRENT_360_STATE.selectedLessonDate = date;

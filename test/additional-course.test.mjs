@@ -155,7 +155,11 @@ async function runSave({ selectValue, courseName, lessonName }) {
     notifyClassSessionSync: () => {}, closeAttendanceModal: () => {},
     loadTeacherPortalData: async () => {},
   };
+  // Lesson History: the save now stamps the PKT date via the REAL
+  // getPktNowParts (extracted, not stubbed) -- the sandbox must provide
+  // it, like every other production dependency of the save function.
   const code = extractConst(TEACHER_HTML, 'ADDITIONAL_COURSE_ID') + '\n'
+    + extractFunction(TEACHER_HTML, 'getPktNowParts') + '\n'
     + extractFunction(TEACHER_HTML, 'saveAttendanceAndLessonNotes');
   vm.createContext(sandbox);
   vm.runInContext(code, sandbox);

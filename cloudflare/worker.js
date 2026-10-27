@@ -1826,9 +1826,23 @@ function applyDbScope(body, role, sub, scope) {
         scoped.values = forceTeacherValues(scoped.values, sub);
       }
     } else if (table === 'attendance_logs') {
-      if (action === 'select' || action === 'update') {
+      // Lesson History UNION scope (owner correction, 2026-10-28): a teacher
+      // reading history sees logs they personally recorded (teacher_id =
+      // sub) OR logs of students currently assigned to them (scope.studentIds
+      // = assigned_teacher_id + class_schedules students, resolveScopeIds).
+      // The old teacher does NOT lose their own logs on reassignment, and
+      // the new teacher sees the shifted student's full past performance.
+      // WRITES stay own-record only: update/insert/upsert are unchanged.
+      if (action === 'select') {
+        const assigned = Array.isArray(scope.studentIds) ? scope.studentIds : [];
+        if (assigned.length > 0) {
+          filters.push({ op: 'or', value: [eq('teacher_id', sub), inList('student_id', assigned)] });
+        } else {
+          filters.push(eq('teacher_id', sub));
+        }
+      } else if (action === 'update') {
         filters.push(eq('teacher_id', sub));
-        if (action === 'update') scoped.values = forceTeacherValues(scoped.values, sub)[0];
+        scoped.values = forceTeacherValues(scoped.values, sub)[0];
       } else if (action === 'insert' || action === 'upsert') {
         scoped.values = forceTeacherValues(scoped.values, sub);
       }
@@ -1894,11 +1908,14 @@ function rowInScope(role, sub, scope, table, row) {
         // keys (flags, logo, anything else) stay denied for teachers.
         return isTeacherReadableSettingsKey(row.key);
       case 'class_schedules':
-      case 'attendance_logs':
       case 'leave_requests':
       case 'trial_students':
       case 'salary_slips':
       case 'salary_adjustments': return String(row.teacher_id) === sub;
+      case 'attendance_logs':
+        // UNION scope (mirror of the SQL filter above): own recordings OR
+        // rows of currently assigned students.
+        return String(row.teacher_id) === sub || scope.studentIds.includes(String(row.student_id));
       default: return false;
     }
   }
@@ -2137,6 +2154,54 @@ function scopedStorageFolder(role, sub) {
   return `scoped-${role}-${safeSub}`;
 }
 
+// Lesson History: is this R2 key the image_key of an attendance_logs row
+// the caller is allowed to see? Parent = own family's rows; teacher = UNION
+// scope (own recordings OR currently assigned students' rows). The check
+// is a server-side D1 lookup on the record -- never trust in the key itself
+// (no key-guessing: an unrelated key, even a well-formed one, stays 403).
+// Returns false (fail closed) when D1 is unavailable.
+async function isLessonImageKeyReadable(db, role, sub, key) {
+  if (!db || !key) return false;
+  try {
+    let rows = [];
+    if (role === 'parent') {
+      const res = await db.prepare(
+        'SELECT lesson_notes FROM attendance_logs WHERE student_id IN (SELECT id FROM students WHERE family_id = ?)'
+      ).bind(sub).all();
+      rows = res.results || [];
+    } else if (role === 'teacher') {
+      const scope = await resolveScopeIds(db, 'teacher', sub);
+      const assigned = Array.isArray(scope.studentIds) ? scope.studentIds : [];
+      const own = await db.prepare(
+        'SELECT lesson_notes FROM attendance_logs WHERE teacher_id = ?'
+      ).bind(sub).all();
+      rows = own.results || [];
+      if (assigned.length > 0) {
+        const placeholders = assigned.map(() => '?').join(', ');
+        const res = await db.prepare(
+          `SELECT lesson_notes FROM attendance_logs WHERE student_id IN (${placeholders})`
+        ).bind(...assigned).all();
+        rows = rows.concat(res.results || []);
+      }
+    } else {
+      return false;
+    }
+    for (const r of rows) {
+      const notes = r && r.lesson_notes;
+      if (!notes) continue;
+      try {
+        const parsed = typeof notes === 'string' ? JSON.parse(notes) : notes;
+        if (parsed && parsed.image_key === key) return true;
+      } catch (e) {}
+      if (typeof notes === 'string' && notes.includes(key)) return true;
+    }
+    return false;
+  } catch (e) {
+    console.error('[storage] lesson-image scope check failed:', e);
+    return false;
+  }
+}
+
 async function handleScopedStorageRequest(ctx, auth) {
   const { request, env } = ctx;
   const role = auth.role;
@@ -2162,6 +2227,13 @@ async function handleScopedStorageRequest(ctx, auth) {
     // path below forces restricted roles into their own scoped folder.
     const isSharedCourseMaterial = key.startsWith('course_material/');
     if (!key.startsWith(prefix) && !isSharedCourseMaterial) {
+      // Lesson History: a lesson image referenced by an in-scope
+      // attendance_logs row is readable even though it lives under another
+      // teacher's scoped prefix. Teachers must NOT write into
+      // course_material/ to dodge this -- the POST path still force-scopes.
+      if (await isLessonImageKeyReadable(getDb(env), role, sub, key)) {
+        return handleStorageRequest(ctx);
+      }
       return forbidden(request, env);
     }
     return handleStorageRequest(ctx);
