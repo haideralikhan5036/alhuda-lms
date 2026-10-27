@@ -1554,6 +1554,9 @@ function _parseLessonDetails360(log) {
     if (parsed && typeof parsed === 'object') {
       const bookTitle = parsed.book_title || parsed.sabaq || parsed.course || 'Daily Quran Lesson';
       const pageStr = parsed.page ? ` • Page ${parsed.page}` : '';
+      // Additional Course: page is null, so pageStr is already omitted;
+      // surface the teacher-entered lesson name in the title instead.
+      const lessonStr = parsed.lesson_name ? ` — ${parsed.lesson_name}` : '';
       return {
         hasLesson: true,
         bookTitle,
@@ -1561,7 +1564,7 @@ function _parseLessonDetails360(log) {
         lineRange: parsed.line_range || '',
         assessment: parsed.status || parsed.result || 'Completed',
         remarks: parsed.remarks || parsed.notes || '',
-        summaryTitle: `${bookTitle}${pageStr}`
+        summaryTitle: `${bookTitle}${lessonStr}${pageStr}`
       };
     }
   } catch (e) {}

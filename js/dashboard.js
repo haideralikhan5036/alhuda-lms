@@ -1504,6 +1504,16 @@
             const pMeta = JSON.parse(c.log.lesson_notes);
             if (pMeta.book_title || pMeta.page) {
               const passColor = pMeta.status === 'Pass' ? 'bg-emerald-100 text-emerald-800 border-emerald-300' : 'bg-amber-100 text-amber-800 border-amber-300';
+              // Additional Course: show the custom lesson name (never a
+              // fake "Pg 1") and no reader button — no book to open.
+              const isAddCourseDash = pMeta.book_id === 'additional-course';
+              const dashLessonLabel = isAddCourseDash
+                ? (pMeta.lesson_name || 'Lesson')
+                : `Pg ${pMeta.page || '1'} ${pMeta.line_range ? `(${pMeta.line_range})` : ''} - ${pMeta.status || 'Done'}`;
+              const dashLessonBtn = isAddCourseDash ? '' : `
+                  <button onclick="openDigitalBookReader('${pMeta.book_id || 'noorani-qaida-classic'}', ${pMeta.page || 1})" class="text-[10px] text-emerald-700 hover:text-emerald-900 font-bold underline flex items-center gap-1">
+                    <i class="fa-solid fa-book-reader"></i> Read Page ${pMeta.page || 1}
+                  </button>`;
               sabaqText = `
                 <div class="space-y-1">
                   <div class="flex items-center gap-1.5 flex-wrap">
@@ -1511,13 +1521,11 @@
                       <i class="fa-solid fa-book-open text-brandEmerald"></i> ${pMeta.book_title || 'Course'}
                     </span>
                     <span class="text-[10px] px-1.5 py-0.5 rounded font-bold ${passColor} border">
-                      Pg ${pMeta.page || '1'} ${pMeta.line_range ? `(${pMeta.line_range})` : ''} - ${pMeta.status || 'Done'}
+                      ${dashLessonLabel}${isAddCourseDash && pMeta.line_range ? ` (${pMeta.line_range})` : ''}${isAddCourseDash ? ` - ${pMeta.status || 'Done'}` : ''}
                     </span>
                   </div>
                   ${pMeta.remarks ? `<div class="text-[11px] text-slate-600 italic">"${pMeta.remarks}"</div>` : ''}
-                  <button onclick="openDigitalBookReader('${pMeta.book_id || 'noorani-qaida-classic'}', ${pMeta.page || 1})" class="text-[10px] text-emerald-700 hover:text-emerald-900 font-bold underline flex items-center gap-1">
-                    <i class="fa-solid fa-book-reader"></i> Read Page ${pMeta.page || 1}
-                  </button>
+                  ${dashLessonBtn}
                 </div>
               `;
             } else {
