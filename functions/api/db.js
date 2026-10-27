@@ -282,8 +282,34 @@ const SCHEMA_STATEMENTS = [
 
 let _schemaInitialized = false;
 
+// SLOW-CLASSES FIX (cold Worker): every cold isolate used to replay
+// the whole DDL set below (~10 CREATEs + ~35 ALTERs + 6 index creates)
+// on EVERY /api/db request before any data query ran — the cold-start
+// tax behind slow first loads (and the probe itself paid it). Now the
+// full DDL path runs only when the persisted schema_version marker
+// differs (or is absent); a matching marker skips straight to the
+// query. BUMP SCHEMA_VERSION whenever the statements below change.
+// Concurrent cold isolates may all run the DDL path (idempotent,
+// errors swallowed) and all write the same marker — safe. A
+// marker-read failure (e.g. brand-new DB where system_settings does
+// not exist yet) falls back to the full DDL path; a marker-write
+// failure only costs the next cold isolate a DDL replay. Neither
+// failure ever fails the request.
+const SCHEMA_VERSION = '2026-10-28-v1';
+const SCHEMA_VERSION_KEY = 'schema_version';
+
 async function ensureSchema(db) {
   if (_schemaInitialized || !db) return;
+  // Fast path: persisted marker matches -> schema already applied.
+  try {
+    const row = await db.prepare('SELECT value FROM system_settings WHERE key = ?').bind(SCHEMA_VERSION_KEY).first();
+    if (row && String(row.value) === SCHEMA_VERSION) {
+      _schemaInitialized = true;
+      return;
+    }
+  } catch (e) {
+    // Marker unreadable -> fall through to the full DDL path below.
+  }
   try {
     const batch = SCHEMA_STATEMENTS.map(sql => db.prepare(sql));
     await db.batch(batch);
@@ -348,6 +374,11 @@ async function ensureSchema(db) {
   try { await db.prepare('CREATE UNIQUE INDEX IF NOT EXISTS idx_salary_slips_slip_no_unique ON salary_slips (slip_no)').run(); } catch (e) {}
   try { await db.prepare('CREATE INDEX IF NOT EXISTS idx_salary_slips_teacher_period ON salary_slips (teacher_id, period)').run(); } catch (e) {}
   try { await db.prepare('CREATE INDEX IF NOT EXISTS idx_salary_adjustments_teacher_period ON salary_adjustments (teacher_id, period)').run(); } catch (e) {}
+  // SLOW-CLASSES FIX: record the schema marker (best effort — never
+  // fail the request if this write fails; see the note above).
+  try {
+    await db.prepare('INSERT INTO system_settings (id, key, value) VALUES (?, ?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = datetime(\'now\')').bind('SYS-SCHEMA-VERSION', SCHEMA_VERSION_KEY, SCHEMA_VERSION).run();
+  } catch (e) {}
 }
 
 function generateId(table) {

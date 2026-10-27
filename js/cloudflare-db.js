@@ -442,6 +442,14 @@
   window.isCloudflareD1Live = function () { return _d1Status === true; };
   window.isCloudflareD1Degraded = function () { return _d1Status === false; };
 
+  // SLOW-CLASSES FIX: branch timeouts used to be measured from branch
+  // start, so a slow-but-live Worker lost its race to the 12 s probe
+  // time inside the budget. Branch settlers (config.js, dashboard.js,
+  // teacher.html) await this first so their 15 s clock starts AFTER the
+  // probe settles. Returns the shared probe promise when one is in
+  // flight, the cached status otherwise; never throws.
+  window.waitForD1ProbeSettled = function () { return checkCloudflareD1Available(); };
+
   // Batch 7 (F3.1): when the network returns or the tab becomes visible
   // again, forget the old probe result so the next data load re-checks D1.
   if (typeof window !== 'undefined' && window.addEventListener) {
@@ -563,6 +571,14 @@
 
   async function executeCloudflareOrLocal(payload) {
     const isD1Live = await checkCloudflareD1Available();
+    // SLOW-CLASSES FIX: remember a mid-flight 401 separately from a
+    // generic failure. A 401 on a READ used to fall through to the local
+    // mirror silently (the write path already surfaced it) — that
+    // asymmetry is what trapped portals in an empty mirror with a dead
+    // token and no re-login prompt. A POST 401 can only happen after a
+    // probe succeeded, so it is never the pre-login probe 401 (which
+    // returns false above and never reaches a POST).
+    let saw401 = false;
     if (isD1Live) {
       try {
         const res = await fetchWithTimeout(`${getApiBase()}/api/db`, {
@@ -572,7 +588,8 @@
         });
         if (res.status === 401) {
           // Token invalid/expired: drop it so we stop sending a bad token,
-          // then fall through to the local mirror below.
+          // then surface the expiry below instead of the mirror.
+          saw401 = true;
           clearWorkerTokens();
         }
         if (res.ok) {
@@ -606,6 +623,10 @@
               }
             });
           }
+          // SLOW-CLASSES FIX: tag provenance so class-list renderers can
+          // tell a live D1 answer from a mirror answer. Callers that only
+          // read .data/.error are unaffected by the extra property.
+          if (result && typeof result === 'object') result._lmsSource = 'd1';
           return result;
         }
       } catch (err) {
@@ -632,7 +653,26 @@
       return { data: null, error: { message: 'Session expired — please log in again. Change was NOT saved.' } };
     }
 
-    return executeLocalQuery(payload);
+    // SLOW-CLASSES FIX (read side of the write guard above): a 401 on a
+    // READ returns an honest error instead of mirror rows with
+    // error: null. Class-list renderers turn this into a "Session
+    // expired — log in again" prompt with a login button; other callers
+    // that ignore .error still see data: null (empty), never stale
+    // mirror rows presented as live data.
+    if (saw401) {
+      try {
+        const lastEv = window.__lmsSessionExpiredEventAt || 0;
+        if (Date.now() - lastEv > 10000) {
+          window.__lmsSessionExpiredEventAt = Date.now();
+          window.dispatchEvent(new CustomEvent('alhuda-session-expired'));
+        }
+      } catch (e) {}
+      return { data: null, error: { message: 'Session expired — please log in again.', code: 'SESSION_EXPIRED' } };
+    }
+
+    const mirrorRes = executeLocalQuery(payload);
+    if (mirrorRes && typeof mirrorRes === 'object') mirrorRes._lmsSource = 'mirror';
+    return mirrorRes;
   }
 
   class CloudflareQueryBuilder {

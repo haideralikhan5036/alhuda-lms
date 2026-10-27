@@ -734,6 +734,12 @@ font-family: var(--font-num) !important;
             </div>
           </div>
 
+          <!-- SLOW-CLASSES FIX: honest load status for Today's Classes.
+               Shown only when the class data failed to load live (server
+               unreachable, timeout, or expired session) — a failed load
+               must never look like "no classes". -->
+          <div id="teacherClassesStatusBanner" class="hidden px-4 sm:px-5 pt-4"></div>
+
           <!-- Schedule Table -->
           <div class="overflow-x-auto touch-scroll">
             <table class="w-full text-left text-xs border-collapse min-w-[700px]">
@@ -3153,6 +3159,43 @@ font-family: var(--font-num) !important;
       }
     }
 
+    // SLOW-CLASSES FIX: load-failure state for Today's Classes. null =
+    // last load was live and clean; otherwise { kind: 'session' |
+    // 'mirror' | 'error' }. The render path below turns this into an
+    // error/pending banner instead of the "no classes" empty state.
+    let _teacherClassesDegraded = null;
+    // ONE bounded automatic retry per degraded episode (fired ~5.5 s
+    // after the failure, just past the 5 s probe cooldown). Cleared by
+    // the next clean live load. Never a loop, never a page reload.
+    let _teacherClassesAutoRetried = false;
+
+    // SLOW-CLASSES FIX: settle one class-load branch independently
+    // (admin dashSettleBranch pattern). The 15 s clock starts AFTER the
+    // D1 probe settles, so a slow-but-live Worker no longer loses its
+    // race to probe time. A timed-out branch resolves to a marked
+    // failure instead of stalling the whole render.
+    const TEACHER_BRANCH_TIMEOUT_MS = 15000;
+    function settleTeacherBranch(branchPromise) {
+      return (async () => {
+        try { if (typeof window.waitForD1ProbeSettled === 'function') await window.waitForD1ProbeSettled(); } catch (e) {}
+        let timer;
+        const timeoutP = new Promise((resolve) => { timer = setTimeout(() => resolve({ data: null, error: { message: 'branch_timeout' }, _lmsSource: 'timeout' }), TEACHER_BRANCH_TIMEOUT_MS); });
+        try {
+          const res = await Promise.race([Promise.resolve(branchPromise), timeoutP]);
+          clearTimeout(timer);
+          return res || { data: null, error: { message: 'branch_failed' } };
+        } catch (e) {
+          clearTimeout(timer);
+          return { data: null, error: { message: 'branch_failed' } };
+        }
+      })();
+    }
+
+    function teacherReLoginFromClasses() {
+      try { if (typeof window.clearWorkerTokens === 'function') window.clearWorkerTokens(); } catch (e) {}
+      try { showLoginView(); } catch (e) { window.location.reload(); }
+    }
+
     // Load Teacher's Live Data from Supabase
     async function loadTeacherPortalData() {
       if (!CURRENT_TEACHER) return;
@@ -3169,10 +3212,15 @@ font-family: var(--font-num) !important;
       // Batch 7 (F3.6): the profile refresh and the four data fetches
       // below are all independent (keyed on CURRENT_TEACHER.id) — run
       // them in PARALLEL instead of the old serial waterfall, where a
-      // stall in any one step froze every count behind it. The profile
-      // refresh no longer blocks the data path; it is awaited only
-      // before the results are processed (its zoom_link feeds the slot
-      // resolution below).
+      // stall in any one step froze every count behind it.
+      //
+      // SLOW-CLASSES FIX: the profile refresh is NOT awaited before the
+      // class list renders anymore. Its only render input is the Zoom
+      // link, which already resolves from CURRENT_TEACHER in memory; a
+      // slow profile fetch must not delay classes. After rendering we
+      // repaint once if the refresh changed the Zoom link (see the end
+      // of this function).
+      const zoomBeforeRefresh = CURRENT_TEACHER ? CURRENT_TEACHER.zoom_link : null;
       const profileRefreshPromise = (async () => {
         try {
           const { data: freshTeacher } = await db.from('teachers').select('*').eq('id', CURRENT_TEACHER.id).single();
@@ -3183,14 +3231,14 @@ font-family: var(--font-num) !important;
       })();
 
       const studentsPromise = (async () => {
-        const { data: assignedWithFam, error: stuFetchErr } = await db.from('students')
+        const first = await db.from('students')
           .select('*, families(id, parent_name, status)')
           .eq('assigned_teacher_id', CURRENT_TEACHER.id);
-        if (!stuFetchErr && Array.isArray(assignedWithFam)) return assignedWithFam;
-        const { data: fallbackStu } = await db.from('students')
+        if (!first.error && Array.isArray(first.data)) return { rows: first.data, _lmsSource: first._lmsSource || null, error: null };
+        const fallback = await db.from('students')
           .select('*')
           .eq('assigned_teacher_id', CURRENT_TEACHER.id);
-        return fallbackStu || [];
+        return { rows: fallback.data || [], _lmsSource: fallback._lmsSource || null, error: fallback.error || null };
       })();
       const schedulesPromise = db.from('class_schedules')
         .select('*, students(*)')
@@ -3209,12 +3257,39 @@ font-family: var(--font-num) !important;
         } catch (e) { return []; }
       })();
 
-      const [assignedStudentsRaw, schedFetchRes, todayLogsRes, advanceLogs] = await Promise.all([
-        studentsPromise, schedulesPromise, todayLogsPromise, advanceLogsPromise
+      // SLOW-CLASSES FIX: settle the three class-critical branches
+      // independently (advance logs are secondary — they only pre-cover
+      // statuses — so their failure never degrades the class list).
+      const [studentsRes, schedFetchRes, todayLogsRes, advanceLogs] = await Promise.all([
+        settleTeacherBranch(studentsPromise), settleTeacherBranch(schedulesPromise), settleTeacherBranch(todayLogsPromise), advanceLogsPromise
       ]);
-      await profileRefreshPromise;
+      const assignedStudentsRaw = (studentsRes && studentsRes.rows) || [];
       const allScheds = schedFetchRes ? schedFetchRes.data : null;
       const logs = todayLogsRes ? todayLogsRes.data : null;
+
+      // SLOW-CLASSES FIX: honest failure state. A failed or
+      // mirror-served critical branch must never render as "no
+      // classes" — the render path below shows an error/pending state
+      // instead, and one bounded auto-retry fires past the probe
+      // cooldown. A clean live load clears both flags.
+      const _critResults = [studentsRes, schedFetchRes, todayLogsRes];
+      const _sessionExpired = _critResults.some(r => r && r.error && r.error.code === 'SESSION_EXPIRED');
+      const _mirrorServed = _critResults.some(r => r && r._lmsSource === 'mirror');
+      const _branchFailed = _critResults.some(r => r && r.error);
+      if (_sessionExpired) {
+        _teacherClassesDegraded = { kind: 'session' };
+      } else if (_mirrorServed || _branchFailed) {
+        _teacherClassesDegraded = { kind: _mirrorServed ? 'mirror' : 'error' };
+      } else {
+        _teacherClassesDegraded = null;
+        _teacherClassesAutoRetried = false;
+      }
+      if (_teacherClassesDegraded && !_teacherClassesAutoRetried) {
+        _teacherClassesAutoRetried = true;
+        setTimeout(() => {
+          if (_teacherClassesDegraded && CURRENT_TEACHER && typeof loadTeacherPortalData === 'function') loadTeacherPortalData();
+        }, 5500);
+      }
 
       // Filter strictly to regular, non-deactivated students assigned to THIS teacher
       const regularNonDeactivated = (assignedStudentsRaw || []).filter(s =>
@@ -3572,6 +3647,15 @@ font-family: var(--font-num) !important;
       renderTeacherStudentListTable();
       loadTeacherTrialsData();
       loadTeacherPreviousSalaries();
+      // SLOW-CLASSES FIX: the profile refresh ran in parallel and was
+      // deliberately NOT awaited before rendering. If it changed the
+      // teacher's Zoom link after we rendered, repaint once so slot
+      // links match the fresh profile.
+      profileRefreshPromise.then(() => {
+        try {
+          if (CURRENT_TEACHER && CURRENT_TEACHER.zoom_link !== zoomBeforeRefresh) renderTeacherClassesTable();
+        } catch (e) {}
+      });
     }
 
     // Render Complete Student List (All Active Students Assigned to This Teacher)
@@ -3734,7 +3818,32 @@ font-family: var(--font-num) !important;
     function renderTeacherClassesTable() {
       const tbody = document.getElementById('teacherClassesTableBody');
       const emptyState = document.getElementById('teacherEmptyState');
+      const banner = document.getElementById('teacherClassesStatusBanner');
       if (!tbody) return;
+
+      // SLOW-CLASSES FIX: a failed or mirror-served load is NEVER "no
+      // classes". Empty + degraded => error state with Retry (and a
+      // login button for expired sessions). Non-empty + degraded =>
+      // rows render with a stale/incomplete banner on top.
+      if (_teacherClassesDegraded) {
+        if (banner) {
+          banner.classList.remove('hidden');
+          if (_teacherClassesDegraded.kind === 'session') {
+            banner.innerHTML = '<div class="rounded-xl border border-rose-300 bg-rose-50 px-4 py-3 text-xs text-rose-800 flex flex-wrap items-center gap-2"><span class="font-extrabold">Session expired — please log in again.</span><span>Your classes could not be loaded because the login session is no longer valid.</span><button onclick="teacherReLoginFromClasses()" class="ml-auto px-3 py-1.5 rounded-lg bg-rose-600 text-white font-extrabold">Log in again</button></div>';
+          } else if (TODAY_CLASSES.length === 0) {
+            banner.innerHTML = '<div class="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-xs text-amber-800 flex flex-wrap items-center gap-2"><span class="font-extrabold">Could not load today\'s classes from the server.</span><span>This is not "no classes" — the server could not be reached or the request timed out.</span><button onclick="loadTeacherPortalData()" class="ml-auto px-3 py-1.5 rounded-lg bg-amber-600 text-white font-extrabold">Retry</button></div>';
+          } else {
+            banner.innerHTML = '<div class="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-xs text-amber-800 flex flex-wrap items-center gap-2"><span class="font-extrabold">Showing an offline / incomplete copy.</span><span>Some class details may be out of date.</span><button onclick="loadTeacherPortalData()" class="ml-auto px-3 py-1.5 rounded-lg bg-amber-600 text-white font-extrabold">Retry</button></div>';
+          }
+        }
+        if (TODAY_CLASSES.length === 0) {
+          tbody.innerHTML = '';
+          if (emptyState) emptyState.classList.add('hidden');
+          return;
+        }
+      } else if (banner) {
+        banner.classList.add('hidden');
+      }
 
       if (TODAY_CLASSES.length === 0) {
         tbody.innerHTML = '';
@@ -4059,9 +4168,11 @@ font-family: var(--font-num) !important;
       // Open standard web meeting in new tab as guaranteed fallback
       window.open(rawMeetingLink, '_blank', 'noopener');
 
-      // Refresh today's list to update status in Teacher Portal
-      if (typeof loadTeacherTodayClasses === 'function') {
-        loadTeacherTodayClasses();
+      // Refresh today's list to update status in Teacher Portal.
+      // SLOW-CLASSES FIX: the old call targeted loadTeacherTodayClasses,
+      // which never existed (guarded no-op). Refresh via the real loader.
+      if (typeof loadTeacherPortalData === 'function') {
+        loadTeacherPortalData();
       }
     }
 
@@ -4365,8 +4476,10 @@ font-family: var(--font-num) !important;
         const teacherSyncChannel = new BroadcastChannel('alhuda_class_session_sync');
         teacherSyncChannel.onmessage = (event) => {
           if (event && event.data && event.data.type === 'CLASS_SESSION_STATUS_CHANGED') {
-            if (typeof loadTeacherTodayClasses === 'function') {
-              loadTeacherTodayClasses();
+            // SLOW-CLASSES FIX: was a guarded call to the nonexistent
+            // loadTeacherTodayClasses (silent no-op). Refresh for real.
+            if (typeof loadTeacherPortalData === 'function') {
+              loadTeacherPortalData();
             }
           }
         };
@@ -4374,9 +4487,22 @@ font-family: var(--font-num) !important;
     }
     window.addEventListener('storage', (e) => {
       if (e.key === 'alhuda_last_class_sync') {
-        if (typeof loadTeacherTodayClasses === 'function') {
-          loadTeacherTodayClasses();
+        // SLOW-CLASSES FIX: was a guarded call to the nonexistent
+        // loadTeacherTodayClasses (silent no-op). Refresh for real.
+        if (typeof loadTeacherPortalData === 'function') {
+          loadTeacherPortalData();
         }
+      }
+    });
+
+    // SLOW-CLASSES FIX: the missing recovery listener (admin dashboard
+    // has had this since Batch 7, teacher never did). When D1 comes
+    // back after a degraded load, re-fetch once — no manual refresh
+    // needed. Guarded to degraded episodes only, so a healthy page
+    // never re-renders on this event.
+    window.addEventListener('alhuda-d1-live', () => {
+      if (_teacherClassesDegraded && CURRENT_TEACHER && typeof loadTeacherPortalData === 'function') {
+        loadTeacherPortalData();
       }
     });
 

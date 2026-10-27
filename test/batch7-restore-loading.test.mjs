@@ -266,11 +266,16 @@ check('D: cloudflare-db has the named timeout + cooldown constants', CFDB.includ
 check('D: cloudflare-db uses AbortController + online re-probe + live event', CFDB.includes('AbortController') && CFDB.includes("addEventListener('online'") && CFDB.includes('alhuda-d1-live') && CFDB.includes('window.isCloudflareD1Live'));
 check('D: config core load settles branches with a timeout helper', CONFIG.includes('settleCoreBranch') && CONFIG.includes('CORE_BRANCH_TIMEOUT_MS'));
 {
-  const onloadStart = CONFIG.indexOf('window.onload = async function()');
+  // SLOW-CLASSES FIX: boot moved from window.onload to a named
+  // runAdminBoot() started on DOMContentLoaded (a hung CDN asset no
+  // longer stalls data). The extraction anchor follows the rename;
+  // the assertions themselves are unchanged.
+  const onloadStart = CONFIG.indexOf('async function runAdminBoot()');
   const onloadEnd = CONFIG.indexOf('function toggleSidebar()', onloadStart);
   const onloadSrc = CONFIG.slice(onloadStart, onloadEnd);
   check('D: boot awaits core before the dashboard (corePromise.then)', onloadSrc.includes('corePromise.then') && onloadSrc.includes('loadDashboardData()'));
   check('D: boot 60 s dashboard timer removed (single timer rule)', !onloadSrc.includes('60000'));
+  check('D: boot starts on DOMContentLoaded, not window.onload', CONFIG.includes("addEventListener('DOMContentLoaded', runAdminBoot)") && !CONFIG.includes('window.onload = async function()'));
 }
 check('D: dashboard has run-guard + settled branches + pending state + live repaint',
   DASHBOARD.includes('_dashRunSeq') && DASHBOARD.includes('_dashLoadInflight') && DASHBOARD.includes('dashSettleBranch') && DASHBOARD.includes('paintDashboardPendingState') && DASHBOARD.includes("addEventListener('alhuda-d1-live'"));
