@@ -181,6 +181,17 @@ try {
   }
 } catch (e) {}
 
+// URGENT FIX (Issue 2): the guard below protected only ids present in the
+// live custom index, so a tombstoned ALLOWLISTED built-in could never
+// heal — deleting the built-in e-Qaida from the admin grid hid it from
+// Admin while the teacher portal (which could not read the tombstone)
+// kept showing it. Allowlisted built-ins are protected the same way:
+// adding them to liveBookIds strips them from the merged tombstone, and
+// the existing push below heals the D1 list, so the book reappears in
+// Admin. Other tombstoned built-ins stay tombstoned — only allowlisted
+// ids are added here.
+getBuiltinAllowlist().forEach(function (id) { if (id) liveBookIds.add(String(id)); });
+
 const mergedDeleted = Array.from(new Set([...localDeleted, ...remoteDeleted]))
   .filter(function (id) { return !liveBookIds.has(String(id)); });
 if (mergedDeleted.length > 0) {
@@ -279,6 +290,15 @@ if (mergedDeleted.length > 0) {
       return true;
     }
 
+    // URGENT FIX (Issue 2): single source for the built-in allowlist
+    // (curriculum_data.js sets window.ALHUDA_BUILTIN_ALLOWLIST; the
+    // fallback matches the Batch 4 behaviour). Allowlisted built-ins have
+    // no D1 record — they can be tombstoned but never truly deleted, so
+    // the guard and the grid both consult this list.
+    function getBuiltinAllowlist() {
+      return (typeof window !== 'undefined' && Array.isArray(window.ALHUDA_BUILTIN_ALLOWLIST)) ? window.ALHUDA_BUILTIN_ALLOWLIST : ['interactive-madani-qaida'];
+    }
+
     function getAllAvailableBooks() {
       const customBooks = getCustomBooks();
       const standardBooks = (typeof ALHUDA_CURRICULUM !== 'undefined' && Array.isArray(ALHUDA_CURRICULUM)) ? ALHUDA_CURRICULUM : [];
@@ -288,7 +308,7 @@ if (mergedDeleted.length > 0) {
       // built-in has no real uploaded pages (its pages were generated
       // placeholders) and must never be listed in any portal, regardless of
       // what the deleted-books tombstone contains.
-      const builtinAllowlist = (typeof window !== 'undefined' && Array.isArray(window.ALHUDA_BUILTIN_ALLOWLIST)) ? window.ALHUDA_BUILTIN_ALLOWLIST : ['interactive-madani-qaida'];
+      const builtinAllowlist = getBuiltinAllowlist();
 
       const merged = Array.isArray(customBooks) ? [...customBooks] : [];
       standardBooks.forEach(b => {
@@ -475,8 +495,11 @@ if (mergedDeleted.length > 0) {
                 <span class="hidden sm:inline">Edit</span>
               </button>
 
-              <!-- Secondary: Delete Book -->
-              ${CURRENT_ROLE !== 'manager' ? `
+              <!-- Secondary: Delete Book (not offered for allowlisted
+                   built-ins: they have no D1 record to remove, so Delete
+                   could only tombstone them — which is how e-Qaida was
+                   hidden from Admin) -->
+              ${(CURRENT_ROLE !== 'manager' && !getBuiltinAllowlist().includes(String(book.id))) ? `
                 <button onclick="handleDeleteCurriculumBook('${book.id}', '${(book.title || '').replace(/'/g, "\\'")}')" class="px-2.5 py-2.5 bg-white hover:bg-rose-50 text-slate-700 hover:text-rose-700 border border-slate-200 rounded-xl text-xs font-bold transition flex items-center gap-1 shadow-2xs" title="Delete Course Material">
                   <i class="fa-solid fa-trash-can text-rose-500"></i>
                   <span class="hidden sm:inline">Delete</span>
