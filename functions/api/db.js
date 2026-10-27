@@ -372,50 +372,61 @@ function sanitizeColumn(col) {
   return String(col || '').replace(/[^a-zA-Z0-9_]/g, '');
 }
 
+// Render ONE filter (or one OR group) to { clause, params }. An OR group
+// joins its members with OR; anything else renders as a single clause.
+// Returns null when the filter produces nothing (unknown op, empty IN).
+function renderFilterClause(f) {
+  if (!f || typeof f !== 'object') return null;
+  // Lesson History (UNION scope): a filter group { op: 'or', value: [...] }
+  // renders as a parenthesised OR of its member filters (nested groups
+  // supported). Members are joined with OR -- never AND.
+  if (f.op === 'or' && Array.isArray(f.value)) {
+    const parts = [];
+    const params = [];
+    for (const member of f.value) {
+      const rendered = renderFilterClause(member);
+      if (rendered) { parts.push(rendered.clause); params.push(...rendered.params); }
+    }
+    if (parts.length === 0) return null;
+    return { clause: `(${parts.join(' OR ')})`, params };
+  }
+  const col = sanitizeColumn(f.column);
+  if (!col) return null;
+  const op = f.op;
+  const val = f.value;
+
+  if (op === 'eq') {
+    if (val === null) return { clause: `${col} IS NULL`, params: [] };
+    return { clause: `${col} = ?`, params: [val] };
+  } else if (op === 'neq') {
+    if (val === null) return { clause: `${col} IS NOT NULL`, params: [] };
+    return { clause: `(${col} IS NULL OR ${col} != ?)`, params: [val] };
+  } else if (op === 'gt') {
+    return { clause: `${col} > ?`, params: [val] };
+  } else if (op === 'gte') {
+    return { clause: `${col} >= ?`, params: [val] };
+  } else if (op === 'lt') {
+    return { clause: `${col} < ?`, params: [val] };
+  } else if (op === 'lte') {
+    return { clause: `${col} <= ?`, params: [val] };
+  } else if (op === 'like' || op === 'ilike') {
+    return { clause: `LOWER(${col}) LIKE LOWER(?)`, params: [String(val || '')] };
+  } else if (op === 'in' && Array.isArray(val) && val.length > 0) {
+    const placeholders = val.map(() => '?').join(', ');
+    return { clause: `${col} IN (${placeholders})`, params: [...val] };
+  }
+  return null;
+}
+
 function buildWhereClause(filters = []) {
   const clauses = [];
   const params = [];
 
   for (const f of filters) {
-    const col = sanitizeColumn(f.column);
-    if (!col) continue;
-    const op = f.op;
-    const val = f.value;
-
-    if (op === 'eq') {
-      if (val === null) {
-        clauses.push(`${col} IS NULL`);
-      } else {
-        clauses.push(`${col} = ?`);
-        params.push(val);
-      }
-    } else if (op === 'neq') {
-      if (val === null) {
-        clauses.push(`${col} IS NOT NULL`);
-      } else {
-        clauses.push(`(${col} IS NULL OR ${col} != ?)`);
-        params.push(val);
-      }
-    } else if (op === 'gt') {
-      clauses.push(`${col} > ?`);
-      params.push(val);
-    } else if (op === 'gte') {
-      clauses.push(`${col} >= ?`);
-      params.push(val);
-    } else if (op === 'lt') {
-      clauses.push(`${col} < ?`);
-      params.push(val);
-    } else if (op === 'lte') {
-      clauses.push(`${col} <= ?`);
-      params.push(val);
-    } else if (op === 'like' || op === 'ilike') {
-      clauses.push(`LOWER(${col}) LIKE LOWER(?)`);
-      params.push(String(val || ''));
-    } else if (op === 'in' && Array.isArray(val) && val.length > 0) {
-      const placeholders = val.map(() => '?').join(', ');
-      clauses.push(`${col} IN (${placeholders})`);
-      params.push(...val);
-    }
+    const rendered = renderFilterClause(f);
+    if (!rendered) continue;
+    clauses.push(rendered.clause);
+    params.push(...rendered.params);
   }
 
   const sql = clauses.length > 0 ? ` WHERE ${clauses.join(' AND ')}` : '';
