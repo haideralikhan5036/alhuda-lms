@@ -468,15 +468,24 @@ await seedTeacher('TCH-COST', 'costteach', hashLegacy('Cost-Teach-99'));
 }
 
 // ---- T18: set-password throttle (D1 mechanism, separate allowance) --------------
+// Batch 3.4 (audit P2-7): only FAILED set-password calls count toward
+// the per-IP allowance. The old test asserted that 30 SUCCESSES trip
+// the lock — that was the bug (a 321-family migration would lock
+// itself out). Successes now never trip; failures do.
 await seedTeacher('TCH-SETPW', 'setpwteach', hashLegacy('Setpw-Teach-99'));
 {
   const ip = '10.7.3.1';
-  const seq = [];
+  const okSeq = [];
   for (let i = 0; i < 30; i++) {
-    seq.push(await authPost(TOK.owner, '/api/auth/set-password', { role: 'teacher', identifier: 'setpwteach', newPassword: 'Setpw-New-99' }, ip));
+    okSeq.push(await authPost(TOK.owner, '/api/auth/set-password', { role: 'teacher', identifier: 'setpwteach', newPassword: 'Setpw-New-99' }, ip));
   }
-  check('first 29 set-password calls succeed', seq.slice(0, 29).every((r) => r.status === 200), seq.map((r) => r.status).join(','));
-  check('30th set-password call trips the setpw throttle (429)', seq[29].status === 429 && !!seq[29].headers.get('Retry-After'), seq[29].text.slice(0, 200));
+  check('30 successful set-password calls do NOT trip the throttle', okSeq.every((r) => r.status === 200), okSeq.map((r) => r.status).join(','));
+  const failSeq = [];
+  for (let i = 0; i < 30; i++) {
+    failSeq.push(await authPost(TOK.owner, '/api/auth/set-password', { role: 'teacher', identifier: 'nosuchuser', newPassword: 'Setpw-New-99' }, ip));
+  }
+  check('first 29 failed set-password calls return 404 (not 429)', failSeq.slice(0, 29).every((r) => r.status === 404), failSeq.map((r) => r.status).join(','));
+  check('30th failed set-password call trips the setpw throttle (429)', failSeq[29].status === 429 && !!failSeq[29].headers.get('Retry-After'), failSeq[29].text.slice(0, 200));
   const otherIp = await authPost(TOK.owner, '/api/auth/set-password', { role: 'teacher', identifier: 'setpwteach', newPassword: 'Setpw-New-99' }, '10.7.3.2');
   check('set-password from another IP still works', otherIp.status === 200, otherIp.text.slice(0, 200));
 }

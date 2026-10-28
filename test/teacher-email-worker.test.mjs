@@ -159,6 +159,15 @@ fakeDb.seed('INSERT INTO students (id, family_id, name, assigned_teacher_id) VAL
   'STU-6', 'FAM-1', 'Student Six', 'TCH-C');
 fakeDb.seed('INSERT INTO class_schedules (id, student_id, teacher_id, day_of_week, start_time, end_time) VALUES (?, ?, ?, ?, ?, ?)',
   'SCH-1', 'STU-4', 'TCH-A', 1, '10:00', '10:30');
+// Batch 3.4 (audit P2-6): advance-class emails now require an advance
+// lesson on file. Every success-path student below gets one for the
+// test's scheduledDate; STU-2 deliberately gets none (its case is a
+// 403 scope denial, which runs before the advance check).
+const advNotes = JSON.stringify({ is_advance_class: true, advance_target_date: '2026-10-25' });
+for (const [attId, stu, tch] of [['ATT-1', 'STU-1', 'TCH-A'], ['ATT-3', 'STU-3', 'TCH-A'], ['ATT-4', 'STU-4', 'TCH-A'], ['ATT-5', 'STU-5', 'TCH-A'], ['ATT-6', 'STU-6', 'TCH-C']]) {
+  fakeDb.seed('INSERT INTO attendance_logs (id, student_id, teacher_id, class_date, status, lesson_notes) VALUES (?, ?, ?, ?, ?, ?)',
+    attId, stu, tch, '2026-10-25', 'Advance Class', advNotes);
+}
 
 // ---- (a) happy path: own student, relay payload, NO address in response --------
 {
@@ -285,6 +294,14 @@ fakeDb.seed('INSERT INTO class_schedules (id, student_id, teacher_id, day_of_wee
   const r = await callAdvance({ token: TOK.teacherA, body: validBody('STU-3') });
   check('B10 (j) family without any email -> 422 No email address on file',
     r.status === 422 && r.data && /No email address on file/i.test(r.data.error || ''),
+    'got ' + r.status + ' ' + r.text.slice(0, 160));
+}
+
+// ---- (p) Batch 3.4 (audit P2-6): no advance record for the date -> 422 ----
+{
+  const r = await callAdvance({ token: TOK.teacherA, body: { ...validBody('STU-1'), scheduledDate: '2026-10-26' } });
+  check('B10 (p) no advance record for the date -> 422 advance-record error',
+    r.status === 422 && r.data && /No advance class record/i.test(r.data.error || ''),
     'got ' + r.status + ' ' + r.text.slice(0, 160));
 }
 

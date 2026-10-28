@@ -42,6 +42,17 @@ const ALLOWED_TABLES = new Set([
 // rejected for every role: financial rows are cancelled, not deleted.
 const FINANCIAL_TABLES = new Set(['payments', 'salary_slips', 'salary_adjustments']);
 
+// Batch 3.4 (audit P2-3): SELECT result ceilings. An unfiltered SELECT
+// used to return every row of the table; at 321 families the
+// system_settings table alone is 751 rows and growing, so an unguarded
+// read is a slow denial-of-service on the Worker and on the portal
+// that renders it. Explicit caller limits are kept (clamped to the
+// ceiling); absent limits get the default. Join chunks below stay
+// safely under D1's 100-parameter binding limit.
+const SELECT_DEFAULT_LIMIT = 5000;
+const SELECT_MAX_LIMIT = 10000;
+const JOIN_CHUNK_SIZE = 90;
+
 /**
  * Build CORS headers from an explicit allowlist.
  * env.ALLOWED_ORIGINS: comma-separated list of exact origins, e.g.
@@ -514,9 +525,28 @@ async function hydrateRelationalJoins(db, table, rows, selectStr = '*') {
   if (!Array.isArray(rows) || rows.length === 0 || !selectStr) return rows;
   const sel = String(selectStr);
 
+  // Batch 3.4 (audit P2-3): join hydration used to SELECT * the whole
+  // target table for every join — at 321 families that is the entire
+  // academy on every joined read. Only the ids the returned rows
+  // actually reference are fetched now, chunked at JOIN_CHUNK_SIZE
+  // (safely under D1's 100-parameter binding limit). Output is
+  // identical whenever the full table fit in memory (every case
+  // today), and stays bounded as the academy grows.
+  const fetchByColumn = async (targetTable, column, values) => {
+    const unique = [...new Set((values || []).map((v) => String(v)).filter((v) => v !== ''))];
+    const out = [];
+    for (let i = 0; i < unique.length; i += JOIN_CHUNK_SIZE) {
+      const chunk = unique.slice(i, i + JOIN_CHUNK_SIZE);
+      const placeholders = chunk.map(() => '?').join(',');
+      const { results } = await db.prepare(`SELECT * FROM ${targetTable} WHERE ${column} IN (${placeholders})`).bind(...chunk).all();
+      out.push(...(results || []));
+    }
+    return out;
+  };
+
   // 1. families -> students(*)
   if (table === 'families' && /students\s*\(/i.test(sel)) {
-    const { results: allStudents } = await db.prepare('SELECT * FROM students').all();
+    const allStudents = await fetchByColumn('students', 'family_id', rows.map((f) => f.id));
     const stuByFam = new Map();
     for (const s of (allStudents || [])) {
       const fId = String(s.family_id || '');
@@ -530,7 +560,7 @@ async function hydrateRelationalJoins(db, table, rows, selectStr = '*') {
 
   // 2. students / class_schedules / payments -> families(...)
   if ((table === 'students' || table === 'class_schedules' || table === 'payments') && /families\s*\(/i.test(sel)) {
-    const { results: allFamilies } = await db.prepare('SELECT * FROM families').all();
+    const allFamilies = await fetchByColumn('families', 'id', rows.map((r) => r.family_id));
     const famMap = new Map((allFamilies || []).map(f => [String(f.id), f]));
     rows.forEach(r => {
       r.families = famMap.get(String(r.family_id || '')) || null;
@@ -539,7 +569,7 @@ async function hydrateRelationalJoins(db, table, rows, selectStr = '*') {
 
   // 3. class_schedules / attendance_logs -> students(...)
   if ((table === 'class_schedules' || table === 'attendance_logs') && /students\s*\(/i.test(sel)) {
-    const { results: allStudents } = await db.prepare('SELECT * FROM students').all();
+    const allStudents = await fetchByColumn('students', 'id', rows.map((r) => r.student_id));
     const stuMap = new Map((allStudents || []).map(s => [String(s.id), s]));
     rows.forEach(r => {
       r.students = stuMap.get(String(r.student_id || '')) || null;
@@ -548,7 +578,7 @@ async function hydrateRelationalJoins(db, table, rows, selectStr = '*') {
 
   // 4. students / class_schedules / attendance_logs -> teachers(...)
   if ((table === 'students' || table === 'class_schedules' || table === 'attendance_logs') && /teachers\s*\(/i.test(sel)) {
-    const { results: allTeachers } = await db.prepare('SELECT * FROM teachers').all();
+    const allTeachers = await fetchByColumn('teachers', 'id', rows.map((r) => r.teacher_id || r.assigned_teacher_id));
     const tchMap = new Map((allTeachers || []).map(t => [String(t.id), t]));
     rows.forEach(r => {
       const tKey = r.teacher_id || r.assigned_teacher_id;
@@ -569,6 +599,62 @@ function jsonResponse(obj, status, corsHeaders) {
     status,
     headers: { ...corsHeaders, 'Content-Type': 'application/json' }
   });
+}
+
+// Batch 3.4 (audit P2-4): pre-validates a financial INSERT batch's
+// UNIQUE keys before anything is written. Returns { index, message }
+// for the first conflicting row, or null. Checks the batch against
+// both the table and itself (two rows in one batch sharing a receipt
+// number would otherwise pass the table check and fail mid-batch).
+// Keys mirror the real constraints: payments receipt_no (UNIQUE index),
+// salary_slips slip_no (UNIQUE index) + (teacher_id, period) (UNIQUE),
+// salary_adjustments id (PRIMARY KEY). NULL/empty keys are skipped —
+// SQLite treats NULLs as distinct in UNIQUE indexes, so they never
+// conflict. Only action==='insert' is pre-validated: an upsert whose
+// id already exists takes the true UPDATE-by-id path, not INSERT.
+async function findFinancialBatchConflict(d1, table, rows) {
+  const seen = new Map();
+  for (let i = 0; i < rows.length; i++) {
+    const row = rows[i] || {};
+    const keys = [];
+    if (table === 'payments') {
+      const rn = row.receipt_no != null ? String(row.receipt_no).trim() : '';
+      if (rn) keys.push(['receipt_no:' + rn, 'Duplicate receipt number']);
+    } else if (table === 'salary_slips') {
+      const sn = row.slip_no != null ? String(row.slip_no).trim() : '';
+      if (sn) keys.push(['slip_no:' + sn, 'A slip already exists for this teacher and month']);
+      const tid = row.teacher_id != null ? String(row.teacher_id).trim() : '';
+      const per = row.period != null ? String(row.period).trim() : '';
+      if (tid && per) keys.push(['pair:' + tid + '|' + per, 'A slip already exists for this teacher and month']);
+    } else if (table === 'salary_adjustments') {
+      const rid = row.id != null ? String(row.id).trim() : '';
+      if (rid) keys.push(['id:' + rid, 'Record already exists']);
+    }
+    for (const [key, message] of keys) {
+      if (seen.has(key)) return { index: i, message };
+      seen.set(key, i);
+    }
+    // Table check (one query per key; batches are small and this runs
+    // once per batch, not per portal render).
+    if (table === 'payments' && keys.some(([k]) => k.startsWith('receipt_no:'))) {
+      const rn = String(row.receipt_no).trim();
+      const existing = await d1.prepare('SELECT id FROM payments WHERE receipt_no = ?').bind(rn).first();
+      if (existing) return { index: i, message: 'Duplicate receipt number' };
+    } else if (table === 'salary_slips') {
+      if (keys.some(([k]) => k.startsWith('slip_no:'))) {
+        const existing = await d1.prepare('SELECT id FROM salary_slips WHERE slip_no = ?').bind(String(row.slip_no).trim()).first();
+        if (existing) return { index: i, message: 'A slip already exists for this teacher and month' };
+      }
+      if (keys.some(([k]) => k.startsWith('pair:'))) {
+        const existing = await d1.prepare('SELECT id FROM salary_slips WHERE teacher_id = ? AND period = ?').bind(String(row.teacher_id).trim(), String(row.period).trim()).first();
+        if (existing) return { index: i, message: 'A slip already exists for this teacher and month' };
+      }
+    } else if (table === 'salary_adjustments' && keys.some(([k]) => k.startsWith('id:'))) {
+      const existing = await d1.prepare('SELECT id FROM salary_adjustments WHERE id = ?').bind(String(row.id).trim()).first();
+      if (existing) return { index: i, message: 'Record already exists' };
+    }
+  }
+  return null;
 }
 
 // Batch 6B: map a UNIQUE-constraint failure on a financial table to a
@@ -749,7 +835,26 @@ export async function onRequest(context) {
           .filter(Boolean);
         if (parts.length > 0) orderSql = ` ORDER BY ${parts.join(', ')}`;
       }
-      const limitSql = limit ? ` LIMIT ${parseInt(limit, 10) || 100}` : '';
+      // Batch 3.4 (audit P2-3): every SELECT carries a ceiling. An
+      // absent limit used to mean "every row" (and LIMIT -5 meant
+      // unlimited in SQLite, since a negative LIMIT is no limit) —
+      // at 321 families the system_settings table alone is 751 rows
+      // and growing, so an unguarded read is a slow denial-of-service
+      // on the Worker and on the portal that renders it. Callers that
+      // pass an explicit limit keep it (clamped to the ceiling);
+      // callers that pass none get the default. The response reports
+      // what was applied and whether the result hit the cap, so a
+      // caller that needs the rest can page with offset instead of
+      // silently receiving a partial table.
+      const rawLimit = Number(limit);
+      const limitApplied = (limit === null || limit === undefined || limit === '')
+        ? SELECT_DEFAULT_LIMIT
+        : Math.min(SELECT_MAX_LIMIT, Math.max(1, Number.isFinite(rawLimit) ? Math.floor(rawLimit) : SELECT_DEFAULT_LIMIT));
+      const rawOffset = Number(body.offset);
+      const offsetApplied = (body.offset === null || body.offset === undefined || body.offset === '')
+        ? 0
+        : (Number.isFinite(rawOffset) ? Math.max(0, Math.floor(rawOffset)) : 0);
+      const limitSql = ` LIMIT ${limitApplied} OFFSET ${offsetApplied}`;
       const query = `SELECT * FROM ${table}${whereSql}${orderSql}${limitSql}`;
       const stmt = d1.prepare(query).bind(...params);
       const { results } = await stmt.all();
@@ -779,7 +884,7 @@ export async function onRequest(context) {
       }
 
       const data = single ? (hydrated[0] || null) : hydrated;
-      return jsonResponse({ data, error: null }, 200, corsHeaders);
+      return jsonResponse({ data, error: null, limitApplied, truncated: !single && (results || []).length >= limitApplied }, 200, corsHeaders);
     }
 
     // 2. INSERT / UPSERT
@@ -804,6 +909,25 @@ export async function onRequest(context) {
         }
       }
 
+      // Batch 3.4 (audit P2-4): a multi-row financial insert used to
+      // write rows one by one and stop at the first UNIQUE conflict,
+      // leaving earlier rows written with no report of which ones
+      // landed. Pre-validate the batch's UNIQUE keys up front so a
+      // conflicting batch writes NOTHING (409, failedIndex, no rows
+      // landed). The mid-batch race window (a conflicting row created
+      // between the check and the write) is still reported exactly —
+      // see the catch below. Non-financial tables use INSERT OR
+      // REPLACE and cannot hit this path.
+      if (isFinancial && action === 'insert') {
+        const conflict = await findFinancialBatchConflict(d1, table, rows);
+        if (conflict) {
+          return jsonResponse(
+            { data: null, error: { message: conflict.message }, failedIndex: conflict.index, insertedIds: [] },
+            409,
+            corsHeaders
+          );
+        }
+      }
       // Batch 7 (F1.2): a students insert/upsert whose resulting status is
       // an "active" value is rejected while the student's family row is
       // Inactive/Deactivated. Deactivation is enforced at the data layer
@@ -827,6 +951,9 @@ export async function onRequest(context) {
         }
       }
 
+      // Batch 3.4 (audit P2-5): unknown keys on inserts are collected
+      // for the response (see the return below) instead of vanishing.
+      const droppedInsertColumns = new Set();
       for (const rawRow of rows) {
         const row = { ...rawRow };
         if (!row.id) row.id = generateId(table);
@@ -858,6 +985,7 @@ export async function onRequest(context) {
         }
 
         const cols = Object.keys(row).filter(k => validCols.has(k));
+        for (const k of Object.keys(row)) if (!validCols.has(k)) droppedInsertColumns.add(k);
         const placeholders = cols.map(() => '?').join(', ');
         const bindVals = cols.map(k => {
           const v = row[k];
@@ -897,8 +1025,14 @@ export async function onRequest(context) {
           if (isFinancial) {
             const uniqueMsg = financialUniqueErrorMessage(table, err);
             if (uniqueMsg) {
+              // Batch 3.4 (audit P2-4): the race window — a conflicting
+              // row created between the pre-validation above and this
+              // write. Rows are pushed in order, so inserted.length is
+              // exactly the failing row's index, and insertedIds names
+              // every row that already landed. The caller can retry
+              // with only the failed tail instead of guessing.
               return jsonResponse(
-                { data: null, error: { message: uniqueMsg } },
+                { data: null, error: { message: uniqueMsg }, failedIndex: inserted.length, insertedIds: inserted.map((r) => r.id) },
                 409,
                 corsHeaders
               );
@@ -922,7 +1056,13 @@ export async function onRequest(context) {
           }
         }
       }
-      return jsonResponse({ data, error: null }, 200, corsHeaders);
+      // Batch 3.4 (audit P2-5): inserts report dropped keys (a 400
+      // would risk breaking live saves that carry UI-only keys, so
+      // inserts report instead of rejecting — unlike updates, where a
+      // zero-valid-column patch is unambiguously a typo).
+      const insertResponse = { data, error: null };
+      if (droppedInsertColumns.size > 0) insertResponse.droppedColumns = [...droppedInsertColumns];
+      return jsonResponse(insertResponse, 200, corsHeaders);
     }
 
     // 3. UPDATE — empty filters are rejected: an unscoped UPDATE would
@@ -941,6 +1081,24 @@ export async function onRequest(context) {
       if (!whereSql) {
         return jsonResponse(
           { data: null, error: { message: 'update_requires_filter' } },
+          400,
+          corsHeaders
+        );
+      }
+
+      // Batch 3.4 (audit P2-5): unknown columns used to be dropped
+      // silently and the update still returned 200 with the
+      // (unchanged) rows — a caller that mistyped a column believed
+      // its write succeeded. A patch with NO valid column is now a
+      // 400 naming the unknown keys; a patch with some valid columns
+      // proceeds and reports the dropped keys, so the caller can fix
+      // the typo without losing the valid part of the write. An empty
+      // patch stays a no-op 200 (a re-read, not a typo).
+      const patchKeys = Object.keys(patch);
+      const droppedColumns = patchKeys.filter(k => !validCols.has(k));
+      if (patchKeys.length > 0 && patchKeys.length === droppedColumns.length) {
+        return jsonResponse(
+          { data: null, error: { message: `Unknown columns: ${droppedColumns.join(', ')}` } },
           400,
           corsHeaders
         );
@@ -1001,7 +1159,10 @@ export async function onRequest(context) {
         }
       }
       const data = single ? (rawResults[0] || null) : rawResults;
-      return jsonResponse({ data, error: null }, 200, corsHeaders);
+      // Batch 3.4 (audit P2-5): report dropped keys (see above).
+      const updateResponse = { data, error: null };
+      if (droppedColumns.length > 0) updateResponse.droppedColumns = droppedColumns;
+      return jsonResponse(updateResponse, 200, corsHeaders);
     }
 
     // 4. DELETE — empty filters are rejected: an unscoped DELETE would
