@@ -15,7 +15,7 @@ const REPO_ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 // Test-only secret, assembled at runtime (never a single literal).
 const WORKER_SECRET = ['test', 'worker', 'secret', 'b7b'].join('-');
 const ORIGIN = 'https://alhuda-lms.vercel.app';
-const WORKER_RELEASE = '2026-10-28-b7b';
+const WORKER_RELEASE = '2026-10-28-b7c';
 const SCHEMA_VERSION = '2026-10-28-v2'; // bumped at rebase: Part A moved SCHEMA_VERSION to v2
 
 // The CSP the Worker REPORT-ONLY header must mirror: read from vercel.json

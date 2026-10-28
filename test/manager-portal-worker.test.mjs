@@ -500,12 +500,18 @@ for (const [table, id] of [['families', 'FAM-1'], ['students', 'STU-1'], ['teach
   check('B8 manager sets a TEACHER password -> 200', r.status === 200 && r.data && r.data.ok === true, `got ${r.status} ${JSON.stringify(r.data)}`);
   const login = await staffLogin('teacher', 'teachone', 'NewTeach-Pass-1');
   check('B8 teacher can staff-login with the manager-set password', login.status === 200 && login.data && login.data.ok === true, `got ${login.status}`);
+  // Batch 7A: a password change ends pre-change sessions, so the forged
+  // TOK.teacher (issued at suite start) is now correctly invalid. Refresh it
+  // from the login above; later sections must use the post-change token.
+  if (login.data && login.data.token) TOK.teacher = login.data.token;
 }
 {
   const r = await setPassword(TOK.manager, { role: 'parent', identifier: 'famuser', newPassword: 'NewParent-Pass-1' });
   check('B8 manager sets a PARENT password -> 200', r.status === 200 && r.data && r.data.ok === true, `got ${r.status} ${JSON.stringify(r.data)}`);
   const login = await staffLogin('parent', 'famuser', 'NewParent-Pass-1');
   check('B8 parent can staff-login with the manager-set password', login.status === 200 && login.data && login.data.ok === true, `got ${login.status}`);
+  // Batch 7A: same refresh as the teacher token above (parent password changed).
+  if (login.data && login.data.token) TOK.parent = login.data.token;
 }
 {
   const r = await setPassword(TOK.manager, { role: 'manager', identifier: 'mgruser', newPassword: 'Whatever-Pass-1' });
@@ -520,6 +526,9 @@ for (const [table, id] of [['families', 'FAM-1'], ['students', 'STU-1'], ['teach
   check('Owner setting a manager password UNCHANGED -> 200', r.status === 200 && r.data && r.data.ok === true, `got ${r.status}`);
   const login = await staffLogin('manager', 'mgruser', 'OwnerSet-Mgr-99');
   check('Owner-set manager password logs in', login.status === 200 && login.data && login.data.ok === true, `got ${login.status}`);
+  // Batch 7A: same refresh as above (manager password changed); B16 and
+  // ReviewFix below must use the post-change token.
+  if (login.data && login.data.token) TOK.manager = login.data.token;
 }
 {
   const r = await setPassword(TOK.teacher, { role: 'teacher', identifier: 'teachone', newPassword: 'Whatever-Pass-3' });
