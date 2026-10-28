@@ -1203,8 +1203,16 @@ function checkTableAccess(role, table, action) {
       case 'leave_requests':
       case 'trial_students':
         return action === 'select' ? 'allow' : 'deny';
+      case 'system_settings':
+        // Lesson History page links: parents may SELECT course-catalog
+        // settings rows only — the key filter lives in rowInScope
+        // (isParentReadableSettingsKey). Without this, parent devices
+        // can never hydrate custom books and open the wrong book.
+        // Every parent write to system_settings stays denied, as do
+        // all other keys (flags, logo, tombstone, anything else).
+        return action === 'select' ? 'allow' : 'deny';
       default:
-        return 'deny'; // system_settings, salary_slips, salary_adjustments (Batch 6B: parents have no salary access)
+        return 'deny'; // system_settings (non-catalog keys), salary_slips, salary_adjustments (Batch 6B: parents have no salary access)
     }
   }
 
@@ -1413,6 +1421,14 @@ function isManagerReadableSettingsKey(key) {
 function isTeacherReadableSettingsKey(key) {
   const k = String(key || '');
   return isCatalogSettingsKey(k) || k === 'alhuda_deleted_books';
+}
+
+// Lesson History page links: keys a parent may READ in system_settings =
+// the course-catalog keys ONLY (custom books index + BOOK_PAGE_* rows).
+// Deliberately NOT the tombstone, logo, or flags — those stay denied for
+// parents, exactly as before. WRITES stay denied in checkTableAccess.
+function isParentReadableSettingsKey(key) {
+  return isCatalogSettingsKey(key);
 }
 
 // Remove contact keys whose value is exactly the mask placeholder. A
@@ -1896,6 +1912,9 @@ function rowInScope(role, sub, scope, table, row) {
       case 'leave_requests':
       case 'class_schedules': return scope.studentIds.includes(String(row.student_id));
       case 'teachers': return true; // reduced to safe subset during scrub
+      case 'system_settings':
+        // Lesson History page links: catalog keys only for parents.
+        return isParentReadableSettingsKey(row.key);
       default: return false;
     }
   }

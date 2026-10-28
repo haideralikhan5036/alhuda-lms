@@ -1808,7 +1808,7 @@
 
               <div class="flex items-center justify-start md:justify-end">
                 ${canRead ? `
-                <button onclick="openParentDigitalReader('${sanitizeBookId(bookId)}', ${Number(pageVal)}, ${meta?.para ? Number(meta.para) : 'null'}, ${meta?.language ? `'${escapeJsAttr(meta.language)}'` : 'null'})" class="w-full sm:w-auto px-4 py-2.5 rounded-xl bg-gradient-to-r from-emerald-800 to-teal-900 hover:from-emerald-700 hover:to-teal-800 text-white font-black text-xs shadow-sm hover:shadow-md transition flex items-center justify-center gap-1.5">
+                <button onclick="openParentSavedLessonPage('${sanitizeBookId(bookId)}', ${Number(pageVal)}, ${meta?.para ? Number(meta.para) : 'null'}, ${meta?.language ? `'${escapeJsAttr(meta.language)}'` : 'null'})" class="w-full sm:w-auto px-4 py-2.5 rounded-xl bg-gradient-to-r from-emerald-800 to-teal-900 hover:from-emerald-700 hover:to-teal-800 text-white font-black text-xs shadow-sm hover:shadow-md transition flex items-center justify-center gap-1.5">
                   <i class="fa-solid fa-book-open-reader text-brandGold"></i> Revise Page ${escapeHtml(pageVal)}
                 </button>
                 ` : ''}
@@ -1836,18 +1836,43 @@
     function openLatestSabaqReader() {
       // Additional Course has no book to open; a record without a real
       // book + page opens nothing (no fallback book, no fake Page 1).
+      // Lesson History page links: the old no-meta fallback opened
+      // page 1 of a tombstoned built-in (which then fell through to
+      // the first qaida book). No meta now means no open at all.
       if (LATEST_SABAQ_META?.book_id === 'additional-course') return;
       if (LATEST_SABAQ_META) {
         if (!LATEST_SABAQ_META.book_id || LATEST_SABAQ_META.page === null || LATEST_SABAQ_META.page === undefined || String(LATEST_SABAQ_META.page) === '') return;
-        openParentDigitalReader(
+        openParentSavedLessonPage(
           LATEST_SABAQ_META.book_id,
           LATEST_SABAQ_META.page,
           LATEST_SABAQ_META.para || null,
           LATEST_SABAQ_META.language || null
         );
-      } else {
-        openParentDigitalReader('holy-quran-16-line', 1);
       }
+    }
+
+    // Lesson History page links (parent): resolve a SAVED lesson
+    // through the canonical resolver (with the on-demand D1
+    // re-hydration for missing/empty pages — this is what makes
+    // custom books resolvable on a parent-only device, now that the
+    // Worker allows parent catalog reads), then open the parent
+    // reader with the resolved values. A gated-but-unresolvable
+    // entry alerts the resolver's honest reason — never another
+    // book's page, never page 1.
+    async function openParentSavedLessonPage(bookId, page, para, language) {
+      if (!window.LessonHistory) { alert('Course book not found.'); return { ok: false, reason: 'BOOK_NOT_FOUND' }; }
+      const entry = { bookId: bookId || null, page: (page === null || page === undefined || page === '') ? null : Number(page), para: (para === null || para === undefined || para === '') ? null : Number(para), language: language || null, isAdditionalCourse: bookId === 'additional-course' };
+      const res = await window.LessonHistory.resolveLessonPageWithRefresh(
+        entry,
+        () => (typeof getParentSavedLessonBooks === 'function' ? getParentSavedLessonBooks() : []),
+        (typeof hydrateParentCustomBooksFromD1 === 'function') ? hydrateParentCustomBooksFromD1 : null
+      );
+      if (res.ok) {
+        openParentDigitalReader(res.book.id, res.displayPage, res.para, res.language);
+      } else {
+        alert(window.LessonHistory.lessonPageReasonMessage(res.reason));
+      }
+      return res;
     }
 
     // Render Weekly Timetable Matrix
@@ -1968,7 +1993,7 @@
             <td class="p-3.5 text-slate-600 truncate max-w-xs">${topic}</td>
             <td class="p-3.5 text-right">
               ${canRead ? `
-                <button onclick="openParentDigitalReader('${sanitizeBookId(meta.book_id)}', ${Number(pageVal)}, ${meta.para ? Number(meta.para) : 'null'}, ${meta.language ? `'${escapeJsAttr(meta.language)}'` : 'null'})" class="px-2.5 py-1 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-800 font-bold text-[11px] transition">
+                <button onclick="openParentSavedLessonPage('${sanitizeBookId(meta.book_id)}', ${Number(pageVal)}, ${meta.para ? Number(meta.para) : 'null'}, ${meta.language ? `'${escapeJsAttr(meta.language)}'` : 'null'})" class="px-2.5 py-1 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-800 font-bold text-[11px] transition">
                   <i class="fa-solid fa-book-open"></i> Read
                 </button>
               ` : '-'}
@@ -2566,6 +2591,34 @@
       return merged.filter(b => b && !deletedIds.includes(b.id) && isMaterialAuthorizedForStudent(b, CURRENT_STUDENT));
     }
 
+    // Lesson History page links: the SAME catalog merge as
+    // getAllAvailableBooks, but WITHOUT the library-browsing
+    // student-course filter. A saved lesson is not browsing: a
+    // shifted student's old book, or a book whose course was renamed,
+    // must still resolve. Allowlist + tombstone gates still apply.
+    // Used ONLY for resolving saved lessons and for the reader's book
+    // lookup — the library grid keeps using the filtered list, so
+    // nothing new is ever displayed for browsing. Server-side,
+    // /api/storage stays Bearer-gated and course_material/ readable
+    // by any authenticated role, so the reader lookup was never the
+    // authorization boundary.
+    function getParentSavedLessonBooks() {
+      let customBooks = [];
+      try { customBooks = JSON.parse(localStorage.getItem('alhuda_custom_books') || '[]'); } catch(e){}
+      const standardBooks = (typeof ALHUDA_CURRICULUM !== 'undefined' && Array.isArray(ALHUDA_CURRICULUM)) ? ALHUDA_CURRICULUM : [];
+      let deletedIds = [];
+      try { deletedIds = JSON.parse(localStorage.getItem('alhuda_deleted_books') || '[]'); } catch(e){}
+      const merged = Array.isArray(customBooks) ? [...customBooks] : [];
+      const builtinAllowlistP = Array.isArray(window.ALHUDA_BUILTIN_ALLOWLIST) ? window.ALHUDA_BUILTIN_ALLOWLIST : [];
+      standardBooks.forEach(b => {
+        if (!builtinAllowlistP.includes(b.id)) return;
+        if (!merged.some(m => m.id === b.id) && !deletedIds.includes(b.id)) {
+          merged.push(b);
+        }
+      });
+      return merged.filter(b => b && !deletedIds.includes(b.id));
+    }
+
     function renderPortalLibrary() {
       const grid = document.getElementById('portalLibraryGrid');
       if (!grid) return;
@@ -2665,16 +2718,17 @@
       // catalogue book's reader for it (defence in depth; buttons are
       // already suppressed for the sentinel).
       if (bookId === 'additional-course') return;
-      const allBooks = typeof getAllAvailableBooks === 'function' ? getAllAvailableBooks() : [];
-      let book = allBooks.find(b => b.id === bookId);
+      // Lesson History page links: FAIL CLOSED like the admin reader.
+      // The old first-qaida fallback silently opened a different book
+      // at the saved page number — the exact wrong-page symptom.
+      // Lookup uses the saved-lesson catalog (no browsing course
+      // filter), so a resolved history click is never re-filtered
+      // away here.
+      const allBooks = typeof getParentSavedLessonBooks === 'function' ? getParentSavedLessonBooks() : [];
+      const book = allBooks.find(b => b.id === bookId);
 
       if (!book) {
-        // Fallback Noorani Qaida
-        book = allBooks.find(b => b.id.includes('qaida')) || allBooks[0];
-      }
-
-      if (!book) {
-        alert("Course book could not be loaded.");
+        alert("Course book not found.");
         return;
       }
 

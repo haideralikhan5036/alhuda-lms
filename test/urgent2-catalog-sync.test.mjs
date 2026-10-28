@@ -3,7 +3,10 @@
 //     against a fake D1): teacher SELECT on system_settings returns ONLY
 //     catalog keys + the tombstone; teacher INSERT/UPDATE/DELETE on
 //     system_settings are denied; manager and owner behaviour unchanged;
-//     parent system_settings select stays denied.
+//     parent system_settings select returns ONLY catalog keys (Lesson
+//     History page links change: parents must hydrate custom books on
+//     parent-only devices); parent writes stay denied, and non-catalog
+//     keys (tombstone, logo, flags) stay invisible to parents.
 //  B) Admin re-poison guard (REAL hydrateCustomBooksFromCloudflareD1,
 //     extracted from js/curriculum.js): a tombstoned allowlisted built-in
 //     (interactive-madani-qaida) is stripped from the merged tombstone and
@@ -155,8 +158,14 @@ for (const [id, key, value] of SEED_SETTINGS) {
   check('owner SELECT unchanged (all keys + schema_version marker)', JSON.stringify(keySet(r)) === JSON.stringify([...SEED_SETTINGS.map(s => s[1]), 'schema_version'].sort()), JSON.stringify(keySet(r)));
 }
 {
+  // Lesson History page links change (deliberate, exact-set like the
+  // teacher block above): a parent SELECT now succeeds but returns
+  // ONLY the catalog keys — no tombstone, no logo, no flags, no other
+  // keys. Parent writes stay denied.
   const r = await dbPost(TOK.parent, { table: 'system_settings', action: 'select' });
-  check('parent SELECT system_settings stays denied', r.status === 403, String(r.status));
+  check('parent SELECT system_settings -> 200 with ONLY catalog keys', r.status === 200 && JSON.stringify(keySet(r)) === JSON.stringify(['BOOK_PAGE_custom-1_0', 'alhuda_custom_books', 'alhuda_custom_books_index']), String(r.status) + ' ' + JSON.stringify(keySet(r)));
+  const w = await dbPost(TOK.parent, { table: 'system_settings', action: 'insert', values: { id: 'SYS-EVIL-P', key: 'BOOK_PAGE_evil_0', value: 'x' } });
+  check('parent INSERT system_settings -> denied', w.status === 403, String(w.status));
 }
 
 // ===========================================================================

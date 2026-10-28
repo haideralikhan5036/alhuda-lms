@@ -1596,10 +1596,16 @@
               const dashLessonLabel = isAddCourseDash
                 ? (pMeta.lesson_name || 'Lesson')
                 : `Pg ${pMeta.page || '1'} ${pMeta.line_range ? `(${pMeta.line_range})` : ''} - ${pMeta.status || 'Done'}`;
-              const dashLessonBtn = isAddCourseDash ? '' : `
-                  <button onclick="openDigitalBookReader('${pMeta.book_id || 'noorani-qaida-classic'}', ${pMeta.page || 1})" class="text-[10px] text-emerald-700 hover:text-emerald-900 font-bold underline flex items-center gap-1">
-                    <i class="fa-solid fa-book-reader"></i> Read Page ${pMeta.page || 1}
-                  </button>`;
+              // Lesson History page links: no invented book id, no page-1
+              // default, para + language passed through. A record with
+              // no book id or no page gets no button (text only); a
+              // gated-but-unresolvable record alerts honestly from the
+              // resolver instead of opening another book's page.
+              const dashCanRead = !isAddCourseDash && pMeta.book_id && pMeta.page !== null && pMeta.page !== undefined && String(pMeta.page) !== '';
+              const dashLessonBtn = dashCanRead ? `
+                  <button onclick="openAdminSavedLessonPage('${pMeta.book_id}', ${Number(pMeta.page)}, ${pMeta.para ? Number(pMeta.para) : 'null'}, ${/^[A-Za-z_-]+$/.test(String(pMeta.language || '')) ? `'${pMeta.language}'` : 'null'})" class="text-[10px] text-emerald-700 hover:text-emerald-900 font-bold underline flex items-center gap-1">
+                    <i class="fa-solid fa-book-reader"></i> Read Page ${pMeta.page}
+                  </button>` : '';
               sabaqText = `
                 <div class="space-y-1">
                   <div class="flex items-center gap-1.5 flex-wrap">
