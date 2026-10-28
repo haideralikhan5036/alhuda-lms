@@ -3882,10 +3882,15 @@ font-family: var(--font-num) !important;
               const lessonMetaLabel = isAddCourseHist
                 ? escapeHtml(pMeta.lesson_name || 'Lesson')
                 : `${pMeta.para ? `Para ${escapeHtml(pMeta.para)} &bull; ` : ''}Pg ${escapeHtml(pMeta.page)}`;
-              const lessonReadBtn = isAddCourseHist ? '' : `
-                    <button onclick="openDigitalBookReader('${sanitizeBookId(pMeta.book_id || 'holy-quran-16-line')}', ${Number(pMeta.page) || 1}, ${pMeta.para ? Number(pMeta.para) : 'null'}, ${pMeta.language ? `'${escapeJsAttr(pMeta.language)}'` : 'null'})" class="text-[10px] text-brandEmerald hover:text-brandDark font-extrabold flex items-center gap-0.5" title="Open Lesson in Digital Reader">
+              // Lesson History page links: no invented book id, no
+              // page-1 default. A record with no book id or no page
+              // gets no button (text only); a gated-but-unresolvable
+              // record alerts honestly from the resolver.
+              const todayCanRead = !isAddCourseHist && pMeta.book_id && pMeta.page !== null && pMeta.page !== undefined && String(pMeta.page) !== '';
+              const lessonReadBtn = todayCanRead ? `
+                    <button onclick="openTeacherSavedLessonPage('${sanitizeBookId(pMeta.book_id)}', ${Number(pMeta.page)}, ${pMeta.para ? Number(pMeta.para) : 'null'}, ${pMeta.language ? `'${escapeJsAttr(pMeta.language)}'` : 'null'})" class="text-[10px] text-brandEmerald hover:text-brandDark font-extrabold flex items-center gap-0.5" title="Open Lesson in Digital Reader">
                       <i class="fa-solid fa-eye text-[9px]"></i> Read
-                    </button>`;
+                    </button>` : '';
               sabaqNotes = `
                 <div class="space-y-1">
                   <div class="flex items-center gap-1.5 flex-wrap">
@@ -4657,6 +4662,34 @@ font-family: var(--font-num) !important;
       });
 
       return merged.filter(b => b && !deletedIds.includes(b.id) && isMaterialAuthorizedForTeacher(b));
+    }
+
+    // Lesson History page links: the SAME catalog merge as
+    // getTeacherAllBooks, but WITHOUT the library-browsing course/title
+    // filter. A saved lesson is not browsing: a shifted student's old
+    // book, or a book whose course was renamed, must still resolve.
+    // Allowlist + tombstone gates still apply. This list is used ONLY
+    // for resolving saved lessons (history + today's-class Read) and
+    // for the reader's book lookup — library grids keep using the
+    // filtered getTeacherAllBooks(), so nothing new is ever displayed
+    // for browsing. Server-side, /api/storage stays Bearer-gated and
+    // course_material/ readable by any authenticated role, so the
+    // reader lookup was never the authorization boundary.
+    function getTeacherSavedLessonBooks() {
+      let customBooks = [];
+      try { customBooks = JSON.parse(localStorage.getItem('alhuda_custom_books') || '[]'); } catch(e){}
+      const standardBooks = (typeof ALHUDA_CURRICULUM !== 'undefined' && Array.isArray(ALHUDA_CURRICULUM)) ? ALHUDA_CURRICULUM : [];
+      let deletedIds = [];
+      try { deletedIds = JSON.parse(localStorage.getItem('alhuda_deleted_books') || '[]'); } catch(e){}
+      const merged = Array.isArray(customBooks) ? [...customBooks] : [];
+      const builtinAllowlistT = Array.isArray(window.ALHUDA_BUILTIN_ALLOWLIST) ? window.ALHUDA_BUILTIN_ALLOWLIST : [];
+      standardBooks.forEach(b => {
+        if (!builtinAllowlistT.includes(b.id)) return;
+        if (!merged.some(m => m.id === b.id) && !deletedIds.includes(b.id)) {
+          merged.push(b);
+        }
+      });
+      return merged.filter(b => b && !deletedIds.includes(b.id));
     }
 
     // Additional Course (Task 1): a teacher-entered course is NOT a catalogue
@@ -5617,9 +5650,14 @@ font-family: var(--font-num) !important;
       // first catalogue book's reader (defence in depth; buttons are
       // already suppressed for the sentinel).
       if (bookId === ADDITIONAL_COURSE_ID) return;
-      const allBooks = getTeacherAllBooks();
-      const book = allBooks.find(b => b.id === bookId) || allBooks[0];
-      if (!book) return;
+      // Lesson History page links: FAIL CLOSED like the admin reader.
+      // The old `|| allBooks[0]` silently opened a different book at
+      // the saved page number — the exact wrong-page symptom. Lookup
+      // uses the saved-lesson catalog (no browsing course filter), so
+      // a resolved history click is never re-filtered away here.
+      const allBooks = getTeacherSavedLessonBooks();
+      const book = allBooks.find(b => b.id === bookId);
+      if (!book) { alert("Course book not found."); return; }
 
       CURRENT_READER_BOOK = book;
       CURRENT_READER_PAGE = Number(startPage) || 1;
@@ -7089,6 +7127,10 @@ font-family: var(--font-num) !important;
     // =================================================================
     let _LH_TEACHER_LIMIT = 100;
     let _LH_TEACHER_BLOB_URLS = [];
+    // Lesson History page links: the entries currently rendered in the
+    // teacher history tab, so their Read buttons can resolve the exact
+    // normalized entry by index. Rebuilt on every render.
+    let _LH_TEACHER_VISIBLE_ENTRIES = [];
     function _lhTeacherRevokeBlobs() {
       _LH_TEACHER_BLOB_URLS.forEach(u => { try { URL.revokeObjectURL(u); } catch (e) {} });
       _LH_TEACHER_BLOB_URLS = [];
@@ -7154,6 +7196,7 @@ font-family: var(--font-num) !important;
       if (moreBtn) moreBtn.classList.toggle('hidden', !(_LH_TEACHER_LIMIT < 1000 && rows.length >= _LH_TEACHER_LIMIT));
 
       _lhTeacherRevokeBlobs();
+      _LH_TEACHER_VISIBLE_ENTRIES = visible;
       if (visible.length === 0) {
         listEl.innerHTML = '<p class="text-xs text-slate-400 text-center py-6">No lesson history found for this selection.</p>';
         return;
@@ -7163,7 +7206,12 @@ font-family: var(--font-num) !important;
       const schedById = {};
       (ALL_TEACHER_SCHEDULES || []).forEach(sc => { schedById[String(sc.id)] = sc; });
       const cards = [];
-      for (const e of visible) {
+      for (let _lhCardIdx = 0; _lhCardIdx < visible.length; _lhCardIdx++) {
+        const e = visible[_lhCardIdx];
+        // Lesson History page links: button ONLY for a non-sentinel
+        // book id + non-null page. 360-form / plain-text rows and
+        // Additional Course rows stay text-only.
+        const _lhCardCanRead = !!(e && !e.isAdditionalCourse && e.bookId && e.page !== null && e.page !== undefined);
         const sched = e.scheduleId ? schedById[String(e.scheduleId)] : null;
         let schedText = '';
         if (sched) {
@@ -7199,11 +7247,41 @@ font-family: var(--font-num) !important;
             ${e.additionalLesson ? `<div class="text-xs text-slate-700">Additional lesson: <strong>${escapeHtml(e.additionalLesson)}</strong></div>` : ''}
             ${e.remarks ? `<p class="text-xs text-slate-600 bg-slate-50 p-2.5 rounded-xl border border-slate-200/70 italic">"${escapeHtml(e.remarks)}"</p>` : ''}
             <div class="text-[11px] text-slate-500">Actual duration: <strong>${escapeHtml(window.LessonHistory.formatActualDuration(e))}</strong>${schedText ? ` • ${escapeHtml(schedText)}` : ''}</div>
+            ${_lhCardCanRead ? `<div><button onclick="openTeacherHistoryLessonPage(${_lhCardIdx})" class="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-extrabold transition cursor-pointer">Read course page</button></div>` : ((e && e.hasLesson && !e.isAdditionalCourse) ? `<div class="text-[11px] text-slate-400 italic">Course page cannot be opened for this record (no course saved with it).</div>` : '')}
             ${imgHtml}
           </div>
         `);
       }
       listEl.innerHTML = cards.join('');
+    }
+
+    // Lesson History page links (teacher): resolve a SAVED lesson
+    // through the canonical resolver (with the on-demand D1
+    // re-hydration for missing/empty pages), then open the teacher
+    // reader with the resolved values. The history tab itself is not
+    // re-rendered, so the teacher's selection and filters survive.
+    // A gated-but-unresolvable entry alerts the resolver's honest
+    // reason — never another book's page, never page 1.
+    async function openTeacherSavedLessonPage(bookId, page, para, language) {
+      if (!window.LessonHistory) { alert('Course book not found.'); return { ok: false, reason: 'BOOK_NOT_FOUND' }; }
+      const entry = { bookId: bookId || null, page: (page === null || page === undefined || page === '') ? null : Number(page), para: (para === null || para === undefined || para === '') ? null : Number(para), language: language || null, isAdditionalCourse: bookId === 'additional-course' };
+      const res = await window.LessonHistory.resolveLessonPageWithRefresh(
+        entry,
+        () => (typeof getTeacherSavedLessonBooks === 'function' ? getTeacherSavedLessonBooks() : []),
+        (typeof hydrateTeacherCustomBooksFromD1 === 'function') ? hydrateTeacherCustomBooksFromD1 : null
+      );
+      if (res.ok) {
+        openDigitalBookReader(res.book.id, res.displayPage, res.para, res.language);
+      } else {
+        alert(window.LessonHistory.lessonPageReasonMessage(res.reason));
+      }
+      return res;
+    }
+
+    function openTeacherHistoryLessonPage(idx) {
+      const e = _LH_TEACHER_VISIBLE_ENTRIES[idx];
+      if (!e) return Promise.resolve({ ok: false, reason: 'NO_BOOK_ID' });
+      return openTeacherSavedLessonPage(e.bookId, e.page, e.para, e.language);
     }
 
     // =================================================================

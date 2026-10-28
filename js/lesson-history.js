@@ -86,6 +86,7 @@
           bookTitle: null,
           para: null,
           page: null,
+          language: null,
           lineRange: null,
           result: null,
           remarks: String(raw),
@@ -105,6 +106,7 @@
       bookTitle: parsed.book_title || parsed.sabaq || parsed.course || null,
       para: toNumOrNull(parsed.para),
       page: page,
+      language: parsed.language || null,
       lineRange: parsed.line_range || null,
       result: parsed.status || parsed.result || null,
       remarks: parsed.remarks || parsed.notes || null,
@@ -138,6 +140,7 @@
       bookTitle: p ? p.bookTitle : null,
       para: p ? p.para : null,
       page: p ? p.page : null,
+      language: p ? p.language : null,
       lineRange: p ? p.lineRange : null,
       result: p ? p.result : null,
       remarks: p ? p.remarks : null,
@@ -231,6 +234,163 @@
     return entry.durationMins + ' min';
   }
 
+  // ==========================================================================
+  // Canonical lesson-page resolver (Lesson History page links, 2026-10-28).
+  // ONE place decides whether a saved lesson record can open its exact
+  // course-material page, and which page that is. Every portal routes its
+  // history Read buttons through resolveLessonPage() — no caller may pass
+  // raw record fields straight to a reader anymore.
+  //
+  // Contract:
+  //   resolveLessonPage(entry, availableBooks)
+  //     entry: a normalized history entry (bookId, bookTitle, para, page,
+  //       language, isAdditionalCourse — exactly what parseLessonNotes
+  //       produces). Callers pass the entry they already render.
+  //     availableBooks: the CALLING portal's catalog list, evaluated at
+  //       click time. The caller supplies its catalog WITHOUT the
+  //       library-browsing course/title filter: a saved lesson is not
+  //       browsing, so a shifted student's old book must still resolve.
+  //       Allowlist + tombstone gates still apply (they are part of the
+  //       catalog itself), and role authorization is enforced at the
+  //       gate: history entries are only ever shown for in-scope
+  //       students (Worker teacher-UNION / parent-own-family scope), and
+  //       /api/storage stays Bearer-gated server-side. The resolver
+  //       itself never title-matches, never guesses a para, and never
+  //       substitutes another book or page 1.
+  //   Returns { ok: true, book, displayPage, pageIndex, para, url,
+  //     viewerMode, language } or { ok: false, reason }.
+  //   Reasons: ADDITIONAL_COURSE, NO_BOOK_ID, BOOK_NOT_FOUND,
+  //     PAGE_MISSING, PARA_REQUIRED, PAGE_OUT_OF_RANGE, PAGE_NOT_AVAILABLE.
+  //
+  // Index rule, stated once: saved/display pages are 1-based everywhere
+  // (form dropdowns, lesson_notes, history entries); pages[] /
+  // paraPages[] / BOOK_PAGE_<id>_<i> are 0-based. The resolver converts
+  // exactly once: pageIndex = displayPage - 1. No other layer converts.
+  // Quran/Tafseer saved pages are PARA-RELATIVE: a para-based book with
+  // a page but no para is PARA_REQUIRED, never treated as a global page.
+  // Interactive Qaida: page = lesson number 1..49, viewerMode
+  // 'interactive', url null (it renders from the lesson registry, not a
+  // storage URL). A resolved storage URL is returned as-is for the
+  // portal reader's existing auth-fetch -> blob URL render; it is never
+  // a public bucket URL and never a signed URL stored in the record.
+  // ==========================================================================
+  function isParaBasedBook(book) {
+    if (!book) return false;
+    return book.category === 'quran' || book.category === 'tafseer' || !!book.paras_data || !!book.paras;
+  }
+
+  // Default 30-para registry (mirrors curriculum_data.js QURAN_PARAS_INFO:
+  // 18 pages per para, except para 29 with 20 and para 30 with 24). Used
+  // only when the book carries no paras_data and no paras array.
+  function defaultParaRange(para) {
+    var p = Number(para) || 1;
+    if (p === 29) return { page_start: 505, page_end: 524, total_pages: 20 };
+    if (p === 30) return { page_start: 525, page_end: 548, total_pages: 24 };
+    return { page_start: (p - 1) * 18 + 1, page_end: p * 18, total_pages: 18 };
+  }
+
+  // Mirror of curriculum_data.js getBookParaPages, self-contained so the
+  // resolver works in tests without the curriculum globals: paras_data
+  // first, then the paras array (explicit pages, else a slice of
+  // book.pages), else the default registry slice of book.pages.
+  function paraPagesFor(book, para) {
+    var p = Number(para) || 1;
+    if (book.paras_data) {
+      if (Array.isArray(book.paras_data[p])) return book.paras_data[p];
+      if (Array.isArray(book.paras_data[String(p)])) return book.paras_data[String(p)];
+    }
+    var match = null;
+    if (Array.isArray(book.paras)) {
+      for (var i = 0; i < book.paras.length; i++) {
+        if (Number(book.paras[i].para) === p) { match = book.paras[i]; break; }
+      }
+    }
+    if (!match) match = defaultParaRange(p);
+    if (Array.isArray(match.pages) && match.pages.length > 0) return match.pages;
+    if (Array.isArray(book.pages) && book.pages.length > 0) {
+      var start = (Number(match.page_start) || 1) - 1;
+      var count = Number(match.total_pages) || (match.page_end ? (Number(match.page_end) - Number(match.page_start) + 1) : 18);
+      return book.pages.slice(start, start + count);
+    }
+    return [];
+  }
+
+  function isPlaceholderSvgUrl(url) {
+    return typeof url === 'string' && url.indexOf('data:image/svg') === 0;
+  }
+
+  var LESSON_PAGE_REASON_MESSAGES = {
+    ADDITIONAL_COURSE: 'This lesson has no course page to open (Additional Course).',
+    NO_BOOK_ID: 'This lesson record has no course saved, so its page cannot be opened.',
+    BOOK_NOT_FOUND: 'Course book not found.',
+    PAGE_MISSING: 'This lesson record has no page saved, so its page cannot be opened.',
+    PARA_REQUIRED: 'This lesson record has no Para saved, so its Quran page cannot be identified.',
+    PAGE_OUT_OF_RANGE: 'The saved page is outside this course book.',
+    PAGE_NOT_AVAILABLE: 'This course page is not available.'
+  };
+
+  function lessonPageReasonMessage(reason) {
+    return LESSON_PAGE_REASON_MESSAGES[reason] || 'This lesson page cannot be opened.';
+  }
+
+  function resolveLessonPage(entry, availableBooks) {
+    if (!entry || entry.isAdditionalCourse || entry.bookId === 'additional-course') {
+      return { ok: false, reason: 'ADDITIONAL_COURSE' };
+    }
+    var bookId = entry.bookId;
+    if (!bookId) return { ok: false, reason: 'NO_BOOK_ID' };
+    var books = Array.isArray(availableBooks) ? availableBooks : [];
+    var book = null;
+    for (var i = 0; i < books.length; i++) {
+      if (books[i] && books[i].id === bookId) { book = books[i]; break; }
+    }
+    if (!book) return { ok: false, reason: 'BOOK_NOT_FOUND' };
+    var page = toNumOrNull(entry.page);
+    if (page === null) return { ok: false, reason: 'PAGE_MISSING' };
+    var para = toNumOrNull(entry.para);
+    var language = entry.language || null;
+    // Interactive Qaida: page IS the lesson number; range-checked, never
+    // silently clamped — a clamp would open a different lesson.
+    if (book.is_interactive || book.id === 'interactive-madani-qaida') {
+      var total = Number(book.total_pages) || 49;
+      if (page < 1 || page > total) return { ok: false, reason: 'PAGE_OUT_OF_RANGE' };
+      return { ok: true, book: book, displayPage: page, pageIndex: page - 1, para: null, url: null, viewerMode: 'interactive', language: language };
+    }
+    if (isParaBasedBook(book)) {
+      if (para === null) return { ok: false, reason: 'PARA_REQUIRED' };
+      var paraPages = paraPagesFor(book, para);
+      if (paraPages.length === 0) return { ok: false, reason: 'PAGE_NOT_AVAILABLE' };
+      if (page < 1 || page > paraPages.length) return { ok: false, reason: 'PAGE_OUT_OF_RANGE' };
+      var paraUrl = paraPages[page - 1];
+      if (!paraUrl || isPlaceholderSvgUrl(paraUrl)) return { ok: false, reason: 'PAGE_NOT_AVAILABLE' };
+      return { ok: true, book: book, displayPage: page, pageIndex: page - 1, para: para, url: paraUrl, viewerMode: 'image', language: language };
+    }
+    if (page < 1) return { ok: false, reason: 'PAGE_OUT_OF_RANGE' };
+    var bookTotal = Number(book.total_pages) || (Array.isArray(book.pages) ? book.pages.length : 0) || 0;
+    if (bookTotal > 0 && page > bookTotal) return { ok: false, reason: 'PAGE_OUT_OF_RANGE' };
+    if (!Array.isArray(book.pages) || book.pages.length === 0) return { ok: false, reason: 'PAGE_NOT_AVAILABLE' };
+    var url = book.pages[page - 1];
+    if (!url || isPlaceholderSvgUrl(url)) return { ok: false, reason: 'PAGE_NOT_AVAILABLE' };
+    return { ok: true, book: book, displayPage: page, pageIndex: page - 1, para: null, url: url, viewerMode: (book.is_text_viewer ? 'text' : 'image'), language: language };
+  }
+
+  // Stale-catalog cure: the per-browser catalog is hydrated from D1 into
+  // localStorage, and a book whose pages[] is missing/empty (or a book
+  // absent from the list because hydration never ran, e.g. a parent-only
+  // device) must get ONE on-demand re-hydration before the click is
+  // judged. getBooks() re-reads the caller's list after hydration.
+  // A failed re-hydration yields the honest final reason — never a
+  // stale page, never a fallback book. Bounded: at most one refresh.
+  async function resolveLessonPageWithRefresh(entry, getBooks, hydrateFn) {
+    var first = resolveLessonPage(entry, typeof getBooks === 'function' ? getBooks() : []);
+    if (first.ok) return first;
+    if ((first.reason === 'PAGE_NOT_AVAILABLE' || first.reason === 'BOOK_NOT_FOUND') && typeof hydrateFn === 'function') {
+      try { await hydrateFn(); } catch (e) {}
+      return resolveLessonPage(entry, typeof getBooks === 'function' ? getBooks() : []);
+    }
+    return first;
+  }
+
   // Human title for an entry: course/lesson, never a fallback book.
   function entryTitle(entry) {
     if (!entry) return '';
@@ -304,6 +464,9 @@
     dedupeLessonRows: dedupeLessonRows,
     filterLessonEntries: filterLessonEntries,
     formatActualDuration: formatActualDuration,
+    resolveLessonPage: resolveLessonPage,
+    resolveLessonPageWithRefresh: resolveLessonPageWithRefresh,
+    lessonPageReasonMessage: lessonPageReasonMessage,
     entryTitle: entryTitle,
     getLessonHistory: getLessonHistory,
     uploadLessonImageOrThrow: uploadLessonImageOrThrow,

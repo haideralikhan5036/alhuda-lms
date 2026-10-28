@@ -11,6 +11,14 @@
  */
 
 let _PROFILE_360_STACK = [];
+// Lesson History page links: the rows currently rendered in the 360
+// history table / inspector, so their Open-page buttons can resolve the
+// exact normalized entry by index (entries are objects, not strings, so
+// they are never interpolated into onclick attributes). Rebuilt on every
+// render; the reader modal opens over the 360 view, so the selected
+// student context survives closing the reader.
+let _LH360_TABLE_ENTRIES = [];
+let _LH360_INSPECTOR_ENTRIES = [];
 let _ORIGIN_LMS_TAB = 'tab-dashboard';
 let _CURRENT_360_STATE = {
   type: null,                 // 'family' | 'teacher'
@@ -1284,6 +1292,8 @@ function _buildSelectedStudentWorkspaceHtml(family, student, famSchedules, famLo
     // Lesson History: ALL entries for the selected date (same-day
     // multiples are all shown, never find-first only).
     const activeLessonLogs = selectedDate ? stuLogs.filter(l => l.date === selectedDate) : [];
+    _LH360_TABLE_ENTRIES = filteredLogs;
+    _LH360_INSPECTOR_ENTRIES = activeLessonLogs;
     const activeLessonLog = activeLessonLogs[0] || stuLogs[0] || null;
 
     bodyHtml = `
@@ -1352,8 +1362,15 @@ function _buildSelectedStudentWorkspaceHtml(family, student, famSchedules, famLo
                     </tr>
                   </thead>
                   <tbody class="divide-y divide-slate-100">
-                    ${filteredLogs.map(log => {
+                    ${filteredLogs.map((log, _lhRowIdx) => {
                       const parsedLesson = _parseLessonDetails360(log);
+                      // Lesson History page links: a button ONLY when
+                      // the normalized entry has a non-sentinel book id
+                      // AND a non-null page. 360-form / plain-text rows
+                      // (no book id) and Additional Course rows stay
+                      // text-only — never a fabricated page.
+                      const _lhRowEntry = log._lhEntry || null;
+                      const _lhRowCanRead = !!(_lhRowEntry && !_lhRowEntry.isAdditionalCourse && _lhRowEntry.bookId && _lhRowEntry.page !== null && _lhRowEntry.page !== undefined);
                       const isActiveDate = activeLessonLog && activeLessonLog.date === log.date;
                       const st = String(log.status || 'Present');
                       const badgeCls = st.toLowerCase() === 'present'
@@ -1374,6 +1391,10 @@ function _buildSelectedStudentWorkspaceHtml(family, student, famSchedules, famLo
                           </td>
                           <td class="px-3.5 py-2.5 text-right whitespace-nowrap">
                             <span class="text-indigo-600 font-extrabold text-[11px] hover:underline">Open</span>
+                            ${_lhRowCanRead ? `
+                            <button onclick="event.stopPropagation();open360LessonPageFromTable(${_lhRowIdx})"
+                                    class="ml-2 px-2 py-0.5 rounded bg-emerald-50 hover:bg-emerald-100 text-emerald-800 font-extrabold text-[11px] border border-emerald-200 transition cursor-pointer">Open page</button>
+                            ` : ''}
                           </td>
                         </tr>
                       `;
@@ -1389,9 +1410,12 @@ function _buildSelectedStudentWorkspaceHtml(family, student, famSchedules, famLo
             ${activeLessonLog ? (() => {
               const schedById = {};
               (famSchedules || []).forEach(sc => { schedById[String(sc.id)] = sc; });
-              const entriesHtml = activeLessonLogs.map(log => {
+              const entriesHtml = activeLessonLogs.map((log, _lhInspIdx) => {
                 const p = _parseLessonDetails360(log);
                 const en = log._lhEntry || null;
+                // Lesson History page links: same gating as the table —
+                // button only for a non-sentinel book id + non-null page.
+                const _lhInspCanRead = !!(en && !en.isAdditionalCourse && en.bookId && en.page !== null && en.page !== undefined);
                 const title = (window.LessonHistory && en) ? window.LessonHistory.entryTitle(en) : p.summaryTitle;
                 const progressBits = [];
                 if (en && en.para) progressBits.push(`Para ${en.para}`);
@@ -1430,6 +1454,17 @@ function _buildSelectedStudentWorkspaceHtml(family, student, famSchedules, famLo
                         <strong class="text-amber-900 block">${_esc360(progressBits.join(' • '))}</strong>
                       </div>
                     ` : ''}
+                    ${_lhInspCanRead ? `
+                      <div>
+                        <button onclick="open360LessonPageFromInspector(${_lhInspIdx})"
+                                class="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-extrabold transition cursor-pointer">
+                          Open course page
+                        </button>
+                        <span class="block text-[11px] text-slate-400 mt-1">Opens the exact saved page. If it cannot be resolved, you will see why instead of another book's page.</span>
+                      </div>
+                    ` : ((en && en.hasLesson && !en.isAdditionalCourse) ? `
+                      <div class="text-[11px] text-slate-400 italic">Course page cannot be opened for this record (no course saved with it).</div>
+                    ` : '')}
                     ${result ? `
                       <div>
                         <span class="text-[10px] font-bold text-slate-400 uppercase block">Result</span>
@@ -1735,6 +1770,45 @@ function filterStudentAttendanceInFamily(status) {
 function selectStudentLessonDateInFamily(dateStr) {
   _CURRENT_360_STATE.selectedLessonDate = dateStr;
   _renderFamilyWorkspaceDOM();
+}
+
+// Lesson History page links (Admin 360): open the EXACT saved page for a
+// 360 history entry. Routes through the shared resolver (with the
+// on-demand D1 re-hydration) and the admin reader — the same path the
+// dashboard widget uses. A gated-but-unresolvable entry alerts the
+// resolver's honest reason; the 360 view is NOT re-rendered, so the
+// selected student/date context survives the attempt. Returns the
+// resolution result for callers/tests.
+async function open360LessonPageForEntry(en) {
+  if (!en || !window.LessonHistory) return { ok: false, reason: 'NO_BOOK_ID' };
+  const res = await window.LessonHistory.resolveLessonPageWithRefresh(
+    en,
+    () => (typeof getAllAvailableBooks === 'function' ? getAllAvailableBooks() : []),
+    (typeof window.hydrateCustomBooksFromCloudflareD1 === 'function') ? window.hydrateCustomBooksFromCloudflareD1 : null
+  );
+  if (res.ok) {
+    // Resolved values go straight to the admin reader (which honors all
+    // four arguments and fails closed on an unknown book). No second
+    // resolution: res already is the canonical answer.
+    if (typeof openDigitalBookReader === 'function') {
+      openDigitalBookReader(res.book.id, res.displayPage, res.para, res.language);
+    }
+  } else {
+    alert(window.LessonHistory.lessonPageReasonMessage(res.reason));
+  }
+  return res;
+}
+
+function open360LessonPageFromTable(idx) {
+  const log = _LH360_TABLE_ENTRIES[idx];
+  if (log) return open360LessonPageForEntry(log._lhEntry || null);
+  return Promise.resolve({ ok: false, reason: 'NO_BOOK_ID' });
+}
+
+function open360LessonPageFromInspector(idx) {
+  const log = _LH360_INSPECTOR_ENTRIES[idx];
+  if (log) return open360LessonPageForEntry(log._lhEntry || null);
+  return Promise.resolve({ ok: false, reason: 'NO_BOOK_ID' });
 }
 
 // ============================================================================

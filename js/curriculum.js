@@ -2379,16 +2379,47 @@ if (mergedDeleted.length > 0) {
 
 
     // Check URL parameters for direct book links (e.g. ?book=quran-16-line&page=15)
+    // Para + language pass through: a Quran/Tafseer deep link without its
+    // para would make the reader guess the para from a para-relative page
+    // (the dashboard para-drop defect) and open the wrong page.
     (function checkUrlBookParam() {
       const params = new URLSearchParams(window.location.search);
       const bookId = params.get('book');
       const pageNum = params.get('page') || 1;
+      const paraNum = params.get('para');
+      const lang = params.get('lang') || params.get('language');
       if (bookId) {
         setTimeout(() => {
-          openDigitalBookReader(bookId, pageNum);
+          openDigitalBookReader(bookId, pageNum, paraNum ? Number(paraNum) : null, lang || null);
         }, 800);
       }
     })();
+
+    // Lesson History page links (admin): resolve a SAVED lesson through
+    // the canonical resolver, then open the reader with the resolved
+    // values. The admin catalog (getAllAvailableBooks) is already
+    // unfiltered — allowlist + tombstone only — because admin browsing
+    // has no course filter. Before resolving, re-hydrate from D1 when
+    // the book's pages are missing/empty; a failed re-hydration yields
+    // the honest reason below, never a fallback book or page 1. The
+    // reader modal stays open over the 360 view, so returning is just
+    // closing the reader — the selected student context is untouched.
+    // Returns the resolution result (tests/callers inspect .ok/.reason).
+    async function openAdminSavedLessonPage(bookId, page, para, language) {
+      if (!window.LessonHistory) { alert('Course book not found.'); return { ok: false, reason: 'BOOK_NOT_FOUND' }; }
+      const entry = { bookId: bookId || null, page: (page === null || page === undefined || page === '') ? null : Number(page), para: (para === null || para === undefined || para === '') ? null : Number(para), language: language || null, isAdditionalCourse: bookId === 'additional-course' };
+      const res = await window.LessonHistory.resolveLessonPageWithRefresh(
+        entry,
+        () => (typeof getAllAvailableBooks === 'function' ? getAllAvailableBooks() : []),
+        (typeof hydrateCustomBooksFromCloudflareD1 === 'function') ? hydrateCustomBooksFromCloudflareD1 : null
+      );
+      if (res.ok) {
+        openDigitalBookReader(res.book.id, res.displayPage, res.para, res.language);
+      } else {
+        alert(window.LessonHistory.lessonPageReasonMessage(res.reason));
+      }
+      return res;
+    }
 
     // Export core curriculum functions to window for cross-portal access
     if (typeof window !== 'undefined') {
@@ -2404,6 +2435,8 @@ if (mergedDeleted.length > 0) {
       window.handleEditBookAppendFiles = handleEditBookAppendFiles;
       window.handleUpdateCustomBook = handleUpdateCustomBook;
       window.openDigitalBookReader = openDigitalBookReader;
+      window.openAdminSavedLessonPage = openAdminSavedLessonPage;
+      window.hydrateCustomBooksFromCloudflareD1 = hydrateCustomBooksFromCloudflareD1;
       window.renderReaderCurrentPage = renderReaderCurrentPage;
       window.loadCurriculumLibrary = loadCurriculumLibrary;
       window.filterCurriculumCategory = filterCurriculumCategory;
