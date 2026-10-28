@@ -644,7 +644,7 @@
       const meeting_link = (document.getElementById('trialMeetingLink').value || '').trim();
 
       if (!parent_name || !whatsapp || !student_name || !teacher_id || !start_date || !pkt_slot) {
-        alert("Please fill in all required fields.");
+        lmsNotify("Please fill in all required fields.");
         if (btn) {
           btn.disabled = false;
           btn.innerHTML = '<i class="fa-solid fa-check"></i> Book 3-Day Free Trial';
@@ -655,7 +655,7 @@
       if (typeof validateEligibleTeacherBackend === 'function') {
         const check = await validateEligibleTeacherBackend(teacher_id);
         if (!check.valid) {
-          alert(check.error);
+          lmsNotify(check.error);
           if (btn) {
             btn.disabled = false;
             btn.innerHTML = '<i class="fa-solid fa-check"></i> Book 3-Day Free Trial';
@@ -816,7 +816,7 @@
           btn.disabled = false;
           btn.innerHTML = '<i class="fa-solid fa-check"></i> Book 3-Day Free Trial';
         }
-        alert('The trial could not be booked because one of its records failed to save. Please check the records and try again.');
+        lmsNotify('The trial could not be booked because one of its records failed to save. Please check the records and try again.');
         return;
       }
 
@@ -835,7 +835,7 @@
       loadDashboardData();
       loadFamiliesAndStudents();
 
-      alert(`🎉 3-Day Free Trial Booked Successfully!\n\n` +
+      lmsNotify(`🎉 3-Day Free Trial Booked Successfully!\n\n` +
         `👤 Student: ${student_name} (${student_age} yrs)\n` +
         `👨‍🏫 Assigned Quran Instructor: ${teacherName}\n` +
         `⏰ Timetable Slot: ${pkt_slot} PKT\n` +
@@ -964,7 +964,7 @@
       const trialId = document.getElementById('convTrialId').value;
       const trial = ALL_TRIALS.find(t => t.id === trialId);
       if (!trial) {
-        alert("Trial record not found.");
+        lmsNotify("Trial record not found.");
         if (btn) {
           btn.disabled = false;
           btn.innerHTML = '<i class="fa-solid fa-circle-check text-brandGold"></i> Confirm & Enroll as Regular Student';
@@ -985,7 +985,7 @@
       const send_welcome_email = document.getElementById('convSendWelcomeEmail')?.checked;
 
       if (monthly_fee <= 0) {
-        alert("Please enter the agreed monthly fee.");
+        lmsNotify("Please enter the agreed monthly fee.");
         if (btn) {
           btn.disabled = false;
           btn.innerHTML = '<i class="fa-solid fa-circle-check text-brandGold"></i> Confirm & Enroll as Regular Student';
@@ -1018,15 +1018,13 @@
         }
       }
       if (dupTrialStudent) {
-        const proceedDupTrial = (typeof lmsConfirm === 'function')
-          ? await lmsConfirm({
+        const proceedDupTrial = await lmsConfirm({
               title: 'Possible Duplicate Student',
               message: `A student named "${dupTrialStudent.name}" is already enrolled in the family this trial is being converted into.\n\nIf this is a different child with the same name, choose "Add Anyway". Otherwise choose "Cancel".`,
               confirmText: 'Add Anyway',
               cancelText: 'Cancel',
               variant: 'warning'
             })
-          : window.confirm(`A student named "${dupTrialStudent.name}" is already enrolled in the family this trial is being converted into. Add anyway?`);
         if (!proceedDupTrial) {
           if (btn) {
             btn.disabled = false;
@@ -1241,7 +1239,7 @@
           btn.disabled = false;
           btn.innerHTML = '<i class="fa-solid fa-circle-check text-brandGold"></i> Confirm & Enroll as Regular Student';
         }
-        alert('The conversion could not be completed because one of its records failed to save. The trial has been left as-is — please check the family and student records and try again.');
+        lmsNotify('The conversion could not be completed because one of its records failed to save. The trial has been left as-is — please check the family and student records and try again.');
         return;
       }
 
@@ -1278,7 +1276,7 @@
         render2DMatrixTable();
       }
 
-      alert(`🎉 Conversion Completed Successfully!\n\n` +
+      lmsNotify(`🎉 Conversion Completed Successfully!\n\n` +
         `👨‍👩‍👧 Family ID: ${canonicalFamId}\n` +
         `🎓 Student ID: ${canonicalStuId}\n` +
         `👤 Student: ${trial.student_name}\n` +
@@ -1318,7 +1316,7 @@
 
     async function deleteTrial(trialId) {
       if (CURRENT_ROLE === 'manager') {
-        alert("Access Denied: Managers are not authorized to permanently delete trial records. Only the System Owner can perform permanent deletions.");
+        lmsNotify("Access Denied: Managers are not authorized to permanently delete trial records. Only the System Owner can perform permanent deletions.");
         return;
       }
       const trial = ALL_TRIALS.find(t => t.id === trialId);

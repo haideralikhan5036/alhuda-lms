@@ -164,7 +164,7 @@
           copyBtn.innerHTML = '<i class="fa-solid fa-check"></i> Copied';
         } catch (e) {
           if (passEl) { passEl.focus(); passEl.select(); }
-          alert('Copy this password now (it will not be shown again):\n\n' + password);
+          if (typeof window.LmsNotify !== 'undefined' && window.LmsNotify.dialog) { window.LmsNotify.dialog({ title: 'Copy this password now', message: 'It will not be shown again:\n\n' + password, confirmText: 'Done' }); }
         }
       });
       const closeBtn = overlay.querySelector('#lmsShowOnceClose');
@@ -349,7 +349,7 @@
       // if the server call failed the token may live until its expiry.
       if (ownerToken && !serverOk) {
         if (typeof showError === 'function') showError('Signed out on this device. Your server session may remain valid until it expires.');
-        else alert('Signed out on this device. Your server session may remain valid until it expires.');
+        else lmsNotify('Signed out on this device. Your server session may remain valid until it expires.');
       }
     }
 
@@ -408,7 +408,7 @@
       } catch (e) {}
       ACTIVE_MANAGER_ID = null;
       window.ACTIVE_MANAGER_NAME = null;
-      if (managerToken && !serverOk) alert('Signed out on this device. Your server session may remain valid until it expires.');
+      if (managerToken && !serverOk) lmsNotify('Signed out on this device. Your server session may remain valid until it expires.');
       window.location.replace('manager.html');
     }
     window.getAuthenticatedManagerSession = getAuthenticatedManagerSession;
@@ -654,7 +654,7 @@
           localStorage.removeItem('alhuda_cloudflare_local_db_v1');
         }
       } catch (e) {}
-      if (teacherToken && !serverOk) alert('Signed out on this device. Your server session may remain valid until it expires.');
+      if (teacherToken && !serverOk) lmsNotify('Signed out on this device. Your server session may remain valid until it expires.');
       window.location.replace('teacher.html');
     }
 

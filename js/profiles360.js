@@ -73,31 +73,9 @@ function _notify360(message, type = 'success') {
     window.lmsNotify(message, { type });
     return;
   }
-  if (typeof showToastNotification === 'function') {
-    try {
-      showToastNotification(message);
-      return;
-    } catch (e) {}
-  }
-  let toast = document.getElementById('family360ToastBanner');
-  if (!toast) {
-    toast = document.createElement('div');
-    toast.id = 'family360ToastBanner';
-    toast.className = 'fixed bottom-5 right-5 z-[9999] px-4 py-3 rounded-xl shadow-xl text-xs font-extrabold flex items-center gap-2.5 transition-all duration-300';
-    document.body.appendChild(toast);
-  }
-  const colors = type === 'error'
-    ? 'bg-rose-900 text-white border border-rose-700'
-    : type === 'warning'
-    ? 'bg-amber-900 text-white border border-amber-700'
-    : 'bg-slate-900 text-white border border-slate-700';
-  toast.className = `fixed bottom-5 right-5 z-[9999] px-4 py-3 rounded-xl shadow-xl text-xs font-extrabold flex items-center gap-2.5 transition-all duration-300 ${colors}`;
-  toast.innerHTML = `<i class="fa-solid ${type === 'error' ? 'fa-circle-exclamation text-rose-400' : 'fa-circle-check text-emerald-400'} text-sm"></i> <span>${_esc360(message)}</span>`;
-  toast.style.opacity = '1';
-  clearTimeout(window._toast360Timer);
-  window._toast360Timer = setTimeout(() => {
-    if (toast) toast.style.opacity = '0';
-  }, 3600);
+  // Batch 8: the shared system is loaded on every portal; if it is ever
+  // absent, log instead of inventing a second toast implementation.
+  try { console.warn('[Family360] notification skipped (lmsNotify unavailable):', message); } catch (e) {}
 }
 
 /**
@@ -1794,7 +1772,7 @@ async function open360LessonPageForEntry(en) {
       openDigitalBookReader(res.book.id, res.displayPage, res.para, res.language);
     }
   } else {
-    alert(window.LessonHistory.lessonPageReasonMessage(res.reason));
+    lmsNotify(window.LessonHistory.lessonPageReasonMessage(res.reason));
   }
   return res;
 }
@@ -2276,7 +2254,7 @@ function openFamilySendInvoiceModal(familyId) {
   const payData = _getFamilyPaymentsList(family);
   const row = payData.rows[0];
   if (!row) {
-    alert("No fee invoice or payment records found for this family.");
+    lmsNotify("No fee invoice or payment records found for this family.");
     return;
   }
   viewFamilyPaymentInvoiceModal(family.id, row.recordId, row.month, row.year);
@@ -2390,7 +2368,7 @@ async function executeSendFamilyCustomEmail(e, familyId) {
     if (sentOk) {
       _notify360('Email sent to the parent.');
     } else {
-      alert('❌ Email could not be sent.\n\nError: ' + sendErr);
+      console.warn('[LMS] operation failed:', sendErr); lmsNotify('Email could not be sent. Please try again.', { type: 'error' });
     }
     _renderFamilyWorkspaceDOM();
     return;
@@ -3244,7 +3222,7 @@ async function executeConfirmSingleStudentDeactivation(e, familyId, studentId) {
     const rawVal = document.getElementById('stuDeactNewFamilyFeeInput')?.value;
     const parsedFee = parseFloat(rawVal);
     if (rawVal === '' || isNaN(parsedFee) || parsedFee < 0) {
-      alert('Please enter a valid non-negative New Family Fee amount before confirming.');
+      lmsNotify('Please enter a valid non-negative New Family Fee amount before confirming.');
       return;
     }
     newFee = parsedFee;
@@ -3339,7 +3317,7 @@ async function executeConfirmSingleStudentDeactivation(e, familyId, studentId) {
       btn.disabled = false;
       btn.innerText = 'Confirm Student Deactivation';
     }
-    alert('Error saving student deactivation: ' + (err?.message || err));
+    console.warn('[LMS] operation failed:', (err?.message || err)); lmsNotify('Error saving student deactivation. Please try again.', { type: 'error' });
   }
 }
 
@@ -3408,7 +3386,7 @@ async function handleFamilyLevelDeactivate(familyId) {
 
   let familyDeactDate = new Date().toISOString().slice(0, 10);
   if (!isInactive) {
-    const userDate = window.prompt(
+    const userDate = await lmsPrompt(
       `Enter Deactivation Date (YYYY-MM-DD) for "${family.parent_name}" (${family.id}) and all active students in this family:\n(Teacher salary eligibility ends on this date)`,
       familyDeactDate
     );
@@ -3710,7 +3688,7 @@ async function submitEditFamilyProfileForm(e, familyId) {
   // is sent ONLY to the owner-only Worker endpoint — it is never stored
   // in the account map or the family record.
   if (password && password.length < 10) {
-    alert('New portal password must be at least 10 characters long (or leave it blank to keep the current one).');
+    lmsNotify('New portal password must be at least 10 characters long (or leave it blank to keep the current one).');
     return;
   }
 
@@ -3757,7 +3735,7 @@ async function submitEditFamilyProfileForm(e, familyId) {
       const famPwField360 = document.getElementById('fwEditFamPass');
       if (famPwField360) famPwField360.value = '';
     } catch (pwErr) {
-      alert('The family profile was SAVED, but the PASSWORD was NOT set.\n\nReason: ' + (pwErr.message || pwErr) + '\n\nPlease try again from the Edit Family form or the password tool.');
+      console.warn('[LMS] operation failed:', (pwErr.message || pwErr)); lmsNotify('The family profile was SAVED, but the PASSWORD was NOT set.\n\nPlease try again from the Edit Family form or the password tool.', { type: 'error' });
       pwNote = ' Portal password was NOT updated — please set it via the password tool.';
     }
   }
@@ -3944,7 +3922,7 @@ function emailSpecificFamilyInvoice(familyId, recordId, month, year) {
 
 async function deleteFamilyPaymentRecord(familyId, recordId, month, year) {
   if (window.CURRENT_ROLE === 'teacher' || window.CURRENT_ROLE === 'student') {
-    alert('Access Denied: Only Admin/Management can delete payment entries.');
+    lmsNotify('Access Denied: Only Admin/Management can delete payment entries.');
     return;
   }
 
@@ -3959,10 +3937,10 @@ async function deleteFamilyPaymentRecord(familyId, recordId, month, year) {
     if (!mgrFamily) return;
 
     if (!(await lmsConfirm(`Cancel the payment/invoice entry for ${month} ${year}?\n\nManagers cannot permanently delete payment records. This entry will be kept on the record and marked as Cancelled.`))) return;
-    const cancelReason = window.prompt('Reason for cancellation (required):', '');
+    const cancelReason = await lmsPrompt('Reason for cancellation (required):', '');
     if (cancelReason === null) return;
     if (!String(cancelReason).trim()) {
-      alert('A cancellation reason is required.');
+      lmsNotify('A cancellation reason is required.');
       return;
     }
     const reasonText = String(cancelReason).trim();
@@ -4016,7 +3994,7 @@ async function deleteFamilyPaymentRecord(familyId, recordId, month, year) {
     }
 
     if (!found) {
-      alert('That payment entry could not be found as a stored record, so nothing was cancelled.');
+      lmsNotify('That payment entry could not be found as a stored record, so nothing was cancelled.');
       return;
     }
 
@@ -5968,7 +5946,7 @@ function openTeacherSalaryRowDetailsModal(teacherId, monthRaw) {
 
 async function deleteTeacherSalaryMonthRecord360(teacherId, monthRaw, slipKey) {
   if (typeof CURRENT_ROLE !== 'undefined' && CURRENT_ROLE === 'manager') {
-    alert('Access Denied: Only the System Owner can delete salary records.');
+    lmsNotify('Access Denied: Only the System Owner can delete salary records.');
     return;
   }
   if (!(await lmsConfirm(`Are you sure you want to delete the salary record for ${monthRaw}?`))) return;

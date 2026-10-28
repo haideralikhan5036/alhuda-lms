@@ -49,6 +49,7 @@
   <!-- Supabase JS Client & Cloudflare D1/R2 Universal Engine -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="js/cloudflare-db.js"></script>
+  <script src="js/ui-notify.js"></script>
   <script src="js/lesson-history.js"></script>
   <script src="js/fee-tables.js"></script>
   <!-- Al-Huda Curriculum & Course Material Registry Engine -->
@@ -1862,7 +1863,7 @@
     // entry alerts the resolver's honest reason — never another
     // book's page, never page 1.
     async function openParentSavedLessonPage(bookId, page, para, language) {
-      if (!window.LessonHistory) { alert('Course book not found.'); return { ok: false, reason: 'BOOK_NOT_FOUND' }; }
+      if (!window.LessonHistory) { lmsNotify('Course book not found.'); return { ok: false, reason: 'BOOK_NOT_FOUND' }; }
       const entry = { bookId: bookId || null, page: (page === null || page === undefined || page === '') ? null : Number(page), para: (para === null || para === undefined || para === '') ? null : Number(para), language: language || null, isAdditionalCourse: bookId === 'additional-course' };
       const res = await window.LessonHistory.resolveLessonPageWithRefresh(
         entry,
@@ -1872,7 +1873,7 @@
       if (res.ok) {
         openParentDigitalReader(res.book.id, res.displayPage, res.para, res.language);
       } else {
-        alert(window.LessonHistory.lessonPageReasonMessage(res.reason));
+        lmsNotify(window.LessonHistory.lessonPageReasonMessage(res.reason));
       }
       return res;
     }
@@ -2296,7 +2297,7 @@
     async function downloadParentFeeInvoicePDF() {
       const r = CURRENT_FEE_MODAL_RECEIPT;
       if (!r) {
-        alert("No active invoice receipt selected.");
+        lmsNotify("No active invoice receipt selected.");
         return;
       }
 
@@ -2730,7 +2731,7 @@
       const book = allBooks.find(b => b.id === bookId);
 
       if (!book) {
-        alert("Course book not found.");
+        lmsNotify("Course book not found.");
         return;
       }
 
@@ -3348,17 +3349,17 @@
       const msg = (document.getElementById('leaveMessageText')?.value || '').trim();
 
       if (!startDate || !endDate) {
-        alert('Please select both a start date and an end date.');
+        lmsNotify('Please select both a start date and an end date.');
         return;
       }
       if (endDate < startDate) {
-        alert('End date cannot be before the start date.');
+        lmsNotify('End date cannot be before the start date.');
         return;
       }
       const today = new Date();
       const todayStr = new Date(today.getTime() - (today.getTimezoneOffset() * 60000)).toISOString().slice(0, 10);
       if (startDate < todayStr) {
-        alert('Start date cannot be in the past.');
+        lmsNotify('Start date cannot be in the past.');
         return;
       }
 
@@ -3407,9 +3408,9 @@
 
         CURRENT_STUDENT.notes = notesObj;
         renderParentLeaveRequests();
-        alert(`✅ Leave request sent.\n\nYour leave request has been sent to the administration for approval.\n\nStudent: ${leaveRequest.student_name}\nDates: ${startDate} to ${endDate}\nReason: ${reason}\nStatus: Pending`);
+        lmsNotify(`✅ Leave request sent.\n\nYour leave request has been sent to the administration for approval.\n\nStudent: ${leaveRequest.student_name}\nDates: ${startDate} to ${endDate}\nReason: ${reason}\nStatus: Pending`);
       } catch (err) {
-        alert(`Your leave request could NOT be sent. Please check your connection and try again.\n\n${err?.message || err || 'Unknown error'}`);
+        lmsNotify(`Your leave request could NOT be sent. Please check your connection and try again.\n\n${err?.message || err || 'Unknown error'}`);
       }
     }
 
@@ -3444,7 +3445,7 @@
       CURRENT_AUTH_FAMILY = null;
       CURRENT_STUDENT = null;
       ALL_STUDENTS = [];
-      if (parentToken && !serverOk) alert('Signed out on this device. Your server session may remain valid until it expires.');
+      if (parentToken && !serverOk) lmsNotify('Signed out on this device. Your server session may remain valid until it expires.');
       window.location.href = 'parent.html';
     }
 

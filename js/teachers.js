@@ -238,7 +238,7 @@
       const zoomPasscode = (document.getElementById('quickZoomPasscodeInput').value || '').trim();
 
       if (!zoomLink) {
-        alert("Please enter a Zoom Meeting Link.");
+        lmsNotify("Please enter a Zoom Meeting Link.");
         return;
       }
 
@@ -268,7 +268,7 @@
       closeModal('modalTeacherQuickZoom');
       await loadTeachers();
 
-      alert(`🎉 Zoom Link Updated & Auto-Cascaded Successfully!\n\n` +
+      lmsNotify(`🎉 Zoom Link Updated & Auto-Cascaded Successfully!\n\n` +
         `📹 New Zoom Link: ${zoomLink}\n` +
         `📅 Updated Timetable Schedules: ${res.schedulesCount} slots\n` +
         `✨ Updated Trial Classes: ${res.trialsCount} trials\n\n` +
@@ -285,13 +285,13 @@
 
       // S8 (Batch 4): no stored link = nothing to sync. Never sync a mock.
       if (!zoomLink) {
-        alert('No Zoom link is saved for this teacher yet. Add the real link first.');
+        lmsNotify('No Zoom link is saved for this teacher yet. Add the real link first.');
         return;
       }
 
       if (await lmsConfirm(`Cascade & sync Zoom link for "${teacher.full_name}" to all assigned students and weekly schedules now?\n\nLink: ${zoomLink}`)) {
         const res = await syncTeacherZoomToAllStudents(teacherId, zoomLink);
-        alert(`✅ Auto-Sync Completed!\n\nUpdated ${res.schedulesCount} schedule slots and ${res.trialsCount} trial classes for ${teacher.full_name}.`);
+        lmsNotify(`✅ Auto-Sync Completed!\n\nUpdated ${res.schedulesCount} schedule slots and ${res.trialsCount} trial classes for ${teacher.full_name}.`);
         await loadTeachers();
       }
     }
@@ -500,7 +500,7 @@
       // Batch 2: managers register Other Staff only — creating a
       // Manager account is owner-only (the Worker also denies it).
       if (designation === 'Manager' && typeof CURRENT_ROLE !== 'undefined' && CURRENT_ROLE === 'manager') {
-        alert('Managers cannot create Manager accounts. Only the System Owner can create or change Manager accounts.');
+        lmsNotify('Managers cannot create Manager accounts. Only the System Owner can create or change Manager accounts.');
         return;
       }
       const full_name   = document.getElementById('ntsFullName')?.value?.trim();
@@ -517,7 +517,7 @@
       const address     = document.getElementById('ntsAddress')?.value?.trim();
 
       if (!full_name || !phone || !joining_date) {
-        alert('Please fill in all required fields (Name, Phone, Joining Date).');
+        lmsNotify('Please fill in all required fields (Name, Phone, Joining Date).');
         return;
       }
 
@@ -538,7 +538,7 @@
       // server-side AFTER the record is created — it is never stored in
       // the record itself or in the local account map.
       if (designation === 'Manager' && password && password.length < 10) {
-        alert('Manager password must be at least 10 characters long (or leave it blank to set it later).');
+        lmsNotify('Manager password must be at least 10 characters long (or leave it blank to set it later).');
         return;
       }
 
@@ -626,7 +626,7 @@
               // with hasExplicitPassword from the typed value, but the
               // server-side set failed, so no usable password exists.
               saveTeacherAccount(insertedId, { hasExplicitPassword: false });
-              alert('The manager profile was SAVED, but the PASSWORD was NOT set.\n\nReason: ' + (pwErr.message || pwErr) + '\n\nPlease set it from the Edit form or the password tool.');
+              console.warn('[LMS] operation failed:', (pwErr.message || pwErr)); lmsNotify('The manager profile was SAVED, but the PASSWORD was NOT set.\n\nPlease set it from the Edit form or the password tool. Please try again.', { type: 'error' });
             }
           }
           // Open official Manager Provisioning Success Modal
@@ -655,10 +655,10 @@
 
           openModal('modalManagerRegisteredSuccess');
         } else {
-          alert(`✅ Staff Registered Successfully!\n\n👤 Name: ${full_name}\n🆔 Staff ID: ${emp_id}\n📋 Role: ${role_title || 'Other Staff'}`);
+          lmsNotify(`✅ Staff Registered Successfully!\n\n👤 Name: ${full_name}\n🆔 Staff ID: ${emp_id}\n📋 Role: ${role_title || 'Other Staff'}`);
         }
       } catch (err) {
-        alert('Error registering employee: ' + err.message);
+        console.warn('[LMS] operation failed:', err.message); lmsNotify('Error registering employee. Please try again.', { type: 'error' });
       } finally {
         btn.disabled = false;
         btn.innerHTML = '<i class="fa-solid fa-floppy-disk"></i> Register Employee';
@@ -674,9 +674,11 @@
       // passwords are never copied, displayed or messaged anymore.
       const text = `Al-Huda Islamic Centre — Manager Portal Access Details\n\n👤 Manager: ${name}\n🆔 Manager ID: ${id}\n🌐 Portal Link: ${url}\n👤 Username: ${user}\n\nYour password will be given to you by the administrator in person or by phone.`;
       navigator.clipboard.writeText(text).then(() => {
-        alert('✅ Manager Portal Link & Username copied to clipboard!\n\n' + text);
+        if (window.LmsNotify && window.LmsNotify.dialog) window.LmsNotify.dialog({ title: 'Manager portal details copied', message: text, confirmText: 'Done' });
+        else if (typeof lmsNotify === 'function') lmsNotify('Manager portal details copied to clipboard.');
       }).catch(() => {
-        alert(text);
+        if (window.LmsNotify && window.LmsNotify.dialog) window.LmsNotify.dialog({ title: 'Copy these details manually', message: text, confirmText: 'Done' });
+        else if (typeof lmsNotify === 'function') lmsNotify(text);
       });
     }
 
@@ -750,7 +752,7 @@
     function openEditTeacherModal(teacherId) {
       const teacher = ALL_TEACHERS.find(t => t.id === teacherId);
       if (!teacher) {
-        alert("Teacher record not found.");
+        lmsNotify("Teacher record not found.");
         return;
       }
 
@@ -827,7 +829,7 @@
 
     async function deleteTeacher(teacherId) {
       if (CURRENT_ROLE === 'manager') {
-        alert('Managers cannot delete staff records.');
+        lmsNotify('Managers cannot delete staff records.');
         return;
       }
       const teacher = ALL_TEACHERS.find(t => t.id === teacherId);
@@ -853,9 +855,9 @@
 
         if (typeof invalidateCoreLmsDataCache === 'function') invalidateCoreLmsDataCache();
         await loadTeachers(true);
-        alert(`${roleLabel} "${tName}" has been deleted successfully.`);
+        lmsNotify(`${roleLabel} "${tName}" has been deleted successfully.`);
       } catch (err) {
-        alert('Error deleting employee: ' + err.message);
+        console.warn('[LMS] operation failed:', err.message); lmsNotify('Error deleting employee. Please try again.', { type: 'error' });
       }
     }
 
@@ -1312,7 +1314,7 @@
                   <span class="truncate text-blue-950 font-bold max-w-[200px]" title="${acc.zoom_link}">
                     ${acc.zoom_link}
                   </span>
-                  <button onclick="navigator.clipboard.writeText('${acc.zoom_link}'); alert('Zoom link copied to clipboard!');" class="text-blue-600 hover:text-blue-800 font-bold text-[10px]" title="Copy Zoom Link">
+                  <button onclick="navigator.clipboard.writeText('${acc.zoom_link}'); lmsNotify('Zoom link copied to clipboard!');" class="text-blue-600 hover:text-blue-800 font-bold text-[10px]" title="Copy Zoom Link">
                     <i class="fa-regular fa-copy"></i>
                   </button>
                   ` : `
@@ -1361,7 +1363,7 @@
       const url = `${window.location.origin}/teacher.html`;
       const txt = `Al-Huda Islamic Centre LMS - Teacher Portal\nTeacher: ${teacherName}\nPortal Link: ${url}\nUsername: ${user}\nYour password will be given to you by the administrator in person or by phone.`;
       navigator.clipboard.writeText(txt);
-      alert(`Copied to clipboard!\n\n${txt}`);
+      lmsNotify(`Copied to clipboard!\n\n${txt}`);
     }
 
     function copyManagerCredentials(id, user, managerName, portalUrl) {
@@ -1369,7 +1371,7 @@
       const url = portalUrl || `${window.location.origin}/manager.html`;
       const txt = `Al-Huda Islamic Centre LMS — Manager Portal\nManager: ${managerName}\nManager ID: ${id}\nPortal Link: ${url}\nUsername: ${user}\nYour password will be given to you by the administrator in person or by phone.`;
       navigator.clipboard.writeText(txt);
-      alert(`Copied to clipboard!\n\n${txt}`);
+      lmsNotify(`Copied to clipboard!\n\n${txt}`);
     }
 
     async function handleSaveTeacher(e) {
@@ -1385,19 +1387,19 @@
 
       // Mandatory Validations
       if (!full_name) {
-        alert("Please enter the Teacher's Full Name.");
+        lmsNotify("Please enter the Teacher's Full Name.");
         document.getElementById('tFullName').focus();
         return;
       }
 
       if (!phone) {
-        alert("Please enter Teacher's Primary WhatsApp Number.");
+        lmsNotify("Please enter Teacher's Primary WhatsApp Number.");
         document.getElementById('tPhone').focus();
         return;
       }
 
       if (!username) {
-        alert("Please enter Teacher Portal Username.");
+        lmsNotify("Please enter Teacher Portal Username.");
         document.getElementById('tUsername').focus();
         return;
       }
@@ -1409,7 +1411,7 @@
       // the owner-only Worker endpoint — never into the record itself,
       // the local account map, or any message.
       if (password && password.length < 10) {
-        alert('Portal password must be at least 10 characters long (or leave it blank).');
+        lmsNotify('Portal password must be at least 10 characters long (or leave it blank).');
         document.getElementById('tPassword').focus();
         return;
       }
@@ -1471,7 +1473,7 @@
           // success alert for a profile that was not saved.
           btn.disabled = false;
           btn.innerHTML = '<i class="fa-solid fa-check"></i> <span id="btnSaveTeacherText">Update Teacher Profile</span>';
-          alert('The teacher profile could not be saved. Please try again.\n\nReason: ' + (error.message || error));
+          console.warn('[LMS] operation failed:', (error.message || error)); lmsNotify('The teacher profile could not be saved. Please try again.', { type: 'error' });
           return;
         }
 
@@ -1527,12 +1529,12 @@
             if (pwFieldU) pwFieldU.value = '';
           } catch (pwErr) {
             saveTeacherAccount(editTeacherId, { hasExplicitPassword: prevHasPw });
-            alert('The teacher profile was SAVED, but the PASSWORD was NOT set.\n\nReason: ' + (pwErr.message || pwErr) + '\n\nPlease set it again from the Edit form or the password tool.');
+            console.warn('[LMS] operation failed:', (pwErr.message || pwErr)); lmsNotify('The teacher profile was SAVED, but the PASSWORD was NOT set.\n\nPlease set it again from the Edit form or the password tool. Please try again.', { type: 'error' });
             pwStatusLine = '🔑 Portal Password: NOT updated — please set it via the password tool';
           }
         }
 
-        alert(`✅ Teacher Profile Updated Successfully!\n\n👨‍🏫 Teacher: ${full_name}\n🆔 Teacher ID: ${teacher_id_code}\n👤 Portal Username: ${username}\n${pwStatusLine}\n🕒 Shift: ${working_shift}\n📹 Zoom: ${zoom_link || 'Not set yet'}`);
+        lmsNotify(`✅ Teacher Profile Updated Successfully!\n\n👨‍🏫 Teacher: ${full_name}\n🆔 Teacher ID: ${teacher_id_code}\n👤 Portal Username: ${username}\n${pwStatusLine}\n🕒 Shift: ${working_shift}\n📹 Zoom: ${zoom_link || 'Not set yet'}`);
       } else {
         // INSERT MODE
         const { data, error } = await db.from('teachers').insert([{
@@ -1545,7 +1547,7 @@
         if (error || !(data && data[0])) {
           btn.disabled = false;
           btn.innerHTML = '<i class="fa-solid fa-user-plus"></i> <span id="btnSaveTeacherText">Save Teacher & Generate LMS Account</span>';
-          alert('The teacher could not be saved. Please try again.\n\nReason: ' + ((error && (error.message || error)) || 'No record was returned.'));
+          console.warn('[LMS] operation failed:', ((error && (error.message || error)) || 'No record was returned.')); lmsNotify('The teacher could not be saved. Please try again.', { type: 'error' });
           return;
         }
 
@@ -1594,12 +1596,12 @@
             const pwFieldI = document.getElementById('tPassword');
             if (pwFieldI) pwFieldI.value = '';
           } catch (pwErr) {
-            alert('The teacher was REGISTERED, but the PASSWORD was NOT set.\n\nReason: ' + (pwErr.message || pwErr) + '\n\nPlease set it from the Edit form or the password tool.');
+            console.warn('[LMS] operation failed:', (pwErr.message || pwErr)); lmsNotify('The teacher was REGISTERED, but the PASSWORD was NOT set.\n\nPlease set it from the Edit form or the password tool. Please try again.', { type: 'error' });
             newPwStatusLine = '🔑 Portal Password: NOT set — please set it via the password tool';
           }
         }
 
-        alert(`✅ Teacher Registered Successfully!\n\n👨‍🏫 Teacher: ${full_name}\n🆔 Teacher ID: ${teacher_id_code}\n👤 Portal Username: ${username}\n${newPwStatusLine}\n🕒 Shift: ${working_shift}\n🎓 Qualification: ${qualification || 'As Assigned'}\n\nTeacher can now log into Al-Huda Teacher Portal.`);
+        lmsNotify(`✅ Teacher Registered Successfully!\n\n👨‍🏫 Teacher: ${full_name}\n🆔 Teacher ID: ${teacher_id_code}\n👤 Portal Username: ${username}\n${newPwStatusLine}\n🕒 Shift: ${working_shift}\n🎓 Qualification: ${qualification || 'As Assigned'}\n\nTeacher can now log into Al-Huda Teacher Portal.`);
       }
     }
 

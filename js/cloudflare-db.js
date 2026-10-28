@@ -647,7 +647,7 @@
         const lastAlert = window.__lmsWriteBlockedAlertAt || 0;
         if (Date.now() - lastAlert > 10000) {
           window.__lmsWriteBlockedAlertAt = Date.now();
-          alert('Session expired — please log in again. Aap ka change SAVE NAHI hua (koi data kharaab nahi hua).');
+          lmsNotify('Session expired — please log in again. Your change was NOT saved (no data was changed).', { type: 'error' });
         }
       }
       return { data: null, error: { message: 'Session expired — please log in again. Change was NOT saved.' } };

@@ -212,19 +212,19 @@ Official Email: ${ACADEMY_OFFICIAL_EMAIL}`;
       const text = document.getElementById('emailPreviewPlainText').value;
       if (navigator.clipboard) {
         navigator.clipboard.writeText(text).then(() => {
-          alert('📋 Official Welcome message copied to clipboard!');
+          lmsNotify('📋 Official Welcome message copied to clipboard!');
         });
       } else {
         const ta = document.getElementById('emailPreviewPlainText');
         ta.select();
         document.execCommand('copy');
-        alert('📋 Official Welcome message copied to clipboard!');
+        lmsNotify('📋 Official Welcome message copied to clipboard!');
       }
     }
 
     function openOfficialGmailComposer() {
       if (CURRENT_ROLE === 'manager') {
-        alert("Access Denied: Direct external emailing from CEO account is restricted for Managers. Please use the automated send button.");
+        lmsNotify("Access Denied: Direct external emailing from CEO account is restricted for Managers. Please use the automated send button.");
         return;
       }
       const to = encodeURIComponent(document.getElementById('emailPreviewTo').value.trim());
@@ -237,13 +237,13 @@ Official Email: ${ACADEMY_OFFICIAL_EMAIL}`;
 
     function dispatchEmailViaWhatsApp() {
       if (CURRENT_ROLE === 'manager') {
-        alert("Access Denied: Managers cannot dispatch messages directly to parent WhatsApp.");
+        lmsNotify("Access Denied: Managers cannot dispatch messages directly to parent WhatsApp.");
         return;
       }
       const phone = (document.getElementById('emailRecipientPhone').value || '').replace(/[^0-9]/g, '');
       const body = encodeURIComponent(document.getElementById('emailPreviewPlainText').value.trim());
       if (!phone) {
-        alert('WhatsApp phone number not found. You can copy the message and send manually.');
+        lmsNotify('WhatsApp phone number not found. You can copy the message and send manually.');
         return;
       }
       window.open(`https://wa.me/${phone}?text=${body}`, '_blank');
@@ -399,7 +399,7 @@ Official Email: ${ACADEMY_OFFICIAL_EMAIL}`;
         const html = document.getElementById('emailPreviewHtmlIframe')?.srcdoc || text;
         const btn = document.getElementById('btnDispatchEmailNow');
         if (!familyId) {
-          alert('This email is not linked to a family record, so it cannot be sent from the Manager portal.');
+          lmsNotify('This email is not linked to a family record, so it cannot be sent from the Manager portal.');
           return;
         }
         if (btn) {
@@ -417,9 +417,9 @@ Official Email: ${ACADEMY_OFFICIAL_EMAIL}`;
           }, 2500);
         }
         if (result.success) {
-          alert('✅ Email sent to the parent.');
+          lmsNotify('✅ Email sent to the parent.');
         } else {
-          alert('❌ Email could not be sent.\n\nError: ' + (result.error || 'Unknown error'));
+          console.warn('[LMS] operation failed:', (result.error || 'Unknown error')); lmsNotify('Email could not be sent. Please try again.', { type: 'error' });
         }
         return;
       }
@@ -434,7 +434,7 @@ Official Email: ${ACADEMY_OFFICIAL_EMAIL}`;
       const btn = document.getElementById('btnDispatchEmailNow');
 
       if (!toEmail) {
-        alert('Please enter a recipient email address.');
+        lmsNotify('Please enter a recipient email address.');
         document.getElementById('emailPreviewTo').focus();
         return;
       }
@@ -471,19 +471,15 @@ Official Email: ${ACADEMY_OFFICIAL_EMAIL}`;
       }
 
       if (result && result.success) {
-        alert(`✅ Official Welcome & Zoom Link Email Sent!\n\n` +
+        lmsNotify(`✅ Official Welcome & Zoom Link Email Sent!\n\n` +
           `📧 Official Sender: ${ACADEMY_OFFICIAL_EMAIL}\n` +
           `👤 Recipient: ${toEmail}\n` +
           `📝 Subject: ${subject}\n\n` +
           `Dispatched via Al-Huda Official Email Relay (ceoislamiccentre@gmail.com).`
         );
       } else {
-        alert(`❌ Email could not be sent.\n\n` +
-          `👤 Recipient: ${toEmail}\n` +
-          `📝 Subject: ${subject}\n\n` +
-          `Error: ${(result && result.error) || 'Unknown error'}\n\n` +
-          `Please check your owner login and try again.`
-        );
+        console.warn('[LMS] email failed:', { toEmail: toEmail, subject: subject, error: (result && result.error) || 'Unknown error' });
+        lmsNotify('Email could not be sent. Please check your owner login and try again.', { type: 'error' });
       }
     }
 

@@ -224,9 +224,7 @@
 
         if (ingestWarnings.length > 0) {
           ingestWarnings.forEach(w => console.warn('[Cloud Fee Sync] ' + w));
-          if (typeof showToastNotification === 'function') {
-            showToastNotification('⚠️ Duplicate receipt numbers were found and kept safe. Please check the Fee Ledger.');
-          }
+          lmsNotify('Duplicate receipt numbers were found and kept safe. Please check the Fee Ledger.', { type: 'warning' });
         }
 
         // Sort all records descending by date / receipt
@@ -298,9 +296,7 @@
             } else {
               notesObj.fee_history.unshift(nr);
               console.warn(`[Cloud Fee Sync] Receipt ${nr.receiptNo} already exists with different details for ${fId} — both records kept.`);
-              if (typeof showToastNotification === 'function') {
-                showToastNotification(`⚠️ Receipt ${nr.receiptNo} already exists with different details — both records were kept.`);
-              }
+              lmsNotify(`Receipt ${nr.receiptNo} already exists with different details — both records were kept.`, { type: 'warning' });
             }
           } else {
             notesObj.fee_history.unshift(nr);
@@ -380,9 +376,9 @@
 
     async function manualFeeCloudSync() {
       updateCloudSyncIndicator('syncing');
-      showToastNotification("Syncing latest fee records with cloud...");
+      lmsNotify("Syncing latest fee records with cloud...");
       await loadFeeBillingLedger(true);
-      showToastNotification("Fee records 100% synchronized across all devices!");
+      lmsNotify("Fee records reloaded.");
     }
 
     // Persistent storage helpers (Hybrid Cloud Cache + Local Fallback)
@@ -1334,7 +1330,7 @@
       if (prorated <= 0) return;
       document.getElementById('feeFormMonthlyFee').value = prorated.toFixed(2);
       recalcFeeTotalLive();
-      showToastNotification(`Prorated fee of ${prorated.toFixed(2)} applied for ${document.getElementById('feeProrateActiveDays').value} active days!`);
+      lmsNotify(`Prorated fee of ${prorated.toFixed(2)} applied for ${document.getElementById('feeProrateActiveDays').value} active days!`);
     }
 
     // Advance Payment Toggle & Calculator
@@ -1391,7 +1387,7 @@
       if (advanceAmt <= 0) return;
       document.getElementById('feeFormMonthlyFee').value = advanceAmt.toFixed(2);
       recalcFeeTotalLive();
-      showToastNotification(`Advance payment fee of ${advanceAmt.toFixed(2)} applied!`);
+      lmsNotify(`Advance payment fee of ${advanceAmt.toFixed(2)} applied!`);
     }
 
     // Submit Payment & Save Record
@@ -1399,7 +1395,7 @@
       e.preventDefault();
       const famId = document.getElementById('feeFormFamilyId').value;
       if (!famId) {
-        alert("Please search and select a family account first.");
+        lmsNotify("Please search and select a family account first.");
         return;
       }
 
@@ -1423,15 +1419,13 @@
           dupHit = findFeeMonthDuplicate(existingRecords, famId, mName, yVal);
         }
         if (dupHit) {
-          const proceed = (typeof lmsConfirm === 'function')
-            ? await lmsConfirm({
+          const proceed = await lmsConfirm({
                 title: 'Possible Duplicate Fee Record',
                 message: `A fee record for this family already exists for ${dupHit.month} ${dupHit.year} (Receipt ${dupHit.receiptNo}, status: ${dupHit.status}).\n\nIf this is a separate payment, choose "Save Anyway". Otherwise choose "Cancel" and check the Fee Ledger first.`,
                 confirmText: 'Save Anyway',
                 cancelText: 'Cancel',
                 variant: 'warning'
               })
-            : window.confirm(`A fee record for this family already exists for ${dupHit.month} ${dupHit.year} (Receipt ${dupHit.receiptNo}). Save anyway?`);
           if (!proceed) return;
         }
       }
@@ -1546,7 +1540,7 @@
       // Refresh Overview, Defaulters and Matrix
       await loadFeeDashboardStats();
       resetFeeForm();
-      showToastNotification("Fee payment recorded successfully!");
+      lmsNotify("Fee payment recorded successfully!");
     }
 
     // ============================================================
@@ -1663,7 +1657,7 @@
     async function downloadFeeInvoicePDF() {
       const r = CURRENT_FEE_MODAL_RECEIPT;
       if (!r) {
-        alert("No active invoice receipt selected.");
+        lmsNotify("No active invoice receipt selected.");
         return;
       }
 
@@ -1778,7 +1772,7 @@
               pdf.addImage(imgData, 'JPEG', xPos, yPos, renderWidth, renderHeight, undefined, 'FAST');
               pdf.save(filename);
               pdfGenerated = true;
-              showToastNotification("✅ Official Invoice PDF downloaded successfully!");
+              lmsNotify("✅ Official Invoice PDF downloaded successfully!");
             }
           } catch (canvasErr) {
             console.warn("[Invoice PDF] html2canvas+jsPDF direct render notice:", canvasErr);
@@ -1807,7 +1801,7 @@
 
           await html2pdf().set(opt).from(cardClone).save();
           pdfGenerated = true;
-          showToastNotification("✅ Official Invoice PDF downloaded successfully!");
+          lmsNotify("✅ Official Invoice PDF downloaded successfully!");
         }
 
         // METHOD 3: Fallback to pristine print preview if canvas libraries fail
@@ -1817,7 +1811,7 @@
 
       } catch (err) {
         console.error("[Invoice PDF] Generation failed:", err);
-        showToastNotification("Opening print preview for PDF saving...");
+        lmsNotify("Opening print preview for PDF saving...");
         printFeeInvoiceReceipt();
       } finally {
         if (sandbox && sandbox.parentNode) {
@@ -1895,7 +1889,7 @@
       // Batch 2: the official sender/CC email is email configuration —
       // owner-only. Managers see the current value but cannot change it.
       if (typeof CURRENT_ROLE !== 'undefined' && CURRENT_ROLE === 'manager') {
-        showToastNotification('The official academy email can only be changed by the Owner.');
+        lmsNotify('The official academy email can only be changed by the Owner.');
         return;
       }
       const current = getOfficialAcademyEmail();
@@ -1908,7 +1902,7 @@
         const clean = entered.trim().toLowerCase();
         localStorage.setItem('alhuda_fee_official_email', clean);
         updateOfficialEmailUI();
-        showToastNotification(`Official Academy Email updated to: ${clean}`);
+        lmsNotify(`Official Academy Email updated to: ${clean}`);
       }
     }
 
@@ -1925,7 +1919,7 @@
     async function sendFeeInvoiceEmailModal(record, isSilent = false) {
       const r = record || CURRENT_FEE_MODAL_RECEIPT;
       if (!r) {
-        showToastNotification("No active invoice loaded to email.");
+        lmsNotify("No active invoice loaded to email.");
         return;
       }
 
@@ -1953,7 +1947,7 @@
 
       if (CURRENT_ROLE !== 'manager' && (!targetEmail || !targetEmail.includes('@'))) {
         if (!isSilent) {
-          alert(`No valid parent email address found for ${r.parentName}. Please specify parent email.`);
+          lmsNotify(`No valid parent email address found for ${r.parentName}. Please specify parent email.`);
         }
         return;
       }
@@ -2082,16 +2076,16 @@
       if (CURRENT_ROLE === 'manager') {
         // Batch 2 (B16): no Gmail compose for managers (it would expose
         // the address), and the confirmation never names the recipient.
-        showToastNotification(dispatchedSuccessfully
+        lmsNotify(dispatchedSuccessfully
           ? '✅ Email sent to the parent.'
           : '❌ Email could not be sent. ' + managerSendError);
       } else if (!isSilent) {
         // Open Gmail compose with complete pre-filled details
         const gmailUrl = `https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(targetEmail)}&cc=${encodeURIComponent(offEmail)}&su=${encodeURIComponent(subject)}&body=${encodeURIComponent(plainText)}`;
         window.open(gmailUrl, '_blank');
-        showToastNotification(`Official Invoice Email prepared for ${targetEmail}`);
+        lmsNotify('Official Invoice Email prepared.');
       } else {
-        showToastNotification(`Official Invoice Email dispatched to ${targetEmail} via Al-Huda Official Relay`);
+        lmsNotify('Official Invoice Email dispatched via Al-Huda Official Relay.');
       }
     }
 
@@ -2323,7 +2317,7 @@ Official Email: ${offEmail}`;
         const gmailUrl = `https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(emailAddr)}&su=${encodeURIComponent(subject)}&body=${encodeURIComponent(plainText)}`;
         window.open(gmailUrl, '_blank');
       } else {
-        alert(`No email address is saved for ${item.parentName} (${item.familyId}). Please add their email in Family Directory.`);
+        lmsNotify(`No email address is saved for ${item.parentName} (${item.familyId}). Please add their email in Family Directory.`);
       }
     }
 
@@ -2337,7 +2331,7 @@ Official Email: ${offEmail}`;
 
       if (list.length === 0) {
         if (!isAuto4thTrigger) {
-          alert(`All clear! There are zero families with pending fees for ${periodStr}.`);
+          lmsNotify(`All clear! There are zero families with pending fees for ${periodStr}.`);
         }
         return;
       }
@@ -2391,8 +2385,8 @@ Official Email: ${offEmail}`;
         }
         localStorage.setItem(`alhuda_bulk_pending_reminder_${targetYear}_${targetMonth}`, new Date().toISOString());
         if (!isAuto4thTrigger) {
-          showToastNotification(`✅ Processed ${itemsMgr.length} pending fee reminders for ${periodStr}!`);
-          alert(`✅ ${periodStr} Fee Reminders Processed!\n\n• Total Pending Families: ${list.length}\n• Emails Sent Securely: ${sentMgr}\n• Could Not Send (no email on file or an error): ${failedMgr}${quotaStoppedMgr ? '\n• ⚠️ Sending stopped early: the daily email limit was reached, so the remaining reminders were NOT sent.' : ''}`);
+          lmsNotify(`✅ Processed ${itemsMgr.length} pending fee reminders for ${periodStr}!`);
+          lmsNotify(`✅ ${periodStr} Fee Reminders Processed!\n\n• Total Pending Families: ${list.length}\n• Emails Sent Securely: ${sentMgr}\n• Could Not Send (no email on file or an error): ${failedMgr}${quotaStoppedMgr ? '\n• ⚠️ Sending stopped early: the daily email limit was reached, so the remaining reminders were NOT sent.' : ''}`);
         }
         return;
       }
@@ -2486,11 +2480,11 @@ Official Email: ${offEmail}`;
 
       if (!isAuto4thTrigger) {
         if (allBccEmails.length > 0 && CURRENT_ROLE !== 'manager') {
-          showToastNotification(`✅ Dispatched ${sentCount} Fee Reminders via Official Relay for ${periodStr}!`);
-          alert(`✅ ${periodStr} Fee Reminder Emails Dispatched!\n\n• Total Pending Families: ${list.length}\n• Emails Sent via Official Relay: ${sentCount}\n• Not Sent: ${itemsToProcess.length - sentCount}${quotaStopped ? '\n• ⚠️ Sending stopped early: the daily email limit was reached, so the remaining reminders were NOT sent.' : ''}\n• Message Included: "${periodStr} fee has not reached us — kindly pay at earliest or share payment screenshot/receipt if already paid."`);
+          lmsNotify(`✅ Dispatched ${sentCount} Fee Reminders via Official Relay for ${periodStr}!`);
+          lmsNotify(`✅ ${periodStr} Fee Reminder Emails Dispatched!\n\n• Total Pending Families: ${list.length}\n• Emails Sent via Official Relay: ${sentCount}\n• Not Sent: ${itemsToProcess.length - sentCount}${quotaStopped ? '\n• ⚠️ Sending stopped early: the daily email limit was reached, so the remaining reminders were NOT sent.' : ''}\n• Message Included: "${periodStr} fee has not reached us — kindly pay at earliest or share payment screenshot/receipt if already paid."`);
         } else {
-          showToastNotification(`✅ Processed ${list.length} pending fee reminders for ${periodStr}!`);
-          alert(`✅ ${periodStr} Fee Reminder Processed for ${list.length} Pending Families!`);
+          lmsNotify(`✅ Processed ${list.length} pending fee reminders for ${periodStr}!`);
+          lmsNotify(`✅ ${periodStr} Fee Reminder Processed for ${list.length} Pending Families!`);
         }
       }
     }
@@ -2506,7 +2500,7 @@ Official Email: ${offEmail}`;
     function toggleMonthly4thAutoReminder(enabled) {
       localStorage.setItem('alhuda_auto_fee_reminder_4th_enabled', enabled ? 'true' : 'false');
       initAndCheckMonthly4thAutoReminder();
-      showToastNotification(enabled
+      lmsNotify(enabled
         ? '✅ 4th of Every Month Auto-Reminder Activated!'
         : '⏸️ 4th of Every Month Auto-Reminder Paused.');
     }
@@ -2552,7 +2546,7 @@ Official Email: ${offEmail}`;
         localStorage.setItem(sentKey, now.toISOString());
         setTimeout(() => {
           sendBulkPendingFeeReminders(true);
-          showToastNotification(`⚡ 4th of Month Auto-Reminder sent to ${CACHED_PENDING_FEE_LIST.length} pending families for ${curMonthName} ${curYear}!`);
+          lmsNotify(`⚡ 4th of Month Auto-Reminder sent to ${CACHED_PENDING_FEE_LIST.length} pending families for ${curMonthName} ${curYear}!`);
           initAndCheckMonthly4thAutoReminder();
         }, 1200);
       }
@@ -2828,7 +2822,7 @@ Official Email: ${offEmail}`;
     async function sendBulkDefaulterReminders3Plus() {
       const list = CACHED_THREE_MONTH_DEFAULTERS || [];
       if (list.length === 0) {
-        alert('All clear! There are currently zero families in the 3+ Months Defaulters list.');
+        lmsNotify('All clear! There are currently zero families in the 3+ Months Defaulters list.');
         return;
       }
 
@@ -2873,8 +2867,8 @@ Official Email: ${offEmail}`;
           btnM3.disabled = false;
           btnM3.innerHTML = origHtmlM3;
         }
-        showToastNotification(`🚨 Processed urgent 3+ month overdue notices for ${list.length} families!`);
-        alert(`🚨 3+ Months Defaulters Reminder Processed!\n\n• Total 3+ Month Defaulters: ${list.length}\n• Urgent Emails Sent Securely: ${sentM3}\n• Could Not Send (no email on file or an error): ${failedM3}${quotaStoppedM3 ? '\n• ⚠️ Sending stopped early: the daily email limit was reached, so the remaining reminders were NOT sent.' : ''}`);
+        lmsNotify(`🚨 Processed urgent 3+ month overdue notices for ${list.length} families!`);
+        lmsNotify(`🚨 3+ Months Defaulters Reminder Processed!\n\n• Total 3+ Month Defaulters: ${list.length}\n• Urgent Emails Sent Securely: ${sentM3}\n• Could Not Send (no email on file or an error): ${failedM3}${quotaStoppedM3 ? '\n• ⚠️ Sending stopped early: the daily email limit was reached, so the remaining reminders were NOT sent.' : ''}`);
         return;
       }
 
@@ -2941,8 +2935,8 @@ Official Email: ${offEmail}`;
         btn.innerHTML = origHtml;
       }
 
-      showToastNotification(`🚨 Dispatched urgent 3+ month overdue notices to ${sentCount} families via Official Relay!`);
-      alert(`🚨 3+ Months Defaulters Reminder Sent!\n\n• Total 3+ Month Defaulters: ${list.length}\n• Urgent Emails Dispatched via Official Relay: ${sentCount}\n• Not Sent: ${itemsToProcess.length - sentCount}${quotaStopped ? '\n• ⚠️ Sending stopped early: the daily email limit was reached, so the remaining reminders were NOT sent.' : ''}`);
+      lmsNotify(`🚨 Dispatched urgent 3+ month overdue notices to ${sentCount} families via Official Relay!`);
+      lmsNotify(`🚨 3+ Months Defaulters Reminder Sent!\n\n• Total 3+ Month Defaulters: ${list.length}\n• Urgent Emails Dispatched via Official Relay: ${sentCount}\n• Not Sent: ${itemsToProcess.length - sentCount}${quotaStopped ? '\n• ⚠️ Sending stopped early: the daily email limit was reached, so the remaining reminders were NOT sent.' : ''}`);
     }
 
 
@@ -3222,7 +3216,7 @@ Official Email: ${offEmail}`;
         closeModal('modalMatrixAction');
         loadMasterAnnualMatrix();
         loadFeeDashboardStats();
-        showToastNotification(`Admission set to ${month} ${year}! All prior months are automatically N/A ($0 fee & 0 arrears).`);
+        lmsNotify(`Admission set to ${month} ${year}! All prior months are automatically N/A ($0 fee & 0 arrears).`);
         return;
       }
 
@@ -3270,7 +3264,7 @@ Official Email: ${offEmail}`;
         closeModal('modalMatrixAction');
         loadMasterAnnualMatrix();
         loadFeeDashboardStats();
-        showToastNotification(`${month} and all prior months marked as Not Enrolled (N/A)! Arrears cleared.`);
+        lmsNotify(`${month} and all prior months marked as Not Enrolled (N/A)! Arrears cleared.`);
         return;
       }
 
@@ -3296,7 +3290,7 @@ Official Email: ${offEmail}`;
       // Optimistic instant re-render of matrix & stats
       loadMasterAnnualMatrix();
       loadFeeDashboardStats();
-      showToastNotification(`Status updated for ${month} ${year}!`);
+      lmsNotify(`Status updated for ${month} ${year}!`);
     }
 
     function proceedToCollectFromMatrixModal() {
@@ -3466,18 +3460,6 @@ Official Email: ${offEmail}`;
       renderFeeReceiptsHistoryRows(filtered);
     }
 
-    // Generic Toast notification helper for fee engine
-    function showToastNotification(message) {
-      if (typeof window.lmsNotify === 'function') {
-        window.lmsNotify(message);
-        return;
-      }
-      if (typeof showAttendanceToast === 'function') {
-        showAttendanceToast(message);
-      } else {
-        alert(message);
-      }
-    }
 
     async function loadCourses() {
       const { data: courses } = await db.from('courses').select('*');

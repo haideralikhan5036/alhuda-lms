@@ -84,12 +84,6 @@
         return;
       }
     } catch (e) { /* ignore */ }
-    try {
-      if (typeof window.showToastNotification === 'function') {
-        window.showToastNotification(text);
-        return;
-      }
-    } catch (e) { /* ignore */ }
     try { console.warn('[FeeTables] ' + text); } catch (e) { /* ignore */ }
   }
 

@@ -46,14 +46,12 @@
     async function saveCustomBooksWithReport(books, successMsg) {
       const ok = await saveCustomBooks(books);
       if (ok) {
-        alert(successMsg);
+        lmsNotify(successMsg);
       } else {
         // Batch 2 (S13): surface the REAL server error when there is one
         // (e.g. a permission denial), not just a generic connection hint.
         const realErr = _lastCatalogSyncError ? `\n\nServer said: ${_lastCatalogSyncError}` : '';
-        alert('⚠️ The material was prepared but could NOT be saved reliably.\n\n'
-          + 'Your pages were not lost from this screen, but they may not appear after refresh or on other devices.\n'
-          + 'Please check your internet connection and try saving again. Nothing was deleted.' + realErr);
+        console.warn('[LMS] operation failed:', realErr); lmsNotify('⚠️ The material was prepared but could NOT be saved reliably.\n\nYour pages were not lost from this screen, but they may not appear after refresh or on other devices.\nPlease check your internet connection and try saving again. Nothing was deleted. Please try again.', { type: 'error' });
       }
       return ok;
     }
@@ -523,7 +521,7 @@ if (mergedDeleted.length > 0) {
       const allBooks = getAllAvailableBooks();
       const book = allBooks.find(b => b.id === bookId);
       if (!book) {
-        alert("Course book not found.");
+        lmsNotify("Course book not found.");
         return;
       }
 
@@ -1736,7 +1734,7 @@ if (mergedDeleted.length > 0) {
     function copyBookDeepLink(bookId, bookTitle) {
       const url = `${window.location.origin}/index.html?book=${bookId}`;
       navigator.clipboard.writeText(url);
-      alert(`✅ Direct Link for "${bookTitle}" Copied to Clipboard!\n\n${url}\n\nStudents or teachers can open this link to view the book directly in LMS.`);
+      lmsNotify(`✅ Direct Link for "${bookTitle}" Copied to Clipboard!\n\n${url}\n\nStudents or teachers can open this link to view the book directly in LMS.`);
     }
 
     // Custom Book Upload & Structure Handling
@@ -1854,7 +1852,7 @@ if (mergedDeleted.length > 0) {
       const language = (category === 'tafseer') ? (document.getElementById('cbLanguage')?.value || 'ur') : null;
 
       if (!title || SELECTED_CUSTOM_FILES.length === 0) {
-        alert("Please provide a book title and select at least one page image.");
+        lmsNotify("Please provide a book title and select at least one page image.");
         return;
       }
 
@@ -1988,7 +1986,7 @@ if (mergedDeleted.length > 0) {
         closeModal('modalUploadCustomBook');
         loadCurriculumLibrary(category);
       } catch (err) {
-        alert("Error saving custom book: " + err.message);
+        console.warn('[LMS] operation failed:', err.message); lmsNotify('Error saving custom book. Please try again.', { type: 'error' });
       } finally {
         btn.disabled = false;
         btn.innerHTML = '<i class="fa-solid fa-floppy-disk"></i> Save &amp; Add to Library';
@@ -2073,7 +2071,7 @@ if (mergedDeleted.length > 0) {
       const allBooks = getAllAvailableBooks();
       const book = allBooks.find(b => b.id === bookId);
       if (!book) {
-        alert("Course book not found.");
+        lmsNotify("Course book not found.");
         return;
       }
 
@@ -2131,7 +2129,7 @@ if (mergedDeleted.length > 0) {
       const lang = (category === 'tafseer') ? (document.getElementById('editBookLanguage')?.value || 'ur') : null;
 
       if (!title) {
-        alert("Please enter a book title.");
+        lmsNotify("Please enter a book title.");
         return;
       }
 
@@ -2252,7 +2250,7 @@ if (mergedDeleted.length > 0) {
         closeModal('modalEditCustomBook');
         loadCurriculumLibrary(category);
       } catch (err) {
-        alert("Error updating book: " + err.message);
+        console.warn('[LMS] operation failed:', err.message); lmsNotify('Error updating book. Please try again.', { type: 'error' });
       } finally {
         btn.disabled = false;
         btn.innerHTML = '<i class="fa-solid fa-check"></i> Save Changes';
@@ -2261,7 +2259,7 @@ if (mergedDeleted.length > 0) {
 
     async function handleDeleteCurriculumBook(bookId, bookTitle) {
       if (CURRENT_ROLE === 'manager') {
-        alert("Access Denied: Managers are not authorized to delete course material books. Only the System Owner can delete books.");
+        lmsNotify("Access Denied: Managers are not authorized to delete course material books. Only the System Owner can delete books.");
         return;
       }
       if (!(await lmsConfirm(`Are you sure you want to delete course material "${bookTitle || 'this book'}" from the library?`))) {
@@ -2282,7 +2280,7 @@ if (mergedDeleted.length > 0) {
         const filteredCustom = customBooks.filter(b => b.id !== bookId);
         const catalogSaved = await saveCustomBooks(filteredCustom);
         if (!catalogSaved) {
-          alert('⚠️ Could NOT delete this course material on the server.\n\n'
+          lmsNotify('⚠️ Could NOT delete this course material on the server.\n\n'
             + (_lastCatalogSyncError ? `Server said: ${_lastCatalogSyncError}\n\n` : '')
             + 'The book has NOT been deleted. Please try again.');
           return;
@@ -2295,7 +2293,7 @@ if (mergedDeleted.length > 0) {
         }
         const tombstoneSaved = await saveDeletedBookIds(deletedIds);
         if (!tombstoneSaved) {
-          alert('⚠️ Could NOT record this deletion on the server.\n\n'
+          lmsNotify('⚠️ Could NOT record this deletion on the server.\n\n'
             + (_lastCatalogSyncError ? `Server said: ${_lastCatalogSyncError}\n\n` : '')
             + 'The book may reappear after refresh. Please try again.');
           return;
@@ -2317,11 +2315,11 @@ if (mergedDeleted.length > 0) {
           }
         }
 
-        alert(`🗑️ "${bookTitle || 'Course material'}" has been deleted from library across all portals.`);
+        lmsNotify(`🗑️ "${bookTitle || 'Course material'}" has been deleted from library across all portals.`);
         loadCurriculumLibrary(CURRENT_CURRICULUM_CATEGORY);
       } catch (err) {
         console.error('Error deleting book:', err);
-        alert('Could not completely delete course material: ' + err.message);
+        console.warn('[LMS] operation failed:', err.message); lmsNotify('Could not completely delete course material. Please try again.', { type: 'error' });
       } finally {
         if (modalDelBtn) {
           modalDelBtn.disabled = false;
@@ -2406,7 +2404,7 @@ if (mergedDeleted.length > 0) {
     // closing the reader — the selected student context is untouched.
     // Returns the resolution result (tests/callers inspect .ok/.reason).
     async function openAdminSavedLessonPage(bookId, page, para, language) {
-      if (!window.LessonHistory) { alert('Course book not found.'); return { ok: false, reason: 'BOOK_NOT_FOUND' }; }
+      if (!window.LessonHistory) { lmsNotify('Course book not found.'); return { ok: false, reason: 'BOOK_NOT_FOUND' }; }
       const entry = { bookId: bookId || null, page: (page === null || page === undefined || page === '') ? null : Number(page), para: (para === null || para === undefined || para === '') ? null : Number(para), language: language || null, isAdditionalCourse: bookId === 'additional-course' };
       const res = await window.LessonHistory.resolveLessonPageWithRefresh(
         entry,
@@ -2416,7 +2414,7 @@ if (mergedDeleted.length > 0) {
       if (res.ok) {
         openDigitalBookReader(res.book.id, res.displayPage, res.para, res.language);
       } else {
-        alert(window.LessonHistory.lessonPageReasonMessage(res.reason));
+        lmsNotify(window.LessonHistory.lessonPageReasonMessage(res.reason));
       }
       return res;
     }

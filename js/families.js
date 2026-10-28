@@ -485,16 +485,13 @@
           return `• ${m.parentName || 'Existing family'} (${m.familyId || ''}) — same ${labels}`;
         });
         const message = 'A family with the same contact details is already registered:\n\n' + lines.join('\n') + '\n\nReal families can share a phone number or name. If this is a different family, choose "Add Anyway". Otherwise choose "Cancel".';
-        if (typeof lmsConfirm === 'function') {
-          return await lmsConfirm({
-            title: 'Possible Duplicate Family',
-            message: message,
-            confirmText: 'Add Anyway',
-            cancelText: 'Cancel',
-            variant: 'warning'
-          });
-        }
-        return window.confirm('Possible Duplicate Family\n\n' + message);
+        return await lmsConfirm({
+          title: 'Possible Duplicate Family',
+          message: message,
+          confirmText: 'Add Anyway',
+          cancelText: 'Cancel',
+          variant: 'warning'
+        });
       } catch (err) {
         console.warn('[Duplicate Check] Family duplicate check failed; continuing without it.');
         return true;
@@ -605,7 +602,7 @@
       if (familyInsertError) {
         btn.disabled = false;
         btn.innerText = 'Save Family & Generate LMS Account';
-        alert('The family could not be saved. Please try again.\n\nReason: ' + (familyInsertError.message || familyInsertError));
+        console.warn('[LMS] operation failed:', (familyInsertError.message || familyInsertError)); lmsNotify('The family could not be saved. Please try again.', { type: 'error' });
         return;
       }
 
@@ -639,7 +636,7 @@
           familyPwStatus = 'Password: Set — give it to the parent in person or by phone.';
         } catch (pwErr) {
           saveParentAccount(id, { hasExplicitPassword: false });
-          alert('The family was SAVED, but the portal PASSWORD was NOT set.\n\nReason: ' + (pwErr.message || pwErr) + '\n\nPlease set it from the Edit Family form or the password tool.');
+          console.warn('[LMS] operation failed:', (pwErr.message || pwErr)); lmsNotify('The family was SAVED, but the portal PASSWORD was NOT set.\n\nReason: \n\nPlease set it from the Edit Family form or the password tool. Please try again.', { type: 'error' });
           familyPwStatus = 'Password: NOT set — please set it via the password tool.';
         }
       }
@@ -714,15 +711,13 @@
         // so the finally block resets the enroll flag and the button.
         const dupStudent = (typeof window.findDuplicateStudentName === 'function') ? window.findDuplicateStudentName(ALL_STUDENTS || [], family_id, name) : null;
         if (dupStudent) {
-          const proceedDupStudent = (typeof lmsConfirm === 'function')
-            ? await lmsConfirm({
+          const proceedDupStudent = await lmsConfirm({
                 title: 'Possible Duplicate Student',
                 message: `A student named "${dupStudent.name}" is already enrolled in this family.\n\nIf this is a different child with the same name, choose "Add Anyway". Otherwise choose "Cancel".`,
                 confirmText: 'Add Anyway',
                 cancelText: 'Cancel',
                 variant: 'warning'
-              })
-            : window.confirm(`A student named "${dupStudent.name}" is already enrolled in this family. Add anyway?`);
+              });
           if (!proceedDupStudent) return;
         }
 
@@ -875,7 +870,7 @@
           zoomNotice = '\n\n⚠️ Note: Assigned teacher currently has no Zoom link configured. Please set up their Zoom Classroom in Teacher Profile.';
         }
 
-        alert(`✅ Student Enrolled Successfully!\n\n🎓 Student: ${name} (${id})\n👨‍👩‍👧 Linked Family: ${family_id}\n📚 Course: ${course_id}\n📅 Days Preference: ${days_per_week}\n🗓️ Joining Date: ${joining_date}\n👨‍🏫 Assigned Teacher: ${tName}\n📹 Zoom Room: ${resolvedZoomLink || 'Pending Configuration'}\n\nStudent is now in Teacher's Student List. You can open Teacher's 2D Schedule to book timetable slots.${zoomNotice}${emailStatusSuffix}`);
+        lmsNotify(`✅ Student Enrolled Successfully!\n\n🎓 Student: ${name} (${id})\n👨‍👩‍👧 Linked Family: ${family_id}\n📚 Course: ${course_id}\n📅 Days Preference: ${days_per_week}\n🗓️ Joining Date: ${joining_date}\n👨‍🏫 Assigned Teacher: ${tName}\n📹 Zoom Room: ${resolvedZoomLink || 'Pending Configuration'}\n\nStudent is now in Teacher's Student List. You can open Teacher's 2D Schedule to book timetable slots.${zoomNotice}${emailStatusSuffix}`);
       } finally {
         _IS_ENROLLING_STUDENT = false;
         if (btn) {
@@ -891,7 +886,7 @@
       // passwords are never copied, displayed or messaged anymore.
       const txt = `Al-Huda LMS Parent Portal\nUsername: ${user}\nYour password will be given to you by the administrator in person or by phone.`;
       navigator.clipboard.writeText(txt);
-      alert(`Copied to clipboard!\n\n${txt}`);
+      lmsNotify(`Copied to clipboard!\n\n${txt}`);
     }
 
     let CURRENT_FAMILIES_VIEW = 'famTable';

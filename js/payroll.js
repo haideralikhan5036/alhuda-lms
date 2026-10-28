@@ -350,7 +350,7 @@
       let accounts = {};
       try { accounts = getTeacherAccounts(); } catch (e) {}
       if (_payrollIsManagerRecord(rec, accounts)) {
-        alert('Manager accounts are managed by the owner only. Their payroll is not visible to managers.');
+        lmsNotify('Manager accounts are managed by the owner only. Their payroll is not visible to managers.');
         return true;
       }
       return false;
@@ -690,7 +690,7 @@
       if (_payrollBlockManagerRecord(teacherId)) return;
       const slipData = ALL_TEACHER_SALARIES[teacherId];
       if (!slipData) {
-        alert("Salary data not available for this instructor.");
+        lmsNotify("Salary data not available for this instructor.");
         return;
       }
 
@@ -853,7 +853,7 @@
       } catch (e) { /* dual-write must never affect the legacy save */ }
 
       calculateMonthlySalaries();
-      alert(`✅ Salary Slip Saved Successfully!\n\n👨‍🏫 Teacher: ${CURRENT_SLIP_DATA.teacher_name}\n💵 Base Teaching: ${baseSubtotal.toLocaleString()} PKR\n💰 Net Payable: ${netPayable.toLocaleString()} PKR\n📌 Status: ${savedSalaries[slipKey].status}`);
+      lmsNotify(`✅ Salary Slip Saved Successfully!\n\n👨‍🏫 Teacher: ${CURRENT_SLIP_DATA.teacher_name}\n💵 Base Teaching: ${baseSubtotal.toLocaleString()} PKR\n💰 Net Payable: ${netPayable.toLocaleString()} PKR\n📌 Status: ${savedSalaries[slipKey].status}`);
     }
 
     function updateSlipPaidButtonUI(isPaid) {
@@ -901,7 +901,7 @@
 
       if (nextStatus === 'Paid') {
         setTimeout(async () => {
-          if (confirm(`Do you want to dispatch the finalized salary statement email to ${CURRENT_SLIP_DATA.teacher_name}?`)) {
+          if (await lmsConfirm({ title: 'Send salary statement email?', message: `Do you want to dispatch the finalized salary statement email to ${CURRENT_SLIP_DATA.teacher_name}?`, confirmText: 'Send Email', cancelText: 'Cancel', variant: 'info' })) {
             await sendSalarySlipEmailModal(CURRENT_SLIP_DATA, false);
           }
         }, 400);
@@ -960,7 +960,7 @@
     function generateAndOpenWhatsAppSlip(slipData) {
       const cleanPhone = (slipData.phone || '').replace(/[^0-9]/g, '');
       if (!cleanPhone) {
-        alert("Teacher WhatsApp number is not registered.");
+        lmsNotify("Teacher WhatsApp number is not registered.");
         return;
       }
 
@@ -1020,13 +1020,13 @@ Al-Huda Islamic Centre Management`;
       }
 
       if (!slipData) {
-        alert("No salary slip data available to generate PDF.");
+        lmsNotify("No salary slip data available to generate PDF.");
         return;
       }
 
       const sourceCard = document.getElementById('salarySlipReceiptCard') || document.querySelector('#modalSalarySlip > div') || document.getElementById('modalSalarySlip');
       if (!sourceCard) {
-        alert("Salary slip modal is not active.");
+        lmsNotify("Salary slip modal is not active.");
         return;
       }
 
@@ -1131,7 +1131,7 @@ Al-Huda Islamic Centre Management`;
             pdf.save(filename);
             pdfGenerated = true;
             if (typeof lmsNotify === 'function') lmsNotify('✅ Official Salary Slip PDF downloaded successfully!', { type: 'success' });
-            else alert('✅ Official Salary Slip PDF downloaded successfully!');
+            else lmsNotify('✅ Official Salary Slip PDF downloaded successfully!');
           } catch (canvasErr) {
             console.warn('[Salary Slip PDF] html2canvas error:', canvasErr);
           }
@@ -1148,7 +1148,7 @@ Al-Huda Islamic Centre Management`;
           await html2pdf().set(opt).from(cardClone).save();
           pdfGenerated = true;
           if (typeof lmsNotify === 'function') lmsNotify('✅ Official Salary Slip PDF downloaded!', { type: 'success' });
-          else alert('✅ Official Salary Slip PDF downloaded!');
+          else lmsNotify('✅ Official Salary Slip PDF downloaded!');
         }
 
         if (!pdfGenerated) {
@@ -1184,7 +1184,7 @@ Al-Huda Islamic Centre Management`;
       }
 
       if (!slipData) {
-        alert("No active salary slip record available to send.");
+        lmsNotify("No active salary slip record available to send.");
         return;
       }
 
@@ -1207,7 +1207,7 @@ Al-Huda Islamic Centre Management`;
 
       if (!targetEmail || !targetEmail.includes('@')) {
         if (!isSilent) {
-          alert(`No valid email address found for ${slipData.teacher_name}. Please specify teacher email.`);
+          lmsNotify(`No valid email address found for ${slipData.teacher_name}. Please specify teacher email.`);
         }
         return;
       }
@@ -1301,10 +1301,10 @@ Official Accounts Email: ceoislamiccentre@gmail.com`;
 
       if (slipEmailSent) {
         if (typeof lmsNotify === 'function') lmsNotify(`Official Salary Slip email dispatched to ${targetEmail}`, { type: 'success' });
-        else if (!isSilent) alert(`Official Salary Slip email dispatched to ${targetEmail}`);
+        else if (!isSilent) lmsNotify(`Official Salary Slip email dispatched to ${targetEmail}`);
       } else if (!isSilent) {
         if (typeof lmsNotify === 'function') lmsNotify(`Official Salary Slip email was NOT sent (${slipEmailError || 'Unknown error'}). Opening Gmail so you can send it manually.`, { type: 'error' });
-        else alert(`Official Salary Slip email was NOT sent (${slipEmailError || 'Unknown error'}). Opening Gmail so you can send it manually.`);
+        else lmsNotify(`Official Salary Slip email was NOT sent (${slipEmailError || 'Unknown error'}). Opening Gmail so you can send it manually.`);
         const gmailUrl = `https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(targetEmail)}&cc=ceoislamiccentre@gmail.com&su=${encodeURIComponent(subject)}&body=${encodeURIComponent(plainText)}`;
         window.open(gmailUrl, '_blank');
       } else {

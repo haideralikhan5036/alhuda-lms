@@ -1787,7 +1787,7 @@
       if (dashAttError) {
         btn.disabled = false;
         btn.innerHTML = '<i class="fa-solid fa-floppy-disk"></i> Save Attendance';
-        alert('The attendance could not be saved. Please try again.\n\nReason: ' + (dashAttError.message || dashAttError));
+        console.warn('[LMS] operation failed:', (dashAttError.message || dashAttError)); lmsNotify('The attendance could not be saved. Please try again.', { type: 'error' });
         return;
       }
 
@@ -1820,7 +1820,7 @@
       }
 
       if (!student) {
-        alert("Student profile details could not be found.");
+        lmsNotify("Student profile details could not be found.");
         return;
       }
 
@@ -1908,7 +1908,7 @@
       }
 
       if (!teacher) {
-        alert("Teacher profile details could not be found.");
+        lmsNotify("Teacher profile details could not be found.");
         return;
       }
 
@@ -2581,7 +2581,7 @@
       const message = (document.getElementById('annMessageInput')?.value || '').trim();
 
       if (!title || !message) {
-        alert('Please enter both the Announcement Title and Message.');
+        lmsNotify('Please enter both the Announcement Title and Message.');
         return;
       }
 
@@ -2601,7 +2601,7 @@
       if (msgEl) msgEl.value = '';
 
       renderAdminAnnouncementsList();
-      alert('Official Announcement published! It is now live on the selected Portal(s).');
+      lmsNotify('Official Announcement published! It is now live on the selected Portal(s).');
     }
 
     function deleteOfficialAnnouncement(annId) {
@@ -2788,7 +2788,7 @@
       syncTopCircleNotificationDots();
 
       closeModal('modalTeacherCorrectionRequestQuick');
-      alert('Request sent to Admin Portal! The Sky-Blue Teacher Requests badge in the Admin Top Bar is now active for 1-click Admin approval.');
+      lmsNotify('Request sent to Admin Portal! The Sky-Blue Teacher Requests badge in the Admin Top Bar is now active for 1-click Admin approval.');
     }
 
     // =========================================================================
@@ -2885,7 +2885,7 @@
       const message = (document.getElementById('compMessageInput')?.value || '').trim();
 
       if (!message) {
-        alert('Please enter complaint details.');
+        lmsNotify('Please enter complaint details.');
         return;
       }
 
@@ -2914,7 +2914,7 @@
       const msgEl = document.getElementById('compMessageInput');
       if (msgEl) msgEl.value = '';
       renderParentComplaintRepliesHistory();
-      alert('Your complaint has been sent directly to the Admin Portal! You can track the Admin reply right below.');
+      lmsNotify('Your complaint has been sent directly to the Admin Portal! You can track the Admin reply right below.');
     }
 
     function openAdminParentComplaintsModal() {
@@ -3021,7 +3021,7 @@
         saveParentComplaints(list);
         renderAdminParentComplaintsList();
         renderParentComplaintRepliesHistory();
-        alert('Official reply sent to Parent Portal and complaint marked Resolved!');
+        lmsNotify('Official reply sent to Parent Portal and complaint marked Resolved!');
       }
     }
 
