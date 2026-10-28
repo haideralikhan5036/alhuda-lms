@@ -56,3 +56,29 @@ Project LMS/
 | **Find Free Teacher Slots** | `js/search.js` | `executeScheduleSearch()`, `quickAssignFromSearch()` |
 | **Modal Popups (`openModal`/`closeModal`)** | `js/utils.js` | `openModal()`, `closeModal()` |
 | **HTML Layout / Modal Markup** | `index.html` | Lines 1–4860 |
+
+---
+
+## ⚠️ Cloudflare Pages warning — never deploy this repo to Pages with bindings
+
+The engines in `functions/api/db.js` (D1) and `functions/api/storage.js`
+(R2) have **no authentication of their own**: no token check, no role
+check, no scope check. They are safe only because the Worker
+(`cloudflare/worker.js`) gates every call first (login, role scoping,
+contact masking, write guards) and then delegates to them **in-process**,
+stamping an internal-invocation marker (`__lmsInternal`) that each
+engine's `onRequest` requires before any DDL or data path (Batch 7 Part B).
+
+Cloudflare Pages uses file-based routing: a Pages deploy of this repo
+would automatically map `functions/api/db.js` to `/api/db` and
+`functions/api/storage.js` to `/api/storage`. With D1/R2 bindings
+attached, that would expose unauthenticated read/write across every
+database table (including payments, salary slips, system settings and the
+audit log) and unauthenticated read of any stored file plus uploads —
+because a remote caller on Pages can never be made to carry the
+in-process marker, the guard fails closed there, but **do not rely on
+the guard alone**: never deploy this repo to Cloudflare Pages with D1
+or R2 bindings attached. The current safe deploys already exclude both
+directories (`.assetsignore` and `.vercelignore` list `functions/` and
+`cloudflare/`, and `vercel.json` routes `/functions/*` to 404), and
+those exclusions must stay in place.

@@ -10,6 +10,10 @@
  *    No origins configured = no cross-origin access.
  *  - update/delete with empty filters are rejected (400).
  *  - Internal error details never leave the server (generic 500 responses).
+ *  - Batch 7 Part B: onRequest refuses any call without the Worker's
+ *    in-process __lmsInternal marker (403 before any DDL or data path),
+ *    so a standalone Cloudflare Pages deploy cannot expose this engine.
+ *    OPTIONS preflights (headers only, no data) are carved out explicitly.
  * ============================================================================
  */
 
@@ -662,6 +666,24 @@ export async function onRequest(context) {
 
   if (request.method === 'OPTIONS') {
     return new Response(null, { status: 204, headers: corsHeaders });
+  }
+
+  // Batch 7 Part B: internal-invocation guard. This engine has no auth of
+  // its own: it is safe ONLY behind the Worker, which delegates in-process
+  // and stamps context.__lmsInternal (see cloudflare/worker.js). A remote
+  // caller on a standalone Cloudflare Pages deploy can never set that
+  // property (Pages builds context from the HTTP request), so any direct
+  // call fails closed here with 403 — BEFORE ensureSchema() runs any DDL
+  // and before any data path. The OPTIONS carve-out above returns headers
+  // only and never touches data, so it stays exempt. Do NOT replace this
+  // with a header check (any HTTP caller can send any header) and do NOT
+  // invent a shared env secret for it.
+  if (!context.__lmsInternal) {
+    return jsonResponse(
+      { ok: false, error: 'Forbidden' },
+      403,
+      corsHeaders
+    );
   }
 
   const d1 = env.DB || env.ALHUDA_DB;
