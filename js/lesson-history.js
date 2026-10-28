@@ -458,10 +458,40 @@
     }
   }
 
+  // Batch 3.2 (audit P1-6) — attended-status semantics, shared by the
+  // parent portal. Teachers store 'Completed' for a held class (the modal
+  // 'Present' is mapped to 'Completed' at save time); 'Present' itself is
+  // only ever a legacy stored value. Every other stored status — Absent,
+  // Leave, Running, Waiting, anything else — is NOT attended.
+  function isAttendedStatus(status) {
+    var s = String(status == null ? '' : status).trim();
+    return s === 'Completed' || s === 'Present';
+  }
+
+  // Batch 3.2 (audit P1-6) — attendance rate over ALREADY-DEDUPED entries
+  // (one per class instance; callers must pass the dedupeLessonRows output,
+  // never raw logs, or re-saves inflate the denominator). Denominator =
+  // every deduped entry, including Absent/Leave/Running/Waiting (a class
+  // that was scheduled and logged but not attended counts against the
+  // rate; only genuinely attended classes count for it). No records →
+  // 0%, never NaN.
+  function attendanceRate(entries) {
+    var list = Array.isArray(entries) ? entries : [];
+    var present = 0;
+    list.forEach(function (e) {
+      if (e && isAttendedStatus(e.status)) present++;
+    });
+    var total = list.length;
+    return { present: present, total: total,
+             percent: total > 0 ? Math.round((present / total) * 100) : 0 };
+  }
+
   var api = {
     parseLessonNotes: parseLessonNotes,
     normalizeLessonRow: normalizeLessonRow,
     dedupeLessonRows: dedupeLessonRows,
+    isAttendedStatus: isAttendedStatus,
+    attendanceRate: attendanceRate,
     filterLessonEntries: filterLessonEntries,
     formatActualDuration: formatActualDuration,
     resolveLessonPage: resolveLessonPage,

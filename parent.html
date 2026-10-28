@@ -747,7 +747,7 @@
                 <i class="fa-solid fa-circle-check mr-1 text-emerald-600"></i> PAID IN FULL
               </div>
               <div class="text-[11px] sm:text-xs text-slate-500 mt-0.5 sm:mt-1">
-                Receipt #: <strong id="feeInvReceiptNo" class="text-emerald-900 font-mono font-bold">AH-REC-OFFICIAL</strong>
+                Receipt #: <strong id="feeInvReceiptNo" class="text-emerald-900 font-mono font-bold">Not issued</strong>
               </div>
             </div>
           </div>
@@ -1437,8 +1437,40 @@
     }
 
     // Render Data for Current Student
+    // Batch 3.2 (P1-6): shared attended predicate for parent views.
+    // Teachers store 'Completed' for a held class ('Present' is only a
+    // legacy stored value); everything else is not attended. Falls back
+    // to the same rule when the shared reader is unavailable.
+    function parentIsAttendedStatus(status) {
+      if (window.LessonHistory && typeof window.LessonHistory.isAttendedStatus === 'function') return window.LessonHistory.isAttendedStatus(status);
+      return status === 'Completed' || status === 'Present';
+    }
+
     async function renderCurrentStudentData() {
       if (!CURRENT_STUDENT) return;
+
+      // Batch 3.2 (P2-25): refetch the student row on every render, so
+      // admin teacher/status/course changes surface without a re-login
+      // (live sync calls switchStudentAccount -> this function). Family
+      // scope is enforced: a row from another family is ignored. Any
+      // failure keeps the cached row (exactly as before). This never
+      // writes: the parent leave flow still writes notes-only elsewhere.
+      try {
+        if (db) {
+          const { data: freshStudent } = await db.from('students').select('*').eq('id', CURRENT_STUDENT.id).single();
+          if (freshStudent) {
+            const cachedFam = String(CURRENT_STUDENT.family_id || '').trim().toUpperCase();
+            const authFam = String(CURRENT_AUTH_FAMILY?.id || '').trim().toUpperCase();
+            const freshFam = String(freshStudent.family_id || '').trim().toUpperCase();
+            if ((!cachedFam || freshFam === cachedFam) && (!authFam || freshFam === authFam)) {
+              const idx = (ALL_STUDENTS || []).findIndex(x => String(x.id) === String(freshStudent.id));
+              if (idx >= 0) ALL_STUDENTS[idx] = freshStudent;
+              CURRENT_STUDENT = freshStudent;
+            }
+          }
+        }
+      } catch (e) { /* keep cached row */ }
+
       const s = CURRENT_STUDENT;
 
       // Update Top Badges & Welcome Text
@@ -1560,8 +1592,19 @@
       CURRENT_ATTENDANCE = attLogs;
 
       // Calculate Real Attendance Metrics (0% when no records exist)
-      const totalClasses = attLogs.length;
-      const presentCount = attLogs.filter(a => a.status === 'Present').length;
+      // Batch 3.2 (P1-6): attendance over DEDUPED entries (the same list
+      // the tables render), counting stored 'Completed' (+ legacy
+      // 'Present') as attended. The old code counted only 'Present' —
+      // a status teachers never store — so every parent saw 0%.
+      // Denominator = every deduped entry (Absent/Leave/Running/Waiting
+      // count as not attended). Falls back to raw logs exactly as
+      // before when the shared reader is unavailable.
+      let attEntries = attLogs;
+      if (window.LessonHistory && typeof window.LessonHistory.dedupeLessonRows === 'function') {
+        try { attEntries = window.LessonHistory.dedupeLessonRows(attLogs).map(en => (en.raw || {})); } catch (e) { attEntries = attLogs; }
+      }
+      const totalClasses = attEntries.length;
+      const presentCount = attEntries.filter(a => a && parentIsAttendedStatus(a.status)).length;
       const attPercent = totalClasses > 0 ? Math.round((presentCount / totalClasses) * 100) : 0;
 
       const attRateEl = document.getElementById('parentAttRate');
@@ -1593,6 +1636,16 @@
         }
       } catch (e) { /* fall back to the legacy chain below */ }
 
+      // Batch 3.2 (P2-24): newest-wins merge across ALL legacy sources
+      // (replaces first-non-empty-wins). Each source below only
+      // COLLECTS its list; the merge after the fallbacks decides.
+      // Rank 0 = fee_collections wins ties; then fresh family notes,
+      // cached family notes, device cache. The table path above
+      // (fee_read_parent ON) is untouched and still wins outright.
+      let freshFamilyNotes = [];
+      let collectionsMapped = [];
+      let cachedFamilyNotes = [];
+      let localMatched = [];
       if (!feeHistoryFromTables && db && s.family_id) {
         try {
           const { data } = await db.from('families').select('*').eq('id', s.family_id).single();
@@ -1600,7 +1653,7 @@
             familyData = data;
             if (data.notes) {
               const pNotes = typeof data.notes === 'string' ? JSON.parse(data.notes) : data.notes;
-              if (pNotes && Array.isArray(pNotes.fee_history)) feeHistory = pNotes.fee_history;
+              if (pNotes && Array.isArray(pNotes.fee_history)) freshFamilyNotes = pNotes.fee_history;
             }
           }
         } catch(e) {}
@@ -1608,9 +1661,9 @@
         // Also query fee_collections table if available
         try {
           const { data: fcData } = await db.from('fee_collections').select('*').eq('family_id', s.family_id).order('created_at', { ascending: false });
-          if (fcData && fcData.length > 0 && feeHistory.length === 0) {
-            feeHistory = fcData.map((fc, idx) => ({
-              receiptNo: fc.receipt_no || `AH-REC-${fc.id || idx + 1}`,
+          if (fcData && fcData.length > 0) {
+            collectionsMapped = fcData.map((fc) => ({
+              receiptNo: fc.receipt_no || null, // Batch 3.2 (P2-27): never invent a receipt number
               date: (fc.payment_date || fc.created_at || '').slice(0, 10),
               familyId: s.family_id || familyData?.id || '',
               parentName: familyData?.parent_name || CURRENT_AUTH_FAMILY?.parent_name || 'Parent',
@@ -1637,16 +1690,16 @@
         } catch(e) {}
       }
 
-      // Fallback 1: check CURRENT_AUTH_FAMILY notes if feeHistory is empty
-      if (!feeHistoryFromTables && feeHistory.length === 0 && CURRENT_AUTH_FAMILY?.notes) {
+      // Fallback 1: check CURRENT_AUTH_FAMILY notes
+      if (!feeHistoryFromTables && CURRENT_AUTH_FAMILY?.notes) {
         try {
           const pNotes = typeof CURRENT_AUTH_FAMILY.notes === 'string' ? JSON.parse(CURRENT_AUTH_FAMILY.notes) : CURRENT_AUTH_FAMILY.notes;
-          if (pNotes && Array.isArray(pNotes.fee_history)) feeHistory = pNotes.fee_history;
+          if (pNotes && Array.isArray(pNotes.fee_history)) cachedFamilyNotes = pNotes.fee_history;
         } catch(e) {}
       }
 
-      // Fallback 2: check localStorage alhuda_fee_records if feeHistory is empty
-      if (!feeHistoryFromTables && feeHistory.length === 0) {
+      // Fallback 2: check localStorage alhuda_fee_records
+      if (!feeHistoryFromTables) {
         try {
           const localFees = JSON.parse(localStorage.getItem('alhuda_fee_records') || '[]');
           if (Array.isArray(localFees) && localFees.length > 0) {
@@ -1656,9 +1709,27 @@
               const rStuNames = String(r.studentsNames || '').toLowerCase();
               return (famIdStr && rFamId === famIdStr) || (s.name && rStuNames.includes(s.name.toLowerCase()));
             });
-            if (matched.length > 0) feeHistory = matched;
+            if (matched.length > 0) localMatched = matched;
           }
         } catch (e) {}
+      }
+
+      // Batch 3.2 (P2-24): merge all collected sources, newest-wins.
+      // Without the helper, keep the old first-non-empty order.
+      if (!feeHistoryFromTables) {
+        if (window.FeeTables && typeof window.FeeTables.mergeLegacyFeeSources === 'function') {
+          feeHistory = window.FeeTables.mergeLegacyFeeSources([
+            { rank: 0, list: collectionsMapped },
+            { rank: 1, list: freshFamilyNotes },
+            { rank: 2, list: cachedFamilyNotes },
+            { rank: 3, list: localMatched }
+          ]);
+        } else {
+          feeHistory = freshFamilyNotes.length > 0 ? freshFamilyNotes
+            : collectionsMapped.length > 0 ? collectionsMapped
+            : cachedFamilyNotes.length > 0 ? cachedFamilyNotes
+            : localMatched;
+        }
       }
 
       CURRENT_FEE_HISTORY = feeHistory;
@@ -1773,7 +1844,7 @@
             <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 mb-2.5 border-b border-slate-100 pb-2.5">
               <div class="flex items-center gap-2 flex-wrap">
                 <span class="text-xs font-black text-slate-800 font-mono">${log.date}</span>
-                <span class="px-2.5 py-0.5 rounded-full text-[10px] font-black ${log.status === 'Present' ? 'bg-emerald-100 text-emerald-800 border border-emerald-300' : 'bg-rose-100 text-rose-800 border border-rose-300'}">${log.status || 'Recorded'}</span>
+                <span class="px-2.5 py-0.5 rounded-full text-[10px] font-black ${parentIsAttendedStatus(log.status) ? 'bg-emerald-100 text-emerald-800 border border-emerald-300' : 'bg-rose-100 text-rose-800 border border-rose-300'}">${log.status || 'Recorded'}</span>
                 <span class="text-xs text-slate-500">Instructor: <strong class="text-slate-800">${escapeHtml(teacherName)}</strong></span>
               </div>
               <div>
@@ -1988,7 +2059,7 @@
           <tr class="hover:bg-slate-50 transition">
             <td class="p-3.5 font-bold font-mono text-slate-800">${log.date}</td>
             <td class="p-3.5">
-              <span class="px-2.5 py-0.5 rounded-full text-[10px] font-black ${log.status === 'Present' ? 'bg-emerald-100 text-emerald-800 border border-emerald-300' : 'bg-rose-100 text-rose-800 border border-rose-300'}">
+              <span class="px-2.5 py-0.5 rounded-full text-[10px] font-black ${parentIsAttendedStatus(log.status) ? 'bg-emerald-100 text-emerald-800 border border-emerald-300' : 'bg-rose-100 text-rose-800 border border-rose-300'}">
                 ${log.status}
               </span>
             </td>
@@ -2035,7 +2106,7 @@
         const badgeLabel = isPaid ? 'Paid in Full' : (h.status || 'Recorded');
         const cur = h.currency || CURRENT_AUTH_FAMILY?.currency || 'USD';
         const displayAmt = `${parseFloat(h.amountPaid ?? 0).toFixed(2)} ${cur}`;
-        const receiptNo = h.receiptNo || `AH-REC-${i+1}`;
+        const receiptNo = h.receiptNo || 'Not issued';
         const monthPeriod = h.year ? `${h.month || ''} ${h.year}` : (h.month || '-');
 
         return `
@@ -2083,7 +2154,7 @@
 
       // Set Header & Family Elements
       const receiptNoEl = document.getElementById('feeInvReceiptNo');
-      if (receiptNoEl) receiptNoEl.innerText = r.receiptNo || 'AH-REC-OFFICIAL';
+      if (receiptNoEl) receiptNoEl.innerText = r.receiptNo || 'Not issued';
 
       const parentNameEl = document.getElementById('feeInvParentName');
       if (parentNameEl) parentNameEl.innerText = parentName;
@@ -2220,7 +2291,7 @@
 
       // Legacy fallback element IDs
       const elRecNo = document.getElementById('receiptModalNo');
-      if (elRecNo) elRecNo.innerText = r.receiptNo || 'AH-REC-OFFICIAL';
+      if (elRecNo) elRecNo.innerText = r.receiptNo || 'Not issued';
       const elStuName = document.getElementById('receiptStudentName');
       if (elStuName) elStuName.innerText = stuNames;
       const elParName = document.getElementById('receiptParentName');
@@ -2315,7 +2386,7 @@
 
       try {
         const cleanParent = (r.parentName || 'Family').replace(/[^a-zA-Z0-9_-]/g, '_');
-        const filename = `AlHuda-Invoice-${r.receiptNo || 'AH-REC'}-${cleanParent}.pdf`;
+        const filename = `AlHuda-Invoice-${r.receiptNo || 'No-receipt'}-${cleanParent}.pdf`;
 
         const scrollArea = document.getElementById('feeInvoicePrintArea');
         if (scrollArea) scrollArea.scrollTop = 0;
