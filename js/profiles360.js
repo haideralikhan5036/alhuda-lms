@@ -581,14 +581,22 @@ function _getFamilyPaymentsList(family) {
     });
   });
 
-  // 2. Also ensure enrolled months in 2026 up to current month (September) appear if not deleted
-  const monthsNames = ['January','February','March','April','May','June','July','August','September'];
+  // 2. Also ensure enrolled months in 2026 up to the CURRENT month appear if not deleted.
+  // Batch 3.5 (audit P2-12): the old list stopped at September and the
+  // loop started at index 8, so from October on no AUTO/unpaid row
+  // existed for the current month at all. The upper bound is now the
+  // current month (for 2026; a full 2026 once the year has rolled over
+  // — this block only ever generates 2026 rows). Amounts, keys and
+  // override handling are unchanged.
+  const monthsNames = ['January','February','March','April','May','June','July','August','September','October','November','December'];
   const deletedMonths = Array.isArray(fNotes.deleted_payment_months) ? fNotes.deleted_payment_months : [];
 
   let joinDateStr = family.created_at ? family.created_at.slice(0, 10) : '2026-06-01';
-  const startMonthIdx = Math.max(0, Math.min(8, (parseInt(joinDateStr.slice(5, 7), 10) || 6) - 1));
+  const _now35 = new Date();
+  const _upper35 = (_now35.getFullYear() === 2026) ? _now35.getMonth() : 11;
+  const startMonthIdx = Math.max(0, Math.min(_upper35, (parseInt(joinDateStr.slice(5, 7), 10) || 6) - 1));
 
-  for (let mIdx = 8; mIdx >= startMonthIdx; mIdx--) {
+  for (let mIdx = _upper35; mIdx >= startMonthIdx; mIdx--) {
     const mName = monthsNames[mIdx];
     const key = `${mName.toLowerCase()}_2026`;
     if (coveredMonths.has(key) || deletedMonths.includes(key)) continue;
@@ -627,7 +635,12 @@ function _getFamilyPaymentsList(family) {
     return String(b.paidDate || '').localeCompare(String(a.paidDate || ''));
   });
 
-  const currentMonthPaid = rows.some(r => String(r.month).toLowerCase() === 'september' && r.status === 'PAID');
+  // Batch 3.5 (audit P2-12): "current month" means the actual current
+  // month, not September — the old literal left October (and later)
+  // with no currentMonthPaid and no AUTO row.
+  const _now35b = new Date();
+  const _curMonth35 = ['january','february','march','april','may','june','july','august','september','october','november','december'][_now35b.getMonth()] || '';
+  const currentMonthPaid = rows.some(r => String(r.month).toLowerCase() === _curMonth35 && Number(r.year) === _now35b.getFullYear() && r.status === 'PAID');
 
   return {
     currency,
@@ -854,7 +867,12 @@ function _renderFamilyWorkspaceDOM() {
     ? 'bg-amber-500/20 text-amber-300 border-amber-400/40'
     : 'bg-rose-500/20 text-rose-300 border-rose-400/40';
 
-  const invoiceSentThisMonth = Boolean(bioMeta.last_invoice_sent_month === 'September 2026' || payData.currentMonthPaid);
+  // Batch 3.5 (audit P2-12): "this month" is the actual current month,
+  // not September 2026 — otherwise the INVOICE badge could never show
+  // sent again after September.
+  const _now35c = new Date();
+  const _curLabel35 = `${['January','February','March','April','May','June','July','August','September','October','November','December'][_now35c.getMonth()]} ${_now35c.getFullYear()}`;
+  const invoiceSentThisMonth = Boolean(bioMeta.last_invoice_sent_month === _curLabel35 || payData.currentMonthPaid);
   const displayEmail = (window.CURRENT_ROLE === 'manager' && typeof maskStudentEmail === 'function')
     ? maskStudentEmail(family.parent_email || family.email || '')
     : (family.parent_email || family.email || 'Not Provided');
@@ -2457,7 +2475,7 @@ function openFamilyManualInvoiceModal(familyId) {
           <div>
             <label class="font-extrabold text-slate-700 block mb-1">Billing Month *</label>
             <select id="fwManInvMonth" class="w-full p-2.5 rounded-xl border border-slate-300 font-bold text-slate-800">
-              ${months.map(m => `<option value="${m}" ${m === 'September' ? 'selected' : ''}>${m} 2026</option>`).join('')}
+              ${months.map(m => `<option value="${m}" ${m === months[new Date().getMonth()] ? 'selected' : ''}>${m} 2026</option>`).join('')}
             </select>
           </div>
           <div>
