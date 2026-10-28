@@ -3343,15 +3343,21 @@ font-family: var(--font-num) !important;
       const listHeaderBadge = document.getElementById('studentListCountBadge');
       if (listHeaderBadge) listHeaderBadge.innerText = `${activeAssignedCount} Active Student${activeAssignedCount === 1 ? '' : 's'}`;
 
-      // 2. Clean up any stale schedule rows in the fetched set (deactivated or reassigned to another teacher)
+      // 2. Hide any stale schedule rows in the fetched set (deactivated
+      // or reassigned to another teacher) at render time only. Batch 3.3
+      // (audit P2-21): loading the portal used to DELETE these rows
+      // from the server on every load, with no confirmation, notice, or
+      // audit — so a transiently stale assignment permanently destroyed
+      // a legitimate slot. The row now simply stays out of
+      // validSchedules; it is never deleted here, and it reappears on
+      // its own if the student is assigned back to this teacher.
       const validSchedules = [];
       for (const slot of (allScheds || [])) {
         const stuObj = (assignedStudentsRaw || []).find(st => String(st.id) === String(slot.student_id)) || slot.students;
         if (stuObj) {
           const isTrialStu = !isPortalRegularStudent(stuObj);
-          // If regular student is deactivated OR assigned to a different teacher (or unassigned), remove stale schedule row
+          // If regular student is deactivated OR assigned to a different teacher (or unassigned), hide the stale schedule row
           if (!isTrialStu && (isPortalStudentDeactivated(stuObj) || String(stuObj.assigned_teacher_id || '') !== String(CURRENT_TEACHER.id))) {
-            db.from('class_schedules').delete().eq('id', slot.id).then(() => {});
             continue;
           }
         }
@@ -4282,7 +4288,29 @@ font-family: var(--font-num) !important;
           upsertData.lesson_notes = notes;
         }
       } else if (targetStatus === 'Absent' || targetStatus === 'Leave') {
-        if (notes) upsertData.lesson_notes = notes;
+        // Batch 3.3 (audit P2-26): the Leave/Absent modal used to
+        // overwrite lesson_notes with the typed remarks text, wiping
+        // the prior lesson JSON (course, page, image, additional lesson).
+        // Mirror the main modal save: preserve the prior JSON object,
+        // refresh only its remarks (when the modal typed any) and its
+        // status. Plain-text or missing prior notes keep the old
+        // behaviour (remarks text as-is).
+        const priorNotes = currentSlot?.log?.lesson_notes;
+        let preserved = null;
+        if (priorNotes && typeof priorNotes === 'string' && priorNotes.trim().startsWith('{')) {
+          try {
+            const parsed = JSON.parse(priorNotes);
+            if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) preserved = parsed;
+          } catch (e) {}
+        }
+        if (preserved) {
+          const next = { ...preserved };
+          if (notes) next.remarks = notes;
+          next.status = targetStatus;
+          upsertData.lesson_notes = JSON.stringify(next);
+        } else if (notes) {
+          upsertData.lesson_notes = notes;
+        }
         if (currentSlot?.log?.started_at) upsertData.started_at = currentSlot.log.started_at;
         if (currentSlot?.log?.waiting_at) upsertData.waiting_at = currentSlot.log.waiting_at;
       }
@@ -4864,7 +4892,13 @@ font-family: var(--font-num) !important;
       const pNum = Number(paraNum) || 1;
       const allBooks = getTeacherAllBooks();
       const bookId = document.getElementById('attCourseBookSelect')?.value || 'holy-quran-16-line';
-      const book = allBooks.find(b => b.id === bookId) || allBooks[0];
+      // Batch 3.3 (audit P2-23): fail closed — a stale/deleted book id
+      // must never resolve to the first catalogue book's pages.
+      const book = allBooks.find(b => b.id === bookId);
+      if (!book) {
+        pageSelect.innerHTML = '<option value="">Course book not found</option>';
+        return;
+      }
 
       // Retrieve actual pages for this Para
       const paraPages = (typeof getBookParaPages === 'function')
@@ -4919,8 +4953,11 @@ font-family: var(--font-num) !important;
       setAdditionalCourseMode('att', false);
 
       const allBooks = getTeacherAllBooks();
-      const book = allBooks.find(b => b.id === bookId) || allBooks[0];
-      if (!book) return;
+      // Batch 3.3 (audit P2-23): fail closed — never resolve a stale id
+      // to the first catalogue book (the guard below was dead code while
+      // the fallback existed).
+      const book = allBooks.find(b => b.id === bookId);
+      if (!book) { lmsNotify("Course book not found."); return; }
 
       const isQuran = (book.category === 'quran' || book.id === 'holy-quran-16-line' || book.id === 'quran-16-line' || (book.title && book.title.toLowerCase().includes('quran') && !book.title.toLowerCase().includes('tafseer')));
       const isTafseer = (book.category === 'tafseer' || (book.title && book.title.toLowerCase().includes('tafseer')));
@@ -4977,7 +5014,10 @@ font-family: var(--font-num) !important;
       // catalogue book's reader for it (the View button is hidden too).
       if (bookId === ADDITIONAL_COURSE_ID) return;
       const allBooks = getTeacherAllBooks();
-      const book = allBooks.find(b => b.id === bookId) || allBooks[0];
+      // Batch 3.3 (audit P2-23): fail closed — never preview another
+      // book when the chosen one is gone.
+      const book = allBooks.find(b => b.id === bookId);
+      if (!book) { lmsNotify("Course book not found."); return; }
       const page = Number(document.getElementById('attCoursePageSelect')?.value || 1);
       const isParaBased = (book?.category === 'quran' || book?.category === 'tafseer' || !!book?.paras_data || !!book?.paras);
       const para = isParaBased ? Number(document.getElementById('attQuranParaSelect')?.value || 1) : null;
@@ -5106,8 +5146,11 @@ font-family: var(--font-num) !important;
 
     function openCourseMaterialPreview(bookId, page = 1) {
       const allBooks = getTeacherAllBooks();
-      const book = allBooks.find(b => b.id === bookId) || allBooks[0];
-      if (!book) return;
+      // Batch 3.3 (audit P2-23): fail closed — never preview another
+      // book when the chosen one is gone (the guard below was dead code
+      // while the fallback existed).
+      const book = allBooks.find(b => b.id === bookId);
+      if (!book) { lmsNotify("Course book not found."); return; }
 
       PREVIEW_BOOK = book;
       PREVIEW_PAGE = Math.max(1, Math.min(Number(page) || 1, book.total_pages || 32));
@@ -5586,7 +5629,12 @@ font-family: var(--font-num) !important;
             recorded_at: new Date().toISOString()
           };
         } else {
-          const book = allBooks.find(b => b.id === bookId) || allBooks[0];
+          // Batch 3.3 (audit P2-23): fail closed — never save a lesson
+          // under the first catalogue book when the chosen book is gone.
+          // (This return runs before the Save button is disabled below,
+          // so no button restore is needed here.)
+          const book = allBooks.find(b => b.id === bookId);
+          if (!book) { lmsNotify("Course book not found. Please choose another book."); return; }
           const page = Number(document.getElementById('attCoursePageSelect')?.value || 1);
 
           const isQuran = (book?.category === 'quran' || bookId === 'holy-quran-16-line' || bookId === 'quran-16-line' || (book?.title && book.title.toLowerCase().includes('quran') && !book?.title?.toLowerCase().includes('tafseer')));
@@ -8237,6 +8285,22 @@ font-family: var(--font-num) !important;
     // TEACHER LEAVE / ADJUSTMENT REQUEST ENGINE
     // ==========================================
 
+    // Batch 3.3 (audit P2-20) — shared teacher-request recorder, mirroring
+    // the parent leave pattern (leave_request + leave_history). The single
+    // field keeps its old meaning (the LATEST request, which the admin
+    // approval readers in js/leaves.js and the today's-classes badges
+    // still read), while EVERY request is also appended to the history
+    // list, so a second request can never silently discard a first pending
+    // one. Other meta keys are untouched: callers pass the fresh-parsed
+    // meta object and only these two keys change. Self-contained (no
+    // globals) so tests can extract and run it directly.
+    function appendTeacherRequestToHistory(meta, singleKey, historyKey, reqObj) {
+      meta[singleKey] = reqObj;
+      if (!Array.isArray(meta[historyKey])) meta[historyKey] = [];
+      meta[historyKey].push(reqObj);
+      return meta;
+    }
+
     function openTeacherLeaveRequestModal(studentId, scheduleId, studentName) {
       if (!studentName && scheduleId) {
         const c = TODAY_CLASSES.find(x => String(x.id) === String(scheduleId));
@@ -8320,7 +8384,7 @@ font-family: var(--font-num) !important;
           requested_at: new Date().toISOString()
         };
 
-        meta.leave_request = reqObj;
+        appendTeacherRequestToHistory(meta, 'leave_request', 'leave_history', reqObj);
 
         const { error: upErr } = await db.from('students').update({
           notes: JSON.stringify(meta)
@@ -8417,7 +8481,7 @@ font-family: var(--font-num) !important;
           requested_at: new Date().toISOString()
         };
 
-        meta.reschedule_request = reqObj;
+        appendTeacherRequestToHistory(meta, 'reschedule_request', 'reschedule_history', reqObj);
 
         const { error: upErr } = await db.from('students').update({
           notes: JSON.stringify(meta)
@@ -8673,7 +8737,7 @@ font-family: var(--font-num) !important;
           requested_at: new Date().toISOString()
         };
 
-        meta.time_change_request = reqObj;
+        appendTeacherRequestToHistory(meta, 'time_change_request', 'time_change_history', reqObj);
 
         const { error: upErr } = await db.from('students').update({
           notes: JSON.stringify(meta)
@@ -8881,8 +8945,11 @@ font-family: var(--font-num) !important;
       setAdditionalCourseMode('adv', false);
 
       const allBooks = getTeacherAllBooks();
-      const book = allBooks.find(b => b.id === bookId) || allBooks[0];
-      if (!book) return;
+      // Batch 3.3 (audit P2-23): fail closed — never resolve a stale id
+      // to the first catalogue book (the guard below was dead code while
+      // the fallback existed).
+      const book = allBooks.find(b => b.id === bookId);
+      if (!book) { lmsNotify("Course book not found."); return; }
 
       const isQuran = (book.category === 'quran' || book.id === 'holy-quran-16-line' || book.id === 'quran-16-line' || (book.title && book.title.toLowerCase().includes('quran') && !book.title.toLowerCase().includes('tafseer')));
       const isTafseer = (book.category === 'tafseer' || (book.title && book.title.toLowerCase().includes('tafseer')));
@@ -8929,7 +8996,11 @@ font-family: var(--font-num) !important;
       // Additional Course has no book to open (View button is hidden too).
       if (bookId === ADDITIONAL_COURSE_ID) return;
       const allBooks = getTeacherAllBooks();
-      const book = allBooks.find(b => b.id === bookId) || allBooks[0];
+      // Batch 3.3 (audit P2-23): fail closed — never preview another
+      // book when the chosen one is gone (the reader itself also fails
+      // closed, defence in depth).
+      const book = allBooks.find(b => b.id === bookId);
+      if (!book) { lmsNotify("Course book not found."); return; }
       const page = Number(document.getElementById('advCoursePageSelect')?.value || 1);
       const isParaBased = (book?.category === 'quran' || book?.category === 'tafseer' || !!book?.paras_data || !!book?.paras);
       const para = isParaBased ? Number(document.getElementById('advQuranParaSelect')?.value || 1) : null;
@@ -9000,7 +9071,13 @@ font-family: var(--font-num) !important;
           }
         }
         const allBooks = getTeacherAllBooks();
-        const book = isAdditionalCourse ? null : (allBooks.find(b => b.id === bookId) || allBooks[0]);
+        // Batch 3.3 (audit P2-23): fail closed — never save under the
+        // first catalogue book when the chosen book is gone. The
+        // Additional Course sentinel is branched before this lookup, so
+        // it can never hit this guard. (The function's finally block
+        // restores the Save button on this early return.)
+        const book = isAdditionalCourse ? null : allBooks.find(b => b.id === bookId);
+        if (!isAdditionalCourse && !book) { lmsNotify("Course book not found. Please choose another book."); return; }
         const bookTitle = isAdditionalCourse ? customCourse : (book ? book.title : 'Course Syllabus');
         const teacherName = CURRENT_TEACHER?.full_name || 'Al-Huda Quran Instructor';
 

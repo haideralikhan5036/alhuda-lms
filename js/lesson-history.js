@@ -94,6 +94,7 @@
           lessonName: null,
           imageKey: null,
           isAdditionalCourse: false,
+          isAdvanceClass: false,
           raw: raw
         };
       }
@@ -114,6 +115,11 @@
       lessonName: parsed.lesson_name || null,
       imageKey: parsed.image_key || null,
       isAdditionalCourse: parsed.book_id === 'additional-course',
+      // Batch 3.3 (audit P2-19): an advance lesson is a lesson FOR A
+      // FUTURE DATE recorded today (advance_target_date). It must never
+      // mask the regular lesson for the same slot/day in deduped views,
+      // so dedupeLessonRows groups advance entries separately (see below).
+      isAdvanceClass: parsed.is_advance_class === true,
       raw: raw
     };
   }
@@ -148,6 +154,10 @@
       lessonName: p ? p.lessonName : null,
       imageKey: p ? p.imageKey : null,
       isAdditionalCourse: p ? p.isAdditionalCourse : false,
+      // Batch 3.3 (audit P2-19): advance by stored status OR by payload
+      // flag — both teacher writers set both, but either alone marks the
+      // row as an advance lesson for dedupe purposes.
+      isAdvanceClass: log.status === 'Advance Class' || (p ? p.isAdvanceClass === true : false),
       hasLesson: !!p,
       startedAt: log.started_at || null,
       completedAt: log.completed_at || null,
@@ -168,6 +178,21 @@
 
   // Read-side dedupe (see header). Input: raw attendance_logs rows.
   // Output: normalized entries, date DESC, then created_at DESC.
+  // Batch 3.3 (audit P2-19) — dedupe key. An advance lesson is a lesson
+  // FOR A FUTURE DATE recorded today (status 'Advance Class' /
+  // is_advance_class payload), NOT the regular lesson for that slot/day.
+  // The old key (schedule + date) merged the two, and the latest-created
+  // row won — so an advance save hid the regular lesson in every deduped
+  // view (teacher history, parent history, admin 360). Advance entries
+  // now form their own group ('|adv' suffix): re-saves of the SAME
+  // advance class still collapse to the latest, and re-saves of the
+  // regular lesson still collapse to the latest, but neither can mask
+  // the other. Schedule-less rows are never grouped (key null).
+  function dedupeKey(e) {
+    if (!e || !e.scheduleId || !e.date) return null;
+    return 's:' + String(e.scheduleId) + '|' + String(e.date) + (e.isAdvanceClass ? '|adv' : '');
+  }
+
   function dedupeLessonRows(rows, teacherNameById) {
     var map = teacherNameById || {};
     var normalized = [];
@@ -178,7 +203,7 @@
 
     var groups = new Map();
     normalized.forEach(function (e) {
-      var key = (e.scheduleId && e.date) ? ('s:' + String(e.scheduleId) + '|' + String(e.date)) : null;
+      var key = dedupeKey(e);
       if (!key) return; // schedule-less rows are never grouped (see below)
       if (!groups.has(key)) groups.set(key, []);
       groups.get(key).push(e);
@@ -189,7 +214,7 @@
     var result = [];
     var emitted = new Set();
     normalized.forEach(function (e) {
-      var key = (e.scheduleId && e.date) ? ('s:' + String(e.scheduleId) + '|' + String(e.date)) : null;
+      var key = dedupeKey(e);
       if (!key) { result.push(e); return; }
       if (emitted.has(key)) return;
       emitted.add(key);
