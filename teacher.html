@@ -2944,6 +2944,8 @@ font-family: var(--font-num) !important;
         restoreLoginButton(btn);
         if (serverAttempt.error === 'no_password_set') {
           showTeacherLoginError(errBox, errText, "No password set. Ask the administrator to set one.");
+        } else if (serverAttempt.error === 'account_deactivated') {
+          showTeacherLoginError(errBox, errText, "This account is deactivated. Please contact the administrator.");
         } else {
           showTeacherLoginError(errBox, errText, "Invalid username or password.");
         }
@@ -4286,7 +4288,11 @@ font-family: var(--font-num) !important;
       try {
         const { error } = await db.from('attendance_logs').upsert([upsertData], { onConflict: 'schedule_id,date' });
         if (error) {
+          // Audit P1-3: report the failure honestly — do NOT broadcast a
+          // status other tabs will believe when D1 has no such row, and
+          // do NOT return success (callers gate on res.success).
           console.error("transitionClassSessionState DB error:", error);
+          return { success: false, error: error.message || error };
         }
 
         notifyClassSessionSync({
@@ -4303,14 +4309,7 @@ font-family: var(--font-num) !important;
         return { success: true };
       } catch(e) {
         console.error("transitionClassSessionState exception:", e);
-        notifyClassSessionSync({
-          scheduleId,
-          studentId,
-          teacherId: tid,
-          date: todayDate,
-          status: targetStatus
-        });
-        return { success: true };
+        return { success: false, error: e.message || e };
       }
     }
 
@@ -4399,8 +4398,8 @@ font-family: var(--font-num) !important;
           targetStatus: 'Completed',
           notes: `Class ended automatically at ${timeStr} PKT`
         });
-        // Honest verification: transitionClassSessionState reports success
-        // even on DB error, so confirm the Completed row exists before
+        // Audit P1-3: transitionClassSessionState now reports failure
+        // honestly, but still confirm the Completed row exists before
         // opening the preview. On failure, show the error and do NOT open
         // it — the teacher can still use the row's COMPLETE CLASS button.
         let verified = false;
@@ -4477,18 +4476,30 @@ font-family: var(--font-num) !important;
       const remarks = (document.getElementById('leaveAbsentRemarks')?.value || '').trim();
 
       const btn = document.getElementById('btnConfirmLeaveAbsent');
+      const btnOriginalHtml = btn ? btn.innerHTML : '';
       if (btn) {
         btn.disabled = true;
         btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Saving...';
       }
 
-      await transitionClassSessionState({
+      const leaveRes = await transitionClassSessionState({
         scheduleId,
         studentId,
         teacherId,
         targetStatus: outcome,
         notes: remarks || `Marked as ${outcome} by teacher.`
       });
+
+      // Audit P1-3: on a failed save, say so and keep the modal open for
+      // a retry instead of closing as if the mark had been saved.
+      if (!leaveRes || !leaveRes.success) {
+        if (btn) {
+          btn.disabled = false;
+          btn.innerHTML = btnOriginalHtml;
+        }
+        alert('The class update could not be saved. Please try again.');
+        return;
+      }
 
       if (btn) btn.disabled = false;
       closeLeaveAbsentModal();
@@ -5621,6 +5632,11 @@ font-family: var(--font-num) !important;
       btn.disabled = true;
       btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Saving...';
 
+      // Audit P1-3: the upsert error was destructured but never checked,
+      // and the catch below announced success for any failure. Track
+      // whether the row itself landed so a post-save failure cannot be
+      // reported as a save failure (or vice versa).
+      let attSaved = false;
       try {
         const nowIso = new Date().toISOString();
         const upsertRow = {
@@ -5637,6 +5653,13 @@ font-family: var(--font-num) !important;
         }
 
         const { error } = await db.from('attendance_logs').upsert([upsertRow], { onConflict: 'schedule_id,date' });
+        if (error) {
+          btn.disabled = false;
+          btn.innerHTML = '<i class="fa-solid fa-floppy-disk"></i> Save Progress';
+          alert('The attendance could not be saved. Please try again.\n\nReason: ' + (error.message || error));
+          return;
+        }
+        attSaved = true;
 
         notifyClassSessionSync({
           scheduleId: schedule_id,
@@ -5654,11 +5677,16 @@ font-family: var(--font-num) !important;
         alert(`✅ Attendance & Lesson Progress Saved Successfully!\n\nStatus: ${dbStatus}\nCourse: Registered & Connected with Student Portal.`);
       } catch (err) {
         console.error("Attendance save error:", err);
-        btn.disabled = false;
-        btn.innerHTML = '<i class="fa-solid fa-floppy-disk"></i> Save Progress';
-        alert("Notice: Log recorded. Syncing complete.");
-        closeAttendanceModal();
-        await loadTeacherPortalData();
+        if (attSaved) {
+          // The row itself landed; only a post-save step threw. Close
+          // without claiming anything further and refresh best-effort.
+          closeAttendanceModal();
+          try { await loadTeacherPortalData(); } catch (e) {}
+        } else {
+          btn.disabled = false;
+          btn.innerHTML = '<i class="fa-solid fa-floppy-disk"></i> Save Progress';
+          alert('The attendance could not be saved. Please try again.\n\nReason: ' + (err.message || err));
+        }
       }
     }
 
@@ -8902,6 +8930,12 @@ font-family: var(--font-num) !important;
       btn.disabled = true;
       btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Saving Advance Class...';
 
+      // Audit P1-3: the upsert error was only warned about, and the catch
+      // below announced success for any failure. Track whether the row
+      // itself landed so a post-save failure cannot be reported as a save
+      // failure (or vice versa) — and so the completion email is never
+      // sent for a class that was not saved.
+      let advSaved = false;
       try {
         // Lesson History: PKT date (same fix as the main modal save).
         const todayDate = getPktNowParts().date;
@@ -8973,8 +9007,13 @@ font-family: var(--font-num) !important;
         }], { onConflict: 'schedule_id,date' });
 
         if (error) {
-          console.warn("Supabase upsert notice:", error);
+          // Audit P1-3: stop here — no local cache write, no completion
+          // email, no success alert, no modal-close-as-success for a class
+          // that was not saved. The finally block restores the button.
+          alert('The advance class could not be saved. Please try again.\n\nReason: ' + (error.message || error));
+          return;
         }
+        advSaved = true;
 
         // Also save in localStorage cache for instant offline resilience
         let advStore = [];
@@ -9079,9 +9118,14 @@ font-family: var(--font-num) !important;
         await loadTeacherPortalData();
       } catch (err) {
         console.error("Advance class error:", err);
-        alert("Notice: Advance class saved & synced: " + err.message);
-        closeAdvanceClassModal();
-        await loadTeacherPortalData();
+        if (advSaved) {
+          // The row itself landed; only a post-save step threw. Close
+          // without claiming anything further and refresh best-effort.
+          closeAdvanceClassModal();
+          try { await loadTeacherPortalData(); } catch (e) {}
+        } else {
+          alert('The advance class could not be saved. Please try again.\n\nReason: ' + (err.message || err));
+        }
       } finally {
         btn.disabled = false;
         btn.innerHTML = '<i class="fa-solid fa-floppy-disk"></i> Confirm & Save Advance Class';

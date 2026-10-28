@@ -1466,7 +1466,13 @@
         }).eq('id', editTeacherId);
 
         if (error) {
-          console.warn("Supabase update error:", error);
+          // Audit P1-3: report a failed profile save honestly instead of
+          // continuing to the local account, zoom sync, password flow and
+          // success alert for a profile that was not saved.
+          btn.disabled = false;
+          btn.innerHTML = '<i class="fa-solid fa-check"></i> <span id="btnSaveTeacherText">Update Teacher Profile</span>';
+          alert('The teacher profile could not be saved. Please try again.\n\nReason: ' + (error.message || error));
+          return;
         }
 
         saveTeacherAccount(editTeacherId, {
@@ -1533,7 +1539,17 @@
           full_name, father_name, phone, alt_phone, address, witness_name, witness_phone, rate_per_slot, working_shift, status: 'Active'
         }]).select();
 
-        const insertedId = (data && data[0]) ? data[0].id : ('local_' + Date.now());
+        // Audit P1-3: never fabricate a local_ id and a success message
+        // when the teacher was not actually saved — no account, no zoom
+        // sync, no password for a teacher that does not exist.
+        if (error || !(data && data[0])) {
+          btn.disabled = false;
+          btn.innerHTML = '<i class="fa-solid fa-user-plus"></i> <span id="btnSaveTeacherText">Save Teacher & Generate LMS Account</span>';
+          alert('The teacher could not be saved. Please try again.\n\nReason: ' + ((error && (error.message || error)) || 'No record was returned.'));
+          return;
+        }
+
+        const insertedId = data[0].id;
 
         saveTeacherAccount(insertedId, {
           teacher_id: teacher_id_code,

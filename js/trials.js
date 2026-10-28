@@ -672,10 +672,16 @@
       const trialStuId = getNextStudentId();
       const trialRefId = `TRL-${Date.now().toString().slice(-4)}`;
 
+      // Audit P1-3: the builder resolves {data,error} and never throws,
+      // so a failed D1 write must be tracked explicitly — a trial must
+      // not be announced as booked when its family/student/schedule rows
+      // were not saved.
+      let trialSaveFailed = false;
+
       // 1. Insert Canonical Family in Supabase (only if not already existing)
       if (!existingFam) {
         try {
-          await db.from('families').insert([{
+          const { error: trialFamilyError } = await db.from('families').insert([{
             id: trialFamId,
             parent_name,
             whatsapp,
@@ -696,14 +702,16 @@
               }
             })
           }]);
+          if (trialFamilyError) trialSaveFailed = true;
         } catch (err) {
           console.warn("Supabase family insert notice:", err);
+          trialSaveFailed = true;
         }
       }
 
       // 2. Insert Canonical Student in Supabase with status = 'Trial'
       try {
-        await db.from('students').insert([{
+        const { error: trialStudentError } = await db.from('students').insert([{
           id: trialStuId,
           family_id: trialFamId,
           name: student_name,
@@ -730,8 +738,10 @@
             }
           })
         }]);
+        if (trialStudentError) trialSaveFailed = true;
       } catch (err) {
         console.warn("Supabase student insert notice:", err);
+        trialSaveFailed = true;
       }
 
       // 3. Auto-Book 3 Consecutive Days in Teacher Timetable
@@ -762,9 +772,11 @@
       }
 
       try {
-        await db.from('class_schedules').insert(scheduleRows);
+        const { error: trialScheduleError } = await db.from('class_schedules').insert(scheduleRows);
+        if (trialScheduleError) trialSaveFailed = true;
       } catch (err) {
         console.warn("Supabase schedule insert notice:", err);
+        trialSaveFailed = true;
       }
 
       // 4. Save Trial locally
@@ -795,6 +807,18 @@
         status: 'Active',
         created_at: new Date().toISOString()
       };
+
+      // Audit P1-3: if any of the three D1 writes above failed, do not
+      // record the trial locally, close the modal, or announce success —
+      // keep the form open so the booking can be retried.
+      if (trialSaveFailed) {
+        if (btn) {
+          btn.disabled = false;
+          btn.innerHTML = '<i class="fa-solid fa-check"></i> Book 3-Day Free Trial';
+        }
+        alert('The trial could not be booked because one of its records failed to save. Please check the records and try again.');
+        return;
+      }
 
       ALL_TRIALS.unshift(newTrial);
       saveStoredTrials(ALL_TRIALS);
@@ -1058,10 +1082,25 @@
         }
       });
 
+      // Audit P1-3: the builder resolves {data,error} and never throws,
+      // so a failed D1 write must be tracked explicitly — a conversion
+      // must not be announced as complete when its records were not saved.
+      let convertSaveFailed = false;
+      const trackConvertWrite = async (write) => {
+        try {
+          const result = await write;
+          if (result && result.error) convertSaveFailed = true;
+          return result;
+        } catch (err) {
+          convertSaveFailed = true;
+          throw err; // the existing catches below still log it
+        }
+      };
+
       // 3. Convert Family in Supabase (Update existing canonical record in-place, or upgrade & remove legacy TRL- record)
       try {
         if (!isLegacyFamId) {
-          await db.from('families').update({
+          await trackConvertWrite(db.from('families').update({
             parent_name: trial.parent_name,
             whatsapp: trial.whatsapp,
             country: trial.country,
@@ -1071,9 +1110,9 @@
             billing_day,
             status: 'Active',
             notes: familyNotesPayload
-          }).eq('id', canonicalFamId);
+          }).eq('id', canonicalFamId));
         } else {
-          await db.from('families').insert([{
+          await trackConvertWrite(db.from('families').insert([{
             id: canonicalFamId,
             parent_name: trial.parent_name,
             whatsapp: trial.whatsapp,
@@ -1084,7 +1123,7 @@
             billing_day,
             status: 'Active',
             notes: familyNotesPayload
-          }]);
+          }]));
         }
 
         saveParentAccount(canonicalFamId, {
@@ -1097,12 +1136,13 @@
         });
       } catch(err) {
         console.warn("Supabase family regular conversion notice:", err);
+        convertSaveFailed = true;
       }
 
       // 4. Convert Student in Supabase (Update existing canonical record in-place, or upgrade & remove legacy TRL- record)
       try {
         if (!isLegacyStuId) {
-          await db.from('students').update({
+          await trackConvertWrite(db.from('students').update({
             family_id: canonicalFamId,
             name: trial.student_name,
             age: parseInt(trial.student_age) || 8,
@@ -1111,9 +1151,9 @@
             joining_date,
             status: 'Active',
             notes: studentNotesPayload
-          }).eq('id', canonicalStuId);
+          }).eq('id', canonicalStuId));
         } else {
-          await db.from('students').insert([{
+          await trackConvertWrite(db.from('students').insert([{
             id: canonicalStuId,
             family_id: canonicalFamId,
             name: trial.student_name,
@@ -1124,25 +1164,26 @@
             joining_date,
             status: 'Active',
             notes: studentNotesPayload
-          }]);
+          }]));
 
           // Migrate attendance logs from legacy trial.student_id to canonicalStuId and delete legacy TRL- rows
           if (trial.student_id && trial.student_id !== canonicalStuId) {
-            await db.from('attendance_logs').update({ student_id: canonicalStuId }).eq('student_id', trial.student_id);
-            await db.from('class_schedules').delete().eq('student_id', trial.student_id);
-            await db.from('students').delete().eq('id', trial.student_id);
+            await trackConvertWrite(db.from('attendance_logs').update({ student_id: canonicalStuId }).eq('student_id', trial.student_id));
+            await trackConvertWrite(db.from('class_schedules').delete().eq('student_id', trial.student_id));
+            await trackConvertWrite(db.from('students').delete().eq('id', trial.student_id));
           }
         }
 
         // Also convert any sibling students under the same family that were in Trial status
         if (!isLegacyFamId) {
-          await db.from('students').update({ status: 'Active' }).eq('family_id', canonicalFamId).eq('status', 'Trial');
+          await trackConvertWrite(db.from('students').update({ status: 'Active' }).eq('family_id', canonicalFamId).eq('status', 'Trial'));
         } else if (trial.family_id && trial.family_id !== canonicalFamId) {
-          await db.from('students').update({ family_id: canonicalFamId, status: 'Active' }).eq('family_id', trial.family_id);
-          await db.from('families').delete().eq('id', trial.family_id);
+          await trackConvertWrite(db.from('students').update({ family_id: canonicalFamId, status: 'Active' }).eq('family_id', trial.family_id));
+          await trackConvertWrite(db.from('families').delete().eq('id', trial.family_id));
         }
       } catch(err) {
         console.warn("Supabase student regular conversion notice:", err);
+        convertSaveFailed = true;
       }
 
       // 5. Expand & Promote Class Schedules from Trial to Active Regular across requested days
@@ -1172,7 +1213,7 @@
         }
 
         // Remove temporary 3-day trial schedule slots for this student
-        await db.from('class_schedules').delete().eq('student_id', canonicalStuId);
+        await trackConvertWrite(db.from('class_schedules').delete().eq('student_id', canonicalStuId));
 
         const scheduleRows = daysToSchedule.map(dayNum => ({
           student_id: canonicalStuId,
@@ -1185,9 +1226,23 @@
           status: 'Active'
         }));
 
-        await db.from('class_schedules').insert(scheduleRows);
+        await trackConvertWrite(db.from('class_schedules').insert(scheduleRows));
       } catch(err) {
         console.warn("Supabase schedule expansion insert notice:", err);
+        convertSaveFailed = true;
+      }
+
+      // Audit P1-3: if any conversion write above failed, do not mark
+      // the trial converted, close the modal, or announce success — the
+      // records may be only partly converted, so say so plainly and leave
+      // the trial in place for a retry after checking the records.
+      if (convertSaveFailed) {
+        if (btn) {
+          btn.disabled = false;
+          btn.innerHTML = '<i class="fa-solid fa-circle-check text-brandGold"></i> Confirm & Enroll as Regular Student';
+        }
+        alert('The conversion could not be completed because one of its records failed to save. The trial has been left as-is — please check the family and student records and try again.');
+        return;
       }
 
       // 6. Update Trial History Record in Memory (linked to the SAME canonical Family/Student IDs)

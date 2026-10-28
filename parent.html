@@ -1347,6 +1347,8 @@
         restoreParentLoginButton(btn);
         if (serverAttempt.error === 'no_password_set') {
           showParentLoginError(errBox, errText, "No password set. Ask the administrator to set one.");
+        } else if (serverAttempt.error === 'account_deactivated') {
+          showParentLoginError(errBox, errText, "This account is deactivated. Please contact the administrator.");
         } else {
           showParentLoginError(errBox, errText, "Invalid username or password.");
         }

@@ -1774,7 +1774,9 @@
       const lesson_notes = document.getElementById('dashAttNotes').value.trim();
       const date = new Date().toISOString().slice(0, 10);
 
-      await db.from('attendance_logs').upsert([{
+      // Audit P1-3: report a failed attendance save honestly instead of
+      // closing the modal and reloading as if it were saved.
+      const { error: dashAttError } = await db.from('attendance_logs').upsert([{
         schedule_id,
         student_id,
         teacher_id,
@@ -1782,6 +1784,12 @@
         status,
         lesson_notes
       }], { onConflict: 'schedule_id,date' });
+      if (dashAttError) {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fa-solid fa-floppy-disk"></i> Save Attendance';
+        alert('The attendance could not be saved. Please try again.\n\nReason: ' + (dashAttError.message || dashAttError));
+        return;
+      }
 
       closeModal('modalDashAttendance');
       btn.disabled = false;

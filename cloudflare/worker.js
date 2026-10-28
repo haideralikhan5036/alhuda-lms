@@ -84,7 +84,7 @@ function corsHeadersFor(request, env) {
 // functions/api/db.js (the D1 schema marker; v2 after Part A). It is hardcoded
 // here on purpose: /api/health must never 500 because D1 is unreachable, and
 // it must never cost an unauthenticated caller a D1 read.
-const WORKER_RELEASE = '2026-10-28-b7c';
+const WORKER_RELEASE = '2026-10-28-audit-p1';
 const HEALTH_SCHEMA_VERSION = '2026-10-28-v2';
 
 // --- Batch 7 Part B: security headers (workers.dev responses) --------------
@@ -625,6 +625,9 @@ async function handleStaffLogin(request, env) {
     let recordId = null;
     let recordFullName = null;
     let recordEmpId = null;
+    // Audit P1-1: status of the record that authenticates, for the
+    // deactivation gate below (null until a password verifies).
+    let recordStatus = null;
     // Batch-1: track WHY login failed so an account that exists but has no
     // owner-set (hashed) password gets the distinct 'no_password_set' error,
     // while every other failure keeps the generic anti-enumeration message.
@@ -636,7 +639,7 @@ async function handleStaffLogin(request, env) {
     let checkedSlot = null;
 
     if (role === 'parent') {
-      const { results } = await db.prepare('SELECT id, parent_name, notes FROM families').all();
+      const { results } = await db.prepare('SELECT id, parent_name, notes, status FROM families').all();
       for (const f of results || []) {
         const notes = parseJsonField(f.notes);
         const pc = parseJsonField(notes.portal_credentials);
@@ -655,12 +658,13 @@ async function handleStaffLogin(request, env) {
           checkedHash = pw;
           recordId = f.id;
           recordFullName = f.parent_name || null;
+          recordStatus = f.status;
           break;
         }
       }
     } else {
       // manager / teacher: credentials live on the teachers table.
-      const { results } = await db.prepare('SELECT id, full_name, address, notes FROM teachers').all();
+      const { results } = await db.prepare('SELECT id, full_name, address, notes, status FROM teachers').all();
       for (const t of results || []) {
         const meta = parseJsonField(t.address);
         const notesMeta = parseJsonField(t.notes);
@@ -693,6 +697,7 @@ async function handleStaffLogin(request, env) {
           }
           recordId = t.id;
           recordFullName = t.full_name || null;
+          recordStatus = t.status;
           recordEmpId = meta.emp_id || acc.emp_id || acc.teacher_id || meta.teacher_id || String(t.id);
           break;
         }
@@ -726,6 +731,19 @@ async function handleStaffLogin(request, env) {
       const accResult = await recordThrottleFailure(db, env, 'account', throttleAccountKey(role, identifier), THROTTLE_ACCOUNT_THRESHOLD, true);
       if (accResult.locked) return throttleLockResponse(request, env, accResult.retryAfterSec);
       return json(request, env, { ok: false, error: 'Invalid username or password.' }, 401);
+    }
+
+    // Audit P1-1: a deactivated account cannot obtain a fresh session,
+    // even with a correct password. No throttle state is touched here:
+    // this is not a failed guess, and the account stays unusable until
+    // reactivated. Portals map 'account_deactivated' to a plain-language
+    // message; the owner env-credential path is untouched (it has no D1
+    // row and never reaches this function).
+    if (recordId && recordStatus != null) {
+      const table = role === 'parent' ? 'families' : 'teachers';
+      if (accountStatusIsInactive(table, recordStatus)) {
+        return json(request, env, { ok: false, error: 'account_deactivated' }, 401);
+      }
     }
 
     // Success resets the account counter (the IP counter is untouched).
@@ -1652,6 +1670,48 @@ async function revokeToken(db, env, token, expiresAtSec) {
   } catch (e) {}
 }
 
+// --- Audit P1-1: account-status gate ----------------------------------------
+// A deactivated family/teacher/manager account must not obtain a fresh
+// session, and a token minted before deactivation must stop working even
+// when its marker check passes (e.g. the same-second mint window). Status
+// values mirror the db engine's ACCOUNT_INACTIVE_STATUSES
+// (functions/api/db.js): families inactive/deactivated, teachers
+// inactive/terminated/deactivated. Anything else (including a missing or
+// empty status) counts as ACTIVE, matching the engine's derivation.
+// Only a positive inactive read denies; a missing row or a lookup error
+// allows — the same missing-table tolerance as the marker check, and
+// test fixtures use synthetic subjects without rows. The lookup is cached
+// per isolate for 60 seconds, the same bound as the marker cache, so the
+// maximum cross-isolate delay for a deactivation to take effect here is
+// 60 seconds (the marker itself usually kills the token sooner).
+const ACCOUNT_INACTIVE_STATUSES_WORKER = {
+  families: new Set(['inactive', 'deactivated']),
+  teachers: new Set(['inactive', 'terminated', 'deactivated']),
+};
+function accountStatusIsInactive(table, status) {
+  const set = ACCOUNT_INACTIVE_STATUSES_WORKER[table];
+  if (!set) return false;
+  return set.has(String(status == null ? '' : status).trim().toLowerCase());
+}
+const ACCOUNT_STATUS_CACHE = new Map();
+const ACCOUNT_STATUS_CACHE_TTL_MS = 60 * 1000;
+async function isAccountDeactivated(db, env, role, sub) {
+  const table = role === 'parent' ? 'families' : 'teachers';
+  const cacheKey = role + ':' + String(sub);
+  const hit = ACCOUNT_STATUS_CACHE.get(cacheKey);
+  if (hit && Date.now() - hit.cachedAtMs < ACCOUNT_STATUS_CACHE_TTL_MS) return hit.inactive;
+  let inactive = false;
+  try {
+    const row = await db.prepare(`SELECT status FROM ${table} WHERE id = ?`).bind(String(sub)).first();
+    inactive = !!(row && accountStatusIsInactive(table, row.status));
+  } catch (e) { inactive = false; }
+  ACCOUNT_STATUS_CACHE.set(cacheKey, { inactive, cachedAtMs: Date.now() });
+  return inactive;
+}
+async function clearAccountStatusCache(role, sub) {
+  ACCOUNT_STATUS_CACHE.delete(role + ':' + String(sub));
+}
+
 // --- Auth middleware for privileged APIs ------------------------------------
 // Requires `Authorization: Bearer <token>` with a valid worker-issued
 // session for any authenticated role. Anonymous requests are rejected.
@@ -1682,6 +1742,22 @@ async function requireApiAuth(request, env) {
       const validAfter = await getValidAfter(db, env, payload.sub);
       if (validAfter !== null && Number(payload.iat) < validAfter) return null;
     } catch (e) { /* Missing table = no marker recorded. */ }
+    // Audit P1-1: status gate for STAFF accounts only (manager/teacher).
+    // The marker above kills tokens that predate a deactivation in the
+    // common case; this closes the residual same-second window and any
+    // path where the marker was missed. The owner env credential has no
+    // D1 row and is never gated here. Parents are deliberately EXEMPT:
+    // Batch 7 established that a deactivated family's parent keeps
+    // notes-only access (the leave flow), with reactivation still
+    // blocked by the engine guard — denying all parent API access here
+    // would break that flow. A deactivated family's fresh parent logins
+    // are still refused by the handleStaffLogin gate, and pre-existing
+    // parent tokens are still ended by the marker above.
+    if (payload.role === 'manager' || payload.role === 'teacher') {
+      try {
+        if (await isAccountDeactivated(db, env, payload.role, payload.sub)) return null;
+      } catch (e) { /* Lookup error: allow (marker check already ran). */ }
+    }
   }
   return payload;
 }
@@ -2167,6 +2243,111 @@ async function loadRowsByIds(db, table, ids) {
   return results || [];
 }
 
+// Audit P1-4: manager 360 sub-record delete guard. The six 360 delete
+// buttons (teacher deduction/leave/document, family manager/teacher
+// note, student certificate) are notes/address-JSON UPDATEs, not
+// DELETEs, so the "no hard deletes" deny-list never saw them. This guard
+// diffs the submitted JSON field against the stored row and:
+//   - DENIES an update/upsert that drops an entry from a protected list
+//     (by entry id, or by deep equality for id-less entries). Adding
+//     entries, editing an entry in place, and editing any other field
+//     still pass — legitimate manager notes edits are untouched.
+//   - RESTORES a protected list the submitted JSON omits entirely while
+//     the stored row still has it. A partial notes patch must never
+//     silently wipe a list the manager never meant to touch (this also
+//     mirrors the existing masked-contact restore in guard (c)).
+//   - DENIES a plain-string field value that would replace stored
+//     structured JSON holding protected lists (a whole-column wipe).
+// Scope is deliberately the audit-listed lists only: teachers.address
+// (deduction_records, leave_records, documents — 360 saves persist
+// there, not in notes), families.notes (manager_notes, teacher_notes),
+// students.notes (certificates). Owner writes are never guarded here.
+// When target ids cannot be determined the guard allows (same posture
+// as guard (c)'s first-row-only merge); the listed 360 saves always
+// carry an id filter.
+const MANAGER_PROTECTED_LISTS = {
+  teachers: { field: 'address', keys: ['deduction_records', 'leave_records', 'documents'] },
+  families: { field: 'notes', keys: ['manager_notes', 'teacher_notes'] },
+  students: { field: 'notes', keys: ['certificates'] },
+};
+const MANAGER_LIST_DELETE_DENY = 'Managers cannot delete official records. Ask the owner to remove this entry.';
+function managerListEntriesMissing(oldList, newList) {
+  if (!Array.isArray(oldList) || oldList.length === 0) return false;
+  if (!Array.isArray(newList)) return true;
+  const newById = new Map();
+  const newWithoutId = [];
+  for (const e of newList) {
+    if (e && typeof e === 'object' && e.id != null) newById.set(String(e.id), e);
+    else newWithoutId.push(e);
+  }
+  for (const old of oldList) {
+    if (old && typeof old === 'object' && old.id != null) {
+      if (!newById.has(String(old.id))) return true;
+    } else {
+      const oldJson = JSON.stringify(old);
+      if (!newWithoutId.some((e) => JSON.stringify(e) === oldJson)) return true;
+    }
+  }
+  return false;
+}
+function managerListGuardDiffRow(spec, storedRaw, submittedRaw) {
+  // Returns 'allow', 'deny', or { restored: <field value> }.
+  const stored = parseJsonObjectValue(storedRaw);
+  if (!stored) return 'allow'; // stored field is not structured JSON: nothing to protect
+  const hasProtected = spec.keys.some((k) => Array.isArray(stored[k]) && stored[k].length > 0);
+  if (!hasProtected) return 'allow';
+  if (submittedRaw == null) return 'allow'; // patch does not touch the field
+  const submitted = parseJsonObjectValue(submittedRaw);
+  if (!submitted) return 'deny'; // plain-string value would wipe the structured lists
+  let restored = false;
+  for (const key of spec.keys) {
+    const oldList = stored[key];
+    if (!Array.isArray(oldList) || oldList.length === 0) continue;
+    if (!(key in submitted)) {
+      submitted[key] = oldList;
+      restored = true;
+      continue;
+    }
+    if (managerListEntriesMissing(oldList, submitted[key])) return 'deny';
+  }
+  if (!restored) return 'allow';
+  return { restored: (typeof submittedRaw === 'string') ? JSON.stringify(submitted) : submitted };
+}
+async function managerNotesListGuard(db, table, action, body) {
+  const spec = MANAGER_PROTECTED_LISTS[table];
+  if (!spec || !db) return true;
+  if (action === 'update') {
+    const ids = filterIdValues(Array.isArray(body.filters) ? body.filters : []);
+    if (!ids.length) return true;
+    const patch = (body.values && typeof body.values === 'object' && !Array.isArray(body.values)) ? body.values : null;
+    if (!patch) return true;
+    const currents = await loadRowsByIds(db, table, ids);
+    for (const cur of currents) {
+      const verdict = managerListGuardDiffRow(spec, cur[spec.field], patch[spec.field]);
+      if (verdict === 'deny') return { deny: MANAGER_LIST_DELETE_DENY };
+      if (verdict !== 'allow') patch[spec.field] = verdict.restored;
+    }
+    return true;
+  }
+  if (action === 'upsert') {
+    const rows = Array.isArray(body.values) ? body.values : [body.values || {}];
+    const ids = rows.map((r) => (r && r.id != null ? String(r.id) : null)).filter(Boolean);
+    if (!ids.length) return true;
+    const currents = await loadRowsByIds(db, table, ids);
+    const byId = new Map(currents.map((c) => [String(c.id), c]));
+    for (const row of rows) {
+      if (!row || row.id == null) continue;
+      const cur = byId.get(String(row.id));
+      if (!cur) continue; // brand-new row: nothing to protect
+      const verdict = managerListGuardDiffRow(spec, cur[spec.field], row[spec.field]);
+      if (verdict === 'deny') return { deny: MANAGER_LIST_DELETE_DENY };
+      if (verdict !== 'allow') row[spec.field] = verdict.restored;
+    }
+    return true;
+  }
+  return true;
+}
+
 // Batch 2 manager write guards. Runs inside handleScopedDbRequest for
 // role==='manager' writes BEFORE delegation; returns true to allow, false
 // to deny (403, generic message). May transform body.values in place
@@ -2198,7 +2379,11 @@ async function applyManagerWriteGuards(db, body, scope) {
   if (table === 'teachers') {
     if (action === 'insert' || action === 'upsert') {
       const rows = Array.isArray(body.values) ? body.values : [body.values || {}];
-      return rows.every((row) => !isManagerStaffRecord(row || {}));
+      if (!rows.every((row) => !isManagerStaffRecord(row || {}))) return false;
+      // Audit P1-4: an upsert that replaces an existing teacher row runs
+      // the same list-shrinkage diff as an update (inserts are new rows).
+      if (action === 'upsert') return managerNotesListGuard(db, 'teachers', action, body);
+      return true;
     }
     if (action === 'update') {
       const ids = filterIdValues(filters);
@@ -2207,7 +2392,9 @@ async function applyManagerWriteGuards(db, body, scope) {
       if (isManagerStaffRecord({ address: patch.address, employee_type: patch.employee_type })) return false;
       const targets = await loadRowsByIds(db, 'teachers', ids);
       if (targets.some((t) => isManagerStaffRecord(t))) return false;
-      return true;
+      // Audit P1-4: 360 sub-record deletes arrive as notes/address-JSON
+      // UPDATEs; the diff guard below denies list shrinkage.
+      return managerNotesListGuard(db, 'teachers', action, body);
     }
     return true; // delete already denied in checkTableAccess
   }
@@ -2253,6 +2440,13 @@ async function applyManagerWriteGuards(db, body, scope) {
       } else if (row.notes && typeof row.notes === 'object' && !Array.isArray(row.notes)) {
         row.notes = mergeCurrent(stripMaskPlaceholders(row.notes, 5));
       }
+    }
+    // Audit P1-4: after the mask merge above, diff the submitted notes
+    // against stored notes and deny 360 sub-record deletions (families:
+    // manager/teacher notes; students: certificates). Updates and
+    // upserts both run the guard; inserts are new rows.
+    if (action === 'update' || action === 'upsert') {
+      return managerNotesListGuard(db, table, action, body);
     }
     return true;
   }
@@ -2380,6 +2574,31 @@ async function restoreManagerUpdateHiddenSlots(db, scopedBody, scope) {
     // Never let the restore step break a legitimate update.
     console.warn('[scope] hidden-slot restore skipped:', e && e.message);
   }
+}
+
+// Audit P1-2: for teacher insert/upsert rows that carry an id, verify the
+// id is either new or already owned by the caller (stored teacher_id =
+// sub). Returns true when a foreign-owned id is supplied (caller must be
+// denied). Rows without an id are unaffected: the engine generates a
+// fresh id for them, so they can never collide. A missing db handle or a
+// lookup error allows — the delegation itself would fail without a db,
+// and this helper must never invent a denial.
+async function teacherInsertOwnsIds(db, table, sub, values) {
+  if (!db) return false;
+  const rows = Array.isArray(values) ? values : [values || {}];
+  const ids = [];
+  for (const row of rows) {
+    if (row && row.id != null && String(row.id) !== '') ids.push(String(row.id));
+  }
+  if (!ids.length) return false;
+  try {
+    const placeholders = ids.map(() => '?').join(', ');
+    const { results } = await db.prepare(`SELECT id, teacher_id FROM ${table} WHERE id IN (${placeholders})`).bind(...ids).all();
+    for (const r of (results || [])) {
+      if (String(r.teacher_id) !== String(sub)) return true;
+    }
+  } catch (e) { return false; }
+  return false;
 }
 
 // Inject server-side filters so a client can never widen its own scope.
@@ -2702,6 +2921,19 @@ async function handleScopedDbRequest(ctx, auth) {
   if (!scopedBody) {
     return forbidden(request, env);
   }
+  // Audit P1-2: a teacher INSERT/UPSERT that supplies the id of a row
+  // owned by another teacher must not silently replace it (the engine's
+  // INSERT OR REPLACE would delete the foreign row and insert the
+  // caller's copy). Owner/manager flows are untouched: they keep
+  // INSERT OR REPLACE semantics (admin re-saves, mirror sync under
+  // owner/manager sessions). Parent inserts are already denied in
+  // checkTableAccess, so no parent branch is needed here.
+  if (role === 'teacher' && (action === 'insert' || action === 'upsert') &&
+      (table === 'class_schedules' || table === 'attendance_logs' || table === 'leave_requests')) {
+    if (await teacherInsertOwnsIds(db, table, sub, scopedBody.values)) {
+      return json(request, env, { ok: false, error: 'You cannot overwrite another teacher\'s record.' }, 403);
+    }
+  }
   // Batch 2 review fix: restore the credential/blob slots a manager's
   // masked read could not contain, so their edit cannot erase them.
   if (role === 'manager' && action === 'update') {
@@ -2751,6 +2983,20 @@ async function handleScopedDbRequest(ctx, auth) {
         if (st === 'inactive' || st === 'terminated' || st === 'deactivated') {
           try { await clearValidAfterCache(env, String(row.id)); } catch (e) {}
         }
+      }
+      // Audit P1-1: also drop this isolate's cached account-status entry
+      // for the updated subject, so a deactivation (or a reactivation)
+      // is read-your-write here instead of waiting out the 60 s cache.
+      // A teachers row may back a teacher token or a manager token, so
+      // both keys are cleared; a families row backs a parent token.
+      if (row && row.id) {
+        try {
+          if (table === 'families') await clearAccountStatusCache('parent', String(row.id));
+          else {
+            await clearAccountStatusCache('teacher', String(row.id));
+            await clearAccountStatusCache('manager', String(row.id));
+          }
+        } catch (e) {}
       }
     }
   }
