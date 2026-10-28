@@ -31,6 +31,25 @@
       return 'https://alhuda-lms.ceoislamiccentre.workers.dev';
     }
 
+    // Batch 7A: server-side logout. Best-effort with a 5-second cap: a
+    // reachable server revokes the token, but a failed call never blocks
+    // the local logout — the caller tells the user the server session
+    // may last until it expires. Returns true when the server confirmed.
+    async function callServerLogout(token) {
+      if (!token) return false;
+      try {
+        const controller = new AbortController();
+        const timer = setTimeout(function () { controller.abort(); }, 5000);
+        const res = await fetch(getWorkerBase() + '/api/auth/logout', {
+          method: 'POST',
+          headers: { 'Authorization': 'Bearer ' + token },
+          signal: controller.signal,
+        });
+        clearTimeout(timer);
+        return !!res.ok;
+      } catch (e) { return false; }
+    }
+
     function getOwnerToken() {
       try {
         return sessionStorage.getItem('alhuda_owner_token') || null;
@@ -298,7 +317,10 @@
       }
     }
 
-    function logoutOwnerPortal() {
+    async function logoutOwnerPortal() {
+      let ownerToken = null;
+      try { ownerToken = sessionStorage.getItem('alhuda_owner_token'); } catch (e) {}
+      const serverOk = await callServerLogout(ownerToken);
       try {
         sessionStorage.removeItem('alhuda_owner_token');
         sessionStorage.removeItem('alhuda_owner_session');
@@ -323,6 +345,12 @@
       const passInp = document.getElementById('ownerLoginPassword');
       if (userInp) userInp.value = '';
       if (passInp) passInp.value = '';
+      // Batch 7A, truthful logout: local state is wiped either way, but
+      // if the server call failed the token may live until its expiry.
+      if (ownerToken && !serverOk) {
+        if (typeof showError === 'function') showError('Signed out on this device. Your server session may remain valid until it expires.');
+        else alert('Signed out on this device. Your server session may remain valid until it expires.');
+      }
     }
 
     window.getAuthenticatedOwnerSession = getAuthenticatedOwnerSession;
@@ -360,7 +388,10 @@
       return parsed;
     }
 
-    function logoutManagerPortal() {
+    async function logoutManagerPortal() {
+      let managerToken = null;
+      try { managerToken = sessionStorage.getItem('alhuda_manager_token'); } catch (e) {}
+      const serverOk = await callServerLogout(managerToken);
       localStorage.removeItem('alhuda_logged_in_manager');
       sessionStorage.removeItem('alhuda_manager_session');
       if (localStorage.getItem('alhuda_active_portal_role') === 'manager') {
@@ -377,6 +408,7 @@
       } catch (e) {}
       ACTIVE_MANAGER_ID = null;
       window.ACTIVE_MANAGER_NAME = null;
+      if (managerToken && !serverOk) alert('Signed out on this device. Your server session may remain valid until it expires.');
       window.location.replace('manager.html');
     }
     window.getAuthenticatedManagerSession = getAuthenticatedManagerSession;
@@ -599,12 +631,26 @@
       if (roleSelect) roleSelect.value = 'teacher';
     }
 
-    function logoutTeacherPortal() {
+    async function logoutTeacherPortal() {
+      let teacherToken = null;
+      try { teacherToken = sessionStorage.getItem('alhuda_teacher_token'); } catch (e) {}
+      const serverOk = await callServerLogout(teacherToken);
       localStorage.removeItem('alhuda_logged_in_teacher');
       sessionStorage.removeItem('alhuda_teacher_session');
       if (localStorage.getItem('alhuda_active_portal_role') === 'teacher') {
         localStorage.removeItem('alhuda_active_portal_role');
       }
+      // Batch 7A: wipe the local DB mirror and every account/session key
+      // like every other portal logout does (this function previously
+      // skipped that step).
+      try {
+        if (typeof window.clearAllLmsLocalState === 'function') {
+          window.clearAllLmsLocalState();
+        } else {
+          localStorage.removeItem('alhuda_cloudflare_local_db_v1');
+        }
+      } catch (e) {}
+      if (teacherToken && !serverOk) alert('Signed out on this device. Your server session may remain valid until it expires.');
       window.location.replace('teacher.html');
     }
 

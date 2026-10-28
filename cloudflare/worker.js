@@ -44,7 +44,7 @@
  * ============================================================================
  */
 
-import { onRequest as handleDbRequest } from '../functions/api/db.js';
+import { onRequest as handleDbRequest, AUTH_TABLE_STATEMENTS } from '../functions/api/db.js';
 import { onRequest as handleStorageRequest } from '../functions/api/storage.js';
 import {
   createSessionToken,
@@ -74,28 +74,70 @@ function corsHeadersFor(request, env) {
   return headers;
 }
 
-function json(request, env, data, status = 200) {
+function json(request, env, data, status = 200, extraHeaders = {}) {
   // 204 No Content must not carry a body — `new Response("{}", {status:204})`
   // throws and turns every CORS preflight into a 500 (caught 2026-10-14:
   // all browser logins were blocked at preflight). Return a null body.
+  const headers = { ...corsHeadersFor(request, env), ...extraHeaders };
   if (status === 204) {
-    return new Response(null, { status, headers: corsHeadersFor(request, env) });
+    return new Response(null, { status, headers });
   }
   return new Response(JSON.stringify(data), {
     status,
-    headers: corsHeadersFor(request, env),
+    headers,
   });
 }
 
-// --- Login rate limiting: max 10 attempts per IP per 10 minutes. -------------
-// NOTE (limits): in-memory Map = per-isolate state. Resets on deploy, not
-// shared across isolates. First line of defence; add a Cloudflare Rate
-// Limiting rule in front of /api/auth/* for stronger guarantees.
+// --- Batch 7A: D1-backed login throttling + lockout --------------------------
+// Replaces the old in-memory IP-only limiter as the primary guard (the
+// in-memory Map below is kept ONLY as a fallback when D1 is unavailable,
+// e.g. owner login on an isolate without a DB binding). Throttle state
+// lives in the auth_throttle table (see functions/api/db.js
+// AUTH_TABLE_STATEMENTS): one row per (kind, key_hash), where key_hash is
+// HMAC-SHA-256 under WORKER_AUTH_SECRET of a normalized key — never a
+// plaintext username or IP. Kinds: 'account' (role + login identifier),
+// 'ip' (client IP), 'setpw' (set-password attempts from one IP).
+//
+// Policy (all windows 15 minutes):
+//   account: 5 failed attempts lock the account 15 minutes, progressive
+//     up to 1 hour on repeated lock cycles (a failure within 15 minutes
+//     after a lock expires re-locks with double the duration, capped at
+//     1 hour; a quiet 15 minutes resets the progression).
+//   ip: 20 failed attempts block the IP 15 minutes (fixed, not
+//     progressive — a shared/NAT IP must not be blocked for an hour
+//     because of one attacker's failures).
+//   setpw: 30 set-password attempts per IP per 15 minutes, 15-minute lock
+//     (authenticated action; the allowance is generous for legitimate
+//     bulk password setting and the endpoint is owner/manager-only).
+// A successful login resets the ACCOUNT counter only (the IP counter
+// keeps counting — one account's good login must not forgive an IP-wide
+// attack). Locks ALWAYS expire: there is no permanent-lock state, and a
+// lock is never extended by attempts made while locked (rejected
+// attempts record nothing, so an attacker cannot stretch a victim's lock
+// by hammering). A lock never ends an already-valid session — it only
+// blocks NEW logins; existing tokens die only via revocation (A2 below).
+// Anti-lockout-abuse notes: account locks are short (15–60 min) and
+// capped; the per-IP block (20 failures) engages before one IP can
+// sustain an account lock indefinitely; and the owner unlock path
+// (POST /api/auth/unlock, owner-only, on the password tool page) plus
+// the WORKER_AUTH_SECRET-rotation emergency path (SECURITY-SETUP.md)
+// exist for recovery. A lockout from one IP never blocks the same
+// account from another IP unless that account's own counter also trips
+// (the account counter counts failures from ALL IPs — by design, since
+// the account itself is the thing being attacked; the owner unlock
+// covers the residual risk).
+// Concurrency note: the read-modify-write below is best-effort under
+// concurrent attempts (two isolates may both read fail_count=4 and both
+// write 5). The lock may engage a few attempts late under a burst, never
+// unboundedly: every attempt still writes, and the thresholds are low.
+// D1 serializes the writes themselves; no attempt is silently dropped.
 const LOGIN_ATTEMPTS = new Map();
 const LOGIN_WINDOW_MS = 10 * 60 * 1000;
 const LOGIN_MAX_ATTEMPTS = 10;
 
 function loginRateLimited(ip) {
+  // Fallback ONLY when D1 is unavailable (owner login without a DB
+  // binding). Every D1-backed path below supersedes this.
   const now = Date.now();
   const rec = LOGIN_ATTEMPTS.get(ip);
   if (!rec || now - rec.start > LOGIN_WINDOW_MS) {
@@ -108,6 +150,108 @@ function loginRateLimited(ip) {
 
 function clientIp(request) {
   return request.headers.get('cf-connecting-ip') || 'unknown';
+}
+
+const THROTTLE_WINDOW_MS = 15 * 60 * 1000;
+const THROTTLE_ACCOUNT_THRESHOLD = 5;
+const THROTTLE_IP_THRESHOLD = 20;
+const THROTTLE_SETPW_THRESHOLD = 30;
+const THROTTLE_LOCK_BASE_MS = 15 * 60 * 1000;
+const THROTTLE_LOCK_MAX_MS = 60 * 60 * 1000;
+
+async function throttleKeyHash(env, key) {
+  if (!env || !env.WORKER_AUTH_SECRET) return null;
+  const cryptoKey = await crypto.subtle.importKey('raw', te.encode(String(env.WORKER_AUTH_SECRET)), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+  const sig = await crypto.subtle.sign('HMAC', cryptoKey, te.encode(String(key)));
+  return [...new Uint8Array(sig)].map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+function throttleAccountKey(role, identifier) {
+  return String(role || '').toLowerCase() + ':' + String(identifier || '').trim().toLowerCase();
+}
+
+async function ensureAuthTables(db) {
+  // Idempotent; only called on throttle/revocation WRITES (login
+  // failures, logout, bumps, unlock), never on the per-request read
+  // path, so a cold isolate that has not served /api/db yet still
+  // records its first failure instead of crashing on a missing table.
+  for (const sql of AUTH_TABLE_STATEMENTS) {
+    try { await db.prepare(sql).run(); } catch (e) {}
+  }
+}
+
+async function getThrottleRow(db, kind, keyHash) {
+  try {
+    return await db.prepare('SELECT kind, key_hash, fail_count, window_start, locked_until FROM auth_throttle WHERE kind = ? AND key_hash = ?').bind(kind, keyHash).first();
+  } catch (e) {
+    return null; // Missing table (pre-deploy DB) = no throttle state.
+  }
+}
+
+async function getThrottleLock(db, env, kind, key) {
+  // Read-only lock check. Returns { locked, retryAfterSec }.
+  const keyHash = await throttleKeyHash(env, key);
+  if (!keyHash) return { locked: false, retryAfterSec: 0 };
+  const row = await getThrottleRow(db, kind, keyHash);
+  if (!row || !row.locked_until) return { locked: false, retryAfterSec: 0 };
+  const remainingMs = Number(row.locked_until) - Date.now();
+  if (remainingMs <= 0) return { locked: false, retryAfterSec: 0 };
+  return { locked: true, retryAfterSec: Math.ceil(remainingMs / 1000) };
+}
+
+function throttleLockResponse(request, env, retryAfterSec) {
+  const minutes = Math.max(1, Math.ceil(retryAfterSec / 60));
+  return json(request, env, { ok: false, error: `Too many attempts. Please try again in ${minutes} minute${minutes === 1 ? '' : 's'}.` }, 429, { 'Retry-After': String(retryAfterSec) });
+}
+
+async function recordThrottleFailure(db, env, kind, key, threshold, progressive) {
+  // Records one failure and returns the lock state AFTER this failure.
+  // Attempts made while already locked record nothing (see header note).
+  await ensureAuthTables(db);
+  const keyHash = await throttleKeyHash(env, key);
+  if (!keyHash) return { locked: false, retryAfterSec: 0 };
+  const now = Date.now();
+  const row = await getThrottleRow(db, kind, keyHash);
+  if (row && row.locked_until && Number(row.locked_until) > now) {
+    return { locked: true, retryAfterSec: Math.ceil((Number(row.locked_until) - now) / 1000) };
+  }
+  let failCount;
+  let windowStart;
+  let lockedUntil = null;
+  if (!row) {
+    failCount = 1; windowStart = now;
+  } else if (progressive && row.locked_until && now - Number(row.locked_until) < THROTTLE_WINDOW_MS) {
+    // Repeat-offender cycle: a failure shortly after a lock expired
+    // re-locks with double the duration, capped at 1 hour.
+    failCount = Number(row.fail_count || 0) + 1; windowStart = now;
+  } else {
+    if (now - Number(row.window_start || 0) > THROTTLE_WINDOW_MS) { failCount = 0; windowStart = now; }
+    else { failCount = Number(row.fail_count || 0); windowStart = Number(row.window_start || now); }
+    failCount += 1;
+  }
+  if (failCount >= threshold) {
+    const cycles = progressive ? Math.max(0, failCount - threshold) : 0;
+    lockedUntil = now + Math.min(THROTTLE_LOCK_MAX_MS, THROTTLE_LOCK_BASE_MS * Math.pow(2, cycles));
+  }
+  try {
+    await db.prepare('INSERT INTO auth_throttle (kind, key_hash, fail_count, window_start, locked_until, updated_at) VALUES (?,?,?,?,?,?) ON CONFLICT(kind, key_hash) DO UPDATE SET fail_count = excluded.fail_count, window_start = excluded.window_start, locked_until = excluded.locked_until, updated_at = excluded.updated_at').bind(kind, keyHash, failCount, windowStart, lockedUntil, new Date().toISOString()).run();
+  } catch (e) {}
+  // Opportunistic purge of fully-expired rows (best effort; never fails
+  // the login): rows whose lock expired over a window ago, or unlocked
+  // rows whose window is long past.
+  try {
+    await db.prepare('DELETE FROM auth_throttle WHERE (locked_until IS NOT NULL AND locked_until < ?) OR (locked_until IS NULL AND window_start < ?)').bind(now - THROTTLE_WINDOW_MS, now - THROTTLE_WINDOW_MS).run();
+  } catch (e) {}
+  if (lockedUntil && lockedUntil > now) {
+    return { locked: true, retryAfterSec: Math.ceil((lockedUntil - now) / 1000) };
+  }
+  return { locked: false, retryAfterSec: 0 };
+}
+
+async function resetThrottleRow(db, env, kind, key) {
+  const keyHash = await throttleKeyHash(env, key);
+  if (!keyHash) return;
+  try { await db.prepare('DELETE FROM auth_throttle WHERE kind = ? AND key_hash = ?').bind(kind, keyHash).run(); } catch (e) {}
 }
 
 // --- Email relay rate limiting: max 100 sends per token per 10 minutes. -----
@@ -182,12 +326,39 @@ function isUsablePassword(pw) {
   return s.length >= 4 && s !== DEFAULT_PASSWORD;
 }
 
-// --- Phase 2: password hashing ------------------------------------------------
-// New hashes are stored as 'sha256$<salt-hex>$<hash-hex>' where
-// hash = SHA-256(saltHex + ':' + password). Legacy plaintext values still
-// verify during the migration period, but the '12345678' default and empty
-// passwords NEVER authenticate. The owner migrates accounts to hashes via
-// POST /api/auth/set-password below.
+// --- Batch 7A: PBKDF2 password hashing (WebCrypto) ---------------------------
+// New hashes are stored as 'pbkdf2$<iterations>$<salt-hex>$<hash-hex>'
+// where hash = PBKDF2-HMAC-SHA-256(password, salt, iterations), 32 bytes.
+// The format carries its iteration count, so the count can be raised (or
+// lowered) later by changing one constant: existing hashes keep verifying
+// at their stored count, and each successful login transparently re-hashes
+// to the current count (see staff-login upgrade below). Legacy formats
+// keep verifying forever (see verifyPassword): no flag day, no mass reset.
+//
+// ITERATION CHOICE (10,000) — read this before raising it:
+//   * Official Cloudflare Workers limits (developers.cloudflare.com/
+//     workers/platform/limits/, retrieved 2026-10-28): Workers Free allows
+//     10 ms CPU time per invocation; Workers Paid (Standard) allows 30 s
+//     by default, up to 5 min. CPU time is execution time, not wall-clock:
+//     D1/network waits do not count toward it.
+//   * This account's Workers plan is UNVERIFIED (dashboard-only; nothing
+//     in the repo states it) — so the count must be safe even on Free.
+//   * Measured on this VM (Node v24.22.1, PBKDF2-HMAC-SHA-256, 32-byte
+//     output): 100,000 iterations ≈ 24–28 ms; 210,000 ≈ 54–60 ms;
+//     600,000 ≈ 158–162 ms (≈0.27 ms per 1,000 iterations). VM numbers are
+//     NOT Workers numbers, but they set the scale: 100,000 iterations
+//     would already exceed a Free 10 ms budget, while 10,000 (≈2.7 ms
+//     interpolated) leaves headroom for the rest of the login request.
+//   * 10,000 is below the 600,000 OWASP recommends for PBKDF2-HMAC-SHA-256
+//     — stated honestly. It is still a large step up from the previous
+//     single SHA-256, and it is the largest count defensible without
+//     knowing the plan. If the account is confirmed on Workers Paid,
+//     raise PBKDF2_ITERATIONS to 210,000 (≈57 ms) or 600,000 (≈160 ms)
+//     with a one-constant redeploy; no migration is needed.
+//   * FALLBACK if logins ever fail with CPU-limit errors after deploy:
+//     lower PBKDF2_ITERATIONS and redeploy. Old hashes still verify at
+//     their stored count, and logins re-hash to the new count. Never
+//     raise the count past what the plan's CPU budget allows.
 //
 // PASSWORD LOCATIONS (canonical slots, verified from D1 schema + login code):
 //   parent  -> families.notes  JSON -> portal_credentials.password
@@ -197,22 +368,47 @@ function isUsablePassword(pw) {
 //   manager -> teachers.address JSON -> password  (same record shape as
 //              teacher; the record counts as a manager when employee_type =
 //              'manager' or id/emp_id starts with 'MGR-')
+const PBKDF2_ITERATIONS = 10000;
+const PBKDF2_MAX_ITERATIONS = 1000000; // fail-closed cap: a stored hash
+// claiming more iterations than this is rejected without deriving (a
+// crafted stored value must never be able to force a CPU-burning derive).
+
+function isPbkdf2Password(s) {
+  return /^pbkdf2\$[0-9]+\$[0-9a-f]{32}\$[0-9a-f]{64}$/i.test(String(s || ''));
+}
+
 function isHashedPassword(s) {
-  return /^sha256\$[0-9a-f]{32}\$[0-9a-f]{64}$/i.test(String(s || ''));
+  return isPbkdf2Password(s) || /^sha256\$[0-9a-f]{32}\$[0-9a-f]{64}$/i.test(String(s || ''));
+}
+
+async function pbkdf2Hex(password, saltHex, iterations) {
+  const saltBytes = new Uint8Array((String(saltHex).match(/../g) || []).map((h) => parseInt(h, 16)));
+  const key = await crypto.subtle.importKey('raw', te.encode(password), 'PBKDF2', false, ['deriveBits']);
+  const bits = await crypto.subtle.deriveBits({ name: 'PBKDF2', salt: saltBytes, iterations, hash: 'SHA-256' }, key, 256);
+  return [...new Uint8Array(bits)].map((b) => b.toString(16).padStart(2, '0')).join('');
 }
 
 async function hashPassword(password) {
   const salt = new Uint8Array(16);
   crypto.getRandomValues(salt);
   const saltHex = [...salt].map((b) => b.toString(16).padStart(2, '0')).join('');
-  const digest = await crypto.subtle.digest('SHA-256', te.encode(saltHex + ':' + password));
-  const hashHex = [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, '0')).join('');
-  return `sha256$${saltHex}$${hashHex}`;
+  const hashHex = await pbkdf2Hex(password, saltHex, PBKDF2_ITERATIONS);
+  return `pbkdf2$${PBKDF2_ITERATIONS}$${saltHex}$${hashHex}`;
 }
 
 async function verifyPassword(password, stored) {
   const s = String(stored || '');
-  if (isHashedPassword(s)) {
+  if (isPbkdf2Password(s)) {
+    const parts = s.split('$');
+    const iterations = parseInt(parts[1], 10);
+    const saltHex = parts[2] || '';
+    const expectedHex = (parts[3] || '').toLowerCase();
+    // Fail closed on absurd iteration claims (see PBKDF2_MAX_ITERATIONS).
+    if (!Number.isFinite(iterations) || iterations < 1 || iterations > PBKDF2_MAX_ITERATIONS) return false;
+    const hashHex = await pbkdf2Hex(password, saltHex, iterations);
+    return constantTimeEqualBytes(te.encode(hashHex), te.encode(expectedHex));
+  }
+  if (/^sha256\$[0-9a-f]{32}\$[0-9a-f]{64}$/i.test(s)) {
     const parts = s.split('$');
     const saltHex = parts[1] || '';
     const expectedHex = (parts[2] || '').toLowerCase();
@@ -222,6 +418,37 @@ async function verifyPassword(password, stored) {
   }
   // Legacy plaintext (migration period). Default/empty still rejected.
   return isUsablePassword(s) && constantTimeEqualBytes(te.encode(password), te.encode(s));
+}
+
+async function verifyOwnerEnvPassword(password, expectedHash) {
+  // The owner credential lives in env, not D1, and the app can never
+  // re-hash it (see PR body). The env value may be the legacy unsalted
+  // SHA-256 hex OR a pbkdf2$... value (the documented migration target);
+  // both verify here so the migration needs no flag day.
+  const expected = String(expectedHash || '').toLowerCase();
+  if (isPbkdf2Password(expected)) {
+    const parts = expected.split('$');
+    const iterations = parseInt(parts[1], 10);
+    if (!Number.isFinite(iterations) || iterations < 1 || iterations > PBKDF2_MAX_ITERATIONS) return false;
+    const hashHex = await pbkdf2Hex(password, parts[2] || '', iterations);
+    return constantTimeEqualBytes(te.encode(hashHex), te.encode((parts[3] || '').toLowerCase()));
+  }
+  const passHash = (await sha256Hex(password)).toLowerCase();
+  return constantTimeEqualBytes(te.encode(passHash), te.encode(expected));
+}
+
+// Dummy PBKDF2 verification for unknown identifiers (staff-login): the
+// failure path must cost roughly what a real PBKDF2 verification costs,
+// so an unknown identifier is not trivially distinguishable from a wrong
+// password by timing. The dummy hash is a fixed test vector, never a real
+// credential, and its result is always discarded. Timing equality is
+// approximate (network jitter dominates a few ms); the primary
+// anti-enumeration defence is the identical 401 response, not timing.
+function dummyPbkdf2Hash() {
+  return 'pbkdf2$' + PBKDF2_ITERATIONS + '$00000000000000000000000000000000$0000000000000000000000000000000000000000000000000000000000000000';
+}
+async function dummyPasswordVerify(password) {
+  try { await verifyPassword(password, dummyPbkdf2Hash()); } catch (e) {}
 }
 
 function isStrongPassword(pw) {
@@ -238,10 +465,6 @@ async function handleOwnerLogin(request, env) {
   }
 
   const ip = clientIp(request);
-  if (loginRateLimited(ip)) {
-    return json(request, env, { ok: false, error: 'Too many login attempts. Please try again later.' }, 429);
-  }
-
   let body;
   try {
     body = await request.json();
@@ -251,20 +474,46 @@ async function handleOwnerLogin(request, env) {
 
   const username = String((body && body.username) || '');
   const password = String((body && body.password) || '');
+  const db = getDb(env);
+  if (db) {
+    const ipLock = await getThrottleLock(db, env, 'ip', ip);
+    if (ipLock.locked) return throttleLockResponse(request, env, ipLock.retryAfterSec);
+    // The account lock is only meaningful for a non-empty username.
+    if (username.trim()) {
+      const accountLock = await getThrottleLock(db, env, 'account', throttleAccountKey('owner', username));
+      if (accountLock.locked) return throttleLockResponse(request, env, Math.max(ipLock.retryAfterSec, accountLock.retryAfterSec));
+    }
+  } else if (loginRateLimited(ip)) {
+    return json(request, env, { ok: false, error: 'Too many login attempts. Please try again later.' }, 429);
+  }
+
   const expectedUser = String(env.OWNER_USERNAME || '');
   const expectedHash = String(env.OWNER_PASSWORD_HASH || '').toLowerCase();
 
   let valid = false;
   if (expectedUser && expectedHash && env.WORKER_AUTH_SECRET) {
     const userOk = constantTimeEqualBytes(te.encode(username), te.encode(expectedUser));
-    const passHash = (await sha256Hex(password)).toLowerCase();
-    const passOk = constantTimeEqualBytes(te.encode(passHash), te.encode(expectedHash));
+    const passOk = await verifyOwnerEnvPassword(password, expectedHash);
     valid = userOk && passOk;
   }
 
   if (!valid) {
+    if (db) {
+      // A lock trips on the attempt that reaches the threshold (same as
+      // the old limiter, which blocked the threshold-crossing attempt),
+      // so the response is 429 right away, not only on the next attempt.
+      const ipResult = await recordThrottleFailure(db, env, 'ip', ip, THROTTLE_IP_THRESHOLD, false);
+      if (ipResult.locked) return throttleLockResponse(request, env, ipResult.retryAfterSec);
+      if (username.trim()) {
+        const accResult = await recordThrottleFailure(db, env, 'account', throttleAccountKey('owner', username), THROTTLE_ACCOUNT_THRESHOLD, true);
+        if (accResult.locked) return throttleLockResponse(request, env, accResult.retryAfterSec);
+      }
+    }
     return json(request, env, { ok: false, error: 'Invalid username or password.' }, 401);
   }
+
+  // Success resets the account counter (the IP counter is untouched).
+  if (db && username.trim()) await resetThrottleRow(db, env, 'account', throttleAccountKey('owner', username));
 
   const token = await createSessionToken(
     { sub: expectedUser, role: 'owner' },
@@ -290,10 +539,6 @@ async function handleStaffLogin(request, env) {
   }
 
   const ip = clientIp(request);
-  if (loginRateLimited(ip)) {
-    return json(request, env, { ok: false, error: 'Too many login attempts. Please try again later.' }, 429);
-  }
-
   let body;
   try {
     body = await request.json();
@@ -314,6 +559,11 @@ async function handleStaffLogin(request, env) {
     return json(request, env, { ok: false, error: 'Authentication service unavailable.' }, 503);
   }
 
+  const ipLock = await getThrottleLock(db, env, 'ip', ip);
+  if (ipLock.locked) return throttleLockResponse(request, env, ipLock.retryAfterSec);
+  const accountLock = await getThrottleLock(db, env, 'account', throttleAccountKey(role, identifier));
+  if (accountLock.locked) return throttleLockResponse(request, env, Math.max(ipLock.retryAfterSec, accountLock.retryAfterSec));
+
   try {
     let recordId = null;
     let recordFullName = null;
@@ -323,6 +573,10 @@ async function handleStaffLogin(request, env) {
     // while every other failure keeps the generic anti-enumeration message.
     let matchedAccount = false;
     let matchedHashed = false;
+    // Batch 7A: the slot + hash the successful login verified against,
+    // so a legacy-format success can transparently upgrade in place.
+    let checkedHash = null;
+    let checkedSlot = null;
 
     if (role === 'parent') {
       const { results } = await db.prepare('SELECT id, parent_name, notes FROM families').all();
@@ -341,6 +595,7 @@ async function handleStaffLogin(request, env) {
         if (!isHashedPassword(pw)) continue;
         matchedHashed = true;
         if (await verifyPassword(password, pw)) {
+          checkedHash = pw;
           recordId = f.id;
           recordFullName = f.parent_name || null;
           break;
@@ -370,6 +625,8 @@ async function handleStaffLogin(request, env) {
         if (!isHashedPassword(pw)) continue;
         matchedHashed = true;
         if (await verifyPassword(password, pw)) {
+          checkedHash = pw;
+          checkedSlot = meta.password ? 'address' : (acc.password ? 'teacher_account' : 'notes');
           // For manager role, require the record to actually be a manager.
           if (role === 'manager') {
             const empType = String(t.employee_type || meta.employee_type || meta.role || '').toLowerCase();
@@ -390,11 +647,50 @@ async function handleStaffLogin(request, env) {
         // The account exists but has no owner-set (hashed) password yet —
         // distinct error so portals can show "No password set. Ask the
         // administrator to set one." instead of a misleading credential
-        // error.
+        // error. No throttle recording here: 'no_password_set' is not a
+        // failed password guess, and recording it would let anyone lock
+        // an unset-password account by knocking on it. (The IP counter
+        // still counts the attempt: it measures failed logins from that
+        // IP, and the attacker only hurts their own IP.) If that IP
+        // record trips the IP block, the trip wins over the distinct
+        // message, exactly as on the generic path.
+        const ipResult = await recordThrottleFailure(db, env, 'ip', ip, THROTTLE_IP_THRESHOLD, false);
+        if (ipResult.locked) return throttleLockResponse(request, env, ipResult.retryAfterSec);
         return json(request, env, { ok: false, error: 'no_password_set' }, 401);
       }
-      // Identical message for every other failure: no enumeration.
+      // Identical message for every other failure: no enumeration. A
+      // dummy verification runs so an unknown identifier costs roughly
+      // what a wrong password costs (see dummyPasswordVerify). A lock
+      // trips on the attempt that reaches the threshold (same as the
+      // old limiter), so the response is 429 right away.
+      await dummyPasswordVerify(password);
+      const ipResult = await recordThrottleFailure(db, env, 'ip', ip, THROTTLE_IP_THRESHOLD, false);
+      if (ipResult.locked) return throttleLockResponse(request, env, ipResult.retryAfterSec);
+      const accResult = await recordThrottleFailure(db, env, 'account', throttleAccountKey(role, identifier), THROTTLE_ACCOUNT_THRESHOLD, true);
+      if (accResult.locked) return throttleLockResponse(request, env, accResult.retryAfterSec);
       return json(request, env, { ok: false, error: 'Invalid username or password.' }, 401);
+    }
+
+    // Success resets the account counter (the IP counter is untouched).
+    await resetThrottleRow(db, env, 'account', throttleAccountKey(role, identifier));
+
+    // Batch 7A: transparent upgrade — a login that verified against an
+    // older hash format re-hashes to PBKDF2 in the SAME slot that was
+    // checked (never a different slot, never a dropped sibling key). A
+    // failed upgrade write never fails the login; the next login retries.
+    // The owner env credential is NEVER upgraded here (no D1 row exists
+    // for it — see the PR body for the env-side migration).
+    if (checkedHash && !isPbkdf2Password(checkedHash)) {
+      try {
+        const upgraded = await hashPassword(password);
+        if (role === 'parent') {
+          const famRow = await db.prepare('SELECT notes FROM families WHERE id = ?').bind(recordId).first();
+          if (famRow) await writeParentPasswordSlot(db, recordId, parseJsonField(famRow.notes), upgraded);
+        } else {
+          const tRow = await db.prepare('SELECT address, notes FROM teachers WHERE id = ?').bind(recordId).first();
+          if (tRow) await writeTeacherPasswordSlot(db, recordId, parseJsonField(tRow.address), parseJsonField(tRow.notes), upgraded, checkedSlot || 'address');
+        }
+      } catch (e) { console.error('[auth] password upgrade failed (login unaffected):', e); }
     }
 
     const token = await createSessionToken(
@@ -412,6 +708,36 @@ async function handleStaffLogin(request, env) {
     console.error('[auth] staff login failed:', e);
     return json(request, env, { ok: false, error: 'Authentication service unavailable.' }, 503);
   }
+}
+
+// --- Batch 7A: password-slot writers (shared by set-password and the
+// login-time transparent upgrade) ------------------------------------------
+// Writes a fresh hash into the canonical slot, preserving every other
+// key of the stored JSON (a full-row JSON rewrite must never drop
+// sibling fields). Parent: families.notes.portal_credentials.password.
+// Teacher/manager: the slot staff-login checks first for that record:
+// 'address' (address.password), 'teacher_account'
+// (address.teacher_account.password), or 'notes' (notes.password).
+async function writeParentPasswordSlot(db, familyId, notes, hashed) {
+  const pc = parseJsonField(notes && notes.portal_credentials);
+  const updated = { ...(notes || {}), portal_credentials: { ...pc, password: hashed } };
+  await db.prepare('UPDATE families SET notes = ? WHERE id = ?').bind(JSON.stringify(updated), familyId).run();
+}
+
+async function writeTeacherPasswordSlot(db, teacherId, address, notesMeta, hashed, slot) {
+  if (slot === 'notes') {
+    const updated = { ...(notesMeta || {}), password: hashed };
+    await db.prepare('UPDATE teachers SET notes = ? WHERE id = ?').bind(JSON.stringify(updated), teacherId).run();
+    return;
+  }
+  const meta = { ...(address || {}) };
+  if (slot === 'teacher_account') {
+    const acc = parseJsonField(meta.teacher_account);
+    meta.teacher_account = { ...acc, password: hashed };
+  } else {
+    meta.password = hashed;
+  }
+  await db.prepare('UPDATE teachers SET address = ? WHERE id = ?').bind(JSON.stringify(meta), teacherId).run();
 }
 
 // --- POST /api/auth/set-password  { role, identifier, newPassword } ---------
@@ -436,7 +762,18 @@ async function handleSetPassword(request, env) {
   }
 
   const ip = clientIp(request);
-  if (loginRateLimited(ip)) {
+  const dbPre = getDb(env);
+  if (dbPre) {
+    // D1 set-password throttle (see the throttle policy note): the IP
+    // block from login failures also applies here, and every
+    // authenticated set-password call counts toward the per-IP allowance
+    // (mirrors the old limiter, which counted all attempts). A lock
+    // trips on the attempt that reaches the threshold, as before.
+    const setpwLock = await getThrottleLock(dbPre, env, 'setpw', ip);
+    if (setpwLock.locked) return throttleLockResponse(request, env, setpwLock.retryAfterSec);
+    const setpwResult = await recordThrottleFailure(dbPre, env, 'setpw', ip, THROTTLE_SETPW_THRESHOLD, false);
+    if (setpwResult.locked) return throttleLockResponse(request, env, setpwResult.retryAfterSec);
+  } else if (loginRateLimited(ip)) {
     return json(request, env, { ok: false, error: 'Too many attempts. Please try again later.' }, 429);
   }
 
@@ -480,8 +817,10 @@ async function handleSetPassword(request, env) {
         const derivedUser = ('parent_' + parentName).toLowerCase().replace(/[^a-z0-9_]/g, '');
         const usernames = [pc.username, derivedUser, String(f.id || '').toLowerCase()].filter(Boolean).map((u) => String(u).toLowerCase());
         if (!usernames.includes(identifier)) continue;
-        const updated = { ...notes, portal_credentials: { ...pc, password: hashed } };
-        await db.prepare('UPDATE families SET notes = ? WHERE id = ?').bind(JSON.stringify(updated), f.id).run();
+        await writeParentPasswordSlot(db, f.id, notes, hashed);
+        // Batch 7A: a password change invalidates all earlier tokens of
+        // this subject immediately (previously they lived until expiry).
+        await bumpSubjectMarker(db, env, f.id, 'password_reset');
         return json(request, env, { ok: true, id: f.id });
       }
       return json(request, env, { ok: false, error: 'Account not found.' }, 404);
@@ -512,8 +851,10 @@ async function handleSetPassword(request, env) {
         const isManager = empType === 'manager' || codeIds.some((c) => c.startsWith('MGR-'));
         if (!isManager) continue;
       }
-      const updated = { ...meta, password: hashed };
-      await db.prepare('UPDATE teachers SET address = ? WHERE id = ?').bind(JSON.stringify(updated), t.id).run();
+      await writeTeacherPasswordSlot(db, t.id, meta, notesMeta, hashed, 'address');
+      // Batch 7A: a password change invalidates all earlier tokens of
+      // this subject immediately (previously they lived until expiry).
+      await bumpSubjectMarker(db, env, t.id, 'password_reset');
       return json(request, env, { ok: true, id: t.id });
     }
     return json(request, env, { ok: false, error: 'Account not found.' }, 404);
@@ -521,6 +862,103 @@ async function handleSetPassword(request, env) {
     console.error('[auth] set-password failed:', e);
     return json(request, env, { ok: false, error: 'Authentication service unavailable.' }, 503);
   }
+}
+
+// --- POST /api/auth/logout ---------------------------------------------------
+// Revokes the PRESENTED token (single-token logout). Idempotent by
+// design: a request with a Bearer token always answers { ok: true }
+// (the frontend proceeds with local logout regardless), and only a
+// signature-valid token is recorded — garbage tokens are a harmless
+// no-op, never an error the UI must surface. No Bearer token → 401.
+async function handleLogout(request, env) {
+  if (request.method === 'OPTIONS') return json(request, env, {}, 204);
+  if (request.method !== 'POST') {
+    return json(request, env, { ok: false, error: 'Method not allowed.' }, 405);
+  }
+  const header = (request.headers.get('authorization') || '').trim();
+  const m = /^Bearer\s+(.+)$/i.exec(header);
+  if (!m) return json(request, env, { ok: false, error: 'Authentication required.' }, 401);
+  const db = getDb(env);
+  if (db) {
+    let expiresAt = null;
+    try {
+      const payload = await verifySessionToken(m[1], env.WORKER_AUTH_SECRET);
+      if (payload && typeof payload.exp === 'number') expiresAt = payload.exp;
+    } catch (e) {}
+    if (expiresAt !== null) await revokeToken(db, env, m[1], expiresAt);
+  }
+  return json(request, env, { ok: true });
+}
+
+// --- POST /api/auth/unlock  { kind, role, identifier } -----------------------
+// Owner-only. Clears throttle rows so a locked account (or a blocked IP)
+// can log in again before its lock expires. kind: 'account' (role +
+// identifier, exactly as used at login) or 'ip' (identifier is the IP
+// address). The response is ALWAYS { ok: true } whether or not rows
+// existed — revealing existence would let anyone probe for locked
+// accounts. A manager can NEVER unlock anyone (403): otherwise the lock
+// itself becomes a bypass.
+// NOTE: this endpoint takes the login identifier, not a subject id,
+// because throttle keys are HMACs of that identifier. If the owner does
+// not know the exact identifier, the emergency path is
+// WORKER_AUTH_SECRET rotation (SECURITY-SETUP.md).
+async function handleUnlock(request, env) {
+  if (request.method === 'OPTIONS') return json(request, env, {}, 204);
+  if (request.method !== 'POST') {
+    return json(request, env, { ok: false, error: 'Method not allowed.' }, 405);
+  }
+  const auth = await requireApiAuth(request, env);
+  if (!auth || auth.role !== 'owner') {
+    return json(request, env, { ok: false, error: 'Access denied.' }, 403);
+  }
+  let body;
+  try { body = await request.json(); } catch (e) {
+    return json(request, env, { ok: false, error: 'Invalid request body.' }, 400);
+  }
+  const kind = String((body && body.kind) || '').toLowerCase();
+  const role = String((body && body.role) || '').toLowerCase();
+  const identifier = String((body && body.identifier) || '').trim();
+  const db = getDb(env);
+  if (db && identifier) {
+    if (kind === 'account' && ['owner', 'manager', 'teacher', 'parent'].includes(role)) {
+      await resetThrottleRow(db, env, 'account', throttleAccountKey(role, identifier));
+    } else if (kind === 'ip') {
+      await resetThrottleRow(db, env, 'ip', identifier);
+    }
+  }
+  return json(request, env, { ok: true });
+}
+
+// --- POST /api/auth/sign-out-everywhere  { subject } -------------------------
+// Owner-only. Bumps the per-subject valid-after marker to now, so every
+// token issued before this call stops working (within the 60-second
+// cache bound across isolates; immediately in this isolate). subject is
+// a token sub: a teacher/manager row id, a family id, or the owner
+// username. If the owner signs out their own username, their own current
+// session ends too — that is the point; they log in again afterwards.
+async function handleSignOutEverywhere(request, env) {
+  if (request.method === 'OPTIONS') return json(request, env, {}, 204);
+  if (request.method !== 'POST') {
+    return json(request, env, { ok: false, error: 'Method not allowed.' }, 405);
+  }
+  const auth = await requireApiAuth(request, env);
+  if (!auth || auth.role !== 'owner') {
+    return json(request, env, { ok: false, error: 'Access denied.' }, 403);
+  }
+  let body;
+  try { body = await request.json(); } catch (e) {
+    return json(request, env, { ok: false, error: 'Invalid request body.' }, 400);
+  }
+  const subject = String((body && body.subject) || '').trim();
+  if (!subject) {
+    return json(request, env, { ok: false, error: 'Invalid request.' }, 400);
+  }
+  const db = getDb(env);
+  if (!db) {
+    return json(request, env, { ok: false, error: 'Authentication service unavailable.' }, 503);
+  }
+  await bumpSubjectMarker(db, env, subject, 'sign_out_everywhere');
+  return json(request, env, { ok: true });
 }
 
 // --- POST /api/email/send  { to, subject, html, text } -----------------------
@@ -1077,6 +1515,86 @@ async function handleFamilyDuplicateCheck(request, env) {
   return json(request, env, { ok: true, matches });
 }
 
+// --- Batch 7A: server-side session revocation --------------------------------
+// Two mechanisms, both enforced in requireApiAuth below:
+//   (a) Single-token logout: POST /api/auth/logout inserts SHA-256 of the
+//       presented token into auth_revoked_tokens. The token itself is
+//       never stored. This check is NOT cached: it is one indexed D1
+//       lookup per authenticated request, so a logout takes effect on
+//       the very next request in every isolate.
+//   (b) Per-subject valid-after marker: auth_subject_valid_after holds
+//       one row per subject (HMAC of the token sub). Tokens with iat
+//       earlier than the marker are rejected. The marker is bumped on
+//       password set/reset, deactivation/deletion (via the db engine),
+//       and owner "sign out everywhere". Because iat has 1-second
+//       granularity, the comparison is STRICT (iat < valid_after): a
+//       token minted in the exact second of the marker still passes, so
+//       a reset-then-immediately-login flow is never broken by its own
+//       marker; the residual window is at most 1 second.
+//   Cache: the marker lookup is cached per isolate for 60 seconds
+//   (VALID_AFTER_CACHE_TTL_MS) to bound D1 reads on hot paths. MAXIMUM
+//   revocation delay for marker-based revocation is therefore 60 seconds
+//   across isolates; single-token logout has no such delay. The cache
+//   entry for a subject is deleted whenever THIS isolate writes that
+//   subject's marker (read-your-write within the isolate), and the
+//   user-visible logout effect is immediate regardless: the portals
+//   wipe all local state on logout before any server round trip could
+//   matter. A 60-second bounded tail is acceptable because the token
+//   itself still expires within 8 hours, the attacker would need the
+//   exact token string, and every other gate (role, scope, masks) still
+//   applies during the tail.
+//   Missing-table tolerance: if the auth tables do not exist yet (a
+//   cold isolate that has never served /api/db since this deploy),
+//   reads treat the state as empty — which is CORRECT, not fail-open:
+//   no revocation could have been recorded in a table that does not
+//   exist. Writes create the tables first (ensureAuthTables).
+const VALID_AFTER_CACHE = new Map();
+const VALID_AFTER_CACHE_TTL_MS = 60 * 1000;
+
+async function getValidAfter(db, env, sub) {
+  const subjectHash = await throttleKeyHash(env, String(sub));
+  if (!subjectHash) return null;
+  const hit = VALID_AFTER_CACHE.get(subjectHash);
+  if (hit && Date.now() - hit.cachedAtMs < VALID_AFTER_CACHE_TTL_MS) return hit.validAfter;
+  let validAfter = null;
+  try {
+    const row = await db.prepare('SELECT valid_after FROM auth_subject_valid_after WHERE subject_hash = ?').bind(subjectHash).first();
+    validAfter = row ? Number(row.valid_after) : null;
+  } catch (e) { validAfter = null; }
+  VALID_AFTER_CACHE.set(subjectHash, { validAfter, cachedAtMs: Date.now() });
+  return validAfter;
+}
+
+async function clearValidAfterCache(env, sub) {
+  const subjectHash = await throttleKeyHash(env, String(sub));
+  if (subjectHash) VALID_AFTER_CACHE.delete(subjectHash);
+}
+
+async function bumpSubjectMarker(db, env, subjectId, reason) {
+  // Worker-side marker write (set-password, sign-out-everywhere). The
+  // db engine has its own equivalent for deactivation/deletion bumps.
+  await ensureAuthTables(db);
+  const subjectHash = await throttleKeyHash(env, String(subjectId));
+  if (!subjectHash) return;
+  const nowSec = Math.floor(Date.now() / 1000);
+  try {
+    await db.prepare('INSERT INTO auth_subject_valid_after (subject_hash, valid_after, reason, updated_at) VALUES (?,?,?,?) ON CONFLICT(subject_hash) DO UPDATE SET valid_after = excluded.valid_after, reason = excluded.reason, updated_at = excluded.updated_at').bind(subjectHash, nowSec, reason, new Date().toISOString()).run();
+  } catch (e) {}
+  VALID_AFTER_CACHE.delete(subjectHash);
+}
+
+async function revokeToken(db, env, token, expiresAtSec) {
+  await ensureAuthTables(db);
+  const tokenHash = await sha256Hex(token);
+  try {
+    await db.prepare('INSERT OR IGNORE INTO auth_revoked_tokens (token_hash, expires_at, created_at) VALUES (?,?,?)').bind(tokenHash, expiresAtSec || null, new Date().toISOString()).run();
+  } catch (e) {}
+  // Opportunistic purge of expired revocation rows.
+  try {
+    await db.prepare('DELETE FROM auth_revoked_tokens WHERE expires_at IS NOT NULL AND expires_at < ?').bind(Math.floor(Date.now() / 1000)).run();
+  } catch (e) {}
+}
+
 // --- Auth middleware for privileged APIs ------------------------------------
 // Requires `Authorization: Bearer <token>` with a valid worker-issued
 // session for any authenticated role. Anonymous requests are rejected.
@@ -1093,6 +1611,21 @@ async function requireApiAuth(request, env) {
   }
   if (!payload) return null;
   if (!['owner', 'manager', 'teacher', 'parent'].includes(payload.role)) return null;
+  // Batch 7A revocation gates (see the module note above). At most two
+  // indexed D1 lookups: the revoked-token check (never cached) and the
+  // per-subject marker check (cached 60 s per isolate).
+  const db = getDb(env);
+  if (db) {
+    try {
+      const tokenHash = await sha256Hex(m[1]);
+      const revoked = await db.prepare('SELECT token_hash FROM auth_revoked_tokens WHERE token_hash = ?').bind(tokenHash).first();
+      if (revoked) return null;
+    } catch (e) { /* Missing table = no revocations recorded. */ }
+    try {
+      const validAfter = await getValidAfter(db, env, payload.sub);
+      if (validAfter !== null && Number(payload.iat) < validAfter) return null;
+    } catch (e) { /* Missing table = no marker recorded. */ }
+  }
   return payload;
 }
 
@@ -2144,6 +2677,34 @@ async function handleScopedDbRequest(ctx, auth) {
   if (role === 'manager' && WRITE_ACTIONS.has(action) && resp.status >= 200 && resp.status < 300 && !(payload && payload.error)) {
     await writeAuditLogEntries(db, auth, body);
   }
+  // Batch 7A: an update that deactivated families/teachers through this
+  // path already bumped their markers inside the engine; clear this
+  // isolate's cached markers for those subjects so the revocation is
+  // read-your-write here (other isolates still see it within the 60 s
+  // cache bound; deletes carry no rows in the response, so they rely on
+  // the bound alone).
+  if (payload && !payload.error && (table === 'families' || table === 'teachers') && action === 'update' && payload.data != null) {
+    const updatedRows = Array.isArray(payload.data) ? payload.data : [payload.data];
+    for (const row of updatedRows) {
+      if (row && row.id && row.status != null) {
+        const st = String(row.status).trim().toLowerCase();
+        if (st === 'inactive' || st === 'terminated' || st === 'deactivated') {
+          try { await clearValidAfterCache(env, String(row.id)); } catch (e) {}
+        }
+      }
+    }
+  }
+  // Batch 7A, deletes: the engine bumped the markers, but the delete
+  // response carries no rows, so recover the ids from the request's own
+  // id filters and clear this isolate's cached markers for them. (The
+  // 60-second bound still applies to OTHER isolates.)
+  if (payload && !payload.error && (table === 'families' || table === 'teachers') && action === 'delete' && body && Array.isArray(body.filters)) {
+    for (const f of body.filters) {
+      if (f && f.column === 'id' && f.op === 'eq' && f.value != null) {
+        try { await clearValidAfterCache(env, String(f.value)); } catch (e) {}
+      }
+    }
+  }
   if (!payload || payload.error || payload.data == null || role === 'owner') {
     return resp;
   }
@@ -2295,6 +2856,17 @@ export default {
     }
     if (url.pathname === '/api/auth/set-password') {
       return handleSetPassword(request, env);
+    }
+    // 0b. Batch 7A: logout, unlock, sign-out-everywhere (auth enforced
+    // inside each handler; logout is idempotent by design).
+    if (url.pathname === '/api/auth/logout') {
+      return handleLogout(request, env);
+    }
+    if (url.pathname === '/api/auth/unlock') {
+      return handleUnlock(request, env);
+    }
+    if (url.pathname === '/api/auth/sign-out-everywhere') {
+      return handleSignOutEverywhere(request, env);
     }
 
     // 1. Database API (/api/db) -> Cloudflare D1   [AUTH-GATED + ROLE-SCOPED]

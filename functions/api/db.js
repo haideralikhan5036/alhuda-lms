@@ -65,6 +65,44 @@ function buildCorsHeaders(request, env) {
   return headers;
 }
 
+// Batch 7A: authentication-hardening tables. Additive only, created by
+// ensureSchema below AND lazily by cloudflare/worker.js auth helpers
+// (which import this list), so login/logout/revocation paths work even on
+// a cold isolate that has not served /api/db yet. Keys are HMAC-SHA-256
+// hex under WORKER_AUTH_SECRET — never plaintext usernames or IPs.
+//   auth_throttle: one row per (kind, key_hash). kind is 'account' (a
+//     login identifier), 'ip' (a client IP), or 'setpw' (set-password
+//     attempts from one IP). window_start / locked_until are unix
+//     milliseconds; fail_count counts failures inside the window.
+//   auth_revoked_tokens: one row per logged-out token (token_hash is
+//     SHA-256 of the full token string — the token itself is never
+//     stored). Rows past expires_at are purged opportunistically.
+//   auth_subject_valid_after: one row per subject; tokens with iat
+//     earlier than valid_after (unix seconds) are rejected.
+export const AUTH_TABLE_STATEMENTS = [
+  `CREATE TABLE IF NOT EXISTS auth_throttle (
+    kind TEXT NOT NULL,
+    key_hash TEXT NOT NULL,
+    fail_count INTEGER DEFAULT 0,
+    window_start INTEGER,
+    locked_until INTEGER,
+    updated_at TEXT,
+    PRIMARY KEY (kind, key_hash)
+  )`,
+  `CREATE TABLE IF NOT EXISTS auth_revoked_tokens (
+    token_hash TEXT PRIMARY KEY,
+    expires_at INTEGER,
+    created_at TEXT
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_auth_revoked_tokens_expires ON auth_revoked_tokens (expires_at)`,
+  `CREATE TABLE IF NOT EXISTS auth_subject_valid_after (
+    subject_hash TEXT PRIMARY KEY,
+    valid_after INTEGER,
+    reason TEXT,
+    updated_at TEXT
+  )`,
+];
+
 const SCHEMA_STATEMENTS = [
   `CREATE TABLE IF NOT EXISTS families (
     id TEXT PRIMARY KEY,
@@ -277,7 +315,11 @@ const SCHEMA_STATEMENTS = [
     cancel_reason TEXT,
     cancelled_by TEXT,
     legacy_json TEXT
-  )`
+  )`,
+  // Batch 7A: authentication-hardening tables (throttle, revocation,
+  // per-subject valid-after markers). Additive only; see
+  // AUTH_TABLE_STATEMENTS above for the column contract.
+  ...AUTH_TABLE_STATEMENTS
 ];
 
 let _schemaInitialized = false;
@@ -295,7 +337,7 @@ let _schemaInitialized = false;
 // not exist yet) falls back to the full DDL path; a marker-write
 // failure only costs the next cold isolate a DDL replay. Neither
 // failure ever fails the request.
-const SCHEMA_VERSION = '2026-10-28-v1';
+const SCHEMA_VERSION = '2026-10-28-v2';
 const SCHEMA_VERSION_KEY = 'schema_version';
 
 async function ensureSchema(db) {
@@ -570,6 +612,49 @@ async function familyRowIsDeactivated(d1, familyId) {
 }
 const STUDENT_ACTIVATION_BLOCKED_MESSAGE = 'This family is deactivated. Reactivate the family before activating its students.';
 
+// Batch 7A: session-revocation bumps. When a teacher/manager/family account
+// is deactivated or deleted through this engine, the subject's earlier
+// tokens must stop working immediately. Before this change they stayed
+// valid until their 8-hour expiry, because no server check consulted any
+// status field. The engine writes a per-subject "valid after" marker that
+// cloudflare/worker.js requireApiAuth enforces: tokens with iat earlier
+// than the marker are rejected. The marker key is an HMAC of the subject
+// id under WORKER_AUTH_SECRET (never a plaintext id in the marker table).
+// If the secret is not configured (a standalone Pages deployment, which
+// has no auth at all), the bump is skipped with a warning — the Worker
+// path always has the secret, so a skipped bump there would indicate a
+// misconfiguration, not a silent hole in the gated path. Bump failures
+// never fail the data write itself.
+const ACCOUNT_INACTIVE_STATUSES = {
+  families: new Set(['inactive', 'deactivated']),
+  teachers: new Set(['inactive', 'terminated', 'deactivated']),
+};
+function accountStatusCountsAsInactive(table, status) {
+  const set = ACCOUNT_INACTIVE_STATUSES[table];
+  if (!set) return false;
+  return set.has(String(status == null ? '' : status).trim().toLowerCase());
+}
+async function hmacHexDb(secret, text) {
+  const key = await globalThis.crypto.subtle.importKey('raw', new TextEncoder().encode(String(secret)), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+  const sig = await globalThis.crypto.subtle.sign('HMAC', key, new TextEncoder().encode(String(text)));
+  return [...new Uint8Array(sig)].map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+async function bumpSubjectValidAfter(d1, env, subjectId, reason) {
+  const secret = env && env.WORKER_AUTH_SECRET;
+  if (!secret) {
+    console.warn('[db-api] valid-after bump skipped: WORKER_AUTH_SECRET not configured');
+    return;
+  }
+  if (subjectId == null || String(subjectId) === '') return;
+  try {
+    const subjectHash = await hmacHexDb(secret, String(subjectId));
+    const nowSec = Math.floor(Date.now() / 1000);
+    await d1.prepare('INSERT INTO auth_subject_valid_after (subject_hash, valid_after, reason, updated_at) VALUES (?,?,?,?) ON CONFLICT(subject_hash) DO UPDATE SET valid_after = excluded.valid_after, reason = excluded.reason, updated_at = excluded.updated_at').bind(subjectHash, nowSec, reason, new Date().toISOString()).run();
+  } catch (e) {
+    console.warn('[db-api] valid-after bump failed (data write unaffected):', e && e.message);
+  }
+}
+
 export async function onRequest(context) {
   const { request, env } = context;
 
@@ -803,6 +888,18 @@ export async function onRequest(context) {
       }
 
       const data = single ? (inserted[0] || null) : inserted;
+      // Batch 7A: a families/teachers row written with an inactive status
+      // invalidates that subject's earlier tokens (covers upsert-driven
+      // deactivation as well as the update path below). Harmless for a
+      // brand-new row: no token can predate the row, and a later login
+      // mints a token with iat at or after the marker.
+      if (table === 'families' || table === 'teachers') {
+        for (const row of inserted) {
+          if (row && accountStatusCountsAsInactive(table, row.status)) {
+            await bumpSubjectValidAfter(d1, env, row.id, 'deactivated');
+          }
+        }
+      }
       return jsonResponse({ data, error: null }, 200, corsHeaders);
     }
 
@@ -873,6 +970,14 @@ export async function onRequest(context) {
           f.parent_email = em;
         });
       }
+      // Batch 7A: an update that SETS an inactive status invalidates that
+      // subject's earlier tokens immediately (previously, deactivated
+      // accounts kept working until their 8-hour token expired).
+      if ((table === 'families' || table === 'teachers') && Object.prototype.hasOwnProperty.call(patch, 'status') && accountStatusCountsAsInactive(table, patch.status)) {
+        for (const row of rawResults) {
+          if (row && row.id) await bumpSubjectValidAfter(d1, env, row.id, 'deactivated');
+        }
+      }
       const data = single ? (rawResults[0] || null) : rawResults;
       return jsonResponse({ data, error: null }, 200, corsHeaders);
     }
@@ -888,7 +993,21 @@ export async function onRequest(context) {
           corsHeaders
         );
       }
+      // Batch 7A: deleting a teacher/manager/family account invalidates
+      // that subject's earlier tokens (previously they survived deletion
+      // until expiry). Ids are read BEFORE the delete, since the engine
+      // returns no rows for deletes.
+      let deletedSubjectIds = null;
+      if (table === 'families' || table === 'teachers') {
+        try {
+          const { results: doomed } = await d1.prepare(`SELECT id FROM ${table}${whereSql}`).bind(...whereParams).all();
+          deletedSubjectIds = (doomed || []).map(r => r && r.id).filter(Boolean);
+        } catch (e) { deletedSubjectIds = null; }
+      }
       await d1.prepare(`DELETE FROM ${table}${whereSql}`).bind(...whereParams).run();
+      if (deletedSubjectIds) {
+        for (const id of deletedSubjectIds) await bumpSubjectValidAfter(d1, env, id, 'deleted');
+      }
       return jsonResponse({ data: [], error: null }, 200, corsHeaders);
     }
 

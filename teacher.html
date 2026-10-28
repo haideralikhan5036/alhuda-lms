@@ -3046,7 +3046,26 @@ font-family: var(--font-num) !important;
       }
     }
 
-    function logoutTeacher() {
+    // Batch 7A: server-side logout (best-effort, 5-second cap). Returns
+    // true when the server confirmed the revocation.
+    async function callTeacherServerLogout(token) {
+      if (!token) return false;
+      try {
+        const controller = new AbortController();
+        const timer = setTimeout(function () { controller.abort(); }, 5000);
+        const res = await fetch(getTeacherWorkerBase() + '/api/auth/logout', {
+          method: 'POST',
+          headers: { 'Authorization': 'Bearer ' + token },
+          signal: controller.signal,
+        });
+        clearTimeout(timer);
+        return !!res.ok;
+      } catch (e) { return false; }
+    }
+
+    async function logoutTeacher() {
+      const teacherToken = getTeacherToken();
+      const serverOk = await callTeacherServerLogout(teacherToken);
       clearTeacherToken();
       localStorage.removeItem('alhuda_logged_in_teacher');
       sessionStorage.removeItem('alhuda_teacher_session');
@@ -3059,6 +3078,7 @@ font-family: var(--font-num) !important;
         toggleSbBtn.classList.add('hidden');
       }
       CURRENT_TEACHER = null;
+      if (teacherToken && !serverOk) alert('Signed out on this device. Your server session may remain valid until it expires.');
       window.location.href = 'teacher.html';
     }
 
