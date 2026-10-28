@@ -290,3 +290,140 @@ stored in `system_settings`. Manage all of them from the owner tool page
 Read flags accept `off` / `compare` / `on`. Turning any flag back to `off`
 restores the previous behaviour immediately; portals read the flags once
 when they load, so refresh an open portal page after changing one.
+
+## Batch 7A — login throttling, session revocation, PBKDF2 passwords
+
+### Login throttling and lockout (what users see)
+
+Failed logins are counted per account and per IP address in the D1
+table `auth_throttle` (keys are HMAC hashes — no username or IP address
+is stored in plain text). The policy is:
+
+- **Per account:** 5 failed attempts in 15 minutes locks that account
+  for 15 minutes. A further failure cycle after the lock expires locks
+  it for 30 minutes, then 60 minutes (the cap). After 15 quiet minutes
+  the progression resets.
+- **Per IP address:** 20 failed attempts in 15 minutes blocks that IP
+  address for 15 minutes (fixed, never progressive — a shared network
+  address must not be blocked for an hour).
+- A successful login resets the account counter only, never the IP
+  counter. **Locks always expire** — no account can be locked forever
+  by this mechanism.
+- While locked, login answers `429` with a `Retry-After` header and the
+  message "Too many attempts. Please try again in N minutes."
+- Unknown usernames and wrong passwords give identical `401` answers
+  (no way to probe which accounts exist), except the deliberate
+  "No password set. Ask the administrator to set one." message when an
+  account exists but has no hashed password yet.
+- Set-password calls are rate-limited separately: 30 calls per IP
+  address per 15 minutes (every authenticated call counts), with a
+  15-minute fixed lock. A locked-out IP cannot set passwords either.
+
+**Lockout risk, stated plainly.** An attacker who knows a username can
+lock that account for up to 60 minutes at a time by failing 5 logins —
+that is the unavoidable trade of any lockout. The damage is bounded:
+locks are short and capped; a lock never ends an already-valid session
+(the person already signed in keeps working); the per-IP block engages
+before one address can sustain an account lock indefinitely; and the
+owner can clear any lock immediately (below). The alternative — no
+lockout — would let an attacker guess passwords forever.
+
+### Unlocking an account (owner only)
+
+Open the owner tool page `set-teacher-passwords.html`, sign in, and use
+**Step 3 — Unlock an account or sign out everywhere**:
+
+- **Unlock account:** pick the portal role, enter the username or ID
+  exactly as used at login, press "Unlock account". The server answers
+  success whether or not a lock existed (so nobody can probe for locked
+  accounts).
+- **Unblock IP:** enter the IP address and press "Unblock IP".
+- A manager can never unlock anyone — the server enforces owner-only
+  (`POST /api/auth/unlock` returns 403 for any other role).
+
+### Emergency: if nobody can log in at all
+
+If the owner account itself is locked and the tool page cannot be
+reached, rotate the `WORKER_AUTH_SECRET` secret (Cloudflare dashboard
+or Anti Gravity) and redeploy the Worker. Because throttle keys are
+HMACs under that secret, rotation effectively clears all throttle
+state. **Be honest about the cost: rotation signs everyone out** —
+every existing token stops verifying, and every user must log in again.
+This is the emergency path only, never routine administration.
+
+### Session revocation (logout, password change, deactivation)
+
+**What happened before this batch:** there was no server-side logout.
+Signing out only cleared the browser. A deactivated teacher or family
+kept working until their 8-hour token expired, and could even log in
+again while deactivated. A password change did not invalidate old
+tokens either.
+
+**After this batch:**
+
+- Every portal's logout calls `POST /api/auth/logout` first, which
+  records the token's hash in `auth_revoked_tokens`. That token stops
+  working on the very next request. If the call fails (offline), the
+  local logout still happens and the user is told the server session
+  may last until it expires.
+- Password set/reset, teacher/manager/family deactivation and deletion,
+  and the owner "sign out everywhere" action (`POST
+  /api/auth/sign-out-everywhere`, subject = teacher/family ID or the
+  owner username) bump a per-account marker in
+  `auth_subject_valid_after`. Tokens issued before the marker are
+  rejected. The marker check is cached per Worker isolate for 60
+  seconds, so the **maximum revocation delay across isolates is 60
+  seconds** (immediate within the isolate that made the change); the
+  single-token logout has no such delay.
+- **Still not blocked:** a fresh login made *after* a deactivation is
+  not rejected by this batch — deactivation ends existing sessions,
+  but the login gate itself was deliberately left unchanged (that
+  would be a separate product decision: what a deactivated account's
+  login screen should say).
+
+### Password hashing: PBKDF2 (10,000 iterations)
+
+New passwords are stored as
+`pbkdf2$<iterations>$<salt-hex>$<hash-hex>` (16 random salt bytes,
+32-byte output, constant-time comparison). **Why 10,000:** the official
+Cloudflare Workers limits documentation gives Workers Free 10 ms of
+CPU per invocation and Workers Paid (Standard) 30 seconds by default.
+This account's Workers plan is **unverified** (plan is dashboard-only,
+nothing in the repository states it), so the count must be safe even
+on the Free plan. Measured on this machine (PBKDF2-HMAC-SHA-256,
+32-byte output): 100,000 iterations ≈ 24–28 ms, 210,000 ≈ 54–60 ms,
+600,000 ≈ 158–162 ms. 10,000 iterations (≈ 2.7 ms) leaves headroom on
+Free; 100,000 would already exceed a Free CPU budget. 10,000 is below
+OWASP's 600,000 recommendation — stated honestly. It is a large step
+up from single SHA-256, and the format carries its iteration count, so
+if the account is confirmed on Workers Paid, raise
+`PBKDF2_ITERATIONS` in `cloudflare/worker.js` to 210,000 (≈ 57 ms) or
+600,000 (≈ 160 ms) and redeploy — no migration needed. Existing hashes
+keep verifying, and logins transparently upgrade.
+
+**Compatibility:** the login still verifies every older format — the
+salted `sha256$` format, and the owner environment credential
+(`OWNER_PASSWORD_HASH`, unsalted SHA-256 hex, or a future `pbkdf2$`
+value by format prefix). On a successful login with an older format,
+the stored hash is transparently upgraded to PBKDF2 in the same slot.
+The owner environment credential is **never** rehashed by the app (no
+owner database row exists, and set-password rejects the owner role).
+
+**Owner environment migration (optional, one-time):** generate a
+`pbkdf2$` hash offline, set it with
+`wrangler secret put OWNER_PASSWORD_HASH`, redeploy, and verify the
+owner login. Until then the owner credential stays on unsalted SHA-256
+by design — the app verifies it, it just cannot upgrade it on its own.
+
+**If logins ever fail with CPU errors after deploy:** lower
+`PBKDF2_ITERATIONS` and redeploy. Old hashes still verify, and new
+logins re-hash at the lowered count. No data migration is involved.
+
+### Rollback
+
+Revert the merge commit (or redeploy the previous Worker version) and
+the old behaviour returns: logins work exactly as before, including
+all legacy hash formats. The three new D1 tables (`auth_throttle`,
+`auth_revoked_tokens`, `auth_subject_valid_after`) are additive and
+harmless if left behind; they are created lazily by the Worker and by
+the schema marker `2026-10-28-v2` in `functions/api/db.js`.

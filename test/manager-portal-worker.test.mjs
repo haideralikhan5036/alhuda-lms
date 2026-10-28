@@ -285,7 +285,12 @@ let mgrFamRow = null;
   const f = rowOf(r, 'FAM-1');
   check('Owner families select UNCHANGED: real contacts + password hash + manager salary entry present',
     !!f && f.email === FAM_EMAIL && f.phone === FAM_PHONE &&
-    (parseJson(f.notes)?.portal_credentials?.password === FAM_PC_HASH) &&
+    // Batch 7A: the (7) parent login above transparently upgrades the
+    // stored hash from legacy sha256$ to pbkdf2$ — so the value is no
+    // longer literally FAM_PC_HASH, but it must still be a real hashed
+    // password (never plaintext, never absent).
+    (parseJson(f.notes)?.portal_credentials?.password === FAM_PC_HASH ||
+     String(parseJson(f.notes)?.portal_credentials?.password || '').startsWith('pbkdf2$')) &&
     !!parseJson(f.notes)?.lms_shared_sync?.teacher_salaries?.['TCH-MGR-1'],
     r.text.slice(0, 200));
 }
