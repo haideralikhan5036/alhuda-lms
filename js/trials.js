@@ -131,8 +131,16 @@
         storedTrials = dedupedTrials;
 
         // 2. Fetch attendance logs to sync conducted sessions
+        // Batch 3.4 (audit P2-3): scoped to this page's trial student
+        // ids (the old unfiltered read returned every log in the
+        // academy and would now hit the engine's SELECT ceiling).
+        // Non-trial rows were filtered out client-side anyway, so the
+        // result is identical.
         try {
-          const { data: attLogs } = await db.from('attendance_logs').select('student_id, status, lesson_notes');
+          const trialStudentIds = [...new Set(storedTrials.map((t) => t.student_id).filter(Boolean))];
+          const { data: attLogs } = trialStudentIds.length
+            ? await db.from('attendance_logs').select('student_id, status, lesson_notes').in('student_id', trialStudentIds)
+            : { data: [] };
           if (attLogs && attLogs.length > 0) {
             storedTrials.forEach(trial => {
               const stuLogs = attLogs.filter(l => l.student_id === trial.student_id && (l.status === 'Present' || l.status === 'Completed'));

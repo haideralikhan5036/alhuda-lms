@@ -18,8 +18,10 @@ const ORIGIN = 'https://alhuda-lms.vercel.app';
 const WORKER_RELEASE = '2026-10-28-audit-p1';
 const SCHEMA_VERSION = '2026-10-28-v2'; // bumped at rebase: Part A moved SCHEMA_VERSION to v2
 
-// The CSP the Worker REPORT-ONLY header must mirror: read from vercel.json
-// itself, so this test fails if either side drifts.
+// The CSP the Worker ENFORCING header must mirror: read from vercel.json
+// itself, so this test fails if either side drifts. Batch 3.4 (audit
+// P2-10) flipped the Worker from report-only to enforcing with the
+// byte-identical string (Vercel already enforces it on the same files).
 const vercelJson = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, 'vercel.json'), 'utf8'));
 const VERCEL_CSP = vercelJson.routes[0].headers['Content-Security-Policy'];
 
@@ -29,7 +31,7 @@ const EXPECTED_SECURITY = {
   'referrer-policy': 'strict-origin-when-cross-origin',
   'permissions-policy': 'camera=(), microphone=(), geolocation=(), payment=(), usb=()',
   'x-frame-options': 'SAMEORIGIN',
-  'content-security-policy-report-only': VERCEL_CSP,
+  'content-security-policy': VERCEL_CSP,
 };
 
 const results = [];
@@ -43,8 +45,8 @@ function assertSecurityHeaders(res, label) {
     check(label + ': header ' + name, res.headers.get(name) === value,
       'got ' + JSON.stringify(res.headers.get(name)));
   }
-  check(label + ': NO enforcing CSP header', res.headers.get('content-security-policy') === null,
-    'got ' + JSON.stringify(res.headers.get('content-security-policy')));
+  check(label + ': NO report-only CSP header', res.headers.get('content-security-policy-report-only') === null,
+    'got ' + JSON.stringify(res.headers.get('content-security-policy-report-only')));
 }
 
 class FakeStatement {

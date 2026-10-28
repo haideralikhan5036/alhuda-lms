@@ -89,18 +89,28 @@ const HEALTH_SCHEMA_VERSION = '2026-10-28-v2';
 
 // --- Batch 7 Part B: security headers (workers.dev responses) --------------
 // Every response the Worker serves carries this set. The Content-Security-
-// Policy is REPORT-ONLY and mirrors the exact CSP string from vercel.json;
-// it is deliberately NOT enforced yet (no report-uri exists, so it collects
-// nothing until one is added — see the PR). Framing is therefore carried by
-// X-Frame-Options: SAMEORIGIN alone: cross-origin framing of the portals is
-// intentionally unsupported (no legitimate cross-origin embedding was
-// found), and a frame-ancestors directive can only be enforced by an
-// enforcing CSP, which this batch does not add. Permissions-Policy denies
+// Policy is ENFORCING (Batch 3.4, audit P2-10) and mirrors the exact CSP
+// string from vercel.json, which Vercel already enforces on the same
+// files. Framing is still carried by X-Frame-Options: SAMEORIGIN alone
+// (no frame-ancestors directive in the string): cross-origin framing of
+// the portals is intentionally unsupported (no legitimate cross-origin
+// embedding was found). Permissions-Policy denies
 // only features the app never uses (verified by grep: no getUserMedia,
 // MediaDevices, geolocation, PaymentRequest, or USB usage in app code).
 // CORS handling (corsHeadersFor) is separate and untouched; Vercel's
 // cache-control is NOT copied here (asset/R2 caching is handled per path).
-const WORKER_CSP_REPORT_ONLY = "default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdn.tailwindcss.com https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdnjs.cloudflare.com https://cdn.jsdelivr.net; font-src 'self' data: https://fonts.gstatic.com https://cdnjs.cloudflare.com https://cdn.jsdelivr.net; img-src 'self' data: https: blob:; connect-src 'self' https:; frame-src 'self' https:; object-src 'none'; base-uri 'self'";
+// Batch 3.4 (audit P2-10): the Worker CSP is now ENFORCING, not
+// report-only. The string is byte-identical to the CSP Vercel already
+// enforces on the same files (see vercel.json), so Worker-enforcing
+// cannot break anything Vercel does not already break: script-src
+// already allows 'unsafe-inline' (the portals' inline scripts), every
+// external host in HTML tags is one of the five allowlisted CDNs,
+// connect-src/frame-src allow all https, and a static scan found no
+// <object>/<embed>/<base> tags, no cross-origin form actions, no
+// eval() and no dynamic script injection. The old report-only header
+// is gone (not kept alongside — a report-only copy would double-report
+// nothing and confuse the header audit).
+const WORKER_CSP = "default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdn.tailwindcss.com https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdnjs.cloudflare.com https://cdn.jsdelivr.net; font-src 'self' data: https://fonts.gstatic.com https://cdnjs.cloudflare.com https://cdn.jsdelivr.net; img-src 'self' data: https: blob:; connect-src 'self' https:; frame-src 'self' https:; object-src 'none'; base-uri 'self'";
 
 function securityHeaders() {
   return {
@@ -109,7 +119,7 @@ function securityHeaders() {
     'Referrer-Policy': 'strict-origin-when-cross-origin',
     'Permissions-Policy': 'camera=(), microphone=(), geolocation=(), payment=(), usb=()',
     'X-Frame-Options': 'SAMEORIGIN',
-    'Content-Security-Policy-Report-Only': WORKER_CSP_REPORT_ONLY,
+    'Content-Security-Policy': WORKER_CSP,
   };
 }
 
@@ -163,9 +173,11 @@ function json(request, env, data, status = 200, extraHeaders = {}) {
 //   ip: 20 failed attempts block the IP 15 minutes (fixed, not
 //     progressive — a shared/NAT IP must not be blocked for an hour
 //     because of one attacker's failures).
-//   setpw: 30 set-password attempts per IP per 15 minutes, 15-minute lock
-//     (authenticated action; the allowance is generous for legitimate
-//     bulk password setting and the endpoint is owner/manager-only).
+//   setpw: 30 FAILED set-password attempts per IP per 15 minutes,
+//     15-minute lock (authenticated action; the allowance is generous
+//     for legitimate bulk password setting and the endpoint is
+//     owner/manager-only). Batch 3.4 (audit P2-7): successes do NOT
+//     count — counting them locked out legitimate migrations.
 // A successful login resets the ACCOUNT counter only (the IP counter
 // keeps counting — one account's good login must not forgive an IP-wide
 // attack). Locks ALWAYS expire: there is no permanent-lock state, and a
@@ -237,19 +249,43 @@ async function ensureAuthTables(db) {
   }
 }
 
-async function getThrottleRow(db, kind, keyHash) {
+async function getThrottleRow(db, kind, keyHash, strict = false) {
   try {
     return await db.prepare('SELECT kind, key_hash, fail_count, window_start, locked_until FROM auth_throttle WHERE kind = ? AND key_hash = ?').bind(kind, keyHash).first();
   } catch (e) {
-    return null; // Missing table (pre-deploy DB) = no throttle state.
+    // Batch 3.4 (audit P2-1): a genuinely missing table (pre-deploy DB)
+    // means no throttle state exists, so null is correct. Any OTHER D1
+    // error is rethrown when the caller asked for strict reads (the lock
+    // check below) so a D1 error window can never read as "unlocked".
+    // Lenient callers (failure recording, best effort) keep null.
+    if (strict && !isMissingTableError(e)) throw e;
+    return null;
   }
+}
+
+// Batch 3.4 (audit P2-1): distinguishes "the auth tables do not exist
+// yet" (correctly treated as empty state) from any other D1 failure
+// (which must fail CLOSED, never as empty state). D1/SQLite report a
+// missing table as "no such table: <name>".
+function isMissingTableError(e) {
+  const msg = String((e && e.message) || e || '');
+  return /no such table/i.test(msg);
 }
 
 async function getThrottleLock(db, env, kind, key) {
   // Read-only lock check. Returns { locked, retryAfterSec }.
+  // Batch 3.4 (audit P2-1): on a D1 read failure that is NOT a missing
+  // table, this returns LOCKED (fail closed) instead of unlocked — a D1
+  // error window must never admit logins or password sets that the
+  // throttle would have blocked.
   const keyHash = await throttleKeyHash(env, key);
   if (!keyHash) return { locked: false, retryAfterSec: 0 };
-  const row = await getThrottleRow(db, kind, keyHash);
+  let row;
+  try {
+    row = await getThrottleRow(db, kind, keyHash, true);
+  } catch (e) {
+    return { locked: true, retryAfterSec: 60 };
+  }
   if (!row || !row.locked_until) return { locked: false, retryAfterSec: 0 };
   const remainingMs = Number(row.locked_until) - Date.now();
   if (remainingMs <= 0) return { locked: false, retryAfterSec: 0 };
@@ -312,8 +348,11 @@ async function resetThrottleRow(db, env, kind, key) {
 }
 
 // --- Email relay rate limiting: max 100 sends per token per 10 minutes. -----
-// Same in-memory Map-window approach as the login limiter. Sized for bulk
-// fee-reminder runs (up to ~85 sequential sends), not just single emails.
+// Batch 3.4 (audit P2-2): the D1 counter (emailSendLimited below) is
+// authoritative whenever a DB binding exists; this Map is ONLY the
+// fallback for a binding-less deploy, because email/send is designed to
+// work without D1. Sized for bulk fee-reminder runs (up to ~85
+// sequential sends), not just single emails.
 const EMAIL_SEND_ATTEMPTS = new Map();
 const EMAIL_SEND_WINDOW_MS = 10 * 60 * 1000;
 const EMAIL_SEND_MAX_ATTEMPTS = 100;
@@ -329,36 +368,67 @@ function emailSendRateLimited(key) {
   return rec.count > EMAIL_SEND_MAX_ATTEMPTS;
 }
 
-// --- Duplicate-check rate limiting: max 30 checks per token per 10 minutes. -
-// Same in-memory Map-window approach as the email limiter. The endpoint
-// answers "does this contact already exist", so the cap also bounds
-// probing for strangers' contact values by trial (Batch 3A, B15).
-const DUPCHECK_ATTEMPTS = new Map();
+// --- Batch 3.4 (audit P2-2): D1-backed fixed-window counters -------------
+// The per-isolate Maps below used to cap email/dup-check/teacher-daily
+// sends per isolate, so a caller spread across isolates got N times the
+// allowance. These counters now live in the Batch 7A auth_throttle table
+// (same table, new kinds: 'email', 'dupcheck', 'teacher_email_daily'):
+// fail_count is the count inside the window, window_start the window
+// start, locked_until stays NULL (these are counters, not locks — the
+// window reset, not a lock, is what re-admits the caller). Concurrency
+// is best-effort like the login throttle: two isolates may both read
+// count=N and both write N+1, so the limit can engage a couple of
+// attempts late, never unboundedly. A D1 error fails CLOSED (limited),
+// except a missing table, which is created first and retried once.
 const DUPCHECK_WINDOW_MS = 10 * 60 * 1000;
 const DUPCHECK_MAX_ATTEMPTS = 30;
-
-function dupCheckRateLimited(key) {
-  const now = Date.now();
-  const rec = DUPCHECK_ATTEMPTS.get(key);
-  if (!rec || now - rec.start > DUPCHECK_WINDOW_MS) {
-    DUPCHECK_ATTEMPTS.set(key, { count: 1, start: now });
-    return false;
-  }
-  rec.count += 1;
-  return rec.count > DUPCHECK_MAX_ATTEMPTS;
-}
-
-// --- Teacher email daily cap: max 30 advance-class emails per teacher per
-// UTC day (Batch 5, B10), on top of the shared 10-minute send limiter. The
-// UTC date inside the key is the window, in the same Map style as above.
-const TEACHER_EMAIL_DAILY_ATTEMPTS = new Map();
 const TEACHER_EMAIL_DAILY_MAX = 30;
 
-function teacherEmailDailyLimited(sub) {
+async function d1WindowLimited(db, env, kind, key, windowMs, max) {
+  const keyHash = await throttleKeyHash(env, key);
+  if (!keyHash) return true;
+  const selectRow = () => db.prepare('SELECT kind, key_hash, fail_count, window_start, locked_until FROM auth_throttle WHERE kind = ? AND key_hash = ?').bind(kind, keyHash).first();
+  let row;
+  try {
+    row = await selectRow();
+  } catch (e) {
+    if (!isMissingTableError(e)) return true;
+    await ensureAuthTables(db);
+    try { row = await selectRow(); } catch (e2) { return true; }
+  }
+  const now = Date.now();
+  let count;
+  let windowStart;
+  if (!row || now - Number(row.window_start || 0) > windowMs) { count = 1; windowStart = now; }
+  else { count = Number(row.fail_count || 0) + 1; windowStart = Number(row.window_start || now); }
+  try {
+    await db.prepare('INSERT INTO auth_throttle (kind, key_hash, fail_count, window_start, locked_until, updated_at) VALUES (?,?,?,?,?,?) ON CONFLICT(kind, key_hash) DO UPDATE SET fail_count = excluded.fail_count, window_start = excluded.window_start, locked_until = excluded.locked_until, updated_at = excluded.updated_at').bind(kind, keyHash, count, windowStart, null, new Date().toISOString()).run();
+  } catch (e) {
+    return true; // could not record: fail closed
+  }
+  // Opportunistic purge of expired counter rows (best effort).
+  try {
+    await db.prepare('DELETE FROM auth_throttle WHERE kind = ? AND locked_until IS NULL AND window_start < ?').bind(kind, now - windowMs).run();
+  } catch (e) {}
+  return count > max;
+}
+
+// Email sends are deliberately designed to work WITHOUT D1 (the relay
+// needs no database), so when no DB binding exists the per-isolate Map
+// below is the only available limiter. With a binding present the D1
+// counter is authoritative and global across isolates.
+async function emailSendLimited(db, env, key) {
+  if (db) return d1WindowLimited(db, env, 'email', key, EMAIL_SEND_WINDOW_MS, EMAIL_SEND_MAX_ATTEMPTS);
+  return emailSendRateLimited(key);
+}
+
+async function dupCheckLimited(db, env, key) {
+  return d1WindowLimited(db, env, 'dupcheck', key, DUPCHECK_WINDOW_MS, DUPCHECK_MAX_ATTEMPTS);
+}
+
+async function teacherEmailDailyLimited(db, env, sub) {
   const key = String(sub || '') + '|' + new Date().toISOString().slice(0, 10);
-  const count = (TEACHER_EMAIL_DAILY_ATTEMPTS.get(key) || 0) + 1;
-  TEACHER_EMAIL_DAILY_ATTEMPTS.set(key, count);
-  return count > TEACHER_EMAIL_DAILY_MAX;
+  return d1WindowLimited(db, env, 'teacher_email_daily', key, 24 * 60 * 60 * 1000, TEACHER_EMAIL_DAILY_MAX);
 }
 
 function getDb(env) {
@@ -840,23 +910,32 @@ async function handleSetPassword(request, env) {
   const dbPre = getDb(env);
   if (dbPre) {
     // D1 set-password throttle (see the throttle policy note): the IP
-    // block from login failures also applies here, and every
-    // authenticated set-password call counts toward the per-IP allowance
-    // (mirrors the old limiter, which counted all attempts). A lock
-    // trips on the attempt that reaches the threshold, as before.
+    // block from login failures also applies here. Batch 3.4 (audit
+    // P2-7): only FAILED set-password calls count toward the per-IP
+    // allowance — counting successes too locked out legitimate bulk
+    // migrations (the 31st set in 15 minutes tripped even when every
+    // prior set succeeded). A lock trips on the failing attempt that
+    // reaches the threshold, as before.
     const setpwLock = await getThrottleLock(dbPre, env, 'setpw', ip);
     if (setpwLock.locked) return throttleLockResponse(request, env, setpwLock.retryAfterSec);
-    const setpwResult = await recordThrottleFailure(dbPre, env, 'setpw', ip, THROTTLE_SETPW_THRESHOLD, false);
-    if (setpwResult.locked) return throttleLockResponse(request, env, setpwResult.retryAfterSec);
   } else if (loginRateLimited(ip)) {
     return json(request, env, { ok: false, error: 'Too many attempts. Please try again later.' }, 429);
   }
+  // Records one set-password failure (see above); if that failure trips
+  // the lock, the 429 replaces the original error. Successful sets
+  // never call this. With no DB binding there is nothing to record.
+  const recordSetpwFailure = async (resp) => {
+    if (!dbPre) return resp;
+    const r = await recordThrottleFailure(dbPre, env, 'setpw', ip, THROTTLE_SETPW_THRESHOLD, false);
+    if (r.locked) return throttleLockResponse(request, env, r.retryAfterSec);
+    return resp;
+  };
 
   let body;
   try {
     body = await request.json();
   } catch (e) {
-    return json(request, env, { ok: false, error: 'Invalid request body.' }, 400);
+    return recordSetpwFailure(json(request, env, { ok: false, error: 'Invalid request body.' }, 400));
   }
 
   const role = String((body && body.role) || '').toLowerCase();
@@ -864,20 +943,20 @@ async function handleSetPassword(request, env) {
   const newPassword = String((body && body.newPassword) || '');
 
   if (!['manager', 'teacher', 'parent'].includes(role) || !identifier) {
-    return json(request, env, { ok: false, error: 'Invalid request.' }, 400);
+    return recordSetpwFailure(json(request, env, { ok: false, error: 'Invalid request.' }, 400));
   }
   // Batch 2: a manager caller may set TEACHER or PARENT passwords only.
   // Manager-account passwords remain owner-only.
   if (auth.role === 'manager' && role !== 'teacher' && role !== 'parent') {
-    return json(request, env, { ok: false, error: 'Access denied.' }, 403);
+    return recordSetpwFailure(json(request, env, { ok: false, error: 'Access denied.' }, 403));
   }
   if (!isStrongPassword(newPassword)) {
-    return json(request, env, { ok: false, error: 'Password must be at least 10 characters and must not be a default password.' }, 400);
+    return recordSetpwFailure(json(request, env, { ok: false, error: 'Password must be at least 10 characters and must not be a default password.' }, 400));
   }
 
   const db = getDb(env);
   if (!db) {
-    return json(request, env, { ok: false, error: 'Authentication service unavailable.' }, 503);
+    return recordSetpwFailure(json(request, env, { ok: false, error: 'Authentication service unavailable.' }, 503));
   }
 
   const hashed = await hashPassword(newPassword);
@@ -898,7 +977,7 @@ async function handleSetPassword(request, env) {
         await bumpSubjectMarker(db, env, f.id, 'password_reset');
         return json(request, env, { ok: true, id: f.id });
       }
-      return json(request, env, { ok: false, error: 'Account not found.' }, 404);
+      return recordSetpwFailure(json(request, env, { ok: false, error: 'Account not found.' }, 404));
     }
 
     // manager / teacher: credentials live on the teachers table.
@@ -932,10 +1011,10 @@ async function handleSetPassword(request, env) {
       await bumpSubjectMarker(db, env, t.id, 'password_reset');
       return json(request, env, { ok: true, id: t.id });
     }
-    return json(request, env, { ok: false, error: 'Account not found.' }, 404);
+    return recordSetpwFailure(json(request, env, { ok: false, error: 'Account not found.' }, 404));
   } catch (e) {
     console.error('[auth] set-password failed:', e);
-    return json(request, env, { ok: false, error: 'Authentication service unavailable.' }, 503);
+    return recordSetpwFailure(json(request, env, { ok: false, error: 'Authentication service unavailable.' }, 503));
   }
 }
 
@@ -1168,7 +1247,7 @@ async function handleEmailSend(request, env) {
   }
 
   const rlKey = 'email:' + String(auth.sub || clientIp(request));
-  if (emailSendRateLimited(rlKey)) {
+  if (await emailSendLimited(getDb(env), env, rlKey)) {
     return json(request, env, { ok: false, error: 'Too many emails. Please try again later.' }, 429);
   }
 
@@ -1236,7 +1315,7 @@ async function handleEmailNotifyParent(request, env) {
   }
 
   const rlKey = 'notify:' + String(auth.sub || clientIp(request));
-  if (emailSendRateLimited(rlKey)) {
+  if (await emailSendLimited(getDb(env), env, rlKey)) {
     return json(request, env, { ok: false, error: 'Too many emails. Please try again later.' }, 429);
   }
 
@@ -1330,11 +1409,19 @@ async function handleTeacherAdvanceClassEmail(request, env) {
     return json(request, env, { ok: false, error: 'Only teachers can send advance-class emails.' }, 403);
   }
 
-  if (emailSendRateLimited('teacher-email:' + String(auth.sub)) ||
-      emailSendRateLimited('teacher-email-ip:' + clientIp(request))) {
+  // Batch 3.4 (audit P2-2): the D1-backed limiters below need the
+  // binding, so the no-DB 503 moves up here (same outcome as before,
+  // just earlier — the endpoint cannot work without D1 anyway).
+  const db = getDb(env);
+  if (!db) {
+    return json(request, env, { ok: false, error: 'Service unavailable.' }, 503);
+  }
+
+  if (await emailSendLimited(db, env, 'teacher-email:' + String(auth.sub)) ||
+      await emailSendLimited(db, env, 'teacher-email-ip:' + clientIp(request))) {
     return json(request, env, { ok: false, error: 'Too many emails. Please try again later.' }, 429);
   }
-  if (teacherEmailDailyLimited(auth.sub)) {
+  if (await teacherEmailDailyLimited(db, env, auth.sub)) {
     return json(request, env, { ok: false, error: 'Daily email limit for teachers reached. Please try again tomorrow.' }, 429);
   }
 
@@ -1395,11 +1482,6 @@ async function handleTeacherAdvanceClassEmail(request, env) {
     return json(request, env, { ok: false, error: 'Remarks are too long (max 300 characters).' }, 400);
   }
 
-  const db = getDb(env);
-  if (!db) {
-    return json(request, env, { ok: false, error: 'Service unavailable.' }, 503);
-  }
-
   // The teacher may only email parents of their OWN students.
   const scope = await resolveScopeIds(db, 'teacher', auth.sub);
   if (!scope || !Array.isArray(scope.studentIds) || !scope.studentIds.includes(studentId)) {
@@ -1417,6 +1499,35 @@ async function handleTeacherAdvanceClassEmail(request, env) {
   }
 
   let teacherName = 'Instructor';
+  // Batch 3.4 (audit P2-6): the confirmation states the class "has been
+  // successfully conducted in advance" — it must never be sendable for
+  // a student/date with no advance lesson on file. An advance lesson is
+  // an attendance_logs row for this teacher + student with status
+  // 'Advance Class' or the is_advance_class payload flag; when the row
+  // carries an advance_target_date it must equal the requested
+  // scheduledDate. Rows without a parseable target date (legacy saves)
+  // pass on the status/flag alone, so old records are not stranded.
+  let advanceOk = false;
+  try {
+    const { results: advRows } = await db.prepare(`SELECT status, lesson_notes FROM attendance_logs WHERE teacher_id = ? AND student_id = ? AND (status = 'Advance Class' OR lesson_notes LIKE '%is_advance_class%')`).bind(auth.sub, studentId).all();
+    for (const r of (advRows || [])) {
+      const notesStr = String(r.lesson_notes || '');
+      const isAdv = String(r.status || '') === 'Advance Class' || /"is_advance_class"\s*:\s*true/.test(notesStr);
+      if (!isAdv) continue;
+      let target = null;
+      try {
+        const parsed = JSON.parse(notesStr);
+        if (parsed && typeof parsed === 'object') target = parsed.advance_target_date || null;
+      } catch (e) { /* unparseable notes: status/flag alone suffices */ }
+      if (target == null || String(target) === scheduledDate) { advanceOk = true; break; }
+    }
+  } catch (e) {
+    return json(request, env, { ok: false, error: 'Service unavailable.' }, 503);
+  }
+  if (!advanceOk) {
+    return json(request, env, { ok: false, error: 'No advance class record found for this student and date. Save the advance lesson first, then send the confirmation.' }, 422);
+  }
+
   try {
     const t = await db.prepare('SELECT full_name FROM teachers WHERE id = ?').bind(auth.sub).first();
     if (t && t.full_name) teacherName = String(t.full_name);
@@ -1527,7 +1638,11 @@ async function handleFamilyDuplicateCheck(request, env) {
   }
 
   const rlKey = 'dupcheck:' + String(auth.sub || clientIp(request));
-  if (dupCheckRateLimited(rlKey)) {
+  const db = getDb(env);
+  if (!db) {
+    return json(request, env, { ok: false, error: 'Service unavailable.' }, 503);
+  }
+  if (await dupCheckLimited(db, env, rlKey)) {
     return json(request, env, { ok: false, error: 'Too many checks. Please try again later.' }, 429);
   }
 
@@ -1549,10 +1664,6 @@ async function handleFamilyDuplicateCheck(request, env) {
     return json(request, env, { ok: false, error: 'Provide at least one of email, phone, whatsapp or parentName.' }, 400);
   }
 
-  const db = getDb(env);
-  if (!db) {
-    return json(request, env, { ok: false, error: 'Service unavailable.' }, 503);
-  }
   let rows;
   try {
     const res = await db.prepare('SELECT id, parent_name, email, parent_email, phone, whatsapp, notes FROM families').all();
@@ -1623,6 +1734,10 @@ async function handleFamilyDuplicateCheck(request, env) {
 //   reads treat the state as empty — which is CORRECT, not fail-open:
 //   no revocation could have been recorded in a table that does not
 //   exist. Writes create the tables first (ensureAuthTables).
+//   Batch 3.4 (audit P2-1) precision: this tolerance applies ONLY to a
+//   genuinely missing table ("no such table"). Any other D1 error
+//   during a revocation/marker/status/throttle read fails CLOSED
+//   (deny) — see isMissingTableError and the requireApiAuth gates.
 const VALID_AFTER_CACHE = new Map();
 const VALID_AFTER_CACHE_TTL_MS = 60 * 1000;
 
@@ -1635,7 +1750,13 @@ async function getValidAfter(db, env, sub) {
   try {
     const row = await db.prepare('SELECT valid_after FROM auth_subject_valid_after WHERE subject_hash = ?').bind(subjectHash).first();
     validAfter = row ? Number(row.valid_after) : null;
-  } catch (e) { validAfter = null; }
+  } catch (e) {
+    // Batch 3.4 (audit P2-1): a missing table means no marker could
+    // exist (correctly null); any other D1 error is rethrown so the
+    // caller fails CLOSED instead of caching a false "no marker".
+    if (!isMissingTableError(e)) throw e;
+    validAfter = null;
+  }
   VALID_AFTER_CACHE.set(subjectHash, { validAfter, cachedAtMs: Date.now() });
   return validAfter;
 }
@@ -1704,7 +1825,13 @@ async function isAccountDeactivated(db, env, role, sub) {
   try {
     const row = await db.prepare(`SELECT status FROM ${table} WHERE id = ?`).bind(String(sub)).first();
     inactive = !!(row && accountStatusIsInactive(table, row.status));
-  } catch (e) { inactive = false; }
+  } catch (e) {
+    // Batch 3.4 (audit P2-1): same rule as the marker check — a missing
+    // table is correctly "not deactivated"; any other D1 error is
+    // rethrown so the caller fails CLOSED instead of caching "active".
+    if (!isMissingTableError(e)) throw e;
+    inactive = false;
+  }
   ACCOUNT_STATUS_CACHE.set(cacheKey, { inactive, cachedAtMs: Date.now() });
   return inactive;
 }
@@ -1731,17 +1858,26 @@ async function requireApiAuth(request, env) {
   // Batch 7A revocation gates (see the module note above). At most two
   // indexed D1 lookups: the revoked-token check (never cached) and the
   // per-subject marker check (cached 60 s per isolate).
+  // Batch 3.4 (audit P2-1): every gate below fails CLOSED on a D1 error
+  // that is not a genuinely missing table. A missing table still means
+  // "no revocation could have been recorded" (correct, not fail-open);
+  // any other error denies the request — including for /api/email/send,
+  // which needs no D1 itself but must still respect revocation during
+  // a D1 error window. When there is no DB binding at all (db === null),
+  // the gates are skipped as before: no revocation state can exist
+  // without a database, production always binds DB (wrangler.toml), and
+  // the email relay is deliberately designed to work without D1.
   const db = getDb(env);
   if (db) {
     try {
       const tokenHash = await sha256Hex(m[1]);
       const revoked = await db.prepare('SELECT token_hash FROM auth_revoked_tokens WHERE token_hash = ?').bind(tokenHash).first();
       if (revoked) return null;
-    } catch (e) { /* Missing table = no revocations recorded. */ }
+    } catch (e) { if (!isMissingTableError(e)) return null; }
     try {
       const validAfter = await getValidAfter(db, env, payload.sub);
       if (validAfter !== null && Number(payload.iat) < validAfter) return null;
-    } catch (e) { /* Missing table = no marker recorded. */ }
+    } catch (e) { if (!isMissingTableError(e)) return null; }
     // Audit P1-1: status gate for STAFF accounts only (manager/teacher).
     // The marker above kills tokens that predate a deactivation in the
     // common case; this closes the residual same-second window and any
@@ -1756,7 +1892,7 @@ async function requireApiAuth(request, env) {
     if (payload.role === 'manager' || payload.role === 'teacher') {
       try {
         if (await isAccountDeactivated(db, env, payload.role, payload.sub)) return null;
-      } catch (e) { /* Lookup error: allow (marker check already ran). */ }
+      } catch (e) { if (!isMissingTableError(e)) return null; }
     }
   }
   return payload;
@@ -2408,6 +2544,16 @@ async function applyManagerWriteGuards(db, body, scope) {
       const ids = filterIdValues(filters);
       if (!ids.length) return false; // unverifiable target: deny
       const patch = body.values || {};
+      // Batch 3.4 (audit P2-8): the hidden-slot restore below can only
+      // restore from ONE stored row, so a credential-JSON patch aimed
+      // at several rows would merge the first row's slots into all of
+      // them (wrong-row merge / erasure for rows 2+). Multi-row
+      // address/notes updates must be done one row at a time; the UI
+      // never sends them (typical updates are single-row).
+      if (patch && typeof patch === 'object' && !Array.isArray(patch) &&
+          ('address' in patch || 'notes' in patch) && new Set(ids).size > 1) {
+        return { deny: 'Updates to teacher notes or address must target a single record.' };
+      }
       if (isManagerStaffRecord({ address: patch.address, employee_type: patch.employee_type })) return false;
       const targets = await loadRowsByIds(db, 'teachers', ids);
       if (targets.some((t) => isManagerStaffRecord(t))) return false;
@@ -2429,6 +2575,14 @@ async function applyManagerWriteGuards(db, body, scope) {
     if (isUpdate) {
       const ids = filterIdValues(filters);
       if (ids.length) {
+        // Batch 3.4 (audit P2-8): the notes merge below restores masked
+        // contacts from ONE stored row; a notes patch aimed at several
+        // rows would merge the first row's contacts into all of them.
+        // Multi-row notes updates must be done one row at a time.
+        const patchTouchesNotes = body.values && typeof body.values === 'object' && !Array.isArray(body.values) && ('notes' in body.values);
+        if (patchTouchesNotes && new Set(ids).size > 1) {
+          return { deny: 'Updates to notes must target a single record.' };
+        }
         const cur = await loadRowsByIds(db, table, ids.slice(0, 1));
         if (cur.length) { currentNotes = cur[0].notes; currentLoaded = true; }
       }
@@ -2530,65 +2684,92 @@ async function restoreManagerUpdateHiddenSlots(db, scopedBody, scope) {
     const table = scopedBody.table;
     if (table !== 'families' && table !== 'teachers') return;
     const vals = scopedBody.values;
-    if (!vals || typeof vals !== 'object' || Array.isArray(vals)) return;
-    const ids = filterIdValues(scopedBody.filters);
-    if (!ids.length) return;
-    const current = await loadRowsByIds(db, table, ids.slice(0, 1));
-    if (!current.length) return;
-    const cur = current[0];
+    if (!vals || typeof vals !== 'object') return;
     const fields = table === 'families' ? ['notes'] : ['address', 'notes'];
-    for (const field of fields) {
-      if (vals[field] == null || cur[field] == null) continue;
-      const sObj = parseJsonObjectValue(vals[field]);
-      const cObj = parseJsonObjectValue(cur[field]);
-      if (!sObj || !cObj) continue;
-      let changed = false;
-      const restorePw = (cHolder, sHolder) => {
-        if (cHolder && sHolder && typeof cHolder === 'object' && typeof sHolder === 'object' &&
-            typeof cHolder.password === 'string' && cHolder.password !== '' && !('password' in sHolder)) {
-          sHolder.password = cHolder.password;
-          return true;
-        }
-        return false;
-      };
-      if (table === 'families') {
-        const cPc = cObj.portal_credentials;
-        if (cPc && typeof cPc === 'object') {
-          if (!sObj.portal_credentials || typeof sObj.portal_credentials !== 'object') {
-            sObj.portal_credentials = cPc;
-            changed = true;
-          } else if (restorePw(cPc, sObj.portal_credentials)) {
-            changed = true;
+    const restoreInto = (target, cur) => {
+      for (const field of fields) {
+        if (target[field] == null || cur[field] == null) continue;
+        const sObj = parseJsonObjectValue(target[field]);
+        const cObj = parseJsonObjectValue(cur[field]);
+        if (!sObj || !cObj) continue;
+        let changed = false;
+        const restorePw = (cHolder, sHolder) => {
+          if (cHolder && sHolder && typeof cHolder === 'object' && typeof sHolder === 'object' &&
+              typeof cHolder.password === 'string' && cHolder.password !== '' && !('password' in sHolder)) {
+            sHolder.password = cHolder.password;
+            return true;
           }
-        }
-        const cSync = cObj.lms_shared_sync;
-        const sSync = sObj.lms_shared_sync;
-        if (cSync && sSync && typeof cSync === 'object' && typeof sSync === 'object' &&
-            cSync.teacher_salaries && typeof cSync.teacher_salaries === 'object') {
-          if (!sSync.teacher_salaries || typeof sSync.teacher_salaries !== 'object') sSync.teacher_salaries = {};
-          for (const k of Object.keys(cSync.teacher_salaries)) {
-            if (((scope && scope.managerIds) || []).includes(String(k)) && !(k in sSync.teacher_salaries)) {
-              sSync.teacher_salaries[k] = cSync.teacher_salaries[k];
+          return false;
+        };
+        if (table === 'families') {
+          const cPc = cObj.portal_credentials;
+          if (cPc && typeof cPc === 'object') {
+            if (!sObj.portal_credentials || typeof sObj.portal_credentials !== 'object') {
+              sObj.portal_credentials = cPc;
+              changed = true;
+            } else if (restorePw(cPc, sObj.portal_credentials)) {
+              changed = true;
+            }
+          }
+          const cSync = cObj.lms_shared_sync;
+          const sSync = sObj.lms_shared_sync;
+          if (cSync && sSync && typeof cSync === 'object' && typeof sSync === 'object' &&
+              cSync.teacher_salaries && typeof cSync.teacher_salaries === 'object') {
+            if (!sSync.teacher_salaries || typeof sSync.teacher_salaries !== 'object') sSync.teacher_salaries = {};
+            for (const k of Object.keys(cSync.teacher_salaries)) {
+              if (((scope && scope.managerIds) || []).includes(String(k)) && !(k in sSync.teacher_salaries)) {
+                sSync.teacher_salaries[k] = cSync.teacher_salaries[k];
+                changed = true;
+              }
+            }
+          }
+        } else {
+          if (restorePw(cObj, sObj)) changed = true;
+          const cAcc = cObj.teacher_account;
+          if (cAcc && typeof cAcc === 'object') {
+            if (!sObj.teacher_account || typeof sObj.teacher_account !== 'object') {
+              sObj.teacher_account = cAcc;
+              changed = true;
+            } else if (restorePw(cAcc, sObj.teacher_account)) {
               changed = true;
             }
           }
         }
-      } else {
-        if (restorePw(cObj, sObj)) changed = true;
-        const cAcc = cObj.teacher_account;
-        if (cAcc && typeof cAcc === 'object') {
-          if (!sObj.teacher_account || typeof sObj.teacher_account !== 'object') {
-            sObj.teacher_account = cAcc;
-            changed = true;
-          } else if (restorePw(cAcc, sObj.teacher_account)) {
-            changed = true;
-          }
+        if (changed) {
+          target[field] = (typeof target[field] === 'string') ? JSON.stringify(sObj) : sObj;
         }
       }
-      if (changed) {
-        vals[field] = (typeof vals[field] === 'string') ? JSON.stringify(sObj) : sObj;
+    };
+    // Batch 3.4 (audit P2-8): array-valued updates restore PER ELEMENT
+    // (matched by the element's own id) instead of returning early —
+    // the old early return left every array element unrestored. The
+    // engine currently no-ops array-valued updates, so this is
+    // defence-in-depth for the day that changes.
+    if (Array.isArray(vals)) {
+      const ids = filterIdValues(scopedBody.filters);
+      const byId = new Map();
+      if (ids.length) {
+        for (const r of await loadRowsByIds(db, table, ids)) byId.set(String(r.id), r);
       }
+      for (const el of vals) {
+        if (!el || typeof el !== 'object' || el.id == null) continue;
+        let cur = byId.get(String(el.id));
+        if (!cur) {
+          const rows = await loadRowsByIds(db, table, [String(el.id)]);
+          cur = rows[0];
+        }
+        if (cur) restoreInto(el, cur);
+      }
+      return;
     }
+    // Single-object updates: the manager guard above already denies a
+    // credential-JSON patch aimed at several rows, so restoring from
+    // the filter's first id is correct-by-construction here.
+    const ids = filterIdValues(scopedBody.filters);
+    if (!ids.length) return;
+    const current = await loadRowsByIds(db, table, ids.slice(0, 1));
+    if (!current.length) return;
+    restoreInto(vals, current[0]);
   } catch (e) {
     // Never let the restore step break a legitimate update.
     console.warn('[scope] hidden-slot restore skipped:', e && e.message);

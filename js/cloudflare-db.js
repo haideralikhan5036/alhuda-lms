@@ -263,7 +263,7 @@
   }
 
   function executeLocalQuery(payload) {
-    const { table, action, select = '*', filters = [], orders = [], limit = null, values = null, single = false } = payload;
+    const { table, action, select = '*', filters = [], orders = [], limit = null, offset = null, values = null, single = false } = payload;
     const store = loadLocalDbStore();
     if (!Array.isArray(store[table])) store[table] = [];
 
@@ -280,7 +280,16 @@
           return 0;
         });
       }
-      if (limit) rows = rows.slice(0, Number(limit) || 100);
+      // Batch 3.4 (audit P2-3): the local mirror applies the same
+      // ceiling as the engine (default 5000, max 10000, floor 1) so
+      // offline reads cannot diverge from live reads on large tables.
+      const rawLimit = Number(limit);
+      const limitApplied = (limit === null || limit === undefined || limit === '')
+        ? 5000 : Math.min(10000, Math.max(1, Number.isFinite(rawLimit) ? Math.floor(rawLimit) : 5000));
+      const rawOffset = Number(offset);
+      const offsetApplied = (offset === null || offset === undefined || offset === '')
+        ? 0 : (Number.isFinite(rawOffset) ? Math.max(0, Math.floor(rawOffset)) : 0);
+      rows = rows.slice(offsetApplied, offsetApplied + limitApplied);
       const hydrated = hydrateLocalJoins(store, table, rows, select);
       if (table === 'families') {
         hydrated.forEach(f => {
@@ -569,6 +578,36 @@
     window.location.reload();
   };
 
+  // Batch 3.4 (audit P2-9): a stale-mirror read must never be presented
+  // silently as live data. The old code only tagged the result object
+  // (_lmsSource: 'mirror'), which most renderers ignore — a portal
+  // showing yesterday's mirror looked identical to a live portal. The
+  // banner below is shown on EVERY mirror-read fallback and hidden on
+  // the next live answer, so staleness is visible whenever stale data
+  // is on screen; window.__lmsMirrorStale mirrors the banner state
+  // for renderers that want to gate on it. Guarded for non-DOM/test
+  // environments (vm harnesses have no document). Individual renderers
+  // still render mirror rows — rewriting every renderer is out of
+  // scope for one batch — but they can no longer do so silently.
+  function setMirrorStaleBanner(show) {
+    try {
+      if (typeof window !== 'undefined') window.__lmsMirrorStale = !!show;
+      if (typeof document === 'undefined' || !document.body) return;
+      let el = document.getElementById('lms-mirror-stale-banner');
+      if (show && !el) {
+        el = document.createElement('div');
+        el.id = 'lms-mirror-stale-banner';
+        el.setAttribute('role', 'status');
+        el.setAttribute('aria-live', 'polite');
+        el.textContent = 'Offline copy shown — live data could not be reached. Reconnect to see the latest records.';
+        el.style.cssText = 'position:fixed;left:0;right:0;top:0;z-index:99999;background:#92400e;color:#fff;font-size:14px;line-height:1.4;padding:10px 16px;text-align:center;box-shadow:0 2px 8px rgba(0,0,0,.3);';
+        document.body.prepend(el);
+      } else if (!show && el) {
+        el.remove();
+      }
+    } catch (e) { /* the banner must never break a read */ }
+  }
+
   async function executeCloudflareOrLocal(payload) {
     const isD1Live = await checkCloudflareD1Available();
     // SLOW-CLASSES FIX: remember a mid-flight 401 separately from a
@@ -597,7 +636,7 @@
           // Also mirror writes into local store for instant offline backup
           if (payload.action !== 'select') {
             executeLocalQuery(payload);
-          } else if (Array.isArray(result.data) && (!payload.filters || payload.filters.length === 0)) {
+          } else if (Array.isArray(result.data) && !result.truncated && (!payload.filters || payload.filters.length === 0)) {
             const store = loadLocalDbStore();
             store[payload.table] = result.data.map(r => {
               const clean = { ...r };
@@ -626,7 +665,9 @@
           // SLOW-CLASSES FIX: tag provenance so class-list renderers can
           // tell a live D1 answer from a mirror answer. Callers that only
           // read .data/.error are unaffected by the extra property.
+          // Batch 3.4 (audit P2-9): a live answer hides the stale banner.
           if (result && typeof result === 'object') result._lmsSource = 'd1';
+          setMirrorStaleBanner(false);
           return result;
         }
       } catch (err) {
@@ -672,6 +713,10 @@
 
     const mirrorRes = executeLocalQuery(payload);
     if (mirrorRes && typeof mirrorRes === 'object') mirrorRes._lmsSource = 'mirror';
+    // Batch 3.4 (audit P2-9): every mirror read shows the stale banner
+    // (see setMirrorStaleBanner above) — stale data on screen is
+    // always disclosed, even in renderers that ignore _lmsSource.
+    setMirrorStaleBanner(true);
     return mirrorRes;
   }
 
@@ -683,6 +728,7 @@
       this.filters = [];
       this.orders = [];
       this.limitCount = null;
+      this.offsetCount = null;
       this.values = null;
       this.isSingle = false;
     }
@@ -770,6 +816,14 @@
       return this;
     }
 
+    // Batch 3.4 (audit P2-3): paging partner for limit(), mirroring the
+    // engine's OFFSET support. Callers that page must keep a stable
+    // order() or rows can shift between pages.
+    offset(count) {
+      this.offsetCount = count;
+      return this;
+    }
+
     single() {
       this.isSingle = true;
       return this;
@@ -788,6 +842,7 @@
         filters: this.filters,
         orders: this.orders,
         limit: this.limitCount,
+        offset: this.offsetCount,
         values: this.values,
         single: this.isSingle
       };
