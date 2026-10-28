@@ -587,7 +587,10 @@
       };
       const notes = JSON.stringify(notesPayload);
 
-      await db.from('families').insert([{
+      // Audit P1-3: report a failed family save honestly instead of
+      // continuing as if it succeeded — the local account, password
+      // flow, welcome email and success toast all require a saved family.
+      const { error: familyInsertError } = await db.from('families').insert([{
         id,
         parent_name,
         whatsapp,
@@ -599,6 +602,12 @@
         parent_email: email || null,
         status: 'Active'
       }]);
+      if (familyInsertError) {
+        btn.disabled = false;
+        btn.innerText = 'Save Family & Generate LMS Account';
+        alert('The family could not be saved. Please try again.\n\nReason: ' + (familyInsertError.message || familyInsertError));
+        return;
+      }
 
       saveParentAccount(id, {
         username,
@@ -1154,14 +1163,19 @@
       let regularFamilies = [];
       let allStu = [];
 
-      if (typeof ensureCoreLmsDataLoaded === 'function') {
-        const core = await ensureCoreLmsDataLoaded({ force: Boolean(forceRefresh) });
-        families = core.rawFamilies || [];
-        regularFamilies = core.families || [];
-        allStu = core.students || [];
-      } else {
-        const { data: fams } = await db.from('families').select('*, students(*)').order('created_at', { ascending: false });
-        families = fams || [];
+      // Audit P1-8: a rejected core load used to leave both tables stuck
+      // on their "Loading…" shells forever, because the renders below
+      // never ran. Fail visibly instead, with a Retry that re-runs the
+      // load — the same pattern as the dashboard's error banner.
+      try {
+        if (typeof ensureCoreLmsDataLoaded === 'function') {
+          const core = await ensureCoreLmsDataLoaded({ force: Boolean(forceRefresh) });
+          families = core.rawFamilies || [];
+          regularFamilies = core.families || [];
+          allStu = core.students || [];
+        } else {
+          const { data: fams } = await db.from('families').select('*, students(*)').order('created_at', { ascending: false });
+          families = fams || [];
         const normalizePhone = (p) => String(p || '').replace(/[^0-9]/g, '').slice(-10);
         const normalizeName = (n) => String(n || '').trim().toLowerCase().replace(/\s+/g, ' ');
         const seenFamKeys = new Set();
@@ -1188,6 +1202,14 @@
           if (f.students) allStu.push(...f.students);
         });
         ALL_STUDENTS = allStu;
+        }
+      } catch (loadErr) {
+        console.error('loadFamiliesAndStudents failed:', loadErr);
+        const famBody = document.getElementById('familiesTableBody');
+        if (famBody) famBody.innerHTML = `<tr><td colspan="10" class="p-8 text-center"><span class="text-rose-600 font-bold">Could not load the families registry. Please try again.</span><br><button onclick="loadFamiliesAndStudents(true)" class="mt-3 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl">Retry</button></td></tr>`;
+        const stuBody = document.getElementById('studentsListTableBody');
+        if (stuBody) stuBody.innerHTML = `<tr><td colspan="9" class="p-8 text-center"><span class="text-rose-600 font-bold">Could not load the students roster. Please try again.</span><br><button onclick="loadFamiliesAndStudents(true)" class="mt-3 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl">Retry</button></td></tr>`;
+        return;
       }
 
       // Count ONLY currently active Trial families (for info badge in tab)

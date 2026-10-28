@@ -609,6 +609,10 @@
         return;
       }
 
+      if (res.status === 401 && data && data.error === 'account_deactivated') {
+        showErr('This account is deactivated. Please contact the administrator.');
+        return;
+      }
       if (res.status === 401 && data && data.error === 'no_password_set') {
         showErr('No password set. Ask the administrator to set one.');
         return;

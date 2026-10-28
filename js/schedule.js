@@ -1515,7 +1515,10 @@
       const noteInput = document.getElementById('note_' + schedule_id);
       const lesson_notes = noteInput ? noteInput.value.trim() : '';
 
-      await db.from('attendance_logs').upsert([{
+      // Audit P1-3: report a failed attendance save honestly instead of
+      // reloading the lists as if it were saved (the note text stays so
+      // the entry can be retried).
+      const { error: schedAttError } = await db.from('attendance_logs').upsert([{
         schedule_id,
         student_id,
         teacher_id,
@@ -1523,6 +1526,10 @@
         status: status === 'Pending' ? 'Present' : status,
         lesson_notes
       }], { onConflict: 'schedule_id,date' });
+      if (schedAttError) {
+        alert('The attendance could not be saved. Please try again.\n\nReason: ' + (schedAttError.message || schedAttError));
+        return;
+      }
 
       loadAttendanceList();
       loadLiveMonitorData();

@@ -412,6 +412,8 @@
         restoreBtn();
         if (errData && errData.error === 'no_password_set') {
           showLoginError('No password set. Ask the administrator to set one.');
+        } else if (errData && errData.error === 'account_deactivated') {
+          showLoginError('This account is deactivated. Please contact the administrator.');
         } else {
           showLoginError('Invalid username or password.');
         }
