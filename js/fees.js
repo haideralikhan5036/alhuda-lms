@@ -1549,7 +1549,7 @@
     function openFeeInvoiceModal(r) {
       CURRENT_FEE_MODAL_RECEIPT = r;
 
-      document.getElementById('feeInvReceiptNo').innerText = r.receiptNo || 'AH-REC-OFFICIAL';
+      document.getElementById('feeInvReceiptNo').innerText = r.receiptNo || 'Not issued';
       document.getElementById('feeInvParentName').innerText = r.parentName || '--';
       document.getElementById('feeInvFamilyId').innerText = r.familyId || '--';
       document.getElementById('feeInvStudentsNames').innerText = r.studentsNames || '--';
@@ -1954,7 +1954,7 @@
 
       const offEmail = getOfficialAcademyEmail();
       const cur = r.currency || 'USD';
-      const rNo = r.receiptNo || 'AH-REC-OFFICIAL';
+      const rNo = r.receiptNo || 'Not issued';
       const monthlyFee = parseFloat(r.monthlyFee || 0).toFixed(2);
       const prevBal = parseFloat(r.previousBalance || 0).toFixed(2);
       const credAmt = parseFloat(r.creditDeducted || 0).toFixed(2);

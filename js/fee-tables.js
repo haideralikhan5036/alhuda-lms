@@ -852,6 +852,50 @@
     return { missingInTable: missingInTable, missingInBlob: missingInBlob, changed: changed };
   }
 
+  // --------------------------------------------------------------------------
+  // Batch 3.2 (P2-24) — newest-wins merge for the parent legacy fee chain.
+  // The old chain was first-non-empty-wins (family notes beat newer
+  // fee_collections whenever notes were non-empty), so a partially
+  // migrated family showed stale history. This merge takes ALL sources:
+  //   sources: [{ rank, list }] — rank 0 wins ties (caller passes
+  //   fee_collections first: the structured DB table is the most
+  //   authoritative source, then fresh family notes, cached family
+  //   notes, then the device cache).
+  // Rules: numbered records dedup by receiptNo (case-insensitive); the
+  // newest record wins per number (by payment_date || date ||
+  // created_at; undated counts as oldest); equal dates fall to the
+  // lower rank. Numberless records can never be deduped, so all are
+  // kept. Output is date-desc (newest first, undated last); no record
+  // is invented, dropped, or rewritten. Pure function: no DOM, no I/O.
+  // --------------------------------------------------------------------------
+  function mergeLegacyFeeSources(sources) {
+    function recordDateMs(r) {
+      var raw = (r && (r.payment_date || r.date || r.created_at)) || '';
+      var ms = Date.parse(String(raw));
+      return Number.isFinite(ms) ? ms : -Infinity;
+    }
+    var byKey = {};
+    var rows = [];
+    (Array.isArray(sources) ? sources : []).forEach(function (src) {
+      var rank = (src && typeof src.rank === 'number') ? src.rank : 999;
+      var recs = (src && Array.isArray(src.list)) ? src.list : [];
+      recs.forEach(function (r) {
+        if (!r || typeof r !== 'object') return;
+        var no = (r.receiptNo == null || r.receiptNo === '') ? null : String(r.receiptNo).toUpperCase();
+        if (!no) { rows.push({ rec: r, dateMs: recordDateMs(r) }); return; }
+        var d = recordDateMs(r);
+        var cur = byKey[no];
+        if (!cur) { byKey[no] = { rec: r, dateMs: d, rank: rank }; return; }
+        if (d > cur.dateMs || (d === cur.dateMs && rank < cur.rank)) {
+          byKey[no] = { rec: r, dateMs: d, rank: rank };
+        }
+      });
+    });
+    Object.keys(byKey).forEach(function (k) { rows.push(byKey[k]); });
+    rows.sort(function (a, b) { return b.dateMs - a.dateMs; });
+    return rows.map(function (x) { return x.rec; });
+  }
+
   window.FeeTables = {
     FEE_TABLES_FLAG_KEY: FEE_TABLES_FLAG_KEY,
     isEnabled: isEnabled,
@@ -873,6 +917,7 @@
     loadSlipsForTeacher: loadSlipsForTeacher,
     unionTableWithLegacy: unionTableWithLegacy,
     diffSlipLists: diffSlipLists,
+    mergeLegacyFeeSources: mergeLegacyFeeSources,
     currentActor: currentActor,
     upsertPaymentRow: upsertPaymentRow,
     cancelPaymentRow: cancelPaymentRow,
