@@ -2956,6 +2956,27 @@ async function handleScopedDbRequest(ctx, auth) {
       return json(request, env, { ok: false, error: 'You cannot overwrite another teacher\'s record.' }, 403);
     }
   }
+  // Audit P2-22: a teacher schedule insert/upsert must name a student in
+  // the teacher's own scope — the same scope resolveScopeIds grants for
+  // reads (assigned_teacher_id OR an existing slot under this teacher).
+  // The browser checks this too (submitTeacherAddScheduleSlot verifies
+  // active + assigned before insert), but a direct /api/db caller could
+  // otherwise schedule an unassigned student under their own teacher_id
+  // (forceTeacherValues only stamps teacher_id, it never checks
+  // student_id). Owner/manager flows are untouched: this branch is
+  // teacher-only. A missing student_id fails closed, like the rest of
+  // the teacher scope (an empty scope list denies rather than allows).
+  // Attendance/leave inserts are deliberately NOT scoped here: P2-22 is
+  // about scheduling, and the Lesson History UNION scope intentionally
+  // lets teachers write/read shifted students' logs.
+  if (role === 'teacher' && (action === 'insert' || action === 'upsert') && table === 'class_schedules') {
+    const schedRows = Array.isArray(scopedBody.values) ? scopedBody.values : [scopedBody.values || {}];
+    const allowedStudents = new Set((scope.studentIds || []).map(String));
+    const outOfScope = schedRows.some((r) => !r || r.student_id == null || String(r.student_id) === '' || !allowedStudents.has(String(r.student_id)));
+    if (outOfScope) {
+      return json(request, env, { ok: false, error: 'You cannot schedule a student who is not assigned to you.' }, 403);
+    }
+  }
   // Batch 2 review fix: restore the credential/blob slots a manager's
   // masked read could not contain, so their edit cannot erase them.
   if (role === 'manager' && action === 'update') {

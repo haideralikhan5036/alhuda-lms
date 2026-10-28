@@ -11,9 +11,14 @@
 //     form's 120 cap still applies to the numeric range only.
 //  D) total_pages below the largest chapter page_start keeps chapters.
 //  E) Both handlers replace the page select wholesale on course change
-//     (no stale options), and the legacy allBooks[0] fallback for
-//     unresolvable NON-sentinel ids is deliberately preserved (student
-//     auto-select suggested ids depend on it) — documented, not silent.
+//     (no stale options). NOTE (Batch 3.3, audit P2-23): the old
+//     allBooks[0] fallback for unresolvable NON-sentinel ids — once
+//     documented here as deliberately preserved for auto-select — is
+//     REMOVED. A stale/deleted book id now fails closed ('Course book
+//     not found.') instead of silently showing the first catalogue
+//     book's pages, which could then be saved under the wrong title.
+//     Auto-select callers passing an unresolvable id get the toast and
+//     pick a book manually; the save paths fail closed too.
 // Run from the repo root:  node test/qaida-pages.test.mjs
 import fs from 'node:fs';
 import path from 'node:path';
@@ -127,8 +132,11 @@ const values = (html) => [...html.matchAll(/value="(\d+)"/g)].map(m => Number(m[
   const hasSuspiciousBound = /<=\s*(12|30|32)\b|Math\.min\([^)]*\b(12|30|32)\b/.test(gen);
   check('generator has no hardcoded 12/30/32 bound', !hasSuspiciousBound);
   const main = extractFunction(TEACHER_HTML, 'onTeacherCourseBookChanged');
-  check('legacy allBooks[0] fallback for unresolvable non-sentinel ids preserved (documented)',
-    main.includes('|| allBooks[0]'));
+  // Batch 3.3 (audit P2-23) supersedes the old documented fallback (see
+  // header note E): a stale/deleted book id must fail closed instead of
+  // silently resolving to the first catalogue book.
+  check('P2-23: course-book handler fails closed, no allBooks[0] fallback',
+    !main.includes('|| allBooks[0]') && main.includes('Course book not found'));
 }
 
 const failed = results.filter(r => !r.pass);
