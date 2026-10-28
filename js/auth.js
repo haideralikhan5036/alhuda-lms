@@ -482,6 +482,11 @@
       }
       if (!badge) return;
 
+      // Batch 3.6 (audit P2-33): the dashboard heading follows the role —
+      // a manager no longer sees "Admin Dashboard".
+      const heading = document.getElementById('dashboardHeading');
+      if (heading) heading.textContent = (role === 'manager') ? 'Manager Dashboard' : 'Admin Dashboard';
+
       if (role === 'manager') {
         const mgrSession = getAuthenticatedManagerSession();
         const mgrId = mgrSession?.emp_id || ACTIVE_MANAGER_ID || 'Manager';

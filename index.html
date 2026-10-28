@@ -77,6 +77,7 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="js/cloudflare-db.js"></script>
   <script src="js/ui-notify.js"></script>
+  <script src="js/modal-a11y.js"></script>
   <script src="js/lesson-history.js"></script>
 
   <!-- Chart.js for Executive Dashboard Analytics -->
@@ -540,19 +541,19 @@
 
           <form onsubmit="handleOwnerSignIn(event)" class="space-y-4 text-xs" autocomplete="off">
             <div>
-              <label class="block font-bold text-slate-700 mb-1.5">
+              <label for="ownerLoginUsername" class="block font-bold text-slate-700 mb-1.5">
                 Username / Admin ID <span class="text-rose-500">*</span>
               </label>
               <div class="relative">
                 <i class="fa-solid fa-user-shield absolute left-3.5 top-3 text-slate-400"></i>
-                <input type="text" id="ownerLoginUsername" required placeholder="Enter username (e.g. alhuda_admin or admin)" autocomplete="username"
+                <input type="text" id="ownerLoginUsername" required placeholder="Enter username" autocomplete="username"
                   class="w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-300 rounded-xl font-bold text-slate-900 focus:bg-white focus:outline-brandEmerald focus:border-brandEmerald text-xs">
               </div>
             </div>
 
             <div>
               <div class="flex items-center justify-between mb-1.5">
-                <label class="font-bold text-slate-700">
+                <label for="ownerLoginPassword" class="font-bold text-slate-700">
                   Password <span class="text-rose-500">*</span>
                 </label>
               </div>
@@ -560,7 +561,7 @@
                 <i class="fa-solid fa-lock absolute left-3.5 top-3 text-slate-400"></i>
                 <input type="password" id="ownerLoginPassword" required placeholder="Enter password" autocomplete="current-password"
                   class="w-full pl-9 pr-10 py-2.5 bg-slate-50 border border-slate-300 rounded-xl font-bold text-slate-900 focus:bg-white focus:outline-brandEmerald focus:border-brandEmerald text-xs">
-                <button type="button" onclick="toggleOwnerPassVisibility()" class="absolute right-3 top-2.5 text-slate-400 hover:text-slate-700" title="Show / Hide Password">
+                <button type="button" onclick="toggleOwnerPassVisibility()" aria-label="Show or hide password" class="absolute right-3 top-2.5 text-slate-400 hover:text-slate-700" title="Show / Hide Password">
                   <i id="ownerPassToggleIcon" class="fa-regular fa-eye"></i>
                 </button>
               </div>
@@ -590,7 +591,7 @@
       <!-- Left Branding Anchor: Sidebar Toggle + Logo + AL-HUDA ISLAMIC CENTRE (Protected from multi-line compression & Back button shifts) -->
       <div class="flex items-center gap-2 sm:gap-2.5 min-w-0 flex-1">
         <!-- Sidebar Toggle Button (Mobile & Desktop) -->
-        <button onclick="toggleSidebar()" class="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition shrink-0 active:scale-95 shadow-2xs cursor-pointer" title="Toggle Navigation Sidebar">
+        <button onclick="toggleSidebar()" aria-label="Toggle navigation sidebar" class="w-11 h-11 rounded-xl bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition shrink-0 active:scale-95 shadow-2xs cursor-pointer" title="Toggle Navigation Sidebar">
           <i class="fa-solid fa-bars text-sm sm:text-base"></i>
         </button>
 
@@ -627,8 +628,8 @@
           </select>
         </div>
 
-        <!-- Dynamic Security / Role Badge (Desktop Only, Concise) -->
-        <div id="headerRoleSecurityBadge" class="hidden xl:block shrink-0"></div>
+        <!-- Dynamic Security / Role Badge (Batch 3.6, audit P2-33: visible at all sizes, not desktop-only) -->
+        <div id="headerRoleSecurityBadge" class="shrink-0"></div>
 
         <!-- Hidden legacy duplicate header notification buttons (Already prominently displayed in #globalPersistentTopSearchBar right below) -->
         <div class="hidden" aria-hidden="true">
@@ -763,7 +764,7 @@
             onclick="clearDashboardGlobalSearch()"
             class="hidden absolute right-2.5 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full bg-slate-200/80 hover:bg-slate-300 text-slate-600 hover:text-slate-900 text-xs flex items-center justify-center transition cursor-pointer"
             title="Clear Search (Esc)"
-          >
+           aria-label="Close">
             <i class="fa-solid fa-xmark"></i>
           </button>
         </div>
@@ -868,7 +869,7 @@
             <i class="fa-solid fa-inbox"></i>
           </div>
           <div class="min-w-0">
-            <h2 class="text-sm sm:text-base font-bold text-slate-700 tracking-tight truncate">Admin Dashboard</h2>
+            <h2 id="dashboardHeading" class="text-sm sm:text-base font-bold text-slate-700 tracking-tight truncate">Admin Dashboard</h2>
             <p class="text-xs text-slate-400 font-medium mt-0.5 truncate">Class Details for Today!</p>
           </div>
         </div>
@@ -1316,6 +1317,7 @@
       </div>
 
       <!-- VIEW 3: ALL ENROLLED STUDENTS LIST (Numbered 1 to N) -->
+        <div id="familiesTablePager"></div>
       <div id="studentsListContainer" class="hidden bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
         <div class="p-4 border-b border-slate-200 flex justify-between items-center flex-wrap gap-2 bg-slate-50/80">
           <div>
@@ -1349,6 +1351,7 @@
       </div>
 
       <!-- VIEW 4: DEACTIVATED FAMILIES AREA -->
+        <div id="studentsTablePager"></div>
       <div id="deactivatedFamiliesContainer" class="hidden bg-white rounded-2xl border border-rose-200 shadow-sm overflow-hidden">
         <div class="p-4 border-b border-rose-200 flex justify-between items-center bg-rose-50/60">
           <div>
@@ -2022,22 +2025,22 @@
             <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5">
               
               <div>
-                <label class="block text-xs font-bold text-slate-600 mb-1">Family Account ID:</label>
+                <label for="feeFormFamilyId" class="block text-xs font-bold text-slate-600 mb-1">Family Account ID:</label>
                 <input type="text" id="feeFormFamilyId" readonly required placeholder="Select family above" class="w-full p-2.5 bg-slate-100 border border-slate-200 rounded-xl text-xs font-mono font-bold text-slate-700">
               </div>
 
               <div>
-                <label class="block text-xs font-bold text-slate-600 mb-1">Parent / Guardian Name:</label>
+                <label for="feeFormParentName" class="block text-xs font-bold text-slate-600 mb-1">Parent / Guardian Name:</label>
                 <input type="text" id="feeFormParentName" readonly required placeholder="Parent Name" class="w-full p-2.5 bg-slate-100 border border-slate-200 rounded-xl text-xs font-bold text-slate-700">
               </div>
 
               <div>
-                <label class="block text-xs font-bold text-slate-600 mb-1">Student(s) Enrolled:</label>
+                <label for="feeFormStudentsNames" class="block text-xs font-bold text-slate-600 mb-1">Student(s) Enrolled:</label>
                 <input type="text" id="feeFormStudentsNames" readonly required placeholder="Children Names" class="w-full p-2.5 bg-slate-100 border border-slate-200 rounded-xl text-xs font-bold text-slate-700">
               </div>
 
               <div>
-                <label class="block text-xs font-bold text-slate-600 mb-1">Country &amp; WhatsApp:</label>
+                <label for="feeFormCountry" class="block text-xs font-bold text-slate-600 mb-1">Country &amp; WhatsApp:</label>
                 <div class="flex gap-2">
                   <input type="text" id="feeFormCountry" readonly placeholder="Country" class="w-1/3 p-2.5 bg-slate-100 border border-slate-200 rounded-xl text-xs font-bold text-slate-700">
                   <input type="text" id="feeFormWhatsApp" readonly placeholder="WhatsApp" class="w-2/3 p-2.5 bg-slate-100 border border-slate-200 rounded-xl text-xs font-bold text-slate-700">
@@ -2045,12 +2048,12 @@
               </div>
 
               <div>
-                <label class="block text-xs font-bold text-slate-600 mb-1">Parent Email (Optional):</label>
+                <label for="feeFormParentEmail" class="block text-xs font-bold text-slate-600 mb-1">Parent Email (Optional):</label>
                 <input type="email" id="feeFormParentEmail" placeholder="parent@example.com" class="w-full p-2.5 bg-white border border-slate-300 rounded-xl text-xs text-slate-800">
               </div>
 
               <div>
-                <label class="block text-xs font-bold text-slate-600 mb-1">Billing Period (Month &amp; Year):</label>
+                <label for="feeFormMonth" class="block text-xs font-bold text-slate-600 mb-1">Billing Period (Month &amp; Year):</label>
                 <div class="flex gap-2">
                   <select id="feeFormMonth" required onchange="triggerFeeBalanceRecalc()" class="w-2/3 p-2.5 bg-white border border-slate-300 rounded-xl text-xs font-bold text-slate-800">
                     <option value="January">January</option>
@@ -2084,19 +2087,19 @@
 
               <div id="feeProrateBox" class="hidden pt-3 border-t border-emerald-200 grid grid-cols-1 sm:grid-cols-4 gap-3 items-end">
                 <div>
-                  <label class="block text-[11px] font-bold text-emerald-900 mb-1">Joining / Start Date:</label>
+                  <label for="feeProrateStartDate" class="block text-[11px] font-bold text-emerald-900 mb-1">Joining / Start Date:</label>
                   <input type="date" id="feeProrateStartDate" onchange="calcProratedFeeFromDate()" class="w-full p-2 bg-white border border-emerald-300 rounded-xl text-xs font-bold text-slate-800">
                 </div>
                 <div>
-                  <label class="block text-[11px] font-bold text-emerald-900 mb-1">Active Days in Month:</label>
+                  <label for="feeProrateActiveDays" class="block text-[11px] font-bold text-emerald-900 mb-1">Active Days in Month:</label>
                   <input type="number" id="feeProrateActiveDays" min="1" max="31" value="22" oninput="calcProratedFeeFromDays()" class="w-full p-2 bg-white border border-emerald-300 rounded-xl text-xs font-extrabold text-slate-900">
                 </div>
                 <div>
-                  <label class="block text-[11px] font-bold text-emerald-900 mb-1">Days in Billing Month:</label>
+                  <label for="feeProrateTotalDays" class="block text-[11px] font-bold text-emerald-900 mb-1">Days in Billing Month:</label>
                   <input type="number" id="feeProrateTotalDays" readonly value="30" class="w-full p-2 bg-emerald-100/70 border border-emerald-200 rounded-xl text-xs font-bold text-slate-700">
                 </div>
                 <div>
-                  <label class="block text-[11px] font-bold text-emerald-900 mb-1">Prorated Fee Amount:</label>
+                  <label for="feeProrateCalcAmount" class="block text-[11px] font-bold text-emerald-900 mb-1">Prorated Fee Amount:</label>
                   <div class="flex gap-2">
                     <input type="text" id="feeProrateCalcAmount" readonly value="0.00" class="w-full p-2 bg-emerald-100 border border-emerald-300 rounded-xl text-xs font-extrabold text-emerald-950 font-num">
                     <button type="button" onclick="applyProratedFeeToForm()" class="px-3 py-2 bg-emerald-700 hover:bg-emerald-800 text-white rounded-xl text-xs font-bold transition shrink-0">
@@ -2117,7 +2120,7 @@
               <div id="feeAdvanceBox" class="hidden pt-3 border-t border-blue-200 space-y-3">
                 <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 items-end">
                   <div>
-                    <label class="block text-[11px] font-bold text-blue-900 mb-1">Advance Period (Months to Pre-Pay):</label>
+                    <label for="feeSelectAdvanceMonths" class="block text-[11px] font-bold text-blue-900 mb-1">Advance Period (Months to Pre-Pay):</label>
                     <select id="feeSelectAdvanceMonths" onchange="calcAdvancePaymentFee()" class="w-full p-2 bg-white border border-blue-300 rounded-xl text-xs font-bold text-slate-800">
                       <option value="2">2 Months (Bi-Monthly)</option>
                       <option value="3" selected>3 Months (Quarterly)</option>
@@ -2128,7 +2131,7 @@
                     </select>
                   </div>
                   <div>
-                    <label class="block text-[11px] font-bold text-blue-900 mb-1">Total Advance Fee:</label>
+                    <label for="feeAdvanceCalcAmount" class="block text-[11px] font-bold text-blue-900 mb-1">Total Advance Fee:</label>
                     <div class="flex gap-2">
                       <input type="text" id="feeAdvanceCalcAmount" readonly value="0.00" class="w-full p-2 bg-blue-100 border border-blue-300 rounded-xl text-xs font-extrabold text-blue-950 font-num">
                       <button type="button" onclick="applyAdvancePaymentFeeToForm()" class="px-3 py-2 bg-blue-700 hover:bg-blue-800 text-white rounded-xl text-xs font-bold transition shrink-0">
@@ -2167,12 +2170,12 @@
             <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5 pt-2">
               
               <div>
-                <label class="block text-xs font-bold text-slate-700 mb-1">Current Agreed Tuition Fee:</label>
+                <label for="feeFormMonthlyFee" class="block text-xs font-bold text-slate-700 mb-1">Current Agreed Tuition Fee:</label>
                 <input type="number" step="any" id="feeFormMonthlyFee" placeholder="0.00" oninput="recalcFeeTotalLive()" class="w-full p-2.5 bg-white border border-slate-300 rounded-xl text-xs font-bold font-num text-slate-900">
               </div>
 
               <div>
-                <label class="block text-xs font-bold text-amber-800 mb-1">Previous Overdue Arrears:</label>
+                <label for="feeFormPreviousBalance" class="block text-xs font-bold text-amber-800 mb-1">
                 <input type="number" step="any" id="feeFormPreviousBalance" value="0.00" oninput="recalcFeeTotalLive()" class="w-full p-2.5 bg-amber-50 border border-amber-200 rounded-xl text-xs font-bold font-num text-amber-900">
               </div>
 
@@ -2369,6 +2372,7 @@
 
       <!-- ============================================================ -->
       <!-- SUB-VIEW 3B: 3+ MONTHS DEFAULTERS (SEPARATE AUTO-LIST)       -->
+        <div id="feePendingTablePager"></div>
       <!-- ============================================================ -->
       <div id="feeSubView-defaulters" class="fee-subview-panel hidden space-y-5">
         <div class="bg-white p-5 rounded-2xl border border-rose-200 shadow-xs space-y-4">
@@ -2429,6 +2433,7 @@
 
       <!-- ============================================================ -->
       <!-- SUB-VIEW 4: MASTER ANNUAL FEE MATRIX (12-MONTH VIEW) -->
+        <div id="feeDefaultersTablePager"></div>
       <!-- ============================================================ -->
       <div id="feeSubView-matrix" class="fee-subview-panel hidden space-y-5">
         <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs space-y-4">
@@ -2502,6 +2507,7 @@
 
       <!-- ============================================================ -->
       <!-- SUB-VIEW 5: RECEIPTS LEDGER & HISTORY -->
+        <div id="feeMatrixTablePager"></div>
       <!-- ============================================================ -->
       <div id="feeSubView-receipts" class="fee-subview-panel hidden space-y-5">
         <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs space-y-4">
@@ -2849,7 +2855,7 @@
             <span class="flex items-center gap-1"><span class="w-3 h-3 rounded bg-blue-100 border border-blue-400 inline-block"></span> Booked</span>
             <span class="flex items-center gap-1"><span class="w-3 h-3 rounded bg-emerald-50 border border-emerald-400 inline-block"></span> Free / Vacant</span>
           </div>
-          <button onclick="closeModal('modalScheduleMatrix')" class="text-slate-400 hover:text-slate-600 text-2xl font-bold leading-none">&times;</button>
+          <button onclick="closeModal('modalScheduleMatrix')" class="text-slate-400 hover:text-slate-600 text-2xl font-bold leading-none" aria-label="Close">&times;</button>
         </div>
       </div>
 
@@ -2900,7 +2906,7 @@
         <h3 class="font-bold text-base text-brandDark flex items-center gap-2">
           <i class="fa-solid fa-clipboard-check text-brandEmerald"></i> Mark Class Attendance & Lesson Notes
         </h3>
-        <button onclick="closeModal('modalDashAttendance')" class="text-slate-400 hover:text-slate-600 text-xl font-bold">&times;</button>
+        <button onclick="closeModal('modalDashAttendance')" class="text-slate-400 hover:text-slate-600 text-xl font-bold" aria-label="Close">&times;</button>
       </div>
       <form onsubmit="handleSaveDashAttendance(event)" class="space-y-4 text-xs">
         <input type="hidden" id="dashAttScheduleId">
@@ -2966,7 +2972,7 @@
             <span id="stuDetailIdBadge" class="px-2 py-0.5 bg-emerald-100 text-emerald-800 rounded font-mono font-bold text-[10px]">STU-001</span>
           </div>
         </div>
-        <button onclick="closeModal('modalStudentDetail')" class="text-slate-400 hover:text-slate-600 text-xl font-bold">&times;</button>
+        <button onclick="closeModal('modalStudentDetail')" class="text-slate-400 hover:text-slate-600 text-xl font-bold" aria-label="Close">&times;</button>
       </div>
 
       <div class="space-y-3.5 text-xs">
@@ -3037,7 +3043,7 @@
             <span id="tOptionIdBadge" class="px-2 py-0.5 bg-teal-100 text-teal-800 rounded font-mono font-bold text-[10px]">TCH-101</span>
           </div>
         </div>
-        <button onclick="closeModal('modalTeacherOptions')" class="text-slate-400 hover:text-slate-600 text-xl font-bold">&times;</button>
+        <button onclick="closeModal('modalTeacherOptions')" class="text-slate-400 hover:text-slate-600 text-xl font-bold" aria-label="Close">&times;</button>
       </div>
 
       <div class="space-y-4 text-xs">
@@ -3107,7 +3113,7 @@
     <div class="bg-white rounded-2xl max-w-md w-full p-5 shadow-2xl border border-slate-200 my-auto">
       <div class="flex justify-between items-center mb-3 border-b pb-2">
         <h4 class="font-bold text-sm text-brandDark"><i class="fa-solid fa-calendar-check text-brandEmerald"></i> Add Student from Student List to Schedule</h4>
-        <button onclick="closeModal('modalBookSlot')" class="text-slate-400 hover:text-slate-600 font-bold">&times;</button>
+        <button onclick="closeModal('modalBookSlot')" class="text-slate-400 hover:text-slate-600 font-bold" aria-label="Close">&times;</button>
       </div>
       <form onsubmit="handleConfirmSlotBooking(event)" class="space-y-3.5 text-xs">
         <div class="bg-emerald-50/60 p-3 rounded-xl border border-emerald-200 space-y-2.5">
@@ -3207,7 +3213,7 @@
         <h4 class="font-bold text-sm text-brandDark flex items-center gap-2">
           <i class="fa-solid fa-calendar-check text-brandEmerald"></i> Manage Scheduled Class
         </h4>
-        <button onclick="closeModal('modalMatrixSlotActions')" class="text-slate-400 hover:text-slate-600 font-bold text-lg leading-none">&times;</button>
+        <button onclick="closeModal('modalMatrixSlotActions')" class="text-slate-400 hover:text-slate-600 font-bold text-lg leading-none" aria-label="Close">&times;</button>
       </div>
 
       <!-- Slot Summary Banner -->
@@ -3330,7 +3336,7 @@
         <h4 class="font-extrabold text-sm text-brandDark flex items-center gap-2">
           <i class="fa-solid fa-right-left text-indigo-600"></i> Shift Student to Another Teacher
         </h4>
-        <button onclick="closeModal('modalShiftStudentTeacher')" class="text-slate-400 hover:text-slate-600 font-bold text-lg leading-none">&times;</button>
+        <button onclick="closeModal('modalShiftStudentTeacher')" class="text-slate-400 hover:text-slate-600 font-bold text-lg leading-none" aria-label="Close">&times;</button>
       </div>
 
       <div class="space-y-3.5 text-xs">
@@ -3411,7 +3417,7 @@
           </div>
           <p class="text-[11px] text-slate-500 mt-0.5">Parent profile, billing terms & auto-generated LMS Portal account credentials</p>
         </div>
-        <button onclick="closeModal('modalAddFamily')" class="text-slate-400 hover:text-slate-600 text-xl font-bold">&times;</button>
+        <button onclick="closeModal('modalAddFamily')" class="text-slate-400 hover:text-slate-600 text-xl font-bold" aria-label="Close">&times;</button>
       </div>
 
       <form onsubmit="handleSaveFamily(event)" novalidate class="space-y-4 text-xs">
@@ -3425,21 +3431,21 @@
           </div>
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
-              <label class="block font-bold mb-1">Parent / Guardian Full Name *:</label>
+              <label for="famParentName" class="block font-bold mb-1">Parent / Guardian Full Name *:</label>
               <input type="text" id="famParentName" required placeholder="e.g. Dr. Bilal Ahmed / Sister Fatima" oninput="autoSuggestParentUsername(this.value)" class="w-full p-2.5 border rounded-lg font-semibold">
             </div>
             <div>
-              <label class="block font-bold mb-1">WhatsApp / Contact Number *:</label>
+              <label for="famWhatsApp" class="block font-bold mb-1">WhatsApp / Contact Number *:</label>
               <input type="text" id="famWhatsApp" required placeholder="+1 234 567 8900" class="w-full p-2.5 border rounded-lg font-mono font-semibold">
             </div>
           </div>
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
-              <label class="block font-bold mb-1">Email Address (Optional):</label>
+              <label for="famEmail" class="block font-bold mb-1">Email Address (Optional):</label>
               <input type="text" inputmode="email" id="famEmail" placeholder="parent@example.com" oninput="this.value = this.value.replace(/\s+/g, '')" class="w-full p-2.5 border rounded-lg font-mono text-xs">
             </div>
             <div>
-              <label class="block font-bold mb-1">City / State:</label>
+              <label for="famCity" class="block font-bold mb-1">City / State:</label>
               <input type="text" id="famCity" placeholder="e.g. London / Dallas / Toronto" class="w-full p-2.5 border rounded-lg">
             </div>
           </div>
@@ -3453,14 +3459,14 @@
           </div>
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
-              <label class="block font-bold mb-1">Country *:</label>
+              <label for="famCountrySelect" class="block font-bold mb-1">Country *:</label>
               <select id="famCountrySelect" onchange="handleCountrySelectionChange(this.value)" class="w-full p-2.5 border border-slate-300 rounded-lg font-bold text-slate-800">
                 <!-- Pre-populated countries -->
               </select>
             </div>
             <!-- Custom Country Box -->
             <div id="customCountryBox" class="hidden">
-              <label class="block font-bold mb-1 text-emerald-700">+ Type New Country Name:</label>
+              <label for="famCustomCountryInput" class="block font-bold mb-1 text-emerald-700">+ Type New Country Name:</label>
               <div class="flex gap-1.5">
                 <input type="text" id="famCustomCountryInput" placeholder="Enter Country Name" class="w-full p-2 border border-emerald-400 rounded-lg font-semibold">
                 <button type="button" onclick="saveNewCustomCountry()" class="px-3 py-1.5 bg-brandEmerald text-white font-bold rounded-lg text-[11px] whitespace-nowrap hover:bg-emerald-700">Save</button>
@@ -3468,7 +3474,7 @@
             </div>
 
             <div>
-              <label class="block font-bold mb-1 text-brandDark">Agreed Monthly Combined Fee *:</label>
+              <label for="famMonthlyFee" class="block font-bold mb-1 text-brandDark">Agreed Monthly Combined Fee *:</label>
               <div class="flex gap-2">
                 <input type="number" id="famMonthlyFee" required value="100" class="w-2/3 p-2.5 border border-emerald-400 rounded-lg font-bold text-sm text-brandDark">
                 <select id="famCurrencySelect" onchange="handleCurrencySelectionChange(this.value)" class="w-1/3 p-2.5 border border-emerald-400 rounded-lg font-bold text-slate-800">
@@ -3478,7 +3484,7 @@
             </div>
             <!-- Custom Currency Box -->
             <div id="customCurrencyBox" class="hidden">
-              <label class="block font-bold mb-1 text-emerald-700">+ Type New Currency Code:</label>
+              <label for="famCustomCurrencyInput" class="block font-bold mb-1 text-emerald-700">+ Type New Currency Code:</label>
               <div class="flex gap-1.5">
                 <input type="text" id="famCustomCurrencyInput" placeholder="e.g. CHF, NZD, KWD" class="w-full p-2 border border-emerald-400 rounded-lg font-mono font-bold uppercase">
                 <button type="button" onclick="saveNewCustomCurrency()" class="px-3 py-1.5 bg-brandEmerald text-white font-bold rounded-lg text-[11px] whitespace-nowrap hover:bg-emerald-700">Save</button>
@@ -3499,11 +3505,11 @@
 
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
-              <label class="block font-bold mb-1 text-slate-700">LMS Portal Username *:</label>
+              <label for="famUsername" class="block font-bold mb-1 text-slate-700">LMS Portal Username *:</label>
               <input type="text" id="famUsername" required placeholder="e.g. parent_bilal" class="w-full p-2.5 bg-white border border-slate-300 rounded-lg font-mono font-bold text-slate-800">
             </div>
             <div>
-              <label class="block font-bold mb-1 text-slate-700">LMS Portal Password *:</label>
+              <label for="famPassword" class="block font-bold mb-1 text-slate-700">LMS Portal Password *:</label>
               <div class="relative">
                 <input type="text" id="famPassword" placeholder="Set a password (min 10 characters)" class="w-full p-2.5 bg-white border border-slate-300 rounded-lg font-mono font-bold text-slate-800 pr-8">
                 <button type="button" onclick="generateRandomParentPass()" class="absolute right-2 top-2.5 text-slate-400 hover:text-brandDark font-bold" title="Generate New Password">
@@ -3537,7 +3543,7 @@
           </div>
           <p class="text-[11px] text-slate-500 mt-0.5">Link student to family, set preferred schedule days, course, and assign teacher</p>
         </div>
-        <button onclick="closeModal('modalAddStudent')" class="text-slate-400 hover:text-slate-600 text-xl font-bold">&times;</button>
+        <button onclick="closeModal('modalAddStudent')" class="text-slate-400 hover:text-slate-600 text-xl font-bold" aria-label="Close">&times;</button>
       </div>
 
       <form onsubmit="handleSaveStudent(event)" class="space-y-4 text-xs">
@@ -3675,7 +3681,7 @@
           </h3>
           <p class="text-xs text-slate-500 mt-0.5">Select the type of employee you are registering</p>
         </div>
-        <button onclick="closeModal('modalChooseEmployeeType')" class="text-slate-400 hover:text-slate-600 text-xl font-bold">&times;</button>
+        <button onclick="closeModal('modalChooseEmployeeType')" class="text-slate-400 hover:text-slate-600 text-xl font-bold" aria-label="Close">&times;</button>
       </div>
 
       <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -3721,7 +3727,7 @@
           </div>
           <p class="text-[11px] text-slate-500 mt-0.5">Select designation to load the appropriate registration form</p>
         </div>
-        <button onclick="closeModal('modalAddNonTeachingStaff')" class="text-slate-400 hover:text-slate-600 text-xl font-bold">&times;</button>
+        <button onclick="closeModal('modalAddNonTeachingStaff')" class="text-slate-400 hover:text-slate-600 text-xl font-bold" aria-label="Close">&times;</button>
       </div>
 
       <form onsubmit="submitNonTeachingStaff(event)" class="space-y-4 text-xs">
@@ -3939,7 +3945,7 @@
           </div>
           <p class="text-[11px] text-slate-500 mt-0.5">Configure schedule shift duration, seniority increments & auto-generate Teacher Portal credentials</p>
         </div>
-        <button onclick="closeModal('modalAddTeacher')" class="text-slate-400 hover:text-slate-600 text-xl font-bold">&times;</button>
+        <button onclick="closeModal('modalAddTeacher')" class="text-slate-400 hover:text-slate-600 text-xl font-bold" aria-label="Close">&times;</button>
       </div>
       
       <form onsubmit="handleSaveTeacher(event)" class="space-y-4 text-xs">
@@ -4167,7 +4173,7 @@
             <p class="text-[11px] sm:text-xs text-slate-500 font-medium" id="slipMonthSubtitle">Official Teacher Compensation & Course Payroll Voucher</p>
           </div>
         </div>
-        <button onclick="closeModal('modalSalarySlip')" class="text-slate-400 hover:text-slate-600 text-2xl font-bold leading-none">&times;</button>
+        <button onclick="closeModal('modalSalarySlip')" class="text-slate-400 hover:text-slate-600 text-2xl font-bold leading-none" aria-label="Close">&times;</button>
       </div>
 
       <input type="hidden" id="slipTeacherId">
@@ -4309,7 +4315,7 @@
             <p class="text-[11px] sm:text-xs text-slate-500">Auto-schedules 3 consecutive evaluation sessions in Teacher's timetable</p>
           </div>
         </div>
-        <button onclick="closeModal('modalAddTrialClass')" class="text-slate-400 hover:text-slate-600 text-2xl font-bold leading-none">&times;</button>
+        <button onclick="closeModal('modalAddTrialClass')" class="text-slate-400 hover:text-slate-600 text-2xl font-bold leading-none" aria-label="Close">&times;</button>
       </div>
 
       <form onsubmit="handleSaveTrialClass(event)" class="space-y-4 text-xs">
@@ -4520,7 +4526,7 @@
             <p class="text-[11px] sm:text-xs text-slate-500">All trial details are pre-filled. Enter fee to complete enrollment.</p>
           </div>
         </div>
-        <button onclick="closeModal('modalConvertTrialToRegular')" class="text-slate-400 hover:text-slate-600 text-2xl font-bold leading-none">&times;</button>
+        <button onclick="closeModal('modalConvertTrialToRegular')" class="text-slate-400 hover:text-slate-600 text-2xl font-bold leading-none" aria-label="Close">&times;</button>
       </div>
 
       <form onsubmit="handleConvertTrialSubmit(event)" class="space-y-4 text-xs">
@@ -4671,7 +4677,7 @@
             <p class="text-[11px] text-slate-500">Sign in to view your timetable, Student List & Lesson Progress</p>
           </div>
         </div>
-        <button onclick="closeModal('modalTeacherLogin')" class="text-slate-400 hover:text-slate-600 text-xl font-bold">&times;</button>
+        <button onclick="closeModal('modalTeacherLogin')" class="text-slate-400 hover:text-slate-600 text-xl font-bold" aria-label="Close">&times;</button>
       </div>
 
       <div id="teacherLoginError" class="hidden mb-3 p-2.5 bg-red-50 border border-red-200 text-red-700 rounded-lg text-xs font-bold"></div>
@@ -4714,7 +4720,7 @@
             </p>
           </div>
         </div>
-        <button onclick="closeModal('modalEmailPreview')" class="text-slate-400 hover:text-slate-600 text-xl font-bold">&times;</button>
+        <button onclick="closeModal('modalEmailPreview')" class="text-slate-400 hover:text-slate-600 text-xl font-bold" aria-label="Close">&times;</button>
       </div>
 
       <!-- Sender / Recipient Bar -->
@@ -4813,7 +4819,7 @@
             <p class="text-xs text-slate-500" id="quickZoomTeacherId">TCH-001</p>
           </div>
         </div>
-        <button onclick="closeModal('modalTeacherQuickZoom')" class="text-slate-400 hover:text-slate-600 text-xl font-bold">&times;</button>
+        <button onclick="closeModal('modalTeacherQuickZoom')" class="text-slate-400 hover:text-slate-600 text-xl font-bold" aria-label="Close">&times;</button>
       </div>
 
       <input type="hidden" id="quickZoomTeacherRawId">
@@ -4867,7 +4873,7 @@
             <p class="text-[11px] sm:text-xs text-slate-500">Configure return date & pause schedule slots</p>
           </div>
         </div>
-        <button onclick="closeModal('modalMarkLeave')" class="text-slate-400 hover:text-slate-600 text-2xl font-bold leading-none">&times;</button>
+        <button onclick="closeModal('modalMarkLeave')" class="text-slate-400 hover:text-slate-600 text-2xl font-bold leading-none" aria-label="Close">&times;</button>
       </div>
 
       <form onsubmit="handleSaveStudentLeave(event)" class="space-y-3.5 text-xs">
@@ -4938,7 +4944,7 @@
             <p class="text-xs text-slate-500">Students whose return date has arrived or passed. Reactivate them to restore slots or extend leave.</p>
           </div>
         </div>
-        <button onclick="closeModal('modalReturnAlerts')" class="text-slate-400 hover:text-slate-600 text-xl font-bold">&times;</button>
+        <button onclick="closeModal('modalReturnAlerts')" class="text-slate-400 hover:text-slate-600 text-xl font-bold" aria-label="Close">&times;</button>
       </div>
 
       <div class="max-h-[60vh] overflow-y-auto space-y-2.5 pr-1" id="returnAlertsListContainer">
@@ -4974,7 +4980,7 @@
           <button onclick="closeModal('modalAdminTeacherRequests'); openTeacherCorrectionRequestQuickModal();" class="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-[11px] font-bold transition cursor-pointer">
             + Submit Request (Teacher Portal)
           </button>
-          <button onclick="closeModal('modalAdminTeacherRequests')" class="text-slate-400 hover:text-slate-600 text-xl font-bold ml-1">&times;</button>
+          <button onclick="closeModal('modalAdminTeacherRequests')" class="text-slate-400 hover:text-slate-600 text-xl font-bold ml-1" aria-label="Close">&times;</button>
         </div>
       </div>
 
@@ -5022,13 +5028,13 @@
           
           <!-- Page Navigation Group -->
           <div class="flex items-center bg-zinc-800/90 rounded-lg p-0.5 border border-zinc-700/70 text-xs">
-            <button onclick="changeReaderPage(-1)" class="w-7 h-7 rounded hover:bg-zinc-700 text-zinc-300 hover:text-white flex items-center justify-center transition" title="Previous Page (Left Arrow)">
+            <button onclick="changeReaderPage(-1)" aria-label="Previous page" class="w-11 h-11 rounded hover:bg-zinc-700 text-zinc-300 hover:text-white flex items-center justify-center transition" title="Previous Page (Left Arrow)">
               <i class="fa-solid fa-chevron-left text-[11px]"></i>
             </button>
             <div class="px-1.5 py-0.5 font-mono text-[11px] font-semibold text-zinc-200" id="readerPageIndicatorTop">
               1 / 32
             </div>
-            <button onclick="changeReaderPage(1)" class="w-7 h-7 rounded hover:bg-zinc-700 text-zinc-300 hover:text-white flex items-center justify-center transition" title="Next Page (Right Arrow)">
+            <button onclick="changeReaderPage(1)" aria-label="Next page" class="w-11 h-11 rounded hover:bg-zinc-700 text-zinc-300 hover:text-white flex items-center justify-center transition" title="Next Page (Right Arrow)">
               <i class="fa-solid fa-chevron-right text-[11px]"></i>
             </button>
           </div>
@@ -5042,31 +5048,31 @@
 
           <!-- Zoom & Display Modes -->
           <div class="flex items-center bg-zinc-800/90 rounded-lg p-0.5 border border-zinc-700/70 text-xs font-mono">
-            <button onclick="changeReaderZoom(-0.15)" class="w-7 h-7 rounded hover:bg-zinc-700 text-zinc-300 hover:text-white flex items-center justify-center transition" title="Zoom Out (Ctrl - or Ctrl + Wheel Down)">
+            <button onclick="changeReaderZoom(-0.15)" aria-label="Zoom out" class="w-11 h-11 rounded hover:bg-zinc-700 text-zinc-300 hover:text-white flex items-center justify-center transition" title="Zoom Out (Ctrl - or Ctrl + Wheel Down)">
               <i class="fa-solid fa-minus text-[11px]"></i>
             </button>
-            <button onclick="resetReaderZoom()" class="px-2 py-0.5 text-[11px] font-bold text-zinc-200 hover:text-white hover:bg-zinc-700 rounded transition min-w-[42px] text-center" title="Reset Zoom (100%)">
+            <button onclick="resetReaderZoom()" aria-label="Reset zoom" class="px-3 min-h-[44px] text-[11px] font-bold text-zinc-200 hover:text-white hover:bg-zinc-700 rounded transition min-w-[42px] text-center" title="Reset Zoom (100%)">
               <span id="readerZoomLevel">100%</span>
             </button>
-            <button onclick="changeReaderZoom(0.15)" class="w-7 h-7 rounded hover:bg-zinc-700 text-zinc-300 hover:text-white flex items-center justify-center transition" title="Zoom In (Ctrl + or Ctrl + Wheel Up)">
+            <button onclick="changeReaderZoom(0.15)" aria-label="Zoom in" class="w-11 h-11 rounded hover:bg-zinc-700 text-zinc-300 hover:text-white flex items-center justify-center transition" title="Zoom In (Ctrl + or Ctrl + Wheel Up)">
               <i class="fa-solid fa-plus text-[11px]"></i>
             </button>
           </div>
 
-          <button onclick="fitReaderWidth()" class="hidden sm:flex w-7 h-7 rounded-lg bg-zinc-800/90 hover:bg-zinc-700 text-zinc-300 hover:text-white items-center justify-center border border-zinc-700/70 transition" title="Fit to Width">
+          <button onclick="fitReaderWidth()" aria-label="Fit to width" class="hidden sm:flex w-11 h-11 rounded-lg bg-zinc-800/90 hover:bg-zinc-700 text-zinc-300 hover:text-white items-center justify-center border border-zinc-700/70 transition" title="Fit to Width">
             <i class="fa-solid fa-arrows-left-right-to-line text-[11px]"></i>
           </button>
-          <button onclick="fitReaderPage()" class="hidden sm:flex w-7 h-7 rounded-lg bg-zinc-800/90 hover:bg-zinc-700 text-zinc-300 hover:text-white items-center justify-center border border-zinc-700/70 transition" title="Fit to Page">
+          <button onclick="fitReaderPage()" aria-label="Fit to page" class="hidden sm:flex w-11 h-11 rounded-lg bg-zinc-800/90 hover:bg-zinc-700 text-zinc-300 hover:text-white items-center justify-center border border-zinc-700/70 transition" title="Fit to Page">
             <i class="fa-solid fa-expand text-[11px]"></i>
           </button>
         </div>
 
         <!-- Right: Window Actions -->
         <div class="flex items-center gap-1.5">
-          <button onclick="toggleReaderFullscreen()" class="w-8 h-8 rounded-lg bg-zinc-800/80 hover:bg-zinc-700 text-zinc-300 hover:text-white flex items-center justify-center transition border border-zinc-700/60" title="Toggle Fullscreen (F)">
+          <button onclick="toggleReaderFullscreen()" aria-label="Toggle fullscreen" class="w-11 h-11 rounded-lg bg-zinc-800/80 hover:bg-zinc-700 text-zinc-300 hover:text-white flex items-center justify-center transition border border-zinc-700/60" title="Toggle Fullscreen (F)">
             <i class="fa-solid fa-maximize text-xs"></i>
           </button>
-          <button onclick="closeDigitalBookReader()" class="w-8 h-8 rounded-lg bg-zinc-800/80 hover:bg-zinc-700 text-zinc-300 hover:text-rose-400 flex items-center justify-center transition font-bold text-lg border border-zinc-700/60" title="Close Viewer (Esc)">
+          <button onclick="closeDigitalBookReader()" aria-label="Close viewer" class="w-11 h-11 rounded-lg bg-zinc-800/80 hover:bg-zinc-700 text-zinc-300 hover:text-rose-400 flex items-center justify-center transition font-bold text-lg border border-zinc-700/60" title="Close Viewer (Esc)">
             &times;
           </button>
         </div>
@@ -5150,7 +5156,7 @@
           </h3>
           <p class="text-xs text-slate-500 mt-0.5">Upload new books with automatic lightweight WebP image compression</p>
         </div>
-        <button onclick="closeModal('modalUploadCustomBook')" class="text-slate-400 hover:text-slate-600 text-xl font-bold">&times;</button>
+        <button onclick="closeModal('modalUploadCustomBook')" class="text-slate-400 hover:text-slate-600 text-xl font-bold" aria-label="Close">&times;</button>
       </div>
 
       <form onsubmit="handleSaveCustomBook(event)" class="space-y-3.5 text-xs">
@@ -5249,7 +5255,7 @@
           </h3>
           <p class="text-xs text-slate-500 mt-0.5">Update book details, syllabus information, or manage Juz / pages</p>
         </div>
-        <button onclick="closeModal('modalEditCustomBook')" class="text-slate-400 hover:text-slate-600 text-xl font-bold">&times;</button>
+        <button onclick="closeModal('modalEditCustomBook')" class="text-slate-400 hover:text-slate-600 text-xl font-bold" aria-label="Close">&times;</button>
       </div>
 
       <form onsubmit="handleUpdateCustomBook(event)" class="space-y-3.5 text-xs">
@@ -5369,7 +5375,7 @@
         <h3 class="font-extrabold text-slate-900 text-sm flex items-center gap-2">
           <i class="fa-solid fa-file-invoice-dollar text-emerald-700"></i> Official Tuition Fee Receipt Voucher
         </h3>
-        <button onclick="closeModal('modalFeeInvoice')" class="text-slate-400 hover:text-slate-700 text-2xl font-bold leading-none">&times;</button>
+        <button onclick="closeModal('modalFeeInvoice')" class="text-slate-400 hover:text-slate-700 text-2xl font-bold leading-none" aria-label="Close">&times;</button>
       </div>
 
       <div class="p-3 sm:p-6 space-y-4 flex-1 overflow-y-auto touch-scroll" id="feeInvoicePrintArea">
@@ -5512,7 +5518,7 @@
           </h3>
           <p id="matrixActionSubtitle" class="text-[11px] text-slate-300 mt-0.5">Family ID: -- • Month: --</p>
         </div>
-        <button onclick="closeModal('modalMatrixAction')" class="text-slate-400 hover:text-white text-2xl font-bold leading-none">&times;</button>
+        <button onclick="closeModal('modalMatrixAction')" class="text-slate-400 hover:text-white text-2xl font-bold leading-none" aria-label="Close">&times;</button>
       </div>
 
       <div class="p-5 space-y-4">
@@ -5628,7 +5634,7 @@
           </h3>
           <p id="familyLedgerSubtitle" class="text-[11px] sm:text-xs text-emerald-200 mt-0.5">Family ID: -- • Parent: --</p>
         </div>
-        <button onclick="closeModal('modalFamilyAnnualLedger')" class="text-white/60 hover:text-white text-2xl font-bold leading-none">&times;</button>
+        <button onclick="closeModal('modalFamilyAnnualLedger')" class="text-white/60 hover:text-white text-2xl font-bold leading-none" aria-label="Close">&times;</button>
       </div>
 
       <div class="p-3.5 sm:p-6 space-y-4 sm:space-y-5 flex-1 overflow-y-auto touch-scroll">
@@ -5724,7 +5730,7 @@
             <p class="text-[11px] text-rose-100">Direct submission to Admin Portal &amp; live status of Admin official replies</p>
           </div>
         </div>
-        <button onclick="closeModal('modalSubmitParentComplaint')" class="text-white/80 hover:text-white text-lg">
+        <button onclick="closeModal('modalSubmitParentComplaint')" class="text-white/80 hover:text-white text-lg" aria-label="Close">
           <i class="fa-solid fa-xmark"></i>
         </button>
       </div>
@@ -5820,7 +5826,7 @@
           <button onclick="closeModal('modalAdminParentComplaints'); openParentComplaintSubmitModal();" class="px-3 py-1.5 bg-rose-600 hover:bg-rose-500 text-white rounded-lg text-[11px] font-bold transition cursor-pointer">
             Open Parent Portal View
           </button>
-          <button onclick="closeModal('modalAdminParentComplaints')" class="text-white/80 hover:text-white text-lg ml-1">
+          <button onclick="closeModal('modalAdminParentComplaints')" class="text-white/80 hover:text-white text-lg ml-1" aria-label="Close">
             <i class="fa-solid fa-xmark"></i>
           </button>
         </div>
@@ -5854,7 +5860,7 @@
             <p class="text-[11px] text-emerald-100">Publish instant announcements to Teacher Portal, Student/Parent Portal, or Both Portals</p>
           </div>
         </div>
-        <button onclick="closeModal('modalAdminAnnouncements')" class="text-white/80 hover:text-white text-lg">
+        <button onclick="closeModal('modalAdminAnnouncements')" class="text-white/80 hover:text-white text-lg" aria-label="Close">
           <i class="fa-solid fa-xmark"></i>
         </button>
       </div>
@@ -5923,7 +5929,7 @@
             <p class="text-[11px] text-sky-100">Accidentally marked Leave or Absent? Send a correction request to Admin</p>
           </div>
         </div>
-        <button onclick="closeModal('modalTeacherCorrectionRequestQuick')" class="text-white/80 hover:text-white text-lg">
+        <button onclick="closeModal('modalTeacherCorrectionRequestQuick')" class="text-white/80 hover:text-white text-lg" aria-label="Close">
           <i class="fa-solid fa-xmark"></i>
         </button>
       </div>
@@ -6008,7 +6014,7 @@
             <p id="graphDrilldownSubtitle" class="text-[11px] text-slate-300">Detailed records for the selected month and category</p>
           </div>
         </div>
-        <button onclick="closeModal('modalGraphMonthDrilldown')" class="text-white/80 hover:text-white text-lg">
+        <button onclick="closeModal('modalGraphMonthDrilldown')" class="text-white/80 hover:text-white text-lg" aria-label="Close">
           <i class="fa-solid fa-xmark"></i>
         </button>
       </div>

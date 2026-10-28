@@ -40,6 +40,29 @@
     // deliberate earlier-month review back to the current month.
     let FEE_MONTH_DEFAULTS_APPLIED = false;
 
+    // Batch 3.6 (audit P2-36): fee ledger pagination (default 25 rows
+    // per page; 'All' restores the old unbounded render). Renders clamp
+    // the page into range, so a narrowed list (new month, live search)
+    // can never strand the view on an empty page.
+    let FEE_PENDING_PAGE = 1;
+    let FEE_PENDING_PAGE_SIZE = 25;
+    let FEE_DEFAULTERS_PAGE = 1;
+    let FEE_DEFAULTERS_PAGE_SIZE = 25;
+    let FEE_MATRIX_PAGE = 1;
+    let FEE_MATRIX_PAGE_SIZE = 25;
+    function setFeePendingPage(p) { FEE_PENDING_PAGE = p; filterPendingDefaultersSearchLive(); }
+    function setFeePendingPageSize(v) { FEE_PENDING_PAGE_SIZE = (v === 'all') ? Infinity : (parseInt(v, 10) || 25); FEE_PENDING_PAGE = 1; filterPendingDefaultersSearchLive(); }
+    function setFeeDefaultersPage(p) { FEE_DEFAULTERS_PAGE = p; filterThreePlusDefaultersLive(); }
+    function setFeeDefaultersPageSize(v) { FEE_DEFAULTERS_PAGE_SIZE = (v === 'all') ? Infinity : (parseInt(v, 10) || 25); FEE_DEFAULTERS_PAGE = 1; filterThreePlusDefaultersLive(); }
+    function setFeeMatrixPage(p) { FEE_MATRIX_PAGE = p; filterAnnualFeeMatrixLive(); }
+    function setFeeMatrixPageSize(v) { FEE_MATRIX_PAGE_SIZE = (v === 'all') ? Infinity : (parseInt(v, 10) || 25); FEE_MATRIX_PAGE = 1; filterAnnualFeeMatrixLive(); }
+    window.setFeePendingPage = setFeePendingPage;
+    window.setFeePendingPageSize = setFeePendingPageSize;
+    window.setFeeDefaultersPage = setFeeDefaultersPage;
+    window.setFeeDefaultersPageSize = setFeeDefaultersPageSize;
+    window.setFeeMatrixPage = setFeeMatrixPage;
+    window.setFeeMatrixPageSize = setFeeMatrixPageSize;
+
     function parseFamilyNotesData(notesRaw) {
       if (!notesRaw) return { fee_history: [], matrix_overrides: {} };
       if (typeof notesRaw === 'object') {
@@ -2260,6 +2283,7 @@
       const targetMonth = mSel ? mSel.value : 'September';
       const targetYear = ySel ? parseInt(ySel.value, 10) : 2026;
 
+      const pendPagerEl = document.getElementById('feePendingTablePager');
       if (!list || list.length === 0) {
         tbody.innerHTML = `
           <tr>
@@ -2269,10 +2293,15 @@
             </td>
           </tr>
         `;
+        if (pendPagerEl) pendPagerEl.innerHTML = '';
         return;
       }
 
-      tbody.innerHTML = list.map(item => {
+      // Batch 3.6 (audit P2-36): page the pending list (default 25).
+      const pendPage = paginateList(list, FEE_PENDING_PAGE, FEE_PENDING_PAGE_SIZE);
+      FEE_PENDING_PAGE = pendPage.safePage;
+
+      tbody.innerHTML = pendPage.pageRows.map(item => {
         const cleanPhone = (item.whatsapp || '').replace(/[^0-9]/g, '');
         const periodStr = `${item.selectedMonth || targetMonth} ${item.selectedYear || targetYear}`;
         const waMsg = `Assalam-o-Alaikum Respected ${item.parentName},\nThis is an official fee reminder from *Al-Huda Islamic Centre*.\nOur records show that your tuition fee for the month of *${periodStr}* (*${item.currency} ${item.dueAmount.toFixed(2)}*) for enrolled student(s): *${item.studentsNames}* has not yet reached us.\nKindly pay your fee at the earliest. *If you have already paid, please share the payment screenshot or receipt with us so we can update your account immediately.*\nJazakAllahu Khairan!`;
@@ -2322,6 +2351,14 @@
           </tr>
         `;
       }).join('');
+      if (pendPagerEl) {
+        pendPagerEl.innerHTML = buildTablePagerHtml({
+          page: FEE_PENDING_PAGE, totalPages: pendPage.totalPages, total: list.length,
+          start: pendPage.start, end: pendPage.end,
+          pageSize: FEE_PENDING_PAGE_SIZE === Infinity ? 'all' : String(FEE_PENDING_PAGE_SIZE),
+          onPage: 'setFeePendingPage', onSize: 'setFeePendingPageSize'
+        });
+      }
     }
 
     function filterPendingDefaultersSearchLive() {
@@ -2775,6 +2812,7 @@ Official Email: ${offEmail}`;
       const tbody = document.getElementById('feeDefaulters3PlusTableBody');
       if (!tbody) return;
 
+      const defPagerEl = document.getElementById('feeDefaultersTablePager');
       if (!list || list.length === 0) {
         tbody.innerHTML = `
           <tr>
@@ -2784,10 +2822,15 @@ Official Email: ${offEmail}`;
             </td>
           </tr>
         `;
+        if (defPagerEl) defPagerEl.innerHTML = '';
         return;
       }
 
-      tbody.innerHTML = list.map(item => {
+      // Batch 3.6 (audit P2-36): page the defaulters list (default 25).
+      const defPage = paginateList(list, FEE_DEFAULTERS_PAGE, FEE_DEFAULTERS_PAGE_SIZE);
+      FEE_DEFAULTERS_PAGE = defPage.safePage;
+
+      tbody.innerHTML = defPage.pageRows.map(item => {
         const cleanPhone = (item.whatsapp || '').replace(/[^0-9]/g, '');
         const waMsg = `Assalam-o-Alaikum Respected ${item.parentName},\n*URGENT FEE NOTICE — AL-HUDA ISLAMIC CENTRE*\nYour tuition fee for enrolled student(s) *${item.studentsNames}* has been pending for *${item.unpaidMonthsCount} months* (${item.unpaidMonthsText}).\nTotal Outstanding Arrears: *${item.currency} ${item.totalArrearsDue.toFixed(2)}*.\nKindly submit your overdue tuition fee as soon as possible. If already paid, please share the payment screenshot or receipt.\nJazakAllahu Khairan!`;
         const waUrl = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(waMsg)}`;
@@ -2837,6 +2880,14 @@ Official Email: ${offEmail}`;
           </tr>
         `;
       }).join('');
+      if (defPagerEl) {
+        defPagerEl.innerHTML = buildTablePagerHtml({
+          page: FEE_DEFAULTERS_PAGE, totalPages: defPage.totalPages, total: list.length,
+          start: defPage.start, end: defPage.end,
+          pageSize: FEE_DEFAULTERS_PAGE_SIZE === Infinity ? 'all' : String(FEE_DEFAULTERS_PAGE_SIZE),
+          onPage: 'setFeeDefaultersPage', onSize: 'setFeeDefaultersPageSize'
+        });
+      }
     }
 
     function filterThreePlusDefaultersLive() {
@@ -3167,12 +3218,18 @@ Official Email: ${offEmail}`;
       const tbody = document.getElementById('feeMatrixTableBody');
       if (!tbody) return;
 
+      const matPagerEl = document.getElementById('feeMatrixTablePager');
       if (!rows || rows.length === 0) {
         tbody.innerHTML = `<tr><td colspan="15" class="p-8 text-center text-slate-400">No enrolled families found.</td></tr>`;
+        if (matPagerEl) matPagerEl.innerHTML = '';
         return;
       }
 
-      tbody.innerHTML = rows.map(r => {
+      // Batch 3.6 (audit P2-36): page the matrix rows (default 25).
+      const matPage = paginateList(rows, FEE_MATRIX_PAGE, FEE_MATRIX_PAGE_SIZE);
+      FEE_MATRIX_PAGE = matPage.safePage;
+
+      tbody.innerHTML = matPage.pageRows.map(r => {
         const monthsHtml = r.months.map(m => {
           let cellBg = 'bg-white';
           let cellContent = '';
@@ -3233,6 +3290,14 @@ Official Email: ${offEmail}`;
           </tr>
         `;
       }).join('');
+      if (matPagerEl) {
+        matPagerEl.innerHTML = buildTablePagerHtml({
+          page: FEE_MATRIX_PAGE, totalPages: matPage.totalPages, total: rows.length,
+          start: matPage.start, end: matPage.end,
+          pageSize: FEE_MATRIX_PAGE_SIZE === Infinity ? 'all' : String(FEE_MATRIX_PAGE_SIZE),
+          onPage: 'setFeeMatrixPage', onSize: 'setFeeMatrixPageSize'
+        });
+      }
     }
 
     function filterAnnualFeeMatrixLive() {

@@ -169,7 +169,7 @@
                 <button type="button" onclick="openGraphMonthDrilldownModal(${mIdx}, '${defaultDrillCat}'); dismissMobileChartTooltip();" class="px-2 py-0.5 rounded bg-indigo-50 text-indigo-700 border border-indigo-200 text-[10.5px] font-extrabold flex items-center gap-1 active:scale-95">
                   Details <i class="fa-solid fa-arrow-right text-[9px]"></i>
                 </button>
-                <button type="button" onclick="dismissMobileChartTooltip()" class="w-5 h-5 rounded text-slate-400 hover:text-slate-700 flex items-center justify-center text-xs">
+                <button type="button" onclick="dismissMobileChartTooltip()" aria-label="Dismiss" class="w-5 h-5 rounded text-slate-400 hover:text-slate-700 flex items-center justify-center text-xs">
                   <i class="fa-solid fa-xmark"></i>
                 </button>
               </div>

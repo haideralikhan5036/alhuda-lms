@@ -984,7 +984,7 @@
     modal.innerHTML = `
       <div class="bg-gradient-to-b from-slate-900 via-zinc-900 to-slate-950 border border-emerald-600/40 rounded-3xl max-w-lg w-full p-5 sm:p-7 shadow-[0_25px_50px_rgba(0,0,0,0.8),0_0_30px_rgba(5,150,105,0.2)] text-white relative animate-scaleIn space-y-5">
         
-        <button onclick="AlHudaInteractiveQaida.closeLetterDetailModal()" class="absolute top-4 right-4 w-9 h-9 rounded-full bg-zinc-800/80 hover:bg-zinc-700 text-zinc-300 hover:text-white flex items-center justify-center transition border border-zinc-700/60" title="Close (Esc)">
+        <button onclick="AlHudaInteractiveQaida.closeLetterDetailModal()" aria-label="Close" class="absolute top-4 right-4 w-9 h-9 rounded-full bg-zinc-800/80 hover:bg-zinc-700 text-zinc-300 hover:text-white flex items-center justify-center transition border border-zinc-700/60" title="Close (Esc)">
           <i class="fa-solid fa-xmark text-sm"></i>
         </button>
 
@@ -1067,7 +1067,7 @@
 
     modal.innerHTML = `
       <div class="bg-gradient-to-b from-slate-900 via-zinc-900 to-slate-950 border border-emerald-600/40 rounded-3xl max-w-2xl w-full p-5 sm:p-7 shadow-2xl text-white relative animate-scaleIn space-y-4 max-h-[92vh] overflow-y-auto">
-        <button onclick="AlHudaInteractiveQaida.closeMakharijTeethReferenceModal()" class="absolute top-4 right-4 w-9 h-9 rounded-full bg-zinc-800 hover:bg-zinc-700 text-zinc-300 hover:text-white flex items-center justify-center transition border border-zinc-700">
+        <button onclick="AlHudaInteractiveQaida.closeMakharijTeethReferenceModal()" aria-label="Close" class="absolute top-4 right-4 w-9 h-9 rounded-full bg-zinc-800 hover:bg-zinc-700 text-zinc-300 hover:text-white flex items-center justify-center transition border border-zinc-700">
           <i class="fa-solid fa-xmark text-sm"></i>
         </button>
 

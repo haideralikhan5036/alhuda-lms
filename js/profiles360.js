@@ -1681,7 +1681,7 @@ function _buildSelectedStudentWorkspaceHtml(family, student, famSchedules, famLo
               <span>${_esc360(item.label)}</span>
             </button>
           `).join('')}
-          <button onclick="closeSelectedStudentDrawer()"
+          <button onclick="closeSelectedStudentDrawer()" aria-label="Collapse student detail panel"
                   class="ml-1 w-7 h-7 rounded-lg bg-white/10 hover:bg-rose-600 text-slate-300 hover:text-white inline-flex items-center justify-center transition shrink-0 cursor-pointer"
                   title="Collapse Student Detail Panel">
             <i class="fa-solid fa-xmark text-xs"></i>
@@ -2229,7 +2229,7 @@ function _openWorkspaceModal(title, subtitle, bodyHtml) {
           <h3 class="text-base font-black">${_esc360(title)}</h3>
           ${subtitle ? `<p class="text-xs text-slate-300 mt-0.5">${_esc360(subtitle)}</p>` : ''}
         </div>
-        <button onclick="_closeWorkspaceModal()" class="w-8 h-8 rounded-lg bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition cursor-pointer">
+        <button onclick="_closeWorkspaceModal()" aria-label="Close" class="w-8 h-8 rounded-lg bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition cursor-pointer">
           <i class="fa-solid fa-xmark"></i>
         </button>
       </div>

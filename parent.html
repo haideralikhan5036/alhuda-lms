@@ -50,6 +50,7 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="js/cloudflare-db.js"></script>
   <script src="js/ui-notify.js"></script>
+  <script src="js/modal-a11y.js"></script>
   <script src="js/lesson-history.js"></script>
   <script src="js/fee-tables.js"></script>
   <!-- Al-Huda Curriculum & Course Material Registry Engine -->
@@ -157,6 +158,25 @@
       padding-right: 2.2rem !important;
       cursor: pointer;
     }
+
+    /* Batch 3.6 (audit P2-35): parent selects previously had NO focus
+       style at all (the rule above defines appearance + chevron but no
+       :focus). Mirror the index/teacher focus ring so keyboard focus is
+       always visible. */
+    select:focus {
+      outline: none !important;
+      border-color: #059669 !important;
+      box-shadow: 0 0 0 3px rgba(5, 150, 105, 0.18) !important;
+      background-color: #ffffff !important;
+    }
+
+    /* The header student selector lives on a dark pill: keep its dark
+       background on focus (the generic white above would make its light
+       text unreadable) while still showing the same focus ring. */
+    #portalStudentSelect:focus {
+      background-color: transparent !important;
+      color: #a7f3d0 !important;
+    }
   </style>
 </head>
 <body class="bg-slate-50 text-slate-800 antialiased min-h-screen flex flex-col font-sans">
@@ -190,7 +210,7 @@
           <div class="flex items-center gap-1.5 bg-slate-900/90 px-2 py-1 rounded-xl border border-emerald-700/60 shadow-xs">
             <i class="fa-solid fa-user-graduate text-brandGold text-xs"></i>
             <span class="text-[11px] font-semibold text-slate-300 hidden md:inline">Student:</span>
-            <select id="portalStudentSelect" onchange="switchStudentAccount(this.value)" class="bg-transparent text-emerald-200 font-bold text-xs border-none focus:outline-none cursor-pointer py-1 pl-1 pr-6 max-w-[130px] sm:max-w-[200px]">
+            <select id="portalStudentSelect" onchange="switchStudentAccount(this.value)" class="bg-transparent text-emerald-200 font-bold text-xs border-none cursor-pointer py-1 pl-1 pr-6 max-w-[130px] sm:max-w-[200px]">
               <option value="">Select Student</option>
             </select>
           </div>
@@ -214,19 +234,19 @@
     <!-- PORTAL SUB-NAV TABS (Visible ONLY when authenticated) -->
     <div id="parentSubNavTabs" class="hidden bg-slate-950/70 border-t border-emerald-900/60 px-4 sm:px-6 lg:px-8 overflow-x-auto touch-scroll no-scrollbar">
       <div class="max-w-7xl mx-auto flex items-center gap-1 py-1.5 min-w-max">
-        <button onclick="switchPortalTab('tab-dashboard')" id="navBtn_dashboard" class="portal-nav-btn active px-3.5 py-1.5 rounded-lg text-xs font-bold text-slate-300 hover:text-white hover:bg-slate-800/60 transition flex items-center gap-1.5">
+        <button onclick="switchPortalTab('tab-dashboard')" id="navBtn_dashboard" class="portal-nav-btn active px-3.5 py-1.5 min-h-[44px] rounded-lg text-xs font-bold text-slate-300 hover:text-white hover:bg-slate-800/60 transition flex items-center gap-1.5">
           <i class="fa-solid fa-gauge-high"></i> Dashboard
         </button>
-        <button onclick="switchPortalTab('tab-library')" id="navBtn_library" class="portal-nav-btn px-3.5 py-1.5 rounded-lg text-xs font-bold text-slate-300 hover:text-white hover:bg-slate-800/60 transition flex items-center gap-1.5">
+        <button onclick="switchPortalTab('tab-library')" id="navBtn_library" class="portal-nav-btn px-3.5 py-1.5 min-h-[44px] rounded-lg text-xs font-bold text-slate-300 hover:text-white hover:bg-slate-800/60 transition flex items-center gap-1.5">
           <i class="fa-solid fa-book-open"></i> Course Material Library (<span id="portalNavBookCount">0</span>)
         </button>
-        <button onclick="switchPortalTab('tab-timetable')" id="navBtn_timetable" class="portal-nav-btn px-3.5 py-1.5 rounded-lg text-xs font-bold text-slate-300 hover:text-white hover:bg-slate-800/60 transition flex items-center gap-1.5">
+        <button onclick="switchPortalTab('tab-timetable')" id="navBtn_timetable" class="portal-nav-btn px-3.5 py-1.5 min-h-[44px] rounded-lg text-xs font-bold text-slate-300 hover:text-white hover:bg-slate-800/60 transition flex items-center gap-1.5">
           <i class="fa-regular fa-calendar-days"></i> Class Schedule
         </button>
-        <button onclick="switchPortalTab('tab-attendance')" id="navBtn_attendance" class="portal-nav-btn px-3.5 py-1.5 rounded-lg text-xs font-bold text-slate-300 hover:text-white hover:bg-slate-800/60 transition flex items-center gap-1.5">
+        <button onclick="switchPortalTab('tab-attendance')" id="navBtn_attendance" class="portal-nav-btn px-3.5 py-1.5 min-h-[44px] rounded-lg text-xs font-bold text-slate-300 hover:text-white hover:bg-slate-800/60 transition flex items-center gap-1.5">
           <i class="fa-solid fa-clipboard-check"></i> Attendance Record
         </button>
-        <button onclick="switchPortalTab('tab-fees')" id="navBtn_fees" class="portal-nav-btn px-3.5 py-1.5 rounded-lg text-xs font-bold text-slate-300 hover:text-white hover:bg-slate-800/60 transition flex items-center gap-1.5">
+        <button onclick="switchPortalTab('tab-fees')" id="navBtn_fees" class="portal-nav-btn px-3.5 py-1.5 min-h-[44px] rounded-lg text-xs font-bold text-slate-300 hover:text-white hover:bg-slate-800/60 transition flex items-center gap-1.5">
           <i class="fa-solid fa-receipt"></i> Fee &amp; Invoices
         </button>
         <button onclick="openLeaveRequestModal()" class="ml-auto px-3 py-1.5 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 text-xs font-bold transition flex items-center gap-1.5">
@@ -278,7 +298,7 @@
 
           <form onsubmit="handleParentSignIn(event)" class="space-y-4 text-xs" autocomplete="off">
             <div>
-              <label class="block font-bold text-slate-700 mb-1.5">
+              <label for="parentLoginUsername" class="block font-bold text-slate-700 mb-1.5">
                 Username / Family ID / Email <span class="text-rose-500">*</span>
               </label>
               <div class="relative">
@@ -290,7 +310,7 @@
 
             <div>
               <div class="flex items-center justify-between mb-1.5">
-                <label class="font-bold text-slate-700">
+                <label for="parentLoginPassword" class="font-bold text-slate-700">
                   Password <span class="text-rose-500">*</span>
                 </label>
               </div>
@@ -298,7 +318,7 @@
                 <i class="fa-solid fa-lock absolute left-3.5 top-3 text-slate-400"></i>
                 <input type="password" id="parentLoginPassword" required placeholder="Enter your password" autocomplete="current-password"
                   class="w-full pl-9 pr-10 py-2.5 bg-slate-50 border border-slate-300 rounded-xl font-bold text-slate-900 focus:bg-white focus:outline-brandEmerald focus:border-brandEmerald text-xs">
-                <button type="button" onclick="toggleParentPassVisibility()" class="absolute right-3 top-2.5 text-slate-400 hover:text-slate-700" title="Show / Hide Password">
+                <button type="button" onclick="toggleParentPassVisibility()" aria-label="Show or hide password" class="absolute right-3 top-2.5 text-slate-400 hover:text-slate-700" title="Show / Hide Password">
                   <i id="parentPassToggleIcon" class="fa-regular fa-eye"></i>
                 </button>
               </div>
@@ -333,7 +353,7 @@
             <i class="fa-solid fa-kaaba"></i> Bismillahi Rahmani Raheem 🤲
           </div>
           <h1 class="text-2xl sm:text-3xl font-black tracking-tight text-white mb-2">
-            Assalamu Alaikum, <span id="heroWelcomeName" class="text-amber-300">Student</span>!
+            Assalamu Alaikum, <span id="heroWelcomeName" class="text-amber-300">Loading…</span>!
           </h1>
           <p class="text-slate-200 text-xs sm:text-sm leading-relaxed mb-6 max-w-2xl">
             Welcome to your Al-Huda online classroom portal. Review today's lesson notes, join your live Zoom class, or revise Noorani Qaida &amp; the Holy Quran directly in the digital reader.
@@ -363,16 +383,16 @@
               </span>
               <span class="text-xs font-semibold text-slate-500" id="liveClassDate">Today's Class</span>
             </div>
-            <h2 class="text-xl font-black text-slate-900" id="liveClassSubject">Quran Recitation &amp; Tajweed</h2>
+            <h2 class="text-xl font-black text-slate-900" id="liveClassSubject">Loading…</h2>
             <p class="text-xs text-slate-600" id="liveClassMeta">
-              Assigned Teacher: <strong class="text-slate-800" id="liveClassTeacher">Teacher</strong> |
-              Time Slot: <strong class="text-slate-800 font-mono" id="liveClassTime">Flexible</strong>
+              Assigned Teacher: <strong class="text-slate-800" id="liveClassTeacher">Loading…</strong> |
+              Time Slot: <strong class="text-slate-800 font-mono" id="liveClassTime">Loading…</strong>
             </p>
           </div>
 
           <div class="w-full sm:w-auto shrink-0">
-            <a id="btnJoinLiveMeeting" href="#" target="_blank" class="w-full sm:w-auto px-6 py-3.5 rounded-2xl bg-brandDark hover:bg-brandDarkest text-white font-black text-sm shadow-md transition flex items-center justify-center gap-2 text-center">
-              <i class="fa-solid fa-video text-amber-300"></i> Join Live Class Now
+            <a id="btnJoinLiveMeeting" class="w-full sm:w-auto px-5 py-3 rounded-2xl bg-slate-100 text-slate-500 border border-slate-200 font-bold text-xs flex items-center justify-center gap-2 text-center cursor-not-allowed">
+              <i class="fa-solid fa-video-slash text-slate-400"></i> Loading class link…
             </a>
           </div>
         </div>
@@ -725,7 +745,7 @@
         <h3 class="font-extrabold text-slate-900 text-sm flex items-center gap-2">
           <i class="fa-solid fa-file-invoice-dollar text-emerald-700"></i> Official Tuition Fee Receipt Voucher
         </h3>
-        <button onclick="closeModal('modalFeeInvoice')" class="text-slate-400 hover:text-slate-700 text-2xl font-bold leading-none">&times;</button>
+        <button onclick="closeModal('modalFeeInvoice')" class="text-slate-400 hover:text-slate-700 text-2xl font-bold leading-none" aria-label="Close">&times;</button>
       </div>
 
       <!-- INVOICE PRINTABLE / DISPLAY AREA -->
@@ -864,7 +884,7 @@
             <span class="text-[10px] text-slate-400">Requests are reviewed by the administration.</span>
           </div>
         </div>
-        <button onclick="closeModal('modalLeaveRequest')" class="text-slate-400 hover:text-slate-700 text-xl font-bold">&times;</button>
+        <button onclick="closeModal('modalLeaveRequest')" class="text-slate-400 hover:text-slate-700 text-xl font-bold" aria-label="Close">&times;</button>
       </div>
 
       <form onsubmit="handleLeaveRequestSubmit(event)" class="space-y-3 text-xs">
@@ -3527,6 +3547,9 @@
       if (el) {
         el.classList.remove('hidden');
         el.classList.add('flex');
+        // Batch 3.6 (audit P2-28/P2-29): focus moves in, Tab traps, and
+        // backdrop click closes — via the one shared helper.
+        if (window.ModalA11y) window.ModalA11y.open(el, function () { closeModal(id); });
       }
     }
     function closeModal(id) {
@@ -3535,8 +3558,19 @@
       if (el) {
         el.classList.add('hidden');
         el.classList.remove('flex');
+        // Batch 3.6 (audit P2-28/P2-29): focus returns to the opener.
+        if (window.ModalA11y) window.ModalA11y.close(el);
       }
     }
+
+    // Batch 3.6 (audit P2-28): parent fee/leave modals previously had no
+    // Escape handling (only the book reader did). Escape now closes the
+    // topmost helper-registered modal; the reader is not registered, so
+    // its own Escape handling is untouched.
+    document.addEventListener('keydown', function (e) {
+      if (e.key !== 'Escape') return;
+      if (window.ModalA11y && window.ModalA11y.closeTop()) e.preventDefault();
+    });
 
     // =========================================================================
     // ZERO-CACHE ENFORCEMENT & REAL-TIME CROSS-DEVICE SYNC FOR PARENT PORTAL
