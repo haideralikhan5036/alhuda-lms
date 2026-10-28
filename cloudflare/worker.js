@@ -74,11 +74,68 @@ function corsHeadersFor(request, env) {
   return headers;
 }
 
+// --- Batch 7 Part B: Worker release identity --------------------------------
+// WORKER_RELEASE identifies the deployed Worker build. There is no
+// version-metadata binding in wrangler.toml, so this constant is the only
+// build identity /api/health can report. BUMP IT IN EVERY RELEASE PR so the
+// "after every merge" checklist in SECURITY-SETUP.md can compare the live
+// health version against the release being deployed.
+// HEALTH_SCHEMA_VERSION is kept in sync by hand with SCHEMA_VERSION in
+// functions/api/db.js (the D1 schema marker; v2 after Part A). It is hardcoded
+// here on purpose: /api/health must never 500 because D1 is unreachable, and
+// it must never cost an unauthenticated caller a D1 read.
+const WORKER_RELEASE = '2026-10-28-b7b';
+const HEALTH_SCHEMA_VERSION = '2026-10-28-v2';
+
+// --- Batch 7 Part B: security headers (workers.dev responses) --------------
+// Every response the Worker serves carries this set. The Content-Security-
+// Policy is REPORT-ONLY and mirrors the exact CSP string from vercel.json;
+// it is deliberately NOT enforced yet (no report-uri exists, so it collects
+// nothing until one is added — see the PR). Framing is therefore carried by
+// X-Frame-Options: SAMEORIGIN alone: cross-origin framing of the portals is
+// intentionally unsupported (no legitimate cross-origin embedding was
+// found), and a frame-ancestors directive can only be enforced by an
+// enforcing CSP, which this batch does not add. Permissions-Policy denies
+// only features the app never uses (verified by grep: no getUserMedia,
+// MediaDevices, geolocation, PaymentRequest, or USB usage in app code).
+// CORS handling (corsHeadersFor) is separate and untouched; Vercel's
+// cache-control is NOT copied here (asset/R2 caching is handled per path).
+const WORKER_CSP_REPORT_ONLY = "default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdn.tailwindcss.com https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdnjs.cloudflare.com https://cdn.jsdelivr.net; font-src 'self' data: https://fonts.gstatic.com https://cdnjs.cloudflare.com https://cdn.jsdelivr.net; img-src 'self' data: https: blob:; connect-src 'self' https:; frame-src 'self' https:; object-src 'none'; base-uri 'self'";
+
+function securityHeaders() {
+  return {
+    'Strict-Transport-Security': 'max-age=31536000; includeSubDomains',
+    'X-Content-Type-Options': 'nosniff',
+    'Referrer-Policy': 'strict-origin-when-cross-origin',
+    'Permissions-Policy': 'camera=(), microphone=(), geolocation=(), payment=(), usb=()',
+    'X-Frame-Options': 'SAMEORIGIN',
+    'Content-Security-Policy-Report-Only': WORKER_CSP_REPORT_ONLY,
+  };
+}
+
+// Rebuild a response with the security set merged over its existing
+// headers (existing headers win except the security keys themselves, which
+// the set owns). Body passes through untouched, so streaming is preserved;
+// a null body (204 preflights) stays null.
+function withSecurityHeaders(response) {
+  const headers = new Headers(response.headers);
+  for (const [name, value] of Object.entries(securityHeaders())) {
+    headers.set(name, value);
+  }
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
+  });
+}
+
 function json(request, env, data, status = 200, extraHeaders = {}) {
   // 204 No Content must not carry a body — `new Response("{}", {status:204})`
   // throws and turns every CORS preflight into a 500 (caught 2026-10-14:
   // all browser logins were blocked at preflight). Return a null body.
-  const headers = { ...corsHeadersFor(request, env), ...extraHeaders };
+  // Batch 7 Part B: every API response also carries the security set
+  // (the set owns its keys; extraHeaders — e.g. Retry-After — passes through).
+  const headers = { ...corsHeadersFor(request, env), ...extraHeaders, ...securityHeaders() };
   if (status === 204) {
     return new Response(null, { status, headers });
   }
@@ -2607,14 +2664,17 @@ async function handleScopedDbRequest(ctx, auth) {
 
   // Availability probe (GET) carries no table/action â pass through.
   if (request.method === 'GET') {
-    return handleDbRequest(ctx);
+    // Batch 7 Part B: the Worker delegates in-process, so it stamps the
+    // internal-invocation marker the engine guard requires (see
+    // functions/api/db.js onRequest). A remote caller can never set it.
+    return handleDbRequest({ ...ctx, __lmsInternal: true });
   }
 
   let body = null;
   try {
     body = await request.clone().json();
   } catch (e) {
-    return handleDbRequest(ctx);
+    return handleDbRequest({ ...ctx, __lmsInternal: true });
   }
   const table = body && body.table;
   const action = body && body.action;
@@ -2658,7 +2718,7 @@ async function handleScopedDbRequest(ctx, auth) {
 
   let resp;
   try {
-    resp = await handleDbRequest({ request: scopedRequest, env, ctx });
+    resp = await handleDbRequest({ request: scopedRequest, env, ctx, __lmsInternal: true });
   } catch (e) {
     console.error('[scope] db handler failed:', e);
     return forbidden(request, env);
@@ -2791,11 +2851,13 @@ async function handleScopedStorageRequest(ctx, auth) {
 
   // Status probe (?key absent) â pass through.
   if (request.method === 'GET' && !url.searchParams.get('key')) {
-    return handleStorageRequest(ctx);
+    // Batch 7 Part B: internal-invocation marker, as for /api/db (see
+    // functions/api/storage.js onRequest). A remote caller can never set it.
+    return handleStorageRequest({ ...ctx, __lmsInternal: true });
   }
 
   if (!restricted) {
-    return handleStorageRequest(ctx);
+    return handleStorageRequest({ ...ctx, __lmsInternal: true });
   }
 
   const prefix = scopedStorageFolder(role, sub) + '/';
@@ -2812,11 +2874,11 @@ async function handleScopedStorageRequest(ctx, auth) {
       // teacher's scoped prefix. Teachers must NOT write into
       // course_material/ to dodge this -- the POST path still force-scopes.
       if (await isLessonImageKeyReadable(getDb(env), role, sub, key)) {
-        return handleStorageRequest(ctx);
+        return handleStorageRequest({ ...ctx, __lmsInternal: true });
       }
       return forbidden(request, env);
     }
-    return handleStorageRequest(ctx);
+    return handleStorageRequest({ ...ctx, __lmsInternal: true });
   }
 
   if (request.method === 'POST') {
@@ -2837,15 +2899,24 @@ async function handleScopedStorageRequest(ctx, auth) {
       headers.set('Content-Type', 'application/json');
       scopedRequest = new Request(request.url, { method: 'POST', headers, body: JSON.stringify(body) });
     }
-    return handleStorageRequest({ request: scopedRequest, env, ctx });
+    return handleStorageRequest({ request: scopedRequest, env, ctx, __lmsInternal: true });
   }
 
-  return handleStorageRequest(ctx);
+  return handleStorageRequest({ ...ctx, __lmsInternal: true });
 }
 
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
+
+    // 0a. Health (Batch 7 Part B, PUBLIC, GET only). Deliberately minimal:
+    // { ok, version, schema } and nothing else — no secrets, no counts, no
+    // data, no D1 read (the schema value is the hardcoded constant kept in
+    // sync with functions/api/db.js, so this endpoint can never 500 on a
+    // D1 error). Non-GET methods fall through to the asset handler below.
+    if (url.pathname === '/api/health' && request.method === 'GET') {
+      return json(request, env, { ok: true, version: WORKER_RELEASE, schema: HEALTH_SCHEMA_VERSION });
+    }
 
     // 0. Logins (public endpoints, rate-limited)
     if (url.pathname === '/api/auth/login') {
@@ -2870,25 +2941,32 @@ export default {
     }
 
     // 1. Database API (/api/db) -> Cloudflare D1   [AUTH-GATED + ROLE-SCOPED]
+    // Batch 7 Part B: engine responses bypass json(), so the branch return
+    // itself is wrapped with the security set (covers API errors, engine
+    // JSON, and the OPTIONS preflight alike).
     if (url.pathname === '/api/db' || url.pathname.startsWith('/api/db/')) {
       // CORS preflights never carry Authorization; let the downstream
       // handler answer them so browsers can complete preflight.
       if (request.method === 'OPTIONS') {
-        return handleDbRequest({ request, env, ctx });
+        return withSecurityHeaders(await handleDbRequest({ request, env, ctx }));
       }
       const auth = await requireApiAuth(request, env);
       if (!auth) return unauthorized(request, env);
-      return handleScopedDbRequest({ request, env, ctx }, auth);
+      return withSecurityHeaders(await handleScopedDbRequest({ request, env, ctx }, auth));
     }
 
     // 2. File Storage API (/api/storage) -> Cloudflare R2   [AUTH-GATED + ROLE-SCOPED]
+    // Batch 7 Part B: same branch wrap as /api/db — this is what covers
+    // the storage-download path (attachment disposition and private
+    // no-store caching set by the engine are preserved; only the security
+    // keys are added).
     if (url.pathname === '/api/storage' || url.pathname.startsWith('/api/storage/')) {
       if (request.method === 'OPTIONS') {
-        return handleStorageRequest({ request, env, ctx });
+        return withSecurityHeaders(await handleStorageRequest({ request, env, ctx }));
       }
       const auth = await requireApiAuth(request, env);
       if (!auth) return unauthorized(request, env);
-      return handleScopedStorageRequest({ request, env, ctx }, auth);
+      return withSecurityHeaders(await handleScopedStorageRequest({ request, env, ctx }, auth));
     }
 
     // 2b. Email relay (/api/email/send) -> official Apps Script relay.
@@ -2940,14 +3018,18 @@ export default {
     if (mappedPath && env.ASSETS && typeof env.ASSETS.fetch === 'function') {
       const rewrittenUrl = new URL(request.url);
       rewrittenUrl.pathname = mappedPath;
-      return env.ASSETS.fetch(new Request(rewrittenUrl.toString(), request));
+      // Batch 7 Part B: asset bytes pass through the Worker, so the
+      // security set is merged here (existing Content-Type/Cache-Control
+      // preserved; body streams through untouched).
+      return withSecurityHeaders(await env.ASSETS.fetch(new Request(rewrittenUrl.toString(), request)));
     }
 
     // 4. All portal pages & static assets
     if (env.ASSETS && typeof env.ASSETS.fetch === 'function') {
-      return env.ASSETS.fetch(request);
+      return withSecurityHeaders(await env.ASSETS.fetch(request));
     }
 
-    return new Response('Al-Huda LMS Worker is running.', { status: 200 });
+    // Batch 7 Part B: fallback text response carries the security set too.
+    return new Response('Al-Huda LMS Worker is running.', { status: 200, headers: securityHeaders() });
   },
 };

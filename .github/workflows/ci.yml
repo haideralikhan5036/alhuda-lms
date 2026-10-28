@@ -1,0 +1,37 @@
+# Al-Huda LMS — automated test suites (Batch 7 Part B)
+#
+# Runs every suite in test/ on pull requests and on pushes to main.
+# No secrets, no environment variables, no publish step: the suites are
+# self-contained (they drive the real Worker module against a fake D1
+# backed by Node's built-in SQLite) and need nothing but Node.
+#
+# Node is pinned to major version 24: node:sqlite requires a modern Node,
+# and 24 is the version the suites demonstrably pass on locally.
+#
+# Note on the suite list: on a fresh checkout of main, test/*.test.mjs is
+# exactly the 27 suites. The old test/smoke_test.mjs (absolute import
+# outside the repo) was deleted from main by PR #30 and is not re-added
+# here; no exclusion is needed. Likewise, the scoping suites already
+# import the real cloudflare/worker.js — no test-pointing work remains.
+
+name: LMS test suites
+
+"on":
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  suites:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Run every suite in test/
+        run: |
+          for f in test/*.test.mjs; do
+            echo "=== $f ==="
+            node "$f" || exit 1
+          done

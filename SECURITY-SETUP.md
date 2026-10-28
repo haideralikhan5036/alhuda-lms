@@ -225,6 +225,24 @@ Work through this list top to bottom before merging the security branch:
 - [ ] Merge the branch into `main`, wait for Vercel to deploy, and repeat the
       checks on the live site
 
+### After every merge (release checklist — Batch 7 Part B)
+
+Run this short checklist after every merge, in order. It catches the one
+mistake that has bitten this project before: the frontend deploying while
+the Worker still runs the previous build (or the other way round).
+
+- [ ] Frontend deployed? Open the live site (Vercel address) and confirm the
+      merged change is visible there.
+- [ ] Worker deployed? The owner runs the deploy through Anti Gravity and
+      reports back the new Worker version ID. (This agent never deploys the
+      Worker itself.)
+- [ ] Health version matches? Open `https://alhuda-lms.ceoislamiccentre.workers.dev/api/health`
+      (no login needed). It returns only `{ ok, version, schema }`. The
+      `version` value must equal the release being deployed (the
+      `WORKER_RELEASE` constant in `cloudflare/worker.js`, bumped in every
+      release PR). If it shows the previous release, the Worker deploy has
+      not landed yet — do not call the release live until it matches.
+
 ---
 
 ## Backup and restore

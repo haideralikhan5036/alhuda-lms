@@ -13,6 +13,11 @@
  *  - Downloads served as attachments with no public caching, so uploaded
  *    content can never execute inline in the portal's origin.
  *  - Internal error details never leave the server (generic 500 responses).
+ *  - Batch 7 Part B: onRequest refuses any call without the Worker's
+ *    in-process __lmsInternal marker (403 before any bucket access or
+ *    data path), so a standalone Cloudflare Pages deploy cannot expose
+ *    this engine. OPTIONS preflights (headers only, no data) are carved
+ *    out explicitly.
  * ============================================================================
  */
 
@@ -114,6 +119,24 @@ export async function onRequest(context) {
 
   if (request.method === 'OPTIONS') {
     return new Response(null, { status: 204, headers: corsHeaders });
+  }
+
+  // Batch 7 Part B: internal-invocation guard. This engine has no auth of
+  // its own: it is safe ONLY behind the Worker, which delegates in-process
+  // and stamps context.__lmsInternal (see cloudflare/worker.js). A remote
+  // caller on a standalone Cloudflare Pages deploy can never set that
+  // property (Pages builds context from the HTTP request), so any direct
+  // call fails closed here with 403 — BEFORE any bucket access or data
+  // path. The OPTIONS carve-out above returns headers only and never
+  // touches data, so it stays exempt. Do NOT replace this with a header
+  // check (any HTTP caller can send any header) and do NOT invent a
+  // shared env secret for it.
+  if (!context.__lmsInternal) {
+    return jsonResponse(
+      { ok: false, error: 'Forbidden' },
+      403,
+      corsHeaders
+    );
   }
 
   const bucket = env.STORAGE || env.ALHUDA_STORAGE;
