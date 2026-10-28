@@ -1875,10 +1875,10 @@ function checkTableAccess(role, table, action) {
         // (isParentReadableSettingsKey). Without this, parent devices
         // can never hydrate custom books and open the wrong book.
         // Every parent write to system_settings stays denied, as do
-        // all other keys (flags, logo, tombstone, anything else).
+        // all other keys (logo, tombstone, anything else).
         return action === 'select' ? 'allow' : 'deny';
       default:
-        return 'deny'; // system_settings (non-catalog keys), salary_slips, salary_adjustments (Batch 6B: parents have no salary access)
+        return 'deny'; // system_settings (non-catalog, non-flag keys), salary_slips, salary_adjustments (Batch 6B: parents have no salary access)
     }
   }
 
@@ -2058,6 +2058,19 @@ function isManagerStaffRecord(row) {
   return codes.some((c) => String(c || '').toUpperCase().startsWith('MGR-'));
 }
 
+// Batch 3.1 (audit P1-5): the three finance read-switch flags. These keys
+// carry only 'off' / 'compare' / 'on' — no contacts, notes, credentials,
+// or financial values — so restricted roles may READ them (per-row, via
+// the predicates below) to evaluate their own read switches. Without this,
+// a parent/manager/teacher read of a flag row is silently dropped and the
+// switch can never take effect for that role. WRITES are untouched:
+// parents/teachers may never write system_settings (checkTableAccess) and
+// manager writes stay catalog-gated (applyManagerWriteGuards).
+function isFeeReadFlagKey(key) {
+  const k = String(key || '');
+  return k === 'fee_read_parent' || k === 'fee_read_360' || k === 'salary_read_v1';
+}
+
 // system_settings keys a manager may read/write: the course catalog itself
 // (S13) plus the logo on read (rowInScope handles the logo separately).
 function isCatalogSettingsKey(key) {
@@ -2067,34 +2080,40 @@ function isCatalogSettingsKey(key) {
 
 // Batch 6B: keys a manager may READ in system_settings = the catalog keys
 // above + the shared logo + the fee_tables_v1 dual-write flag (portals
-// must read the flag inside manager sessions too). WRITES stay
-// catalog-only: applyManagerWriteGuards adjudicates them with
-// isCatalogSettingsKey, which deliberately does NOT include the flag or
-// the logo — toggling fee_tables_v1 is owner-only.
+// must read the flag inside manager sessions too). Batch 3.1: + the three
+// finance read-switch flags, so the 360/salary switches can take effect
+// for managers too. WRITES stay catalog-only: applyManagerWriteGuards
+// adjudicates them with isCatalogSettingsKey, which deliberately does NOT
+// include the flags or the logo — toggling the flags is owner-only.
 function isManagerReadableSettingsKey(key) {
   const k = String(key || '');
-  return isCatalogSettingsKey(k) || k === 'alhuda_logo' || k === 'fee_tables_v1';
+  return isCatalogSettingsKey(k) || k === 'alhuda_logo' || k === 'fee_tables_v1' || isFeeReadFlagKey(k);
 }
 
 // URGENT FIX (Issue 2): keys a teacher may READ in system_settings = the
 // course-catalog keys + the deleted-books tombstone, so the teacher
 // portal's catalog hydrate converges with the admin portal's (before this,
 // the teacher select was denied outright and the portal silently fell back
-// to a per-browser local mirror). WRITES stay denied in checkTableAccess,
-// and every other key stays denied via rowInScope. This read exposes no
-// contacts, notes, flags, or credentials — catalog rows and the tombstone
-// only.
+// to a per-browser local mirror). Batch 3.1: + the finance read-switch
+// flags, so a teacher can evaluate salary_read_v1 for the 6D-3 salary read
+// switch. WRITES stay denied in checkTableAccess, and every other key
+// stays denied via rowInScope. This read exposes no contacts, notes,
+// flags beyond the three switch values, or credentials — catalog rows,
+// the tombstone, and the switch values only.
 function isTeacherReadableSettingsKey(key) {
   const k = String(key || '');
-  return isCatalogSettingsKey(k) || k === 'alhuda_deleted_books';
+  return isCatalogSettingsKey(k) || k === 'alhuda_deleted_books' || isFeeReadFlagKey(k);
 }
 
 // Lesson History page links: keys a parent may READ in system_settings =
 // the course-catalog keys ONLY (custom books index + BOOK_PAGE_* rows).
-// Deliberately NOT the tombstone, logo, or flags — those stay denied for
-// parents, exactly as before. WRITES stay denied in checkTableAccess.
+// Batch 3.1 (audit P1-5): + the three finance read-switch flags, so a
+// parent can observe fee_read_parent='on' and the payments-table fee
+// history renders. Deliberately NOT the tombstone or logo — those stay
+// denied for parents, exactly as before. WRITES stay denied in
+// checkTableAccess.
 function isParentReadableSettingsKey(key) {
-  return isCatalogSettingsKey(key);
+  return isCatalogSettingsKey(key) || isFeeReadFlagKey(key);
 }
 
 // Remove contact keys whose value is exactly the mask placeholder. A
@@ -2722,7 +2741,8 @@ function rowInScope(role, sub, scope, table, row) {
       case 'class_schedules': return scope.studentIds.includes(String(row.student_id));
       case 'teachers': return true; // reduced to safe subset during scrub
       case 'system_settings':
-        // Lesson History page links: catalog keys only for parents.
+        // Lesson History page links: catalog keys + finance read-switch
+        // flags for parents.
         return isParentReadableSettingsKey(row.key);
       default: return false;
     }
@@ -2732,8 +2752,9 @@ function rowInScope(role, sub, scope, table, row) {
       case 'students': return scope.studentIds.includes(String(row.id));
       case 'teachers': return String(row.id) === sub;
       case 'system_settings':
-        // URGENT FIX (Issue 2): catalog keys + tombstone only; all other
-        // keys (flags, logo, anything else) stay denied for teachers.
+        // URGENT FIX (Issue 2): catalog keys + tombstone + finance
+        // read-switch flags; all other keys (logo, anything else)
+        // stay denied for teachers.
         return isTeacherReadableSettingsKey(row.key);
       case 'class_schedules':
       case 'leave_requests':
@@ -2748,7 +2769,8 @@ function rowInScope(role, sub, scope, table, row) {
     }
   }
   // Batch 2: managers may only ever receive course-catalog settings rows
-  // (plus the shared logo). All other keys are owner-only.
+  // (plus the shared logo, fee_tables_v1, and the finance read-switch
+  // flags). All other keys are owner-only.
   if (role === 'manager' && table === 'system_settings') {
     return isManagerReadableSettingsKey(row.key);
   }

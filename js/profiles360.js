@@ -515,29 +515,36 @@ function _getFamilyPaymentsList(family) {
 
   // Batch 6D-2: when the fee_read_360 flag is 'on', _prefetch360Payments has
   // warmed _fee360TableCache with this family's payments-table records
-  // (already converted to legacy shape). Those records ARE the real-records
-  // list — including numberless ones, which the legacy receiptNo-keyed merge
-  // below silently drops. The AUTO-row generation further down is unchanged
-  // and runs either way. Empty cache -> legacy merge, exactly as before.
+  // (already converted to legacy shape). Batch 3.1 (P2-13): those records
+  // UNION with the legacy list below (table rows win on
+  // receiptNo|familyId) instead of replacing it — including numberless
+  // table rows, which the legacy receiptNo-keyed merge silently drops.
+  // The AUTO-row generation further down is unchanged and runs either
+  // way. Empty cache -> legacy merge, exactly as before.
   const _tableRecs360 = _fee360TableCache[famId];
+
+  // Legacy receipts, computed exactly as before: family.notes fee_history
+  // merged with stored records, keyed by receiptNo.
+  let storedReceipts = [];
+  if (typeof getStoredFeeRecords === 'function') {
+    storedReceipts = (getStoredFeeRecords() || []).filter(r => String(r.familyId || '').toUpperCase() === famId);
+  }
+  const mergedMap = new Map();
+  (fNotes.fee_history || []).forEach(r => {
+    if (r && r.receiptNo) mergedMap.set(r.receiptNo, r);
+  });
+  storedReceipts.forEach(r => {
+    if (r && r.receiptNo) mergedMap.set(r.receiptNo, r);
+  });
+  const legacyReceipts = Array.from(mergedMap.values());
+
   let allReceipts;
-  if (Array.isArray(_tableRecs360)) {
+  if (Array.isArray(_tableRecs360) && window.FeeTables && typeof window.FeeTables.unionTableWithLegacy === 'function') {
+    allReceipts = window.FeeTables.unionTableWithLegacy(_tableRecs360, legacyReceipts, famId);
+  } else if (Array.isArray(_tableRecs360)) {
     allReceipts = _tableRecs360.slice();
   } else {
-    let storedReceipts = [];
-    if (typeof getStoredFeeRecords === 'function') {
-      storedReceipts = (getStoredFeeRecords() || []).filter(r => String(r.familyId || '').toUpperCase() === famId);
-    }
-    // Merge with any records inside family.notes.fee_history
-    const mergedMap = new Map();
-    (fNotes.fee_history || []).forEach(r => {
-      if (r && r.receiptNo) mergedMap.set(r.receiptNo, r);
-    });
-    storedReceipts.forEach(r => {
-      if (r && r.receiptNo) mergedMap.set(r.receiptNo, r);
-    });
-
-    allReceipts = Array.from(mergedMap.values());
+    allReceipts = legacyReceipts;
   }
   const defaultMethod = fNotes.bio_meta?.payment_method || (currency === 'GBP' ? 'UK Bank Transfer' : 'Bank Transfer');
 

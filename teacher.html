@@ -28,6 +28,7 @@
 
   <script src="js/cloudflare-db.js"></script>
   <script src="js/ui-notify.js"></script>
+  <script src="js/fee-tables.js"></script>
   <script src="js/lesson-history.js"></script>
   <!-- High-Res Client-Side PDF Generation Libraries (html2canvas, jsPDF) -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
@@ -7415,6 +7416,42 @@ font-family: var(--font-num) !important;
       const tierEl = document.getElementById('tSalSeniorityTier');
       if (tierEl) {
         tierEl.innerText = seniorityIncrement > 0 ? `+${seniorityIncrement} PKR / stu` : 'Standard Tier';
+      }
+
+      // Batch 3.1 (6D-3): salary read switch (salary_read_v1), read from
+      // the salary_slips table via FeeTables. 'off' (default, or any load
+      // failure) = the blob list above, exactly as before. 'on' = table
+      // rows unioned over the blob list (table wins per slip_key, so a
+      // never-dual-written blob slip still shows — the P2-13 lesson).
+      // 'compare' = display unchanged (blob); table-vs-blob mismatches
+      // are logged to the console for the owner to inspect.
+      try {
+        if (window.FeeTables && typeof window.FeeTables.getReadMode === 'function' && typeof window.FeeTables.loadSlipsForTeacher === 'function') {
+          const salaryMode = await window.FeeTables.getReadMode(window.FeeTables.READ_FLAG_SALARY);
+          if (salaryMode === 'on' || salaryMode === 'compare') {
+            const tableSlips = await window.FeeTables.loadSlipsForTeacher(CURRENT_TEACHER.id);
+            if (Array.isArray(tableSlips)) {
+              if (salaryMode === 'compare' && typeof window.FeeTables.diffSlipLists === 'function') {
+                const blobList = Object.entries(savedSalaries).map(([k, v]) => ({ slip_key: k, ...(v || {}) }));
+                const diff = window.FeeTables.diffSlipLists(tableSlips, blobList);
+                if (diff.missingInTable.length || diff.missingInBlob.length || diff.changed.length) {
+                  console.warn('[Teacher Salaries Compare] salary_slips vs blob mismatches:', diff);
+                }
+              } else if (salaryMode === 'on') {
+                tableSlips.forEach((s) => {
+                  if (!s) return;
+                  const key = s.slip_key || s.slipKey || (s.teacher_id != null && s.month ? String(s.teacher_id) + '_' + String(s.month).replace(/\s+/g, '_') : null);
+                  if (key) savedSalaries[key] = { ...(savedSalaries[key] || {}), ...s, teacher_id: s.teacher_id || CURRENT_TEACHER.id };
+                });
+                try { localStorage.setItem('alhuda_teacher_salaries', JSON.stringify(savedSalaries)); } catch (e) {}
+              }
+            } else {
+              console.warn('[Teacher Salaries] salary_slips load failed; keeping blob vouchers.');
+            }
+          }
+        }
+      } catch (salaryErr) {
+        console.warn('[Teacher Salaries] salary read switch failed; keeping blob vouchers:', salaryErr);
       }
 
       // Collect all slips belonging to logged in teacher
