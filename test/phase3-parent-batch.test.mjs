@@ -141,8 +141,8 @@ check('C receipt-less records show a truthful label (parent template + table + m
   String((PARENT.match(/'Not issued'/g) || []).length));
 check('C collections mapping no longer invents a number (null receiptNo)',
   PARENT.includes('receiptNo: fc.receipt_no || null'));
-check('C worker release NOT bumped in this batch (batched deploy rule)',
-  WORKER.includes("const WORKER_RELEASE = '2026-10-28-audit-p1'"));
+check('C worker release is the final Phase 3 release (2026-10-29-phase3)',
+  WORKER.includes("const WORKER_RELEASE = '2026-10-29-phase3'"));
 
 const failed = results.filter((x) => !x.pass);
 console.log('---');
