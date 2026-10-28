@@ -146,7 +146,7 @@
           ALL_TRIALS.unshift(tempTrial);
           openConvertTrialModal(tempTrial.id);
         } else {
-          alert("Trial record details not found for student ID: " + studentId);
+          lmsNotify('Trial record details not found for student ID: ' + studentId, { type: 'error' });
         }
       }
     }
@@ -625,18 +625,18 @@
       const endTimeInput = (document.getElementById('bookSlotEndTime')?.value || ACTIVE_END_TIME || '').trim().slice(0, 5);
 
       if (!student_id) {
-        alert('Please select an active student from this teacher\'s Student List.');
+        lmsNotify('Please select an active student from this teacher\'s Student List.');
         return;
       }
 
       if (!startTimeInput || !endTimeInput) {
-        alert('Please specify both a valid Start Time and End Time.');
+        lmsNotify('Please specify both a valid Start Time and End Time.');
         return;
       }
 
       const durationMins = getScheduleDurationMinutes(startTimeInput, endTimeInput);
       if (durationMins <= 0) {
-        alert('Invalid Class Time Range: End Time must be after Start Time.');
+        lmsNotify('Invalid Class Time Range: End Time must be after Start Time.');
         return;
       }
 
@@ -648,19 +648,19 @@
         .filter(d => d >= 1 && d <= 7);
 
       if (targetDays.length === 0) {
-        alert('Please select at least one weekday (Monday through Sunday) for this class.');
+        lmsNotify('Please select at least one weekday (Monday through Sunday) for this class.');
         return;
       }
 
       if (!CURRENT_MATRIX_TEACHER || !CURRENT_MATRIX_TEACHER.id) {
-        alert('No teacher selected for scheduling.');
+        lmsNotify('No teacher selected for scheduling.');
         return;
       }
 
       if (typeof validateEligibleTeacherBackend === 'function') {
         const check = await validateEligibleTeacherBackend(CURRENT_MATRIX_TEACHER.id);
         if (!check.valid) {
-          alert(check.error);
+          lmsNotify(check.error);
           return;
         }
       }
@@ -672,12 +672,12 @@
         .single();
 
       if (stuErr || !stuRecord) {
-        alert('Backend Validation Failed: Student record could not be verified.');
+        lmsNotify('Backend Validation Failed: Student record could not be verified.');
         return;
       }
 
       if (String(stuRecord.assigned_teacher_id || '') !== String(CURRENT_MATRIX_TEACHER.id || '')) {
-        alert('Backend Validation Failed: This student does not belong to this teacher\'s Student List. Only students assigned to this teacher can be scheduled.');
+        lmsNotify('Backend Validation Failed: This student does not belong to this teacher\'s Student List. Only students assigned to this teacher can be scheduled.');
         return;
       }
 
@@ -694,7 +694,7 @@
         : (String(stuRecord.status || '').toLowerCase() !== 'inactive' && String(stuRecord.status || '').toLowerCase() !== 'deactivated'));
 
       if (!isStuActive) {
-        alert('Backend Validation Failed: Students on Leave, deactivated students, or students belonging to a deactivated family cannot be scheduled.');
+        lmsNotify('Backend Validation Failed: Students on Leave, deactivated students, or students belonging to a deactivated family cannot be scheduled.');
         return;
       }
 
@@ -714,7 +714,7 @@
       });
 
       if (conflictingDetails.length > 0) {
-        alert(`Schedule Conflict Detected!\n\nThe requested class (${ACTIVE_START_TIME} - ${ACTIVE_END_TIME}, ${durationMins} mins) overlaps with an existing class for ${CURRENT_MATRIX_TEACHER.full_name}:\n• ${conflictingDetails.join('\n• ')}\n\nPlease choose a non-overlapping start/end time or deselect the conflicting day(s).`);
+        lmsNotify(`Schedule Conflict Detected!\n\nThe requested class (${ACTIVE_START_TIME} - ${ACTIVE_END_TIME}, ${durationMins} mins) overlaps with an existing class for ${CURRENT_MATRIX_TEACHER.full_name}:\n• ${conflictingDetails.join('\n• ')}\n\nPlease choose a non-overlapping start/end time or deselect the conflicting day(s).`);
         return;
       }
 
@@ -731,7 +731,7 @@
       const { error } = await db.from('class_schedules').insert(rows);
 
       if (error) {
-        alert('Error booking slot: ' + error.message);
+        console.warn('[LMS] operation failed:', error.message); lmsNotify('Error booking slot. Please try again.', { type: 'error' });
       } else {
         closeModal('modalBookSlot');
         await fetchTeacherSchedules();
@@ -782,7 +782,7 @@
 
       const dur = getScheduleDurationMinutes(newStart, newEnd);
       if (!newStart || !newEnd || dur <= 0) {
-        alert('Invalid Time Range: End Time must be after Start Time.');
+        lmsNotify('Invalid Time Range: End Time must be after Start Time.');
         return;
       }
 
@@ -804,7 +804,7 @@
       });
 
       if (conflicts.length > 0) {
-        alert(`Schedule Conflict Detected!\n\nCannot update to ${newStart} - ${newEnd} (${dur} mins) because it overlaps with:\n• ${conflicts.join('\n• ')}`);
+        lmsNotify(`Schedule Conflict Detected!\n\nCannot update to ${newStart} - ${newEnd} (${dur} mins) because it overlaps with:\n• ${conflicts.join('\n• ')}`);
         return;
       }
 
@@ -823,7 +823,7 @@
 
     function openMatrixSlotActionModal(scheduleId) {
       if (CURRENT_ROLE === 'manager') {
-        alert("Access Denied: Managers are not authorized to permanently delete class schedule allocations. Only the System Owner can perform permanent deletions.");
+        lmsNotify("Access Denied: Managers are not authorized to permanently delete class schedule allocations. Only the System Owner can perform permanent deletions.");
         return;
       }
 
@@ -906,7 +906,7 @@
 
       const { error } = await db.from('class_schedules').delete().eq('id', scheduleId);
       if (error) {
-        alert('Error deleting this day\'s class: ' + error.message);
+        console.warn('[LMS] operation failed:', error.message); lmsNotify('Error deleting this day\'s class. Please try again.', { type: 'error' });
         return;
       }
 
@@ -925,7 +925,7 @@
         .eq('student_id', studentId);
 
       if (error) {
-        alert('Error deleting all scheduled classes for student: ' + error.message);
+        console.warn('[LMS] operation failed:', error.message); lmsNotify('Error deleting all scheduled classes for student. Please try again.', { type: 'error' });
         return;
       }
 
@@ -1452,13 +1452,13 @@
 
       const m = newStartInput.trim().match(/^(\d{1,2}):(\d{2})$/);
       if (!m) {
-        alert("Invalid time format. Please enter HH:MM (e.g., 18:30 or 16:00).");
+        lmsNotify("Invalid time format. Please enter HH:MM (e.g., 18:30 or 16:00).");
         return;
       }
       const sH = parseInt(m[1], 10);
       const sM = parseInt(m[2], 10);
       if (sH < 0 || sH > 23 || (sM !== 0 && sM !== 30)) {
-        alert("Please enter a valid 30-minute slot time ending in :00 or :30 (e.g. 17:00, 17:30, 18:00).");
+        lmsNotify("Please enter a valid 30-minute slot time ending in :00 or :30 (e.g. 17:00, 17:30, 18:00).");
         return;
       }
 
@@ -1503,10 +1503,10 @@
         }).eq('id', studentId);
         if (upErr) throw upErr;
 
-        alert(`✅ Time Change Request Sent to Manager / Owner Portal!\n\nStudent: ${studentName}\nOld Time: ${oldStart} - ${oldEnd} PKT\nRequested New Time: ${newStart24} - ${newEnd24} PKT\n\nOnce approved by the Manager or Owner, the schedule will automatically update!`);
+        lmsNotify(`✅ Time Change Request Sent to Manager / Owner Portal!\n\nStudent: ${studentName}\nOld Time: ${oldStart} - ${oldEnd} PKT\nRequested New Time: ${newStart24} - ${newEnd24} PKT\n\nOnce approved by the Manager or Owner, the schedule will automatically update!`);
         await checkLeaveReturnAlertsAndRequests(false);
       } catch (err) {
-        alert("Error submitting time change request: " + err.message);
+        console.warn('[LMS] operation failed:', err.message); lmsNotify('Error submitting time change request. Please try again.', { type: 'error' });
       }
     }
 
@@ -1527,7 +1527,7 @@
         lesson_notes
       }], { onConflict: 'schedule_id,date' });
       if (schedAttError) {
-        alert('The attendance could not be saved. Please try again.\n\nReason: ' + (schedAttError.message || schedAttError));
+        console.warn('[LMS] operation failed:', (schedAttError.message || schedAttError)); lmsNotify('The attendance could not be saved. Please try again.', { type: 'error' });
         return;
       }
 

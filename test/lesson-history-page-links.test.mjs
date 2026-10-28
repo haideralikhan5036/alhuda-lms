@@ -139,10 +139,10 @@ const BOOKS = [QAIDA_EN, ISLAMIC_STUDIES, E_QAIDA, CUSTOM_QURAN, BUILTIN_QURAN];
   // not itself trip the assertion — only executable code counts.
   const tReaderCode = tReader.replace(/\/\/[^\n]*/g, '');
   check('teacher reader: no allBooks[0] fallback', !tReaderCode.includes('allBooks[0]'), tReaderCode.slice(0, 200));
-  check('teacher reader: honest alert on unknown book', tReader.includes('alert("Course book not found.")'));
+  check('teacher reader: honest notification on unknown book', tReader.includes('lmsNotify("Course book not found.")'));
   const pReader = parent.slice(parent.indexOf('function openParentDigitalReader'), parent.indexOf('ACTIVE_READER_BOOK = book'));
   check('parent reader: no first-qaida fallback', !pReader.includes("includes('qaida')") && !pReader.includes('allBooks[0]'));
-  check('parent reader: honest alert on unknown book', pReader.includes('alert("Course book not found.")'));
+  check('parent reader: honest notification on unknown book', pReader.includes('lmsNotify("Course book not found.")'));
   check('dashboard: no invented noorani-qaida-classic id', !dash.includes('noorani-qaida-classic'));
   check('dashboard: Read button routes via resolver opener', dash.includes('openAdminSavedLessonPage'));
   const todayBtn = teacher.slice(teacher.indexOf('const lessonReadBtn'), teacher.indexOf('const lessonReadBtn') + 1200);

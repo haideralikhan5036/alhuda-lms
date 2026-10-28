@@ -670,7 +670,7 @@
     async function quickAssignFromSearch(teacherId, day, startTime, endTime) {
       const teacher = (ALL_TEACHERS || []).find(t => String(t.id) === String(teacherId));
       if (!teacher) {
-        alert("Teacher profile could not be found.");
+        lmsNotify("Teacher profile could not be found.");
         return;
       }
       CURRENT_MATRIX_TEACHER = teacher;

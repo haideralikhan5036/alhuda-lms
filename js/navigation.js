@@ -301,7 +301,7 @@
 
     function switchTab(tabId) {
       if (typeof CURRENT_ROLE !== 'undefined' && CURRENT_ROLE === 'manager' && OWNER_ONLY_TABS.includes(tabId)) {
-        alert('Access Denied: This area is available to the Owner only.');
+        lmsNotify('Access Denied: This area is available to the Owner only.');
         tabId = 'tab-dashboard';
       }
       const targetId = (tabId === 'tab-live-monitor') ? 'tab-dashboard' : tabId;

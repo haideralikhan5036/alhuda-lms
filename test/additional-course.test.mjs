@@ -7,7 +7,7 @@
 //  B) Save branch (REAL saveAttendanceAndLessonNotes, stubbed environment):
 //     sentinel payload shape exactly (book_id, book_title = entered name,
 //     content_type 'additional', lesson_name, page null, para null,
-//     language null); missing course/lesson name alerts and saves nothing;
+//     language null); missing course/lesson name notifies and saves nothing;
 //     a catalogue book still saves its own title + page.
 //  C) Display guards: teacher history, parent latest/history and the
 //     dashboard widget all key their "Page N" label and reader button on
@@ -135,7 +135,7 @@ function makeDoc() {
 // ---- B) behavioural: save branch (REAL saveAttendanceAndLessonNotes) ----
 async function runSave({ selectValue, courseName, lessonName }) {
   const upserts = [];
-  const alerts = [];
+  const notifies = [];
   const el = (value = '') => ({ value, innerHTML: '', disabled: false });
   const els = {
     attScheduleId: el('SCH-1'), attStudentId: el('STU-1'), attSelectedStatus: el('Present'),
@@ -147,7 +147,7 @@ async function runSave({ selectValue, courseName, lessonName }) {
     btnSaveAttendance: el(''),
   };
   const sandbox = {
-    console, alert: (m) => alerts.push(m),
+    console, lmsNotify: (m) => notifies.push(m),
     document: { getElementById: (id) => els[id] || null },
     CURRENT_TEACHER: { id: 'TCH-1' },
     getTeacherAllBooks: () => [{ id: 'q1', title: 'Qaida Book', category: 'qaida', total_pages: 10 }],
@@ -164,14 +164,14 @@ async function runSave({ selectValue, courseName, lessonName }) {
   vm.createContext(sandbox);
   vm.runInContext(code, sandbox);
   await vm.runInContext('saveAttendanceAndLessonNotes()', sandbox);
-  return { upserts, alerts };
+  return { upserts, notifies };
 }
 {
-  const { upserts, alerts } = await runSave({
+  const { upserts, notifies } = await runSave({
     selectValue: 'additional-course', courseName: 'Arabic Grammar Basics', lessonName: 'Lesson 5: Past Tense Verbs',
   });
-  check('sentinel save: one upsert, only the success alert (no validation alert)',
-    upserts.length === 1 && alerts.every(a => a.includes('Saved Successfully')), `alerts: ${JSON.stringify(alerts)}`);
+  check('sentinel save: one upsert, only the success notification (no validation notification)',
+    upserts.length === 1 && notifies.every(a => a.includes('Saved Successfully')), `notifies: ${JSON.stringify(notifies)}`);
   const payload = upserts.length ? JSON.parse(upserts[0][0].lesson_notes) : {};
   check('sentinel save: payload book_id is the sentinel', payload.book_id === 'additional-course');
   check('sentinel save: book_title is the entered course name', payload.book_title === 'Arabic Grammar Basics');
@@ -181,9 +181,9 @@ async function runSave({ selectValue, courseName, lessonName }) {
   check('sentinel save: same schedule/student/date associations', upserts[0][0].schedule_id === 'SCH-1' && upserts[0][0].student_id === 'STU-1' && upserts[0][0].status === 'Completed');
 
   const missing = await runSave({ selectValue: 'additional-course', courseName: '', lessonName: 'Some lesson' });
-  check('sentinel save: missing course name alerts and saves nothing', missing.alerts.length === 1 && missing.upserts.length === 0);
+  check('sentinel save: missing course name notifies and saves nothing', missing.notifies.length === 1 && missing.upserts.length === 0);
   const missing2 = await runSave({ selectValue: 'additional-course', courseName: 'Some course', lessonName: '   ' });
-  check('sentinel save: blank lesson name alerts and saves nothing', missing2.alerts.length === 1 && missing2.upserts.length === 0);
+  check('sentinel save: blank lesson name notifies and saves nothing', missing2.notifies.length === 1 && missing2.upserts.length === 0);
 
   const cat = await runSave({ selectValue: 'q1', courseName: '', lessonName: '' });
   const catPayload = cat.upserts.length ? JSON.parse(cat.upserts[0][0].lesson_notes) : {};

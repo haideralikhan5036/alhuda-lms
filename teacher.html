@@ -27,6 +27,7 @@
   <!-- Supabase JS Client & Cloudflare D1/R2 Universal Engine -->
 
   <script src="js/cloudflare-db.js"></script>
+  <script src="js/ui-notify.js"></script>
   <script src="js/lesson-history.js"></script>
   <!-- High-Res Client-Side PDF Generation Libraries (html2canvas, jsPDF) -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
@@ -3080,7 +3081,7 @@ font-family: var(--font-num) !important;
         toggleSbBtn.classList.add('hidden');
       }
       CURRENT_TEACHER = null;
-      if (teacherToken && !serverOk) alert('Signed out on this device. Your server session may remain valid until it expires.');
+      if (teacherToken && !serverOk) lmsNotify('Signed out on this device. Your server session may remain valid until it expires.');
       window.location.href = 'teacher.html';
     }
 
@@ -4127,7 +4128,7 @@ font-family: var(--font-num) !important;
     function launchTeacherZoomClassById(scheduleId) {
       const c = TODAY_CLASSES.find(x => String(x.id) === String(scheduleId));
       if (!c) {
-        alert("Class record not found. Please refresh the page.");
+        lmsNotify("Class record not found. Please refresh the page.");
         return;
       }
       const zoomLink = resolveEffectiveClassZoomLink(c, CURRENT_TEACHER);
@@ -4137,7 +4138,7 @@ font-family: var(--font-num) !important;
     // Smart LMS-to-Zoom Gateway with Punch-In Timestamp Verification
     async function launchTeacherZoomClass(scheduleId, rawMeetingLink, studentName, studentId) {
       if (!rawMeetingLink) {
-        alert("No Zoom Meeting Link assigned for this class yet. Please contact Academy Admin.");
+        lmsNotify("No Zoom Meeting Link assigned for this class yet. Please contact Academy Admin.");
         return;
       }
 
@@ -4146,11 +4147,11 @@ font-family: var(--font-num) !important;
       try {
         const _schemeCheck = new URL(String(rawMeetingLink));
         if (_schemeCheck.protocol !== 'https:') {
-          alert("Invalid meeting link. Only secure (https) Zoom links are allowed.");
+          lmsNotify("Invalid meeting link. Only secure (https) Zoom links are allowed.");
           return;
         }
       } catch (e) {
-        alert("Invalid meeting link.");
+        lmsNotify("Invalid meeting link.");
         return;
       }
 
@@ -4231,7 +4232,7 @@ font-family: var(--font-num) !important;
 
     async function transitionClassSessionState({ scheduleId, studentId, teacherId, targetStatus, notes = '', lessonNotesPayload = null }) {
       if (!scheduleId && !studentId) {
-        alert("Invalid class record. Please refresh.");
+        lmsNotify("Invalid class record. Please refresh.");
         return { success: false, error: 'Missing schedule or student ID' };
       }
 
@@ -4248,7 +4249,7 @@ font-family: var(--font-num) !important;
       const currentStatus = currentSlot?.log?.status || 'Scheduled';
 
       if (currentStatus === 'Completed' && (targetStatus === 'Waiting' || targetStatus === 'Running')) {
-        alert("This class session has already been COMPLETED. It cannot be reverted to Waiting or Running.");
+        lmsNotify("This class session has already been COMPLETED. It cannot be reverted to Waiting or Running.");
         return { success: false, error: 'Cannot revert completed session' };
       }
 
@@ -4408,14 +4409,14 @@ font-family: var(--font-num) !important;
           verified = (data || []).some(r => r.status === 'Completed');
         } catch (e) { verified = false; }
         if (!verified) {
-          alert('The class time ended, but the completion could not be saved. Please use COMPLETE CLASS to finish it manually.');
+          lmsNotify('The class time ended, but the completion could not be saved. Please use COMPLETE CLASS to finish it manually.');
           return;
         }
         await loadTeacherPortalData();
         openAttendanceModal(candidate.id, candidate.students?.name || 'Student', '', candidate.student_id, 'Completed', '');
       } catch (e) {
         console.error('Auto class completion failed:', e);
-        alert('The class time ended, but the completion could not be saved. Please use COMPLETE CLASS to finish it manually.');
+        lmsNotify('The class time ended, but the completion could not be saved. Please use COMPLETE CLASS to finish it manually.');
       } finally {
         _autoPreviewInFlight = false;
       }
@@ -4497,7 +4498,7 @@ font-family: var(--font-num) !important;
           btn.disabled = false;
           btn.innerHTML = btnOriginalHtml;
         }
-        alert('The class update could not be saved. Please try again.');
+        lmsNotify('The class update could not be saved. Please try again.');
         return;
       }
 
@@ -5523,7 +5524,7 @@ font-family: var(--font-num) !important;
         if (selectedStatus === 'Advance Class') {
           targetDate = document.getElementById('attAdvanceTargetDate')?.value;
           if (!targetDate) {
-            alert("Please choose the target date for which this advance class is taken.");
+            lmsNotify("Please choose the target date for which this advance class is taken.");
             return;
           }
         }
@@ -5543,13 +5544,13 @@ font-family: var(--font-num) !important;
         const lessonImageFile = document.getElementById('attLessonImageFile')?.files?.[0] || null;
         if (lessonImageFile) {
           if (!window.LessonHistory) {
-            alert("Lesson image cannot be uploaded right now (history module missing). Nothing was saved.");
+            lmsNotify("Lesson image cannot be uploaded right now (history module missing). Nothing was saved.");
             return;
           }
           try {
             lessonImageKey = await window.LessonHistory.uploadLessonImageOrThrow(lessonImageFile);
           } catch (uploadErr) {
-            alert("Lesson image upload failed. Nothing was saved. Please try again. (" + (uploadErr?.message || uploadErr) + ")");
+            console.warn('[LMS] operation failed:', (uploadErr?.message || uploadErr)); lmsNotify('Lesson image upload failed. Nothing was saved. Please try again.', { type: 'error' });
             return;
           }
         }
@@ -5562,7 +5563,7 @@ font-family: var(--font-num) !important;
           const customCourse = (document.getElementById('attAdditionalCourseName')?.value || '').trim();
           const customLesson = (document.getElementById('attAdditionalLessonName')?.value || '').trim();
           if (!customCourse || !customLesson) {
-            alert("Please enter both the additional course name and the lesson name.");
+            lmsNotify("Please enter both the additional course name and the lesson name.");
             return;
           }
           sabaqPayload = {
@@ -5656,7 +5657,7 @@ font-family: var(--font-num) !important;
         if (error) {
           btn.disabled = false;
           btn.innerHTML = '<i class="fa-solid fa-floppy-disk"></i> Save Progress';
-          alert('The attendance could not be saved. Please try again.\n\nReason: ' + (error.message || error));
+          console.warn('[LMS] operation failed:', (error.message || error)); lmsNotify('The attendance could not be saved. Please try again.', { type: 'error' });
           return;
         }
         attSaved = true;
@@ -5674,7 +5675,7 @@ font-family: var(--font-num) !important;
         btn.innerHTML = '<i class="fa-solid fa-floppy-disk"></i> Save Progress';
         closeAttendanceModal();
         await loadTeacherPortalData();
-        alert(`✅ Attendance & Lesson Progress Saved Successfully!\n\nStatus: ${dbStatus}\nCourse: Registered & Connected with Student Portal.`);
+        lmsNotify(`✅ Attendance & Lesson Progress Saved Successfully!\n\nStatus: ${dbStatus}\nCourse: Registered & Connected with Student Portal.`);
       } catch (err) {
         console.error("Attendance save error:", err);
         if (attSaved) {
@@ -5685,7 +5686,7 @@ font-family: var(--font-num) !important;
         } else {
           btn.disabled = false;
           btn.innerHTML = '<i class="fa-solid fa-floppy-disk"></i> Save Progress';
-          alert('The attendance could not be saved. Please try again.\n\nReason: ' + (err.message || err));
+          console.warn('[LMS] operation failed:', (err.message || err)); lmsNotify('The attendance could not be saved. Please try again.', { type: 'error' });
         }
       }
     }
@@ -5705,7 +5706,7 @@ font-family: var(--font-num) !important;
       // a resolved history click is never re-filtered away here.
       const allBooks = getTeacherSavedLessonBooks();
       const book = allBooks.find(b => b.id === bookId);
-      if (!book) { alert("Course book not found."); return; }
+      if (!book) { lmsNotify("Course book not found."); return; }
 
       CURRENT_READER_BOOK = book;
       CURRENT_READER_PAGE = Number(startPage) || 1;
@@ -6492,7 +6493,7 @@ font-family: var(--font-num) !important;
         }
       };
 
-      canvas.addEventListener('pointerdown', (e) => {
+      canvas.addEventListener('pointerdown', async (e) => {
         if (!ANNOTATION_ACTIVE) return;
         e.preventDefault();
         try { canvas.setPointerCapture(e.pointerId); } catch(err) {}
@@ -6507,7 +6508,7 @@ font-family: var(--font-num) !important;
 
         if (ANNOTATION_CURRENT_TOOL === 'text') {
           ANNOTATION_IS_DRAWING = false;
-          const textInput = prompt('Enter annotation text label:');
+          const textInput = await lmsPrompt('Enter annotation text label:');
           if (textInput && textInput.trim()) {
             const pageKey = getReaderPageKey();
             if (!ANNOTATION_STORE[pageKey]) ANNOTATION_STORE[pageKey] = [];
@@ -6704,7 +6705,7 @@ font-family: var(--font-num) !important;
         document.body.removeChild(link);
       } catch (err) {
         console.error('Download error:', err);
-        alert('Could not export annotated page: ' + err.message);
+        console.warn('[LMS] operation failed:', err.message); lmsNotify('Could not export annotated page. Please try again.', { type: 'error' });
       }
     }
 
@@ -7311,7 +7312,7 @@ font-family: var(--font-num) !important;
     // A gated-but-unresolvable entry alerts the resolver's honest
     // reason — never another book's page, never page 1.
     async function openTeacherSavedLessonPage(bookId, page, para, language) {
-      if (!window.LessonHistory) { alert('Course book not found.'); return { ok: false, reason: 'BOOK_NOT_FOUND' }; }
+      if (!window.LessonHistory) { lmsNotify('Course book not found.'); return { ok: false, reason: 'BOOK_NOT_FOUND' }; }
       const entry = { bookId: bookId || null, page: (page === null || page === undefined || page === '') ? null : Number(page), para: (para === null || para === undefined || para === '') ? null : Number(para), language: language || null, isAdditionalCourse: bookId === 'additional-course' };
       const res = await window.LessonHistory.resolveLessonPageWithRefresh(
         entry,
@@ -7321,7 +7322,7 @@ font-family: var(--font-num) !important;
       if (res.ok) {
         openDigitalBookReader(res.book.id, res.displayPage, res.para, res.language);
       } else {
-        alert(window.LessonHistory.lessonPageReasonMessage(res.reason));
+        lmsNotify(window.LessonHistory.lessonPageReasonMessage(res.reason));
       }
       return res;
     }
@@ -7524,7 +7525,7 @@ font-family: var(--font-num) !important;
 
       const slip = savedSalaries[slipKey];
       if (!slip) {
-        alert("Salary slip details not found in academy records.");
+        lmsNotify("Salary slip details not found in academy records.");
         return;
       }
 
@@ -7642,7 +7643,7 @@ font-family: var(--font-num) !important;
     async function downloadTeacherSalarySlipPDF() {
       const sourceCard = document.getElementById('teacherSalarySlipReceiptCard');
       if (!sourceCard) {
-        alert("Salary voucher element not found.");
+        lmsNotify("Salary voucher element not found.");
         return;
       }
 
@@ -7953,20 +7954,20 @@ font-family: var(--font-num) !important;
         .filter(d => d >= 1 && d <= 7);
 
       if (!studentId) {
-        alert('Please select an active student from your Student List.');
+        lmsNotify('Please select an active student from your Student List.');
         return;
       }
       if (!start24 || !end24) {
-        alert('Please specify both a Class Start Time and End Time.');
+        lmsNotify('Please specify both a Class Start Time and End Time.');
         return;
       }
       const durationMins = getTeacherSlotDurationMins(start24, end24);
       if (durationMins <= 0) {
-        alert('Invalid Class Duration: End Time must be after Start Time.');
+        lmsNotify('Invalid Class Duration: End Time must be after Start Time.');
         return;
       }
       if (selectedDays.length === 0) {
-        alert('Please select at least one weekly class day (Monday through Sunday).');
+        lmsNotify('Please select at least one weekly class day (Monday through Sunday).');
         return;
       }
 
@@ -8038,9 +8039,9 @@ font-family: var(--font-num) !important;
         }
 
         const addedDayNames = freeDaysToInsert.map(d => DAY_NAMES[d]).join(', ');
-        alert(`✅ Student Added to Schedule!\n\nStudent: ${stuRecord.name} (${stuRecord.id})\nTime: ${format24To12HourLabel(start24)} - ${format24To12HourLabel(end24)} PKT (${durationMins} Minutes)\nDays: ${addedDayNames}`);
+        lmsNotify(`✅ Student Added to Schedule!\n\nStudent: ${stuRecord.name} (${stuRecord.id})\nTime: ${format24To12HourLabel(start24)} - ${format24To12HourLabel(end24)} PKT (${durationMins} Minutes)\nDays: ${addedDayNames}`);
       } catch (err) {
-        alert('Schedule Notice: ' + (err.message || err));
+        console.warn('[LMS] operation failed:', (err.message || err)); lmsNotify('Schedule Notice. Please try again.', { type: 'error' });
       } finally {
         if (btn) {
           btn.disabled = false;
@@ -8252,7 +8253,7 @@ font-family: var(--font-num) !important;
       const notes = (document.getElementById('teacherReqNotes')?.value || '').trim();
 
       if (!studentId || !startDate || !returnDate) {
-        alert("Please fill in all required dates.");
+        lmsNotify("Please fill in all required dates.");
         return;
       }
 
@@ -8290,11 +8291,11 @@ font-family: var(--font-num) !important;
 
         if (upErr) throw upErr;
 
-        alert(`✅ Leave request submitted for ${studentName}!\nStatus: Pending Admin Approval.\nAdmin will review and approve on the Main Dashboard.`);
+        lmsNotify(`✅ Leave request submitted for ${studentName}!\nStatus: Pending Admin Approval.\nAdmin will review and approve on the Main Dashboard.`);
         closeTeacherLeaveRequestModal();
         await loadTeacherPortalData();
       } catch (err) {
-        alert("Error submitting request: " + err.message);
+        console.warn('[LMS] operation failed:', err.message); lmsNotify('Error submitting request. Please try again.', { type: 'error' });
       } finally {
         btn.disabled = false;
         btn.innerHTML = '<i class="fa-solid fa-paper-plane"></i> Submit Request to Admin';
@@ -8307,7 +8308,7 @@ font-family: var(--font-num) !important;
 
     function openRescheduleRequestModal(scheduleId) {
       const c = TODAY_CLASSES.find(x => String(x.id) === String(scheduleId));
-      if (!c) { alert("Class record not found. Please refresh."); return; }
+      if (!c) { lmsNotify("Class record not found. Please refresh."); return; }
 
       document.getElementById('reschedScheduleId').value = scheduleId;
       document.getElementById('reschedModalSubtitle').innerText =
@@ -8346,7 +8347,7 @@ font-family: var(--font-num) !important;
       const reason     = document.getElementById('reschedReasonSelect')?.value;
       const notes      = (document.getElementById('reschedNotes')?.value || '').trim();
 
-      if (!scheduleId) { alert("Schedule ID missing. Please refresh."); return; }
+      if (!scheduleId) { lmsNotify("Schedule ID missing. Please refresh."); return; }
 
       const c = TODAY_CLASSES.find(x => String(x.id) === String(scheduleId));
       const studentId   = c?.student_id;
@@ -8387,11 +8388,11 @@ font-family: var(--font-num) !important;
 
         if (upErr) throw upErr;
 
-        alert(`✅ Reschedule request submitted!\n\nStudent: ${studentName}\nRequested Status: ${newStatus}\nReason: ${reason}\n\nAdmin will review and approve this change.`);
+        lmsNotify(`✅ Reschedule request submitted!\n\nStudent: ${studentName}\nRequested Status: ${newStatus}\nReason: ${reason}\n\nAdmin will review and approve this change.`);
         closeRescheduleRequestModal();
         await loadTeacherPortalData();
       } catch (err) {
-        alert("Error submitting reschedule request: " + err.message);
+        console.warn('[LMS] operation failed:', err.message); lmsNotify('Error submitting reschedule request. Please try again.', { type: 'error' });
       } finally {
         btn.disabled = false;
         btn.innerHTML = '<i class="fa-solid fa-paper-plane"></i> Send Request to Admin';
@@ -8480,7 +8481,7 @@ font-family: var(--font-num) !important;
         c = (ALL_TEACHER_SCHEDULES || []).find(x => String(x.id) === String(scheduleId));
       }
       if (!c) {
-        alert("Schedule slot not found. Please refresh.");
+        lmsNotify("Schedule slot not found. Please refresh.");
         return;
       }
 
@@ -8582,13 +8583,13 @@ font-family: var(--font-num) !important;
       const notes = (document.getElementById('timeChangeNotes')?.value || '').trim();
 
       if (!scheduleId || !studentId || !newStart24 || !newEnd24) {
-        alert("Please specify a valid new Start Time and End Time.");
+        lmsNotify("Please specify a valid new Start Time and End Time.");
         return;
       }
 
       const newDurMins = getTeacherSlotDurationMins(newStart24, newEnd24);
       if (newDurMins <= 0) {
-        alert("Invalid Class Duration: End Time must be after Start Time.");
+        lmsNotify("Invalid Class Duration: End Time must be after Start Time.");
         return;
       }
 
@@ -8643,11 +8644,11 @@ font-family: var(--font-num) !important;
 
         if (upErr) throw upErr;
 
-        alert(`✅ Time Change Request Sent to Manager / Owner Portal!\n\nStudent: ${studentName}\nCurrent Time: ${oldLabel}\nRequested New Time: ${newLabel}\nScope: ${scope === 'all_days' ? 'All Weekly Days' : 'Single Day'}\n\nAs soon as the Manager or Owner clicks "Approve", this student's class timing will automatically update in your schedule!`);
+        lmsNotify(`✅ Time Change Request Sent to Manager / Owner Portal!\n\nStudent: ${studentName}\nCurrent Time: ${oldLabel}\nRequested New Time: ${newLabel}\nScope: ${scope === 'all_days' ? 'All Weekly Days' : 'Single Day'}\n\nAs soon as the Manager or Owner clicks "Approve", this student's class timing will automatically update in your schedule!`);
         closeTimeChangeRequestModal();
         await loadTeacherPortalData();
       } catch (err) {
-        alert("Error submitting time change request: " + err.message);
+        console.warn('[LMS] operation failed:', err.message); lmsNotify('Error submitting time change request. Please try again.', { type: 'error' });
       } finally {
         btn.disabled = false;
         btn.innerHTML = '<i class="fa-solid fa-paper-plane"></i> Send Time Change Request';
@@ -8661,7 +8662,7 @@ font-family: var(--font-num) !important;
 
     function openAdvanceClassModal(preselectStudentId = null) {
       if (!CURRENT_TEACHER) {
-        alert("Please login to your teacher portal first.");
+        lmsNotify("Please login to your teacher portal first.");
         return;
       }
 
@@ -8913,7 +8914,7 @@ font-family: var(--font-num) !important;
       const remarks = (document.getElementById('advLessonNotes')?.value || '').trim();
 
       if (!studentId || !targetDate) {
-        alert("Please select both the student and the target advance date.");
+        lmsNotify("Please select both the student and the target advance date.");
         return;
       }
 
@@ -8923,7 +8924,7 @@ font-family: var(--font-num) !important;
       const customCourse = (document.getElementById('advAdditionalCourseName')?.value || '').trim();
       const customLesson = (document.getElementById('advAdditionalLessonName')?.value || '').trim();
       if (isAdditionalCourse && (!customCourse || !customLesson)) {
-        alert("Please enter both the additional course name and the lesson name.");
+        lmsNotify("Please enter both the additional course name and the lesson name.");
         return;
       }
 
@@ -8947,7 +8948,7 @@ font-family: var(--font-num) !important;
         const advLessonImageFile = document.getElementById('advLessonImageFile')?.files?.[0] || null;
         if (advLessonImageFile) {
           if (!window.LessonHistory) {
-            alert("Lesson image cannot be uploaded right now (history module missing). Nothing was saved.");
+            lmsNotify("Lesson image cannot be uploaded right now (history module missing). Nothing was saved.");
             btn.disabled = false;
             btn.innerHTML = '<i class="fa-solid fa-floppy-disk"></i> Confirm & Save Advance Class';
             return;
@@ -8955,7 +8956,7 @@ font-family: var(--font-num) !important;
           try {
             advLessonImageKey = await window.LessonHistory.uploadLessonImageOrThrow(advLessonImageFile);
           } catch (uploadErr) {
-            alert("Lesson image upload failed. Nothing was saved. Please try again. (" + (uploadErr?.message || uploadErr) + ")");
+            console.warn('[LMS] operation failed:', (uploadErr?.message || uploadErr)); lmsNotify('Lesson image upload failed. Nothing was saved. Please try again.', { type: 'error' });
             btn.disabled = false;
             btn.innerHTML = '<i class="fa-solid fa-floppy-disk"></i> Confirm & Save Advance Class';
             return;
@@ -9010,7 +9011,7 @@ font-family: var(--font-num) !important;
           // Audit P1-3: stop here — no local cache write, no completion
           // email, no success alert, no modal-close-as-success for a class
           // that was not saved. The finally block restores the button.
-          alert('The advance class could not be saved. Please try again.\n\nReason: ' + (error.message || error));
+          console.warn('[LMS] operation failed:', (error.message || error)); lmsNotify('The advance class could not be saved. Please try again.', { type: 'error' });
           return;
         }
         advSaved = true;
@@ -9107,7 +9108,7 @@ font-family: var(--font-num) !important;
           ? `\n\n📧 Automated completion email has been dispatched to the parent.`
           : `\n\n📧 The completion email could NOT be sent (${emailErrorText || 'the email service could not be reached'}). The class record was saved — please inform the parent directly.`;
 
-        alert(`🌟 Advance Class Successfully Recorded!\n\n` +
+        lmsNotify(`🌟 Advance Class Successfully Recorded!\n\n` +
           `Student: ${studentName}\n` +
           `Advance Target Date: ${targetDate}\n` +
           `Lesson: ${bookTitle}${isAdditionalCourse ? ` (${customLesson})` : ` (Page ${page})`}\n` +
@@ -9124,7 +9125,7 @@ font-family: var(--font-num) !important;
           closeAdvanceClassModal();
           try { await loadTeacherPortalData(); } catch (e) {}
         } else {
-          alert('The advance class could not be saved. Please try again.\n\nReason: ' + (err.message || err));
+          console.warn('[LMS] operation failed:', (err.message || err)); lmsNotify('The advance class could not be saved. Please try again.', { type: 'error' });
         }
       } finally {
         btn.disabled = false;

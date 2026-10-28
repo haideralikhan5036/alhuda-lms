@@ -449,7 +449,7 @@
         if (error || !st) {
           if (typeof syncTopCircleNotificationDots === 'function') syncTopCircleNotificationDots();
           openAdminTeacherRequestsModal();
-          alert(`✅ Approved! Teacher ${rType === 'time_change' ? 'Schedule Time Change' : 'Attendance Correction'} request for Student (${studentId}) has been applied.`);
+          lmsNotify(`✅ Approved! Teacher ${rType === 'time_change' ? 'Schedule Time Change' : 'Attendance Correction'} request for Student (${studentId}) has been applied.`);
           return;
         }
 
@@ -505,7 +505,7 @@
           }
           try { loadTeachers(); } catch (e) {}
 
-          alert(`✅ Approved & Schedule Updated Automatically!\n\nStudent: ${st.name} (${st.id})\nOld Time: ${req.old_slot_label || oldStart}\nNew Time: ${req.new_slot_label || newStart.slice(0,5)}\nUpdated Timetable Slots: ${targetIds.length} weekly session(s)`);
+          lmsNotify(`✅ Approved & Schedule Updated Automatically!\n\nStudent: ${st.name} (${st.id})\nOld Time: ${req.old_slot_label || oldStart}\nNew Time: ${req.new_slot_label || newStart.slice(0,5)}\nUpdated Timetable Slots: ${targetIds.length} weekly session(s)`);
         } else if (rType === 'reschedule') {
           const req = meta.reschedule_request || meta.pending_reschedule_request || {};
           const scheduleId = req.schedule_id;
@@ -530,7 +530,7 @@
 
           await db.from('students').update({ notes: JSON.stringify(meta) }).eq('id', studentId);
 
-          alert(`✅ Attendance Correction approved for ${st.name}!\nAttendance status updated to: ${newStatus}`);
+          lmsNotify(`✅ Attendance Correction approved for ${st.name}!\nAttendance status updated to: ${newStatus}`);
         } else {
           const req = meta.leave_request || {};
           const startDate  = req.start_date  || new Date().toISOString().slice(0, 10);
@@ -554,7 +554,7 @@
           }).eq('id', studentId);
 
           if (upErr) throw upErr;
-          alert(`✅ Leave request approved for ${st.name}!\nOn leave from ${startDate}; returns on ${returnDate}.\nThe leave starts and ends automatically on these dates.`);
+          lmsNotify(`✅ Leave request approved for ${st.name}!\nOn leave from ${startDate}; returns on ${returnDate}.\nThe leave starts and ends automatically on these dates.`);
         }
 
         closeModal('modalAdminTeacherRequests');
@@ -565,7 +565,7 @@
           await loadLeaveManagementData();
         }
       } catch (err) {
-        alert("Error approving request: " + err.message);
+        console.warn('[LMS] operation failed:', err.message); lmsNotify('Error approving request. Please try again.', { type: 'error' });
       }
     }
 
@@ -590,7 +590,7 @@
         if (!st) {
           if (typeof syncTopCircleNotificationDots === 'function') syncTopCircleNotificationDots();
           openAdminTeacherRequestsModal();
-          alert(`❌ Request declined.`);
+          lmsNotify(`❌ Request declined.`);
           return;
         }
 
@@ -621,12 +621,12 @@
           notes: JSON.stringify(meta)
         }).eq('id', studentId);
 
-        alert(`❌ Request declined for ${st.name}.`);
+        lmsNotify(`❌ Request declined for ${st.name}.`);
         closeModal('modalAdminTeacherRequests');
         await checkLeaveReturnAlertsAndRequests(false);
         if (typeof syncTopCircleNotificationDots === 'function') syncTopCircleNotificationDots();
       } catch (err) {
-        alert("Error declining request: " + err.message);
+        console.warn('[LMS] operation failed:', err.message); lmsNotify('Error declining request. Please try again.', { type: 'error' });
       }
     }
 
@@ -648,7 +648,7 @@
             ? (typeof isFamilyDeactivated === 'function' ? isFamilyDeactivated(famRec) : ['inactive', 'deactivated'].includes(String(famRec.status || '').toLowerCase()))
             : false;
           if (famDeact) {
-            alert("This student's family is deactivated. Reactivate the family first, then return the student from leave.");
+            lmsNotify("This student's family is deactivated. Reactivate the family first, then return the student from leave.");
             return;
           }
         }
@@ -667,7 +667,7 @@
 
         if (upErr) throw upErr;
 
-        alert(`🎓 ${st.name} has been reactivated!\nWeekly class schedule slots are fully active.`);
+        lmsNotify(`🎓 ${st.name} has been reactivated!\nWeekly class schedule slots are fully active.`);
         await loadDashboardData();
         await checkLeaveReturnAlertsAndRequests(false);
         if (document.getElementById('tab-leaves') && !document.getElementById('tab-leaves').classList.contains('hidden')) {
@@ -678,7 +678,7 @@
           openReturnAlertsModal();
         }
       } catch (err) {
-        alert("Error reactivating student: " + err.message);
+        console.warn('[LMS] operation failed:', err.message); lmsNotify('Error reactivating student. Please try again.', { type: 'error' });
       }
     }
 
@@ -706,7 +706,7 @@
           notes: JSON.stringify(meta)
         }).eq('id', studentId);
 
-        alert(`📅 Leave extended until ${newReturnDate} for ${st.name}!`);
+        lmsNotify(`📅 Leave extended until ${newReturnDate} for ${st.name}!`);
         await loadDashboardData();
         await checkLeaveReturnAlertsAndRequests(false);
         if (document.getElementById('tab-leaves') && !document.getElementById('tab-leaves').classList.contains('hidden')) {
@@ -717,7 +717,7 @@
           openReturnAlertsModal();
         }
       } catch (err) {
-        alert("Error extending leave: " + err.message);
+        console.warn('[LMS] operation failed:', err.message); lmsNotify('Error extending leave. Please try again.', { type: 'error' });
       }
     }
 
@@ -940,7 +940,7 @@
       }
 
       if (!studentId || !startDate || !returnDate) {
-        alert("Please fill in all required fields.");
+        lmsNotify("Please fill in all required fields.");
         return;
       }
 
@@ -968,7 +968,7 @@
 
         if (upErr) throw upErr;
 
-        alert(`🏖️ Leave recorded for ${st.name}.\nOn leave from ${startDate}; returns on ${returnDate}.\nThe leave starts and ends automatically on these dates.`);
+        lmsNotify(`🏖️ Leave recorded for ${st.name}.\nOn leave from ${startDate}; returns on ${returnDate}.\nThe leave starts and ends automatically on these dates.`);
         closeModal('modalMarkLeave');
         await loadDashboardData();
         await checkLeaveReturnAlertsAndRequests(false);
@@ -976,7 +976,7 @@
           await loadLeaveManagementData();
         }
       } catch (err) {
-        alert("Error marking leave: " + err.message);
+        console.warn('[LMS] operation failed:', err.message); lmsNotify('Error marking leave. Please try again.', { type: 'error' });
       } finally {
         btn.disabled = false;
         btn.innerHTML = '<i class="fa-solid fa-check"></i> Confirm Leave & Set Return';

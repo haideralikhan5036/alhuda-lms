@@ -73,7 +73,7 @@ function makeCtx(opts = {}) {
   const localStorage = makeLocalStorageStub(opts.seedLocalStorage || {});
   const modalHidden = opts.modalHidden !== false;
   const modalEl = { classList: { contains: (c) => (c === 'hidden' ? modalHidden : !modalHidden) } };
-  const calls = { transitions: [], modals: [], reloads: 0, alerts: [], dbReads: [] };
+  const calls = { transitions: [], modals: [], reloads: 0, notifies: [], dbReads: [] };
   const readBackRows = opts.readBackRows !== undefined ? opts.readBackRows : [{ status: 'Completed' }];
   const sandbox = {
     console,
@@ -96,7 +96,7 @@ function makeCtx(opts = {}) {
     },
     loadTeacherPortalData: async () => { calls.reloads++; },
     openAttendanceModal: (...args) => { calls.modals.push(args); },
-    alert: (msg) => { calls.alerts.push(msg); },
+    lmsNotify: (msg) => { calls.notifies.push(msg); },
   };
   if (opts.fixedMs !== undefined) {
     const RealDate = Date;
@@ -211,7 +211,7 @@ async function runWatcher(ctx) {
 {
   const { ctx, calls } = makeCtx({ todayClasses: [slot()], readBackRows: [] });
   await runWatcher(ctx);
-  check('failed write (no Completed row on read-back) -> alert, NO preview', calls.alerts.length === 1 && calls.modals.length === 0, JSON.stringify(calls.alerts));
+  check('failed write (no Completed row on read-back) -> notification, NO preview', calls.notifies.length === 1 && calls.modals.length === 0, JSON.stringify(calls.notifies));
 }
 {
   const { ctx, calls } = makeCtx({ todayClasses: [slot(), slot({ id: 'SCH-2', student_id: 'STU-2' })] });
