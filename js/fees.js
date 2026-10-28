@@ -34,6 +34,11 @@
     let CLOUD_FEE_RECORDS_CACHE = null;
     let CLOUD_MATRIX_OVERRIDES_CACHE = null;
     let LAST_CLOUD_FEE_SYNC_TIME = null;
+    // Batch 3.5 (audit P2-12): the current-month default below must be
+    // applied exactly once per page load. loadFeeBillingLedger runs on
+    // every fee-tab entry, so an unconditional set would snap a
+    // deliberate earlier-month review back to the current month.
+    let FEE_MONTH_DEFAULTS_APPLIED = false;
 
     function parseFamilyNotesData(notesRaw) {
       if (!notesRaw) return { fee_history: [], matrix_overrides: {} };
@@ -264,10 +269,18 @@
       }
     }
 
+    // Batch 3.5 (audit P2-16): this now REPORTS its outcome. The old
+    // version returned undefined in every path and only console-logged
+    // failures, so callers could not tell success from failure — and
+    // the submit flow toasted success before the sync even finished.
+    // Returns { ok: true } on a completed cloud write, { ok: false,
+    // error } otherwise (fetch failure, update failure, exception).
+    // The local retry flag `cloudSyncPending` is stripped from the
+    // copy sent to the cloud, so cloud records stay clean.
     async function syncPaymentRecordsBatchToCloud(familyId, newRecords) {
       try {
         const fId = String(familyId).trim();
-        if (!fId || !newRecords || newRecords.length === 0) return;
+        if (!fId || !newRecords || newRecords.length === 0) return { ok: true };
 
         updateCloudSyncIndicator('syncing');
 
@@ -275,7 +288,8 @@
         const { data: fam, error } = await db.from('families').select('id, notes').eq('id', fId).maybeSingle();
         if (error) {
           console.warn("[Cloud Fee Sync] Error fetching family:", error);
-          return;
+          updateCloudSyncIndicator('offline');
+          return { ok: false, error: 'family fetch failed' };
         }
 
         const notesObj = parseFamilyNotesData(fam?.notes);
@@ -289,17 +303,22 @@
         // record carrying the same number is kept alongside — never
         // overwritten — and the collision is surfaced.
         newRecords.forEach(nr => {
-          const existsIdx = notesObj.fee_history.findIndex(r => r.receiptNo === nr.receiptNo);
+          // Batch 3.5 (P2-16): strip the local retry flag from the
+          // copy stored in the cloud. The local record keeps its flag
+          // until a sync actually succeeds.
+          const toStore = { ...nr };
+          delete toStore.cloudSyncPending;
+          const existsIdx = notesObj.fee_history.findIndex(r => r.receiptNo === toStore.receiptNo);
           if (existsIdx >= 0) {
-            if (feeRecordFingerprint(notesObj.fee_history[existsIdx]) === feeRecordFingerprint(nr)) {
-              notesObj.fee_history[existsIdx] = nr;
+            if (feeRecordFingerprint(notesObj.fee_history[existsIdx]) === feeRecordFingerprint(toStore)) {
+              notesObj.fee_history[existsIdx] = toStore;
             } else {
-              notesObj.fee_history.unshift(nr);
-              console.warn(`[Cloud Fee Sync] Receipt ${nr.receiptNo} already exists with different details for ${fId} — both records kept.`);
-              lmsNotify(`Receipt ${nr.receiptNo} already exists with different details — both records were kept.`, { type: 'warning' });
+              notesObj.fee_history.unshift(toStore);
+              console.warn(`[Cloud Fee Sync] Receipt ${toStore.receiptNo} already exists with different details for ${fId} — both records kept.`);
+              lmsNotify(`Receipt ${toStore.receiptNo} already exists with different details — both records were kept.`, { type: 'warning' });
             }
           } else {
-            notesObj.fee_history.unshift(nr);
+            notesObj.fee_history.unshift(toStore);
           }
         });
 
@@ -309,6 +328,8 @@
 
         if (upErr) {
           console.error("[Cloud Fee Sync] Supabase update error:", upErr);
+          updateCloudSyncIndicator('offline');
+          return { ok: false, error: 'family update failed' };
         } else {
           console.log(`[Cloud Fee Sync] Successfully synced ${newRecords.length} fee records for ${fId} to Supabase`);
           updateCloudSyncIndicator('synced');
@@ -320,9 +341,12 @@
               newRecords.forEach(function (nr) { window.FeeTables.dualWritePayment(nr, 'fee_form'); });
             }
           } catch (e) { /* dual-write must never affect the legacy sync */ }
+          return { ok: true };
         }
       } catch (e) {
         console.error("[Cloud Fee Sync] Fatal sync exception:", e);
+        updateCloudSyncIndicator('offline');
+        return { ok: false, error: 'sync exception' };
       }
     }
 
@@ -374,11 +398,53 @@
       }
     }
 
+    // Batch 3.5 (audit P2-16): the old version toasted about cloud
+    // sync while only reloading the ledger — it never sent anything.
+    // This now actually retries every locally-marked unsynced record
+    // (grouped per family, so one family write per family) and reports
+    // the REAL outcome: how many synced, how many are still pending.
+    // A reload alone can no longer claim a sync happened.
     async function manualFeeCloudSync() {
       updateCloudSyncIndicator('syncing');
-      lmsNotify("Syncing latest fee records with cloud...");
+      const localRecords = getStoredFeeRecords();
+      const pendingByFamily = {};
+      localRecords.forEach(rec => {
+        if (rec && rec.cloudSyncPending) {
+          const famId = String(rec.familyId || '');
+          if (!famId) return;
+          (pendingByFamily[famId] = pendingByFamily[famId] || []).push(rec);
+        }
+      });
+      const pendingFamilies = Object.keys(pendingByFamily);
+      let syncedCount = 0;
+      let failedCount = 0;
+      for (const famId of pendingFamilies) {
+        const batch = pendingByFamily[famId];
+        let res = null;
+        try {
+          res = await syncPaymentRecordsBatchToCloud(famId, batch);
+        } catch (e) {
+          res = { ok: false };
+        }
+        if (res && res.ok) {
+          syncedCount += batch.length;
+          batch.forEach(rec => { delete rec.cloudSyncPending; });
+        } else {
+          failedCount += batch.length;
+        }
+      }
+      if (syncedCount > 0 || failedCount > 0) saveStoredFeeRecords(localRecords);
       await loadFeeBillingLedger(true);
-      lmsNotify("Fee records reloaded.");
+      if (pendingFamilies.length === 0) {
+        updateCloudSyncIndicator('synced');
+        lmsNotify("No unsynced fee records — fee records reloaded.");
+      } else if (failedCount === 0) {
+        updateCloudSyncIndicator('synced');
+        lmsNotify(`${syncedCount} unsynced fee record(s) synced to the cloud.`);
+      } else {
+        updateCloudSyncIndicator('offline');
+        lmsNotify(`${failedCount} fee record(s) still unsynced — please try Sync again.`, { type: 'error' });
+      }
     }
 
     // Persistent storage helpers (Hybrid Cloud Cache + Local Fallback)
@@ -488,15 +554,38 @@
           });
         }
 
-        // Set default month/year in dropdowns if not already set
+        // Set default month/year in dropdowns, once per page load.
+        // Batch 3.5 (audit P2-12): the old code set these only
+        // `if (!mSel.value)`, which the hard-coded `selected` September
+        // option in index.html defeated — the dashboard opened on last
+        // month, and bulk Remind All targeted it, until the user changed
+        // two dropdowns by hand. The first ledger load now always picks
+        // the current month; later loads leave the user's choice alone
+        // (see FEE_MONTH_DEFAULTS_APPLIED).
         const now = new Date();
         const curMonthName = FEE_CONFIG.MONTHS[now.getMonth()] || "September";
         const curYear = now.getFullYear();
 
         const mSel = document.getElementById('feeDashMonthSelect');
         const ySel = document.getElementById('feeDashYearSelect');
-        if (mSel && !mSel.value) mSel.value = curMonthName;
-        if (ySel && !ySel.value) ySel.value = String(curYear);
+        if (!FEE_MONTH_DEFAULTS_APPLIED) {
+          FEE_MONTH_DEFAULTS_APPLIED = true;
+          if (mSel) mSel.value = curMonthName;
+          if (ySel) ySel.value = String(curYear);
+          // Same staleness in the pending filter (it follows the
+          // dashboard on pending-tab load, but its own initial value
+          // was September too) and the salary month (first option won
+          // by default, which was September 2026).
+          const pMSel = document.getElementById('feePendingMonthFilter');
+          const pYSel = document.getElementById('feePendingYearFilter');
+          if (pMSel) pMSel.value = curMonthName;
+          if (pYSel) pYSel.value = String(curYear);
+          const salMSel = document.getElementById('salaryMonthSelect');
+          if (salMSel) {
+            const curLabel = `${curMonthName} ${curYear}`;
+            if ([...salMSel.options].some(o => o.value === curLabel)) salMSel.value = curLabel;
+          }
+        }
 
         const formMSel = document.getElementById('feeFormMonth');
         const formYSel = document.getElementById('feeFormYear');
@@ -1520,12 +1609,26 @@
 
       saveStoredFeeRecords(records);
 
-      // Asynchronously sync payment records to Supabase Cloud for cross-device visibility
-      syncPaymentRecordsBatchToCloud(paymentRecord.familyId, addedBatch);
+      // Batch 3.5 (audit P2-16): the cloud sync used to run unawaited
+      // while the invoice modal and success toast already showed — so
+      // a failed sync left the receipt only in this browser, silently.
+      // The sync is now awaited BEFORE any success claim. On failure
+      // the local receipt is marked unsynced (the Sync button retries
+      // it), a persistent error toast says so plainly, and no success
+      // toast shows. The invoice modal still opens: it renders the
+      // LOCAL receipt the parent needs, and the error toast states it
+      // is local-only. Auto-send still runs (it has its own P2-17 fix).
+      const syncResult = await syncPaymentRecordsBatchToCloud(paymentRecord.familyId, addedBatch);
 
       if (btn) {
         btn.disabled = false;
         btn.innerHTML = '<i class="fa-solid fa-file-invoice"></i> Save Payment &amp; Generate Official Invoice';
+      }
+
+      if (!syncResult || !syncResult.ok) {
+        addedBatch.forEach(rec => { rec.cloudSyncPending = true; });
+        saveStoredFeeRecords(records);
+        lmsNotify('Fee saved on this device, but cloud sync failed — this receipt is marked unsynced. Use Sync to retry sending it to the cloud.', { type: 'error' });
       }
 
       // Open Official Printable Receipt Modal
@@ -1540,7 +1643,7 @@
       // Refresh Overview, Defaulters and Matrix
       await loadFeeDashboardStats();
       resetFeeForm();
-      lmsNotify("Fee payment recorded successfully!");
+      if (syncResult && syncResult.ok) lmsNotify("Fee payment recorded successfully!");
     }
 
     // ============================================================
@@ -2085,7 +2188,16 @@
         window.open(gmailUrl, '_blank');
         lmsNotify('Official Invoice Email prepared.');
       } else {
-        lmsNotify('Official Invoice Email dispatched via Al-Huda Official Relay.');
+        // Silent path (auto-send): Batch 3.5 (audit P2-17) — the old
+        // code toasted dispatch success here unconditionally, even
+        // when every delivery path had failed. Success is now claimed
+        // only on a real dispatch; a failure says plainly that the
+        // receipt is still saved and must be sent manually.
+        if (dispatchedSuccessfully) {
+          lmsNotify('Official Invoice Email dispatched via Al-Huda Official Relay.');
+        } else {
+          lmsNotify('Invoice email could NOT be sent — the receipt is still saved, please send it manually.', { type: 'error' });
+        }
       }
     }
 

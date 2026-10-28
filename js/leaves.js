@@ -437,19 +437,38 @@
       const rType = requestType || 'leave';
       try {
         // Remove from local Teacher Portal queue if present
+        // Batch 3.5 (audit P2-15): capture what is dropped, so a failed
+        // approval below can put the request back. The old code dropped
+        // it AND claimed success, so a failed approval vanished from
+        // the queue as if it had been applied.
+        let removedLocalRequests = [];
+        let removedPendingRequests = [];
         if (typeof getLocalTeacherCorrectionRequests === 'function') {
-          const localFiltered = getLocalTeacherCorrectionRequests().filter(item => !(item.student?.id === studentId && item.requestType === rType));
-          saveLocalTeacherCorrectionRequests(localFiltered);
+          const localAll = getLocalTeacherCorrectionRequests();
+          removedLocalRequests = localAll.filter(item => (item.student?.id === studentId && item.requestType === rType));
+          saveLocalTeacherCorrectionRequests(localAll.filter(item => !(item.student?.id === studentId && item.requestType === rType)));
         }
         if (Array.isArray(PENDING_TEACHER_REQUESTS)) {
+          removedPendingRequests = PENDING_TEACHER_REQUESTS.filter(item => (item.student?.id === studentId && item.requestType === rType));
           PENDING_TEACHER_REQUESTS = PENDING_TEACHER_REQUESTS.filter(item => !(item.student?.id === studentId && item.requestType === rType));
         }
 
         const { data: st, error } = await db.from('students').select('*').eq('id', studentId).maybeSingle();
         if (error || !st) {
+          // Batch 3.5 (audit P2-15): the old branch toasted success
+          // ("Approved! ... has been applied.") even though nothing was
+          // applied — the student record could not even be loaded.
+          // Fail honestly: put the request back in the queue, reopen
+          // the modal, and say plainly that nothing was approved.
+          if (removedLocalRequests.length > 0 && typeof saveLocalTeacherCorrectionRequests === 'function') {
+            saveLocalTeacherCorrectionRequests([...getLocalTeacherCorrectionRequests(), ...removedLocalRequests]);
+          }
+          if (removedPendingRequests.length > 0) {
+            PENDING_TEACHER_REQUESTS = [...PENDING_TEACHER_REQUESTS, ...removedPendingRequests];
+          }
           if (typeof syncTopCircleNotificationDots === 'function') syncTopCircleNotificationDots();
           openAdminTeacherRequestsModal();
-          lmsNotify(`✅ Approved! Teacher ${rType === 'time_change' ? 'Schedule Time Change' : 'Attendance Correction'} request for Student (${studentId}) has been applied.`);
+          lmsNotify('Could not load the student record. The request was NOT approved — please try again.', { type: 'error' });
           return;
         }
 
@@ -518,7 +537,11 @@
               lesson_notes: `[Admin Override] Status changed from ${req.current_status || req.old_status} to ${newStatus}. Reason: ${req.reason || 'Teacher request'}. Approved by ${CURRENT_ROLE} on ${todayDate}.`
             }).eq('schedule_id', scheduleId).eq('date', todayDate);
 
-            if (logErr) console.warn("Could not update attendance log:", logErr.message);
+            // Batch 3.5 (audit P2-15): the old code only console.warned
+            // this error and still toasted approval. Like the
+            // time-change branch, a failed write must throw so the
+            // outer catch reports failure instead of success.
+            if (logErr) throw logErr;
           }
 
           delete meta.pending_reschedule_request;
@@ -528,7 +551,11 @@
             meta.reschedule_request.approved_by = CURRENT_ROLE;
           }
 
-          await db.from('students').update({ notes: JSON.stringify(meta) }).eq('id', studentId);
+          // Batch 3.5 (audit P2-15, same branch): the approval record
+          // itself must also land — an unchecked notes update here
+          // would toast approval while the approval was never saved.
+          const { error: reschedNotesErr } = await db.from('students').update({ notes: JSON.stringify(meta) }).eq('id', studentId);
+          if (reschedNotesErr) throw reschedNotesErr;
 
           lmsNotify(`✅ Attendance Correction approved for ${st.name}!\nAttendance status updated to: ${newStatus}`);
         } else {
