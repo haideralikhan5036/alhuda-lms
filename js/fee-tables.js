@@ -752,6 +752,106 @@
     }
   }
 
+  // --------------------------------------------------------------------------
+  // Batch 3.1 (6D-3) — teacher salary table reads. Mirrors
+  // loadPaymentsForFamily: a teacher session only ever receives their own
+  // rows (the Worker scopes the select server-side on teacher_id, Batch
+  // 6B); owner/manager sessions may pass any teacher id. Rows come back
+  // in legacy slip shape (slipLegacyFromRow), in the order the query
+  // returned them. Returns null on ANY failure so callers fall back to
+  // the legacy blob stores. Never throws.
+  // --------------------------------------------------------------------------
+  async function loadSlipsForTeacher(teacherId) {
+    try {
+      var client = getDb();
+      if (!client) return null;
+      var res;
+      if (typeof teacherId === 'string' && teacherId !== '') {
+        res = await client.from('salary_slips').select('*').eq('teacher_id', teacherId);
+      } else {
+        res = await client.from('salary_slips').select('*');
+      }
+      if (!res || res.error) return null;
+      var rows = res.data || [];
+      return rows.map(function (row) { return slipLegacyFromRow(row); });
+    } catch (e) {
+      return null;
+    }
+  }
+
+  // --------------------------------------------------------------------------
+  // Batch 3.1 (P2-13) — union helper for the Family 360 payments list.
+  // Table rows win: every table record is kept (including numberless
+  // ones, which the legacy receiptNo-keyed merge silently drops), then
+  // legacy records are appended only when their receiptNo|familyId key
+  // is not already present in the table side — the same key the 6D-1
+  // compare uses for numbered rows. Pure function: no DOM, no I/O.
+  // An empty table list therefore no longer hides legacy receipts.
+  // --------------------------------------------------------------------------
+  function unionTableWithLegacy(tableRecs, legacyRecs, familyId) {
+    var table = Array.isArray(tableRecs) ? tableRecs : [];
+    var legacy = Array.isArray(legacyRecs) ? legacyRecs : [];
+    var fam = String(familyId || '').toUpperCase();
+    var seen = {};
+    table.forEach(function (r) {
+      if (r && r.receiptNo) seen[String(r.receiptNo).toUpperCase() + '|' + fam] = true;
+    });
+    var out = table.slice();
+    legacy.forEach(function (r) {
+      if (!r) return;
+      if (!r.receiptNo) { out.push(r); return; }
+      var key = String(r.receiptNo).toUpperCase() + '|' + fam;
+      if (!seen[key]) { seen[key] = true; out.push(r); }
+    });
+    return out;
+  }
+
+  // --------------------------------------------------------------------------
+  // Batch 3.1 (6D-3, compare mode) — pure diff between salary_slips rows
+  // (legacy shape) and the blob-side slip map values. Keyed by slip_key
+  // (falling back to teacherId_month, exactly as the forward builder
+  // does). Reports presence on each side plus value changes on the
+  // fields the teacher view renders. Pure function: no DOM, no I/O.
+  // --------------------------------------------------------------------------
+  function diffSlipLists(tableSlips, blobSlips) {
+    function slipKeyOf(s) {
+      if (!s) return '';
+      if (s.slip_key) return String(s.slip_key);
+      if (s.slipKey) return String(s.slipKey);
+      if (s.teacher_id != null && s.month) return String(s.teacher_id) + '_' + String(s.month).replace(/\s+/g, '_');
+      return '';
+    }
+    function num(v) { var n = parseFloat(v); return isFinite(n) ? n : 0; }
+    var tableByKey = {};
+    var blobByKey = {};
+    (Array.isArray(tableSlips) ? tableSlips : []).forEach(function (s) {
+      var k = slipKeyOf(s);
+      if (k) tableByKey[k] = s;
+    });
+    (Array.isArray(blobSlips) ? blobSlips : []).forEach(function (s) {
+      var k = slipKeyOf(s);
+      if (k) blobByKey[k] = s;
+    });
+    var missingInTable = [];
+    var missingInBlob = [];
+    var changed = [];
+    Object.keys(blobByKey).forEach(function (k) {
+      if (!tableByKey[k]) { missingInTable.push(k); return; }
+      var b = blobByKey[k];
+      var t = tableByKey[k];
+      var fields = ['status', 'month', 'net_payable', 'base_subtotal', 'bonus', 'deduction'];
+      fields.forEach(function (f) {
+        var bv = (f === 'status' || f === 'month') ? String(b[f] == null ? '' : b[f]) : num(b[f]);
+        var tv = (f === 'status' || f === 'month') ? String(t[f] == null ? '' : t[f]) : num(t[f]);
+        if (bv !== tv) changed.push({ key: k, field: f, blob: b[f] == null ? null : b[f], table: t[f] == null ? null : t[f] });
+      });
+    });
+    Object.keys(tableByKey).forEach(function (k) {
+      if (!blobByKey[k]) missingInBlob.push(k);
+    });
+    return { missingInTable: missingInTable, missingInBlob: missingInBlob, changed: changed };
+  }
+
   window.FeeTables = {
     FEE_TABLES_FLAG_KEY: FEE_TABLES_FLAG_KEY,
     isEnabled: isEnabled,
@@ -770,6 +870,9 @@
     READ_FLAG_SALARY: READ_FLAG_SALARY,
     getReadMode: getReadMode,
     loadPaymentsForFamily: loadPaymentsForFamily,
+    loadSlipsForTeacher: loadSlipsForTeacher,
+    unionTableWithLegacy: unionTableWithLegacy,
+    diffSlipLists: diffSlipLists,
     currentActor: currentActor,
     upsertPaymentRow: upsertPaymentRow,
     cancelPaymentRow: cancelPaymentRow,
