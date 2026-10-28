@@ -12,6 +12,10 @@
       if (m) {
         m.classList.remove('hidden');
         m.classList.add('flex');
+        // Batch 3.6 (audit P2-29): focus moves in, Tab traps, backdrop click
+        // closes — via the one shared helper. Escape already closes index
+        // modals (js/navigation.js), so the helper does not handle it.
+        if (window.ModalA11y) window.ModalA11y.open(m, function () { closeModal(id); });
         try {
           window.history.pushState({ type: 'modal', modalId: id }, '', window.location.pathname);
         } catch (e) {}
@@ -23,6 +27,8 @@
       if (m) {
         m.classList.add('hidden');
         m.classList.remove('flex');
+        // Batch 3.6 (audit P2-29): focus returns to the opener.
+        if (window.ModalA11y) window.ModalA11y.close(m);
         if (window.history.state && window.history.state.type === 'modal' && window.history.state.modalId === id) {
           isProgrammaticModalBack = true;
           window.history.back();
@@ -32,8 +38,50 @@
     }
 
     // ============================================================
-    // ZERO-CACHE ENFORCEMENT: Unregister any service workers and clear all caches
+    // Batch 3.6 (audit P2-36): ONE shared pager renderer for the
+    // directory + fee ledger tables. Tables used to render every row
+    // (321 families, unbounded) with no paging at all. Callers slice
+    // their filtered list to the current page, then drop this HTML
+    // into their pager container. o: { page, totalPages, total,
+    // start, end, pageSize ('25'|'50'|'100'|'all'), onPage, onSize }
+    // (onPage/onSize are global function names called from onclick).
     // ============================================================
+    function buildTablePagerHtml(o) {
+      const prevDis = o.page <= 1 ? 'disabled' : '';
+      const nextDis = o.page >= o.totalPages ? 'disabled' : '';
+      const range = o.total === 0
+        ? 'No rows'
+        : ('Showing ' + o.start + '–' + o.end + ' of ' + o.total);
+      const sizeOpts = ['25', '50', '100', 'all'].map(v => {
+        const label = v === 'all' ? 'All' : v;
+        return '<option value="' + v + '"' + (String(o.pageSize) === v ? ' selected' : '') + '>' + label + '</option>';
+      }).join('');
+      return '<div class="flex flex-wrap items-center justify-between gap-2 px-3 py-2 border-t border-slate-100 bg-slate-50/60">' +
+        '<span class="text-[11px] font-bold text-slate-500">' + range + '</span>' +
+        '<div class="flex items-center gap-2">' +
+        '<label class="text-[11px] font-bold text-slate-500 flex items-center gap-1">Rows per page ' +
+        '<select onchange="' + o.onSize + '(this.value)" aria-label="Rows per page" class="text-[11px] font-bold text-slate-700 bg-white border border-slate-300 rounded-lg px-2 py-2 cursor-pointer">' + sizeOpts + '</select></label>' +
+        '<button type="button" onclick="' + o.onPage + '(' + (o.page - 1) + ')" ' + prevDis + ' aria-label="Previous page" class="min-h-[44px] px-3 rounded-lg bg-white border border-slate-300 text-slate-700 text-[11px] font-bold hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed transition">Prev</button>' +
+        '<span class="text-[11px] font-bold text-slate-600 min-w-[76px] text-center">Page ' + o.page + ' of ' + o.totalPages + '</span>' +
+        '<button type="button" onclick="' + o.onPage + '(' + (o.page + 1) + ')" ' + nextDis + ' aria-label="Next page" class="min-h-[44px] px-3 rounded-lg bg-white border border-slate-300 text-slate-700 text-[11px] font-bold hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed transition">Next</button>' +
+        '</div></div>';
+    }
+    // Pager state helper: clamp the page into range and return
+    // { pageRows, totalPages, start, end } for a filtered list.
+    function paginateList(list, page, size) {
+      const total = list.length;
+      const totalPages = size === Infinity ? 1 : Math.max(1, Math.ceil(total / size));
+      const safePage = Math.min(Math.max(1, page || 1), totalPages);
+      const startIdx = size === Infinity ? 0 : (safePage - 1) * size;
+      const pageRows = size === Infinity ? list : list.slice(startIdx, startIdx + size);
+      return {
+        pageRows: pageRows,
+        totalPages: totalPages,
+        safePage: safePage,
+        start: total === 0 ? 0 : startIdx + 1,
+        end: size === Infinity ? total : Math.min(total, startIdx + size)
+      };
+    }
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.getRegistrations().then(registrations => {
         for (let reg of registrations) {

@@ -894,6 +894,39 @@
     let CURRENT_FAMILIES_STATUS_FILTER = 'ACTIVE'; // 'ALL' | 'ACTIVE' | 'DEACTIVATED'
     let CURRENT_STUDENTS_STATUS_FILTER = 'ACTIVE'; // 'ALL' | 'ACTIVE' | 'DEACTIVATED'
 
+    // Batch 3.6 (audit P2-36): directory pagination. Default 25 rows per
+    // page; 'All' restores the old unbounded render. Page resets to 1
+    // whenever the search query or a status filter changes (see
+    // handleFamUnifiedSearch / setFamiliesStatusFilter /
+    // setStudentsStatusFilter); renders additionally clamp into range,
+    // so a shrunken list can never strand the view on an empty page.
+    let FAM_TABLE_PAGE = 1;
+    let FAM_TABLE_PAGE_SIZE = 25;
+    let STU_TABLE_PAGE = 1;
+    let STU_TABLE_PAGE_SIZE = 25;
+    function setFamTablePage(p) {
+      FAM_TABLE_PAGE = p;
+      renderFamiliesMasterTable();
+    }
+    function setFamTablePageSize(v) {
+      FAM_TABLE_PAGE_SIZE = (v === 'all') ? Infinity : (parseInt(v, 10) || 25);
+      FAM_TABLE_PAGE = 1;
+      renderFamiliesMasterTable();
+    }
+    function setStuTablePage(p) {
+      STU_TABLE_PAGE = p;
+      renderAllStudentsListTable();
+    }
+    function setStuTablePageSize(v) {
+      STU_TABLE_PAGE_SIZE = (v === 'all') ? Infinity : (parseInt(v, 10) || 25);
+      STU_TABLE_PAGE = 1;
+      renderAllStudentsListTable();
+    }
+    window.setFamTablePage = setFamTablePage;
+    window.setFamTablePageSize = setFamTablePageSize;
+    window.setStuTablePage = setStuTablePage;
+    window.setStuTablePageSize = setStuTablePageSize;
+
     function updateStatusFilterPillsUI() {
       const btnFamAll = document.getElementById('btnFilterFamAll');
       const btnFamAct = document.getElementById('btnFilterFamActive');
@@ -1038,6 +1071,7 @@
 
     function setFamiliesStatusFilter(filterMode) {
       CURRENT_FAMILIES_STATUS_FILTER = ['ALL', 'ACTIVE', 'DEACTIVATED'].includes(filterMode) ? filterMode : 'ACTIVE';
+      FAM_TABLE_PAGE = 1; // Batch 3.6 (audit P2-36): new filter, page 1.
       updateStatusFilterPillsUI();
       if (CURRENT_FAMILIES_VIEW === 'studentsList' || CURRENT_FAMILIES_VIEW === 'deactivatedFams') {
         switchFamiliesViewMode('famTable');
@@ -1049,6 +1083,7 @@
 
     function setStudentsStatusFilter(filterMode) {
       CURRENT_STUDENTS_STATUS_FILTER = ['ALL', 'ACTIVE', 'DEACTIVATED'].includes(filterMode) ? filterMode : 'ACTIVE';
+      STU_TABLE_PAGE = 1; // Batch 3.6 (audit P2-36): new filter, page 1.
       updateStatusFilterPillsUI();
       if (CURRENT_FAMILIES_VIEW !== 'studentsList') {
         switchFamiliesViewMode('studentsList');
@@ -1147,6 +1182,9 @@
 
     function handleFamUnifiedSearch(query) {
       FAM_SEARCH_QUERY = (query || '').trim().toLowerCase();
+      // Batch 3.6 (audit P2-36): a new search starts on page 1.
+      FAM_TABLE_PAGE = 1;
+      STU_TABLE_PAGE = 1;
       renderFamiliesCards();
       renderFamiliesMasterTable();
       renderAllStudentsListTable();
@@ -1487,12 +1525,19 @@
           : 'px-2.5 py-0.5 rounded-full text-xs font-mono font-bold bg-emerald-100 text-emerald-800 border border-emerald-200';
       }
 
+      const famPagerEl = document.getElementById('familiesTablePager');
       if (filtered.length === 0) {
         tbody.innerHTML = `<tr><td colspan="10" class="p-8 text-center text-slate-400">No ${filterTitlePrefix.toLowerCase()} found matching search.</td></tr>`;
+        if (famPagerEl) famPagerEl.innerHTML = '';
         return;
       }
 
-      tbody.innerHTML = filtered.map((f, idx) => {
+      // Batch 3.6 (audit P2-36): page the filtered list (default 25).
+      const famPage = paginateList(filtered, FAM_TABLE_PAGE, FAM_TABLE_PAGE_SIZE);
+      FAM_TABLE_PAGE = famPage.safePage;
+      const famPageStart = famPage.start - 1;
+
+      tbody.innerHTML = famPage.pageRows.map((f, idx) => {
         const creds = getParentCreds(f);
         const cleanPhone = (f.whatsapp || '').replace(/[^0-9]/g, '');
         const allSibs = f.students || [];
@@ -1505,7 +1550,7 @@
 
         return `
           <tr onclick="openFamily360Profile('${f.id}')" class="hover:bg-slate-50 transition text-xs cursor-pointer ${isFamDeact ? 'bg-rose-50/20' : ''}" title="Click to open Family 360° Profile">
-            <td class="p-3 text-center lms-num-table font-bold text-slate-600">${idx + 1}</td>
+            <td class="p-3 text-center lms-num-table font-bold text-slate-600">${famPageStart + idx + 1}</td>
             <td class="p-3 lms-num-id font-bold text-brandDark">
               <button onclick="event.stopPropagation(); openFamily360Profile('${f.id}')" class="px-2 py-0.5 rounded-md ${isFamDeact ? 'bg-rose-50 border-rose-200 text-rose-800' : 'bg-emerald-50 border-emerald-200 text-brandDark'} border hover:opacity-90 transition">${f.id}</button>
             </td>
@@ -1556,6 +1601,14 @@
           </tr>
         `;
       }).join('');
+      if (famPagerEl) {
+        famPagerEl.innerHTML = buildTablePagerHtml({
+          page: FAM_TABLE_PAGE, totalPages: famPage.totalPages, total: filtered.length,
+          start: famPage.start, end: famPage.end,
+          pageSize: FAM_TABLE_PAGE_SIZE === Infinity ? 'all' : String(FAM_TABLE_PAGE_SIZE),
+          onPage: 'setFamTablePage', onSize: 'setFamTablePageSize'
+        });
+      }
     }
 
     function renderAllStudentsListTable() {
@@ -1590,12 +1643,19 @@
           : 'px-2.5 py-0.5 rounded-full text-xs font-mono font-bold bg-teal-100 text-teal-800 border border-teal-200';
       }
 
+      const stuPagerEl = document.getElementById('studentsTablePager');
       if (filtered.length === 0) {
         tbody.innerHTML = `<tr><td colspan="9" class="p-8 text-center text-slate-400">No ${stuFilterLabel.toLowerCase()} found matching search.</td></tr>`;
+        if (stuPagerEl) stuPagerEl.innerHTML = '';
         return;
       }
 
-      tbody.innerHTML = filtered.map((s, idx) => {
+      // Batch 3.6 (audit P2-36): page the filtered list (default 25).
+      const stuPage = paginateList(filtered, STU_TABLE_PAGE, STU_TABLE_PAGE_SIZE);
+      STU_TABLE_PAGE = stuPage.safePage;
+      const stuPageStart = stuPage.start - 1;
+
+      tbody.innerHTML = stuPage.pageRows.map((s, idx) => {
         const parentFam = famMap[String(s.family_id || '').toUpperCase()];
         const parentName = parentFam ? parentFam.parent_name : (s.family_id || '--');
         const isStuActive = typeof isActiveStudentRecord === 'function'
@@ -1616,7 +1676,7 @@
 
         return `
           <tr class="hover:bg-slate-50 transition text-xs ${!isStuActive ? 'bg-rose-50/20' : ''}">
-            <td class="p-3 text-center font-mono font-bold text-slate-500">${idx + 1}</td>
+            <td class="p-3 text-center font-mono font-bold text-slate-500">${stuPageStart + idx + 1}</td>
             <td class="p-3 font-mono font-black text-brandDark">
               <button onclick="openStudent360Profile('${s.id}')" class="hover:underline">${s.id}</button>
             </td>
@@ -1650,6 +1710,14 @@
           </tr>
         `;
       }).join('');
+      if (stuPagerEl) {
+        stuPagerEl.innerHTML = buildTablePagerHtml({
+          page: STU_TABLE_PAGE, totalPages: stuPage.totalPages, total: filtered.length,
+          start: stuPage.start, end: stuPage.end,
+          pageSize: STU_TABLE_PAGE_SIZE === Infinity ? 'all' : String(STU_TABLE_PAGE_SIZE),
+          onPage: 'setStuTablePage', onSize: 'setStuTablePageSize'
+        });
+      }
     }
 
     function renderDeactivatedFamiliesView() {

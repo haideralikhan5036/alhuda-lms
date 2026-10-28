@@ -582,13 +582,16 @@
   // silently as live data. The old code only tagged the result object
   // (_lmsSource: 'mirror'), which most renderers ignore — a portal
   // showing yesterday's mirror looked identical to a live portal. The
-  // banner below is shown on EVERY mirror-read fallback and hidden on
-  // the next live answer, so staleness is visible whenever stale data
-  // is on screen; window.__lmsMirrorStale mirrors the banner state
-  // for renderers that want to gate on it. Guarded for non-DOM/test
-  // environments (vm harnesses have no document). Individual renderers
-  // still render mirror rows — rewriting every renderer is out of
-  // scope for one batch — but they can no longer do so silently.
+  // banner below is shown on a mirror-read fallback ONLY when the gate
+  // at the fallback site passes (Batch 3.6: fallback rows exist AND no
+  // login screen is showing) and hidden on the next live answer, so
+  // staleness is visible whenever stale data is on screen, and never
+  // claimed on a bare login screen that renders no data; window
+  // .__lmsMirrorStale mirrors the banner state for renderers that want
+  // to gate on it. Guarded for non-DOM/test environments (vm harnesses
+  // have no document). Individual renderers still render mirror rows —
+  // rewriting every renderer is out of scope for one batch — but they
+  // can no longer do so silently.
   function setMirrorStaleBanner(show) {
     try {
       if (typeof window !== 'undefined') window.__lmsMirrorStale = !!show;
@@ -711,12 +714,48 @@
       return { data: null, error: { message: 'Session expired — please log in again.', code: 'SESSION_EXPIRED' } };
     }
 
+    // Batch 3.6 (3.4 follow-up): the banner gate. Batch 3.4 showed the
+    // banner on EVERY mirror-read fallback, which put it on the bare
+    // Vercel login screen on every load — even with an empty mirror and
+    // no data displayed at all (Vercel serves no /api, so a boot read
+    // always falls back there). A banner that claims "offline copy
+    // shown" is only true when stale rows are actually on screen, so it
+    // now requires BOTH: the fallback result carries rows, AND no login
+    // view is currently showing (login screens render no data). A
+    // fallback that fails either test hides the banner instead, so
+    // logging out also clears a banner left over from the session.
+    function mirrorResultHasRows(res) {
+      if (!res || typeof res !== 'object') return false;
+      var d = res.data;
+      if (Array.isArray(d)) return d.length > 0;
+      return !!(d && typeof d === 'object');
+    }
+    function isLoginScreenShowing() {
+      try {
+        if (typeof document === 'undefined') return false;
+        var ids = ['ownerLoginView', 'loginView', 'parentLoginView'];
+        for (var i = 0; i < ids.length; i++) {
+          var el = document.getElementById(ids[i]);
+          if (el && !el.classList.contains('hidden')) {
+            var cs = null;
+            try { cs = window.getComputedStyle(el); } catch (e) {}
+            if (!cs || cs.display !== 'none') return true;
+          }
+        }
+      } catch (e) { /* a failed check must never break the read */ }
+      return false;
+    }
+
     const mirrorRes = executeLocalQuery(payload);
     if (mirrorRes && typeof mirrorRes === 'object') mirrorRes._lmsSource = 'mirror';
-    // Batch 3.4 (audit P2-9): every mirror read shows the stale banner
-    // (see setMirrorStaleBanner above) — stale data on screen is
-    // always disclosed, even in renderers that ignore _lmsSource.
-    setMirrorStaleBanner(true);
+    // Batch 3.4 (audit P2-9), gated by Batch 3.6 (see above): stale data
+    // on screen is always disclosed, even in renderers that ignore
+    // _lmsSource — but never claimed when nothing stale is displayed.
+    if (mirrorResultHasRows(mirrorRes) && !isLoginScreenShowing()) {
+      setMirrorStaleBanner(true);
+    } else {
+      setMirrorStaleBanner(false);
+    }
     return mirrorRes;
   }
 

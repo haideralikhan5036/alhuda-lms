@@ -28,6 +28,7 @@
 
   <script src="js/cloudflare-db.js"></script>
   <script src="js/ui-notify.js"></script>
+  <script src="js/modal-a11y.js"></script>
   <script src="js/fee-tables.js"></script>
   <script src="js/lesson-history.js"></script>
   <!-- High-Res Client-Side PDF Generation Libraries (html2canvas, jsPDF) -->
@@ -330,7 +331,7 @@ font-family: var(--font-num) !important;
       <!-- Brand Crest & Title -->
       <div class="flex items-center gap-3">
         <!-- Sidebar Drawer & Desktop Rail Toggle (When authenticated) -->
-        <button id="btnToggleTeacherSidebar" onclick="toggleTeacherSidebar()" class="hidden p-2 text-emerald-200 hover:text-white hover:bg-emerald-900/60 rounded-xl transition" title="Toggle Navigation Sidebar">
+        <button id="btnToggleTeacherSidebar" onclick="toggleTeacherSidebar()" aria-label="Toggle navigation sidebar" class="hidden p-2 min-h-[44px] min-w-[44px] text-emerald-200 hover:text-white hover:bg-emerald-900/60 rounded-xl transition" title="Toggle Navigation Sidebar">
           <i class="fa-solid fa-bars text-lg"></i>
         </button>
         <a href="teacher.html" class="flex items-center gap-2.5 group" title="Al-Huda Islamic Centre LMS">
@@ -410,7 +411,7 @@ font-family: var(--font-num) !important;
           <form onsubmit="handleTeacherSignIn(event)" class="space-y-4 text-xs" autocomplete="off">
             <!-- Username / Email / Teacher ID -->
             <div>
-              <label class="block font-bold text-slate-700 mb-1.5">
+              <label for="loginUsername" class="block font-bold text-slate-700 mb-1.5">
                 Email / Username / Teacher ID <span class="text-rose-500">*</span>
               </label>
               <div class="relative">
@@ -423,7 +424,7 @@ font-family: var(--font-num) !important;
             <!-- Password -->
             <div>
               <div class="flex justify-between items-center mb-1.5">
-                <label class="font-bold text-slate-700">
+                <label for="loginPassword" class="font-bold text-slate-700">
                   Password <span class="text-rose-500">*</span>
                 </label>
               </div>
@@ -431,7 +432,7 @@ font-family: var(--font-num) !important;
                 <i class="fa-solid fa-lock absolute left-3.5 top-3 text-slate-400"></i>
                 <input type="password" id="loginPassword" required placeholder="Enter your password" autocomplete="current-password"
                   class="w-full pl-9 pr-10 py-2.5 bg-slate-50 border border-slate-300 rounded-xl font-bold text-slate-900 focus:bg-white focus:outline-brandEmerald focus:border-brandEmerald text-xs">
-                <button type="button" onclick="togglePassVisibility()" class="absolute right-3 top-2.5 text-slate-400 hover:text-slate-700" title="Show / Hide Password">
+                <button type="button" onclick="togglePassVisibility()" aria-label="Show or hide password" class="absolute right-3 top-2.5 text-slate-400 hover:text-slate-700" title="Show / Hide Password">
                   <i id="passToggleIcon" class="fa-regular fa-eye"></i>
                 </button>
               </div>
@@ -576,7 +577,7 @@ font-family: var(--font-num) !important;
                 <i class="fa-solid fa-bolt text-slate-300 text-[10px]"></i>
               </p>
               <nav class="space-y-1">
-                <button onclick="openTeacherAddScheduleModal(); toggleTeacherSidebar(false);" class="sidebar-nav-btn w-full text-left px-3 py-2.5 flex items-center gap-2.5 text-emerald-800 hover:bg-emerald-50" title="+ Schedule Student">
+                <button id="sbNavAddSchedule" onclick="openTeacherAddScheduleModal(); toggleTeacherSidebar(false);" class="sidebar-nav-btn w-full text-left px-3 py-2.5 flex items-center gap-2.5 text-emerald-800 hover:bg-emerald-50" title="+ Schedule Student">
                   <span class="sidebar-icon-box bg-emerald-50 text-emerald-700"><i class="fa-solid fa-calendar-plus"></i></span>
                   <span class="sidebar-text truncate font-bold">+ Schedule Student</span>
                 </button>
@@ -1084,7 +1085,7 @@ font-family: var(--font-num) !important;
             <p class="text-xs text-slate-500" id="attModalSubtitle">Class details</p>
           </div>
         </div>
-        <button onclick="closeAttendanceModal()" class="text-slate-400 hover:text-slate-600 text-xl font-bold">&times;</button>
+        <button onclick="closeAttendanceModal()" class="text-slate-400 hover:text-slate-600 text-xl font-bold" aria-label="Close">&times;</button>
       </div>
 
       <input type="hidden" id="attScheduleId">
@@ -1288,7 +1289,7 @@ font-family: var(--font-num) !important;
             <p class="text-xs text-slate-500" id="leaveAbsentModalSubtitle">Mark Student Leave or Absent</p>
           </div>
         </div>
-        <button type="button" onclick="closeLeaveAbsentModal()" class="text-slate-400 hover:text-slate-600 text-xl font-bold">&times;</button>
+        <button type="button" onclick="closeLeaveAbsentModal()" class="text-slate-400 hover:text-slate-600 text-xl font-bold" aria-label="Close">&times;</button>
       </div>
 
       <input type="hidden" id="leaveAbsentScheduleId">
@@ -1350,7 +1351,7 @@ font-family: var(--font-num) !important;
             <p class="text-xs text-slate-500">Record a preponed session ahead of schedule</p>
           </div>
         </div>
-        <button onclick="closeAdvanceClassModal()" class="text-slate-400 hover:text-slate-600 text-xl font-bold">&times;</button>
+        <button onclick="closeAdvanceClassModal()" class="text-slate-400 hover:text-slate-600 text-xl font-bold" aria-label="Close">&times;</button>
       </div>
 
       <form onsubmit="handleAdvanceClassSubmit(event)" class="space-y-4 text-xs overflow-y-auto touch-scroll flex-1 pr-1">
@@ -1557,7 +1558,7 @@ font-family: var(--font-num) !important;
             <p class="text-xs text-slate-500" id="teacherReqStudentSubtitle">Submit vacation / break to Admin</p>
           </div>
         </div>
-        <button onclick="closeTeacherLeaveRequestModal()" class="text-slate-400 hover:text-slate-600 text-xl font-bold">&times;</button>
+        <button onclick="closeTeacherLeaveRequestModal()" class="text-slate-400 hover:text-slate-600 text-xl font-bold" aria-label="Close">&times;</button>
       </div>
 
       <form onsubmit="submitTeacherLeaveRequest(event)" class="space-y-3 text-xs overflow-y-auto touch-scroll flex-1 pr-1">
@@ -1626,7 +1627,7 @@ font-family: var(--font-num) !important;
             <p class="text-xs text-slate-500" id="reschedModalSubtitle">Submit a change request to Admin</p>
           </div>
         </div>
-        <button onclick="closeRescheduleRequestModal()" class="text-slate-400 hover:text-slate-600 text-xl font-bold">&times;</button>
+        <button onclick="closeRescheduleRequestModal()" class="text-slate-400 hover:text-slate-600 text-xl font-bold" aria-label="Close">&times;</button>
       </div>
 
       <div class="space-y-3 text-xs overflow-y-auto touch-scroll flex-1 pr-1">
@@ -1688,7 +1689,7 @@ font-family: var(--font-num) !important;
             <p class="text-xs text-slate-500" id="timeChangeModalSubtitle">Request Manager / Owner to update class timing</p>
           </div>
         </div>
-        <button onclick="closeTimeChangeRequestModal()" class="text-slate-400 hover:text-slate-600 text-xl font-bold">&times;</button>
+        <button onclick="closeTimeChangeRequestModal()" class="text-slate-400 hover:text-slate-600 text-xl font-bold" aria-label="Close">&times;</button>
       </div>
 
       <div class="space-y-3.5 text-xs overflow-y-auto touch-scroll flex-1 pr-1 mt-3">
@@ -1803,7 +1804,7 @@ font-family: var(--font-num) !important;
           <button onclick="openTeacherAddScheduleModal()" class="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs rounded-xl transition flex items-center gap-1.5 shadow-xs whitespace-nowrap">
             <i class="fa-solid fa-calendar-plus"></i> + Schedule Student
           </button>
-          <button onclick="closeWeeklyMatrixModal()" class="w-8 h-8 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-500 hover:text-slate-800 flex items-center justify-center font-bold text-lg transition" title="Close">&times;</button>
+          <button onclick="closeWeeklyMatrixModal()" class="w-8 h-8 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-500 hover:text-slate-800 flex items-center justify-center font-bold text-lg transition" title="Close" aria-label="Close">&times;</button>
         </div>
       </div>
 
@@ -1880,7 +1881,7 @@ font-family: var(--font-num) !important;
             <p class="text-xs text-slate-500">Select an active student from your Student List and define start/end time &amp; duration</p>
           </div>
         </div>
-        <button onclick="closeTeacherAddScheduleModal()" class="text-slate-400 hover:text-slate-600 text-xl font-bold">&times;</button>
+        <button onclick="closeTeacherAddScheduleModal()" class="text-slate-400 hover:text-slate-600 text-xl font-bold" aria-label="Close">&times;</button>
       </div>
 
       <form onsubmit="submitTeacherAddScheduleSlot(event)" class="space-y-4 text-xs overflow-y-auto touch-scroll flex-1 pr-1 mt-3">
@@ -2160,7 +2161,7 @@ font-family: var(--font-num) !important;
       <div class="flex-1 bg-[#09090b] flex items-center justify-between p-2 sm:p-6 overflow-hidden relative select-none" id="readerStage">
         
         <!-- Left Side Page Turn Button (Discreet & Neutral) -->
-        <button onclick="changeReaderPage(-1)" id="btnReaderPrevFloating" class="z-20 w-9 h-9 sm:w-11 sm:h-11 rounded-full bg-zinc-900/80 hover:bg-zinc-800 text-zinc-300 hover:text-white shadow-xl flex items-center justify-center transition backdrop-blur-sm border border-zinc-700/60" title="Previous Page (Left Arrow)">
+        <button onclick="changeReaderPage(-1)" id="btnReaderPrevFloating" aria-label="Previous page" class="z-20 w-11 h-11 rounded-full bg-zinc-900/80 hover:bg-zinc-800 text-zinc-300 hover:text-white shadow-xl flex items-center justify-center transition backdrop-blur-sm border border-zinc-700/60" title="Previous Page (Left Arrow)">
           <i class="fa-solid fa-chevron-left text-xs sm:text-sm"></i>
         </button>
 
@@ -2199,7 +2200,7 @@ font-family: var(--font-num) !important;
         </div>
 
         <!-- Right Side Page Turn Button (Discreet & Neutral) -->
-        <button onclick="changeReaderPage(1)" id="btnReaderNextFloating" class="z-20 w-9 h-9 sm:w-11 sm:h-11 rounded-full bg-zinc-900/80 hover:bg-zinc-800 text-zinc-300 hover:text-white shadow-xl flex items-center justify-center transition backdrop-blur-sm border border-zinc-700/60" title="Next Page (Right Arrow)">
+        <button onclick="changeReaderPage(1)" id="btnReaderNextFloating" aria-label="Next page" class="z-20 w-11 h-11 rounded-full bg-zinc-900/80 hover:bg-zinc-800 text-zinc-300 hover:text-white shadow-xl flex items-center justify-center transition backdrop-blur-sm border border-zinc-700/60" title="Next Page (Right Arrow)">
           <i class="fa-solid fa-chevron-right text-xs sm:text-sm"></i>
         </button>
       </div>
@@ -2247,7 +2248,7 @@ font-family: var(--font-num) !important;
           <button onclick="launchFullReaderFromPreview()" class="px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition flex items-center gap-1.5 shadow-sm">
             <i class="fa-solid fa-up-right-and-down-left-from-center text-[11px]"></i> Full Reader
           </button>
-          <button onclick="closeCourseMaterialPreview()" class="w-9 h-9 rounded-xl bg-white/10 hover:bg-white/20 text-white flex items-center justify-center font-black text-lg transition" title="Close">&times;</button>
+          <button onclick="closeCourseMaterialPreview()" class="w-11 h-11 rounded-xl bg-white/10 hover:bg-white/20 text-white flex items-center justify-center font-black text-lg transition" title="Close" aria-label="Close">&times;</button>
         </div>
       </div>
 
@@ -2326,15 +2327,15 @@ font-family: var(--font-num) !important;
             <div class="flex items-center gap-2">
               <!-- Zoom Suite -->
               <div class="flex items-center bg-white rounded-lg border border-slate-200 p-0.5 shadow-2xs">
-                <button type="button" onclick="changePreviewZoom(-0.1)" class="w-6 h-6 rounded flex items-center justify-center text-slate-600 hover:text-slate-900 hover:bg-slate-100 transition cursor-pointer" title="Zoom Out (-)">
+                <button type="button" onclick="changePreviewZoom(-0.1)" aria-label="Zoom out" class="w-11 h-11 rounded flex items-center justify-center text-slate-600 hover:text-slate-900 hover:bg-slate-100 transition cursor-pointer" title="Zoom Out (-)">
                   <i class="fa-solid fa-minus text-[10px]"></i>
                 </button>
                 <span id="previewZoomLevel" class="text-[11px] font-mono font-bold text-slate-700 px-1.5 min-w-[38px] text-center select-none">100%</span>
-                <button type="button" onclick="changePreviewZoom(0.1)" class="w-6 h-6 rounded flex items-center justify-center text-slate-600 hover:text-slate-900 hover:bg-slate-100 transition cursor-pointer" title="Zoom In (+)">
+                <button type="button" onclick="changePreviewZoom(0.1)" aria-label="Zoom in" class="w-11 h-11 rounded flex items-center justify-center text-slate-600 hover:text-slate-900 hover:bg-slate-100 transition cursor-pointer" title="Zoom In (+)">
                   <i class="fa-solid fa-plus text-[10px]"></i>
                 </button>
                 <div class="w-[1px] h-3.5 bg-slate-200 mx-0.5"></div>
-                <button type="button" onclick="fitPreviewWidth()" class="px-1.5 h-6 rounded text-[10px] font-bold text-slate-600 hover:text-slate-900 hover:bg-slate-100 transition cursor-pointer" title="Fit Width">
+                <button type="button" onclick="fitPreviewWidth()" aria-label="Fit width" class="px-3 min-h-[44px] rounded text-[10px] font-bold text-slate-600 hover:text-slate-900 hover:bg-slate-100 transition cursor-pointer" title="Fit Width">
                   Fit
                 </button>
                 <button type="button" onclick="resetPreviewZoom()" class="px-1.5 h-6 rounded text-[10px] font-bold text-slate-600 hover:text-slate-900 hover:bg-slate-100 transition cursor-pointer" title="Reset Zoom (100%)">
@@ -2396,7 +2397,7 @@ font-family: var(--font-num) !important;
             <p class="text-[11px] text-emerald-300 mt-0.5">Select verified syllabus material to preview or open in classroom reader</p>
           </div>
         </div>
-        <button onclick="closeTeacherLibraryPicker()" class="w-9 h-9 rounded-xl bg-rose-950/70 hover:bg-rose-900 text-rose-200 border border-rose-800/60 flex items-center justify-center font-black text-lg transition" title="Close">&times;</button>
+        <button onclick="closeTeacherLibraryPicker()" class="w-11 h-11 rounded-xl bg-rose-950/70 hover:bg-rose-900 text-rose-200 border border-rose-800/60 flex items-center justify-center font-black text-lg transition" title="Close" aria-label="Close">&times;</button>
       </div>
 
       <!-- Category Filter Tabs -->
@@ -2447,7 +2448,7 @@ font-family: var(--font-num) !important;
             <p class="text-[11px] sm:text-xs text-slate-500 font-medium" id="tSlipMonthSubtitle">Official Teacher Compensation & Course Payroll Voucher</p>
           </div>
         </div>
-        <button onclick="closeTeacherSalarySlip()" class="text-slate-400 hover:text-slate-600 text-2xl font-bold leading-none">&times;</button>
+        <button onclick="closeTeacherSalarySlip()" class="text-slate-400 hover:text-slate-600 text-2xl font-bold leading-none" aria-label="Close">&times;</button>
       </div>
 
       <!-- Scrollable Voucher Body -->
@@ -7131,10 +7132,32 @@ font-family: var(--font-num) !important;
         trials: 'sbNavTrials',
         salaries: 'sbNavSalaries'
       };
+      // Batch 3.6 (audit P2-32): sidebar modal openers are buttons, not
+      // tabs, so the old navMap left the highlight on the previous view
+      // while a modal was open. A modal opener now shows active while
+      // its modal is visible; otherwise the current tab shows active.
+      const modalMap = {
+        modalWeeklyMatrix: 'sbNavWeekSchedule',
+        modalTeacherLibraryPicker: 'sbNavCourseMaterials',
+        modalTeacherAdvanceClass: 'sbNavAdvanceClass',
+        modalTeacherAddScheduleSlot: 'sbNavAddSchedule'
+      };
       Object.values(navMap).forEach(id => {
         const el = document.getElementById(id);
         if (el) el.classList.remove('active');
       });
+      Object.values(modalMap).forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.classList.remove('active');
+      });
+      for (const modalId of Object.keys(modalMap)) {
+        const modalEl = document.getElementById(modalId);
+        if (modalEl && !modalEl.classList.contains('hidden')) {
+          const openerEl = document.getElementById(modalMap[modalId]);
+          if (openerEl) openerEl.classList.add('active');
+          return;
+        }
+      }
       const activeId = navMap[tab];
       if (activeId) {
         const activeEl = document.getElementById(activeId);
@@ -9328,6 +9351,60 @@ font-family: var(--font-num) !important;
       });
     } catch (e) {
       console.warn('[Teacher Realtime Sync] Notice:', e);
+    }
+
+    // Batch 3.6 (audit P2-29): wire every teacher modal through the one
+    // shared helper — focus moves in, Tab traps, backdrop click closes
+    // via each modal's own close function (history handling preserved).
+    // Escape already closes teacher modals (the global Escape listener
+    // above), so the helper does not handle it; its observer unregisters
+    // a modal when hidden, which returns focus to the opener.
+    try {
+      if (window.ModalA11y) {
+        var teacherModalClosers = {
+          modalTeacherAttendance: function () { closeAttendanceModal(); },
+          modalClassLeaveAbsent: function () { closeLeaveAbsentModal(); },
+          modalTeacherAdvanceClass: function () { closeAdvanceClassModal(); },
+          modalTeacherLeaveRequest: function () { closeTeacherLeaveRequestModal(); },
+          modalRescheduleRequest: function () { closeRescheduleRequestModal(); },
+          modalTimeChangeRequest: function () { closeTimeChangeRequestModal(); },
+          modalWeeklyMatrix: function () { closeWeeklyMatrixModal(); },
+          modalTeacherAddScheduleSlot: function () { closeTeacherAddScheduleModal(); },
+          modalDigitalBookReader: function () { closeDigitalBookReader(); },
+          modalCourseMaterialPreview: function () { closeCourseMaterialPreview(); },
+          modalTeacherLibraryPicker: function () { closeTeacherLibraryPicker(); },
+          modalTeacherSalarySlip: function () { closeTeacherSalarySlip(); }
+        };
+        window.ModalA11y.watchAllModals(function (el) {
+          var fn = teacherModalClosers[el.id];
+          if (fn) return fn;
+          return function () {
+            el.classList.add('hidden');
+            el.classList.remove('flex');
+            if (typeof popTeacherModalHistory === 'function') popTeacherModalHistory(el.id);
+          };
+        });
+      }
+    } catch (e) {
+      console.warn('[Teacher Modal A11y] Notice:', e);
+    }
+
+    // Batch 3.6 (audit P2-32): keep the sidebar highlight following modal
+    // openers — whenever one of the four opener modals shows or hides,
+    // re-sync (the sync itself prefers a visible modal over the tab).
+    try {
+      if (typeof MutationObserver !== 'undefined') {
+        var teacherSidebarModalIds = ['modalWeeklyMatrix', 'modalTeacherLibraryPicker', 'modalTeacherAdvanceClass', 'modalTeacherAddScheduleSlot'];
+        var teacherSidebarObserver = new MutationObserver(function () {
+          try { syncTeacherSidebarActiveState(CURRENT_TEACHER_TAB); } catch (e) {}
+        });
+        teacherSidebarModalIds.forEach(function (modalId) {
+          var modalEl = document.getElementById(modalId);
+          if (modalEl) teacherSidebarObserver.observe(modalEl, { attributes: true, attributeFilter: ['class'] });
+        });
+      }
+    } catch (e) {
+      console.warn('[Teacher Sidebar Sync] Notice:', e);
     }
   </script>
   <style>
