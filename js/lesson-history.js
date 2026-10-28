@@ -92,6 +92,7 @@
           remarks: String(raw),
           additionalLesson: null,
           lessonName: null,
+          pageReference: null,
           imageKey: null,
           isAdditionalCourse: false,
           isAdvanceClass: false,
@@ -113,6 +114,7 @@
       remarks: parsed.remarks || parsed.notes || null,
       additionalLesson: parsed.additional_lesson || null,
       lessonName: parsed.lesson_name || null,
+      pageReference: parsed.page_reference || null,
       imageKey: parsed.image_key || null,
       isAdditionalCourse: parsed.book_id === 'additional-course',
       // Batch 3.3 (audit P2-19): an advance lesson is a lesson FOR A
@@ -152,6 +154,7 @@
       remarks: p ? p.remarks : null,
       additionalLesson: p ? p.additionalLesson : null,
       lessonName: p ? p.lessonName : null,
+      pageReference: p ? p.pageReference : null,
       imageKey: p ? p.imageKey : null,
       isAdditionalCourse: p ? p.isAdditionalCourse : false,
       // Batch 3.3 (audit P2-19): advance by stored status OR by payload

@@ -1141,15 +1141,20 @@ font-family: var(--font-num) !important;
               </select>
             </div>
 
-            <!-- Additional Course inputs (shown only when "Additional Course" is selected) -->
+            <!-- Additional Course inputs (shown only when "Additional Course" is selected).
+                 Lesson-form simplify: the custom course has a name (required)
+                 and an optional free-text page/lesson reference. The lesson
+                 description itself lives in the ONE shared "Additional Lesson /
+                 Description" box below (attAdditionalLesson) — there is no
+                 second description box for Additional Course. -->
             <div id="attAdditionalCourseContainer" class="hidden space-y-2">
               <div>
                 <label class="block font-bold text-slate-700 mb-1">Additional Course Name *:</label>
                 <input type="text" id="attAdditionalCourseName" placeholder="e.g. Arabic Grammar Basics" class="w-full p-2.5 bg-white border border-slate-300 rounded-xl font-bold text-slate-800 text-xs focus:outline-brandEmerald">
               </div>
               <div>
-                <label class="block font-bold text-slate-700 mb-1">Lesson Name / Description *:</label>
-                <input type="text" id="attAdditionalLessonName" placeholder="e.g. Lesson 5: Past Tense Verbs" class="w-full p-2.5 bg-white border border-slate-300 rounded-xl font-medium text-slate-800 text-xs focus:outline-brandEmerald">
+                <label class="block font-bold text-slate-700 mb-1">Page / Lesson Reference (Optional):</label>
+                <input type="text" id="attAdditionalCourseReference" placeholder="e.g. Lesson 5, handout page 12 (optional)" class="w-full p-2.5 bg-white border border-slate-300 rounded-xl font-medium text-slate-800 text-xs focus:outline-brandEmerald">
               </div>
             </div>
 
@@ -1175,94 +1180,69 @@ font-family: var(--font-num) !important;
               </select>
             </div>
 
-            <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-              <div>
-                <label class="block font-bold text-slate-700 mb-1">Page / Chapter / Portion *:</label>
-                <div class="flex items-center gap-1.5">
-                  <select id="attCoursePageSelect" class="flex-1 p-2 bg-white border border-slate-300 rounded-xl font-semibold text-slate-800 text-xs focus:outline-brandEmerald">
-                    <!-- Populated dynamically -->
-                  </select>
-                  <button type="button" onclick="previewTeacherSelectedMaterial()" class="px-2.5 py-2 bg-brandDark hover:bg-brandDarkest text-white rounded-xl font-bold text-xs shadow-xs transition flex items-center gap-1 flex-shrink-0" title="Open Page in Digital Reader">
-                    <i class="fa-solid fa-eye text-brandGold"></i> View
-                  </button>
-                </div>
-              </div>
-
-              <div>
-                <label class="block font-bold text-slate-700 mb-1">Lines / Verses (Optional):</label>
-                <input type="text" id="attLineRange" placeholder="e.g. Lines 1 to 5 / Verses 1-10" class="w-full p-2 bg-white border border-slate-300 rounded-xl font-medium text-slate-800 text-xs focus:outline-brandEmerald">
+            <div>
+              <label class="block font-bold text-slate-700 mb-1">Page / Chapter / Portion *:</label>
+              <div class="flex items-center gap-1.5">
+                <select id="attCoursePageSelect" class="flex-1 p-2 bg-white border border-slate-300 rounded-xl font-semibold text-slate-800 text-xs focus:outline-brandEmerald">
+                  <!-- Populated dynamically -->
+                </select>
+                <button type="button" onclick="previewTeacherSelectedMaterial()" class="px-2.5 py-2 bg-brandDark hover:bg-brandDarkest text-white rounded-xl font-bold text-xs shadow-xs transition flex items-center gap-1 flex-shrink-0" title="Open Page in Digital Reader">
+                  <i class="fa-solid fa-eye text-brandGold"></i> View
+                </button>
               </div>
             </div>
-
-            <div class="grid grid-cols-2 gap-2.5">
-              <div>
-                <label class="block font-bold text-slate-700 mb-1">Lesson Assessment:</label>
-                <select id="attSabaqResult" class="w-full p-2 bg-white border border-slate-300 rounded-xl font-bold text-slate-800 text-xs">
-                  <option value="Pass">⭐ Pass (Advance to Next Lesson)</option>
-                  <option value="Repeat">🔄 Revision / Repeat (Same Page Next Class)</option>
-                  <option value="Practice">⚠️ Needs Home Tajweed Practice</option>
-                </select>
-              </div>
-              <div>
-                <label class="block font-bold text-slate-700 mb-1">Recitation Quality:</label>
-                <select id="attSabaqRating" class="w-full p-2 bg-white border border-slate-300 rounded-xl font-bold text-slate-800 text-xs">
-                  <option value="5">⭐⭐⭐⭐⭐ Excellent</option>
-                  <option value="4">⭐⭐⭐⭐ Very Good</option>
-                  <option value="3">⭐⭐⭐ Good</option>
-                  <option value="2">⭐⭐ Satisfactory</option>
-                </select>
-              </div>
-            </div>
+            <!-- Lesson-form simplify: Lines / Assessment / Rating are no
+                 longer teacher-facing controls in this minimal form. The
+                 ids are kept as hidden inputs so the existing save/reopen
+                 code (and every old record's values on edit) keeps working
+                 unchanged: new saves default to '' / 'Pass' / 5. -->
+            <input type="hidden" id="attLineRange" value="">
+            <input type="hidden" id="attSabaqResult" value="Pass">
+            <input type="hidden" id="attSabaqRating" value="5">
           </div>
         </div>
 
-        <!-- Additional Lesson (supplementary: Namaz, Duas, Islamic Studies).
-             Saved as the ONE key `additional_lesson` in lesson_notes JSON.
-             Distinct from the Additional Course `lesson_name` above. -->
+        <!-- Additional Lesson / Description: the ONE description box for
+             both paths — supplementary material for a standard course
+             (Duas, Namaz/practical prayer, daily Islamic practices, other
+             Islamic studies) AND the Additional Course lesson details.
+             Saved as `additional_lesson` for standard courses and as
+             `lesson_name` for Additional Course (so history shows it once,
+             in the title, instead of twice). -->
         <div>
           <label class="block font-bold text-slate-700 mb-1.5">
-            Additional Lesson (Optional):
+            Additional Lesson / Description:
           </label>
           <input type="text" id="attAdditionalLesson" placeholder="e.g. Namaz: Surah Fatiha, Duas: Morning Duas"
             class="w-full p-3 border border-slate-300 rounded-xl font-medium text-slate-800 text-xs focus:outline-brandEmerald focus:border-brandEmerald">
-          <p class="text-[10px] text-slate-400 mt-1">Supplementary lesson taught alongside the main lesson (shown separately in Lesson History).</p>
         </div>
 
-        <!-- Lesson Image (Optional): uploaded via /api/storage BEFORE save;
-             only the R2 key is stored in lesson_notes (image_key). -->
+        <!-- Lesson-form simplify: new image uploads are no longer offered
+             from this minimal form. The hidden key input is kept so an
+             image attached to an OLD record survives an edit/re-save, and
+             history views keep rendering it via `image_key`. -->
+        <input type="hidden" id="attLessonImageKey" value="">
+
+        <!-- Remarks: five predefined remarks as selectable chips (NOT a
+             dropdown). Tapping a chip fills the remarks box; the teacher
+             may still type free text instead. Stored as plain text in
+             lesson_notes.remarks, exactly as before, so history display
+             is unchanged. -->
         <div>
           <label class="block font-bold text-slate-700 mb-1.5">
-            Lesson Image (Optional):
+            Remarks:
           </label>
-          <input type="file" id="attLessonImageFile" accept="image/jpeg,image/png,image/webp"
-            class="w-full p-2 border border-slate-300 rounded-xl font-medium text-slate-800 text-xs focus:outline-brandEmerald">
-          <input type="hidden" id="attLessonImageKey" value="">
-          <div id="attLessonImagePreviewBox" class="hidden mt-2 flex items-center gap-2">
-            <img id="attLessonImagePreview" class="max-h-28 rounded-xl border border-slate-200" alt="Attached lesson image">
-            <button type="button" onclick="clearTeacherLessonImage()" class="px-2.5 py-1 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-lg text-[11px] font-bold">Remove image</button>
+          <div id="attRemarkChips" class="flex flex-wrap gap-1.5 mb-2">
+            <button type="button" data-remark="MashaAllah" onclick="selectRemarkChip('att', 'MashaAllah', this)" class="remark-chip px-3.5 py-2 rounded-full border border-slate-300 bg-white text-slate-700 text-[11px] font-bold hover:border-emerald-500 transition">MashaAllah</button>
+            <button type="button" data-remark="Very Good" onclick="selectRemarkChip('att', 'Very Good', this)" class="remark-chip px-3.5 py-2 rounded-full border border-slate-300 bg-white text-slate-700 text-[11px] font-bold hover:border-emerald-500 transition">Very Good</button>
+            <button type="button" data-remark="Not Bad" onclick="selectRemarkChip('att', 'Not Bad', this)" class="remark-chip px-3.5 py-2 rounded-full border border-slate-300 bg-white text-slate-700 text-[11px] font-bold hover:border-emerald-500 transition">Not Bad</button>
+            <button type="button" data-remark="Not Too Good" onclick="selectRemarkChip('att', 'Not Too Good', this)" class="remark-chip px-3.5 py-2 rounded-full border border-slate-300 bg-white text-slate-700 text-[11px] font-bold hover:border-emerald-500 transition">Not Too Good</button>
+            <button type="button" data-remark="Very Bad" onclick="selectRemarkChip('att', 'Very Bad', this)" class="remark-chip px-3.5 py-2 rounded-full border border-slate-300 bg-white text-slate-700 text-[11px] font-bold hover:border-emerald-500 transition">Very Bad</button>
           </div>
-          <p class="text-[10px] text-slate-400 mt-1">Visible to the student's parent and to teachers assigned to this student. Upload failure stops the save (no partial record).</p>
+          <input type="text" id="attLessonNotes" placeholder="Or write your own remark (optional)"
+            class="w-full p-3 border border-slate-300 rounded-xl font-medium text-slate-800 text-xs focus:outline-brandEmerald focus:border-brandEmerald" oninput="syncRemarkChips('att')">
         </div>
 
-        <!-- Lesson Notes Input -->
-        <div>
-          <label class="block font-bold text-slate-700 mb-1.5">
-            Teacher Lesson Remarks &amp; Tajweed Guidance:
-          </label>
-          <textarea id="attLessonNotes" rows="3" placeholder="e.g. Pronounced articulation points very well. Ensure proper nasalization on Noon Mushaddad."
-            class="w-full p-3 border border-slate-300 rounded-xl font-medium text-slate-800 text-xs focus:outline-brandEmerald focus:border-brandEmerald"></textarea>
-          <p class="text-[10px] text-slate-400 mt-1">These notes and exact material page are permanently saved and directly accessible to student on their portal.</p>
-        </div>
-
-        <div class="p-2.5 bg-amber-50 rounded-xl border border-amber-200 flex items-center justify-between text-xs">
-          <div class="text-[11px] text-amber-900 font-medium flex items-center gap-1.5">
-            <i class="fa-solid fa-plane-departure text-amber-600"></i>
-            <span>Going on vacation/long holiday?</span>
-          </div>
-          <button type="button" onclick="triggerLeaveRequestFromAttendanceModal()" class="px-2.5 py-1 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-[10px] font-black transition">
-            Request Leave
-          </button>
-        </div>
       </div>
 
       <div class="pt-3 border-t flex flex-col-reverse sm:flex-row justify-end gap-2 shrink-0">
@@ -1423,15 +1403,18 @@ font-family: var(--font-num) !important;
               </select>
             </div>
 
-            <!-- Additional Course inputs (shown only when "Additional Course" is selected) -->
+            <!-- Additional Course inputs (shown only when "Additional Course" is selected).
+                 Lesson-form simplify: name (required) + optional free-text
+                 page/lesson reference. The description lives in the ONE
+                 shared "Additional Lesson / Description" box below. -->
             <div id="advAdditionalCourseContainer" class="hidden space-y-2">
               <div>
                 <label class="block font-bold text-slate-700 mb-1">Additional Course Name *:</label>
                 <input type="text" id="advAdditionalCourseName" placeholder="e.g. Arabic Grammar Basics" class="w-full p-2.5 bg-white border border-slate-300 rounded-xl font-bold text-slate-800 text-xs focus:outline-purple-600">
               </div>
               <div>
-                <label class="block font-bold text-slate-700 mb-1">Lesson Name / Description *:</label>
-                <input type="text" id="advAdditionalLessonName" placeholder="e.g. Lesson 5: Past Tense Verbs" class="w-full p-2.5 bg-white border border-slate-300 rounded-xl font-medium text-slate-800 text-xs focus:outline-purple-600">
+                <label class="block font-bold text-slate-700 mb-1">Page / Lesson Reference (Optional):</label>
+                <input type="text" id="advAdditionalCourseReference" placeholder="e.g. Lesson 5, handout page 12 (optional)" class="w-full p-2.5 bg-white border border-slate-300 rounded-xl font-medium text-slate-800 text-xs focus:outline-purple-600">
               </div>
             </div>
 
@@ -1457,73 +1440,57 @@ font-family: var(--font-num) !important;
               </select>
             </div>
 
-            <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-              <div>
-                <label class="block font-bold text-slate-700 mb-1">Page / Chapter / Portion *:</label>
-                <div class="flex items-center gap-1.5">
-                  <select id="advCoursePageSelect" class="flex-1 p-2 bg-white border border-slate-300 rounded-xl font-semibold text-slate-800 text-xs focus:outline-purple-600">
-                    <!-- Populated dynamically -->
-                  </select>
-                  <button type="button" onclick="previewAdvanceSelectedMaterial()" class="px-2.5 py-2 bg-purple-900 hover:bg-purple-950 text-white rounded-xl font-bold text-xs shadow-xs transition flex items-center gap-1 flex-shrink-0" title="Open Page in Digital Reader">
-                    <i class="fa-solid fa-eye text-amber-300"></i> View
-                  </button>
-                </div>
-              </div>
-
-              <div>
-                <label class="block font-bold text-slate-700 mb-1">Lines / Verses (Optional):</label>
-                <input type="text" id="advLineRange" placeholder="e.g. Lines 1 to 5 / Verses 1-10" class="w-full p-2 bg-white border border-slate-300 rounded-xl font-medium text-slate-800 text-xs focus:outline-purple-600">
+            <div>
+              <label class="block font-bold text-slate-700 mb-1">Page / Chapter / Portion *:</label>
+              <div class="flex items-center gap-1.5">
+                <select id="advCoursePageSelect" class="flex-1 p-2 bg-white border border-slate-300 rounded-xl font-semibold text-slate-800 text-xs focus:outline-purple-600">
+                  <!-- Populated dynamically -->
+                </select>
+                <button type="button" onclick="previewAdvanceSelectedMaterial()" class="px-2.5 py-2 bg-purple-900 hover:bg-purple-950 text-white rounded-xl font-bold text-xs shadow-xs transition flex items-center gap-1 flex-shrink-0" title="Open Page in Digital Reader">
+                  <i class="fa-solid fa-eye text-amber-300"></i> View
+                </button>
               </div>
             </div>
-
-            <div class="grid grid-cols-2 gap-2.5">
-              <div>
-                <label class="block font-bold text-slate-700 mb-1">Lesson Assessment:</label>
-                <select id="advSabaqResult" class="w-full p-2 bg-white border border-slate-300 rounded-xl font-bold text-slate-800 text-xs">
-                  <option value="Pass">⭐ Pass (Advance to Next Lesson)</option>
-                  <option value="Repeat">🔄 Revision / Repeat (Same Page Next Class)</option>
-                  <option value="Practice">⚠️ Needs Home Tajweed Practice</option>
-                </select>
-              </div>
-              <div>
-                <label class="block font-bold text-slate-700 mb-1">Recitation Quality:</label>
-                <select id="advSabaqRating" class="w-full p-2 bg-white border border-slate-300 rounded-xl font-bold text-slate-800 text-xs">
-                  <option value="5">⭐⭐⭐⭐⭐ Excellent</option>
-                  <option value="4">⭐⭐⭐⭐ Very Good</option>
-                  <option value="3">⭐⭐⭐ Good</option>
-                  <option value="2">⭐⭐ Satisfactory</option>
-                </select>
-              </div>
-            </div>
+            <!-- Lesson-form simplify: Lines / Assessment / Rating kept as
+                 hidden inputs (same ids, same defaults) so the existing
+                 save code and old records keep working unchanged. -->
+            <input type="hidden" id="advLineRange" value="">
+            <input type="hidden" id="advSabaqResult" value="Pass">
+            <input type="hidden" id="advSabaqRating" value="5">
           </div>
         </div>
 
-        <!-- 4. Teacher Remarks -->
+        <!-- Additional Lesson / Description: the ONE description box
+             (field 3, before remarks). Same shared field as the main form. -->
         <div>
           <label class="block font-bold text-slate-700 mb-1.5">
-            Teacher Lesson Remarks &amp; Tajweed Guidance:
-          </label>
-          <textarea id="advLessonNotes" rows="2" placeholder="e.g. Completed tomorrow's session today with great focus. Pronounced Makharij smoothly."
-            class="w-full p-3 border border-slate-300 rounded-xl font-medium text-slate-800 text-xs focus:outline-purple-600 focus:border-purple-600"></textarea>
-        </div>
-
-        <!-- Additional Lesson + Lesson Image (same keys as the main modal) -->
-        <div>
-          <label class="block font-bold text-slate-700 mb-1.5">
-            Additional Lesson (Optional):
+            Additional Lesson / Description:
           </label>
           <input type="text" id="advAdditionalLesson" placeholder="e.g. Namaz: Surah Fatiha, Duas: Morning Duas"
             class="w-full p-3 border border-slate-300 rounded-xl font-medium text-slate-800 text-xs focus:outline-purple-600 focus:border-purple-600">
         </div>
+
+        <!-- Remarks: five predefined remarks as selectable chips (NOT a
+             dropdown); tapping a chip fills the remarks box, free text
+             still allowed. Stored as plain text, as before. -->
         <div>
           <label class="block font-bold text-slate-700 mb-1.5">
-            Lesson Image (Optional):
+            Remarks:
           </label>
-          <input type="file" id="advLessonImageFile" accept="image/jpeg,image/png,image/webp"
-            class="w-full p-2 border border-slate-300 rounded-xl font-medium text-slate-800 text-xs focus:outline-purple-600">
-          <input type="hidden" id="advLessonImageKey" value="">
-          <p class="text-[10px] text-slate-400 mt-1">Uploaded before saving; only the image reference is stored with the lesson.</p>
+          <div id="advRemarkChips" class="flex flex-wrap gap-1.5 mb-2">
+            <button type="button" data-remark="MashaAllah" onclick="selectRemarkChip('adv', 'MashaAllah', this)" class="remark-chip px-3.5 py-2 rounded-full border border-slate-300 bg-white text-slate-700 text-[11px] font-bold hover:border-purple-500 transition">MashaAllah</button>
+            <button type="button" data-remark="Very Good" onclick="selectRemarkChip('adv', 'Very Good', this)" class="remark-chip px-3.5 py-2 rounded-full border border-slate-300 bg-white text-slate-700 text-[11px] font-bold hover:border-purple-500 transition">Very Good</button>
+            <button type="button" data-remark="Not Bad" onclick="selectRemarkChip('adv', 'Not Bad', this)" class="remark-chip px-3.5 py-2 rounded-full border border-slate-300 bg-white text-slate-700 text-[11px] font-bold hover:border-purple-500 transition">Not Bad</button>
+            <button type="button" data-remark="Not Too Good" onclick="selectRemarkChip('adv', 'Not Too Good', this)" class="remark-chip px-3.5 py-2 rounded-full border border-slate-300 bg-white text-slate-700 text-[11px] font-bold hover:border-purple-500 transition">Not Too Good</button>
+            <button type="button" data-remark="Very Bad" onclick="selectRemarkChip('adv', 'Very Bad', this)" class="remark-chip px-3.5 py-2 rounded-full border border-slate-300 bg-white text-slate-700 text-[11px] font-bold hover:border-purple-500 transition">Very Bad</button>
+          </div>
+          <input type="text" id="advLessonNotes" placeholder="Or write your own remark (optional)"
+            class="w-full p-3 border border-slate-300 rounded-xl font-medium text-slate-800 text-xs focus:outline-purple-600 focus:border-purple-600" oninput="syncRemarkChips('adv')">
         </div>
+
+        <!-- Lesson-form simplify: new image uploads are no longer offered
+             from this minimal form; the hidden key is kept for old records. -->
+        <input type="hidden" id="advLessonImageKey" value="">
 
         <!-- Automated Parent Email Notification Notice -->
         <div class="p-3 bg-purple-50 rounded-xl border border-purple-200 flex items-center gap-2.5 text-xs text-purple-900">
@@ -3908,10 +3875,11 @@ font-family: var(--font-num) !important;
               const passColor = pMeta.status === 'Pass' ? 'bg-emerald-100 text-emerald-800 border-emerald-300' : 'bg-amber-100 text-amber-800 border-amber-300';
               // Additional Course: show the custom lesson name (never a
               // "Pg null" label) and no reader button — there is no book
-              // to open for a teacher-entered course.
+              // to open for a teacher-entered course. A saved free-text
+              // reference is shown after the lesson name.
               const isAddCourseHist = pMeta.book_id === 'additional-course';
               const lessonMetaLabel = isAddCourseHist
-                ? escapeHtml(pMeta.lesson_name || 'Lesson')
+                ? escapeHtml(pMeta.lesson_name || 'Lesson') + (pMeta.page_reference ? ` &bull; Ref: ${escapeHtml(pMeta.page_reference)}` : '')
                 : `${pMeta.para ? `Para ${escapeHtml(pMeta.para)} &bull; ` : ''}Pg ${escapeHtml(pMeta.page)}`;
               // Lesson History page links: no invented book id, no
               // page-1 default. A record with no book id or no page
@@ -4764,7 +4732,10 @@ font-family: var(--font-num) !important;
     // For the sentinel: hide the page cell (select + View button) and the
     // para/language containers, show the custom inputs. For a catalogue
     // book: hide the custom inputs and restore the page cell; para/language
-    // visibility is then decided by the caller's branch logic.
+    // visibility is then decided by the caller's branch logic. Switching
+    // away clears the custom name/reference (never a stale custom course
+    // under a catalogue book); switching to the sentinel never clears the
+    // shared description box, which may hold unrelated saved data.
     function setAdditionalCourseMode(prefix, isAdditional) {
       const pageSelect = document.getElementById(prefix + 'CoursePageSelect');
       const pageCell = pageSelect ? pageSelect.closest('div.flex')?.parentElement : null;
@@ -4774,9 +4745,9 @@ font-family: var(--font-num) !important;
         addC.classList.toggle('hidden', !isAdditional);
         if (!isAdditional) {
           const nameInp = document.getElementById(prefix + 'AdditionalCourseName');
-          const lessonInp = document.getElementById(prefix + 'AdditionalLessonName');
+          const refInp = document.getElementById(prefix + 'AdditionalCourseReference');
           if (nameInp) nameInp.value = '';
-          if (lessonInp) lessonInp.value = '';
+          if (refInp) refInp.value = '';
         }
       }
       if (isAdditional) {
@@ -4785,6 +4756,35 @@ font-family: var(--font-num) !important;
         if (langC) langC.classList.add('hidden');
         if (paraC) paraC.classList.add('hidden');
       }
+    }
+
+    // Lesson-form simplify: predefined remarks as chips. The chips are
+    // display-only: tapping one fills the remarks input (same id the save
+    // code already reads), so the stored value stays plain free text and
+    // history display is unchanged. A remark that exactly matches a chip
+    // shows that chip active; anything else leaves all chips inactive.
+    const LESSON_REMARK_CHIPS = ['MashaAllah', 'Very Good', 'Not Bad', 'Not Too Good', 'Very Bad'];
+    function syncRemarkChips(prefix) {
+      const inp = document.getElementById(prefix + 'LessonNotes');
+      const box = document.getElementById(prefix + 'RemarkChips');
+      if (!inp || !box) return;
+      const val = (inp.value || '').trim();
+      box.querySelectorAll('[data-remark]').forEach(function (btn) {
+        const active = btn.getAttribute('data-remark') === val;
+        btn.classList.toggle('bg-emerald-600', active && prefix === 'att');
+        btn.classList.toggle('bg-purple-700', active && prefix === 'adv');
+        btn.classList.toggle('text-white', active);
+        btn.classList.toggle('border-emerald-600', active && prefix === 'att');
+        btn.classList.toggle('border-purple-700', active && prefix === 'adv');
+        btn.classList.toggle('bg-white', !active);
+        btn.classList.toggle('text-slate-700', !active);
+        btn.classList.toggle('border-slate-300', !active);
+      });
+    }
+    function selectRemarkChip(prefix, text) {
+      const inp = document.getElementById(prefix + 'LessonNotes');
+      if (inp) inp.value = text;
+      syncRemarkChips(prefix);
     }
 
     // Dynamic page options (Task 2): a book's chapters must not shadow its
@@ -5445,10 +5445,13 @@ font-family: var(--font-num) !important;
         // Additional Course restore: refill the custom inputs and show the
         // custom course/lesson on the badge (never a "Page N" label). The
         // change handler below (sentinel branch) reveals the container.
+        // The description box is refilled from lesson_name (the shared
+        // description for Additional Course); old records that also carry
+        // additional_lesson fall back to it, so an edit loses nothing.
         const addName = document.getElementById('attAdditionalCourseName');
-        const addLesson = document.getElementById('attAdditionalLessonName');
+        const addRef = document.getElementById('attAdditionalCourseReference');
         if (addName) addName.value = parsedNotes.book_title || '';
-        if (addLesson) addLesson.value = parsedNotes.lesson_name || '';
+        if (addRef) addRef.value = parsedNotes.page_reference || '';
         if (badge) {
           badge.innerHTML = `<i class="fa-solid fa-bookmark text-emerald-600"></i> Resuming: ${escapeHtml(parsedNotes.book_title || 'Additional Course')}${parsedNotes.lesson_name ? ' — ' + escapeHtml(parsedNotes.lesson_name) : ''}`;
           badge.className = 'text-[10px] font-bold text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded-md border border-emerald-300';
@@ -5482,6 +5485,8 @@ font-family: var(--font-num) !important;
           badge.className = 'text-[10px] font-bold text-amber-800 bg-amber-100 px-2 py-0.5 rounded-md border border-amber-200';
         }
         document.getElementById('attLineRange').value = '';
+        document.getElementById('attSabaqResult').value = 'Pass';
+        document.getElementById('attSabaqRating').value = '5';
         document.getElementById('attLessonNotes').value = currentNotes || '';
       }
 
@@ -5490,7 +5495,13 @@ font-family: var(--font-num) !important;
       // preserves it instead of wiping lesson_notes with raw text.
       _ATT_PRIOR_NOTES = (parsedNotes && typeof parsedNotes === 'object') ? parsedNotes : null;
       const _addLessonInp = document.getElementById('attAdditionalLesson');
-      if (_addLessonInp) _addLessonInp.value = parsedNotes?.additional_lesson || '';
+      // Lesson-form simplify: the description box shows lesson_name for
+      // Additional Course (its description) and additional_lesson for
+      // standard courses; old Additional Course records fall back to
+      // additional_lesson so an edit loses nothing.
+      if (_addLessonInp) _addLessonInp.value = (parsedNotes?.book_id === ADDITIONAL_COURSE_ID)
+        ? (parsedNotes?.lesson_name || parsedNotes?.additional_lesson || '')
+        : (parsedNotes?.additional_lesson || '');
       const _imgKeyInp = document.getElementById('attLessonImageKey');
       if (_imgKeyInp) _imgKeyInp.value = parsedNotes?.image_key || '';
       const _imgFileInp = document.getElementById('attLessonImageFile');
@@ -5501,6 +5512,8 @@ font-family: var(--font-num) !important;
       onTeacherCourseBookChanged(suggestedBook, resumePara, nextPage);
 
       selectAttendanceStatus((currentStatus === 'Completed' || currentStatus === 'Running' || currentStatus === 'Waiting') ? 'Present' : (currentStatus || 'Present'));
+      // Lesson-form simplify: mark the chip matching the restored remark.
+      syncRemarkChips('att');
       document.getElementById('modalTeacherAttendance').classList.remove('hidden');
       document.getElementById('modalTeacherAttendance').classList.add('flex');
       pushTeacherModalHistory('modalTeacherAttendance');
@@ -5603,19 +5616,26 @@ font-family: var(--font-num) !important;
         let sabaqPayload;
         if (bookId === ADDITIONAL_COURSE_ID) {
           // Additional Course branch (BEFORE the book lookup, so the
-          // sentinel can never resolve to allBooks[0]). Course + lesson
-          // names are required; page is null, never a fake "Page 1".
+          // sentinel can never resolve to allBooks[0]). Only the custom
+          // course name is required. The description comes from the ONE
+          // shared "Additional Lesson / Description" box (already read as
+          // additionalLesson above) and is stored as lesson_name, so
+          // history shows it once, in the title — additional_lesson is
+          // left null for Additional Course to avoid showing it twice.
+          // The optional free-text reference is stored as page_reference;
+          // page stays null, never a fake "Page 1".
           const customCourse = (document.getElementById('attAdditionalCourseName')?.value || '').trim();
-          const customLesson = (document.getElementById('attAdditionalLessonName')?.value || '').trim();
-          if (!customCourse || !customLesson) {
-            lmsNotify("Please enter both the additional course name and the lesson name.");
+          const customReference = (document.getElementById('attAdditionalCourseReference')?.value || '').trim();
+          if (!customCourse) {
+            lmsNotify("Please enter the additional course name.");
             return;
           }
           sabaqPayload = {
             book_id: ADDITIONAL_COURSE_ID,
             book_title: customCourse,
             content_type: 'additional',
-            lesson_name: customLesson,
+            lesson_name: additionalLesson || null,
+            page_reference: customReference || null,
             language: null,
             para: null,
             page: null,
@@ -5623,7 +5643,7 @@ font-family: var(--font-num) !important;
             status: sabaq_result,
             rating: rating,
             remarks: remarks,
-            additional_lesson: additionalLesson || null,
+            additional_lesson: null,
             image_key: lessonImageKey,
             is_advance_class: (selectedStatus === 'Advance Class'),
             advance_target_date: targetDate,
@@ -7344,6 +7364,7 @@ font-family: var(--font-num) !important;
         const progress = [];
         if (e.para) progress.push(`Para ${escapeHtml(e.para)}`);
         if (e.page !== null && e.page !== undefined) progress.push(`Page ${escapeHtml(e.page)}`);
+        if (e.pageReference) progress.push(`Ref: ${escapeHtml(e.pageReference)}`);
         if (e.lineRange) progress.push(escapeHtml(e.lineRange));
         const progressText = progress.join(' • ');
         let imgHtml = '';
@@ -8357,15 +8378,6 @@ font-family: var(--font-num) !important;
       if (popHistory) popTeacherModalHistory('modalTeacherLeaveRequest');
     }
 
-    function triggerLeaveRequestFromAttendanceModal() {
-      const scheduleId = document.getElementById('attScheduleId')?.value;
-      const studentId = document.getElementById('attStudentId')?.value;
-      const subTitle = document.getElementById('attModalSubtitle')?.innerText || '';
-      const studentName = subTitle.split('•')[0].trim();
-      closeAttendanceModal(false);
-      openTeacherLeaveRequestModal(studentId, scheduleId, studentName);
-    }
-
     async function submitTeacherLeaveRequest(e) {
       e.preventDefault();
       const studentId = document.getElementById('teacherReqStudentId')?.value;
@@ -8815,6 +8827,8 @@ font-family: var(--font-num) !important;
         `).join('') + `<option value="${ADDITIONAL_COURSE_ID}">Additional Course</option>`;
         onAdvanceCourseBookChanged(allBooks[0]?.id || 'noorani-qaida-classic');
       }
+      // Lesson-form simplify: mark the chip matching any carried remark.
+      syncRemarkChips('adv');
 
       document.getElementById('modalTeacherAdvanceClass')?.classList.remove('hidden');
       document.getElementById('modalTeacherAdvanceClass')?.classList.add('flex');
@@ -9049,13 +9063,16 @@ font-family: var(--font-num) !important;
         return;
       }
 
-      // Additional Course: course + lesson names are required (validated
-      // before any save work, matching the student/date check above).
+      // Additional Course: only the custom course name is required
+      // (validated before any save work, matching the student/date check
+      // above). The description comes from the ONE shared "Additional
+      // Lesson / Description" box and is stored as lesson_name, exactly
+      // like the main modal; page_reference holds the optional reference.
       const isAdditionalCourse = bookId === ADDITIONAL_COURSE_ID;
       const customCourse = (document.getElementById('advAdditionalCourseName')?.value || '').trim();
-      const customLesson = (document.getElementById('advAdditionalLessonName')?.value || '').trim();
-      if (isAdditionalCourse && (!customCourse || !customLesson)) {
-        lmsNotify("Please enter both the additional course name and the lesson name.");
+      const customReference = (document.getElementById('advAdditionalCourseReference')?.value || '').trim();
+      if (isAdditionalCourse && !customCourse) {
+        lmsNotify("Please enter the additional course name.");
         return;
       }
 
@@ -9117,7 +9134,8 @@ font-family: var(--font-num) !important;
           book_id: bookId,
           book_title: bookTitle,
           content_type: isAdditionalCourse ? 'additional' : (isQuran ? 'quran' : isTafseer ? 'tafseer' : (book?.category || 'qaida')),
-          lesson_name: isAdditionalCourse ? customLesson : undefined,
+          lesson_name: isAdditionalCourse ? (advAdditionalLesson || undefined) : undefined,
+          page_reference: isAdditionalCourse ? (customReference || null) : undefined,
           language: selectedLanguage,
           para: selectedPara,
           page: isAdditionalCourse ? null : page,
@@ -9125,7 +9143,7 @@ font-family: var(--font-num) !important;
           status: sabaqResult,
           rating: rating,
           remarks: remarks,
-          additional_lesson: advAdditionalLesson || null,
+          additional_lesson: isAdditionalCourse ? null : (advAdditionalLesson || null),
           image_key: advLessonImageKey,
           is_advance_class: true,
           advance_target_date: targetDate,

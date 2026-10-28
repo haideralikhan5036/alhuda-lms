@@ -50,11 +50,23 @@ check('advance save has no UTC-date stamp', !/new Date\(\)\.toISOString\(\)\.sli
 check('modal save writes additional_lesson', /additional_lesson:/.test(modalSave));
 check('advance save writes additional_lesson', /additional_lesson:/.test(advSave));
 check('no second additional-lesson key invented', !/additionalLesson:/.test(modalSave) && !/additionalLesson:/.test(advSave));
-check('Additional Course lesson_name untouched in modal save', /lesson_name: customLesson/.test(modalSave));
+// Lesson-form simplify (Batch A) deliberately changed this: the old
+// separate "Lesson Name" input is gone, so the modal save now stores the
+// shared description box as lesson_name for Additional Course
+// (lesson_name: additionalLesson) instead of a dedicated customLesson
+// variable. The key itself is untouched — only its source changed.
+check('Additional Course lesson_name now comes from the shared description box',
+  /lesson_name: additionalLesson/.test(modalSave));
 
 // --- 3. Image: inputs, carry-through, loud failure ------------------------
-check('modal has image file input + hidden key', TEACHER_HTML.includes('id="attLessonImageFile"') && TEACHER_HTML.includes('id="attLessonImageKey"'));
-check('advance form has image file input + hidden key', TEACHER_HTML.includes('id="advLessonImageFile"') && TEACHER_HTML.includes('id="advLessonImageKey"'));
+// Lesson-form simplify (Batch A) deliberately removed the file inputs
+// from the minimal lesson form (new uploads are not offered there); the
+// hidden key inputs are kept so an image on an OLD record survives an
+// edit/re-save, and history views keep rendering it via image_key. The
+// save-side upload blocks remain (guarded) but are unreachable without
+// a file input.
+check('modal keeps hidden image key, file input removed', !TEACHER_HTML.includes('id="attLessonImageFile"') && TEACHER_HTML.includes('id="attLessonImageKey"'));
+check('advance form keeps hidden image key, file input removed', !TEACHER_HTML.includes('id="advLessonImageFile"') && TEACHER_HTML.includes('id="advLessonImageKey"'));
 check('modal save writes image_key', /image_key:/.test(modalSave));
 check('advance save writes image_key', /image_key:/.test(advSave));
 check('modal save uploads before save via loud-fail helper', /uploadLessonImageOrThrow/.test(modalSave));

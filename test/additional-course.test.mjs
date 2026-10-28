@@ -6,14 +6,20 @@
 //     catalogue book restores the normal form.
 //  B) Save branch (REAL saveAttendanceAndLessonNotes, stubbed environment):
 //     sentinel payload shape exactly (book_id, book_title = entered name,
-//     content_type 'additional', lesson_name, page null, para null,
-//     language null); missing course/lesson name notifies and saves nothing;
-//     a catalogue book still saves its own title + page.
+//     content_type 'additional', lesson_name = the shared description box,
+//     page_reference = the optional free-text reference, page null, para
+//     null, language null, additional_lesson null so history shows the
+//     description once, in the title); only the course name is required —
+//     an empty description still saves; a catalogue book still saves its
+//     own title + page + the shared description as additional_lesson.
 //  C) Display guards: teacher history, parent latest/history and the
 //     dashboard widget all key their "Page N" label and reader button on
 //     the sentinel; the reader entry points early-return for it; the
 //     Teacher 360 parser (REAL _parseLessonDetails360) surfaces the lesson
 //     name with no Page suffix for sentinel records.
+// Lesson-form simplify (Batch A) deliberately changed B: the old separate
+// "Lesson Name" input is gone — the shared description box feeds
+// lesson_name, and the new reference input feeds page_reference.
 // Run from the repo root:  node test/additional-course.test.mjs
 import fs from 'node:fs';
 import path from 'node:path';
@@ -94,7 +100,7 @@ function makeDoc() {
   const pageCell = { style: {} };
   const ids = ['attCoursePageSelect', 'attQuranParaContainer', 'attQuranParaSelect',
     'attTafseerLanguageContainer', 'attTafseerLanguageSelect', 'attParaLabelText',
-    'attAdditionalCourseContainer', 'attAdditionalCourseName', 'attAdditionalLessonName'];
+    'attAdditionalCourseContainer', 'attAdditionalCourseName', 'attAdditionalCourseReference'];
   ids.forEach(id => { els[id] = stubEl(); });
   els.attCoursePageSelect.closest = () => ({ parentElement: pageCell });
   els.attAdditionalCourseContainer.classList.add('hidden');
@@ -122,25 +128,27 @@ function makeDoc() {
     doc.els.attTafseerLanguageContainer.classList.contains('hidden'));
   // Catalogue book selected: form restored, custom inputs cleared + hidden.
   doc.els.attAdditionalCourseName.value = 'Stale Name';
+  doc.els.attAdditionalCourseReference.value = 'Stale Ref';
   vm.runInContext(`onTeacherCourseBookChanged('c1')`, sandbox);
   check('catalogue change: custom container hidden again',
     doc.els.attAdditionalCourseContainer.classList.contains('hidden'));
   check('catalogue change: custom inputs cleared',
-    doc.els.attAdditionalCourseName.value === '');
+    doc.els.attAdditionalCourseName.value === '' && doc.els.attAdditionalCourseReference.value === '');
   check('catalogue change: page cell restored', doc.pageCell.style.display === '');
   check('catalogue change: page options generated (5)',
     (doc.els.attCoursePageSelect.innerHTML.match(/<option/g) || []).length === 5);
 }
 
 // ---- B) behavioural: save branch (REAL saveAttendanceAndLessonNotes) ----
-async function runSave({ selectValue, courseName, lessonName }) {
+async function runSave({ selectValue, courseName, reference, description }) {
   const upserts = [];
   const notifies = [];
   const el = (value = '') => ({ value, innerHTML: '', disabled: false });
   const els = {
     attScheduleId: el('SCH-1'), attStudentId: el('STU-1'), attSelectedStatus: el('Present'),
     attAdvanceTargetDate: el(''), attCourseBookSelect: el(selectValue),
-    attAdditionalCourseName: el(courseName), attAdditionalLessonName: el(lessonName),
+    attAdditionalCourseName: el(courseName), attAdditionalCourseReference: el(reference),
+    attAdditionalLesson: el(description),
     attCoursePageSelect: el('3'), attLineRange: el('Lines 1-5'), attSabaqResult: el('Pass'),
     attSabaqRating: el('5'), attLessonNotes: el('Good work'),
     attTafseerLanguageSelect: el('ur'), attQuranParaSelect: el('1'),
@@ -168,26 +176,30 @@ async function runSave({ selectValue, courseName, lessonName }) {
 }
 {
   const { upserts, notifies } = await runSave({
-    selectValue: 'additional-course', courseName: 'Arabic Grammar Basics', lessonName: 'Lesson 5: Past Tense Verbs',
+    selectValue: 'additional-course', courseName: 'Arabic Grammar Basics',
+    reference: 'Lesson 5', description: 'Past Tense Verbs',
   });
   check('sentinel save: one upsert, only the success notification (no validation notification)',
     upserts.length === 1 && notifies.every(a => a.includes('Saved Successfully')), `notifies: ${JSON.stringify(notifies)}`);
   const payload = upserts.length ? JSON.parse(upserts[0][0].lesson_notes) : {};
   check('sentinel save: payload book_id is the sentinel', payload.book_id === 'additional-course');
   check('sentinel save: book_title is the entered course name', payload.book_title === 'Arabic Grammar Basics');
-  check('sentinel save: content_type additional + lesson_name carried', payload.content_type === 'additional' && payload.lesson_name === 'Lesson 5: Past Tense Verbs');
+  check('sentinel save: content_type additional + lesson_name is the shared description', payload.content_type === 'additional' && payload.lesson_name === 'Past Tense Verbs');
+  check('sentinel save: page_reference carried, additional_lesson null (no double display)', payload.page_reference === 'Lesson 5' && payload.additional_lesson === null);
   check('sentinel save: page/para/language are null (never a fake Page 1)', payload.page === null && payload.para === null && payload.language === null);
   check('sentinel save: status/rating/remarks preserved', payload.status === 'Pass' && payload.rating === 5 && payload.remarks === 'Good work');
   check('sentinel save: same schedule/student/date associations', upserts[0][0].schedule_id === 'SCH-1' && upserts[0][0].student_id === 'STU-1' && upserts[0][0].status === 'Completed');
 
-  const missing = await runSave({ selectValue: 'additional-course', courseName: '', lessonName: 'Some lesson' });
+  const missing = await runSave({ selectValue: 'additional-course', courseName: '', reference: '', description: 'Some lesson' });
   check('sentinel save: missing course name notifies and saves nothing', missing.notifies.length === 1 && missing.upserts.length === 0);
-  const missing2 = await runSave({ selectValue: 'additional-course', courseName: 'Some course', lessonName: '   ' });
-  check('sentinel save: blank lesson name notifies and saves nothing', missing2.notifies.length === 1 && missing2.upserts.length === 0);
+  const noDesc = await runSave({ selectValue: 'additional-course', courseName: 'Some course', reference: '', description: '   ' });
+  check('sentinel save: blank description still saves (description optional, course name required)',
+    noDesc.upserts.length === 1 && JSON.parse(noDesc.upserts[0][0].lesson_notes).lesson_name === null);
 
-  const cat = await runSave({ selectValue: 'q1', courseName: '', lessonName: '' });
+  const cat = await runSave({ selectValue: 'q1', courseName: '', reference: '', description: 'Morning Duas' });
   const catPayload = cat.upserts.length ? JSON.parse(cat.upserts[0][0].lesson_notes) : {};
   check('catalogue save unchanged: own title + page', catPayload.book_id === 'q1' && catPayload.book_title === 'Qaida Book' && catPayload.page === 3);
+  check('catalogue save: shared description stored as additional_lesson', catPayload.additional_lesson === 'Morning Duas');
 }
 
 // ---- C) Teacher 360 parser (REAL function, profiles360.js) ----

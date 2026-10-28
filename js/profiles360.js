@@ -1424,6 +1424,8 @@ function _buildSelectedStudentWorkspaceHtml(family, student, famSchedules, famLo
                 if (en && en.para) progressBits.push(`Para ${en.para}`);
                 if (en && en.page !== null && en.page !== undefined) progressBits.push(`Page ${en.page}`);
                 else if (p.page) progressBits.push(String(p.page));
+                if (en && en.pageReference) progressBits.push(`Ref: ${en.pageReference}`);
+                else if (p.pageReference) progressBits.push(`Ref: ${p.pageReference}`);
                 if (en && en.lineRange) progressBits.push(en.lineRange);
                 else if (p.lineRange) progressBits.push(p.lineRange);
                 // Teacher attribution ONLY from the record itself (never
@@ -1703,8 +1705,10 @@ function _parseLessonDetails360(log) {
       const bookTitle = parsed.book_title || parsed.sabaq || parsed.course || 'Daily Quran Lesson';
       const pageStr = parsed.page ? ` • Page ${parsed.page}` : '';
       // Additional Course: page is null, so pageStr is already omitted;
-      // surface the teacher-entered lesson name in the title instead.
+      // surface the teacher-entered lesson name in the title instead, plus
+      // the optional free-text reference when one was saved.
       const lessonStr = parsed.lesson_name ? ` — ${parsed.lesson_name}` : '';
+      const refStr = parsed.page_reference ? ` • Ref: ${parsed.page_reference}` : '';
       return {
         hasLesson: true,
         bookTitle,
@@ -1714,8 +1718,9 @@ function _parseLessonDetails360(log) {
         assessment: parsed.status || parsed.result || 'Completed',
         remarks: parsed.remarks || parsed.notes || '',
         additionalLesson: parsed.additional_lesson || null,
+        pageReference: parsed.page_reference || null,
         imageKey: parsed.image_key || null,
-        summaryTitle: `${bookTitle}${lessonStr}${pageStr}`
+        summaryTitle: `${bookTitle}${lessonStr}${pageStr}${refStr}`
       };
     }
   } catch (e) {}
@@ -1728,6 +1733,7 @@ function _parseLessonDetails360(log) {
     assessment: 'Completed',
     remarks: String(raw),
     additionalLesson: null,
+    pageReference: null,
     imageKey: null,
     summaryTitle: String(raw)
   };
