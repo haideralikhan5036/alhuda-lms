@@ -180,8 +180,8 @@ check('HERO no dead Join link left in parent template',
   !PARENT.includes('href="#"') && PARENT.includes('Loading class link…'));
 
 // ==== Guards: no release bump, no native popups in the new helper ====
-check('GUARD WORKER_RELEASE untouched',
-  WORKER.includes("2026-10-28-audit-p1"));
+check('GUARD WORKER_RELEASE is the Phase 3 release',
+  WORKER.includes("2026-10-29-phase3"));
 check('GUARD new modal helper uses no native alert/confirm/prompt',
   !MODAL_A11Y.includes('alert(') && !MODAL_A11Y.includes('confirm(') && !MODAL_A11Y.includes('prompt('));
 
