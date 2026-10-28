@@ -1592,9 +1592,14 @@
               const passColor = pMeta.status === 'Pass' ? 'bg-emerald-100 text-emerald-800 border-emerald-300' : 'bg-amber-100 text-amber-800 border-amber-300';
               // Additional Course: show the custom lesson name (never a
               // fake "Pg 1") and no reader button — no book to open.
+              // A saved free-text reference is shown after the lesson name
+              // (escaped: this widget interpolates teacher-entered text).
               const isAddCourseDash = pMeta.book_id === 'additional-course';
+              const dashRefLabel = pMeta.page_reference
+                ? ' • Ref: ' + String(pMeta.page_reference).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
+                : '';
               const dashLessonLabel = isAddCourseDash
-                ? (pMeta.lesson_name || 'Lesson')
+                ? ((pMeta.lesson_name || 'Lesson') + dashRefLabel)
                 : `Pg ${pMeta.page || '1'} ${pMeta.line_range ? `(${pMeta.line_range})` : ''} - ${pMeta.status || 'Done'}`;
               // Lesson History page links: no invented book id, no page-1
               // default, para + language passed through. A record with

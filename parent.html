@@ -1844,7 +1844,7 @@
           if (lr) progressBits.push(escapeHtml(lr));
         }
         const progressBadge = isAddCourse
-          ? escapeHtml(meta.lesson_name || 'Lesson')
+          ? escapeHtml(meta.lesson_name || 'Lesson') + (((en && en.pageReference) || meta?.page_reference) ? ` &bull; Ref: ${escapeHtml((en && en.pageReference) || meta.page_reference)}` : '')
           : (progressBits.length ? progressBits.join(' &bull; ') : '');
         const additionalLesson = (en && en.additionalLesson) || meta?.additional_lesson || null;
         const actualDur = (window.LessonHistory && en) ? window.LessonHistory.formatActualDuration(en) : 'not recorded';
@@ -2069,7 +2069,7 @@
         const pageVal = (en && en.page !== null && en.page !== undefined) ? en.page : (meta?.page ?? null);
         const topic = meta?.book_title
           ? (meta.book_id === 'additional-course'
-            ? `${escapeHtml(meta.book_title)}${meta.lesson_name ? ` — ${escapeHtml(meta.lesson_name)}` : ''}`
+            ? `${escapeHtml(meta.book_title)}${meta.lesson_name ? ` — ${escapeHtml(meta.lesson_name)}` : ''}${meta.page_reference ? ` • Ref: ${escapeHtml(meta.page_reference)}` : ''}`
             : `${escapeHtml(meta.book_title)}${meta?.para ? ` • Para ${escapeHtml(meta.para)}` : ''}${pageVal !== null && pageVal !== undefined && String(pageVal) !== '' ? ` (Page ${escapeHtml(pageVal)})` : ''}${((en && en.additionalLesson) || meta?.additional_lesson) ? ` • + ${escapeHtml((en && en.additionalLesson) || meta.additional_lesson)}` : ''}`)
           : escapeHtml(log.lesson_notes || 'Regular Class Attendance');
         const teacher = log.teachers?.full_name || defaultTeacher;
