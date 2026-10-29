@@ -1108,7 +1108,7 @@ font-family: var(--font-num) !important;
             </div>
           </div>
 
-          <div class="overflow-x-auto touch-scroll">
+          <div class="overflow-x-auto touch-scroll tcard">
             <table class="w-full text-left text-xs border-collapse min-w-[640px]">
               <thead class="bg-slate-100 text-slate-700 font-bold border-b border-slate-200 uppercase tracking-wide text-[11px]">
                 <tr>
@@ -7709,14 +7709,14 @@ font-family: var(--font-num) !important;
 
         return `
           <tr class="hover:bg-slate-50/80 transition">
-            <td class="p-3 font-extrabold text-slate-900">${s.month || 'Statement'}</td>
-            <td class="p-3 text-slate-600"><span class="font-bold text-slate-900">${studentCount}</span> Enrolled Students</td>
-            <td class="p-3 font-mono text-slate-700 font-bold">${baseSubtotal.toLocaleString()} PKR</td>
-            <td class="p-3 text-slate-600 font-mono text-xs">${adjText}</td>
-            <td class="p-3 text-slate-600 font-mono text-xs">${advText}</td>
-            <td class="p-3 text-right font-mono font-black text-emerald-800 text-sm">${netPayable.toLocaleString()} PKR</td>
-            <td class="p-3 text-center">${statusBadge}</td>
-            <td class="p-3 text-right">
+            <td data-label="Billing Month" class="p-3 font-extrabold text-slate-900">${s.month || 'Statement'}</td>
+            <td data-label="Assigned Students" class="p-3 text-slate-600"><span class="font-bold text-slate-900">${studentCount}</span> Enrolled Students</td>
+            <td data-label="Base Teaching" class="p-3 font-mono text-slate-700 font-bold">${baseSubtotal.toLocaleString()} PKR</td>
+            <td data-label="Adjustments (Bonus/Ded)" class="p-3 text-slate-600 font-mono text-xs">${adjText}</td>
+            <td data-label="Approved Advances" class="p-3 text-slate-600 font-mono text-xs">${advText}</td>
+            <td data-label="Net Payable" class="p-3 text-right font-mono font-black text-emerald-800 text-sm">${netPayable.toLocaleString()} PKR</td>
+            <td data-label="Status" class="p-3 text-center">${statusBadge}</td>
+            <td data-label="Actions" class="p-3 text-right">
               <div class="inline-flex items-center gap-1.5 justify-end">
                 <button onclick="viewTeacherSalarySlip('${escapeJsAttr(s.slipKey)}')" class="px-3 py-1.5 rounded-lg text-xs font-bold bg-slate-100 hover:bg-slate-200 text-slate-700 transition flex items-center gap-1">
                   <i class="fa-solid fa-eye text-emerald-700"></i> View Voucher
@@ -9939,12 +9939,16 @@ font-family: var(--font-num) !important;
       #teacherMainContainer button, div.fixed[id^="modal"] button { min-height: 44px; }
       div.fixed[id^="modal"] button[aria-label] { min-width: 44px; }
 
+      /* Phase 2: salary summary cells never overflow narrow cards. */
+      #tSalSummaryBody .grid > div { min-width: 0; }
+      #tSalSummaryBody .font-mono { overflow-wrap: anywhere; }
+
       /* Dashboard KPI numbers fit 320px screens. */
       .lms-num-kpi, #statAssignedStudents, #statTodayClasses, #statCompleted, #statRemaining {
         font-size: 1.5rem !important;
       }
 
-      /* Tables -> cards for Today's Classes + Student List only. */
+      /* Tables -> cards for Today's Classes, Student List, and the salary ledger. */
       .tcard { overflow-x: visible; }
       .tcard table { min-width: 0; display: block; width: 100%; }
       .tcard thead { display: none; }
