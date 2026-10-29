@@ -2464,8 +2464,30 @@
       return list;
     }
 
+    // Announcements (2026-10-29): the portals read the announcements
+    // from a system_settings row in D1 (key allowlisted for teacher +
+    // parent reads in the Worker). localStorage + the shared-sync blob
+    // remain the admin-side store; every save ALSO upserts the settings
+    // row so teachers/parents on OTHER devices actually receive them —
+    // before this, announcements never left the admin's own browser.
+    let _annSettingsPushDone = false;
+    function pushAnnouncementsToSettings(list) {
+      try {
+        if (typeof db === 'undefined' || !db) return;
+        const p = db.from('system_settings').upsert({
+          id: 'SYS-ANNOUNCEMENTS',
+          key: 'alhuda_official_announcements',
+          value: JSON.stringify(list || []),
+          updated_at: new Date().toISOString()
+        });
+        if (p && typeof p.catch === 'function') p.catch(() => {});
+        _annSettingsPushDone = true;
+      } catch (e) {}
+    }
+
     function saveOfficialAnnouncements(list) {
       localStorage.setItem('alhuda_official_announcements', JSON.stringify(list || []));
+      pushAnnouncementsToSettings(list);
       if (typeof syncGlobalSharedStateToCloud === 'function') {
         syncGlobalSharedStateToCloud();
       }
@@ -2657,6 +2679,9 @@
       if (!bannerEl) return;
 
       const list = getOfficialAnnouncements();
+      if (!_annSettingsPushDone && Array.isArray(list) && list.length > 0) {
+        pushAnnouncementsToSettings(list);
+      }
       if (!list || list.length === 0) {
         bannerEl.classList.add('hidden');
         bannerEl.innerHTML = '';
