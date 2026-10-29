@@ -950,6 +950,23 @@ export async function onRequest(context) {
         }
       }
 
+      // Phase 4 (audit P3-o): a salary slip must always name its
+      // teacher and period (same reasoning as the payments check above;
+      // UNIQUE(teacher_id, period) cannot help a row that omits them).
+      if (table === 'salary_slips') {
+        for (const rawRow of rows) {
+          const tid = rawRow && rawRow.teacher_id != null ? String(rawRow.teacher_id).trim() : '';
+          const per = rawRow && rawRow.period != null ? String(rawRow.period).trim() : '';
+          if (!tid || !per) {
+            return jsonResponse(
+              { error: 'teacher_id and period are required for salary_slips' },
+              400,
+              corsHeaders
+            );
+          }
+        }
+      }
+
       // Batch 3.4 (audit P2-4): a multi-row financial insert used to
       // write rows one by one and stop at the first UNIQUE conflict,
       // leaving earlier rows written with no report of which ones
@@ -1179,7 +1196,22 @@ export async function onRequest(context) {
           return v === undefined ? null : v;
         });
         const updateSql = `UPDATE ${table} SET ${setSql}${whereSql}`;
-        await d1.prepare(updateSql).bind(...setVals, ...whereParams).run();
+        try {
+          await d1.prepare(updateSql).bind(...setVals, ...whereParams).run();
+        } catch (updErr) {
+          // Phase 4 (audit P3-h): a UNIQUE collision on the UPDATE path
+          // (e.g. reusing a receipt number) is a user error — map it to
+          // the same 409 the insert path returns, not a generic 500.
+          const uniqueMsg = financialUniqueErrorMessage(table, updErr);
+          if (uniqueMsg) {
+            return jsonResponse(
+              { data: null, error: { message: uniqueMsg } },
+              409,
+              corsHeaders
+            );
+          }
+          throw updErr;
+        }
       }
 
       const { results } = await d1.prepare(`SELECT * FROM ${table}${whereSql}`).bind(...whereParams).all();
@@ -1228,11 +1260,18 @@ export async function onRequest(context) {
           deletedSubjectIds = (doomed || []).map(r => r && r.id).filter(Boolean);
         } catch (e) { deletedSubjectIds = null; }
       }
-      await d1.prepare(`DELETE FROM ${table}${whereSql}`).bind(...whereParams).run();
+      const delRes = await d1.prepare(`DELETE FROM ${table}${whereSql}`).bind(...whereParams).run();
       if (deletedSubjectIds) {
         for (const id of deletedSubjectIds) await bumpSubjectValidAfter(d1, env, id, 'deleted');
       }
-      return jsonResponse({ data: [], error: null }, 200, corsHeaders);
+      // Phase 4 (audit P3-n): report how many rows actually matched, so
+      // a no-match delete is no longer indistinguishable from a real
+      // one. Additive field only — the { data: [], error: null } shape
+      // existing callers rely on is unchanged.
+      const delPayload = { data: [], error: null };
+      const delChanges = delRes && delRes.meta && typeof delRes.meta.changes === 'number' ? delRes.meta.changes : null;
+      if (delChanges !== null) delPayload.deleted = delChanges;
+      return jsonResponse(delPayload, 200, corsHeaders);
     }
 
     return jsonResponse(

@@ -91,7 +91,9 @@ fakeDb.seed("INSERT INTO system_settings (id, key, value) VALUES ('s6', 'alhuda_
   check('parent catalog read: 200', r.status === 200, 'got ' + r.status);
   check('parent catalog read: index + BOOK_PAGE rows returned', keys.includes('alhuda_custom_books_index') && keys.includes('BOOK_PAGE_custom-1_0') && keys.includes('BOOK_PAGE_custom-1_1'), keys.join(','));
   check('parent catalog read: fee flag NOT returned', !keys.includes('fee_tables_v1'), keys.join(','));
-  check('parent catalog read: tombstone NOT returned', !keys.includes('alhuda_deleted_books'), keys.join(','));
+  // Phase 4 (audit P3-s): the tombstone IS parent-readable now, so a
+  // deleted custom book stops rendering on parent devices too.
+  check('parent catalog read: tombstone returned (P3-s)', keys.includes('alhuda_deleted_books'), keys.join(','));
   check('parent catalog read: logo NOT returned', !keys.includes('alhuda_logo'), keys.join(','));
   const w = await dbPost(TOK.parent1, { table: 'system_settings', action: 'insert', values: { key: 'BOOK_PAGE_evil_0', value: 'x' } });
   check('parent catalog write: denied (not 200)', w.status !== 200, 'got ' + w.status);
