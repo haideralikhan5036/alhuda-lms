@@ -263,6 +263,52 @@
     }
 
     window.getEmployeeRoleClassification = getEmployeeRoleClassification;
+
+    // Staff categories (Employees redesign, 2026-10-29): the ONE canonical
+    // category vocabulary for the Employees tabs, list and
+    // category-specific views. Storage is unchanged — employee_type in
+    // the record meta ('manager' | 'other_staff' | absent = teacher);
+    // this layer only names the categories and classifies records via
+    // getEmployeeRoleClassification above.
+    const StaffCategories = {
+      TEACHING: 'teaching',
+      MANAGEMENT: 'management',
+      NON_TEACHING: 'non-teaching',
+      LABELS: { teaching: 'Teaching Staff', management: 'Management Staff', 'non-teaching': 'Non-Teaching Staff' },
+      EMPLOYEE_TYPE: { teaching: 'teacher', management: 'manager', 'non-teaching': 'other_staff' },
+      of(emp) {
+        const cls = getEmployeeRoleClassification(emp);
+        if (cls === 'manager') return 'management';
+        if (cls === 'other_staff') return 'non-teaching';
+        return 'teaching';
+      },
+      // Positive signals for MORE THAN ONE category (e.g. employee_type
+      // 'manager' together with an STF- code): never guess — the UI
+      // flags the record "Needs review" instead.
+      hasConflict(emp) {
+        if (!emp || typeof emp !== 'object') return false;
+        const tryParse = (str) => {
+          if (typeof str === 'string' && str.trim().startsWith('{')) { try { return JSON.parse(str); } catch (e) {} }
+          else if (str && typeof str === 'object') return str;
+          return null;
+        };
+        const meta = tryParse(emp.address) || tryParse(emp.notes) || tryParse(emp.witness_name) || {};
+        let acc = {};
+        try {
+          const accounts = typeof getTeacherAccounts === 'function'
+            ? getTeacherAccounts()
+            : JSON.parse(localStorage.getItem('alhuda_teacher_accounts') || '{}');
+          if (emp.id && accounts[emp.id]) acc = accounts[emp.id];
+        } catch (e) {}
+        const types = [emp.employee_type, meta.employee_type, acc.employee_type].map(v => String(v || '').trim().toLowerCase());
+        const codes = [emp.id, emp.witness_name, meta.emp_id, meta.teacher_id, acc.emp_id, acc.teacher_id].map(v => String(v || '').trim().toUpperCase());
+        const mgr = types.includes('manager') || codes.some(c => c.startsWith('MGR-'));
+        const stf = types.includes('other_staff') || types.includes('staff') || codes.some(c => c.startsWith('STF-'));
+        const tch = types.includes('teacher');
+        return (mgr && stf) || (tch && (mgr || stf));
+      }
+    };
+    window.StaffCategories = StaffCategories;
     window.isEligibleTeacherRecord = isEligibleTeacherRecord;
     window.getEligibleTeachers = getEligibleTeachers;
     window.validateEligibleTeacherBackend = validateEligibleTeacherBackend;

@@ -513,6 +513,18 @@
       scroll-behavior: auto !important;
     }
   }
+
+  /* Employees list (2026-10-29 redesign): clean table + stacked mobile rows. */
+  .emp-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .emp-table th { text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: #64748b; padding: 10px 12px; border-bottom: 2px solid #e2e8f0; background: #f8fafc; }
+  .emp-table td { padding: 10px 12px; border-bottom: 1px solid #eef2f7; vertical-align: middle; }
+  @media (max-width: 767px) {
+    .emp-table thead { display: none; }
+    .emp-table, .emp-table tbody, .emp-table tr, .emp-table td { display: block; width: 100%; }
+    .emp-table tr { border-bottom: 10px solid #f1f5f9; padding: 6px 2px; }
+    .emp-table td { border-bottom: none; padding: 5px 12px; }
+    .emp-table td[data-label]::before { content: attr(data-label); display: block; font-size: 10px; text-transform: uppercase; letter-spacing: .04em; color: #94a3b8; font-weight: 700; margin-bottom: 2px; }
+  }
 </style>
 </head>
 <body class="text-slate-800 flex flex-col min-h-screen w-full max-w-full overflow-x-hidden bg-slate-50">
@@ -1413,7 +1425,19 @@
         <!-- Populated dynamically by renderPendingTimeChangeBanners() -->
       </div>
 
-      <div id="teachersGrid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+      <!-- Employees redesign (2026-10-29): staff category tabs + in-category search -->
+      <div class="flex flex-wrap items-center gap-2 mb-3">
+        <button id="empTab-teaching" onclick="setEmployeeCategory('teaching')" class="px-3.5 py-2 rounded-lg text-xs font-bold border border-slate-300 shadow-sm">Teaching Staff <span id="empCount-teaching" class="ml-1 px-1.5 py-0.5 rounded bg-black/10 text-[10px] font-extrabold">0</span></button>
+        <button id="empTab-management" onclick="setEmployeeCategory('management')" class="px-3.5 py-2 rounded-lg text-xs font-bold border border-slate-300 shadow-sm">Management Staff <span id="empCount-management" class="ml-1 px-1.5 py-0.5 rounded bg-black/10 text-[10px] font-extrabold">0</span></button>
+        <button id="empTab-non-teaching" onclick="setEmployeeCategory('non-teaching')" class="px-3.5 py-2 rounded-lg text-xs font-bold border border-slate-300 shadow-sm">Non-Teaching Staff <span id="empCount-non-teaching" class="ml-1 px-1.5 py-0.5 rounded bg-black/10 text-[10px] font-extrabold">0</span></button>
+        <div class="ml-auto relative">
+          <i class="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs"></i>
+          <input type="text" id="empSearchInput" oninput="setEmployeeSearch(this.value)" placeholder="Search in this category..." class="pl-8 pr-3 py-2 bg-white border border-slate-300 rounded-lg text-xs font-semibold w-52 sm:w-64 shadow-sm">
+        </div>
+      </div>
+      <p id="empReviewNote" class="hidden mb-3 text-[11px] font-bold text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2"></p>
+
+      <div id="teachersGrid">
         <div class="col-span-full p-8 text-center text-slate-400">Loading registered employees...</div>
       </div>
     </section>
