@@ -28,8 +28,12 @@ check('dashboard content column is centered with a max width (breathing room at 
 check('the wide center gap and the two side groups are gone',
   !INDEX.includes('INTENTIONAL WIDE OPEN BREATHING SPACE') && !INDEX.includes('xl:w-[420px]') &&
   !INDEX.includes('items-center justify-between gap-4 mb-5'));
-check('one unified KPI grid: 2 columns on mobile, 4 on desktop',
-  DASH.includes('grid grid-cols-2 md:grid-cols-4 gap-2.5'));
+check('one unified KPI grid: 2 columns on mobile, 4 on desktop, generous gaps',
+  DASH.includes('grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5'));
+check('no enclosing panel slab around the cards (airy, owner follow-up)',
+  !DASH.includes('bg-white p-3 sm:p-3.5 rounded-xl border border-slate-200/80 shadow-xs mb-5'));
+check('cards are roomier (80/88px tall) so the row breathes',
+  (DASH.match(/h-\[80px\] min-h-\[80px\] sm:h-\[88px\]/g) || []).length === 8);
 check('all 8 KPI cards survive with ids, filters and counters intact',
   ['all', 'current', 'running', 'completed', 'remaining', 'absent', 'leave', 'trial'].every(k =>
     DASH.includes(`id="kpiBox-${k}"`) && DASH.includes(`filterDashboardClasses('${k === 'all' ? 'all' : k}')`)) &&
