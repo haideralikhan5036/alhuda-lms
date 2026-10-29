@@ -313,9 +313,10 @@ font-family: var(--font-num) !important;
 
     /* Whiteboard & Annotation Tool Styles */
     .annotation-tool-btn.active {
-      background: #047857 !important;
+      background: linear-gradient(180deg, #059669, #047857) !important;
       color: #ffffff !important;
-      box-shadow: 0 0 0 2px #34d399 !important;
+      border-color: transparent !important;
+      box-shadow: 0 1px 3px rgba(4, 120, 87, 0.35), 0 0 0 2px #a7f3d0 !important;
     }
     .annotation-color-btn.active {
       transform: scale(1.18);
@@ -2119,47 +2120,47 @@ font-family: var(--font-num) !important;
       </div>
 
       <!-- WHITEBOARD & ANNOTATION TOOLBAR (TASKS 7, 8, 9) -->
-      <div id="readerAnnotationToolbar" class="hidden bg-white px-3 py-2 border-b border-stone-200 flex items-center justify-between flex-wrap gap-2 text-xs z-30 shadow-md">
+      <div id="readerAnnotationToolbar" class="hidden bg-[#fffdf9] px-3 py-2 border-b border-stone-200 flex items-center justify-between flex-wrap gap-2 text-xs z-30 shadow-md">
         <!-- Tools Palette -->
         <div class="flex items-center gap-1.5 flex-wrap">
           <!-- Fine Pen -->
-          <button type="button" id="toolBtnPen" onclick="selectAnnotationTool('pen')" class="annotation-tool-btn active px-2.5 py-1.5 rounded-lg bg-stone-100 text-stone-700 hover:text-stone-900 flex items-center gap-1 text-xs font-bold transition cursor-pointer" title="Fine Pen (P)">
+          <button type="button" id="toolBtnPen" onclick="selectAnnotationTool('pen')" class="annotation-tool-btn active px-3 py-1.5 rounded-full bg-white border border-stone-200 shadow-sm text-stone-600 hover:text-stone-900 hover:border-emerald-300 flex items-center gap-1 text-xs font-bold transition cursor-pointer" title="Fine Pen (P)">
             <i class="fa-solid fa-pen"></i> <span class="hidden sm:inline">Pen</span>
           </button>
           <!-- Highlighter -->
-          <button type="button" id="toolBtnHighlighter" onclick="selectAnnotationTool('highlighter')" class="annotation-tool-btn px-2.5 py-1.5 rounded-lg bg-stone-100 text-stone-700 hover:text-stone-900 flex items-center gap-1 text-xs font-bold transition cursor-pointer" title="Highlighter / Marker (H)">
+          <button type="button" id="toolBtnHighlighter" onclick="selectAnnotationTool('highlighter')" class="annotation-tool-btn px-3 py-1.5 rounded-full bg-white border border-stone-200 shadow-sm text-stone-600 hover:text-stone-900 hover:border-emerald-300 flex items-center gap-1 text-xs font-bold transition cursor-pointer" title="Highlighter / Marker (H)">
             <i class="fa-solid fa-highlighter text-amber-400"></i> <span class="hidden sm:inline">Highlighter</span>
           </button>
           <!-- Eraser -->
-          <button type="button" id="toolBtnEraser" onclick="selectAnnotationTool('eraser')" class="annotation-tool-btn px-2.5 py-1.5 rounded-lg bg-stone-100 text-stone-700 hover:text-stone-900 flex items-center gap-1 text-xs font-bold transition cursor-pointer" title="Eraser (E)">
+          <button type="button" id="toolBtnEraser" onclick="selectAnnotationTool('eraser')" class="annotation-tool-btn px-3 py-1.5 rounded-full bg-white border border-stone-200 shadow-sm text-stone-600 hover:text-stone-900 hover:border-emerald-300 flex items-center gap-1 text-xs font-bold transition cursor-pointer" title="Eraser (E)">
             <i class="fa-solid fa-eraser text-rose-400"></i> <span class="hidden sm:inline">Eraser</span>
           </button>
 
-          <div class="w-[1px] h-5 bg-zinc-700 mx-1 hidden sm:block"></div>
+          <div class="w-[1px] h-5 bg-stone-200 mx-1 hidden sm:block"></div>
 
           <!-- Shapes Selector -->
-          <div class="flex items-center bg-stone-100 rounded-lg p-0.5 border border-stone-200">
-            <button type="button" id="toolBtnLine" onclick="selectAnnotationTool('line')" class="annotation-tool-btn w-7 h-7 rounded hover:bg-stone-200 text-stone-500 hover:text-stone-900 flex items-center justify-center transition cursor-pointer" title="Line (L)">
+          <div class="flex items-center bg-white rounded-full p-0.5 border border-stone-200 shadow-sm">
+            <button type="button" id="toolBtnLine" onclick="selectAnnotationTool('line')" class="annotation-tool-btn w-7 h-7 rounded-full hover:bg-emerald-50 text-stone-500 hover:text-emerald-700 flex items-center justify-center transition cursor-pointer" title="Line (L)">
               <i class="fa-solid fa-slash text-[11px]"></i>
             </button>
-            <button type="button" id="toolBtnArrow" onclick="selectAnnotationTool('arrow')" class="annotation-tool-btn w-7 h-7 rounded hover:bg-stone-200 text-stone-500 hover:text-stone-900 flex items-center justify-center transition cursor-pointer" title="Arrow (A)">
+            <button type="button" id="toolBtnArrow" onclick="selectAnnotationTool('arrow')" class="annotation-tool-btn w-7 h-7 rounded-full hover:bg-emerald-50 text-stone-500 hover:text-emerald-700 flex items-center justify-center transition cursor-pointer" title="Arrow (A)">
               <i class="fa-solid fa-arrow-right text-[11px]"></i>
             </button>
-            <button type="button" id="toolBtnRect" onclick="selectAnnotationTool('rect')" class="annotation-tool-btn w-7 h-7 rounded hover:bg-stone-200 text-stone-500 hover:text-stone-900 flex items-center justify-center transition cursor-pointer" title="Rectangle (R)">
+            <button type="button" id="toolBtnRect" onclick="selectAnnotationTool('rect')" class="annotation-tool-btn w-7 h-7 rounded-full hover:bg-emerald-50 text-stone-500 hover:text-emerald-700 flex items-center justify-center transition cursor-pointer" title="Rectangle (R)">
               <i class="fa-regular fa-square text-[11px]"></i>
             </button>
-            <button type="button" id="toolBtnCircle" onclick="selectAnnotationTool('circle')" class="annotation-tool-btn w-7 h-7 rounded hover:bg-stone-200 text-stone-500 hover:text-stone-900 flex items-center justify-center transition cursor-pointer" title="Circle (C)">
+            <button type="button" id="toolBtnCircle" onclick="selectAnnotationTool('circle')" class="annotation-tool-btn w-7 h-7 rounded-full hover:bg-emerald-50 text-stone-500 hover:text-emerald-700 flex items-center justify-center transition cursor-pointer" title="Circle (C)">
               <i class="fa-regular fa-circle text-[11px]"></i>
             </button>
-            <button type="button" id="toolBtnText" onclick="selectAnnotationTool('text')" class="annotation-tool-btn w-7 h-7 rounded hover:bg-stone-200 text-stone-500 hover:text-stone-900 flex items-center justify-center transition cursor-pointer" title="Text Label (T)">
+            <button type="button" id="toolBtnText" onclick="selectAnnotationTool('text')" class="annotation-tool-btn w-7 h-7 rounded-full hover:bg-emerald-50 text-stone-500 hover:text-emerald-700 flex items-center justify-center transition cursor-pointer" title="Text Label (T)">
               <i class="fa-solid fa-font text-[11px]"></i>
             </button>
           </div>
 
-          <div class="w-[1px] h-5 bg-zinc-700 mx-1 hidden sm:block"></div>
+          <div class="w-[1px] h-5 bg-stone-200 mx-1 hidden sm:block"></div>
 
           <!-- Stroke Size Selector -->
-          <select id="annotationStrokeSelect" onchange="setAnnotationStroke(this.value)" class="bg-stone-100 text-stone-700 text-xs rounded-lg px-2 py-1 border border-stone-300 cursor-pointer" title="Stroke Thickness">
+          <select id="annotationStrokeSelect" onchange="setAnnotationStroke(this.value)" class="bg-white text-stone-600 text-xs rounded-full px-2.5 py-1 border border-stone-200 shadow-sm cursor-pointer" title="Stroke Thickness">
             <option value="2">Fine (2px)</option>
             <option value="4" selected>Medium (4px)</option>
             <option value="8">Bold (8px)</option>
@@ -2168,27 +2169,27 @@ font-family: var(--font-num) !important;
 
           <!-- Colors Palette -->
           <div class="flex items-center gap-1.5 ml-1">
-            <button type="button" onclick="setAnnotationColor('#dc2626')" class="annotation-color-btn w-5 h-5 rounded-full bg-red-600 transition border border-white/20 active cursor-pointer" data-color="#dc2626" title="Red"></button>
-            <button type="button" onclick="setAnnotationColor('#16a34a')" class="annotation-color-btn w-5 h-5 rounded-full bg-emerald-600 transition border border-white/20 cursor-pointer" data-color="#16a34a" title="Green"></button>
-            <button type="button" onclick="setAnnotationColor('#2563eb')" class="annotation-color-btn w-5 h-5 rounded-full bg-blue-600 transition border border-white/20 cursor-pointer" data-color="#2563eb" title="Blue"></button>
-            <button type="button" onclick="setAnnotationColor('#eab308')" class="annotation-color-btn w-5 h-5 rounded-full bg-yellow-500 transition border border-white/20 cursor-pointer" data-color="#eab308" title="Gold / Yellow"></button>
-            <button type="button" onclick="setAnnotationColor('#111827')" class="annotation-color-btn w-5 h-5 rounded-full bg-black transition border border-zinc-600 cursor-pointer" data-color="#111827" title="Black"></button>
-            <button type="button" onclick="setAnnotationColor('#ffffff')" class="annotation-color-btn w-5 h-5 rounded-full bg-white transition border border-zinc-400 cursor-pointer" data-color="#ffffff" title="White"></button>
+            <button type="button" onclick="setAnnotationColor('#dc2626')" class="annotation-color-btn w-5 h-5 rounded-full bg-red-600 transition border border-black/10 shadow-sm active cursor-pointer" data-color="#dc2626" title="Red"></button>
+            <button type="button" onclick="setAnnotationColor('#16a34a')" class="annotation-color-btn w-5 h-5 rounded-full bg-emerald-600 transition border border-black/10 shadow-sm cursor-pointer" data-color="#16a34a" title="Green"></button>
+            <button type="button" onclick="setAnnotationColor('#2563eb')" class="annotation-color-btn w-5 h-5 rounded-full bg-blue-600 transition border border-black/10 shadow-sm cursor-pointer" data-color="#2563eb" title="Blue"></button>
+            <button type="button" onclick="setAnnotationColor('#eab308')" class="annotation-color-btn w-5 h-5 rounded-full bg-yellow-500 transition border border-black/10 shadow-sm cursor-pointer" data-color="#eab308" title="Gold / Yellow"></button>
+            <button type="button" onclick="setAnnotationColor('#111827')" class="annotation-color-btn w-5 h-5 rounded-full bg-black transition border border-black/20 shadow-sm cursor-pointer" data-color="#111827" title="Black"></button>
+            <button type="button" onclick="setAnnotationColor('#ffffff')" class="annotation-color-btn w-5 h-5 rounded-full bg-white transition border border-stone-300 shadow-sm cursor-pointer" data-color="#ffffff" title="White"></button>
           </div>
         </div>
 
         <!-- Annotation Actions -->
         <div class="flex items-center gap-1.5">
-          <button type="button" onclick="undoAnnotation()" class="px-2.5 py-1 bg-stone-100 hover:bg-stone-200 text-stone-500 rounded-lg text-xs font-bold transition flex items-center gap-1 cursor-pointer" title="Undo (Ctrl+Z)">
+          <button type="button" onclick="undoAnnotation()" class="px-3 py-1 bg-white hover:bg-stone-50 border border-stone-200 shadow-sm text-stone-500 rounded-full text-xs font-bold transition flex items-center gap-1 cursor-pointer" title="Undo (Ctrl+Z)">
             <i class="fa-solid fa-rotate-left"></i> <span class="hidden sm:inline">Undo</span>
           </button>
-          <button type="button" onclick="redoAnnotation()" class="px-2.5 py-1 bg-stone-100 hover:bg-stone-200 text-stone-500 rounded-lg text-xs font-bold transition flex items-center gap-1 cursor-pointer" title="Redo (Ctrl+Y)">
+          <button type="button" onclick="redoAnnotation()" class="px-3 py-1 bg-white hover:bg-stone-50 border border-stone-200 shadow-sm text-stone-500 rounded-full text-xs font-bold transition flex items-center gap-1 cursor-pointer" title="Redo (Ctrl+Y)">
             <i class="fa-solid fa-rotate-right"></i> <span class="hidden sm:inline">Redo</span>
           </button>
-          <button type="button" onclick="clearAnnotationCanvas()" class="px-2.5 py-1 bg-rose-50 hover:bg-rose-100 text-rose-600 rounded-lg text-xs font-bold transition flex items-center gap-1 border border-rose-200 cursor-pointer" title="Clear Canvas">
+          <button type="button" onclick="clearAnnotationCanvas()" class="px-3 py-1 bg-rose-50 hover:bg-rose-100 text-rose-600 rounded-full text-xs font-bold transition flex items-center gap-1 border border-rose-200 shadow-sm cursor-pointer" title="Clear Canvas">
             <i class="fa-solid fa-trash-can"></i> <span class="hidden sm:inline">Clear</span>
           </button>
-          <button type="button" onclick="downloadAnnotatedPage()" class="px-3 py-1 bg-emerald-700 hover:bg-emerald-600 text-white rounded-lg text-xs font-black transition flex items-center gap-1 shadow-xs cursor-pointer" title="Save / Download Annotated Page">
+          <button type="button" onclick="downloadAnnotatedPage()" class="px-3.5 py-1 bg-gradient-to-b from-emerald-500 to-emerald-700 hover:from-emerald-400 hover:to-emerald-600 text-white rounded-full text-xs font-black transition flex items-center gap-1 shadow-md shadow-emerald-600/25 cursor-pointer" title="Save / Download Annotated Page">
             <i class="fa-solid fa-download"></i> <span class="hidden sm:inline">Save Page</span>
           </button>
         </div>
@@ -6106,6 +6107,7 @@ font-family: var(--font-num) !important;
           img.src = TEACHER_READER_BLOB_URL;
         })
         .catch(function (err) {
+          if (err && err.status === 401 && typeof window.clearWorkerTokens === 'function') { try { window.clearWorkerTokens(); } catch (e) {} }
           if (typeof onFetchError === 'function') onFetchError(err && err.status);
           else if (spinner) spinner.classList.add('hidden');
         });
