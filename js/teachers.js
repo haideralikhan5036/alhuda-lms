@@ -360,6 +360,16 @@
 
 
 
+    // Employee form expansion (2026-10-29): the optional bio/bank fields
+    // added to the form in sections 6-7, cleared/filled as one list.
+    // (Restored 2026-10-29: the PR #85 NTS-block cut removed this const
+    // along with the NTS functions, which broke BOTH add buttons —
+    // clearTeacherExtraFields threw a ReferenceError before the modal
+    // could open. Guarded by test/employee-form-open.test.mjs, which
+    // EXECUTES the open functions.)
+    const TEACHER_EXTRA_FIELD_IDS = ['tEmail', 'tNationality', 'tQualification2', 'tQualification3',
+      'tExperience', 'tTimezone', 'tMonthlySalary', 'tHourRate', 'tBankName', 'tAccountTitle', 'tAccountNumber'];
+
     function clearTeacherExtraFields() {
       TEACHER_EXTRA_FIELD_IDS.forEach(id => {
         const el = document.getElementById(id);
