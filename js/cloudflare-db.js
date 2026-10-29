@@ -82,14 +82,34 @@
   // mode, extensions, cookie blocking). Keep an in-memory cache as well,
   // so the token survives even when storage is unavailable.
   let _memoryTokenCache = null;
+  // Session-token recovery (2026-10-29): sessionStorage is CLONED into a
+  // new tab opened from another portal tab, so a teacher tab can inherit
+  // the admin tab's owner token. The old owner-first lookup then offered
+  // that (possibly expired/revoked) owner token for every teacher call,
+  // shadowing the teacher's own valid token — books would not open and
+  // saves reported "Session expired" even right after a fresh teacher
+  // login. Each portal now prefers ITS OWN role's token; the legacy
+  // order remains as the fallback (the admin app hosts several roles).
+  function portalTokenKey() {
+    try {
+      const p = String((window.location && window.location.pathname) || '').toLowerCase();
+      if (p.indexOf('teacher') !== -1) return 'alhuda_teacher_token';
+      if (p.indexOf('parent') !== -1) return 'alhuda_parent_token';
+      if (p.indexOf('manager') !== -1) return 'alhuda_manager_token';
+    } catch (e) {}
+    return null;
+  }
   function getWorkerToken() {
     if (_memoryTokenCache) return _memoryTokenCache;
     try {
-      return sessionStorage.getItem('alhuda_owner_token')
-        || sessionStorage.getItem('alhuda_manager_token')
-        || sessionStorage.getItem('alhuda_teacher_token')
-        || sessionStorage.getItem('alhuda_parent_token')
-        || null;
+      const keys = ['alhuda_owner_token', 'alhuda_manager_token', 'alhuda_teacher_token', 'alhuda_parent_token'];
+      const own = portalTokenKey();
+      if (own) { keys.splice(keys.indexOf(own), 1); keys.unshift(own); }
+      for (const k of keys) {
+        const t = sessionStorage.getItem(k);
+        if (t) return t;
+      }
+      return null;
     } catch (e) {
       return null;
     }
@@ -100,8 +120,12 @@
   function setWorkerToken(token) {
     _memoryTokenCache = token || null;
     try {
-      if (token) sessionStorage.setItem('alhuda_owner_token', token);
-      else sessionStorage.removeItem('alhuda_owner_token');
+      // Store under the CURRENT portal's role key (default: owner, which
+      // preserves the historical behaviour on the admin app and the
+      // owner-only utility pages that call setLmsAuthToken).
+      const key = portalTokenKey() || 'alhuda_owner_token';
+      if (token) sessionStorage.setItem(key, token);
+      else sessionStorage.removeItem(key);
     } catch (e) {}
   }
 

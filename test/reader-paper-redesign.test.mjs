@@ -39,7 +39,7 @@ for (const [label, seg] of [['teacher', TSEG], ['admin', ISEG], ['parent', PSEG]
   check(label + ': soft warm backdrop', seg.includes('bg-stone-900/60'));
   check(label + ': warm paper page shadow', seg.includes('rgba(74,60,35,0.35)'));
 }
-check('teacher: annotation toolbar is light too', TSEG.includes('id="readerAnnotationToolbar" class="hidden bg-white'));
+check('teacher: annotation toolbar is light too', TSEG.includes('id="readerAnnotationToolbar" class="hidden bg-[#fffdf9]'));
 check('teacher: Annotate is a solid emerald action', TSEG.includes('bg-emerald-600 hover:bg-emerald-500 text-white'));
 check('admin/teacher: dark-select CSS no longer targets the reader',
   !INDEX.includes('#modalDigitalBookReader select') && !TEACHER.includes('#modalDigitalBookReader select'));
@@ -73,6 +73,22 @@ check('library cards are clean white book cards',
   TEACHER.includes('bg-white border border-stone-200 hover:border-emerald-500 rounded-2xl p-0 overflow-hidden'));
 check('library filter toggle uses the light palette too',
   TEACHER.includes("bg-white text-stone-600 border border-stone-200 hover:bg-stone-100 transition whitespace-nowrap flex-shrink-0';"));
+
+
+// ---- Session-token recovery + Annotate restyle (2026-10-29 evening) ----
+const DB = read('js/cloudflare-db.js');
+function fnSeg(srcText, marker, len) { const a = srcText.indexOf(marker); return a < 0 ? '' : srcText.slice(a, a + len); }
+check('db shim: portal-aware token selection exists', DB.includes('function portalTokenKey()') && DB.includes('keys.unshift(own)'));
+check('db shim: teacher portal maps to the teacher token key', DB.includes("if (p.indexOf('teacher') !== -1) return 'alhuda_teacher_token';"));
+check('db shim: setWorkerToken stores under the portal key, owner by default', DB.includes("const key = portalTokenKey() || 'alhuda_owner_token';"));
+check('teacher loader: a 401 clears the dead token', fnSeg(TEACHER, 'function loadTeacherReaderPageImage', 2400).includes('window.clearWorkerTokens'));
+check('parent loader: a 401 clears the dead token', fnSeg(PARENT, 'function loadParentReaderPageImage', 2400).includes('window.clearWorkerTokens'));
+check('admin loader: a 401 clears the dead token', fnSeg(CURR, 'function loadReaderPageImage', 2400).includes('window.clearWorkerTokens'));
+const ASEG = fnSeg(TEACHER, 'id="readerAnnotationToolbar"', 9500);
+check('annotate: tool buttons are sleek white pills', ASEG.includes('rounded-full bg-white border border-stone-200 shadow-sm text-stone-600'));
+check('annotate: separators are light (no dark zinc in the toolbar)', !ASEG.includes('bg-zinc-700'));
+check('annotate: Save Page is an emerald gradient pill', ASEG.includes('bg-gradient-to-b from-emerald-500 to-emerald-700'));
+check('annotate: active tool uses a soft emerald gradient', TEACHER.includes('background: linear-gradient(180deg, #059669, #047857) !important;'));
 
 const failed = results.filter(r => !r.pass);
 console.log(`\n${results.length - failed.length}/${results.length} checks passed`);

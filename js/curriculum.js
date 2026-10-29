@@ -861,6 +861,7 @@ if (mergedDeleted.length > 0) {
           img.src = READER_BLOB_URL;
         })
         .catch(function (err) {
+          if (err && err.status === 401 && typeof window.clearWorkerTokens === 'function') { try { window.clearWorkerTokens(); } catch (e) {} }
           if (typeof onFetchError === 'function') onFetchError(err && err.status);
           else if (spinner) spinner.classList.add('hidden');
         });
