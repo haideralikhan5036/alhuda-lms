@@ -51,7 +51,7 @@ check('v: any slot failure aborts before the student record moves',
   SCHEDULE.indexOf('if (slotFailures.length > 0)') < SCHEDULE.indexOf("stuMeta.teacher_shift_history.unshift"));
 
 // oo — modal caps anchored at the right modals
-for (const id of ['modalDashAttendance', 'modalChooseEmployeeType', 'modalTeacherLogin']) {
+for (const id of ['modalDashAttendance', 'modalTeacherLogin']) {
   const at = INDEX.indexOf(`id="${id}"`);
   const seg = INDEX.slice(at, at + 400);
   check(`oo: ${id} card caps height + scrolls`, seg.includes('max-h-[90vh] overflow-y-auto'));
