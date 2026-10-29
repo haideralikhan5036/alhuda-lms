@@ -1608,14 +1608,34 @@
           </p>
         </div>
         <div class="flex gap-2.5 items-center flex-wrap">
-          <select id="salaryMonthSelect" onchange="calculateMonthlySalaries()" class="text-xs font-bold p-2.5 bg-slate-50 border border-slate-300 rounded-xl focus:bg-white">
-            <option value="September 2026">September 2026</option>
-            <option value="October 2026">October 2026</option>
-            <option value="August 2026">August 2026</option>
-            <option value="July 2026">July 2026</option>
-            <option value="November 2026">November 2026</option>
-            <option value="December 2026">December 2026</option>
-          </select>
+          <select id="salaryMonthSelect" onchange="calculateMonthlySalaries()" class="text-xs font-bold p-2.5 bg-slate-50 border border-slate-300 rounded-xl focus:bg-white"></select>
+          <script>
+            // Batch C1: payroll month options are generated, not hardcoded
+            // (the old list stopped at December 2026 and defaulted to
+            // September because it was the first option). Window: 12
+            // months back through 2 months forward; the current PKT
+            // month is selected by default. Year rollover (including
+            // January) is handled by Date month arithmetic.
+            (function () {
+              var sel = document.getElementById('salaryMonthSelect');
+              if (!sel) return;
+              var y = 0, m = 0;
+              try {
+                var parts = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Karachi', year: 'numeric', month: '2-digit' }).formatToParts(new Date());
+                parts.forEach(function (p) { if (p.type === 'year') y = parseInt(p.value, 10); if (p.type === 'month') m = parseInt(p.value, 10); });
+              } catch (e) {}
+              if (!y || !m) { var d0 = new Date(); y = d0.getFullYear(); m = d0.getMonth() + 1; }
+              var names = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+              for (var off = -12; off <= 2; off++) {
+                var d = new Date(Date.UTC(y, m - 1 + off, 1));
+                var label = names[d.getUTCMonth()] + ' ' + d.getUTCFullYear();
+                var opt = document.createElement('option');
+                opt.value = label; opt.textContent = label;
+                if (off === 0) opt.selected = true;
+                sel.appendChild(opt);
+              }
+            })();
+          </script>
           <button onclick="calculateMonthlySalaries()" class="px-4 py-2.5 bg-brandDark text-white font-extrabold rounded-xl text-xs hover:bg-brandDarkest shadow-md transition flex items-center gap-1.5">
             <i class="fa-solid fa-arrows-rotate text-brandGold"></i> Recalculate Payroll
           </button>
@@ -6071,6 +6091,7 @@
   <script src="js/trials.js"></script>
   <script src="js/leaves.js"></script>
   <script src="js/search.js"></script>
+  <script src="js/attendance-summary.js"></script>
   <script src="js/profiles360.js"></script>
 </body>
 </html>

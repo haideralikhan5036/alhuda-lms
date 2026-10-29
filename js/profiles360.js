@@ -28,6 +28,7 @@ let _CURRENT_360_STATE = {
   studentSubView: 'history',  // 'history' | 'lessons' | 'report' | 'certificates' | 'info'
   selectedLessonDate: null,   // Highlighted date in Daily Lessons
   attFilterStatus: 'all',     // 'all' | 'Present' | 'Absent' | 'Leave'
+  attReportMonth: null,       // 'YYYY-MM' for the attendance strip + report tab; null = current PKT month
   showPassword: false
 };
 
@@ -1259,15 +1260,27 @@ function _buildSelectedStudentWorkspaceHtml(family, student, famSchedules, famLo
   const assignedTeacher = (window.ALL_TEACHERS || []).find(t => String(t.id) === String(student.assigned_teacher_id));
   const stuMeta = _parseStudentStructuredNotes(student);
 
-  const totalLogs = stuLogs.length;
-  const presentLogs = stuLogs.filter(l => String(l.status || '').toLowerCase() === 'present');
-  const absentLogs = stuLogs.filter(l => String(l.status || '').toLowerCase() === 'absent');
-  const leaveLogs = stuLogs.filter(l => String(l.status || '').toLowerCase() === 'leave');
-
-  const attendedCount = presentLogs.length;
-  const missedCount = absentLogs.length;
-  const leaveCount = leaveLogs.length;
-  const attendancePct = totalLogs > 0 ? Math.round((attendedCount / totalLogs) * 100) : 100;
+  // Monthly attendance summary (Batch C1): the strip + Progress Report
+  // tab are scoped to ONE month (default: current PKT month), computed
+  // by the shared AttendanceSummary helper — NOT from all-time logs.
+  // Old code counted only literal 'present' (teachers actually store
+  // 'Completed' for a held class) and reported 100% when there were no
+  // logs at all. Both are fixed here; the helper's own comment records
+  // the status mapping, the leave-in-denominator policy, and the
+  // final-status eligibility rule.
+  const attReportMonth = _CURRENT_360_STATE.attReportMonth
+    || (window.AttendanceSummary ? window.AttendanceSummary.currentPktMonth() : null);
+  const attSummary = window.AttendanceSummary
+    ? window.AttendanceSummary.summarize(stuLogs, attReportMonth)
+    : { present: 0, absent: 0, leave: 0, eligible: 0, percentage: null };
+  const attReportMonthLabel = window.AttendanceSummary
+    ? window.AttendanceSummary.labelOfMonth(attReportMonth)
+    : (attReportMonth || '');
+  const attendedCount = attSummary.present;
+  const missedCount = attSummary.absent;
+  const leaveCount = attSummary.leave;
+  // null = no eligible classes this month (rendered as '—', never 0%/100%).
+  const attendancePct = attSummary.percentage;
 
   // Compact single-line sub-tabs so they NEVER wrap onto 2 rows
   const subNavItems = [
@@ -1301,14 +1314,22 @@ function _buildSelectedStudentWorkspaceHtml(family, student, famSchedules, famLo
 
     bodyHtml = `
       <div class="p-5 space-y-4">
+        <!-- Monthly attendance scope (Batch C1): the strip below covers
+             ONE month, not all-time history. -->
+        <div class="flex items-center gap-2 flex-wrap">
+          <label class="text-xs font-bold text-slate-500" for="attReportMonthInput">Attendance month:</label>
+          <input type="month" id="attReportMonthInput" value="${_esc360(attReportMonth || '')}" onchange="set360AttendanceReportMonth(this.value)"
+                 class="px-2 py-1.5 rounded-lg text-xs font-bold border border-slate-200 bg-white text-slate-700">
+          <span class="text-xs text-slate-500">${_esc360(attReportMonthLabel)}${attendancePct == null ? ' — No eligible classes this month' : ''}</span>
+        </div>
         <!-- Compact 4-Box Attendance Strip -->
         <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
           <div class="bg-slate-50 px-4 py-3 rounded-xl border border-slate-200 flex items-center justify-between">
-            <span class="text-xs font-bold text-slate-500">Attended</span>
+            <span class="text-xs font-bold text-slate-500">Present</span>
             <strong class="text-base font-black text-emerald-700">${attendedCount}</strong>
           </div>
           <div class="bg-slate-50 px-4 py-3 rounded-xl border border-slate-200 flex items-center justify-between">
-            <span class="text-xs font-bold text-slate-500">Missed</span>
+            <span class="text-xs font-bold text-slate-500">Absent</span>
             <strong class="text-base font-black text-rose-600">${missedCount}</strong>
           </div>
           <div class="bg-slate-50 px-4 py-3 rounded-xl border border-slate-200 flex items-center justify-between">
@@ -1317,7 +1338,7 @@ function _buildSelectedStudentWorkspaceHtml(family, student, famSchedules, famLo
           </div>
           <div class="bg-slate-50 px-4 py-3 rounded-xl border border-slate-200 flex items-center justify-between">
             <span class="text-xs font-bold text-slate-500">Attendance Rate</span>
-            <strong class="text-base font-black text-indigo-700">${attendancePct}%</strong>
+            <strong class="text-base font-black text-indigo-700">${attendancePct == null ? '—' : attendancePct + '%'}</strong>
           </div>
         </div>
 
@@ -1536,10 +1557,16 @@ function _buildSelectedStudentWorkspaceHtml(family, student, famSchedules, famLo
   else if (subView === 'report') {
     const currentLevel = stuMeta.current_level || student.course_id || 'Noorani Qaida / Quran Reading';
     const currentSabaq = stuMeta.current_sabaq || (stuLogs[0] ? _parseLessonDetails360(stuLogs[0]).summaryTitle : 'In Progress');
-    const teacherEval = stuMeta.overall_evaluation || (attendancePct >= 85 ? 'Excellent Consistency' : 'Needs Regular Attendance');
+    const teacherEval = stuMeta.overall_evaluation || (attendancePct == null ? 'No attendance data this month' : (attendancePct >= 85 ? 'Excellent Consistency' : 'Needs Regular Attendance'));
 
     bodyHtml = `
       <div class="p-5 space-y-4">
+        <div class="flex items-center gap-2 flex-wrap">
+          <label class="text-xs font-bold text-slate-500" for="attReportMonthInput2">Attendance month:</label>
+          <input type="month" id="attReportMonthInput2" value="${_esc360(attReportMonth || '')}" onchange="set360AttendanceReportMonth(this.value)"
+                 class="px-2 py-1.5 rounded-lg text-xs font-bold border border-slate-200 bg-white text-slate-700">
+          <span class="text-xs text-slate-500">${_esc360(attReportMonthLabel)}${attendancePct == null ? ' — No eligible classes this month' : ''}</span>
+        </div>
         <div class="flex items-center justify-between flex-wrap gap-2">
           <div class="text-xs text-slate-600">
             Instructor: <strong class="text-slate-900">${_esc360(assignedTeacher ? assignedTeacher.full_name : 'Not Assigned')}</strong> &bull;
@@ -1558,8 +1585,8 @@ function _buildSelectedStudentWorkspaceHtml(family, student, famSchedules, famLo
             <span class="text-slate-500 block mt-0.5">Latest Lesson: ${_esc360(currentSabaq)}</span>
           </div>
           <div class="p-3.5 rounded-xl bg-slate-50 border border-slate-200">
-            <span class="text-[10px] font-bold text-slate-400 uppercase block">Attendance Accuracy</span>
-            <strong class="text-sm text-emerald-700 block mt-0.5">${attendancePct}% (${attendedCount} Present / ${missedCount} Missed)</strong>
+            <span class="text-[10px] font-bold text-slate-400 uppercase block">Attendance Accuracy — ${_esc360(attReportMonthLabel)}</span>
+            <strong class="text-sm text-emerald-700 block mt-0.5">${attendancePct == null ? '—' : attendancePct + '%'} (${attendedCount} Present / ${missedCount} Absent / ${leaveCount} Leave)</strong>
             <span class="text-slate-500 block mt-0.5">Joined: ${_esc360(student.joining_date || '2026-01-01')}</span>
           </div>
           <div class="p-3.5 rounded-xl bg-slate-50 border border-slate-200">
@@ -1739,6 +1766,14 @@ function _parseLessonDetails360(log) {
   };
 }
 
+// Attendance report month (Batch C1): the strip + Progress Report tab
+// are scoped to one month (default: current PKT month). Changing it
+// re-renders the workspace; the history table itself stays all-time
+// with its own date/status filters.
+function set360AttendanceReportMonth(v) {
+  _CURRENT_360_STATE.attReportMonth = v || null;
+  _renderFamilyWorkspaceDOM();
+}
 // Lesson History: date-selector state for the 360 history view.
 function set360LessonHistoryDate(v) {
   _CURRENT_360_STATE.lessonHistoryDate = v || '';
