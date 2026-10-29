@@ -148,7 +148,7 @@ function parseField(v) { try { return typeof v === 'string' ? JSON.parse(v) : (v
   const tables = fakeDb.raw("SELECT name FROM sqlite_master WHERE type='table' AND name LIKE 'auth_%'").map((x) => x.name).sort();
   check('auth tables created', tables.includes('auth_throttle') && tables.includes('auth_revoked_tokens') && tables.includes('auth_subject_valid_after'), tables.join(','));
   const marker = fakeDb.raw("SELECT value FROM system_settings WHERE key='schema_version'");
-  check('schema version bumped to v2', marker.length === 1 && marker[0].value === '2026-10-28-v2', JSON.stringify(marker));
+  check('schema version bumped to v3', marker.length === 1 && marker[0].value === '2026-10-29-v3', JSON.stringify(marker));
 }
 
 // ---- T1: legacy login outcomes preserved ------------------------------------

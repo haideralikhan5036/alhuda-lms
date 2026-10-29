@@ -378,14 +378,22 @@ let _schemaInitialized = false;
 // tax behind slow first loads (and the probe itself paid it). Now the
 // full DDL path runs only when the persisted schema_version marker
 // differs (or is absent); a matching marker skips straight to the
-// query. BUMP SCHEMA_VERSION whenever the statements below change.
+// BUMP SCHEMA_VERSION whenever the statements below change. (Phase 1
+// advance/Zoom commission: Batch B added the advance_requests table to
+// these statements WITHOUT bumping the version, so live D1 — whose
+// marker already read v2 — skipped schema creation entirely and the
+// table was never created. The bump to v3 repairs that: the next
+// Worker deploy re-runs the idempotent statements and creates it.
+// Faster activation without a deploy: reset the live marker row
+// (system_settings key 'schema_version') and the CURRENT live Worker
+// creates the table on its next authenticated /api/db call.)
 // Concurrent cold isolates may all run the DDL path (idempotent,
 // errors swallowed) and all write the same marker — safe. A
 // marker-read failure (e.g. brand-new DB where system_settings does
 // not exist yet) falls back to the full DDL path; a marker-write
 // failure only costs the next cold isolate a DDL replay. Neither
 // failure ever fails the request.
-const SCHEMA_VERSION = '2026-10-28-v2';
+const SCHEMA_VERSION = '2026-10-29-v3';
 const SCHEMA_VERSION_KEY = 'schema_version';
 
 async function ensureSchema(db) {

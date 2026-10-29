@@ -7792,6 +7792,20 @@ font-family: var(--font-num) !important;
             list.sort((a, b) => (a.period < b.period ? 1 : -1));
             return list;
           })();
+        // Phase 1: the CURRENT PKT period is always offered, even
+        // without a generated slip (custom-amount requests only; the
+        // request stays pending until the slip exists and is approved).
+        let curPeriodNoSlip = null;
+        try {
+          const partsCur = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Karachi', year: 'numeric', month: '2-digit' }).formatToParts(new Date());
+          let yCur = '', mCur = '';
+          partsCur.forEach((p) => { if (p.type === 'year') yCur = p.value; if (p.type === 'month') mCur = p.value; });
+          if (yCur && mCur) curPeriodNoSlip = yCur + '-' + mCur;
+        } catch (e) {}
+        if (curPeriodNoSlip && !opts.some((o) => o.period === curPeriodNoSlip)) {
+          opts.push({ period: curPeriodNoSlip, label: _tAdvLabelOf(curPeriodNoSlip) });
+          opts.sort((a, b) => (a.period < b.period ? 1 : -1));
+        }
         periodSel.innerHTML = opts.length
           ? opts.map((o) => `<option value="${o.period}">${o.label}</option>`).join('')
           : '<option value="">No salary record yet</option>';
@@ -7808,8 +7822,9 @@ font-family: var(--font-num) !important;
             parts.forEach((p) => { if (p.type === 'year') y = p.value; if (p.type === 'month') m = p.value; });
             if (y && m) { curPeriod = y + '-' + m; curLabel = _tAdvLabelOf(curPeriod); }
           } catch (e) {}
-          if (opts.length && curPeriod && !opts.some((o) => o.period === curPeriod)) {
-            periodNote.innerText = 'No slip has been generated for ' + curLabel + ' yet — advances are only available for periods with a generated slip. Ask Administration to generate this period\'s slip.';
+          const curHasSlip = curPeriod && _TADV_SLIPS.some((s) => _tAdvPeriodOf(s) === curPeriod);
+          if (curPeriod && !curHasSlip) {
+            periodNote.innerText = 'No slip has been generated for ' + curLabel + ' yet — you can still request an advance for it below (custom amount only). It stays pending until Administration generates the slip and approves it.';
             periodNote.classList.remove('hidden');
           } else {
             periodNote.innerText = '';
@@ -7880,13 +7895,39 @@ font-family: var(--font-num) !important;
       const hint = document.getElementById('tAdvAmountHint');
       if (!amountText || !hint) return;
       const slip = _tAdvSelectedSlip();
+      // Phase 1: a period without a slip offers custom amounts only.
+      // Full/half are disabled (they need a net); the request stays
+      // pending until the slip exists and is approved.
+      const typeBtns = document.querySelectorAll('#tAdvTypeGroup .adv-type-btn');
+      const setFullHalfDisabled = (disabled) => {
+        typeBtns.forEach((b) => {
+          if (b.getAttribute('data-adv-type') === 'full' || b.getAttribute('data-adv-type') === 'half') b.disabled = disabled;
+        });
+      };
       if (!slip) {
-        amountText.innerText = '—';
-        hint.innerText = _TADV_SLIPS.length
-          ? 'Select a salary period that has a generated slip.'
-          : 'No salary record yet — an advance can be requested once Administration generates a slip.';
+        setFullHalfDisabled(true);
+        if (_TADV_TYPE !== 'custom') {
+          _TADV_TYPE = 'custom';
+          typeBtns.forEach((b) => b.classList.remove('adv-type-active', 'bg-emerald-600', 'text-white', 'border-emerald-600'));
+          const cb = document.querySelector('#tAdvTypeGroup [data-adv-type="custom"]');
+          if (cb) cb.classList.add('adv-type-active', 'bg-emerald-600', 'text-white', 'border-emerald-600');
+          const customBox = document.getElementById('tAdvCustomBox');
+          if (customBox) customBox.classList.remove('hidden');
+        }
+        const periodSel = document.getElementById('tAdvPeriod');
+        const periodLabel = (periodSel && periodSel.value) ? _tAdvLabelOf(periodSel.value) : 'this period';
+        const customEl = document.getElementById('tAdvCustomAmount');
+        const custom = customEl ? parseFloat(customEl.value) : NaN;
+        if (Number.isFinite(custom) && custom > 0) {
+          amountText.innerText = custom.toLocaleString() + ' PKR';
+          hint.innerText = 'Custom advance for ' + periodLabel + ' (no slip yet). It stays pending until Administration generates the slip and approves it.';
+        } else {
+          amountText.innerText = '—';
+          hint.innerText = 'No slip has been generated for ' + periodLabel + ' yet. Enter a custom amount — full/half advances need a generated slip.';
+        }
         return;
       }
+      setFullHalfDisabled(false);
       const net = _tAdvNetOf(slip);
       if (!(net > 0)) {
         amountText.innerText = '—';
@@ -7933,16 +7974,17 @@ font-family: var(--font-num) !important;
       if (!CURRENT_TEACHER || !CURRENT_TEACHER.id) { lmsNotify('Please log in again to request an advance.'); return; }
       const periodSel = document.getElementById('tAdvPeriod');
       const period = periodSel ? periodSel.value : '';
-      if (!period) { lmsNotify('Select a salary period that has a generated slip first.'); return; }
+      if (!period) { lmsNotify('Select a salary period first.'); return; }
       const slip = _tAdvSelectedSlip();
       const net = slip ? _tAdvNetOf(slip) : 0;
-      if (!(net > 0)) { lmsNotify('There is no payable salary for this period to advance against.'); return; }
+      if (slip && !(net > 0)) { lmsNotify('There is no payable salary for this period to advance against.'); return; }
+      if (!slip && _TADV_TYPE !== 'custom') { lmsNotify('No slip has been generated for this period yet — full/half advances need a slip. Enter a custom amount instead.'); return; }
       let customAmount = null;
       if (_TADV_TYPE === 'custom') {
         const customEl = document.getElementById('tAdvCustomAmount');
         customAmount = customEl ? parseFloat(customEl.value) : NaN;
         if (!Number.isFinite(customAmount) || customAmount <= 0) { lmsNotify('Enter a custom amount greater than 0.'); return; }
-        if (customAmount > net) { lmsNotify('A custom advance cannot exceed the net payable for this period (' + net.toLocaleString() + ' PKR).'); return; }
+        if (slip && customAmount > net) { lmsNotify('A custom advance cannot exceed the net payable for this period (' + net.toLocaleString() + ' PKR).'); return; }
       }
       const reasonEl = document.getElementById('tAdvReason');
       const reason = reasonEl ? reasonEl.value.trim() : '';
@@ -7964,6 +8006,8 @@ font-family: var(--font-num) !important;
         }
         if (data.duplicate) {
           lmsNotify('You already have a pending request for this period. No duplicate was created.');
+        } else if (data.salary_pending) {
+          lmsNotify('Advance request submitted. No slip exists for this period yet — it stays pending until Administration generates the slip and approves it.');
         } else {
           lmsNotify('Advance request submitted. It is now pending review by Administration.');
         }
