@@ -321,7 +321,16 @@ font-family: var(--font-num) !important;
       transform: scale(1.18);
       box-shadow: 0 0 0 2.5px #ffffff, 0 0 0 4px #059669;
     }
-  </style>
+    /* Phase 4 (audit P3-ss): respect reduced-motion preferences. */
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+</style>
 </head>
 <body class="bg-slate-50 text-slate-800 font-sans min-h-screen flex flex-col antialiased">
 

@@ -1218,18 +1218,29 @@
       }
 
       try {
+        // Phase 4 (audit P3-v): per-slot results are CHECKED. Any slot
+        // failure aborts before the student record moves, so a partial
+        // shift can never report success; the admin can simply retry
+        // (slot updates are idempotent by id).
+        const slotFailures = [];
         // 1. Update non-conflicting schedule slots in Supabase from Teacher A to Teacher B
         for (const s of nonConflictingSlots) {
           const updateFields = { teacher_id: toTeacherId };
           if (toTeacherZoom) updateFields.meeting_link = toTeacherZoom;
-          await db.from('class_schedules').update(updateFields).eq('id', s.id);
+          const { error: slotErr } = await db.from('class_schedules').update(updateFields).eq('id', s.id);
+          if (slotErr) slotFailures.push(s.id);
         }
 
         // 2. If partial shift on conflict was chosen, remove conflicting slots from Teacher A so Teacher A never retains duplicate/stale schedule slots
         if (conflictingSlots.length > 0 && allowPartialOnConflict) {
           for (const c of conflictingSlots) {
-            await db.from('class_schedules').delete().eq('id', c.slot.id);
+            const { error: delErr } = await db.from('class_schedules').delete().eq('id', c.slot.id);
+            if (delErr) slotFailures.push(c.slot.id);
           }
+        }
+
+        if (slotFailures.length > 0) {
+          throw new Error(slotFailures.length + ' schedule change(s) could not be saved. The student was NOT shifted — please try again.');
         }
 
         // 3. Update student's assigned_teacher_id and preserve shift audit trail in student.notes
