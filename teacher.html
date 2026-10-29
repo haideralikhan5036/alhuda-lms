@@ -6307,8 +6307,7 @@ font-family: var(--font-num) !important;
           canvas.classList.add('pointer-events-auto');
         }
         if (btn) {
-          btn.classList.add('bg-emerald-600', 'text-white', 'border-emerald-500');
-          btn.classList.remove('bg-zinc-800/80', 'text-zinc-300');
+          btn.classList.add('ring-2', 'ring-emerald-300', 'ring-offset-1');
         }
         initAnnotationCanvasListeners();
         resizeAndSyncAnnotationCanvas();
@@ -6319,17 +6318,19 @@ font-family: var(--font-num) !important;
           canvas.classList.remove('pointer-events-auto');
         }
         if (btn) {
-          btn.classList.remove('bg-emerald-600', 'text-white', 'border-emerald-500');
-          btn.classList.add('bg-zinc-800/80', 'text-zinc-300');
+          btn.classList.remove('ring-2', 'ring-emerald-300', 'ring-offset-1');
         }
       }
     }
 
     function selectAnnotationTool(toolName) {
       ANNOTATION_CURRENT_TOOL = toolName;
+      // Sleek toolbar (2026-10-29): the selected tool is shown by the
+      // .annotation-tool-btn.active CSS (soft emerald gradient). The old
+      // code painted every button dark zinc on each selection,
+      // which is why the toolbar kept turning dark after the redesign.
       document.querySelectorAll('.annotation-tool-btn').forEach(btn => {
-        btn.classList.remove('ring-2', 'ring-emerald-400', 'bg-zinc-700');
-        btn.classList.add('bg-zinc-800');
+        btn.classList.remove('active');
       });
 
       const map = {
@@ -6344,8 +6345,7 @@ font-family: var(--font-num) !important;
       };
       const activeEl = document.getElementById(map[toolName]);
       if (activeEl) {
-        activeEl.classList.add('ring-2', 'ring-emerald-400', 'bg-zinc-700');
-        activeEl.classList.remove('bg-zinc-800');
+        activeEl.classList.add('active');
       }
 
       const canvas = document.getElementById('readerAnnotationCanvas');
@@ -6364,9 +6364,9 @@ font-family: var(--font-num) !important;
       ANNOTATION_CURRENT_COLOR = hex;
       document.querySelectorAll('.annotation-color-btn').forEach(b => {
         if (b.getAttribute('data-color') === hex) {
-          b.classList.add('ring-2', 'ring-white', 'scale-110');
+          b.classList.add('ring-2', 'ring-white', 'scale-110', 'active');
         } else {
-          b.classList.remove('ring-2', 'ring-white', 'scale-110');
+          b.classList.remove('ring-2', 'ring-white', 'scale-110', 'active');
         }
       });
     }
@@ -6632,12 +6632,16 @@ font-family: var(--font-num) !important;
         if (ANNOTATION_CURRENT_TOOL === 'pen' || ANNOTATION_CURRENT_TOOL === 'highlighter') {
           ANNOTATION_STROKE_POINTS.push({ x: pt.x, y: pt.y });
           redrawCurrentPageAnnotations();
-          // Draw in-progress stroke
+          // Draw in-progress stroke. resetTransform first: the redraw
+          // leaves the transform at scale(dpr), and scaling again put
+          // the live stroke at dpr-squared coordinates (far from the
+          // pen on scaled displays) — owner report 2026-10-29.
           const ctx = canvas.getContext('2d');
           const dpr = window.devicePixelRatio || 1;
           const w = parseFloat(canvas.style.width) || (canvas.width / dpr);
           const h = parseFloat(canvas.style.height) || (canvas.height / dpr);
           ctx.save();
+          if (ctx.resetTransform) ctx.resetTransform();
           ctx.scale(dpr, dpr);
           drawSingleAnnotationAction(ctx, {
             type: ANNOTATION_CURRENT_TOOL,
@@ -6655,6 +6659,7 @@ font-family: var(--font-num) !important;
           const w = parseFloat(canvas.style.width) || (canvas.width / dpr);
           const h = parseFloat(canvas.style.height) || (canvas.height / dpr);
           ctx.save();
+          if (ctx.resetTransform) ctx.resetTransform();
           ctx.scale(dpr, dpr);
           drawSingleAnnotationAction(ctx, {
             type: ANNOTATION_CURRENT_TOOL,
@@ -6711,6 +6716,7 @@ font-family: var(--font-num) !important;
 
       canvas.addEventListener('pointerup', handlePointerEnd);
       canvas.addEventListener('pointercancel', handlePointerEnd);
+      window.addEventListener('pointerup', handlePointerEnd);
       window.addEventListener('resize', () => {
         if (ANNOTATION_ACTIVE) resizeAndSyncAnnotationCanvas();
       });

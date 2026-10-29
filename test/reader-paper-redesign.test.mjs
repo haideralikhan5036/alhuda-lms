@@ -90,6 +90,17 @@ check('annotate: separators are light (no dark zinc in the toolbar)', !ASEG.incl
 check('annotate: Save Page is an emerald gradient pill', ASEG.includes('bg-gradient-to-b from-emerald-500 to-emerald-700'));
 check('annotate: active tool uses a soft emerald gradient', TEACHER.includes('background: linear-gradient(180deg, #059669, #047857) !important;'));
 
+
+// ---- Annotate drawing fixes (owner report 2026-10-29, late evening) ----
+const SELSEG = fnSeg(TEACHER, 'function selectAnnotationTool', 1500);
+check('annotate: tool selection no longer paints buttons dark zinc', !SELSEG.includes('bg-zinc-800') && !SELSEG.includes('bg-zinc-700'));
+check('annotate: tool selection toggles the active class (emerald gradient CSS)', SELSEG.includes("classList.add('active')"));
+const TOGSEG = fnSeg(TEACHER, 'function toggleReaderWhiteboard', 2200);
+check('annotate: whiteboard toggle never paints the Annotate button dark', !TOGSEG.includes('bg-zinc-800'));
+const MOVESEG = fnSeg(TEACHER, "canvas.addEventListener('pointermove'", 4200);
+check('annotate: live stroke resets the transform before scaling (no dpr-squared offset)', MOVESEG.includes('if (ctx.resetTransform) ctx.resetTransform();'));
+check('annotate: stroke also ends on a window-level pointerup', TEACHER.includes("window.addEventListener('pointerup', handlePointerEnd);"));
+
 const failed = results.filter(r => !r.pass);
 console.log(`\n${results.length - failed.length}/${results.length} checks passed`);
 if (failed.length) { console.log('FAILED: ' + failed.map(f => f.name).join('; ')); process.exit(1); }
