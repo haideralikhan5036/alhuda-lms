@@ -84,7 +84,7 @@ function corsHeadersFor(request, env) {
 // functions/api/db.js (the D1 schema marker; v2 after Part A). It is hardcoded
 // here on purpose: /api/health must never 500 because D1 is unreachable, and
 // it must never cost an unauthenticated caller a D1 read.
-const WORKER_RELEASE = '2026-10-29-phase4';
+const WORKER_RELEASE = '2026-10-29-announcements';
 const HEALTH_SCHEMA_VERSION = '2026-10-29-v3';
 
 // --- Batch 7 Part B: security headers (workers.dev responses) --------------
@@ -2283,7 +2283,10 @@ function isManagerReadableSettingsKey(key) {
 // the tombstone, and the switch values only.
 function isTeacherReadableSettingsKey(key) {
   const k = String(key || '');
-  return isCatalogSettingsKey(k) || k === 'alhuda_deleted_books' || isFeeReadFlagKey(k);
+  // Announcements (2026-10-29): the official-announcements list is
+  // published BY the admin FOR teachers/parents — titles and messages
+  // only, no contacts or credentials — so both portals may read it.
+  return isCatalogSettingsKey(k) || k === 'alhuda_deleted_books' || isFeeReadFlagKey(k) || k === 'alhuda_official_announcements';
 }
 
 // Lesson History page links: keys a parent may READ in system_settings =
@@ -2297,7 +2300,7 @@ function isParentReadableSettingsKey(key) {
   // Phase 4 (audit P3-s): + the deleted-books tombstone, so a deleted
   // custom book stops rendering on parent devices too (the key carries
   // only book ids — no contacts or credentials).
-  return isCatalogSettingsKey(key) || isFeeReadFlagKey(key) || key === 'alhuda_deleted_books';
+  return isCatalogSettingsKey(key) || isFeeReadFlagKey(key) || key === 'alhuda_deleted_books' || key === 'alhuda_official_announcements';
 }
 
 // Remove contact keys whose value is exactly the mask placeholder. A

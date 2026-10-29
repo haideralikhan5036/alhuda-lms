@@ -15,7 +15,7 @@ const REPO_ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 // Test-only secret, assembled at runtime (never a single literal).
 const WORKER_SECRET = ['test', 'worker', 'secret', 'b7b'].join('-');
 const ORIGIN = 'https://alhuda-lms.vercel.app';
-const WORKER_RELEASE = '2026-10-29-phase4';
+const WORKER_RELEASE = '2026-10-29-announcements';
 const SCHEMA_VERSION = '2026-10-29-v3'; // v3: Batch B added advance_requests without a bump, so live D1 skipped schema creation
 
 // The CSP the Worker ENFORCING header must mirror: read from vercel.json

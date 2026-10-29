@@ -273,7 +273,7 @@ fakeDb.seed('INSERT INTO salary_slips (id, teacher_id, period, slip_no, month_la
   check('C profiles360 360 list uses unionTableWithLegacy', P360.includes('unionTableWithLegacy'));
   const WORKER = fs.readFileSync(path.join(REPO_ROOT, 'cloudflare/worker.js'), 'utf8');
   check('C worker defines the shared fee-read flag allowlist', WORKER.includes('isFeeReadFlagKey') && WORKER.includes("k === 'fee_read_parent'") && WORKER.includes("k === 'salary_read_v1'"));
-  check('C worker release is the commission release (2026-10-29-phase4)', WORKER.includes("const WORKER_RELEASE = '2026-10-29-phase4'"));
+  check('C worker release is the commission release (2026-10-29-announcements)', WORKER.includes("const WORKER_RELEASE = '2026-10-29-announcements'"));
 }
 
 const failed = results.filter((r) => !r.pass);

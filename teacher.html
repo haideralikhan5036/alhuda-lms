@@ -641,6 +641,9 @@ font-family: var(--font-num) !important;
             </div>
           </div>
 
+      <!-- OFFICIAL ANNOUNCEMENTS (from Admin Portal) -->
+      <div id="teacherAnnouncementsBanner" class="hidden mb-4"></div>
+
       <!-- LIVE / NEXT CLASS PROMINENT CURRENT SESSION CARD -->
       <div id="liveClassAlertBanner" class="hidden p-4 sm:p-5 rounded-2xl bg-gradient-to-r from-emerald-800 via-teal-900 to-slate-900 text-white shadow-md border border-emerald-500/30 transition-all">
         <div class="flex flex-col md:flex-row items-start md:items-center justify-between gap-3.5 sm:gap-4">
@@ -4614,6 +4617,51 @@ font-family: var(--font-num) !important;
         }
       } catch (e) {}
     }
+    // =========================================================================
+    // OFFICIAL ANNOUNCEMENTS (Admin -> Teacher Portal noticeboard)
+    // The admin publishes into localStorage + a D1 system_settings row
+    // (key: alhuda_official_announcements, teacher-readable). Render the
+    // local copy instantly, then refresh from D1 so announcements reach
+    // teachers on any device. Audience: target 'teachers' or 'both'.
+    // =========================================================================
+    function annEscT(s) {
+      return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+    function renderTeacherAnnouncements(list) {
+      const el = document.getElementById('teacherAnnouncementsBanner');
+      if (!el) return;
+      const mine = (Array.isArray(list) ? list : []).filter(a => a && (a.target === 'teachers' || a.target === 'both'));
+      if (mine.length === 0) {
+        el.classList.add('hidden');
+        el.innerHTML = '';
+        return;
+      }
+      el.classList.remove('hidden');
+      el.innerHTML = '<div class="bg-gradient-to-r from-emerald-900 via-teal-800 to-emerald-900 text-white p-3.5 rounded-2xl border border-emerald-400/40 shadow-sm space-y-2">'
+        + '<div class="flex items-center gap-2 font-extrabold text-xs text-emerald-200 uppercase tracking-wider"><i class="fa-solid fa-bullhorn text-amber-300"></i> Official Announcements (' + mine.length + ')</div>'
+        + '<div class="space-y-1.5">'
+        + mine.slice(0, 3).map(a => '<div class="p-2.5 rounded-lg bg-white/10 border border-white/15 flex flex-wrap items-center justify-between gap-2 text-xs"><div><strong class="font-extrabold text-white">' + annEscT(a.title) + ':</strong><span class="text-emerald-50 ml-1">' + annEscT(a.message) + '</span></div><span class="text-[10px] text-emerald-200/70 font-mono">' + annEscT(a.created_at || '') + '</span></div>').join('')
+        + '</div></div>';
+    }
+    async function loadTeacherAnnouncements() {
+      try {
+        const local = JSON.parse(localStorage.getItem('alhuda_official_announcements') || '[]');
+        if (Array.isArray(local) && local.length) renderTeacherAnnouncements(local);
+      } catch (e) {}
+      try {
+        if (typeof db === 'undefined' || !db) return;
+        const { data, error } = await db.from('system_settings').select('value').eq('key', 'alhuda_official_announcements');
+        if (error || !data || !data[0]) return;
+        const list = JSON.parse(data[0].value || '[]');
+        if (Array.isArray(list)) {
+          try { localStorage.setItem('alhuda_official_announcements', JSON.stringify(list)); } catch (e) {}
+          renderTeacherAnnouncements(list);
+        }
+      } catch (e) {}
+    }
+    loadTeacherAnnouncements();
+    setTimeout(loadTeacherAnnouncements, 2500);
+
     // Hydrate immediately and after startup delay
     hydrateTeacherCustomBooksFromD1();
     setTimeout(hydrateTeacherCustomBooksFromD1, 500);
