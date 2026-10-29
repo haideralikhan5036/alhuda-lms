@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, interactive-widget=resizes-content">
   <title>Teacher Portal - Al-Huda Islamic Centre LMS</title>
 
   <!-- Progressive Web App (PWA) Manifest & Icons -->
@@ -744,7 +744,7 @@ font-family: var(--font-num) !important;
           <div id="teacherClassesStatusBanner" class="hidden px-4 sm:px-5 pt-4"></div>
 
           <!-- Schedule Table -->
-          <div class="overflow-x-auto touch-scroll">
+          <div class="overflow-x-auto touch-scroll tcard">
             <table class="w-full text-left text-xs border-collapse min-w-[700px]">
               <thead class="bg-slate-100 text-slate-700 font-bold border-b border-slate-200 uppercase tracking-wider text-[11px]">
                 <tr>
@@ -796,7 +796,7 @@ font-family: var(--font-num) !important;
             </div>
           </div>
 
-          <div class="overflow-x-auto touch-scroll">
+          <div class="overflow-x-auto touch-scroll tcard">
             <table class="w-full text-left text-xs border-collapse min-w-[680px]">
               <thead class="bg-slate-100 text-slate-700 font-bold border-b border-slate-200 uppercase tracking-wider text-[11px]">
                 <tr>
@@ -3843,25 +3843,25 @@ font-family: var(--font-num) !important;
 
         return `
           <tr class="hover:bg-slate-50 transition">
-            <td class="p-3.5 text-center font-extrabold text-slate-600 font-mono">${idx + 1}</td>
-            <td class="p-3.5">
+            <td data-label="#" class="p-3.5 text-center font-extrabold text-slate-600 font-mono">${idx + 1}</td>
+            <td data-label="Student" class="p-3.5">
               <div class="font-extrabold text-slate-900 text-[13.5px]">${escapeHtml(st.name || 'Student')}</div>
               <div class="lms-num-id text-slate-600 bg-slate-100 border border-slate-200/80 px-2 py-0.5 rounded inline-block mt-1">ID: ${escapeHtml(st.id)}</div>
             </td>
-            <td class="p-3.5">
+            <td data-label="Course" class="p-3.5">
               <span class="px-2.5 py-1 rounded-lg bg-emerald-50 text-brandEmerald border border-emerald-200 font-bold text-xs inline-block">
                 ${courseTitle}
               </span>
             </td>
-            <td class="p-3.5">
+            <td data-label="Schedule" class="p-3.5">
               ${scheduleSummaryHtml}
             </td>
-            <td class="p-3.5">
+            <td data-label="Status" class="p-3.5">
               <span class="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-100 text-emerald-800 border border-emerald-300">
                 Active
               </span>
             </td>
-            <td class="p-3.5 text-right">
+            <td data-label="" class="p-3.5 text-right">
               <div class="flex items-center justify-end gap-1.5 flex-wrap">
                 ${zoomActionBtn}
                 <button onclick="openTeacherAddScheduleModal('${escapeJsAttr(st.id)}')" class="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold shadow-2xs flex items-center gap-1 transition" title="Add or schedule weekly class slots for ${escapeHtml(st.name)}">
@@ -4125,14 +4125,14 @@ font-family: var(--font-num) !important;
 
         return `
           <tr class="${rowClass}">
-            <td class="p-3.5 whitespace-nowrap">
+            <td data-label="Time" class="p-3.5 whitespace-nowrap">
               <div class="flex items-center gap-1.5 flex-wrap">
                 <span class="lms-num-time font-bold text-slate-900 bg-slate-100/90 border border-slate-200 px-2.5 py-1 rounded-lg inline-block whitespace-nowrap">${c.start_time.slice(0,5)} – ${c.end_time.slice(0,5)}</span>
                 <span class="px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-800 border border-emerald-200 font-mono font-extrabold text-[10px]">${durDisplay}</span>
               </div>
               <div class="mt-1">${timingBadge}</div>
             </td>
-            <td class="p-3.5">
+            <td data-label="Student" class="p-3.5">
               <div class="flex items-center gap-1.5 flex-wrap">
                 <span class="font-bold text-slate-900 text-[13.5px]">${c.students?.name || 'Student'}</span>
                 ${isTrialClass 
@@ -4142,20 +4142,20 @@ font-family: var(--font-num) !important;
               </div>
               <div class="lms-num-id text-slate-600 bg-slate-100 border border-slate-200/80 px-2 py-0.5 rounded inline-block mt-1">ID: ${c.students?.id || 'STU'}</div>
             </td>
-            <td class="p-3.5">
+            <td data-label="Course" class="p-3.5">
               <span class="px-2.5 py-1 rounded-lg ${isTrialClass ? 'bg-purple-50 text-purple-900 border-purple-200' : 'bg-emerald-50 text-brandEmerald border-emerald-200'} font-bold text-xs border inline-block">
                 ${courseTitle}
               </span>
             </td>
-            <td class="p-3.5 max-w-xs truncate">
+            <td data-label="Lesson" class="p-3.5 max-w-xs truncate">
               ${sabaqNotes}
             </td>
-            <td class="p-3.5">
+            <td data-label="Attendance" class="p-3.5">
               <span class="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold border ${c.badgeClass}">
                 ${c.status}
               </span>
             </td>
-            <td class="p-3.5 text-right">
+            <td data-label="" class="p-3.5 text-right">
               <div class="flex items-center justify-end gap-1.5 flex-wrap">
                 ${actionButtons}
               </div>
@@ -9846,6 +9846,90 @@ font-family: var(--font-num) !important;
         overflow-y: auto !important;
         margin: 8px auto !important;
       }
+    }
+  </style>
+
+  <!-- Batch C2: teacher-portal mobile-first layer. Theme preserved
+       (same brand palette, fonts, components, and workflows); only
+       layout, touch targets, and type hierarchy adapt for phones.
+       Tables other than .tcard keep their contained horizontal scroll
+       by design. -->
+  <style>
+    /* C2.1: visible keyboard focus everywhere in the portal. */
+    #teacherMainContainer :is(button, a, input, select, textarea, [tabindex]):focus-visible,
+    div.fixed[id^="modal"] :is(button, a, input, select, textarea, [tabindex]):focus-visible,
+    #teacherSidebar :is(button, a, input, select, textarea, [tabindex]):focus-visible {
+      outline: 2px solid #059669;
+      outline-offset: 2px;
+    }
+
+    /* C2.2: type hierarchy (portal-wide, theme kept). Headings, key
+       amounts, primary actions and status badges keep their strong
+       weights. Form labels step down to medium and supporting /
+       descriptive paragraphs to regular, so bold means something. */
+    #teacherMainContainer label.font-bold,
+    div.fixed[id^="modal"] label.font-bold {
+      font-weight: 500;
+    }
+    #teacherMainContainer p.text-slate-500,
+    div.fixed[id^="modal"] p.text-slate-500 {
+      font-weight: 400;
+    }
+
+    /* C2.3: phones. */
+    @media (max-width: 767px) {
+      /* Sidebar never wider than the phone; nav rows are thumb-sized. */
+      #teacherSidebar { max-width: 86vw; }
+      #teacherSidebar .sidebar-nav-btn { min-height: 44px; font-size: 14px; }
+      #teacherSidebar button { min-height: 44px; }
+
+      /* Forms: 16px text stops iOS focus-zoom; 44px rows for thumbs. */
+      #teacherMainContainer input:not([type="checkbox"]):not([type="radio"]),
+      #teacherMainContainer select, #teacherMainContainer textarea,
+      div.fixed[id^="modal"] input:not([type="checkbox"]):not([type="radio"]),
+      div.fixed[id^="modal"] select, div.fixed[id^="modal"] textarea {
+        font-size: 16px;
+        min-height: 44px;
+      }
+      /* Buttons: comfortably tappable. */
+      #teacherMainContainer button, div.fixed[id^="modal"] button { min-height: 44px; }
+      div.fixed[id^="modal"] button[aria-label] { min-width: 44px; }
+
+      /* Dashboard KPI numbers fit 320px screens. */
+      .lms-num-kpi, #statAssignedStudents, #statTodayClasses, #statCompleted, #statRemaining {
+        font-size: 1.5rem !important;
+      }
+
+      /* Tables -> cards for Today's Classes + Student List only. */
+      .tcard { overflow-x: visible; }
+      .tcard table { min-width: 0; display: block; width: 100%; }
+      .tcard thead { display: none; }
+      .tcard tbody { display: block; width: 100%; }
+      .tcard tbody > :not([hidden]) ~ :not([hidden]) { border-top-width: 0; }
+      .tcard tr {
+        display: block; width: 100%;
+        border: 1px solid #e2e8f0; border-radius: 12px;
+        margin-bottom: 12px; padding: 4px 0; background: #fff;
+      }
+      .tcard td {
+        display: flex; justify-content: space-between; align-items: flex-start; gap: 12px;
+        width: 100%; padding: 8px 14px; border: 0;
+        overflow-wrap: anywhere; text-align: right;
+      }
+      .tcard td::before {
+        content: attr(data-label); flex: 0 0 auto;
+        font-weight: 600; font-size: 11px; color: #64748b; text-align: left;
+      }
+      .tcard td[data-label=""]::before { display: none; }
+      .tcard td[data-label=""] { justify-content: flex-end; }
+      /* Card cells must not clip lesson text. */
+      .tcard td .truncate, .tcard td.truncate { overflow: visible; text-overflow: clip; white-space: normal; }
+
+      /* Long names / ids wrap instead of overflowing. */
+      #teacherMainContainer { overflow-wrap: anywhere; }
+      /* Dialog panels use the full phone width and fit the keyboard. */
+      div.fixed[id^="modal"] { padding: 8px; }
+      div.fixed[id^="modal"] > div { width: 100%; max-height: 92dvh; }
     }
   </style>
 </body>
