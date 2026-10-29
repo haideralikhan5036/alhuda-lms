@@ -21,7 +21,9 @@
     };
 
     let CACHED_FEE_FAMILIES = [];
-    let CACHED_PENDING_FEE_LIST = [];
+    // Phase 4 (audit P3-rr-e): null until the first successful load,
+    // so an empty table can say "not loaded" instead of "all cleared".
+    let CACHED_PENDING_FEE_LIST = null;
     let CACHED_ANNUAL_FEE_MATRIX = [];
     let CURRENT_FEE_MODAL_RECEIPT = null;
     let CURRENT_MATRIX_ACTION_DATA = null;
@@ -802,8 +804,8 @@
     async function loadFeeDashboardStats() {
       const mSel = document.getElementById('feeDashMonthSelect');
       const ySel = document.getElementById('feeDashYearSelect');
-      const selectedMonth = mSel ? mSel.value : 'September';
-      const selectedYear = ySel ? parseInt(ySel.value, 10) : 2026;
+      const selectedMonth = mSel ? mSel.value : (FEE_CONFIG.MONTHS[new Date().getMonth()] || 'September');
+      const selectedYear = ySel ? parseInt(ySel.value, 10) : new Date().getFullYear();
 
       const badgePeriod = document.getElementById('feeDashActivePeriodBadge');
       if (badgePeriod) badgePeriod.innerText = `${selectedMonth} ${selectedYear}`;
@@ -2257,8 +2259,8 @@
     function loadPendingDefaultersList() {
       const mSel = document.getElementById('feePendingMonthFilter');
       const ySel = document.getElementById('feePendingYearFilter');
-      const targetMonth = mSel ? mSel.value : 'September';
-      const targetYear = ySel ? parseInt(ySel.value, 10) : 2026;
+      const targetMonth = mSel ? mSel.value : (FEE_CONFIG.MONTHS[new Date().getMonth()] || 'September');
+      const targetYear = ySel ? parseInt(ySel.value, 10) : new Date().getFullYear();
 
       const pLabel = document.getElementById('feePendingPeriodLabel');
       if (pLabel) pLabel.innerText = `${targetMonth} ${targetYear}`;
@@ -2280,11 +2282,25 @@
 
       const mSel = document.getElementById('feePendingMonthFilter');
       const ySel = document.getElementById('feePendingYearFilter');
-      const targetMonth = mSel ? mSel.value : 'September';
-      const targetYear = ySel ? parseInt(ySel.value, 10) : 2026;
+      const targetMonth = mSel ? mSel.value : (FEE_CONFIG.MONTHS[new Date().getMonth()] || 'September');
+      const targetYear = ySel ? parseInt(ySel.value, 10) : new Date().getFullYear();
 
       const pendPagerEl = document.getElementById('feePendingTablePager');
       if (!list || list.length === 0) {
+        // Phase 4 (audit P3-rr-e): never claim "all cleared" when the
+        // pending list simply has not loaded (or its load failed).
+        if (CACHED_PENDING_FEE_LIST === null) {
+          tbody.innerHTML = `
+          <tr>
+            <td colspan="7" class="p-8 text-center text-slate-500 font-bold">
+              <i class="fa-solid fa-triangle-exclamation text-2xl text-amber-500 block mb-1"></i>
+              The pending list has not loaded yet. Please reload the page to see the current pending fees.
+            </td>
+          </tr>
+        `;
+          if (pendPagerEl) pendPagerEl.innerHTML = '';
+          return;
+        }
         tbody.innerHTML = `
           <tr>
             <td colspan="7" class="p-8 text-center text-emerald-800 font-bold">
@@ -2445,8 +2461,8 @@ Official Email: ${offEmail}`;
 
       const mSel = document.getElementById('feePendingMonthFilter');
       const ySel = document.getElementById('feePendingYearFilter');
-      const targetMonth = item.selectedMonth || (mSel ? mSel.value : 'September');
-      const targetYear = item.selectedYear || (ySel ? parseInt(ySel.value, 10) : 2026);
+      const targetMonth = item.selectedMonth || (mSel ? mSel.value : (FEE_CONFIG.MONTHS[new Date().getMonth()] || 'September'));
+      const targetYear = item.selectedYear || (ySel ? parseInt(ySel.value, 10) : new Date().getFullYear());
       const emailAddr = item.email || getFamilyEmailAddress(item.family);
 
       const { subject, plainText, htmlBody } = buildPendingMonthReminderEmail(item, targetMonth, targetYear);
@@ -2474,8 +2490,8 @@ Official Email: ${offEmail}`;
       const list = CACHED_PENDING_FEE_LIST || [];
       const mSel = document.getElementById('feePendingMonthFilter');
       const ySel = document.getElementById('feePendingYearFilter');
-      const targetMonth = mSel ? mSel.value : 'September';
-      const targetYear = ySel ? parseInt(ySel.value, 10) : 2026;
+      const targetMonth = mSel ? mSel.value : (FEE_CONFIG.MONTHS[new Date().getMonth()] || 'September');
+      const targetYear = ySel ? parseInt(ySel.value, 10) : new Date().getFullYear();
       const periodStr = `${targetMonth} ${targetYear}`;
 
       if (list.length === 0) {
@@ -2801,8 +2817,8 @@ Official Email: ${offEmail}`;
     function loadThreePlusDefaultersList() {
       const mSel = document.getElementById('feeDashMonthSelect');
       const ySel = document.getElementById('feeDashYearSelect');
-      const targetMonth = mSel ? mSel.value : 'September';
-      const targetYear = ySel ? parseInt(ySel.value, 10) : 2026;
+      const targetMonth = mSel ? mSel.value : (FEE_CONFIG.MONTHS[new Date().getMonth()] || 'September');
+      const targetYear = ySel ? parseInt(ySel.value, 10) : new Date().getFullYear();
 
       const list = calculateThreePlusMonthDefaulters(targetMonth, targetYear);
       renderThreePlusDefaultersRows(list);
@@ -3108,7 +3124,7 @@ Official Email: ${offEmail}`;
     // ============================================================
     function loadMasterAnnualMatrix() {
       const ySel = document.getElementById('feeMatrixYearSelect');
-      const targetYear = ySel ? parseInt(ySel.value, 10) : 2026;
+      const targetYear = ySel ? parseInt(ySel.value, 10) : new Date().getFullYear();
       const tbody = document.getElementById('feeMatrixTableBody');
       if (!tbody) return;
 
@@ -3326,7 +3342,7 @@ Official Email: ${offEmail}`;
 
       const m = (row.months || []).find(item => item.month.toLowerCase() === month.toLowerCase()) || {};
       const yrSelect = document.getElementById('feeMatrixYearSelect');
-      const year = yrSelect ? parseInt(yrSelect.value, 10) : 2026;
+      const year = yrSelect ? parseInt(yrSelect.value, 10) : new Date().getFullYear();
       const enrollInfo = getFamilyEnrollmentInfo(fam);
 
       let statusHtml = '<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-rose-100 text-rose-800">Due / Unpaid</span>';
@@ -3492,7 +3508,7 @@ Official Email: ${offEmail}`;
       if (!fam) return;
 
       const ySel = document.getElementById('ledgerYearSelect');
-      const year = ySel ? parseInt(ySel.value, 10) : 2026;
+      const year = ySel ? parseInt(ySel.value, 10) : new Date().getFullYear();
 
       document.getElementById('familyLedgerSubtitle').innerText = `Family ID: ${fam.id} • Parent: ${fam.parent_name}`;
       document.getElementById('ledgerParentName').innerText = fam.parent_name || 'Parent / Guardian';

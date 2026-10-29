@@ -725,6 +725,12 @@ window.writeTables = async function () {
   var client = dbClient();
   if (!client) { logLine('Write refused: the database client is not available. Reload the page and sign in again.', 'err'); return; }
 
+  // Phase 4 (audit P3-u): one final confirmation before inserting.
+  if (typeof window.lmsConfirm === 'function') {
+    var okWrite = await window.lmsConfirm({ title: 'Write to the fee tables?', message: 'This inserts the reconciled dry-run records into the payments / salary tables. It cannot be undone from this page.', confirmText: 'Write records' });
+    if (!okWrite) { logLine('Write cancelled at the confirmation step.', ''); return; }
+  }
+
   setBusy('btnWrite', true, 'Write to tables');
   try {
     if (await flagIsOn()) {

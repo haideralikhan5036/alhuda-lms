@@ -504,7 +504,16 @@
     .no-scrollbar::-webkit-scrollbar { display: none; }
     .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
     .touch-scroll { -webkit-overflow-scrolling: touch; scroll-behavior: smooth; }
-  </style>
+    /* Phase 4 (audit P3-ss): respect reduced-motion preferences. */
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+</style>
 </head>
 <body class="text-slate-800 flex flex-col min-h-screen w-full max-w-full overflow-x-hidden bg-slate-50">
 
@@ -2921,7 +2930,7 @@
 
   <!-- MODAL: DASHBOARD QUICK ATTENDANCE -->
   <div id="modalDashAttendance" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-[65] hidden items-center justify-center p-4">
-    <div class="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-200">
+    <div class="bg-white rounded-2xl max-w-md w-full p-6 max-h-[90vh] overflow-y-auto shadow-2xl border border-slate-200">
       <div class="flex justify-between items-center mb-4 border-b pb-3">
         <h3 class="font-bold text-base text-brandDark flex items-center gap-2">
           <i class="fa-solid fa-clipboard-check text-brandEmerald"></i> Mark Class Attendance & Lesson Notes
@@ -3693,7 +3702,7 @@
   <!-- MODAL: ADD TEACHER -->
   <!-- ============ MODAL: CHOOSE EMPLOYEE TYPE ============ -->
   <div id="modalChooseEmployeeType" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 hidden items-center justify-center p-4">
-    <div class="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-slate-200">
+    <div class="bg-white rounded-2xl max-w-lg w-full p-6 max-h-[90vh] overflow-y-auto shadow-2xl border border-slate-200">
       <div class="flex justify-between items-center mb-5 border-b pb-3">
         <div>
           <h3 class="font-black text-base text-brandDark flex items-center gap-2">
@@ -4686,7 +4695,7 @@
 
   <!-- MODAL: TEACHER PORTAL LOGIN (AUTHENTICATE TEACHER) -->
   <div id="modalTeacherLogin" class="fixed inset-0 bg-black/70 backdrop-blur-sm z-[70] hidden items-center justify-center p-4">
-    <div class="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-200">
+    <div class="bg-white rounded-2xl max-w-md w-full p-6 max-h-[90vh] overflow-y-auto shadow-2xl border border-slate-200">
       <div class="flex justify-between items-center mb-4 border-b pb-3">
         <div class="flex items-center gap-2.5">
           <div class="w-9 h-9 rounded-xl bg-emerald-100 text-brandDark flex items-center justify-center font-bold text-base">
