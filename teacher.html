@@ -2671,84 +2671,6 @@ font-family: var(--font-num) !important;
       return classifyEmployeeRole(emp, accountsMap) === 'teacher';
     }
 
-    async function fetchTeachersAndAccountsFromBackend() {
-      let localTeacherAccs = {};
-      try {
-        localTeacherAccs = JSON.parse(localStorage.getItem('alhuda_teacher_accounts') || '{}');
-      } catch (e) { localTeacherAccs = {}; }
-
-      try {
-        const [tchRes, famRes] = await Promise.all([
-          db.from('teachers').select('*').order('full_name', { ascending: true }),
-          db.from('families').select('id, notes')
-        ]);
-
-        const teachers = tchRes.data || [];
-        ALL_TEACHERS = teachers;
-
-        let cloudSharedState = null;
-        let cloudUpdatedAt = 0;
-        (famRes.data || []).forEach(f => {
-          if (!f || !f.notes) return;
-          try {
-            const nObj = typeof f.notes === 'object' ? f.notes : JSON.parse(f.notes);
-            if (nObj && nObj.lms_shared_sync && typeof nObj.lms_shared_sync === 'object') {
-              const ts = new Date(nObj.lms_shared_sync.updated_at || 0).getTime() || 0;
-              if (ts >= cloudUpdatedAt) {
-                cloudUpdatedAt = ts;
-                cloudSharedState = nObj.lms_shared_sync;
-              }
-            }
-          } catch (e) {}
-        });
-
-        const mergedAccs = { ...(cloudSharedState?.teacher_accounts || {}), ...localTeacherAccs };
-        teachers.forEach(t => {
-          if (!t || !t.id) return;
-          const meta = parseEmployeeMeta(t.address);
-          if (meta.teacher_account && typeof meta.teacher_account === 'object') {
-            mergedAccs[t.id] = { ...(mergedAccs[t.id] || {}), ...meta.teacher_account };
-          } else if (meta.username || meta.emp_id || meta.password) {
-            mergedAccs[t.id] = {
-              ...(mergedAccs[t.id] || {}),
-              ...(meta.emp_id ? { teacher_id: meta.emp_id, emp_id: meta.emp_id } : {}),
-              ...(meta.username ? { username: meta.username } : {}),
-              ...(meta.password ? { password: meta.password } : {}),
-              ...(meta.employee_type ? { employee_type: meta.employee_type } : {})
-            };
-          }
-        });
-
-        localStorage.setItem('alhuda_teacher_accounts', JSON.stringify(mergedAccs));
-        return { teachers, accountsMap: mergedAccs };
-      } catch (err) {
-        console.warn("Error loading teachers for authentication:", err);
-        return { teachers: ALL_TEACHERS || [], accountsMap: localTeacherAccs };
-      }
-    }
-
-    function resolveTeacherCreds(t, allTeachersList, accountsMap = {}) {
-      const meta = parseEmployeeMeta(t.address);
-      const acc = (t.id && accountsMap[t.id]) ? accountsMap[t.id] : (meta.teacher_account || {});
-      let seqNum = 1;
-      if (Array.isArray(allTeachersList) && allTeachersList.length > 0) {
-        const idx = allTeachersList.findIndex(item => String(item.id) === String(t.id));
-        seqNum = idx >= 0 ? (idx + 1) : 1;
-      }
-      const assignedId = acc.teacher_id || acc.emp_id || meta.emp_id || `TCH-${String(seqNum).padStart(3, '0')}`;
-      const firstWord = (t.full_name || 'teacher').trim().split(/\s+/)[0];
-      const baseUser = firstWord.toLowerCase().replace(/[^a-z0-9]/g, '') || 'teacher';
-      const cleanNameSlug = (t.full_name || '').trim().toLowerCase().replace(/[^a-z0-9]/g, '_').replace(/_+/g, '_').replace(/^_|_$/g, '');
-
-      return {
-        teacher_id: String(assignedId).trim(),
-        username: String(acc.username || meta.username || baseUser).trim(),
-        cleanNameSlug,
-        password: '',
-        hasExplicitPassword: Boolean(acc.password || meta.password)
-      };
-    }
-
     // Initialize on page load
     window.onload = async function() {
       // Live PKT clock
@@ -4452,7 +4374,6 @@ font-family: var(--font-num) !important;
       });
       if (!candidate) return;
       const markerKey = AUTO_PREVIEW_KEY_PREFIX + String(candidate.id) + ':' + pkt.date;
-      try { localStorage.setItem(markerKey, '1'); } catch (e) {}
       _autoPreviewInFlight = true;
       try {
         const timeStr = new Date().toLocaleTimeString('en-US', { timeZone: 'Asia/Karachi', hour: '2-digit', minute: '2-digit', hour12: true });
@@ -4476,6 +4397,10 @@ font-family: var(--font-num) !important;
           lmsNotify('The class time ended, but the completion could not be saved. Please use COMPLETE CLASS to finish it manually.');
           return;
         }
+        // Phase 4 (audit P3-aa): consume the once-a-day marker only now
+        // that completion is verified — a failed save can be retried by
+        // a later tick instead of being silently given up for the day.
+        try { localStorage.setItem(markerKey, '1'); } catch (e) {}
         await loadTeacherPortalData();
         openAttendanceModal(candidate.id, candidate.students?.name || 'Student', '', candidate.student_id, 'Completed', '');
       } catch (e) {
@@ -7650,10 +7575,11 @@ font-family: var(--font-num) !important;
         }
       });
 
-      // If no explicit 'Paid' status yet but vouchers exist, fallback to total net of available vouchers
-      const effectiveEarnings = totalPaid > 0 ? totalPaid : teacherSlips.reduce((sum, s) => sum + ((window.FeeTables && typeof window.FeeTables.netPayable === 'function')
-        ? window.FeeTables.netPayable(s.base_subtotal, s.bonus, s.deduction, s.advance_deducted)
-        : (parseFloat(s.net_payable) || 0)), 0);
+      // Phase 4 (audit P3-cc): "Total Earnings" counts PAID vouchers
+      // only. The old fallback presented the sum of unpaid vouchers as
+      // earnings when nothing was paid yet — pending amounts stay on
+      // their own per-voucher badges, not in the earnings total.
+      const effectiveEarnings = totalPaid;
       const earningsEl = document.getElementById('tSalTotalEarnings');
       if (earningsEl) {
         earningsEl.innerText = `PKR ${effectiveEarnings.toLocaleString()}`;
@@ -8863,6 +8789,9 @@ font-family: var(--font-num) !important;
       btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Submitting...';
 
       try {
+        // Phase 4 (audit P3-y): never invent a teacher id — without a
+        // live session the request cannot be attributed, so fail honestly.
+        if (!CURRENT_TEACHER?.id) throw new Error('Teacher session not found. Please log in again.');
         const { data: st, error: fetchErr } = await db.from('students').select('*').eq('id', studentId).single();
         if (fetchErr || !st) throw new Error("Student not found.");
 
@@ -8874,7 +8803,7 @@ font-family: var(--font-num) !important;
           student_id: studentId,
           student_name: studentName,
           schedule_id: scheduleId,
-          teacher_id: CURRENT_TEACHER?.id || 'TCH-001',
+          teacher_id: CURRENT_TEACHER.id,
           teacher_name: CURRENT_TEACHER?.full_name || 'Teacher',
           start_date: startDate,
           return_date: returnDate,
@@ -8917,7 +8846,11 @@ font-family: var(--font-num) !important;
 
       const newStatusSel = document.getElementById('reschedNewStatus');
       if (newStatusSel && c.log?.status) {
-        const opposite = c.log.status === 'Present' ? 'Absent' : 'Present';
+        // Phase 4 (audit P3-x): stored statuses are Completed/Absent —
+        // 'Present' is only this select's vocabulary. A delivered class
+        // (Completed, or legacy Present) defaults to Absent; anything
+        // else defaults to Present.
+        const opposite = (c.log.status === 'Completed' || c.log.status === 'Present') ? 'Absent' : 'Present';
         newStatusSel.value = opposite;
       }
 
