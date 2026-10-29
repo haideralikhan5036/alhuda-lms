@@ -898,13 +898,12 @@
       </div>
 
       <!-- 8 KPI BOXES IN ONE SLEEK PANEL (owner redesign 2026-10-29: no wide center gap; one unified grid, mobile-safe) -->
-      <div class="bg-white p-3 sm:p-3.5 rounded-xl border border-slate-200/80 shadow-xs mb-5">
-        <div class="grid grid-cols-2 md:grid-cols-4 gap-2.5">
+      <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5 mb-6">
         
         <!-- LEFT CARD: 4 COMPACT EQUAL-SIZED BOXES (2x2 GRID, RESPONSIVE COMPACT WIDTH) -->
           
           <!-- 1. Total Today (Slate-Indigo Theme) -->
-          <div onclick="filterDashboardClasses('all')" id="kpiBox-all" class="kpi-dash-card cursor-pointer px-3 py-2 rounded-xl shadow-2xs hover:shadow-md transition-all flex items-center justify-between h-[64px] min-h-[64px] max-h-[64px] w-full box-border">
+          <div onclick="filterDashboardClasses('all')" id="kpiBox-all" class="kpi-dash-card cursor-pointer px-3 py-2 rounded-xl shadow-2xs hover:shadow-md transition-all flex items-center justify-between h-[80px] min-h-[80px] sm:h-[88px] sm:min-h-[88px] w-full box-border">
             <div class="flex items-center gap-2 min-w-0">
               <span class="w-7 h-7 rounded-lg bg-white/20 text-white flex items-center justify-center text-[11px] shrink-0 shadow-2xs border border-white/20">
                 <i class="fa-solid fa-calendar-day"></i>
@@ -918,7 +917,7 @@
           </div>
 
           <!-- 2. Current Classes (Cyan-Sky Theme) -->
-          <div onclick="filterDashboardClasses('current')" id="kpiBox-current" class="kpi-dash-card cursor-pointer px-3 py-2 rounded-xl shadow-2xs hover:shadow-md transition-all flex items-center justify-between h-[64px] min-h-[64px] max-h-[64px] w-full box-border">
+          <div onclick="filterDashboardClasses('current')" id="kpiBox-current" class="kpi-dash-card cursor-pointer px-3 py-2 rounded-xl shadow-2xs hover:shadow-md transition-all flex items-center justify-between h-[80px] min-h-[80px] sm:h-[88px] sm:min-h-[88px] w-full box-border">
             <div class="flex items-center gap-2 min-w-0">
               <span class="w-7 h-7 rounded-lg bg-white/20 text-white flex items-center justify-center text-[11px] shrink-0 shadow-2xs border border-white/20">
                 <i class="fa-solid fa-clock"></i>
@@ -937,7 +936,7 @@
           </div>
 
           <!-- 3. Running Classes (Emerald Theme) -->
-          <div onclick="filterDashboardClasses('running')" id="kpiBox-running" class="kpi-dash-card cursor-pointer px-3 py-2 rounded-xl shadow-2xs hover:shadow-md transition-all flex items-center justify-between h-[64px] min-h-[64px] max-h-[64px] w-full box-border">
+          <div onclick="filterDashboardClasses('running')" id="kpiBox-running" class="kpi-dash-card cursor-pointer px-3 py-2 rounded-xl shadow-2xs hover:shadow-md transition-all flex items-center justify-between h-[80px] min-h-[80px] sm:h-[88px] sm:min-h-[88px] w-full box-border">
             <div class="flex items-center gap-2 min-w-0">
               <span class="w-7 h-7 rounded-lg bg-white/20 text-white flex items-center justify-center text-[11px] shrink-0 shadow-2xs border border-white/20">
                 <i class="fa-solid fa-tower-broadcast"></i>
@@ -953,7 +952,7 @@
           </div>
 
           <!-- 4. Taken (Teal-Mint Theme) -->
-          <div onclick="filterDashboardClasses('completed')" id="kpiBox-completed" class="kpi-dash-card cursor-pointer px-3 py-2 rounded-xl shadow-2xs hover:shadow-md transition-all flex items-center justify-between h-[64px] min-h-[64px] max-h-[64px] w-full box-border">
+          <div onclick="filterDashboardClasses('completed')" id="kpiBox-completed" class="kpi-dash-card cursor-pointer px-3 py-2 rounded-xl shadow-2xs hover:shadow-md transition-all flex items-center justify-between h-[80px] min-h-[80px] sm:h-[88px] sm:min-h-[88px] w-full box-border">
             <div class="flex items-center gap-2 min-w-0">
               <span class="w-7 h-7 rounded-lg bg-white/20 text-white flex items-center justify-center text-[11px] shrink-0 shadow-2xs border border-white/20">
                 <i class="fa-solid fa-circle-check"></i>
@@ -969,7 +968,7 @@
         
 
           <!-- 5. Remaining (Warm Amber-Gold Theme) -->
-          <div onclick="filterDashboardClasses('remaining')" id="kpiBox-remaining" class="kpi-dash-card cursor-pointer px-3 py-2 rounded-xl shadow-2xs hover:shadow-md transition-all flex items-center justify-between h-[64px] min-h-[64px] max-h-[64px] w-full box-border">
+          <div onclick="filterDashboardClasses('remaining')" id="kpiBox-remaining" class="kpi-dash-card cursor-pointer px-3 py-2 rounded-xl shadow-2xs hover:shadow-md transition-all flex items-center justify-between h-[80px] min-h-[80px] sm:h-[88px] sm:min-h-[88px] w-full box-border">
             <div class="flex items-center gap-2 min-w-0">
               <span class="w-7 h-7 rounded-lg bg-white/20 text-white flex items-center justify-center text-[11px] shrink-0 shadow-2xs border border-white/20">
                 <i class="fa-solid fa-hourglass-half"></i>
@@ -983,7 +982,7 @@
           </div>
 
           <!-- 6. Absent (Crimson-Rose Theme) -->
-          <div onclick="filterDashboardClasses('absent')" id="kpiBox-absent" class="kpi-dash-card cursor-pointer px-3 py-2 rounded-xl shadow-2xs hover:shadow-md transition-all flex items-center justify-between h-[64px] min-h-[64px] max-h-[64px] w-full box-border">
+          <div onclick="filterDashboardClasses('absent')" id="kpiBox-absent" class="kpi-dash-card cursor-pointer px-3 py-2 rounded-xl shadow-2xs hover:shadow-md transition-all flex items-center justify-between h-[80px] min-h-[80px] sm:h-[88px] sm:min-h-[88px] w-full box-border">
             <div class="flex items-center gap-2 min-w-0">
               <span class="w-7 h-7 rounded-lg bg-white/20 text-white flex items-center justify-center text-[11px] shrink-0 shadow-2xs border border-white/20">
                 <i class="fa-solid fa-user-xmark"></i>
@@ -997,7 +996,7 @@
           </div>
 
           <!-- 7. Leaves (Royal Blue Theme) -->
-          <div onclick="filterDashboardClasses('leave')" id="kpiBox-leave" class="kpi-dash-card cursor-pointer px-3 py-2 rounded-xl shadow-2xs hover:shadow-md transition-all flex items-center justify-between h-[64px] min-h-[64px] max-h-[64px] w-full box-border">
+          <div onclick="filterDashboardClasses('leave')" id="kpiBox-leave" class="kpi-dash-card cursor-pointer px-3 py-2 rounded-xl shadow-2xs hover:shadow-md transition-all flex items-center justify-between h-[80px] min-h-[80px] sm:h-[88px] sm:min-h-[88px] w-full box-border">
             <div class="flex items-center gap-2 min-w-0">
               <span class="w-7 h-7 rounded-lg bg-white/20 text-white flex items-center justify-center text-[11px] shrink-0 shadow-2xs border border-white/20">
                 <i class="fa-solid fa-calendar-xmark"></i>
@@ -1011,7 +1010,7 @@
           </div>
 
           <!-- 8. Trials (Violet-Purple Theme) -->
-          <div onclick="filterDashboardClasses('trial')" id="kpiBox-trial" class="kpi-dash-card cursor-pointer px-3 py-2 rounded-xl shadow-2xs hover:shadow-md transition-all flex items-center justify-between h-[64px] min-h-[64px] max-h-[64px] w-full box-border">
+          <div onclick="filterDashboardClasses('trial')" id="kpiBox-trial" class="kpi-dash-card cursor-pointer px-3 py-2 rounded-xl shadow-2xs hover:shadow-md transition-all flex items-center justify-between h-[80px] min-h-[80px] sm:h-[88px] sm:min-h-[88px] w-full box-border">
             <div class="flex items-center gap-2 min-w-0">
               <span class="w-7 h-7 rounded-lg bg-white/20 text-white flex items-center justify-center text-[11px] shrink-0 shadow-2xs border border-white/20">
                 <i class="fa-solid fa-graduation-cap"></i>
@@ -1025,8 +1024,6 @@
           </div>
 
         </div>
-
-      </div>
 
       <!-- LIVE TEACHER SCHEDULE TIME CHANGE APPROVAL BANNER (OWNER & MANAGER 1-CLICK APPROVAL) -->
       <div id="dashboardPendingTimeChangesBanner" class="hidden mb-4 bg-gradient-to-r from-indigo-950 via-slate-900 to-indigo-950 text-white p-4 rounded-2xl border-2 border-indigo-400/60 shadow-lg">
