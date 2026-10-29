@@ -85,7 +85,7 @@ function corsHeadersFor(request, env) {
 // here on purpose: /api/health must never 500 because D1 is unreachable, and
 // it must never cost an unauthenticated caller a D1 read.
 const WORKER_RELEASE = '2026-10-29-salary-advance';
-const HEALTH_SCHEMA_VERSION = '2026-10-28-v2';
+const HEALTH_SCHEMA_VERSION = '2026-10-29-v3';
 
 // --- Batch 7 Part B: security headers (workers.dev responses) --------------
 // Every response the Worker serves carries this set. The Content-Security-
@@ -3613,22 +3613,30 @@ async function handleAdvanceRequest(request, env) {
   } catch (e) {
     return json(request, env, { ok: false, error: 'Service unavailable.' }, 503);
   }
-  if (!salary) {
-    return json(request, env, { ok: false, error: 'No salary record exists for this period yet. Ask the administrator to generate the salary slip first.' }, 422);
-  }
-  const net = salary.netPayable;
-  if (!(net > 0)) {
+  // Phase 1 (advance/Zoom commission): a period WITHOUT a generated slip
+  // is no longer a hard block at REQUEST time. Full/half are undefined
+  // without a net, so they still need a slip — but a custom amount may
+  // be requested now; it stays Pending, uncapped, until Administration
+  // generates the slip AND approves it (the decide handler still
+  // requires a slip and caps against the then-current net). Submitting
+  // creates no payment, slip, deduction, or ledger entry.
+  const hasSalary = !!salary;
+  const net = hasSalary ? salary.netPayable : null;
+  if (hasSalary && !(net > 0)) {
     return json(request, env, { ok: false, error: 'There is no payable salary for this period to advance against.' }, 422);
   }
   let requested;
-  if (advanceType === 'full') requested = net;
-  else if (advanceType === 'half') requested = Math.floor(net / 2);
-  else {
+  if (advanceType === 'full' || advanceType === 'half') {
+    if (!hasSalary) {
+      return json(request, env, { ok: false, error: 'A full or half advance needs a generated salary slip for this period. Enter a custom amount instead — it stays pending until Administration generates the slip and approves it.' }, 422);
+    }
+    requested = advanceType === 'full' ? net : Math.floor(net / 2);
+  } else {
     const custom = Number(body.custom_amount);
     if (!Number.isFinite(custom) || custom <= 0) {
       return json(request, env, { ok: false, error: 'A custom advance amount must be a positive number.' }, 400);
     }
-    if (custom > net) {
+    if (hasSalary && custom > net) {
       return json(request, env, { ok: false, error: 'A custom advance cannot exceed the payable salary for this period.', salary_net: net }, 400);
     }
     requested = custom;
@@ -3645,7 +3653,7 @@ async function handleAdvanceRequest(request, env) {
       "SELECT * FROM advance_requests WHERE teacher_id = ? AND period = ? AND advance_type = ? AND requested_amount = ? AND status = 'Pending' ORDER BY created_at ASC LIMIT 1"
     ).bind(String(auth.sub), period, advanceType, requested).first();
     if (existing) {
-      return json(request, env, { ok: true, duplicate: true, request: advancePublicRow(existing), salary_net: net, period_label: label });
+      return json(request, env, { ok: true, duplicate: true, request: advancePublicRow(existing), salary_net: net, salary_pending: !hasSalary, period_label: label });
     }
     let teacherName = null;
     try {
@@ -3658,7 +3666,7 @@ async function handleAdvanceRequest(request, env) {
       'INSERT INTO advance_requests (id, teacher_id, teacher_name, period, advance_type, requested_amount, status, reason, requested_at, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
     ).bind(id, String(auth.sub), teacherName, period, advanceType, requested, 'Pending', reason || null, now, now, now).run();
     const created = await db.prepare('SELECT * FROM advance_requests WHERE id = ?').bind(id).first();
-    return json(request, env, { ok: true, request: advancePublicRow(created), salary_net: net, period_label: label });
+    return json(request, env, { ok: true, request: advancePublicRow(created), salary_net: net, salary_pending: !hasSalary, period_label: label });
   } catch (e) {
     if (isMissingTableError(e)) {
       return json(request, env, { ok: false, error: 'Service unavailable.' }, 503);

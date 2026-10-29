@@ -81,7 +81,7 @@ check('teacher form uses the shared periodOptionsForSlips helper',
 check('teacher form has the current-month-missing note element',
   TEACHER.includes('id="tAdvPeriodNote"'));
 check('teacher form explains the missing-slip reason in plain words',
-  TEACHER.includes('No slip has been generated for') && TEACHER.includes('Ask Administration to generate'));
+  TEACHER.includes('No slip has been generated for') && TEACHER.includes('you can still request an advance for it below (custom amount only)'));
 const INDEX = read('index.html');
 const selStart = INDEX.indexOf('id="salaryMonthSelect"');
 const selEnd = INDEX.indexOf('</select>', selStart);
