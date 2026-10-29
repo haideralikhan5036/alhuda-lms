@@ -941,438 +941,191 @@
         return;
       }
 
-      container.innerHTML = teachers.map(t => {
+      // ==========================================================
+      // EMPLOYEES REDESIGN (2026-10-29): category tabs + clean list.
+      // Categories come from the ONE canonical classifier
+      // (StaffCategories in js/config.js). The cards are replaced by a
+      // table (desktop) / stacked labelled rows (mobile). All existing
+      // actions are preserved with their existing permission rules.
+      // ==========================================================
+      const enriched = teachers.map(t => {
         let meta = {};
         try {
           if (t.address && t.address.startsWith('{')) meta = JSON.parse(t.address);
           else if (t.witness_name && t.witness_name.startsWith('{')) meta = JSON.parse(t.witness_name);
           else if (t.notes && t.notes.startsWith('{')) meta = JSON.parse(t.notes);
-        } catch(e){}
+        } catch (e) {}
         const acc = accounts[t.id] || {};
         if (!meta.employee_type && acc.employee_type) meta = { ...meta, ...acc };
         if (!meta.emp_id && (String(t.witness_name || '').startsWith('MGR-') || String(t.witness_name || '').startsWith('STF-'))) {
           meta.emp_id = t.witness_name;
         }
+        const category = (typeof StaffCategories !== 'undefined' && StaffCategories.of) ? StaffCategories.of(t) : 'teaching';
+        const conflict = (typeof StaffCategories !== 'undefined' && StaffCategories.hasConflict) ? StaffCategories.hasConflict(t) : false;
+        return { t, meta, acc, category, conflict };
+      });
 
-        const isManager = meta.employee_type === 'manager' || t.working_shift === 'Manager' || String(t.id).startsWith('MGR-') || String(meta.emp_id || '').startsWith('MGR-') || String(acc.teacher_id || '').startsWith('MGR-') || String(t.witness_name || '').startsWith('MGR-');
-        const isOtherStaff = meta.employee_type === 'other_staff' || (t.working_shift && t.working_shift.toLowerCase().includes('staff')) || String(t.id).startsWith('STF-') || String(meta.emp_id || '').startsWith('STF-') || String(acc.teacher_id || '').startsWith('STF-') || String(t.witness_name || '').startsWith('STF-');
-
-        // ==========================================
-        // CARD: MANAGER — PLAIN VIEW FOR MANAGER SESSIONS (Batch 2, B7)
-        // A signed-in manager must not see or act on Manager accounts:
-        // no contacts, no salary, no credential box, no edit/delete.
-        // The Worker enforces the same rule server-side.
-        // ==========================================
-        if (isManager && typeof CURRENT_ROLE !== 'undefined' && CURRENT_ROLE === 'manager') {
-          const mgrDisplayIdPlain = meta.emp_id || (String(t.witness_name || '').startsWith('MGR-') ? t.witness_name : null) || acc.teacher_id || (String(t.id).startsWith('MGR-') ? t.id : 'MGR-001');
-          return `
-            <div class="bg-white rounded-2xl border-2 border-indigo-200 shadow-sm p-5">
-              <div class="flex items-center gap-3 mb-3">
-                <div class="w-12 h-12 rounded-xl bg-indigo-100 border border-indigo-300 text-indigo-800 flex items-center justify-center font-black text-base">
-                  ${t.full_name.slice(0, 2).toUpperCase()}
-                </div>
-                <div>
-                  <div class="font-extrabold text-base text-slate-900 leading-tight">${t.full_name}</div>
-                  <p class="text-[11px] text-indigo-700 font-semibold">${meta.role_title || 'Operations Manager'} &bull; <span class="font-mono">${mgrDisplayIdPlain}</span></p>
-                </div>
-                <span class="ml-auto px-2 py-0.5 rounded text-[10px] font-extrabold bg-indigo-100 text-indigo-800 border border-indigo-200">Manager</span>
-              </div>
-              <div class="p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-[11px] text-slate-500 flex items-center gap-1.5">
-                <i class="fa-solid fa-lock text-indigo-500"></i>
-                <span>Manager account — managed by the owner only.</span>
-              </div>
-            </div>
-          `;
+      const catCounts = { teaching: 0, management: 0, 'non-teaching': 0 };
+      enriched.forEach(r => { catCounts[r.category] = (catCounts[r.category] || 0) + 1; });
+      ['teaching', 'management', 'non-teaching'].forEach(c => {
+        const el = document.getElementById('empCount-' + c);
+        if (el) el.textContent = catCounts[c] || 0;
+        const tab = document.getElementById('empTab-' + c);
+        if (tab) {
+          const active = (window.EMP_CATEGORY_TAB || 'teaching') === c;
+          tab.classList.toggle('bg-brandDark', active);
+          tab.classList.toggle('text-white', active);
+          tab.classList.toggle('bg-white', !active);
+          tab.classList.toggle('text-slate-600', !active);
         }
+      });
+      const reviewCount = enriched.filter(r => r.conflict).length;
+      const reviewNote = document.getElementById('empReviewNote');
+      if (reviewNote) {
+        reviewNote.classList.toggle('hidden', reviewCount === 0);
+        if (reviewCount > 0) reviewNote.textContent = reviewCount + ' employee record(s) have conflicting category signals — please review their category in the employee profile.';
+      }
 
-        // ==========================================
-        // CARD: MANAGER (NON-TEACHING)
-        // ==========================================
-        if (isManager) {
-          const displayId = meta.emp_id || (String(t.witness_name || '').startsWith('MGR-') ? t.witness_name : null) || acc.teacher_id || (String(t.id).startsWith('MGR-') ? t.id : 'MGR-001');
-          const cleanPhone = (t.phone || '').replace(/[^0-9]/g, '');
-          const mgrUsername = meta.username || acc.username || `mgr.${t.full_name.toLowerCase().replace(/[^a-z]/g, '').slice(0, 8)}`;
-          // AUTH HARDENING (Batch 1): never read or render a password value.
-          // meta/acc may still hold a legacy plaintext entry or the new
-          // server-side hash — either way only the STATUS is displayed.
-          const mgrPasswordStatus = (meta.password || acc.password || acc.hasExplicitPassword)
-            ? 'Password set'
-            : 'No password set — set one via the password tool';
-          const directPortalUrl = `${window.location.origin}/manager.html`;
-          const waMsg = `Assalamu Alaikum Respected ${t.full_name},\nWelcome to Al-Huda Islamic Centre Management Operations.\n\n🌐 *Your Dedicated Manager Portal Link:*\n${directPortalUrl}\n\n🆔 *Manager ID:* ${displayId}\n👤 *Login Username:* ${mgrUsername}\n💼 *Role / Title:* ${meta.role_title || 'Operations Manager'}\n\nYour password will be given to you by the administrator in person or by phone.\nPlease click your portal link to access all management tools, rosters, timetables, and system follow-ups.\nJazakum Allahu Khairan!`;
-          const waUrl = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(waMsg)}`;
+      const activeCat = window.EMP_CATEGORY_TAB || 'teaching';
+      const query = String(window.EMP_SEARCH_QUERY || '').trim().toLowerCase();
+      const visible = enriched.filter(r => r.category === activeCat).filter(r => {
+        if (!query) return true;
+        const credsId = r.category === 'teaching' ? (getTeacherCreds(r.t).teacher_id || '') : (r.meta.emp_id || r.acc.teacher_id || '');
+        const hay = [r.t.full_name, credsId, r.t.id, r.meta.username, r.acc.username, r.t.phone].join(' ').toLowerCase();
+        return hay.includes(query);
+      });
 
-          return `
-            <div class="bg-white rounded-2xl border-2 border-indigo-200 shadow-sm hover:shadow-md transition p-5 flex flex-col justify-between">
-              <div>
-                <div class="flex justify-between items-start mb-3 border-b pb-3">
-                  <div class="flex items-center gap-3">
-                    <div class="w-12 h-12 rounded-xl bg-indigo-100 border border-indigo-300 text-indigo-800 flex items-center justify-center font-black text-base">
-                      ${t.full_name.slice(0, 2).toUpperCase()}
-                    </div>
-                    <div>
-                      <div class="flex items-center gap-1.5 flex-wrap">
-                        <button onclick="openTeacher360Profile('${t.id}')" class="font-extrabold text-base text-slate-900 hover:text-indigo-700 hover:underline leading-tight text-left cursor-pointer">${t.full_name}</button>
-                        <button onclick="openTeacher360Profile('${t.id}')" class="px-1.5 py-0.5 rounded text-[9px] font-mono font-bold bg-indigo-50 text-indigo-800 border border-indigo-200 cursor-pointer">${displayId}</button>
-                      </div>
-                      <p class="text-[11px] text-indigo-700 font-semibold">${meta.role_title || 'Operations Manager'}</p>
-                    </div>
-                  </div>
-                  <div class="flex items-center gap-1">
-                    <span class="px-2 py-0.5 rounded text-[10px] font-extrabold bg-indigo-100 text-indigo-800 border border-indigo-200">
-                       Manager
-                    </span>
-                    ${CURRENT_ROLE !== 'manager' ? `
-                      <button onclick="deleteTeacher('${t.id}')" title="Delete Manager" class="text-slate-300 hover:text-rose-600 transition p-1 text-xs">
-                        <i class="fa-regular fa-trash-can"></i>
-                      </button>
-                    ` : ''}
-                  </div>
-                </div>
-
-                <!-- MANAGER DETAILS -->
-                <div class="grid grid-cols-2 gap-2 text-xs mb-3 bg-indigo-50/40 p-2.5 rounded-xl border border-indigo-100">
-                  <div>
-                    <span class="text-slate-400 text-[10px] block">Monthly Salary:</span>
-                    <strong class="text-indigo-900 font-bold text-xs">${meta.salary ? meta.salary + ' PKR' : (t.rate_per_slot ? t.rate_per_slot + ' PKR' : 'As Agreed')}</strong>
-                  </div>
-                  <div>
-                    <span class="text-slate-400 text-[10px] block">Joining Date:</span>
-                    <strong class="text-slate-800 font-mono text-[11px]">${meta.joining_date || t.joining_date || (t.created_at ? t.created_at.slice(0,10) : '--')}</strong>
-                  </div>
-                  <div>
-                    <span class="text-slate-400 text-[10px] block">Phone / WhatsApp:</span>
-                    <strong class="text-slate-800 font-mono">${t.phone}</strong>
-                  </div>
-                  <div>
-                    <span class="text-slate-400 text-[10px] block">CNIC / ID:</span>
-                    <strong class="text-slate-700 font-mono text-[11px]">${meta.cnic || '--'}</strong>
-                  </div>
-                  ${meta.email ? `
-                    <div class="col-span-2">
-                      <span class="text-slate-400 text-[10px] block">Email Address:</span>
-                      <strong class="text-slate-700 font-mono text-[11px]">${meta.email}</strong>
-                    </div>
-                  ` : ''}
-                  ${meta.emergency_name ? `
-                    <div class="col-span-2">
-                      <span class="text-slate-400 text-[10px] block">Emergency Contact:</span>
-                      <span class="text-slate-700 font-medium">${meta.emergency_name} (${meta.emergency_phone || '--'})</span>
-                    </div>
-                  ` : ''}
-                  ${meta.address ? `
-                    <div class="col-span-2">
-                      <span class="text-slate-400 text-[10px] block">Residential Address:</span>
-                      <span class="text-slate-600 text-[11px]">${meta.address}</span>
-                    </div>
-                  ` : ''}
-                </div>
-
-                <!-- PORTAL CREDENTIALS BOX -->
-                <div class="bg-gradient-to-r from-indigo-50 to-blue-50 p-2.5 rounded-xl border border-indigo-200 mb-3 space-y-1.5">
-                  <div class="flex justify-between items-center text-[10px] font-bold text-indigo-900 uppercase tracking-wide">
-                    <span class="flex items-center gap-1"><i class="fa-solid fa-key text-indigo-600"></i> LMS Login Credentials</span>
-                    <button onclick="copyManagerCredentials('${t.id}', '${mgrUsername}', '${t.full_name}', '${directPortalUrl}')" class="text-indigo-700 hover:text-indigo-900 font-bold" title="Copy Login Details">
-                      <i class="fa-regular fa-copy"></i> Copy
-                    </button>
-                  </div>
-                  <div class="grid grid-cols-2 gap-2 text-xs font-mono">
-                    <div class="bg-white px-2 py-1 rounded border border-indigo-100 truncate">
-                      <span class="text-[9px] text-slate-400 block">Username:</span>
-                      <strong class="text-indigo-950">${mgrUsername}</strong>
-                    </div>
-                    <div class="bg-white px-2 py-1 rounded border border-indigo-100 truncate">
-                      <span class="text-[9px] text-slate-400 block">Password:</span>
-                      <strong class="text-indigo-950">${mgrPasswordStatus}</strong>
-                    </div>
-                  </div>
-                  <a href="${waUrl}" target="_blank" class="w-full py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-bold text-[11px] flex items-center justify-center gap-1.5 shadow-xs transition mt-1">
-                    <i class="fa-brands fa-whatsapp"></i> Send Login Credentials to Manager WhatsApp
-                  </a>
-                </div>
-
-                <div class="p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-[11px] text-slate-500 flex items-center gap-1.5">
-                  <i class="fa-solid fa-shield-halved text-indigo-500"></i>
-                  <span>Security &amp; Manager permissions portal integration enabled.</span>
-                </div>
-              </div>
-
-              <div class="pt-3 border-t mt-3 flex items-center justify-between gap-2 flex-wrap">
-                <a href="${directPortalUrl}" target="_blank" class="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold rounded-xl text-xs shadow-xs transition flex items-center gap-1.5">
-                  <i class="fa-solid fa-arrow-up-right-from-square"></i> Open Manager Portal
-                </a>
-                ${CURRENT_ROLE !== 'manager' ? `
-                  <button onclick="deleteTeacher('${t.id}')" class="px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-lg font-bold text-xs transition flex items-center gap-1">
-                    <i class="fa-regular fa-trash-can"></i> Remove
-                  </button>
-                ` : ''}
-              </div>
-            </div>
-          `;
-        }
-
-        // ==========================================
-        // CARD: OTHER STAFF (NON-TEACHING)
-        // ==========================================
-        if (isOtherStaff) {
-          const displayId = meta.emp_id || (String(t.witness_name || '').startsWith('STF-') ? t.witness_name : null) || acc.teacher_id || (String(t.id).startsWith('STF-') ? t.id : 'STF-001');
-          return `
-            <div class="bg-white rounded-2xl border-2 border-slate-200 shadow-sm hover:shadow-md transition p-5 flex flex-col justify-between">
-              <div>
-                <div class="flex justify-between items-start mb-3 border-b pb-3">
-                  <div class="flex items-center gap-3">
-                    <div class="w-12 h-12 rounded-xl bg-slate-100 border border-slate-300 text-slate-700 flex items-center justify-center font-black text-base">
-                      ${t.full_name.slice(0, 2).toUpperCase()}
-                    </div>
-                    <div>
-                      <div class="flex items-center gap-1.5 flex-wrap">
-                        <button onclick="openTeacher360Profile('${t.id}')" class="font-extrabold text-base text-slate-900 hover:text-indigo-700 hover:underline leading-tight text-left cursor-pointer">${t.full_name}</button>
-                        <button onclick="openTeacher360Profile('${t.id}')" class="px-1.5 py-0.5 rounded text-[9px] font-mono font-bold bg-slate-100 text-slate-700 border border-slate-200 cursor-pointer">${displayId}</button>
-                      </div>
-                      <p class="text-[11px] text-slate-500 font-semibold">${meta.role_title || 'Non-Teaching Staff'}</p>
-                    </div>
-                  </div>
-                  <div class="flex items-center gap-1">
-                    <span class="px-2 py-0.5 rounded text-[10px] font-extrabold bg-slate-100 text-slate-700 border border-slate-200">
-                      🪪 Other Staff
-                    </span>
-                    ${CURRENT_ROLE !== 'manager' ? `
-                      <button onclick="deleteTeacher('${t.id}')" title="Delete Staff" class="text-slate-300 hover:text-rose-600 transition p-1 text-xs">
-                        <i class="fa-regular fa-trash-can"></i>
-                      </button>
-                    ` : ''}
-                  </div>
-                </div>
-
-                <div class="grid grid-cols-2 gap-2 text-xs mb-3 bg-slate-50 p-2.5 rounded-xl border border-slate-100">
-                  <div>
-                    <span class="text-slate-400 text-[10px] block">Role / Designation:</span>
-                    <strong class="text-slate-800 font-bold text-xs">${meta.role_title || 'Support Staff'}</strong>
-                  </div>
-                  <div>
-                    <span class="text-slate-400 text-[10px] block">Monthly Salary:</span>
-                    <strong class="text-emerald-700 font-bold text-xs">${meta.salary ? meta.salary + ' PKR' : (t.rate_per_slot ? t.rate_per_slot + ' PKR' : 'As Agreed')}</strong>
-                  </div>
-                  <div>
-                    <span class="text-slate-400 text-[10px] block">Phone / WhatsApp:</span>
-                    <strong class="text-slate-800 font-mono">${t.phone}</strong>
-                  </div>
-                  <div>
-                    <span class="text-slate-400 text-[10px] block">Joining Date:</span>
-                    <strong class="text-slate-800 font-mono text-[11px]">${meta.joining_date || t.joining_date || (t.created_at ? t.created_at.slice(0,10) : '--')}</strong>
-                  </div>
-                  ${meta.extra_notes ? `
-                    <div class="col-span-2">
-                      <span class="text-slate-400 text-[10px] block">Notes:</span>
-                      <span class="text-slate-600 text-[11px]">${meta.extra_notes}</span>
-                    </div>
-                  ` : ''}
-                </div>
-              </div>
-
-              <div class="pt-3 border-t mt-3 flex items-center justify-between">
-                <span class="text-[11px] font-mono text-slate-400">Non-Teaching Staff</span>
-                ${CURRENT_ROLE !== 'manager' ? `
-                  <button onclick="deleteTeacher('${t.id}')" class="px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-lg font-bold text-xs transition flex items-center gap-1">
-                    <i class="fa-regular fa-trash-can"></i> Remove
-                  </button>
-                ` : ''}
-              </div>
-            </div>
-          `;
-        }
-
-        // ==========================================
-        // CARD: TEACHING STAFF (DEFAULT)
-        // ==========================================
-        const bookedCount = countMap[t.id] || 0;
-        const activeStudentListCount = (window.ALL_STUDENTS || []).filter(s => {
-          if (String(s.assigned_teacher_id || '') !== String(t.id)) return false;
-          const stLow = String(s.status || 'Active').trim().toLowerCase();
-          if (stLow === 'inactive' || stLow === 'deactivated' || stLow === 'left' || stLow === 'deleted' || stLow === 'trial' || stLow === 'converted' || stLow === 'leave') return false;
-          if (typeof isStudentSelfDeactivated === 'function' && isStudentSelfDeactivated(s)) return false;
-          try {
-            const sMeta = typeof s.notes === 'string' ? JSON.parse(s.notes || '{}') : (s.notes || {});
-            if (sMeta && sMeta.on_leave === true) return false;
-          } catch (e) {}
-          return true;
-        }).length;
-        const creds = getTeacherCreds(t);
-        const cleanPhone = (t.phone || '').replace(/[^0-9]/g, '');
-        const directPortalUrl = `${window.location.origin}/teacher.html`;
-        const waMsg = `Assalamu Alaikum Respected ${t.full_name},\nWelcome to the Al-Huda Islamic Centre Teacher Operations Portal.\n\n🌐 *Your Personal Portal Link:*\n${directPortalUrl}\n\n👤 *Username:* ${creds.username}\n🕒 *Assigned Shift:* ${t.working_shift || '10 Hours Shift'}\n💰 *Slot Rate:* ${t.rate_per_slot || 2200} PKR\n\nYour password will be given to you by the administrator in person or by phone.\nPlease tap the link above to view your timetable, Student List, and lesson logs.\nJazakum Allahu Khairan!`;
-        const waUrl = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(waMsg)}`;
-
-        // Seniority increment text
-        const joiningDate = acc.joining_date || (t.created_at ? t.created_at.slice(0, 10) : '2025-01-01');
-        let incrementText = '+0 PKR (Base)';
-        if (acc.increment_tier && acc.increment_tier !== 'auto') {
-          incrementText = `+${acc.increment_tier} PKR/stu`;
-        } else {
-          const yrs = Math.floor((new Date() - new Date(joiningDate)) / (365.25 * 24 * 3600 * 1000));
-          if (yrs >= 1) incrementText = `+${yrs * 200} PKR/stu (Yr ${yrs})`;
-        }
-
-        // Trial performance metrics for this teacher
-        const teacherTrials = (ALL_TRIALS || []).filter(tr => tr.teacher_id === t.id);
-        const totalTr = teacherTrials.length;
-        const convTr = teacherTrials.filter(tr => tr.status === 'Converted').length;
-        const discTr = teacherTrials.filter(tr => tr.status === 'Discontinued').length;
-        const activeTr = teacherTrials.filter(tr => tr.status !== 'Converted' && tr.status !== 'Discontinued').length;
-        const convRate = (convTr + discTr) > 0 ? Math.round((convTr / (convTr + discTr)) * 100) : (totalTr > 0 ? 0 : null);
-
-        return `
-          <div class="bg-white rounded-2xl border border-slate-200 shadow-sm hover:shadow-md transition p-5 flex flex-col justify-between">
-            <div>
-              <div class="flex justify-between items-start mb-3 border-b pb-3">
-                <div class="flex items-center gap-3">
-                  <div class="w-12 h-12 rounded-xl bg-emerald-50 border border-emerald-200 text-brandDark flex items-center justify-center font-black text-base">
-                    ${t.full_name.slice(0, 2).toUpperCase()}
-                  </div>
-                  <div>
-                    <div class="flex items-center gap-1.5">
-                      <button onclick="openTeacher360Profile('${t.id}')" class="font-extrabold text-base text-slate-900 hover:text-indigo-700 hover:underline leading-tight text-left transition">${t.full_name}</button>
-                      <button onclick="openTeacher360Profile('${t.id}')" class="px-1.5 py-0.5 rounded text-[9px] font-mono font-bold bg-slate-100 hover:bg-indigo-100 text-brandDark border border-slate-200 transition">${creds.teacher_id}</button>
-                    </div>
-                    <p class="text-[11px] text-slate-500">${t.father_name ? 'S/O ' + t.father_name : 'Quran Instructor'}</p>
-                  </div>
-                </div>
-                <div class="flex items-center gap-1">
-                  <span class="px-2 py-0.5 rounded text-[10px] font-extrabold ${t.status === 'Active' ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-600'}">
-                    ${t.status}
-                  </span>
-                  ${CURRENT_ROLE !== 'manager' ? `
-                    <button onclick="deleteTeacher('${t.id}')" title="Delete Teacher" class="text-slate-300 hover:text-rose-600 transition p-1 text-xs">
-                      <i class="fa-regular fa-trash-can"></i>
-                    </button>
-                  ` : ''}
-                </div>
-              </div>
-
-              <!-- RATE, SHIFT, STUDENT LIST & SLOTS -->
-              <div class="grid grid-cols-2 gap-2 text-xs mb-3 bg-slate-50 p-2.5 rounded-xl border border-slate-100">
-                <div>
-                  <span class="text-slate-400 text-[10px] block">Base Course Rate:</span>
-                  <strong class="text-brandDark font-bold text-xs">${t.rate_per_slot || 2200} PKR / stu</strong>
-                </div>
-                <div>
-                  <span class="text-slate-400 text-[10px] block">Student List (Active):</span>
-                  <strong class="text-emerald-700 font-extrabold text-xs"><i class="fa-solid fa-users text-[10px]"></i> ${activeStudentListCount} Student${activeStudentListCount === 1 ? '' : 's'}</strong>
-                </div>
-                <div>
-                  <span class="text-slate-400 text-[10px] block">WhatsApp Contact:</span>
-                  <strong class="text-slate-800 font-mono">${t.phone}</strong>
-                </div>
-                <div>
-                  <span class="text-slate-400 text-[10px] block">Booked Weekly Slots:</span>
-                  <strong class="text-emerald-700 font-bold">${bookedCount} Slots</strong>
-                </div>
-              </div>
-
-              <!-- TRIAL EVALUATION PERFORMANCE BADGE -->
-              <div class="mb-3 p-2.5 bg-gradient-to-r from-purple-50/80 to-indigo-50/60 border border-purple-200 rounded-xl flex items-center justify-between text-xs">
-                <div>
-                  <span class="text-[10px] font-black uppercase tracking-wider text-purple-900 flex items-center gap-1">
-                    <i class="fa-solid fa-chart-line text-purple-600"></i> Trial Conversion Track
-                  </span>
-                  <div class="font-extrabold text-slate-800 text-[11px] mt-0.5">
-                    ${totalTr} Assigned • <strong class="text-emerald-700">${convTr} Regular</strong> • <strong class="text-rose-600">${discTr} Dead</strong>
-                  </div>
-                </div>
-                <div class="text-right">
-                  ${convRate !== null ? `
-                    <span class="px-2 py-0.5 rounded-full text-[10px] font-black ${convRate >= 70 ? 'bg-emerald-100 text-emerald-800 border border-emerald-300' : convRate >= 50 ? 'bg-amber-100 text-amber-800 border border-amber-300' : 'bg-rose-100 text-rose-800 border border-rose-300'}">
-                      🎯 ${convRate}% Rate
-                    </span>
-                  ` : `
-                    <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-500">
-                      ${totalTr} Trials
-                    </span>
-                  `}
-                  <button onclick="viewTeacherTrialsHistory('${t.id}')" class="block text-[10px] text-purple-700 font-extrabold hover:underline mt-0.5 text-right w-full">
-                    View Trials &rarr;
-                  </button>
-                </div>
-              </div>
-
-              <!-- TEACHER PORTAL LOGIN CREDENTIALS BOX -->
-              <div class="bg-gradient-to-r from-emerald-50/80 to-amber-50/50 p-2.5 rounded-xl border border-brandEmerald/30 mb-3 space-y-1.5">
-                <div class="flex justify-between items-center text-[10px] font-bold text-slate-500 uppercase tracking-wide">
-                  <span class="text-brandDark flex items-center gap-1"><i class="fa-solid fa-key text-brandGold"></i> LMS Login Credentials</span>
-                  <button onclick="copyTeacherCredentials('${creds.username}', '${t.full_name}')" class="text-brandEmerald hover:text-brandDark font-bold" title="Copy Login Details">
-                    <i class="fa-regular fa-copy"></i> Copy
-                  </button>
-                </div>
-                <div class="grid grid-cols-2 gap-2 text-xs font-mono">
-                  <div class="bg-white px-2 py-1 rounded border border-slate-200 truncate">
-                    <span class="text-[9px] text-slate-400 block">Username:</span>
-                    <strong class="text-slate-800">${creds.username}</strong>
-                  </div>
-                  <div class="bg-white px-2 py-1 rounded border border-slate-200 truncate">
-                    <span class="text-[9px] text-slate-400 block">Password:</span>
-                    <strong class="text-brandDark">${creds.hasExplicitPassword ? 'Password set' : 'No password set — set one via the password tool'}</strong>
-                  </div>
-                </div>
-                <a href="${waUrl}" target="_blank" class="w-full py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-bold text-[11px] flex items-center justify-center gap-1.5 shadow-xs transition mt-1">
-                  <i class="fa-brands fa-whatsapp"></i> Send Login Credentials to Teacher WhatsApp
-                </a>
-              </div>
-
-              <!-- DEDICATED ZOOM CLASSROOM STATUS & SYNC -->
-              <div class="bg-gradient-to-r from-blue-50/90 to-indigo-50/70 p-2.5 rounded-xl border border-blue-200 mb-3 space-y-1.5 text-xs">
-                <div class="flex justify-between items-center text-[10px] font-bold text-blue-900 uppercase tracking-wide">
-                  <span class="flex items-center gap-1"><i class="fa-solid fa-video text-blue-600"></i> Dedicated Zoom Classroom</span>
-                  <span class="px-1.5 py-0.2 rounded text-[9px] font-extrabold ${acc.zoom_link ? 'bg-blue-600 text-white' : 'bg-slate-200 text-slate-600'}">
-                    ${acc.zoom_link ? 'CONFIGURED' : 'NOT SET'}
-                  </span>
-                </div>
-                <div class="bg-white p-1.5 rounded border border-blue-100 flex items-center justify-between gap-1 text-[11px] font-mono">
-                  ${acc.zoom_link ? `
-                  <span class="truncate text-blue-950 font-bold max-w-[200px]" title="${acc.zoom_link}">
-                    ${acc.zoom_link}
-                  </span>
-                  <button onclick="navigator.clipboard.writeText('${acc.zoom_link}'); lmsNotify('Zoom link copied to clipboard!');" class="text-blue-600 hover:text-blue-800 font-bold text-[10px]" title="Copy Zoom Link">
-                    <i class="fa-regular fa-copy"></i>
-                  </button>
-                  ` : `
-                  <span class="text-slate-500 font-bold">Class link not set yet</span>
-                  `}
-                </div>
-                <div class="grid grid-cols-2 gap-1.5 pt-0.5">
-                  <button onclick="openQuickZoomModal('${t.id}')" class="py-1.5 px-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-bold text-[10px] flex items-center justify-center gap-1 shadow-2xs transition">
-                    <i class="fa-solid fa-pen"></i> Edit Zoom
-                  </button>
-                  <button onclick="triggerTeacherZoomSync('${t.id}')" class="py-1.5 px-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-900 border border-indigo-200 rounded-lg font-bold text-[10px] flex items-center justify-center gap-1 shadow-2xs transition" title="Cascade & Sync Link to All Students">
-                    <i class="fa-solid fa-bolt text-amber-500"></i> Sync Students
-                  </button>
-                </div>
-              </div>
-
-              ${t.witness_name ? `
-                <div class="text-[11px] text-slate-500 mb-3">
-                  <i class="fa-solid fa-shield-halved text-brandEmerald"></i> <strong>Witness:</strong> ${t.witness_name} (${t.witness_phone || '--'})
-                </div>
-              ` : ''}
-            </div>
-
-            <div class="pt-2 border-t flex flex-col gap-2">
-              <button onclick="openTeacher360Profile('${t.id}')" class="w-full py-2.5 bg-indigo-900 hover:bg-indigo-950 text-white font-extrabold text-xs rounded-xl transition flex items-center justify-center gap-1.5 shadow-sm">
-                <i class="fa-solid fa-circle-nodes text-amber-300"></i> View 360° Teacher Profile &amp; Salary Ledger
-              </button>
-              <button onclick="openEditTeacherModal('${t.id}')" class="w-full py-2 bg-amber-50 hover:bg-amber-100 text-amber-900 font-extrabold text-xs rounded-xl border border-amber-300 transition flex items-center justify-center gap-1.5 shadow-xs">
-                <i class="fa-solid fa-pen-to-square text-amber-600"></i> Edit Teacher Profile & Credentials
-              </button>
-              <button onclick="open2DMatrixForTeacher('${t.id}')" class="w-full py-2.5 bg-gradient-to-r from-brandDark to-brandEmerald text-white font-extrabold text-xs rounded-xl hover:shadow-lg transition flex items-center justify-center gap-2 shadow-xs">
-                <i class="fa-solid fa-table-cells"></i> Open 2D Full-Week Timetable
-              </button>
-              <a href="teacher.html" target="_blank" class="w-full py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-[11px] rounded-lg transition flex items-center justify-center gap-1.5">
-                <i class="fa-solid fa-arrow-up-right-from-square text-emerald-600"></i> Open Dedicated Teacher Portal
-              </a>
-            </div>
+      if (visible.length === 0) {
+        container.innerHTML = `
+          <div class="p-10 text-center bg-white rounded-2xl border border-slate-200">
+            <i class="fa-solid fa-user-slash text-4xl text-slate-300 mb-3"></i>
+            <h4 class="font-extrabold text-slate-700 text-base">No ${((typeof StaffCategories !== 'undefined' && StaffCategories.LABELS) || {})[activeCat] || 'Employees'} Found</h4>
+            <p class="text-xs text-slate-400 mt-1">${query ? 'No employee in this category matches your search.' : 'No employees are registered in this category yet. Use "+ Add New Employee" above to add one.'}</p>
           </div>
         `;
+        return;
+      }
+
+      const catBadge = {
+        teaching: '<span class="px-2 py-0.5 rounded text-[10px] font-extrabold bg-emerald-100 text-emerald-800 border border-emerald-200">Teaching</span>',
+        management: '<span class="px-2 py-0.5 rounded text-[10px] font-extrabold bg-indigo-100 text-indigo-800 border border-indigo-200">Management</span>',
+        'non-teaching': '<span class="px-2 py-0.5 rounded text-[10px] font-extrabold bg-slate-100 text-slate-700 border border-slate-200">Non-Teaching</span>'
+      };
+      const isManagerSession = (typeof CURRENT_ROLE !== 'undefined' && CURRENT_ROLE === 'manager');
+
+      const rowsHtml = visible.map(({ t, meta, acc, category, conflict }) => {
+        const statusBadge = `<span class="px-2 py-0.5 rounded text-[10px] font-extrabold ${t.status === 'Active' ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-600'}">${t.status || 'Active'}</span>`;
+        const reviewBadge = conflict ? ' <span class="px-2 py-0.5 rounded text-[10px] font-extrabold bg-amber-100 text-amber-800 border border-amber-200" title="Conflicting category signals — please review">Needs review</span>' : '';
+        const initials = `<span class="w-9 h-9 rounded-lg bg-emerald-50 border border-emerald-200 text-brandDark inline-flex items-center justify-center font-black text-xs mr-2.5 align-middle">${String(t.full_name || '?').slice(0, 2).toUpperCase()}</span>`;
+
+        // MANAGER RECORD SEEN BY A MANAGER SESSION: plain row only —
+        // no contacts, no salary, no actions (Batch 2 rule, unchanged).
+        if (category === 'management' && isManagerSession) {
+          const mgrIdPlain = meta.emp_id || (String(t.witness_name || '').startsWith('MGR-') ? t.witness_name : null) || acc.teacher_id || (String(t.id).startsWith('MGR-') ? t.id : 'MGR-001');
+          return `
+            <tr>
+              <td data-label="Employee">${initials}<span class="font-extrabold text-slate-900">${t.full_name}</span><div class="text-[11px] text-slate-500 font-mono ml-[46px]">${mgrIdPlain}</div></td>
+              <td data-label="Designation">${meta.role_title || 'Operations Manager'}</td>
+              <td data-label="Category">${catBadge.management}${reviewBadge}</td>
+              <td data-label="Contact" class="text-slate-400">—</td>
+              <td data-label="Students">—</td>
+              <td data-label="Compensation" class="text-slate-400">—</td>
+              <td data-label="Status">${statusBadge}</td>
+              <td data-label="Actions"><span class="text-[11px] text-slate-500"><i class="fa-solid fa-lock text-indigo-500"></i> Manager account — owner only</span></td>
+            </tr>`;
+        }
+
+        let displayId, designation, compensation, studentsCell = '—', actions = '';
+
+        if (category === 'teaching') {
+          const creds = getTeacherCreds(t);
+          displayId = creds.teacher_id;
+          designation = meta.role_title || meta.designation || 'Quran Instructor';
+          compensation = `${t.rate_per_slot || 2200} PKR / stu`;
+          const activeCount = (window.ALL_STUDENTS || []).filter(s => {
+            if (String(s.assigned_teacher_id || '') !== String(t.id)) return false;
+            const stLow = String(s.status || 'Active').trim().toLowerCase();
+            if (['inactive', 'deactivated', 'left', 'deleted', 'trial', 'converted', 'leave'].includes(stLow)) return false;
+            if (typeof isStudentSelfDeactivated === 'function' && isStudentSelfDeactivated(s)) return false;
+            try { const sMeta = typeof s.notes === 'string' ? JSON.parse(s.notes || '{}') : (s.notes || {}); if (sMeta && sMeta.on_leave === true) return false; } catch (e) {}
+            return true;
+          }).length;
+          const trAll = (typeof ALL_TRIALS !== 'undefined' ? ALL_TRIALS : []).filter(tr => tr.teacher_id === t.id);
+          const trActive = trAll.filter(tr => tr.status !== 'Converted' && tr.status !== 'Discontinued').length;
+          studentsCell = `<strong class="text-emerald-700">${activeCount} Student${activeCount === 1 ? '' : 's'}</strong>` +
+            (trAll.length ? `<button onclick="viewTeacherTrialsHistory('${t.id}')" class="block text-[10px] text-purple-700 font-bold hover:underline mt-0.5">Trials: ${trActive} active / ${trAll.length} total</button>` : '');
+          const cleanPhone = (t.phone || '').replace(/[^0-9]/g, '');
+          const waMsg = `Assalamu Alaikum Respected ${t.full_name},\nWelcome to the Al-Huda Islamic Centre Teacher Operations Portal.\n\n🌐 *Your Personal Portal Link:*\n${window.location.origin}/teacher.html\n\n👤 *Username:* ${creds.username}\n🕒 *Assigned Shift:* ${t.working_shift || '10 Hours Shift'}\n💰 *Slot Rate:* ${t.rate_per_slot || 2200} PKR\n\nYour password will be given to you by the administrator in person or by phone.\nPlease tap the link above to view your timetable, Student List, and lesson logs.\nJazakum Allahu Khairan!`;
+          actions = `
+            <button onclick="openTeacher360Profile('${t.id}')" class="px-2.5 py-1.5 bg-indigo-900 hover:bg-indigo-950 text-white rounded-lg font-bold text-[11px]">360° Profile</button>
+            <button onclick="openEditTeacherModal('${t.id}')" class="px-2.5 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 rounded-lg font-bold text-[11px]">Edit</button>
+            <button onclick="open2DMatrixForTeacher('${t.id}')" title="Schedule Matrix" class="px-2 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-[11px]"><i class="fa-solid fa-table-cells"></i></button>
+            <button onclick="copyTeacherCredentials('${creds.username}', '${t.full_name}')" title="Copy Login Details" class="px-2 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-[11px]"><i class="fa-regular fa-copy"></i></button>
+            ${cleanPhone ? `<a href="https://wa.me/${cleanPhone}?text=${encodeURIComponent(waMsg)}" target="_blank" title="Send Credentials on WhatsApp" class="px-2 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-[11px] inline-block"><i class="fa-brands fa-whatsapp"></i></a>` : ''}
+            ${(acc.zoom_link) ? `<button onclick="navigator.clipboard.writeText('${acc.zoom_link}'); lmsNotify('Zoom link copied to clipboard!');" title="Copy Zoom Link" class="px-2 py-1.5 bg-slate-100 hover:bg-slate-200 text-blue-700 rounded-lg text-[11px]"><i class="fa-solid fa-link"></i></button>` : '<span class="text-[10px] text-slate-400 font-semibold self-center">Class link not set yet</span>'}
+            <button onclick="openQuickZoomModal('${t.id}')" title="Quick Zoom" class="px-2 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-[11px]"><i class="fa-solid fa-video"></i></button>
+            <button onclick="triggerTeacherZoomSync('${t.id}')" title="Sync Zoom Link to All Students" class="px-2 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-900 border border-indigo-200 rounded-lg text-[11px]"><i class="fa-solid fa-rotate"></i></button>
+            ${!isManagerSession ? `<button onclick="deleteTeacher('${t.id}')" title="Delete Teacher" class="px-2 py-1.5 text-rose-600 hover:bg-rose-50 rounded-lg text-[11px]"><i class="fa-regular fa-trash-can"></i></button>` : ''}`;
+        } else if (category === 'management') {
+          displayId = meta.emp_id || (String(t.witness_name || '').startsWith('MGR-') ? t.witness_name : null) || acc.teacher_id || (String(t.id).startsWith('MGR-') ? t.id : 'MGR-001');
+          designation = meta.role_title || meta.designation || 'Operations Manager';
+          compensation = meta.salary ? `${meta.salary} PKR / mo` : (t.rate_per_slot ? `${t.rate_per_slot} PKR` : 'As Agreed');
+          const mgrUsername = meta.username || acc.username || `mgr.${String(t.full_name || '').toLowerCase().replace(/[^a-z]/g, '').slice(0, 8)}`;
+          const cleanPhone = (t.phone || '').replace(/[^0-9]/g, '');
+          const mgrPortalUrl = `${window.location.origin}/manager.html`;
+          const waMsg = `Assalamu Alaikum Respected ${t.full_name},\nWelcome to Al-Huda Islamic Centre Management Operations.\n\n🌐 *Your Dedicated Manager Portal Link:*\n${mgrPortalUrl}\n\n🆔 *Manager ID:* ${displayId}\n👤 *Login Username:* ${mgrUsername}\n💼 *Role / Title:* ${designation}\n\nYour password will be given to you by the administrator in person or by phone.\nPlease click your portal link to access all management tools, rosters, timetables, and system follow-ups.\nJazakum Allahu Khairan!`;
+          actions = `
+            <button onclick="openTeacher360Profile('${t.id}')" class="px-2.5 py-1.5 bg-indigo-900 hover:bg-indigo-950 text-white rounded-lg font-bold text-[11px]">360° Profile</button>
+            <button onclick="copyManagerCredentials('${t.id}', '${mgrUsername}', '${t.full_name}', '${mgrPortalUrl}')" title="Copy Login Details" class="px-2 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-[11px]"><i class="fa-regular fa-copy"></i></button>
+            ${cleanPhone ? `<a href="https://wa.me/${cleanPhone}?text=${encodeURIComponent(waMsg)}" target="_blank" title="Send Credentials on WhatsApp" class="px-2 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-[11px] inline-block"><i class="fa-brands fa-whatsapp"></i></a>` : ''}
+            <button onclick="deleteTeacher('${t.id}')" title="Delete Manager" class="px-2 py-1.5 text-rose-600 hover:bg-rose-50 rounded-lg text-[11px]"><i class="fa-regular fa-trash-can"></i></button>`;
+        } else {
+          displayId = meta.emp_id || (String(t.witness_name || '').startsWith('STF-') ? t.witness_name : null) || acc.teacher_id || (String(t.id).startsWith('STF-') ? t.id : 'STF-001');
+          designation = meta.role_title || meta.designation || 'Support & Administrative Staff';
+          compensation = meta.salary ? `${meta.salary} PKR / mo` : (t.rate_per_slot ? `${t.rate_per_slot} PKR` : 'As Agreed');
+          actions = `
+            <button onclick="openTeacher360Profile('${t.id}')" class="px-2.5 py-1.5 bg-indigo-900 hover:bg-indigo-950 text-white rounded-lg font-bold text-[11px]">360° Profile</button>
+            <button onclick="deleteTeacher('${t.id}')" title="Delete Staff" class="px-2 py-1.5 text-rose-600 hover:bg-rose-50 rounded-lg text-[11px]"><i class="fa-regular fa-trash-can"></i></button>`;
+        }
+
+        return `
+          <tr class="hover:bg-slate-50">
+            <td data-label="Employee">${initials}<button onclick="openTeacher360Profile('${t.id}')" class="font-extrabold text-slate-900 hover:text-indigo-700 hover:underline text-left">${t.full_name}</button><div class="text-[11px] text-slate-500 font-mono ml-[46px]">${displayId}</div></td>
+            <td data-label="Designation">${designation}</td>
+            <td data-label="Category">${catBadge[category]}${reviewBadge}</td>
+            <td data-label="Contact"><span class="font-mono text-xs">${t.phone || '—'}</span></td>
+            <td data-label="Students">${studentsCell}</td>
+            <td data-label="Compensation"><strong class="text-emerald-700 text-xs">${compensation}</strong></td>
+            <td data-label="Status">${statusBadge}</td>
+            <td data-label="Actions"><div class="flex flex-wrap gap-1.5">${actions}</div></td>
+          </tr>`;
       }).join('');
+
+      container.innerHTML = `
+        <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+          <table class="emp-table">
+            <thead><tr>
+              <th>Employee</th><th>Designation</th><th>Category</th><th>Contact</th><th>Students</th><th>Compensation</th><th>Status</th><th>Actions</th>
+            </tr></thead>
+            <tbody>${rowsHtml}</tbody>
+          </table>
+        </div>`;
     }
+
+    // Employees redesign: category tab + in-category search controls.
+    window.EMP_CATEGORY_TAB = window.EMP_CATEGORY_TAB || 'teaching';
+    window.EMP_SEARCH_QUERY = window.EMP_SEARCH_QUERY || '';
+    function setEmployeeCategory(cat) {
+      if (!['teaching', 'management', 'non-teaching'].includes(cat)) return;
+      window.EMP_CATEGORY_TAB = cat;
+      loadTeachers();
+    }
+    function setEmployeeSearch(q) {
+      window.EMP_SEARCH_QUERY = String(q || '');
+      loadTeachers();
+    }
+    window.setEmployeeCategory = setEmployeeCategory;
+    window.setEmployeeSearch = setEmployeeSearch;
 
     function copyTeacherCredentials(user, teacherName) {
       // AUTH HARDENING (Batch 1): copy tools copy the USERNAME only —
