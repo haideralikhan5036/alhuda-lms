@@ -5653,18 +5653,18 @@ function _buildTeacherBioDataTabHtml(state) {
   const bioFields = [
     { label: 'Father Name:', value: teacher.father_name || meta.father_name || meta.emergency_name || '--' },
     { label: 'CNIC:', value: meta.cnic || teacher.witness_phone || '--' },
-    { label: 'Email:', value: meta.email || `${(meta.username || 'teacher')}@alhudaislamic.com` },
+    { label: 'Email:', value: meta.email || '--' },
 
-    { label: 'Nationality:', value: meta.nationality || 'Pakistan' },
+    { label: 'Nationality:', value: meta.nationality || '--' },
     { label: 'Phone:', value: teacher.alt_phone || meta.emergency_phone || '--' },
     { label: 'Mobile:', value: teacher.phone || '--' },
 
     { label: 'Gender:', value: teacher.gender || meta.gender || 'Male' },
-    { label: 'Qualification 01:', value: meta.qualification || 'Alimiyah / Tajweed & Qiraat' },
+    { label: 'Qualification 01:', value: meta.qualification || '--' },
     { label: 'Qualification 02:', value: meta.qualification_02 || '--' },
 
     { label: 'Qualification 03:', value: meta.qualification_03 || '--' },
-    { label: 'Experience:', value: meta.experience || 'Certified Quran Instructor' },
+    { label: 'Experience:', value: meta.experience || '--' },
     { label: 'Working Shift:', value: teacher.working_shift || 'Regular Shift' },
 
     { label: 'Zoom:', value: meta.zoom_meeting_id || '--' },
@@ -5680,7 +5680,7 @@ function _buildTeacherBioDataTabHtml(state) {
     { label: 'DoJ:', value: joinDateStr },
 
     { label: 'Account Title:', value: isAuthorizedForBank ? (meta.account_title || teacher.full_name) : 'Restricted' },
-    { label: 'Monthly Salary:', value: isAuthorizedForBank ? `${meta.salary || currentBaseSubtotal || teacher.rate_per_slot || 2500}` : 'Restricted' },
+    { label: 'Monthly Salary:', value: isAuthorizedForBank ? `${meta.monthly_salary || meta.salary || currentBaseSubtotal || teacher.rate_per_slot || '--'}` : 'Restricted' },
     { label: 'Hour Rate:', value: isAuthorizedForBank ? `${meta.hour_rate || 0}` : 'Restricted' },
 
     { label: 'Bank:', value: isAuthorizedForBank ? (meta.bank_name || '--') : 'Restricted' },

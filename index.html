@@ -1350,9 +1350,14 @@
             <i class="fa-solid fa-user-tie text-brandEmerald"></i> Employees
           </h2>
         </div>
-        <button onclick="openEmployeeTypeChoice()" class="px-3.5 py-2 bg-brandDark text-white rounded-lg text-xs font-bold hover:bg-brandDarkest flex items-center gap-1.5 shadow">
-          <i class="fa-solid fa-user-plus"></i> + Add New Employee
-        </button>
+        <div class="flex items-center gap-2">
+          <button onclick="openEmployeeTypeChoice()" class="px-3.5 py-2 bg-brandDark text-white rounded-lg text-xs font-bold hover:bg-brandDarkest flex items-center gap-1.5 shadow">
+            <i class="fa-solid fa-user-plus"></i> + Add New Employee
+          </button>
+          <button id="btnAddManager" onclick="prepareAddManagerModal()" style="display:none" class="px-3.5 py-2 bg-indigo-700 text-white rounded-lg text-xs font-bold hover:bg-indigo-800 items-center gap-1.5 shadow">
+            <i class="fa-solid fa-user-tie"></i> + Add Manager
+          </button>
+        </div>
       </div>
 
       <!-- LIVE TEACHER SCHEDULE TIME CHANGE APPROVAL BANNER IN TEACHERS TAB -->
@@ -3918,6 +3923,26 @@
     </div>
   </div>
 
+  <style>
+    /* Employee form polish (2026-10-29): readable fonts, roomier fields,
+       calm section cards — scoped to this modal only. */
+    #modalAddTeacher form { font-size: 13.5px; }
+    #modalAddTeacher label { font-size: 11px; letter-spacing: .02em; color: #475569; }
+    #modalAddTeacher input:not([type="checkbox"]):not([type="hidden"]),
+    #modalAddTeacher select,
+    #modalAddTeacher textarea {
+      padding: 11px 12px; border-radius: 12px; border-color: #cbd5e1;
+      font-size: 13.5px; background: #fff;
+    }
+    #modalAddTeacher input:not([type="checkbox"]):focus,
+    #modalAddTeacher select:focus,
+    #modalAddTeacher textarea:focus {
+      outline: none; border-color: #059669;
+      box-shadow: 0 0 0 3px rgba(5, 150, 105, .15);
+    }
+    #modalAddTeacher .bg-slate-50, #modalAddTeacher .bg-blue-50 { padding: 18px; border-radius: 16px; }
+    #modalTeacherTitle { font-size: 17px; }
+  </style>
   <div id="modalAddTeacher" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 hidden items-center justify-center p-2 sm:p-4 overflow-y-auto">
     <div class="bg-white rounded-2xl max-w-2xl w-full p-4 sm:p-6 shadow-2xl border border-slate-200 my-auto max-h-[94vh] overflow-y-auto touch-scroll">
       <div class="flex justify-between items-center mb-3 sm:mb-4 border-b pb-3 shrink-0">
@@ -4143,7 +4168,95 @@
           </div>
         </div>
 
-        <div class="flex flex-col-reverse sm:flex-row justify-end gap-2 sm:gap-2.5 pt-3 border-t">
+                <!-- 6. ADDITIONAL BIO DATA (OPTIONAL) -->
+        <div class="bg-slate-50 p-3.5 rounded-xl border border-slate-200 space-y-3">
+          <div class="font-bold text-slate-700 uppercase tracking-wide text-[11px] flex justify-between">
+            <span><i class="fa-solid fa-address-card text-brandEmerald"></i> 6. Additional Bio Data</span>
+            <span class="text-slate-400 normal-case font-semibold">Optional</span>
+          </div>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label class="block font-bold mb-1">Email Address:</label>
+              <input type="email" id="tEmail" placeholder="e.g. teacher@example.com" class="w-full p-2.5 border rounded-lg">
+            </div>
+            <div>
+              <label class="block font-bold mb-1">Nationality:</label>
+              <input type="text" id="tNationality" placeholder="e.g. Pakistan" class="w-full p-2.5 border rounded-lg">
+            </div>
+          </div>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label class="block font-bold mb-1">Qualification 02:</label>
+              <input type="text" id="tQualification2" placeholder="Additional qualification (optional)" class="w-full p-2.5 border rounded-lg">
+            </div>
+            <div>
+              <label class="block font-bold mb-1">Qualification 03:</label>
+              <input type="text" id="tQualification3" placeholder="Additional qualification (optional)" class="w-full p-2.5 border rounded-lg">
+            </div>
+          </div>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label class="block font-bold mb-1">Experience:</label>
+              <input type="text" id="tExperience" placeholder="e.g. 5 years online Quran teaching" class="w-full p-2.5 border rounded-lg">
+            </div>
+            <div>
+              <label class="block font-bold mb-1">Timezone:</label>
+              <input type="text" id="tTimezone" list="tTimezoneList" placeholder="Asia/Karachi" class="w-full p-2.5 border rounded-lg font-semibold">
+              <datalist id="tTimezoneList">
+                <option value="Asia/Karachi"></option>
+                <option value="Asia/Dubai"></option>
+                <option value="Asia/Riyadh"></option>
+                <option value="Asia/Qatar"></option>
+                <option value="Asia/Kolkata"></option>
+                <option value="Asia/Dhaka"></option>
+                <option value="Asia/Tashkent"></option>
+                <option value="Europe/London"></option>
+                <option value="Europe/Berlin"></option>
+                <option value="America/New_York"></option>
+                <option value="America/Chicago"></option>
+                <option value="America/Denver"></option>
+                <option value="America/Los_Angeles"></option>
+                <option value="America/Toronto"></option>
+                <option value="Australia/Sydney"></option>
+                <option value="UTC"></option>
+              </datalist>
+            </div>
+          </div>
+        </div>
+
+        <!-- 7. BANK & FIXED SALARY (OPTIONAL) -->
+        <div class="bg-slate-50 p-3.5 rounded-xl border border-slate-200 space-y-3">
+          <div class="font-bold text-slate-700 uppercase tracking-wide text-[11px] flex justify-between">
+            <span><i class="fa-solid fa-building-columns text-brandEmerald"></i> 7. Bank &amp; Fixed Salary</span>
+            <span class="text-slate-400 normal-case font-semibold">Optional</span>
+          </div>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label class="block font-bold mb-1">Monthly Fixed Salary (PKR):</label>
+              <input type="number" id="tMonthlySalary" min="0" placeholder="Only for fixed-salary staff" class="w-full p-2.5 border rounded-lg font-semibold">
+            </div>
+            <div>
+              <label class="block font-bold mb-1">Hour Rate (PKR):</label>
+              <input type="number" id="tHourRate" min="0" placeholder="0" class="w-full p-2.5 border rounded-lg font-semibold">
+            </div>
+          </div>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label class="block font-bold mb-1">Bank Name:</label>
+              <input type="text" id="tBankName" placeholder="e.g. Meezan Bank" class="w-full p-2.5 border rounded-lg">
+            </div>
+            <div>
+              <label class="block font-bold mb-1">Account Title:</label>
+              <input type="text" id="tAccountTitle" placeholder="Account holder name" class="w-full p-2.5 border rounded-lg">
+            </div>
+          </div>
+          <div>
+            <label class="block font-bold mb-1">Account Number / IBAN:</label>
+            <input type="text" id="tAccountNumber" placeholder="Account number or IBAN" class="w-full p-2.5 border rounded-lg font-mono">
+          </div>
+        </div>
+
+<div class="flex flex-col-reverse sm:flex-row justify-end gap-2 sm:gap-2.5 pt-3 border-t">
           <button type="button" onclick="closeModal('modalAddTeacher')" class="w-full sm:w-auto px-4 py-2.5 border rounded-xl font-bold text-slate-600 text-center">Cancel</button>
           <button type="submit" id="btnSaveTeacher" class="w-full sm:w-auto px-6 py-2.5 bg-brandDark text-white rounded-xl font-bold hover:bg-brandDarkest shadow-md flex items-center justify-center gap-1.5 transition">
             <i class="fa-solid fa-user-plus"></i> <span id="btnSaveTeacherText">Save Teacher & Generate LMS Account</span>
