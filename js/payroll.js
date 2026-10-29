@@ -715,6 +715,18 @@
       document.getElementById('slipTeacherCode').innerText = teacherId.slice(0, 8).toUpperCase();
       document.getElementById('slipJoiningDate').innerText = slipData.joining_date;
 
+      // Employees redesign E2 (2026-10-29): Management / Non-Teaching
+      // slips have NO student breakdown. The students section and the
+      // per-student increment are omitted entirely for those categories
+      // (never a 'No students assigned' message); their salary amounts,
+      // advances and history below are untouched.
+      const slipTeacherRec = (window.ALL_TEACHERS || []).find(t => String(t.id) === String(teacherId));
+      const slipIsTeaching = !slipTeacherRec || typeof StaffCategories === 'undefined' || StaffCategories.of(slipTeacherRec) === 'teaching';
+      const studentsSection = document.getElementById('slipStudentsSection');
+      if (studentsSection) studentsSection.classList.toggle('hidden', !slipIsTeaching);
+      const incCell = document.getElementById('slipIncrementCell');
+      if (incCell) incCell.classList.toggle('hidden', !slipIsTeaching);
+
       const incBadge = document.getElementById('slipIncrementTierBadge');
       if (incBadge) {
         incBadge.innerText = slipData.seniority_increment > 0 
@@ -722,9 +734,9 @@
           : 'Base Level (0 PKR)';
       }
 
-      // Render editable students table
+      // Render editable students table (teaching staff only)
       const tbody = document.getElementById('slipStudentsTableBody');
-      if (tbody) {
+      if (tbody && slipIsTeaching) {
         if (!slipData.assigned_students || slipData.assigned_students.length === 0) {
           tbody.innerHTML = '<tr><td colspan="6" class="p-6 text-center text-slate-400">No students assigned yet.</td></tr>';
         } else {
