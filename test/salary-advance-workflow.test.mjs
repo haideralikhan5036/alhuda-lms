@@ -276,8 +276,8 @@ let reqFull, reqCustom;
     feeTables.includes('netPayable:') && feeTables.includes('mergeSlipLists:') && feeTables.includes('labelFromPeriod:'));
   check('ui: teacher salary preview no longer consults the salary_read_v1 flag',
     !/loadTeacherPreviousSalaries[\s\S]{0,4000}getReadMode/.test(teacherHtml));
-  check('release: WORKER_RELEASE untouched by this batch',
-    /const WORKER_RELEASE = '2026-10-29-phase3'/.test(workerSrc));
+  check('release: WORKER_RELEASE is the commission release',
+    /const WORKER_RELEASE = '2026-10-29-salary-advance'/.test(workerSrc));
   check('release: no native alert/confirm/prompt in new teacher advance code',
     !/submitTeacherAdvanceRequest[\s\S]{0,8000}\b(alert|confirm|prompt)\(/.test(teacherHtml));
 }
