@@ -1062,6 +1062,7 @@ font-family: var(--font-num) !important;
             <div>
               <label class="block font-bold text-slate-700 mb-1" for="tAdvPeriod">Salary Period</label>
               <select id="tAdvPeriod" class="w-full p-2.5 bg-white border border-slate-300 rounded-xl font-bold text-slate-800 text-xs focus:outline-brandEmerald"></select>
+              <p id="tAdvPeriodNote" class="hidden text-[11px] text-amber-800 mt-1"></p>
             </div>
             <div>
               <label class="block font-bold text-slate-700 mb-1">Advance Type</label>
@@ -7776,16 +7777,45 @@ font-family: var(--font-num) !important;
       // first. The advance form can only target a period that HAS a
       // salary record — the server refuses the rest (422).
       if (periodSel) {
-        const seen = {};
-        const opts = [];
-        _TADV_SLIPS.forEach((s) => {
-          const p = _tAdvPeriodOf(s);
-          if (p && !seen[p]) { seen[p] = true; opts.push({ period: p, label: s.month || _tAdvLabelOf(p) }); }
-        });
-        opts.sort((a, b) => (a.period < b.period ? 1 : -1));
+        // Period options come from the shared FeeTables helper (the same
+        // slip-backed list, newest first). The server refuses any period
+        // without a generated slip (422), so no calendar range is offered.
+        const opts = (window.FeeTables && typeof window.FeeTables.periodOptionsForSlips === 'function')
+          ? window.FeeTables.periodOptionsForSlips(_TADV_SLIPS)
+          : (() => {
+            const seen = {};
+            const list = [];
+            _TADV_SLIPS.forEach((s) => {
+              const p = _tAdvPeriodOf(s);
+              if (p && !seen[p]) { seen[p] = true; list.push({ period: p, label: s.month || _tAdvLabelOf(p) }); }
+            });
+            list.sort((a, b) => (a.period < b.period ? 1 : -1));
+            return list;
+          })();
         periodSel.innerHTML = opts.length
           ? opts.map((o) => `<option value="${o.period}">${o.label}</option>`).join('')
           : '<option value="">No salary record yet</option>';
+        // Batch C1: when slips exist but the CURRENT month has no slip
+        // yet, say so plainly — otherwise the teacher sees only older
+        // months (e.g. only September) with no explanation of why the
+        // current month is missing or what unblocks it.
+        const periodNote = document.getElementById('tAdvPeriodNote');
+        if (periodNote) {
+          let curPeriod = null, curLabel = '';
+          try {
+            const parts = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Karachi', year: 'numeric', month: '2-digit' }).formatToParts(new Date());
+            let y = '', m = '';
+            parts.forEach((p) => { if (p.type === 'year') y = p.value; if (p.type === 'month') m = p.value; });
+            if (y && m) { curPeriod = y + '-' + m; curLabel = _tAdvLabelOf(curPeriod); }
+          } catch (e) {}
+          if (opts.length && curPeriod && !opts.some((o) => o.period === curPeriod)) {
+            periodNote.innerText = 'No slip has been generated for ' + curLabel + ' yet — advances are only available for periods with a generated slip. Ask Administration to generate this period\'s slip.';
+            periodNote.classList.remove('hidden');
+          } else {
+            periodNote.innerText = '';
+            periodNote.classList.add('hidden');
+          }
+        }
         periodSel.onchange = refreshAdvanceAmountText;
         if (!_TADV_TYPE) _TADV_TYPE = 'full';
         const firstBtn = document.querySelector('#tAdvTypeGroup [data-adv-type="full"]');

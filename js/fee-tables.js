@@ -945,6 +945,21 @@
     labelFromPeriod: function (period) {
       return _labelFromPeriod(period);
     },
+    // Advance-request period options, extracted from the teacher form
+    // (Batch C1): every slip month with a parseable period, deduped,
+    // newest first. The advance form can only target a period that HAS
+    // a salary record — the server refuses the rest (422) — so this
+    // list is deliberately slip-backed, never a calendar range. Pure.
+    periodOptionsForSlips: function (slips) {
+      var seen = {};
+      var opts = [];
+      (Array.isArray(slips) ? slips : []).forEach(function (s) {
+        var p = periodFromLabel(s ? s.month : null);
+        if (p && !seen[p]) { seen[p] = true; opts.push({ period: p, label: s.month || _labelFromPeriod(p) }); }
+      });
+      opts.sort(function (a, b) { return a.period < b.period ? 1 : -1; });
+      return opts;
+    },
     FEE_TABLES_FLAG_KEY: FEE_TABLES_FLAG_KEY,
     isEnabled: isEnabled,
     periodFromMonthYear: periodFromMonthYear,
