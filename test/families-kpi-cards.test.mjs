@@ -31,21 +31,26 @@ check('registry heading simplified, description removed',
 
 // ---- New KPI cards -----------------------------------------------------------
 for (const [id, mode] of [['famKpiTotal', 'total'], ['famKpiActive', 'active'], ['famKpiDeactivated', 'deactivated']]) {
-  check(`KPI card ${id} is a clickable button -> setDirectoryKpi('${mode}')`,
-    INDEX.includes(`id="${id}"`) && INDEX.includes(`onclick="setDirectoryKpi('${mode}')"`) );
+  check(`KPI card ${id}: Families and Students parts are clickable for '${mode}'`,
+    INDEX.includes(`id="${id}"`) &&
+    INDEX.includes(`onclick="setDirectoryKpi('${mode}', 'families')"`) &&
+    INDEX.includes(`onclick="setDirectoryKpi('${mode}', 'students')"`) );
 }
-for (const id of ['famKpiTotalCombined', 'famKpiTotalBreakdown', 'famKpiActiveCombined', 'famKpiActiveBreakdown', 'famKpiDeactCombined', 'famKpiDeactBreakdown']) {
+for (const id of ['famKpiTotalCombined', 'famKpiTotalFamCount', 'famKpiTotalStuCount', 'famKpiActiveCombined', 'famKpiActiveFamCount', 'famKpiActiveStuCount', 'famKpiDeactivatedCombined', 'famKpiDeactivatedFamCount', 'famKpiDeactivatedStuCount']) {
   check(`KPI value span exists: ${id}`, INDEX.includes(`id="${id}"`));
 }
-check('combined counts are written from the canonical counters sync (both writers)',
+check('combined + segment counts are written from the canonical counters sync (both writers)',
   (FAMILIES.match(/setFVal\('famKpiTotalCombined'/g) || []).length >= 2 && // both counter writers
   FAMILIES.includes("setFVal('famKpiActiveCombined', activeFamiliesList.length + activeStus)") &&
-  FAMILIES.includes("setFVal('famKpiDeactCombined', deactivatedFamiliesList.length + deactivatedStudentsOnly.length)"));
-check('click handler sets BOTH filters together and shows the data below',
-  FAMILIES.includes('function setDirectoryKpi(mode)') &&
-  FAMILIES.includes("CURRENT_FAMILIES_STATUS_FILTER = target;") &&
-  FAMILIES.includes("CURRENT_STUDENTS_STATUS_FILTER = target;") &&
+  FAMILIES.includes("setFVal('famKpiDeactivatedCombined', deactivatedFamiliesList.length + deactivatedStudentsOnly.length)") &&
+  FAMILIES.includes("setFVal('famKpiTotalStuCount', allStu.length)"));
+check('click handler sets BOTH filters together and shows the matching list below',
+  FAMILIES.includes('function setDirectoryKpi(mode, target)') &&
+  FAMILIES.includes("CURRENT_FAMILIES_STATUS_FILTER = status;") &&
+  FAMILIES.includes("CURRENT_STUDENTS_STATUS_FILTER = status;") &&
   FAMILIES.includes("switchFamiliesViewMode('deactivatedFams')") &&
+  FAMILIES.includes("switchFamiliesViewMode('studentsList')") &&
+  FAMILIES.includes("switchFamiliesViewMode('famTable')") &&
   FAMILIES.includes('window.setDirectoryKpi = setDirectoryKpi;'));
 check('selected card highlight syncs with the current filters/view',
   FAMILIES.includes('function syncDirectoryKpiCardsUI()') && FAMILIES.includes('function directoryKpiSelectedMode()'));

@@ -1195,41 +1195,59 @@
 
       <!-- SUMMARY COUNTERS & VIEW CONTROLS TOOLBAR -->
       <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm space-y-3.5">
-        <!-- Directory KPI cards (owner redesign 2026-10-29): three sleek
-             combined cards; clicking one shows its data below. -->
-        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          <button type="button" id="famKpiTotal" onclick="setDirectoryKpi('total')" class="text-left px-4 py-3 rounded-xl bg-slate-50 border border-slate-200 flex items-center justify-between gap-3 transition hover:shadow-sm cursor-pointer w-full">
-            <span>
-              <span class="text-[11px] font-bold uppercase tracking-wider text-slate-500 block">Total</span>
-              <span id="famKpiTotalCombined" class="lms-num-stat text-slate-900 mt-0.5 block">0</span>
-              <span id="famKpiTotalBreakdown" class="text-[11px] font-semibold text-slate-500 block">0 Families &middot; 0 Students</span>
-            </span>
-            <span class="w-9 h-9 rounded-xl bg-white border border-slate-200 text-brandDark flex items-center justify-center text-sm shadow-2xs shrink-0">
-              <i class="fa-solid fa-users"></i>
-            </span>
-          </button>
-          <button type="button" id="famKpiActive" onclick="setDirectoryKpi('active')" class="text-left px-4 py-3 rounded-xl bg-emerald-50/70 border border-emerald-200 flex items-center justify-between gap-3 transition hover:shadow-sm cursor-pointer w-full">
-            <span>
-              <span class="text-[11px] font-bold uppercase tracking-wider text-emerald-800 block">Active</span>
-              <span id="famKpiActiveCombined" class="lms-num-stat text-emerald-700 mt-0.5 block">0</span>
-              <span id="famKpiActiveBreakdown" class="text-[11px] font-semibold text-emerald-700/80 block">0 Families &middot; 0 Students</span>
-            </span>
-            <span class="w-9 h-9 rounded-xl bg-white border border-emerald-200 text-brandEmerald flex items-center justify-center text-sm shadow-2xs shrink-0">
-              <i class="fa-solid fa-house-circle-check"></i>
-            </span>
-          </button>
-          <button type="button" id="famKpiDeactivated" onclick="setDirectoryKpi('deactivated')" class="text-left px-4 py-3 rounded-xl bg-rose-50/70 border border-rose-200 flex items-center justify-between gap-3 transition hover:shadow-sm cursor-pointer w-full">
-            <span>
-              <span class="text-[11px] font-bold uppercase tracking-wider text-rose-800 block">Deactivated</span>
-              <span id="famKpiDeactCombined" class="lms-num-stat text-rose-700 mt-0.5 block">0</span>
-              <span id="famKpiDeactBreakdown" class="text-[11px] font-semibold text-rose-700/80 block">0 Families &middot; 0 Students</span>
-            </span>
-            <span class="w-9 h-9 rounded-xl bg-white border border-rose-200 text-rose-600 flex items-center justify-center text-sm shadow-2xs shrink-0">
-              <i class="fa-solid fa-user-slash"></i>
-            </span>
-          </button>
+        <!-- Directory KPI cards v2 (owner 2026-10-29): smaller cards;
+             the Families / Students parts inside each card are clickable
+             and show that list for the card's state below. -->
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+          <div id="famKpiTotal" class="px-3.5 py-2.5 rounded-xl border bg-slate-50 border-slate-200 flex flex-col gap-1 transition">
+            <div class="flex items-start justify-between gap-2">
+              <button type="button" onclick="setDirectoryKpi('total', 'families')" class="text-left">
+                <span class="text-[10px] font-bold uppercase tracking-wider text-slate-500 block">Total</span>
+                <span id="famKpiTotalCombined" class="text-xl font-black text-slate-900 leading-tight block">0</span>
+              </button>
+              <span class="w-7 h-7 rounded-lg bg-white border border-slate-200 text-brandDark flex items-center justify-center text-xs shadow-2xs shrink-0">
+                <i class="fa-solid fa-users"></i>
+              </span>
+            </div>
+            <div class="flex items-center gap-1.5 text-[11px] font-bold text-slate-600">
+              <button type="button" onclick="setDirectoryKpi('total', 'families')" class="hover:underline underline-offset-2"><span id="famKpiTotalFamCount">0</span> Families</button>
+              <span class="opacity-50">&middot;</span>
+              <button type="button" onclick="setDirectoryKpi('total', 'students')" class="hover:underline underline-offset-2"><span id="famKpiTotalStuCount">0</span> Students</button>
+            </div>
+          </div>
+          <div id="famKpiActive" class="px-3.5 py-2.5 rounded-xl border bg-emerald-50/70 border-emerald-200 flex flex-col gap-1 transition">
+            <div class="flex items-start justify-between gap-2">
+              <button type="button" onclick="setDirectoryKpi('active', 'families')" class="text-left">
+                <span class="text-[10px] font-bold uppercase tracking-wider text-emerald-800 block">Active</span>
+                <span id="famKpiActiveCombined" class="text-xl font-black text-emerald-700 leading-tight block">0</span>
+              </button>
+              <span class="w-7 h-7 rounded-lg bg-white border border-emerald-200 text-brandEmerald flex items-center justify-center text-xs shadow-2xs shrink-0">
+                <i class="fa-solid fa-house-circle-check"></i>
+              </span>
+            </div>
+            <div class="flex items-center gap-1.5 text-[11px] font-bold text-emerald-800">
+              <button type="button" onclick="setDirectoryKpi('active', 'families')" class="hover:underline underline-offset-2"><span id="famKpiActiveFamCount">0</span> Families</button>
+              <span class="opacity-50">&middot;</span>
+              <button type="button" onclick="setDirectoryKpi('active', 'students')" class="hover:underline underline-offset-2"><span id="famKpiActiveStuCount">0</span> Students</button>
+            </div>
+          </div>
+          <div id="famKpiDeactivated" class="px-3.5 py-2.5 rounded-xl border bg-rose-50/70 border-rose-200 flex flex-col gap-1 transition">
+            <div class="flex items-start justify-between gap-2">
+              <button type="button" onclick="setDirectoryKpi('deactivated', 'families')" class="text-left">
+                <span class="text-[10px] font-bold uppercase tracking-wider text-rose-800 block">Deactivated</span>
+                <span id="famKpiDeactivatedCombined" class="text-xl font-black text-rose-700 leading-tight block">0</span>
+              </button>
+              <span class="w-7 h-7 rounded-lg bg-white border border-rose-200 text-rose-600 flex items-center justify-center text-xs shadow-2xs shrink-0">
+                <i class="fa-solid fa-user-slash"></i>
+              </span>
+            </div>
+            <div class="flex items-center gap-1.5 text-[11px] font-bold text-rose-800">
+              <button type="button" onclick="setDirectoryKpi('deactivated', 'families')" class="hover:underline underline-offset-2"><span id="famKpiDeactivatedFamCount">0</span> Families</button>
+              <span class="opacity-50">&middot;</span>
+              <button type="button" onclick="setDirectoryKpi('deactivated', 'students')" class="hover:underline underline-offset-2"><span id="famKpiDeactivatedStuCount">0</span> Students</button>
+            </div>
+          </div>
         </div>
-
       </div>
 
       <!-- VIEW 1: FAMILIES CARDS GRID (Alternative Overview — Hidden by Default) -->
