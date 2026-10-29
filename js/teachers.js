@@ -704,6 +704,8 @@
       if (editIdInput) editIdInput.value = '';
       _editTeacherOrigAddress = '';
 
+      const catSelAdd = document.getElementById('tStaffCategory');
+      if (catSelAdd) catSelAdd.value = 'teaching';
       const titleEl = document.getElementById('modalTeacherTitle');
       if (titleEl) titleEl.innerHTML = '<i class="fa-solid fa-chalkboard-user text-brandEmerald"></i> Register Teacher Profile (Full Details)';
 
@@ -814,6 +816,9 @@
 
       const joiningDate = acc.joining_date || (teacher.created_at ? teacher.created_at.slice(0, 10) : new Date().toISOString().slice(0, 10));
       document.getElementById('tJoiningDate').value = joiningDate;
+      // Employees redesign E3: Staff Category selector (canonical values).
+      const catSelEdit = document.getElementById('tStaffCategory');
+      if (catSelEdit) catSelEdit.value = (typeof StaffCategories !== 'undefined' && StaffCategories.of) ? StaffCategories.of(teacher) : 'teaching';
       document.getElementById('tIncrementTier').value = acc.increment_tier || 'auto';
 
       document.getElementById('tUsername').value = creds.username || '';
@@ -1076,6 +1081,7 @@
           const waMsg = `Assalamu Alaikum Respected ${t.full_name},\nWelcome to Al-Huda Islamic Centre Management Operations.\n\n🌐 *Your Dedicated Manager Portal Link:*\n${mgrPortalUrl}\n\n🆔 *Manager ID:* ${displayId}\n👤 *Login Username:* ${mgrUsername}\n💼 *Role / Title:* ${designation}\n\nYour password will be given to you by the administrator in person or by phone.\nPlease click your portal link to access all management tools, rosters, timetables, and system follow-ups.\nJazakum Allahu Khairan!`;
           actions = `
             <button onclick="openTeacher360Profile('${t.id}')" class="px-2.5 py-1.5 bg-indigo-900 hover:bg-indigo-950 text-white rounded-lg font-bold text-[11px]">360° Profile</button>
+            <button onclick="openEditTeacherModal('${t.id}')" class="px-2.5 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 rounded-lg font-bold text-[11px]">Edit</button>
             <button onclick="copyManagerCredentials('${t.id}', '${mgrUsername}', '${t.full_name}', '${mgrPortalUrl}')" title="Copy Login Details" class="px-2 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-[11px]"><i class="fa-regular fa-copy"></i></button>
             ${cleanPhone ? `<a href="https://wa.me/${cleanPhone}?text=${encodeURIComponent(waMsg)}" target="_blank" title="Send Credentials on WhatsApp" class="px-2 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-[11px] inline-block"><i class="fa-brands fa-whatsapp"></i></a>` : ''}
             <button onclick="deleteTeacher('${t.id}')" title="Delete Manager" class="px-2 py-1.5 text-rose-600 hover:bg-rose-50 rounded-lg text-[11px]"><i class="fa-regular fa-trash-can"></i></button>`;
@@ -1085,6 +1091,7 @@
           compensation = meta.salary ? `${meta.salary} PKR / mo` : (t.rate_per_slot ? `${t.rate_per_slot} PKR` : 'As Agreed');
           actions = `
             <button onclick="openTeacher360Profile('${t.id}')" class="px-2.5 py-1.5 bg-indigo-900 hover:bg-indigo-950 text-white rounded-lg font-bold text-[11px]">360° Profile</button>
+            <button onclick="openEditTeacherModal('${t.id}')" class="px-2.5 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 rounded-lg font-bold text-[11px]">Edit</button>
             <button onclick="deleteTeacher('${t.id}')" title="Delete Staff" class="px-2 py-1.5 text-rose-600 hover:bg-rose-50 rounded-lg text-[11px]"><i class="fa-regular fa-trash-can"></i></button>`;
         }
 
@@ -1154,6 +1161,14 @@
       const username = (document.getElementById('tUsername').value || '').trim();
       const password = (document.getElementById('tPassword').value || '').trim();
       const working_shift_val = document.getElementById('tShift').value;
+      // Employees redesign E3: canonical Staff Category from the form.
+      const staffCategorySel = document.getElementById('tStaffCategory')?.value || 'teaching';
+      const staffCategoryEmpType = (typeof StaffCategories !== 'undefined' && StaffCategories.EMPLOYEE_TYPE)
+        ? (StaffCategories.EMPLOYEE_TYPE[staffCategorySel] || 'teacher') : 'teacher';
+      if (staffCategorySel === 'management' && typeof CURRENT_ROLE !== 'undefined' && CURRENT_ROLE === 'manager') {
+        lmsNotify('Managers cannot assign the Management Staff category. Please ask the owner.');
+        return;
+      }
 
       // Mandatory Validations
       if (!full_name) {
@@ -1244,12 +1259,29 @@
             if (origMeta && typeof origMeta === 'object' && !Array.isArray(origMeta)) {
               origMeta.residential_address = address || origMeta.residential_address || origMeta.address || '';
               origMeta.address = address || origMeta.address || '';
+              // Employees redesign E3: persist the chosen category.
+              origMeta.employee_type = staffCategoryEmpType;
               addressToSave = JSON.stringify(origMeta);
             }
           }
         } catch (e) {}
+        // Employees redesign E3: records created by the non-teaching
+        // flow keep employee_type in their NOTES meta — update it there
+        // too, so a category change is never lost.
+        let notesToSave;
+        try {
+          const recForNotes = (ALL_TEACHERS || []).find(x => String(x.id) === String(editTeacherId));
+          if (recForNotes && typeof recForNotes.notes === 'string' && recForNotes.notes.trim().startsWith('{')) {
+            const nMeta = JSON.parse(recForNotes.notes);
+            if (nMeta && typeof nMeta === 'object' && 'employee_type' in nMeta) {
+              nMeta.employee_type = staffCategoryEmpType;
+              notesToSave = JSON.stringify(nMeta);
+            }
+          }
+        } catch (e) {}
         const { error } = await db.from('teachers').update({
-          full_name, father_name, phone, alt_phone, address: addressToSave, witness_name, witness_phone, rate_per_slot, working_shift, zoom_link
+          full_name, father_name, phone, alt_phone, address: addressToSave, witness_name, witness_phone, rate_per_slot, working_shift, zoom_link,
+          ...(notesToSave !== undefined ? { notes: notesToSave } : {})
         }).eq('id', editTeacherId);
 
         if (error) {
@@ -1287,7 +1319,8 @@
           zoom_link,
           zoom_meeting_id,
           zoom_passcode,
-          zoom_host_key
+          zoom_host_key,
+          employee_type: staffCategoryEmpType
         });
 
         if (auto_sync_zoom && zoom_link) {
@@ -1363,7 +1396,8 @@
           zoom_link,
           zoom_meeting_id,
           zoom_passcode,
-          zoom_host_key
+          zoom_host_key,
+          employee_type: staffCategoryEmpType
         });
 
         if (auto_sync_zoom && zoom_link) {
