@@ -36,8 +36,11 @@ check('update: employee_type written into the address meta merge',
 check('update: employee_type also written into notes meta when it lives there',
   TEACHERS.includes("'employee_type' in nMeta") && TEACHERS.includes('notesToSave = JSON.stringify(nMeta)'));
 check('update: account map receives employee_type', TEACHERS.includes('employee_type: staffCategoryEmpType'));
-check('list: Edit action now exists on management and non-teaching rows too',
-  (TEACHERS.match(/openEditTeacherModal\('\$\{t\.id\}'\)/g) || []).length >= 3);
+// Owner screenshot directive (2026-10-29): the Edit buttons were
+// removed from the list rows again; the form + handler remain in code.
+check('list: Edit buttons removed from rows (owner directive); edit handler still exists',
+  !TEACHERS.slice(TEACHERS.indexOf('EMPLOYEES REDESIGN'), TEACHERS.indexOf('window.setEmployeeCategory')).includes('>Edit</button>') &&
+  TEACHERS.includes('function openEditTeacherModal(teacherId)'));
 check('config: EMPLOYEE_TYPE vocabulary unchanged (teacher/manager/other_staff)',
   CONFIG.includes("EMPLOYEE_TYPE: { teaching: 'teacher', management: 'manager', 'non-teaching': 'other_staff' }"));
 

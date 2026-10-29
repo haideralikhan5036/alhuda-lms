@@ -773,7 +773,7 @@
             onfocus="handleDashboardGlobalSearch(this.value)"
             onkeydown="if(event.key==='Enter'){ event.preventDefault(); handleDashboardGlobalSearch(this.value); } else if(event.key==='Escape'){ clearDashboardGlobalSearch(); this.blur(); }"
             autocomplete="off"
-            placeholder="Search student, family, employee, trial, phone or ID... (Ctrl+K)"
+            placeholder=""
             class="w-full pl-9 pr-16 py-2 bg-slate-50/90 hover:bg-white focus:bg-white border border-slate-300 hover:border-slate-400 focus:border-emerald-600 rounded-xl text-[13px] font-semibold text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-3 focus:ring-emerald-500/15 transition-all shadow-2xs"
           >
           <span id="kbdDashGlobalSearchHint" class="hidden sm:inline-flex items-center px-1.5 py-0.5 rounded bg-slate-200/80 text-slate-500 font-mono text-[10px] font-bold absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none">
@@ -1413,7 +1413,6 @@
           <h2 class="text-xl font-extrabold text-brandDark flex items-center gap-2">
             <i class="fa-solid fa-user-tie text-brandEmerald"></i> Employees
           </h2>
-          <p class="text-xs text-slate-500">Teaching Staff, Managers &amp; Non-Teaching Staff — Profiles, Credentials &amp; Schedule Matrix</p>
         </div>
         <button onclick="openEmployeeTypeChoice()" class="px-3.5 py-2 bg-brandDark text-white rounded-lg text-xs font-bold hover:bg-brandDarkest flex items-center gap-1.5 shadow">
           <i class="fa-solid fa-user-plus"></i> + Add New Employee
@@ -1430,10 +1429,7 @@
         <button id="empTab-teaching" onclick="setEmployeeCategory('teaching')" class="px-3.5 py-2 rounded-lg text-xs font-bold border border-slate-300 shadow-sm">Teaching Staff <span id="empCount-teaching" class="ml-1 px-1.5 py-0.5 rounded bg-black/10 text-[10px] font-extrabold">0</span></button>
         <button id="empTab-management" onclick="setEmployeeCategory('management')" class="px-3.5 py-2 rounded-lg text-xs font-bold border border-slate-300 shadow-sm">Management Staff <span id="empCount-management" class="ml-1 px-1.5 py-0.5 rounded bg-black/10 text-[10px] font-extrabold">0</span></button>
         <button id="empTab-non-teaching" onclick="setEmployeeCategory('non-teaching')" class="px-3.5 py-2 rounded-lg text-xs font-bold border border-slate-300 shadow-sm">Non-Teaching Staff <span id="empCount-non-teaching" class="ml-1 px-1.5 py-0.5 rounded bg-black/10 text-[10px] font-extrabold">0</span></button>
-        <div class="ml-auto relative">
-          <i class="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs"></i>
-          <input type="text" id="empSearchInput" oninput="setEmployeeSearch(this.value)" placeholder="Search in this category..." class="pl-8 pr-3 py-2 bg-white border border-slate-300 rounded-lg text-xs font-semibold w-52 sm:w-64 shadow-sm">
-        </div>
+        <button id="empTab-deactivated" onclick="setEmployeeCategory('deactivated')" class="px-3 py-2 rounded-lg text-[11px] font-bold border border-slate-300 shadow-sm"><i class="fa-solid fa-user-slash mr-1"></i>Deactivated Staff <span id="empCount-deactivated" class="ml-1 px-1.5 py-0.5 rounded bg-black/10 text-[10px] font-extrabold">0</span></button>
       </div>
       <p id="empReviewNote" class="hidden mb-3 text-[11px] font-bold text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2"></p>
 

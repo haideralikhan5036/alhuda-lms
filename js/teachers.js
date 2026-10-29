@@ -849,39 +849,42 @@
       openModal('modalAddTeacher');
     }
 
-    async function deleteTeacher(teacherId) {
-      if (CURRENT_ROLE === 'manager') {
-        lmsNotify('Managers cannot delete staff records.');
+    // Staff deactivation (owner directive 2026-10-29): staff are NEVER
+    // hard-deleted from the Employees list. Deactivation changes ONLY
+    // the record's status — profile, credentials, schedules, salary
+    // history and student records all stay saved — the portal login
+    // stops (the backend treats 'Deactivated' as an inactive account),
+    // and the person moves to the Deactivated Staff view. Reactivation
+    // restores status 'Active' and the person returns to their category.
+    async function setStaffDeactivated(teacherId, deactivate) {
+      if (typeof CURRENT_ROLE !== 'undefined' && CURRENT_ROLE === 'manager') {
+        lmsNotify('Managers cannot deactivate or reactivate staff records.');
         return;
       }
-      const teacher = ALL_TEACHERS.find(t => t.id === teacherId);
-      const tName = teacher ? teacher.full_name : 'this employee';
-      let meta = {};
-      try { meta = JSON.parse(teacher?.notes || '{}'); } catch(e){}
-      const roleLabel = meta.employee_type === 'manager' ? 'Manager' : (meta.employee_type === 'other_staff' ? 'Staff Member' : 'Teacher');
-
-      if (!(await lmsConfirm(`Are you sure you want to delete ${roleLabel} "${tName}"?\n\nThis will remove their profile and records.`))) {
-        return;
+      const teacher = (ALL_TEACHERS || []).find(t => t.id === teacherId);
+      if (!teacher) return;
+      const tName = teacher.full_name || 'this employee';
+      const category = (typeof StaffCategories !== 'undefined' && StaffCategories.of) ? StaffCategories.of(teacher) : 'teaching';
+      if (deactivate) {
+        if (!(await lmsConfirm(`Deactivate "${tName}"?\n\nNo data will be deleted. Their profile, salary history and records stay saved, their portal login will stop, and they will move to Deactivated Staff.`))) return;
+      } else {
+        if (!(await lmsConfirm(`Reactivate "${tName}"?\n\nThey will return to their staff category with all their saved data and portal access restored.`))) return;
       }
-
       try {
-        await db.from('class_schedules').delete().eq('teacher_id', teacherId);
-        await db.from('teachers').delete().eq('id', teacherId);
-
-        const accounts = getTeacherAccounts();
-        delete accounts[teacherId];
-        localStorage.setItem('alhuda_teacher_accounts', JSON.stringify(accounts));
-        if (typeof syncGlobalSharedStateToCloud === 'function') {
-          syncGlobalSharedStateToCloud();
-        }
-
+        const { error } = await db.from('teachers').update({ status: deactivate ? 'Deactivated' : 'Active' }).eq('id', teacherId);
+        if (error) throw error;
         if (typeof invalidateCoreLmsDataCache === 'function') invalidateCoreLmsDataCache();
+        if (!deactivate) window.EMP_CATEGORY_TAB = category;
         await loadTeachers(true);
-        lmsNotify(`${roleLabel} "${tName}" has been deleted successfully.`);
+        lmsNotify(deactivate
+          ? `"${tName}" has been deactivated. All their data is preserved under Deactivated Staff.`
+          : `"${tName}" has been reactivated with all their saved data.`);
       } catch (err) {
-        console.warn('[LMS] operation failed:', err.message); lmsNotify('Error deleting employee. Please try again.', { type: 'error' });
+        console.warn('[LMS] operation failed:', (err && err.message) || err);
+        lmsNotify('The status could not be changed. Please try again.', { type: 'error' });
       }
     }
+    window.setStaffDeactivated = setStaffDeactivated;
 
     async function loadTeachers(forceRefresh = false) {
       const container = document.getElementById('teachersGrid');
@@ -967,12 +970,17 @@
         }
         const category = (typeof StaffCategories !== 'undefined' && StaffCategories.of) ? StaffCategories.of(t) : 'teaching';
         const conflict = (typeof StaffCategories !== 'undefined' && StaffCategories.hasConflict) ? StaffCategories.hasConflict(t) : false;
-        return { t, meta, acc, category, conflict };
+        const statusNorm = String(t.status || 'Active').trim().toLowerCase();
+        const isDeactivated = ['inactive', 'deactivated', 'terminated'].includes(statusNorm);
+        return { t, meta, acc, category, conflict, isDeactivated };
       });
 
-      const catCounts = { teaching: 0, management: 0, 'non-teaching': 0 };
-      enriched.forEach(r => { catCounts[r.category] = (catCounts[r.category] || 0) + 1; });
-      ['teaching', 'management', 'non-teaching'].forEach(c => {
+      const catCounts = { teaching: 0, management: 0, 'non-teaching': 0, deactivated: 0 };
+      enriched.forEach(r => {
+        if (r.isDeactivated) catCounts.deactivated += 1;
+        else catCounts[r.category] = (catCounts[r.category] || 0) + 1;
+      });
+      ['teaching', 'management', 'non-teaching', 'deactivated'].forEach(c => {
         const el = document.getElementById('empCount-' + c);
         if (el) el.textContent = catCounts[c] || 0;
         const tab = document.getElementById('empTab-' + c);
@@ -993,7 +1001,7 @@
 
       const activeCat = window.EMP_CATEGORY_TAB || 'teaching';
       const query = String(window.EMP_SEARCH_QUERY || '').trim().toLowerCase();
-      const visible = enriched.filter(r => r.category === activeCat).filter(r => {
+      const visible = enriched.filter(r => activeCat === 'deactivated' ? r.isDeactivated : (r.category === activeCat && !r.isDeactivated)).filter(r => {
         if (!query) return true;
         const credsId = r.category === 'teaching' ? (getTeacherCreds(r.t).teacher_id || '') : (r.meta.emp_id || r.acc.teacher_id || '');
         const hay = [r.t.full_name, credsId, r.t.id, r.meta.username, r.acc.username, r.t.phone].join(' ').toLowerCase();
@@ -1004,8 +1012,8 @@
         container.innerHTML = `
           <div class="p-10 text-center bg-white rounded-2xl border border-slate-200">
             <i class="fa-solid fa-user-slash text-4xl text-slate-300 mb-3"></i>
-            <h4 class="font-extrabold text-slate-700 text-base">No ${((typeof StaffCategories !== 'undefined' && StaffCategories.LABELS) || {})[activeCat] || 'Employees'} Found</h4>
-            <p class="text-xs text-slate-400 mt-1">${query ? 'No employee in this category matches your search.' : 'No employees are registered in this category yet. Use "+ Add New Employee" above to add one.'}</p>
+            <h4 class="font-extrabold text-slate-700 text-base">No ${activeCat === 'deactivated' ? 'Deactivated Staff' : (((typeof StaffCategories !== 'undefined' && StaffCategories.LABELS) || {})[activeCat] || 'Employees')} Found</h4>
+            <p class="text-xs text-slate-400 mt-1">${query ? 'No employee in this category matches your search.' : (activeCat === 'deactivated' ? 'No deactivated staff yet. Anyone you deactivate will appear here with all their data preserved.' : 'No employees are registered in this category yet. Use "+ Add New Employee" above to add one.')}</p>
           </div>
         `;
         return;
@@ -1018,8 +1026,10 @@
       };
       const isManagerSession = (typeof CURRENT_ROLE !== 'undefined' && CURRENT_ROLE === 'manager');
 
-      const rowsHtml = visible.map(({ t, meta, acc, category, conflict }) => {
-        const statusBadge = `<span class="px-2 py-0.5 rounded text-[10px] font-extrabold ${t.status === 'Active' ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-600'}">${t.status || 'Active'}</span>`;
+      const rowsHtml = visible.map(({ t, meta, acc, category, conflict, isDeactivated }) => {
+        const statusBadge = isDeactivated
+          ? '<span class="px-2 py-0.5 rounded text-[10px] font-extrabold bg-rose-100 text-rose-800 border border-rose-200">Deactivated</span>'
+          : `<span class="px-2 py-0.5 rounded text-[10px] font-extrabold ${t.status === 'Active' ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-600'}">${t.status || 'Active'}</span>`;
         const reviewBadge = conflict ? ' <span class="px-2 py-0.5 rounded text-[10px] font-extrabold bg-amber-100 text-amber-800 border border-amber-200" title="Conflicting category signals — please review">Needs review</span>' : '';
         const initials = `<span class="w-9 h-9 rounded-lg bg-emerald-50 border border-emerald-200 text-brandDark inline-flex items-center justify-center font-black text-xs mr-2.5 align-middle">${String(t.full_name || '?').slice(0, 2).toUpperCase()}</span>`;
 
@@ -1030,8 +1040,7 @@
           return `
             <tr>
               <td data-label="Employee">${initials}<span class="font-extrabold text-slate-900">${t.full_name}</span><div class="text-[11px] text-slate-500 font-mono ml-[46px]">${mgrIdPlain}</div></td>
-              <td data-label="Designation">${meta.role_title || 'Operations Manager'}</td>
-              <td data-label="Category">${catBadge.management}${reviewBadge}</td>
+                <td data-label="Category">${catBadge.management}${reviewBadge}</td>
               <td data-label="Contact" class="text-slate-400">—</td>
               <td data-label="Students">—</td>
               <td data-label="Compensation" class="text-slate-400">—</td>
@@ -1062,15 +1071,10 @@
           const cleanPhone = (t.phone || '').replace(/[^0-9]/g, '');
           const waMsg = `Assalamu Alaikum Respected ${t.full_name},\nWelcome to the Al-Huda Islamic Centre Teacher Operations Portal.\n\n🌐 *Your Personal Portal Link:*\n${window.location.origin}/teacher.html\n\n👤 *Username:* ${creds.username}\n🕒 *Assigned Shift:* ${t.working_shift || '10 Hours Shift'}\n💰 *Slot Rate:* ${t.rate_per_slot || 2200} PKR\n\nYour password will be given to you by the administrator in person or by phone.\nPlease tap the link above to view your timetable, Student List, and lesson logs.\nJazakum Allahu Khairan!`;
           actions = `
-            <button onclick="openTeacher360Profile('${t.id}')" class="px-2.5 py-1.5 bg-indigo-900 hover:bg-indigo-950 text-white rounded-lg font-bold text-[11px]">360° Profile</button>
-            <button onclick="openEditTeacherModal('${t.id}')" class="px-2.5 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 rounded-lg font-bold text-[11px]">Edit</button>
-            <button onclick="open2DMatrixForTeacher('${t.id}')" title="Schedule Matrix" class="px-2 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-[11px]"><i class="fa-solid fa-table-cells"></i></button>
-            <button onclick="copyTeacherCredentials('${creds.username}', '${t.full_name}')" title="Copy Login Details" class="px-2 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-[11px]"><i class="fa-regular fa-copy"></i></button>
-            ${cleanPhone ? `<a href="https://wa.me/${cleanPhone}?text=${encodeURIComponent(waMsg)}" target="_blank" title="Send Credentials on WhatsApp" class="px-2 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-[11px] inline-block"><i class="fa-brands fa-whatsapp"></i></a>` : ''}
-            ${(acc.zoom_link) ? `<button onclick="navigator.clipboard.writeText('${acc.zoom_link}'); lmsNotify('Zoom link copied to clipboard!');" title="Copy Zoom Link" class="px-2 py-1.5 bg-slate-100 hover:bg-slate-200 text-blue-700 rounded-lg text-[11px]"><i class="fa-solid fa-link"></i></button>` : '<span class="text-[10px] text-slate-400 font-semibold self-center">Class link not set yet</span>'}
+            <button onclick="open2DMatrixForTeacher('${t.id}')" class="px-2.5 py-1.5 bg-indigo-900 hover:bg-indigo-950 text-white rounded-lg font-bold text-[11px]">Schedule Matrix</button>
+            ${(!acc.zoom_link) ? '<span class="text-[10px] text-slate-400 font-semibold self-center">Class link not set yet</span>' : ''}
             <button onclick="openQuickZoomModal('${t.id}')" title="Quick Zoom" class="px-2 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-[11px]"><i class="fa-solid fa-video"></i></button>
-            <button onclick="triggerTeacherZoomSync('${t.id}')" title="Sync Zoom Link to All Students" class="px-2 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-900 border border-indigo-200 rounded-lg text-[11px]"><i class="fa-solid fa-rotate"></i></button>
-            ${!isManagerSession ? `<button onclick="deleteTeacher('${t.id}')" title="Delete Teacher" class="px-2 py-1.5 text-rose-600 hover:bg-rose-50 rounded-lg text-[11px]"><i class="fa-regular fa-trash-can"></i></button>` : ''}`;
+            ${!isManagerSession ? `<button onclick="setStaffDeactivated('${t.id}', true)" class="px-2.5 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-800 border border-rose-300 rounded-lg font-bold text-[11px]"><i class="fa-solid fa-user-slash mr-1"></i>Deactivate</button>` : ''}`;
         } else if (category === 'management') {
           displayId = meta.emp_id || (String(t.witness_name || '').startsWith('MGR-') ? t.witness_name : null) || acc.teacher_id || (String(t.id).startsWith('MGR-') ? t.id : 'MGR-001');
           designation = meta.role_title || meta.designation || 'Operations Manager';
@@ -1079,26 +1083,25 @@
           const cleanPhone = (t.phone || '').replace(/[^0-9]/g, '');
           const mgrPortalUrl = `${window.location.origin}/manager.html`;
           const waMsg = `Assalamu Alaikum Respected ${t.full_name},\nWelcome to Al-Huda Islamic Centre Management Operations.\n\n🌐 *Your Dedicated Manager Portal Link:*\n${mgrPortalUrl}\n\n🆔 *Manager ID:* ${displayId}\n👤 *Login Username:* ${mgrUsername}\n💼 *Role / Title:* ${designation}\n\nYour password will be given to you by the administrator in person or by phone.\nPlease click your portal link to access all management tools, rosters, timetables, and system follow-ups.\nJazakum Allahu Khairan!`;
-          actions = `
-            <button onclick="openTeacher360Profile('${t.id}')" class="px-2.5 py-1.5 bg-indigo-900 hover:bg-indigo-950 text-white rounded-lg font-bold text-[11px]">360° Profile</button>
-            <button onclick="openEditTeacherModal('${t.id}')" class="px-2.5 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 rounded-lg font-bold text-[11px]">Edit</button>
-            <button onclick="copyManagerCredentials('${t.id}', '${mgrUsername}', '${t.full_name}', '${mgrPortalUrl}')" title="Copy Login Details" class="px-2 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-[11px]"><i class="fa-regular fa-copy"></i></button>
-            ${cleanPhone ? `<a href="https://wa.me/${cleanPhone}?text=${encodeURIComponent(waMsg)}" target="_blank" title="Send Credentials on WhatsApp" class="px-2 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-[11px] inline-block"><i class="fa-brands fa-whatsapp"></i></a>` : ''}
-            <button onclick="deleteTeacher('${t.id}')" title="Delete Manager" class="px-2 py-1.5 text-rose-600 hover:bg-rose-50 rounded-lg text-[11px]"><i class="fa-regular fa-trash-can"></i></button>`;
+          actions = !isManagerSession ? `
+            <button onclick="setStaffDeactivated('${t.id}', true)" class="px-2.5 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-800 border border-rose-300 rounded-lg font-bold text-[11px]"><i class="fa-solid fa-user-slash mr-1"></i>Deactivate</button>` : '';
         } else {
           displayId = meta.emp_id || (String(t.witness_name || '').startsWith('STF-') ? t.witness_name : null) || acc.teacher_id || (String(t.id).startsWith('STF-') ? t.id : 'STF-001');
           designation = meta.role_title || meta.designation || 'Support & Administrative Staff';
           compensation = meta.salary ? `${meta.salary} PKR / mo` : (t.rate_per_slot ? `${t.rate_per_slot} PKR` : 'As Agreed');
-          actions = `
-            <button onclick="openTeacher360Profile('${t.id}')" class="px-2.5 py-1.5 bg-indigo-900 hover:bg-indigo-950 text-white rounded-lg font-bold text-[11px]">360° Profile</button>
-            <button onclick="openEditTeacherModal('${t.id}')" class="px-2.5 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 rounded-lg font-bold text-[11px]">Edit</button>
-            <button onclick="deleteTeacher('${t.id}')" title="Delete Staff" class="px-2 py-1.5 text-rose-600 hover:bg-rose-50 rounded-lg text-[11px]"><i class="fa-regular fa-trash-can"></i></button>`;
+          actions = !isManagerSession ? `
+            <button onclick="setStaffDeactivated('${t.id}', true)" class="px-2.5 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-800 border border-rose-300 rounded-lg font-bold text-[11px]"><i class="fa-solid fa-user-slash mr-1"></i>Deactivate</button>` : '';
+        }
+
+        if (isDeactivated) {
+          actions = !isManagerSession
+            ? `<button onclick="setStaffDeactivated('${t.id}', false)" class="px-2.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-bold text-[11px]"><i class="fa-solid fa-user-check mr-1"></i>Reactivate</button>`
+            : '';
         }
 
         return `
           <tr class="hover:bg-slate-50">
             <td data-label="Employee">${initials}<button onclick="openTeacher360Profile('${t.id}')" class="font-extrabold text-slate-900 hover:text-indigo-700 hover:underline text-left">${t.full_name}</button><div class="text-[11px] text-slate-500 font-mono ml-[46px]">${displayId}</div></td>
-            <td data-label="Designation">${designation}</td>
             <td data-label="Category">${catBadge[category]}${reviewBadge}</td>
             <td data-label="Contact"><span class="font-mono text-xs">${t.phone || '—'}</span></td>
             <td data-label="Students">${studentsCell}</td>
@@ -1112,7 +1115,7 @@
         <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
           <table class="emp-table">
             <thead><tr>
-              <th>Employee</th><th>Designation</th><th>Category</th><th>Contact</th><th>Students</th><th>Compensation</th><th>Status</th><th>Actions</th>
+              <th>Employee</th><th>Category</th><th>Contact</th><th>Students</th><th>Compensation</th><th>Status</th><th>Actions</th>
             </tr></thead>
             <tbody>${rowsHtml}</tbody>
           </table>
@@ -1123,7 +1126,7 @@
     window.EMP_CATEGORY_TAB = window.EMP_CATEGORY_TAB || 'teaching';
     window.EMP_SEARCH_QUERY = window.EMP_SEARCH_QUERY || '';
     function setEmployeeCategory(cat) {
-      if (!['teaching', 'management', 'non-teaching'].includes(cat)) return;
+      if (!['teaching', 'management', 'non-teaching', 'deactivated'].includes(cat)) return;
       window.EMP_CATEGORY_TAB = cat;
       loadTeachers();
     }
