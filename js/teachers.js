@@ -699,6 +699,89 @@
       });
     }
 
+    // Employee form expansion (2026-10-29): the optional bio/bank fields
+    // added to the form in sections 6-7, cleared/filled as one list.
+    const TEACHER_EXTRA_FIELD_IDS = ['tEmail', 'tNationality', 'tQualification2', 'tQualification3',
+      'tExperience', 'tTimezone', 'tMonthlySalary', 'tHourRate', 'tBankName', 'tAccountTitle', 'tAccountNumber'];
+
+    function clearTeacherExtraFields() {
+      TEACHER_EXTRA_FIELD_IDS.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.value = '';
+      });
+    }
+
+    function fillTeacherExtraFields(acc) {
+      const map = {
+        tEmail: acc.email, tNationality: acc.nationality, tQualification2: acc.qualification_02,
+        tQualification3: acc.qualification_03, tExperience: acc.experience, tTimezone: acc.timezone,
+        tMonthlySalary: acc.monthly_salary, tHourRate: acc.hour_rate, tBankName: acc.bank_name,
+        tAccountTitle: acc.account_title, tAccountNumber: acc.account_number
+      };
+      Object.keys(map).forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.value = (map[id] === undefined || map[id] === null) ? '' : map[id];
+      });
+    }
+
+    function readTeacherExtraFields() {
+      const v = id => (document.getElementById(id)?.value || '').trim();
+      const n = id => { const raw = v(id); return raw === '' ? '' : (parseFloat(raw) || 0); };
+      return {
+        email: v('tEmail'), nationality: v('tNationality'), qualification_02: v('tQualification2'),
+        qualification_03: v('tQualification3'), experience: v('tExperience'), timezone: v('tTimezone'),
+        monthly_salary: n('tMonthlySalary'), hour_rate: n('tHourRate'), bank_name: v('tBankName'),
+        account_title: v('tAccountTitle'), account_number: v('tAccountNumber')
+      };
+    }
+
+    // Category availability: the select is re-enabled for a fresh form,
+    // and a signed-in MANAGER can never pick the Management category
+    // (owner directive 2026-10-29: management staff are owner-added only;
+    // the save handler still hard-blocks it as defence in depth).
+    function syncStaffCategoryAvailability() {
+      const sel = document.getElementById('tStaffCategory');
+      if (!sel) return;
+      sel.disabled = false;
+      const mgrOpt = sel.querySelector('option[value="management"]');
+      if (mgrOpt) mgrOpt.disabled = (typeof CURRENT_ROLE !== 'undefined' && CURRENT_ROLE === 'manager');
+    }
+
+    function getNextManagerId() {
+      const accounts = getTeacherAccounts();
+      let max = 0;
+      Object.values(accounts).forEach(acc => {
+        if (acc && acc.teacher_id) {
+          const m = String(acc.teacher_id).match(/MGR-(\d+)/i);
+          if (m) max = Math.max(max, parseInt(m[1], 10));
+        }
+      });
+      return 'MGR-' + String(max + 1).padStart(3, '0');
+    }
+
+    // Owner-only: register a MANAGER through the same full form, with the
+    // Staff Category locked to Management and an MGR- employee code.
+    function prepareAddManagerModal() {
+      if (typeof CURRENT_ROLE !== 'undefined' && CURRENT_ROLE === 'manager') {
+        lmsNotify('Managers cannot add Management staff. Please ask the owner.');
+        return;
+      }
+      prepareAddTeacherModal();
+      const mgrId = getNextManagerId();
+      const titleEl = document.getElementById('modalTeacherTitle');
+      if (titleEl) titleEl.innerHTML = '<i class="fa-solid fa-user-tie text-indigo-600"></i> Register Manager Profile (Full Details)';
+      const btnText = document.getElementById('btnSaveTeacherText');
+      if (btnText) btnText.innerText = 'Save Manager & Generate LMS Account';
+      const catSel = document.getElementById('tStaffCategory');
+      if (catSel) { catSel.value = 'management'; catSel.disabled = true; }
+      const badge = document.getElementById('tGeneratedIdBadge');
+      if (badge) badge.innerText = mgrId;
+      const valInput = document.getElementById('tGeneratedIdVal');
+      if (valInput) valInput.value = mgrId;
+      const portalId = document.getElementById('tPortalId');
+      if (portalId) portalId.value = mgrId;
+    }
+
     function prepareAddTeacherModal() {
       const editIdInput = document.getElementById('editTeacherId');
       if (editIdInput) editIdInput.value = '';
@@ -752,6 +835,9 @@
       if (zHostKey) zHostKey.value = '';
       const zAutoSync = document.getElementById('tZoomAutoSync');
       if (zAutoSync) zAutoSync.checked = true;
+
+      clearTeacherExtraFields();
+      syncStaffCategoryAvailability();
 
       const newId = getNextTeacherId();
       const badge = document.getElementById('tGeneratedIdBadge');
@@ -845,6 +931,8 @@
       document.getElementById('tZoomHostKey').value = acc.zoom_host_key || '';
       const autoSyncCheck = document.getElementById('tZoomAutoSync');
       if (autoSyncCheck) autoSyncCheck.checked = true;
+      fillTeacherExtraFields(acc);
+      syncStaffCategoryAvailability();
 
       openModal('modalAddTeacher');
     }
@@ -887,6 +975,8 @@
     window.setStaffDeactivated = setStaffDeactivated;
 
     async function loadTeachers(forceRefresh = false) {
+      const btnAddMgr = document.getElementById('btnAddManager');
+      if (btnAddMgr) btnAddMgr.style.display = (typeof CURRENT_ROLE !== 'undefined' && CURRENT_ROLE === 'manager') ? 'none' : '';
       const container = document.getElementById('teachersGrid');
       if (!container) return;
 
@@ -1234,6 +1324,7 @@
       const zoom_passcode = (document.getElementById('tZoomPasscode')?.value || '').trim();
       const zoom_host_key = (document.getElementById('tZoomHostKey')?.value || '').trim();
       const auto_sync_zoom = document.getElementById('tZoomAutoSync')?.checked;
+      const extraFields = readTeacherExtraFields();
 
       // Phase 3: a teacher default link must be a Zoom link (or a bare
       // meeting code, normalized). Invalid input stops the save before
@@ -1323,7 +1414,8 @@
           zoom_meeting_id,
           zoom_passcode,
           zoom_host_key,
-          employee_type: staffCategoryEmpType
+          employee_type: staffCategoryEmpType,
+          ...extraFields
         });
 
         if (auto_sync_zoom && zoom_link) {
@@ -1400,7 +1492,8 @@
           zoom_meeting_id,
           zoom_passcode,
           zoom_host_key,
-          employee_type: staffCategoryEmpType
+          employee_type: staffCategoryEmpType,
+          ...extraFields
         });
 
         if (auto_sync_zoom && zoom_link) {
@@ -1418,13 +1511,13 @@
         if (password) {
           try {
             if (typeof window.setAccountPasswordViaWorker !== 'function') throw new Error('Password helper unavailable.');
-            await window.setAccountPasswordViaWorker('teacher', insertedId, password);
+            await window.setAccountPasswordViaWorker(staffCategorySel === 'management' ? 'manager' : 'teacher', insertedId, password);
             saveTeacherAccount(insertedId, { hasExplicitPassword: true });
             newPwStatusLine = '🔑 Portal Password: Set — give it to the teacher in person or by phone';
             // Batch 2: show-once for a signed-in manager (see update
             // branch); the form password field is cleared either way.
             if (typeof CURRENT_ROLE !== 'undefined' && CURRENT_ROLE === 'manager' && typeof window.showPasswordOnce === 'function') {
-              window.showPasswordOnce({ label: 'Teacher portal password', username: username, password: password });
+              window.showPasswordOnce({ label: staffCategorySel === 'management' ? 'Manager portal password' : 'Teacher portal password', username: username, password: password });
             }
             const pwFieldI = document.getElementById('tPassword');
             if (pwFieldI) pwFieldI.value = '';
