@@ -820,6 +820,12 @@ if (mergedDeleted.length > 0) {
             showReaderPageError(img, spinner, book, CURRENT_READER_PAGE, 'Session expired. Please log in again.');
             return;
           }
+          if (status) {
+            // Name the HTTP status in the error itself so a screenshot
+            // of the failure carries the diagnosis (no console needed).
+            showReaderPageError(img, spinner, book, CURRENT_READER_PAGE, 'Could not load this page. (HTTP ' + status + ')');
+            return;
+          }
           // Authenticated fetch failed: run the same honest error/fallback decision.
           if (typeof img.onerror === 'function') {
             const handler = img.onerror;
