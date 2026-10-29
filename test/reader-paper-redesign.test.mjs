@@ -116,8 +116,17 @@ check('teacher loader: load sequence guard present', TEACHER.includes('TEACHER_R
 check('parent loader: load sequence guard present', PARENT.includes('PARENT_READER_LOAD_SEQ') && PARENT.includes('seq !== PARENT_READER_LOAD_SEQ'));
 check('admin loader: load sequence guard present', CURR.includes('READER_LOAD_SEQ') && CURR.includes('seq !== READER_LOAD_SEQ'));
 check('teacher onload: success clears a stale error box', fnSeg(TEACHER, 'img.onload = () =>', 400).includes("getElementById('readerPageError')"));
-check('parent onload: success clears a stale error box', PARENT.includes("img.onload = () => { const ebP = document.getElementById('readerPageError')"));
+check('parent onload: success clears a stale error box', PARENT.includes("img.onload = () => { if (PARENT_READER_ERROR_TIMER)") && PARENT.includes("getElementById('parentReaderPageError')"));
 check('admin onload: success clears a stale error box', fnSeg(CURR, 'img.onload = function()', 400).includes("getElementById('readerPageError')"));
+
+
+// ---- Reader error grace period (2026-10-29, late) ----
+check('teacher error: 1.2s grace wrapper present', TEACHER.includes('TEACHER_READER_ERROR_TIMER') && TEACHER.includes('showTeacherReaderPageErrorNow') && TEACHER.includes('}, 1200);'));
+check('parent error: 1.2s grace wrapper present', PARENT.includes('PARENT_READER_ERROR_TIMER') && PARENT.includes('showParentReaderPageErrorNow') && PARENT.includes('}, 1200);'));
+check('admin error: 1.2s grace wrapper present', CURR.includes('READER_ERROR_TIMER') && CURR.includes('showReaderPageErrorNow') && CURR.includes('}, 1200);'));
+check('teacher onload: success cancels a pending error', fnSeg(TEACHER, 'img.onload = () =>', 500).includes('clearTimeout(TEACHER_READER_ERROR_TIMER)'));
+check('parent onload: cancels pending error + hides parent errbox', PARENT.includes('clearTimeout(PARENT_READER_ERROR_TIMER)') && PARENT.includes("getElementById('parentReaderPageError')"));
+check('admin onload: success cancels a pending error', fnSeg(CURR, 'img.onload = function()', 500).includes('clearTimeout(READER_ERROR_TIMER)'));
 
 const failed = results.filter(r => !r.pass);
 console.log(`\n${results.length - failed.length}/${results.length} checks passed`);

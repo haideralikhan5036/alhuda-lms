@@ -2997,6 +2997,7 @@
         img.style.transform = 'none';
         applyParentReaderZoom();
         // Clear any previous honest-error state before rendering the new page.
+        if (typeof PARENT_READER_ERROR_TIMER !== 'undefined' && PARENT_READER_ERROR_TIMER) { clearTimeout(PARENT_READER_ERROR_TIMER); PARENT_READER_ERROR_TIMER = null; }
         const prevErrP = document.getElementById('parentReaderPageError');
         if (prevErrP) prevErrP.style.display = 'none';
         img.style.display = '';
@@ -3022,7 +3023,7 @@
           return;
         }
 
-        img.onload = () => { const ebP = document.getElementById('readerPageError'); if (ebP) ebP.style.display = 'none'; img.style.display = ''; applyParentReaderZoom(); };
+        img.onload = () => { if (PARENT_READER_ERROR_TIMER) { clearTimeout(PARENT_READER_ERROR_TIMER); PARENT_READER_ERROR_TIMER = null; } const ebP = document.getElementById('parentReaderPageError'); if (ebP) ebP.style.display = 'none'; img.style.display = ''; applyParentReaderZoom(); };
         img.onerror = () => {
           img.onerror = null;
           if (!isInteractiveBookP) {
@@ -3106,7 +3107,18 @@
     }
 
     // Honest empty state for authentic custom-book pages that cannot be displayed.
+    let PARENT_READER_ERROR_TIMER = null;
+    // Grace period: a page load that recovers within ~1.2s (loader
+    // retry or the next render) must never flash the error first;
+    // only a failure that is still standing after the grace shows.
     function showParentReaderPageError(img, book, pageNum, reason) {
+      if (PARENT_READER_ERROR_TIMER) clearTimeout(PARENT_READER_ERROR_TIMER);
+      PARENT_READER_ERROR_TIMER = setTimeout(function () {
+        PARENT_READER_ERROR_TIMER = null;
+        showParentReaderPageErrorNow(img, book, pageNum, reason);
+      }, 1200);
+    }
+    function showParentReaderPageErrorNow(img, book, pageNum, reason) {
       if (PARENT_READER_BLOB_URL) {
         try { URL.revokeObjectURL(PARENT_READER_BLOB_URL); } catch (e) {}
         PARENT_READER_BLOB_URL = null;

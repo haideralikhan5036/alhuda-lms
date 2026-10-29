@@ -745,6 +745,7 @@ if (mergedDeleted.length > 0) {
       if (img) {
         if (spinner) spinner.classList.remove('hidden');
         // Clear any previous honest-error state before rendering the new page.
+        if (typeof READER_ERROR_TIMER !== 'undefined' && READER_ERROR_TIMER) { clearTimeout(READER_ERROR_TIMER); READER_ERROR_TIMER = null; }
         const prevErr = document.getElementById('readerPageError');
         if (prevErr) prevErr.style.display = 'none';
         img.style.display = '';
@@ -784,6 +785,7 @@ if (mergedDeleted.length > 0) {
         }
 
         img.onload = function() {
+          if (READER_ERROR_TIMER) { clearTimeout(READER_ERROR_TIMER); READER_ERROR_TIMER = null; }
           const ebA = document.getElementById('readerPageError');
           if (ebA) ebA.style.display = 'none';
           img.style.display = '';
@@ -893,7 +895,18 @@ if (mergedDeleted.length > 0) {
     // Honest empty state for any book page that cannot be displayed
     // (Batch 4, B13: applies to every book, not only custom ones).
     // Never generates placeholder content.
+    let READER_ERROR_TIMER = null;
+    // Grace period: a page load that recovers within ~1.2s (loader
+    // retry or the next render) must never flash the error first;
+    // only a failure that is still standing after the grace shows.
     function showReaderPageError(img, spinner, book, pageNum, reason) {
+      if (READER_ERROR_TIMER) clearTimeout(READER_ERROR_TIMER);
+      READER_ERROR_TIMER = setTimeout(function () {
+        READER_ERROR_TIMER = null;
+        showReaderPageErrorNow(img, spinner, book, pageNum, reason);
+      }, 1200);
+    }
+    function showReaderPageErrorNow(img, spinner, book, pageNum, reason) {
       if (spinner) spinner.classList.add('hidden');
       if (READER_BLOB_URL) {
         try { URL.revokeObjectURL(READER_BLOB_URL); } catch (e) {}
