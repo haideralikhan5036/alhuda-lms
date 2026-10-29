@@ -146,7 +146,8 @@ for (const [id, key, value] of SEED_SETTINGS) {
 }
 {
   const r = await dbPost(TOK.manager, { table: 'system_settings', action: 'select' });
-  check('manager SELECT unchanged (catalog + logo + flag, NO tombstone)', JSON.stringify(keySet(r)) === JSON.stringify(['BOOK_PAGE_custom-1_0', 'alhuda_custom_books', 'alhuda_custom_books_index', 'alhuda_logo', 'fee_tables_v1']), JSON.stringify(keySet(r)));
+  // Phase 4 (audit P3-s): manager now reads the tombstone too.
+  check('manager SELECT (catalog + logo + flag + tombstone, P3-s)', JSON.stringify(keySet(r)) === JSON.stringify(['BOOK_PAGE_custom-1_0', 'alhuda_custom_books', 'alhuda_custom_books_index', 'alhuda_deleted_books', 'alhuda_logo', 'fee_tables_v1']), JSON.stringify(keySet(r)));
 }
 {
   const r = await dbPost(TOK.owner, { table: 'system_settings', action: 'select' });
@@ -163,7 +164,8 @@ for (const [id, key, value] of SEED_SETTINGS) {
   // ONLY the catalog keys — no tombstone, no logo, no flags, no other
   // keys. Parent writes stay denied.
   const r = await dbPost(TOK.parent, { table: 'system_settings', action: 'select' });
-  check('parent SELECT system_settings -> 200 with ONLY catalog keys', r.status === 200 && JSON.stringify(keySet(r)) === JSON.stringify(['BOOK_PAGE_custom-1_0', 'alhuda_custom_books', 'alhuda_custom_books_index']), String(r.status) + ' ' + JSON.stringify(keySet(r)));
+  // Phase 4 (audit P3-s): parent now reads the tombstone too.
+  check('parent SELECT system_settings -> 200 with catalog keys + tombstone (P3-s)', r.status === 200 && JSON.stringify(keySet(r)) === JSON.stringify(['BOOK_PAGE_custom-1_0', 'alhuda_custom_books', 'alhuda_custom_books_index', 'alhuda_deleted_books']), String(r.status) + ' ' + JSON.stringify(keySet(r)));
   const w = await dbPost(TOK.parent, { table: 'system_settings', action: 'insert', values: { id: 'SYS-EVIL-P', key: 'BOOK_PAGE_evil_0', value: 'x' } });
   check('parent INSERT system_settings -> denied', w.status === 403, String(w.status));
 }

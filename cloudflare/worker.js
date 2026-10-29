@@ -734,7 +734,7 @@ async function handleStaffLogin(request, env) {
       }
     } else {
       // manager / teacher: credentials live on the teachers table.
-      const { results } = await db.prepare('SELECT id, full_name, address, notes, status FROM teachers').all();
+      const { results } = await db.prepare('SELECT id, full_name, address, notes, status, witness_name FROM teachers').all();
       for (const t of results || []) {
         const meta = parseJsonField(t.address);
         const notesMeta = parseJsonField(t.notes);
@@ -981,7 +981,7 @@ async function handleSetPassword(request, env) {
     }
 
     // manager / teacher: credentials live on the teachers table.
-    const { results } = await db.prepare('SELECT id, full_name, address, notes FROM teachers').all();
+    const { results } = await db.prepare('SELECT id, full_name, address, notes, witness_name FROM teachers').all();
     for (const t of results || []) {
       const meta = parseJsonField(t.address);
       const notesMeta = parseJsonField(t.notes);
@@ -1167,12 +1167,21 @@ async function forwardEmailViaRelay(env, { to, subject, html, text }) {
     let url = relayUrl;
     let fwd = null;
     for (let hop = 0; hop < 5; hop++) {
-      fwd = await fetch(url, {
-        method: 'POST',
-        redirect: 'manual',
-        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-        body: forwardBody,
-      });
+      // Phase 4 (audit P3-m): bound each relay hop (15s) so a hung
+      // relay cannot hold the request open indefinitely.
+      const relayCtl = new AbortController();
+      const relayTimer = setTimeout(() => relayCtl.abort(), 15000);
+      try {
+        fwd = await fetch(url, {
+          method: 'POST',
+          redirect: 'manual',
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+          body: forwardBody,
+          signal: relayCtl.signal,
+        });
+      } finally {
+        clearTimeout(relayTimer);
+      }
       const loc = fwd.headers.get('location');
       if (fwd.status >= 300 && fwd.status < 400 && loc) {
         try { await fwd.text(); } catch (e2) {}
@@ -1565,7 +1574,9 @@ async function handleTeacherAdvanceClassEmail(request, env) {
   const conductedDate = new Date().toISOString().slice(0, 10);
   const subject = `🌟 Advance Class Completed: ${studentName} (${scheduledDate}) — Al-Huda Islamic Centre`;
   const text = `Assalamu Alaikum wa Rahmatullah ${parentName},\n\nWe pray you are in the best of health and Iman.\n\nThis is an official confirmation from Al-Huda Islamic Centre that the class for ${studentName} originally scheduled for ${scheduledDate} has been successfully conducted in advance today (${conductedDate}).\n\n══════════════════════════════════════\nADVANCE CLASS SESSION DETAILS:\n══════════════════════════════════════\n• Student Name: ${studentName}\n• Instructor: ${teacherName}\n• Course Material: ${bookTitle}${pageStr ? ` (Page ${pageStr}${lineRange ? ', Lines ' + lineRange : ''})` : ''}\n• Scheduled Class Date: ${scheduledDate}\n• Conducted & Completed On: ${conductedDate}\n• Performance: ${sabaqResult} (${rating} / 5 Stars)\n${remarks ? `• Teacher Remarks: ${remarks}\n` : ''}══════════════════════════════════════\n\nThe attendance and lesson Sabaq records have been updated in your Parent Portal.\n\nJazakumullahu Khairan!\nAl-Huda Islamic Centre Management\nOfficial Accounts Email: ceoislamiccentre@gmail.com`;
-  const html = text.replace(/\n/g, '<br/>');
+  // Phase 4 (audit P3-d): HTML-escape the interpolated names/remarks
+  // before the <br/> conversion — the plain-text body stays untouched.
+  const html = text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br/>');
 
   const result = await forwardEmailViaRelay(env, { to, subject, html, text });
   // Metadata only: student id + relay status. NEVER the address or body.
@@ -2039,12 +2050,32 @@ function checkTableAccess(role, table, action) {
 // students. Teachers: students assigned via students.assigned_teacher_id OR
 // via class_schedules.teacher_id (both assignment paths exist in the app).
 async function resolveScopeIds(db, role, sub) {
-  const scope = { studentIds: [], managerIds: [] };
+  const scope = { studentIds: [], managerIds: [], teacherIds: [] };
   if (!db) return scope;
   try {
     if (role === 'parent') {
       const { results } = await db.prepare('SELECT id FROM students WHERE family_id = ?').bind(sub).all();
       scope.studentIds = (results || []).map((r) => String(r.id));
+      // Phase 4 (audit P3-a): the parent may see ONLY their own
+      // children's teachers (assigned + scheduled + trial teachers),
+      // not every teacher's name/Zoom link in the academy. Fail closed:
+      // a failed lookup leaves the list empty.
+      try {
+        const tids = new Set();
+        const addT = (rows) => { for (const r of (rows || [])) { if (r && r.tid) tids.add(String(r.tid)); } };
+        const a = await db.prepare('SELECT DISTINCT assigned_teacher_id AS tid FROM students WHERE family_id = ?').bind(sub).all();
+        addT(a.results);
+        const t = await db.prepare('SELECT DISTINCT teacher_id AS tid FROM trial_students WHERE family_id = ?').bind(sub).all();
+        addT(t.results);
+        if (scope.studentIds.length > 0) {
+          const ph = scope.studentIds.map(() => '?').join(', ');
+          const c = await db.prepare(`SELECT DISTINCT teacher_id AS tid FROM class_schedules WHERE student_id IN (${ph})`).bind(...scope.studentIds).all();
+          addT(c.results);
+        }
+        scope.teacherIds = [...tids];
+      } catch (e2) {
+        scope.teacherIds = [];
+      }
     } else if (role === 'teacher') {
       const { results: a } = await db.prepare('SELECT id FROM students WHERE assigned_teacher_id = ?').bind(sub).all();
       const { results: b } = await db.prepare('SELECT DISTINCT student_id AS id FROM class_schedules WHERE teacher_id = ?').bind(sub).all();
@@ -2237,7 +2268,7 @@ function isCatalogSettingsKey(key) {
 // include the flags or the logo — toggling the flags is owner-only.
 function isManagerReadableSettingsKey(key) {
   const k = String(key || '');
-  return isCatalogSettingsKey(k) || k === 'alhuda_logo' || k === 'fee_tables_v1' || isFeeReadFlagKey(k);
+  return isCatalogSettingsKey(k) || k === 'alhuda_logo' || k === 'fee_tables_v1' || isFeeReadFlagKey(k) || k === 'alhuda_deleted_books';
 }
 
 // URGENT FIX (Issue 2): keys a teacher may READ in system_settings = the
@@ -2263,7 +2294,10 @@ function isTeacherReadableSettingsKey(key) {
 // denied for parents, exactly as before. WRITES stay denied in
 // checkTableAccess.
 function isParentReadableSettingsKey(key) {
-  return isCatalogSettingsKey(key) || isFeeReadFlagKey(key);
+  // Phase 4 (audit P3-s): + the deleted-books tombstone, so a deleted
+  // custom book stops rendering on parent devices too (the key carries
+  // only book ids — no contacts or credentials).
+  return isCatalogSettingsKey(key) || isFeeReadFlagKey(key) || key === 'alhuda_deleted_books';
 }
 
 // Remove contact keys whose value is exactly the mask placeholder. A
@@ -2987,7 +3021,7 @@ function rowInScope(role, sub, scope, table, row) {
       case 'attendance_logs':
       case 'leave_requests':
       case 'class_schedules': return scope.studentIds.includes(String(row.student_id));
-      case 'teachers': return true; // reduced to safe subset during scrub
+      case 'teachers': return scope.teacherIds.includes(String(row.id)); // own children's teachers only (P3-a); still reduced to the safe subset during scrub
       case 'system_settings':
         // Lesson History page links: catalog keys + finance read-switch
         // flags for parents.
@@ -3384,7 +3418,9 @@ async function isLessonImageKeyReadable(db, role, sub, key) {
         const parsed = typeof notes === 'string' ? JSON.parse(notes) : notes;
         if (parsed && parsed.image_key === key) return true;
       } catch (e) {}
-      if (typeof notes === 'string' && notes.includes(key)) return true;
+      // Phase 4 (audit P3-g): NO substring fallback — a key merely
+      // mentioned inside lesson-notes text must not grant the image.
+      // Only the exact parsed image_key above authorizes the read.
     }
     return false;
   } catch (e) {

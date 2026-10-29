@@ -425,8 +425,9 @@ for (const [table, id] of [['families', 'FAM-1'], ['students', 'STU-1'], ['teach
 {
   const r = await dbPost(TOK.manager, { table: 'system_settings', action: 'select' });
   const keys = ((r.data && r.data.data) || []).map((x) => x.key).sort();
-  check('B2 manager SELECT system_settings returns ONLY catalog/logo rows',
-    r.status === 200 && keys.join(',') === 'BOOK_PAGE_book1_0,alhuda_custom_books,alhuda_custom_books_index,alhuda_logo',
+  // Phase 4 (audit P3-s): the tombstone is manager-readable now too.
+  check('B2 manager SELECT system_settings returns ONLY catalog/logo/tombstone rows',
+    r.status === 200 && keys.join(',') === 'BOOK_PAGE_book1_0,alhuda_custom_books,alhuda_custom_books_index,alhuda_deleted_books,alhuda_logo',
     'keys=' + keys.join(','));
   const own = await dbPost(TOK.owner, { table: 'system_settings', action: 'select' });
   const okeys = ((own.data && own.data.data) || []).map((x) => x.key);
