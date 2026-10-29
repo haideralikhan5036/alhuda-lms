@@ -23,13 +23,14 @@
 <body>
 <div class="card">
   <h1>Reader Self-Test</h1>
-  <p class="sub">Ye page aap ke isi browser ke andar book page load karke har step ka result yahin likhta hai. Koi password ya token screen par nahi aata.</p>
+  <p class="sub">Ye page aap ke isi browser ke andar har qisam ki request test karke result yahin likhta hai. Koi password ya token screen par nahi aata.</p>
   <button id="runBtn" type="button">Run test</button>
   <div id="steps"></div>
   <img id="testImg" alt="Loaded page preview">
 </div>
 <script>
 (function () {
+  var WORKER = 'https://alhuda-lms.ceoislamiccentre.workers.dev';
   var stepsEl = document.getElementById('steps');
   function addStep(title) {
     var d = document.createElement('div');
@@ -82,6 +83,16 @@
     } catch (e) {}
     return null;
   }
+  async function probe(step, url, opts) {
+    try {
+      var r = await fetch(url, opts || {});
+      step.ok('Server ne jawab diya: HTTP ' + r.status);
+      return r;
+    } catch (e) {
+      step.bad('Fetch FAIL — server tak nahi pahuncha', e.name + ': ' + e.message);
+      return null;
+    }
+  }
   async function run() {
     stepsEl.innerHTML = '';
     document.getElementById('testImg').style.display = 'none';
@@ -89,49 +100,44 @@
     var sEnv = addStep('1. Browser');
     sEnv.ok('online = ' + navigator.onLine + ', display scale (dpr) = ' + (window.devicePixelRatio || 1));
 
-    var sTok = addStep('2. Login token (portal jaisa hi dhoondha)');
-    var found = findToken();
-    if (found && found.error) { sTok.bad('Token nahi mila', found.error); return; }
-    if (!found) { sTok.bad('Token NAHI mila — is tab mein login token maujood nahi hai'); return; }
-    sTok.ok('Token mila — role: ' + found.role + ' (length ' + found.token.length + ')');
-
-    var sUrl = addStep('3. Book page ka address (is browser ke saved data se)');
     var pick = pickPageUrl();
-    if (!pick) { sUrl.bad('Saved books mein koi page address nahi mila'); return; }
-    sUrl.ok(pick.title + ' — page ' + pick.page, pick.url);
 
-    var sA = addStep('4. Baghair login ke page mangna (401 aana chahiye)');
-    try {
-      var rA = await fetch(pick.url, {});
-      sA.ok('Server ne jawab diya: HTTP ' + rA.status + (rA.status === 401 ? ' (bilkul expected)' : ''));
-    } catch (e) {
-      sA.bad('Fetch FAIL ho gaya — server tak pahuncha hi nahi', e.name + ': ' + e.message);
-      return;
-    }
+    var sH = addStep('2. Worker ki chhoti file (health) program se mangna');
+    await probe(sH, WORKER + '/api/health');
 
-    var sB = addStep('5. Login token ke saath page mangna (200 aana chahiye)');
-    var blob = null;
-    try {
-      var rB = await fetch(pick.url, { headers: { 'Authorization': 'Bearer ' + found.token } });
-      if (!rB.ok) { sB.bad('Server ne mana kar diya: HTTP ' + rB.status); return; }
-      blob = await rB.blob();
-      sB.ok('HTTP 200 — file aa gayi', 'type: ' + blob.type + ', size: ' + blob.size + ' bytes');
-    } catch (e) {
-      sB.bad('Fetch FAIL ho gaya', e.name + ': ' + e.message);
-      return;
-    }
+    var sS = addStep('3. Book page program se mangna (baghair login — 401 aana chahiye)');
+    if (pick) await probe(sS, pick.url);
+    else sS.bad('Saved books mein koi page address nahi mila');
 
-    var sC = addStep('6. Aayi hui file ko tasveer ki tarah kholna');
-    var objUrl = URL.createObjectURL(blob);
-    var img = document.getElementById('testImg');
-    img.onload = function () {
-      sC.ok('Tasveer KHUL gayi — ' + img.naturalWidth + 'x' + img.naturalHeight);
-      img.style.display = 'block';
-    };
-    img.onerror = function () {
-      sC.bad('File aayi lekin tasveer NAHI khuli (decode fail)');
-    };
-    img.src = objUrl;
+    var sC = addStep('4. Doosri website se program ke zariye file mangna (control test)');
+    await probe(sC, 'https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/package.json');
+
+    var sI = addStep('5. Book page ko seedha tasveer ki tarah kholna');
+    if (pick) {
+      var img = document.getElementById('testImg');
+      var done = false;
+      img.onload = function () { if (!done) { done = true; sI.ok('Tasveer seedha KHUL gayi — ' + img.naturalWidth + 'x' + img.naturalHeight); img.style.display = 'block'; } };
+      img.onerror = function () { if (!done) { done = true; sI.bad('Tasveer seedha bhi NAHI khuli'); } };
+      img.src = pick.url;
+      setTimeout(function () { if (!done) { done = true; sI.bad('Tasveer 10 second mein nahi aayi (timeout)'); } }, 10000);
+    } else sI.bad('Page address nahi mila');
+
+    var sTok = addStep('6. Login token');
+    var found = findToken();
+    if (found && found.error) sTok.bad('Token nahi mila', found.error);
+    else if (!found) sTok.bad('Token NAHI mila — is tab mein login token maujood nahi hai');
+    else sTok.ok('Token mila — role: ' + found.role + ' (length ' + found.token.length + ')');
+
+    var sB = addStep('7. Login token ke saath book page (200 aana chahiye)');
+    if (found && found.token && pick) {
+      var r = await probe(sB, pick.url, { headers: { 'Authorization': 'Bearer ' + found.token } });
+      if (r && r.ok) {
+        try {
+          var blob = await r.blob();
+          sB.ok('HTTP 200 — file aa gayi', 'type: ' + blob.type + ', size: ' + blob.size + ' bytes');
+        } catch (e) { sB.bad('File ka data parhne mein fail', e.name + ': ' + e.message); }
+      }
+    } else sB.bad('Token ya page address nahi mila — ye step nahi chal saka');
   }
   document.getElementById('runBtn').addEventListener('click', run);
 })();
