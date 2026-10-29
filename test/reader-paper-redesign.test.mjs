@@ -54,6 +54,10 @@ for (const [label, src] of [['teacher loader', TEACHER], ['admin loader', CURR],
   check(label + ': fetch failure carries the HTTP status', src.includes('err.status = res.status') && src.includes('onFetchError(err && err.status)'));
   check(label + ': 401 shows the session-expired message', src.includes("if (status === 401)") && src.includes("'Session expired. Please log in again.'"));
 }
+for (const [label, src] of [['teacher', TEACHER], ['admin', CURR], ['parent', PARENT]]) {
+  check(label + ': non-401 fetch failures name the HTTP status in the error',
+    src.includes("'Could not load this page. (HTTP ' + status + ')'"));
+}
 check('honest load errors preserved (no fabricated pages)',
   TEACHER.includes("'Could not load this page.'") && PARENT.includes("'Could not load this page.'") && CURR.includes("'Could not load this page.'"));
 
