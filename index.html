@@ -343,17 +343,17 @@
       background-color: #ffffff !important;
     }
 
-    /* Dark Mode Reader / Modal Selects */
-    .bg-slate-900 select, .bg-slate-950 select, #modalDigitalBookReader select {
+    /* Dark Mode Modal Selects (book reader is light/paper now) */
+    .bg-slate-900 select, .bg-slate-950 select {
       background-color: #0f172a !important;
       border-color: #334155 !important;
       color: #f8fafc !important;
       background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%2334d399' stroke-width='2.5'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E") !important;
     }
-    .bg-slate-900 select:hover, .bg-slate-950 select:hover, #modalDigitalBookReader select:hover {
+    .bg-slate-900 select:hover, .bg-slate-950 select:hover {
       border-color: #059669 !important;
     }
-    .bg-slate-900 select:focus, .bg-slate-950 select:focus, #modalDigitalBookReader select:focus {
+    .bg-slate-900 select:focus, .bg-slate-950 select:focus {
       border-color: #34d399 !important;
       box-shadow: 0 0 0 3px rgba(52, 211, 153, 0.25) !important;
     }
@@ -4999,23 +4999,23 @@
   <!-- ============================================================= -->
   <!-- MODAL: IN-LMS PROFESSIONAL DOCUMENT & COURSE MATERIAL VIEWER -->
   <!-- ============================================================= -->
-  <div id="modalDigitalBookReader" class="fixed inset-0 bg-black/90 backdrop-blur-md z-[95] hidden items-center justify-center p-1 sm:p-3">
-    <div id="readerModalContainer" class="bg-[#18181b] rounded-xl sm:rounded-2xl max-w-6xl w-full h-[96vh] flex flex-col shadow-2xl border border-zinc-800 overflow-hidden text-zinc-100 animate-scaleIn">
+  <div id="modalDigitalBookReader" class="fixed inset-0 bg-stone-900/60 backdrop-blur-md z-[95] hidden items-center justify-center p-1 sm:p-3">
+    <div id="readerModalContainer" class="bg-[#faf6ee] rounded-xl sm:rounded-2xl max-w-6xl w-full h-[96vh] flex flex-col shadow-2xl border border-stone-200 overflow-hidden text-stone-800 animate-scaleIn">
       
       <!-- TOP DOCUMENT TOOLBAR -->
-      <div class="bg-zinc-900/95 px-3 sm:px-4 py-2.5 border-b border-zinc-800/80 flex items-center justify-between flex-wrap gap-2 z-20 shrink-0">
+      <div class="bg-white px-3 sm:px-4 py-2.5 border-b border-stone-200 flex items-center justify-between flex-wrap gap-2 z-20 shrink-0">
         
         <!-- Left: Document Identity -->
         <div class="flex items-center gap-2.5 min-w-0 max-w-[280px] sm:max-w-sm">
-          <div class="w-8 h-8 rounded-lg bg-zinc-800 text-emerald-400 flex items-center justify-center font-bold text-sm shrink-0 border border-zinc-700/60" id="readerBookIcon">
+          <div class="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-700 flex items-center justify-center font-bold text-sm shrink-0 border border-stone-200" id="readerBookIcon">
             <i class="fa-solid fa-book-open"></i>
           </div>
           <div class="min-w-0">
             <div class="flex items-center gap-2">
-              <h3 class="font-bold text-xs sm:text-sm text-zinc-100 truncate tracking-tight" id="readerBookTitle">Course Material</h3>
-              <span id="readerCategoryBadge" class="hidden sm:inline-block px-2 py-0.5 rounded text-[10px] font-medium bg-zinc-800 text-zinc-400 border border-zinc-700">Syllabus</span>
+              <h3 class="font-bold text-xs sm:text-sm text-stone-800 truncate tracking-tight" id="readerBookTitle">Course Material</h3>
+              <span id="readerCategoryBadge" class="hidden sm:inline-block px-2 py-0.5 rounded text-[10px] font-medium bg-stone-100 text-stone-500 border border-stone-300">Syllabus</span>
             </div>
-            <p class="text-[11px] text-zinc-400 truncate mt-0.5" id="readerChapterDesc">Page 1</p>
+            <p class="text-[11px] text-stone-500 truncate mt-0.5" id="readerChapterDesc">Page 1</p>
           </div>
         </div>
 
@@ -5023,62 +5023,62 @@
         <div class="flex items-center gap-1.5 sm:gap-2">
           
           <!-- Page Navigation Group -->
-          <div class="flex items-center bg-zinc-800/90 rounded-lg p-0.5 border border-zinc-700/70 text-xs">
-            <button onclick="changeReaderPage(-1)" aria-label="Previous page" class="w-11 h-11 rounded hover:bg-zinc-700 text-zinc-300 hover:text-white flex items-center justify-center transition" title="Previous Page (Left Arrow)">
+          <div class="flex items-center bg-stone-100 rounded-lg p-0.5 border border-stone-200 text-xs">
+            <button onclick="changeReaderPage(-1)" aria-label="Previous page" class="w-11 h-11 rounded hover:bg-stone-200 text-stone-500 hover:text-stone-900 flex items-center justify-center transition" title="Previous Page (Left Arrow)">
               <i class="fa-solid fa-chevron-left text-[11px]"></i>
             </button>
-            <div class="px-1.5 py-0.5 font-mono text-[11px] font-semibold text-zinc-200" id="readerPageIndicatorTop">
+            <div class="px-1.5 py-0.5 font-mono text-[11px] font-semibold text-stone-700" id="readerPageIndicatorTop">
               1 / 32
             </div>
-            <button onclick="changeReaderPage(1)" aria-label="Next page" class="w-11 h-11 rounded hover:bg-zinc-700 text-zinc-300 hover:text-white flex items-center justify-center transition" title="Next Page (Right Arrow)">
+            <button onclick="changeReaderPage(1)" aria-label="Next page" class="w-11 h-11 rounded hover:bg-stone-200 text-stone-500 hover:text-stone-900 flex items-center justify-center transition" title="Next Page (Right Arrow)">
               <i class="fa-solid fa-chevron-right text-[11px]"></i>
             </button>
           </div>
 
           <!-- Jump To Chapter / Page Selector -->
-          <select id="readerJumpSelect" onchange="jumpToReaderPage(this.value)" class="hidden md:inline-block bg-zinc-800 text-zinc-200 text-xs font-medium rounded-lg px-2.5 py-1.5 border border-zinc-700 focus:outline-emerald-500 cursor-pointer max-w-[170px] truncate" title="Jump to section">
+          <select id="readerJumpSelect" onchange="jumpToReaderPage(this.value)" class="hidden md:inline-block bg-stone-100 text-stone-700 text-xs font-medium rounded-lg px-2.5 py-1.5 border border-stone-300 focus:outline-emerald-500 cursor-pointer max-w-[170px] truncate" title="Jump to section">
             <!-- Dynamically populated -->
           </select>
 
-          <div class="hidden sm:block w-[1px] h-5 bg-zinc-700/60 mx-0.5"></div>
+          <div class="hidden sm:block w-[1px] h-5 bg-stone-200 mx-0.5"></div>
 
           <!-- Zoom & Display Modes -->
-          <div class="flex items-center bg-zinc-800/90 rounded-lg p-0.5 border border-zinc-700/70 text-xs font-mono">
-            <button onclick="changeReaderZoom(-0.15)" aria-label="Zoom out" class="w-11 h-11 rounded hover:bg-zinc-700 text-zinc-300 hover:text-white flex items-center justify-center transition" title="Zoom Out (Ctrl - or Ctrl + Wheel Down)">
+          <div class="flex items-center bg-stone-100 rounded-lg p-0.5 border border-stone-200 text-xs font-mono">
+            <button onclick="changeReaderZoom(-0.15)" aria-label="Zoom out" class="w-11 h-11 rounded hover:bg-stone-200 text-stone-500 hover:text-stone-900 flex items-center justify-center transition" title="Zoom Out (Ctrl - or Ctrl + Wheel Down)">
               <i class="fa-solid fa-minus text-[11px]"></i>
             </button>
-            <button onclick="resetReaderZoom()" aria-label="Reset zoom" class="px-3 min-h-[44px] text-[11px] font-bold text-zinc-200 hover:text-white hover:bg-zinc-700 rounded transition min-w-[42px] text-center" title="Reset Zoom (100%)">
+            <button onclick="resetReaderZoom()" aria-label="Reset zoom" class="px-3 min-h-[44px] text-[11px] font-bold text-stone-700 hover:text-stone-900 hover:bg-stone-200 rounded transition min-w-[42px] text-center" title="Reset Zoom (100%)">
               <span id="readerZoomLevel">100%</span>
             </button>
-            <button onclick="changeReaderZoom(0.15)" aria-label="Zoom in" class="w-11 h-11 rounded hover:bg-zinc-700 text-zinc-300 hover:text-white flex items-center justify-center transition" title="Zoom In (Ctrl + or Ctrl + Wheel Up)">
+            <button onclick="changeReaderZoom(0.15)" aria-label="Zoom in" class="w-11 h-11 rounded hover:bg-stone-200 text-stone-500 hover:text-stone-900 flex items-center justify-center transition" title="Zoom In (Ctrl + or Ctrl + Wheel Up)">
               <i class="fa-solid fa-plus text-[11px]"></i>
             </button>
           </div>
 
-          <button onclick="fitReaderWidth()" aria-label="Fit to width" class="hidden sm:flex w-11 h-11 rounded-lg bg-zinc-800/90 hover:bg-zinc-700 text-zinc-300 hover:text-white items-center justify-center border border-zinc-700/70 transition" title="Fit to Width">
+          <button onclick="fitReaderWidth()" aria-label="Fit to width" class="hidden sm:flex w-11 h-11 rounded-lg bg-stone-100 hover:bg-stone-200 text-stone-500 hover:text-stone-900 items-center justify-center border border-stone-200 transition" title="Fit to Width">
             <i class="fa-solid fa-arrows-left-right-to-line text-[11px]"></i>
           </button>
-          <button onclick="fitReaderPage()" aria-label="Fit to page" class="hidden sm:flex w-11 h-11 rounded-lg bg-zinc-800/90 hover:bg-zinc-700 text-zinc-300 hover:text-white items-center justify-center border border-zinc-700/70 transition" title="Fit to Page">
+          <button onclick="fitReaderPage()" aria-label="Fit to page" class="hidden sm:flex w-11 h-11 rounded-lg bg-stone-100 hover:bg-stone-200 text-stone-500 hover:text-stone-900 items-center justify-center border border-stone-200 transition" title="Fit to Page">
             <i class="fa-solid fa-expand text-[11px]"></i>
           </button>
         </div>
 
         <!-- Right: Window Actions -->
         <div class="flex items-center gap-1.5">
-          <button onclick="toggleReaderFullscreen()" aria-label="Toggle fullscreen" class="w-11 h-11 rounded-lg bg-zinc-800/80 hover:bg-zinc-700 text-zinc-300 hover:text-white flex items-center justify-center transition border border-zinc-700/60" title="Toggle Fullscreen (F)">
+          <button onclick="toggleReaderFullscreen()" aria-label="Toggle fullscreen" class="w-11 h-11 rounded-lg bg-white hover:bg-stone-200 text-stone-500 hover:text-stone-900 flex items-center justify-center transition border border-stone-200" title="Toggle Fullscreen (F)">
             <i class="fa-solid fa-maximize text-xs"></i>
           </button>
-          <button onclick="closeDigitalBookReader()" aria-label="Close viewer" class="w-11 h-11 rounded-lg bg-zinc-800/80 hover:bg-zinc-700 text-zinc-300 hover:text-rose-400 flex items-center justify-center transition font-bold text-lg border border-zinc-700/60" title="Close Viewer (Esc)">
+          <button onclick="closeDigitalBookReader()" aria-label="Close viewer" class="w-11 h-11 rounded-lg bg-white hover:bg-stone-200 text-stone-500 hover:text-rose-400 flex items-center justify-center transition font-bold text-lg border border-stone-200" title="Close Viewer (Esc)">
             &times;
           </button>
         </div>
       </div>
 
       <!-- MAIN DOCUMENT VIEWING STAGE -->
-      <div class="flex-1 bg-[#09090b] flex items-center justify-between p-2 sm:p-6 overflow-hidden relative select-none" id="readerStage">
+      <div class="flex-1 bg-[#eae1cf] flex items-center justify-between p-2 sm:p-6 overflow-hidden relative select-none" id="readerStage">
         
         <!-- Left Side Page Turn Button (Discreet & Neutral) -->
-        <button onclick="changeReaderPage(-1)" id="btnReaderPrevFloating" class="z-20 w-9 h-9 sm:w-11 sm:h-11 rounded-full bg-zinc-900/80 hover:bg-zinc-800 text-zinc-300 hover:text-white shadow-xl flex items-center justify-center transition backdrop-blur-sm border border-zinc-700/60" title="Previous Page (Left Arrow)">
+        <button onclick="changeReaderPage(-1)" id="btnReaderPrevFloating" class="z-20 w-9 h-9 sm:w-11 sm:h-11 rounded-full bg-white/95 hover:bg-stone-100 text-stone-500 hover:text-stone-900 shadow-xl flex items-center justify-center transition backdrop-blur-sm border border-stone-200" title="Previous Page (Left Arrow)">
           <i class="fa-solid fa-chevron-left text-xs sm:text-sm"></i>
         </button>
 
@@ -5086,21 +5086,21 @@
         <div class="flex-1 h-full flex items-center justify-center overflow-auto p-1 relative" id="readerContentArea">
           
           <!-- Loading Spinner -->
-          <div id="readerLoadingSpinner" class="hidden absolute inset-0 flex flex-col items-center justify-center bg-zinc-950/70 backdrop-blur-xs z-30">
+          <div id="readerLoadingSpinner" class="hidden absolute inset-0 flex flex-col items-center justify-center bg-[#faf6ee]/85 backdrop-blur-xs z-30">
             <i class="fa-solid fa-circle-notch fa-spin text-2xl text-emerald-400 mb-2"></i>
-            <span class="text-xs text-zinc-400 font-medium">Loading document page...</span>
+            <span class="text-xs text-stone-500 font-medium">Loading document page...</span>
           </div>
 
           <!-- 1. IMAGE-BASED DOCUMENT STAGE (Realistic Paper Look) -->
           <div id="readerImageStage" class="min-h-full min-w-full flex items-center justify-center p-2 sm:p-4 overflow-visible">
             <div id="readerCanvasWrapper" class="relative inline-block max-h-[80vh] max-w-full origin-center select-none">
               <img id="readerPageImg" src="" alt="Document Page" 
-                class="max-h-[80vh] w-auto max-w-full rounded shadow-[0_15px_35px_rgba(0,0,0,0.5),0_0_0_1px_rgba(255,255,255,0.08)] object-contain bg-white block select-none pointer-events-none transition-shadow" />
+                class="max-h-[80vh] w-auto max-w-full rounded shadow-[0_24px_45px_rgba(74,60,35,0.35),0_0_0_1px_rgba(74,60,35,0.10)] object-contain bg-white block select-none pointer-events-none transition-shadow" />
             </div>
           </div>
 
           <!-- 2. TEXT-BASED READABLE STAGE (Tafseer / Hadith) -->
-          <div id="readerTextStage" class="hidden w-full max-w-3xl h-full overflow-y-auto p-5 sm:p-8 bg-zinc-900/95 rounded-xl border border-zinc-800 text-zinc-200 space-y-4 shadow-xl">
+          <div id="readerTextStage" class="hidden w-full max-w-3xl h-full overflow-y-auto p-5 sm:p-8 bg-white rounded-xl border border-stone-200 text-stone-700 space-y-4 shadow-xl">
             <div id="readerTextContent">
               <!-- Dynamically populated for text materials -->
             </div>
@@ -5116,20 +5116,20 @@
         </div>
 
         <!-- Right Side Page Turn Button (Discreet & Neutral) -->
-        <button onclick="changeReaderPage(1)" id="btnReaderNextFloating" class="z-20 w-9 h-9 sm:w-11 sm:h-11 rounded-full bg-zinc-900/80 hover:bg-zinc-800 text-zinc-300 hover:text-white shadow-xl flex items-center justify-center transition backdrop-blur-sm border border-zinc-700/60" title="Next Page (Right Arrow)">
+        <button onclick="changeReaderPage(1)" id="btnReaderNextFloating" class="z-20 w-9 h-9 sm:w-11 sm:h-11 rounded-full bg-white/95 hover:bg-stone-100 text-stone-500 hover:text-stone-900 shadow-xl flex items-center justify-center transition backdrop-blur-sm border border-stone-200" title="Next Page (Right Arrow)">
           <i class="fa-solid fa-chevron-right text-xs sm:text-sm"></i>
         </button>
       </div>
 
       <!-- BOTTOM SCRUB NAVIGATION BAR -->
-      <div class="bg-zinc-900/95 px-4 py-2 border-t border-zinc-800 flex items-center justify-between gap-3 text-xs font-medium z-20 shrink-0">
-        <button onclick="changeReaderPage(-1)" id="btnReaderPrevBottom" class="px-3 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-300 hover:text-white flex items-center gap-1.5 transition">
+      <div class="bg-white px-4 py-2 border-t border-stone-200 flex items-center justify-between gap-3 text-xs font-medium z-20 shrink-0">
+        <button onclick="changeReaderPage(-1)" id="btnReaderPrevBottom" class="px-3 py-1.5 rounded-lg bg-stone-100 hover:bg-stone-200 text-stone-500 hover:text-stone-900 flex items-center gap-1.5 transition">
           <i class="fa-solid fa-chevron-left text-[10px]"></i> <span class="hidden sm:inline">Previous</span>
         </button>
 
         <div class="flex items-center gap-3 flex-1 justify-center max-w-xs sm:max-w-md">
-          <span class="font-mono text-[11px] text-zinc-400 whitespace-nowrap" id="readerPageIndicator">Page 1 of 32</span>
-          <input type="range" id="readerPageSlider" min="1" max="32" value="1" oninput="jumpToReaderPage(this.value)" class="w-full accent-emerald-500 cursor-pointer h-1.5 bg-zinc-800 rounded-lg">
+          <span class="font-mono text-[11px] text-stone-500 whitespace-nowrap" id="readerPageIndicator">Page 1 of 32</span>
+          <input type="range" id="readerPageSlider" min="1" max="32" value="1" oninput="jumpToReaderPage(this.value)" class="w-full accent-emerald-500 cursor-pointer h-1.5 bg-stone-200 rounded-lg">
         </div>
 
         <button onclick="changeReaderPage(1)" id="btnReaderNextBottom" class="px-3 py-1.5 rounded-lg bg-emerald-700 hover:bg-emerald-600 text-white flex items-center gap-1.5 transition font-semibold">
