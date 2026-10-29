@@ -257,8 +257,18 @@ fakeDb.seed('INSERT INTO salary_slips (id, teacher_id, period, slip_no, month_la
   const TEACHER_HTML = fs.readFileSync(path.join(REPO_ROOT, 'teacher.html'), 'utf8');
   check('C teacher.html loads fee-tables.js after cloudflare-db.js',
     TEACHER_HTML.indexOf('js/cloudflare-db.js') > -1 && TEACHER_HTML.indexOf('js/fee-tables.js') > TEACHER_HTML.indexOf('js/cloudflare-db.js'));
-  check('C teacher.html salary switch reads salary_read_v1 via FeeTables',
-    TEACHER_HTML.includes('READ_FLAG_SALARY') && TEACHER_HTML.includes('loadSlipsForTeacher') && TEACHER_HTML.includes('diffSlipLists'));
+  // Salary-advance workflow (Batch B) deliberately changed this: the
+  // teacher's OWN voucher list no longer consults the salary_read_v1
+  // flag (default off) — that flag-gated read was the preview's
+  // staleness root cause (an admin edit landing in the ungated store
+  // stayed invisible). The list now always merges the table + blob
+  // stores newest-wins via FeeTables.mergeSlipLists. The flag itself
+  // still exists (fee-tables.js READ_FLAG_SALARY + diffSlipLists) and
+  // still gates the Family 360 / admin compare paths; only the
+  // teacher's own list is ungated. The worker flag allowlist check
+  // below is unchanged.
+  check('C teacher.html salary list merges table + blob newest-wins (flag ungated for own list)',
+    TEACHER_HTML.includes('loadSlipsForTeacher') && TEACHER_HTML.includes('mergeSlipLists') && !/loadTeacherPreviousSalaries[\s\S]{0,4000}getReadMode/.test(TEACHER_HTML));
   const P360 = fs.readFileSync(path.join(REPO_ROOT, 'js/profiles360.js'), 'utf8');
   check('C profiles360 360 list uses unionTableWithLegacy', P360.includes('unionTableWithLegacy'));
   const WORKER = fs.readFileSync(path.join(REPO_ROOT, 'cloudflare/worker.js'), 'utf8');

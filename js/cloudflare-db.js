@@ -23,6 +23,7 @@
     'payments',
     'salary_slips',
     'salary_adjustments',
+    'advance_requests',
     'leave_requests',
     'trial_students',
     'system_settings'

@@ -79,6 +79,37 @@
           }
         });
 
+        // Salary-advance workflow (Batch B): pending advance requests
+        // join the SAME queue, so the nav badge, the top-circle dot,
+        // and the Requests modal all count them with no second
+        // notification system. A failed fetch skips advances only —
+        // the leave/reschedule queue above is never affected.
+        try {
+          if (typeof db !== 'undefined' && db) {
+            const advRes = await db.from('advance_requests').select('*').eq('status', 'Pending').order('requested_at', { ascending: true });
+            const advRows = (advRes && !advRes.error && Array.isArray(advRes.data)) ? advRes.data : [];
+            if (advRows.length) {
+              let teacherNames = {};
+              try {
+                const tRes = await db.from('teachers').select('id, full_name');
+                if (tRes && !tRes.error && Array.isArray(tRes.data)) {
+                  tRes.data.forEach((t) => { if (t && t.id) teacherNames[String(t.id)] = t.full_name || ''; });
+                }
+              } catch (e) {}
+              advRows.forEach((r) => {
+                if (!r || !r.id) return;
+                PENDING_TEACHER_REQUESTS.push({
+                  requestType: 'advance_salary',
+                  teacher: { id: r.teacher_id, full_name: teacherNames[String(r.teacher_id)] || r.teacher_name || 'Teacher' },
+                  request: r
+                });
+              });
+            }
+          }
+        } catch (advErr) {
+          console.warn('[Teacher Requests] advance requests skipped:', advErr);
+        }
+
         // Update nav badge
         const navLeaveBadge = document.getElementById('navLeaveCountBadge');
         if (navLeaveBadge) navLeaveBadge.innerText = totalActiveLeaves;
@@ -297,6 +328,11 @@
         `;
       } else {
         container.innerHTML = PENDING_TEACHER_REQUESTS.map(item => {
+          // Salary-advance workflow (Batch B): advance items carry a
+          // teacher, not a student, and render through their own card
+          // (Approve/Reject go through POST /api/advances/decide — a
+          // click here is never itself an approval).
+          if (item.requestType === 'advance_salary') return renderAdvanceSalaryRequestItem(item);
           const st = item.student;
           const req = item.request;
           const rType = item.requestType || 'leave';
@@ -431,6 +467,215 @@
 
       modal.classList.remove('hidden');
       modal.classList.add('flex');
+    }
+
+    // =================================================================
+    // SALARY-ADVANCE WORKFLOW (Batch B) — admin/manager Requests area
+    // Advance requests ride the existing PENDING_TEACHER_REQUESTS queue
+    // (same badges, same modal). Decisions go through the Worker
+    // endpoint, never through a raw /api/db status flip: only the
+    // endpoint creates the salary_adjustments row, and only after the
+    // server re-validates the amount against the CURRENT net payable.
+    // A notification click is never an approval — Approve/Reject are
+    // explicit buttons with a confirm step, and the queue updates only
+    // after the backend confirms.
+    // =================================================================
+    function _advanceAdminToken() {
+      try { if (typeof getOwnerToken === 'function') { const t = getOwnerToken(); if (t) return t; } } catch (e) {}
+      try { const t = sessionStorage.getItem('alhuda_owner_token'); if (t) return t; } catch (e) {}
+      try {
+        if (typeof window.getLmsAuthHeaders === 'function') {
+          const h = window.getLmsAuthHeaders() || {};
+          const a = h.Authorization || h.authorization || '';
+          if (a && a.toLowerCase().startsWith('bearer ')) return a.slice(7);
+        }
+      } catch (e) {}
+      try { const t = sessionStorage.getItem('alhuda_manager_token'); if (t) return t; } catch (e) {}
+      return null;
+    }
+
+    function _advanceWorkerBase() {
+      try { if (typeof resolveWorkerBaseForEmail === 'function') return resolveWorkerBaseForEmail(); } catch (e) {}
+      return 'https://alhuda-lms.ceoislamiccentre.workers.dev';
+    }
+
+    function _advanceEsc(v) {
+      return String(v == null ? '' : v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+
+    function renderAdvanceSalaryRequestItem(item) {
+      const req = item.request || {};
+      const teacher = item.teacher || {};
+      const typeLabel = req.advance_type === 'full' ? 'Full Salary Advance' : req.advance_type === 'half' ? 'Half Salary Advance' : 'Custom Amount Advance';
+      const requestedAt = req.requested_at ? new Date(req.requested_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'Recently';
+      const amount = parseFloat(req.requested_amount) || 0;
+      const periodLabel = req.period_label || req.period || '';
+      return `
+        <div class="p-4 bg-white rounded-2xl border border-emerald-300 shadow-xs space-y-3">
+          <div class="flex items-start justify-between gap-2 flex-wrap">
+            <div>
+              <div class="flex items-center gap-2 flex-wrap">
+                <span class="font-black text-slate-900 text-sm">${_advanceEsc(teacher.full_name || 'Teacher')}</span>
+                <span class="px-2 py-0.5 rounded-full text-[10px] font-mono bg-emerald-100 text-emerald-900 font-extrabold border border-emerald-300">💵 Salary Advance Request</span>
+              </div>
+              <div class="text-xs text-slate-500 flex items-center gap-2 mt-0.5">
+                <span>Teacher ID: <strong class="font-mono text-slate-700">${_advanceEsc(teacher.id || '')}</strong></span>
+              </div>
+            </div>
+            <div class="text-[11px] text-slate-400 font-mono">
+              Submitted: ${requestedAt}
+            </div>
+          </div>
+
+          <div class="p-3.5 bg-emerald-50/80 rounded-xl border border-emerald-200 grid grid-cols-1 sm:grid-cols-2 gap-2.5 text-xs">
+            <div>
+              <span class="text-slate-500 font-bold block text-[11px]">Advance Type:</span>
+              <span class="font-extrabold text-emerald-950">${typeLabel}</span>
+            </div>
+            <div>
+              <span class="text-slate-500 font-bold block text-[11px]">Requested Amount:</span>
+              <span class="font-mono font-black text-emerald-700 text-sm">${amount.toLocaleString()} PKR</span>
+            </div>
+            <div>
+              <span class="text-slate-500 font-bold block text-[11px]">Salary Period:</span>
+              <span class="font-extrabold text-slate-800">${_advanceEsc(periodLabel)}</span>
+            </div>
+            <div>
+              <span class="text-slate-500 font-bold block text-[11px]">Recovery Period:</span>
+              <span class="font-extrabold text-slate-800">${_advanceEsc(periodLabel)} (same period)</span>
+            </div>
+            ${req.reason ? `
+              <div class="sm:col-span-2 text-slate-700 italic bg-white p-2 rounded-lg border border-emerald-200/70">
+                &ldquo;${_advanceEsc(req.reason)}&rdquo;
+              </div>
+            ` : ''}
+          </div>
+          <p class="text-[11px] text-slate-500">Approving creates one salary record for this teacher and deducts the amount from the ${ _advanceEsc(periodLabel)} salary. The server re-checks the amount against the current net payable before approving.</p>
+
+          <div class="flex items-center justify-end gap-2 border-t pt-2.5">
+            <button onclick="handleDeclineAdvanceRequest('${_advanceEsc(req.id)}')" class="px-3.5 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-800 border border-rose-300 rounded-xl text-xs font-bold transition flex items-center gap-1">
+              <i class="fa-solid fa-xmark"></i> Reject
+            </button>
+            <button onclick="handleApproveAdvanceRequest('${_advanceEsc(req.id)}')" class="px-4 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black transition flex items-center gap-1.5 shadow-xs">
+              <i class="fa-solid fa-check"></i> Approve Advance
+            </button>
+          </div>
+        </div>
+      `;
+    }
+
+    async function _callAdvanceDecide(requestId, decision, reviewerComment) {
+      const token = _advanceAdminToken();
+      if (!token) return { ok: false, error: 'Session not found. Please log in again.' };
+      const res = await fetch(_advanceWorkerBase() + '/api/advances/decide', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+        body: JSON.stringify({ request_id: requestId, decision, reviewer_comment: reviewerComment || undefined })
+      });
+      let data = null;
+      try { data = await res.json(); } catch (e) {}
+      if (!res.ok || !data || !data.ok) {
+        return { ok: false, status: res.status, error: (data && data.error) || ('Decision failed (HTTP ' + res.status + ')'), current_net: data ? data.current_net : undefined };
+      }
+      return { ok: true, data };
+    }
+
+    async function _refreshAdvanceQueueAndModal() {
+      try {
+        if (typeof checkLeaveReturnAlertsAndRequests === 'function') {
+          await checkLeaveReturnAlertsAndRequests(false);
+        }
+      } catch (e) {}
+      openAdminTeacherRequestsModal();
+    }
+
+    // After an approval, mirror the server's updated slip figures into
+    // this device's admin blob cache so the payroll table shows the
+    // advance immediately (the server already updated the cloud blob;
+    // this only refreshes the local copy, never invents figures).
+    function _mirrorApprovedSlipToAdminCache(updatedSlip, teacherId) {
+      try {
+        if (!updatedSlip || !updatedSlip.slip_key) return;
+        const saved = JSON.parse(localStorage.getItem('alhuda_teacher_salaries') || '{}');
+        const prev = saved[updatedSlip.slip_key] || {};
+        saved[updatedSlip.slip_key] = {
+          ...prev,
+          teacher_id: teacherId,
+          month: updatedSlip.month || prev.month,
+          base_subtotal: updatedSlip.base_subtotal,
+          bonus: updatedSlip.bonus,
+          deduction: updatedSlip.deduction,
+          advance_deducted: updatedSlip.advance_deducted,
+          net_payable: updatedSlip.net_payable,
+          status: updatedSlip.status || prev.status,
+          slip_key: updatedSlip.slip_key
+        };
+        localStorage.setItem('alhuda_teacher_salaries', JSON.stringify(saved));
+      } catch (e) {}
+      try {
+        if (typeof calculateMonthlySalaries === 'function' && document.getElementById('salariesTableBody')) {
+          const p = calculateMonthlySalaries();
+          if (p && typeof p.catch === 'function') p.catch(() => {});
+        }
+      } catch (e) {}
+    }
+
+    async function handleApproveAdvanceRequest(requestId) {
+      const item = (Array.isArray(PENDING_TEACHER_REQUESTS) ? PENDING_TEACHER_REQUESTS : []).find((it) => it.requestType === 'advance_salary' && String(it.request && it.request.id) === String(requestId));
+      const teacherName = (item && item.teacher && item.teacher.full_name) || 'this teacher';
+      const amount = item && item.request ? (parseFloat(item.request.requested_amount) || 0) : 0;
+      const periodLabel = (item && item.request && (item.request.period_label || item.request.period)) || '';
+      const ok = await lmsConfirm({
+        title: 'Approve salary advance?',
+        message: `Approve a ${amount.toLocaleString()} PKR advance for ${teacherName} (salary period ${periodLabel})? This creates one salary record and deducts the amount from that month's salary.`,
+        confirmText: 'Approve Advance',
+        cancelText: 'Cancel',
+        variant: 'info'
+      });
+      if (!ok) return;
+      let result;
+      try {
+        result = await _callAdvanceDecide(requestId, 'approved', '');
+      } catch (e) {
+        lmsNotify('Cannot reach the server. Nothing was approved.');
+        return;
+      }
+      if (!result.ok) {
+        if (result.status === 409 && result.current_net != null) {
+          lmsNotify(`The salary for this period has changed (current net: ${Number(result.current_net).toLocaleString()} PKR). The request was NOT approved — it stays pending.`);
+        } else {
+          lmsNotify(result.error || 'Approval failed. Nothing was changed.');
+        }
+        await _refreshAdvanceQueueAndModal();
+        return;
+      }
+      if (result.data && result.data.updated_slip && item && item.teacher) {
+        _mirrorApprovedSlipToAdminCache(result.data.updated_slip, item.teacher.id);
+      }
+      lmsNotify('Advance approved. The salary record has been created and the teacher will see the updated salary.');
+      await _refreshAdvanceQueueAndModal();
+    }
+
+    async function handleDeclineAdvanceRequest(requestId) {
+      const comment = await lmsPrompt('Enter a short reason for rejecting this advance request (the teacher will see it):', '', {
+        title: 'Reject Advance Request',
+        confirmText: 'Confirm Reject'
+      });
+      if (comment === null) return;
+      let result;
+      try {
+        result = await _callAdvanceDecide(requestId, 'rejected', comment);
+      } catch (e) {
+        lmsNotify('Cannot reach the server. Nothing was rejected.');
+        return;
+      }
+      if (!result.ok) {
+        lmsNotify(result.error || 'Rejection failed. Nothing was changed.');
+        await _refreshAdvanceQueueAndModal();
+        return;
+      }
+      lmsNotify('Advance request rejected. No salary record was created and nothing was deducted.');
+      await _refreshAdvanceQueueAndModal();
     }
 
     async function handleApproveTeacherRequest(studentId, requestType) {

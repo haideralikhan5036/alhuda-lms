@@ -1940,8 +1940,10 @@ const WRITE_ACTIONS = new Set(['insert', 'upsert', 'update', 'delete']);
 function checkTableAccess(role, table, action) {
   // Batch 6B: financial rows (fee receipts, salary slips, salary
   // adjustments) are NEVER hard-deleted, by any role — the portals cancel
-  // them with a reason instead. This runs before the owner allow-all.
-  if (action === 'delete' && ['payments', 'salary_slips', 'salary_adjustments'].includes(table)) return 'deny';
+  // them with a reason instead. Salary-advance requests are
+  // financial-adjacent records with the same rule: a decided request is
+  // terminal history, never erased. This runs before the owner allow-all.
+  if (action === 'delete' && ['payments', 'salary_slips', 'salary_adjustments', 'advance_requests'].includes(table)) return 'deny';
   if (role === 'owner') return 'allow';
   // Batch 2.1: the audit log is owner-only through this API. The Worker
   // itself writes entries directly (never through /api/db), so no other
@@ -1957,6 +1959,12 @@ function checkTableAccess(role, table, action) {
     // which un-denies the manager curriculum upload path (S13). Password
     // fields are stripped separately.
     if (action === 'delete' && ['families', 'students', 'teachers', 'payments', 'salary_slips', 'salary_adjustments'].includes(table)) return 'deny';
+    // Salary-advance workflow: managers READ requests (their own portal's
+    // Requests area) but must decide ONLY through POST /api/advances/decide,
+    // where the transaction is created atomically with the decision. A raw
+    // /api/db write that flipped a request to Approved would create no
+    // salary record, so manager writes on this table are denied here.
+    if (table === 'advance_requests') return action === 'select' ? 'allow' : 'deny';
     return 'allow';
   }
 
@@ -1986,6 +1994,12 @@ function checkTableAccess(role, table, action) {
       case 'salary_adjustments':
         // Batch 6B: teachers may read their OWN salary rows only — row
         // ownership is enforced in applyDbScope/rowInScope (teacher_id).
+        return action === 'select' ? 'allow' : 'deny';
+      case 'advance_requests':
+        // Salary-advance workflow: teachers READ their own requests only
+        // (the Salary section's request list). Creation and decisions go
+        // through POST /api/advances/*, where amounts are computed and
+        // validated server-side — never through a raw /api/db write.
         return action === 'select' ? 'allow' : 'deny';
       default:
         return 'deny'; // families, payments
@@ -2840,7 +2854,7 @@ function applyDbScope(body, role, sub, scope) {
       }
     } else if (table === 'teachers' && action === 'select') {
       filters.push(eq('id', sub));
-    } else if ((table === 'salary_slips' || table === 'salary_adjustments') && action === 'select') {
+    } else if ((table === 'salary_slips' || table === 'salary_adjustments' || table === 'advance_requests') && action === 'select') {
       // Batch 6B: a teacher reads only their own salary rows. (Writes by
       // teachers on these tables are already denied in checkTableAccess.)
       filters.push(eq('teacher_id', sub));
@@ -2941,7 +2955,8 @@ function rowInScope(role, sub, scope, table, row) {
       case 'leave_requests':
       case 'trial_students':
       case 'salary_slips':
-      case 'salary_adjustments': return String(row.teacher_id) === sub;
+      case 'salary_adjustments':
+      case 'advance_requests': return String(row.teacher_id) === sub;
       case 'attendance_logs':
         // UNION scope (mirror of the SQL filter above): own recordings OR
         // rows of currently assigned students.
@@ -2959,7 +2974,9 @@ function rowInScope(role, sub, scope, table, row) {
   // manager account (including their own) — keyed on the real teacher_id
   // column, not on blob keys. scope.managerIds is resolved for every
   // manager request in resolveScopeIds; tolerate it being absent.
-  if (role === 'manager' && (table === 'salary_slips' || table === 'salary_adjustments')) {
+  // Salary-advance requests follow the same rule: a manager never sees
+  // (and therefore never decides) a manager account's advance request.
+  if (role === 'manager' && (table === 'salary_slips' || table === 'salary_adjustments' || table === 'advance_requests')) {
     const managerIds = (scope && Array.isArray(scope.managerIds)) ? scope.managerIds : [];
     return !managerIds.includes(String(row.teacher_id));
   }
@@ -3375,6 +3392,535 @@ async function handleScopedStorageRequest(ctx, auth) {
   return handleStorageRequest({ ...ctx, __lmsInternal: true });
 }
 
+// ============================================================================
+// Salary-advance workflow (Batch B, 2026-10-29).
+//
+// A teacher requests an advance against ONE salary period; an owner or a
+// manager (never for a manager account, never the requester themselves)
+// approves or rejects it. Approval creates EXACTLY ONE salary_adjustments
+// row (kind 'advance') and folds the amount into that period's slip
+// (advance_deducted + recomputed net_payable) — in the table AND in the
+// teacher.address blob slip entry, so the Admin payroll view (blob) and
+// the Teacher voucher view (table+blob merge) show the same numbers.
+// Pending and rejected requests never touch any salary figure.
+//
+// Canonical net formula (matches payroll.js / profiles360.js, extended
+// with the previously dormant advance_deducted column — legacy slips
+// carry 0 there, so their results are unchanged):
+//   net = max(0, base_subtotal + bonus - deduction_total - advance_deducted)
+//
+// Recovery rule (the ONE business rule needing the owner's confirmation):
+// an approved advance is recovered IN FULL from the SAME period it was
+// requested for. The recovery period is stored explicitly on both the
+// request and the adjustment row; no instalment schedule is invented
+// (recovery_per_month = the full approved amount, advance_remaining = 0
+// once applied). If the owner wants multi-month recovery later, that is
+// a new policy decision, not a silent default.
+//
+// Idempotency: the request id is the idempotency key. A second approval
+// of an already-approved request returns the existing adjustment (no new
+// row); a second identical pending submission returns the existing
+// pending request (no duplicate row). A decided request is terminal:
+// a different decision afterwards is a 409, never a silent flip.
+// ============================================================================
+const ADVANCE_MONTH_LABELS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+
+function advanceGenerateId(prefix) {
+  return prefix + Date.now().toString(36).toUpperCase() + '-' + Math.random().toString(36).substring(2, 6).toUpperCase();
+}
+
+// 'YYYY-MM' -> 'Month YYYY', or null when malformed.
+function advancePeriodLabel(period) {
+  const m = /^(\d{4})-(\d{2})$/.exec(String(period || ''));
+  if (!m) return null;
+  const month = Number(m[2]);
+  if (month < 1 || month > 12) return null;
+  return ADVANCE_MONTH_LABELS[month - 1] + ' ' + m[1];
+}
+
+// 'Month YYYY' (the portal's slip-month label) -> 'YYYY-MM', or null.
+function advancePeriodFromLabel(label) {
+  if (label == null) return null;
+  const m = String(label).trim().match(/^([A-Za-z]+)\s+(\d{4})$/);
+  if (!m) return null;
+  const idx = ADVANCE_MONTH_LABELS.findIndex((n) => n.toLowerCase() === m[1].toLowerCase());
+  if (idx < 0) return null;
+  return m[2] + '-' + String(idx + 1).padStart(2, '0');
+}
+
+// Current salary month in PKT (the academy's working timezone), as
+// 'YYYY-MM'. Advances may only target the current month or earlier.
+function advanceCurrentPktPeriod() {
+  const pkt = new Date(Date.now() + 5 * 3600 * 1000);
+  return pkt.toISOString().slice(0, 7);
+}
+
+function advanceNetPayable(base, bonus, deductionTotal, advanceDeducted) {
+  const v = (Number(base) || 0) + (Number(bonus) || 0) - (Number(deductionTotal) || 0) - (Number(advanceDeducted) || 0);
+  return v > 0 ? v : 0;
+}
+
+// Resolve the authoritative salary figures for one teacher + period.
+// Table row first (it is the financial record); the teacher.address blob
+// slip entry second (a slip saved while fee_tables_v1 was off has no
+// table row yet). Returns null when neither exists — the caller then
+// refuses the request honestly instead of inventing a salary.
+async function resolveAdvanceSalary(db, teacherId, period) {
+  const label = advancePeriodLabel(period);
+  try {
+    const row = await db.prepare(
+      'SELECT * FROM salary_slips WHERE teacher_id = ? AND period = ? AND cancelled_at IS NULL ORDER BY updated_at DESC, created_at DESC LIMIT 1'
+    ).bind(String(teacherId), period).first();
+    if (row) {
+      return {
+        source: 'table',
+        slipId: row.id || null,
+        slipNo: row.slip_no || null,
+        monthLabel: row.month_label || label,
+        baseSubtotal: Number(row.base_subtotal) || 0,
+        bonus: Number(row.bonus) || 0,
+        deductionTotal: Number(row.deduction_total) || 0,
+        advanceDeducted: Number(row.advance_deducted) || 0,
+        netPayable: advanceNetPayable(row.base_subtotal, row.bonus, row.deduction_total, row.advance_deducted),
+        status: row.status || 'Pending',
+        paidAt: row.paid_at || null
+      };
+    }
+  } catch (e) { if (!isMissingTableError(e)) throw e; }
+  try {
+    const tRow = await db.prepare('SELECT id, address FROM teachers WHERE id = ?').bind(String(teacherId)).first();
+    const meta = parseJsonField(tRow && tRow.address);
+    const slips = (meta && typeof meta.salary_slips === 'object' && meta.salary_slips) || {};
+    for (const key of Object.keys(slips)) {
+      const s = slips[key];
+      if (!s || typeof s !== 'object') continue;
+      const sPeriod = advancePeriodFromLabel(s.month) || (typeof s.period === 'string' ? s.period : null);
+      if (sPeriod === period) {
+        return {
+          source: 'blob',
+          slipKey: key,
+          slipNo: s.slip_no || null,
+          monthLabel: s.month || label,
+          baseSubtotal: Number(s.base_subtotal) || 0,
+          bonus: Number(s.bonus) || 0,
+          deductionTotal: Number(s.deduction) || 0,
+          advanceDeducted: Number(s.advance_deducted) || 0,
+          netPayable: advanceNetPayable(s.base_subtotal, s.bonus, s.deduction, s.advance_deducted),
+          status: s.status || 'Pending',
+          paidAt: s.paid_at || null
+        };
+      }
+    }
+  } catch (e) { if (!isMissingTableError(e)) throw e; }
+  return null;
+}
+
+// Metadata-only audit entry for an advance decision. Amounts NEVER go
+// into audit_log (metadata-only convention); the request row itself
+// carries the figures and this entry links to it by id. Best-effort:
+// a failed audit write never fails the decision it records.
+async function writeAdvanceAuditEntry(db, auth, requestId, decision) {
+  try {
+    if (!db) return;
+    const now = new Date().toISOString();
+    const entryId = 'AUD-' + now.replace(/[^0-9]/g, '').slice(0, 17) + '-' + Math.random().toString(36).slice(2, 8);
+    await db.prepare(
+      'INSERT INTO audit_log (id, actor_id, actor_role, action, table_name, record_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)'
+    ).bind(entryId, String(auth.sub || ''), String(auth.role || ''), decision === 'approved' ? 'advance_approve' : 'advance_reject', 'advance_requests', String(requestId), now).run();
+  } catch (e) {
+    console.warn('[advance] audit write skipped:', e && e.message);
+  }
+}
+
+function advancePublicRow(row) {
+  if (!row || typeof row !== 'object') return null;
+  return {
+    id: row.id,
+    teacher_id: row.teacher_id,
+    teacher_name: row.teacher_name || null,
+    period: row.period,
+    period_label: advancePeriodLabel(row.period),
+    advance_type: row.advance_type,
+    requested_amount: Number(row.requested_amount) || 0,
+    approved_amount: row.approved_amount != null ? Number(row.approved_amount) : null,
+    status: row.status,
+    reason: row.reason || null,
+    reviewer_comment: row.reviewer_comment || null,
+    reviewed_by: row.reviewed_by || null,
+    adjustment_id: row.adjustment_id || null,
+    requested_at: row.requested_at || null,
+    decided_at: row.decided_at || null
+  };
+}
+
+async function readAdvanceRequestBody(request) {
+  let body;
+  try {
+    body = await request.json();
+  } catch (e) {
+    return null;
+  }
+  if (!body || typeof body !== 'object' || Array.isArray(body)) return null;
+  return body;
+}
+
+// --- POST /api/advances/request  { period, advance_type, custom_amount?, reason? }
+// Teacher role ONLY. The teacher id comes from the token, never the body:
+// a teacher can request only for their own authenticated account. Full
+// and half amounts are computed here from the authoritative salary
+// record; a frontend-supplied amount is accepted ONLY for custom type
+// and is validated against the same record.
+async function handleAdvanceRequest(request, env) {
+  if (request.method === 'OPTIONS') return json(request, env, {}, 204);
+  if (request.method !== 'POST') {
+    return json(request, env, { ok: false, error: 'Method not allowed.' }, 405);
+  }
+  const auth = await requireApiAuth(request, env);
+  if (!auth) return unauthorized(request, env);
+  if (auth.role !== 'teacher') {
+    return json(request, env, { ok: false, error: 'Access denied.' }, 403);
+  }
+  const db = getDb(env);
+  if (!db) {
+    return json(request, env, { ok: false, error: 'Service unavailable.' }, 503);
+  }
+  if (await d1WindowLimited(db, env, 'advance_request', 'advreq:' + String(auth.sub), 10 * 60 * 1000, 10)) {
+    return json(request, env, { ok: false, error: 'Too many requests. Please try again later.' }, 429);
+  }
+  const body = await readAdvanceRequestBody(request);
+  if (!body) {
+    return json(request, env, { ok: false, error: 'Invalid request body.' }, 400);
+  }
+  const period = String(body.period || '').trim();
+  const label = advancePeriodLabel(period);
+  if (!label) {
+    return json(request, env, { ok: false, error: 'A valid salary period (YYYY-MM) is required.' }, 400);
+  }
+  if (period > advanceCurrentPktPeriod()) {
+    return json(request, env, { ok: false, error: 'An advance cannot be requested for a future salary period.' }, 400);
+  }
+  const advanceType = String(body.advance_type || '').trim();
+  if (!['full', 'half', 'custom'].includes(advanceType)) {
+    return json(request, env, { ok: false, error: 'Advance type must be full, half, or custom.' }, 400);
+  }
+  const reason = body.reason != null ? String(body.reason).trim() : '';
+  if (reason.length > 500) {
+    return json(request, env, { ok: false, error: 'The reason must be 500 characters or fewer.' }, 400);
+  }
+  let salary;
+  try {
+    salary = await resolveAdvanceSalary(db, auth.sub, period);
+  } catch (e) {
+    return json(request, env, { ok: false, error: 'Service unavailable.' }, 503);
+  }
+  if (!salary) {
+    return json(request, env, { ok: false, error: 'No salary record exists for this period yet. Ask the administrator to generate the salary slip first.' }, 422);
+  }
+  const net = salary.netPayable;
+  if (!(net > 0)) {
+    return json(request, env, { ok: false, error: 'There is no payable salary for this period to advance against.' }, 422);
+  }
+  let requested;
+  if (advanceType === 'full') requested = net;
+  else if (advanceType === 'half') requested = Math.floor(net / 2);
+  else {
+    const custom = Number(body.custom_amount);
+    if (!Number.isFinite(custom) || custom <= 0) {
+      return json(request, env, { ok: false, error: 'A custom advance amount must be a positive number.' }, 400);
+    }
+    if (custom > net) {
+      return json(request, env, { ok: false, error: 'A custom advance cannot exceed the payable salary for this period.', salary_net: net }, 400);
+    }
+    requested = custom;
+  }
+  if (!(requested > 0)) {
+    return json(request, env, { ok: false, error: 'The requested advance amount must be greater than zero.' }, 422);
+  }
+  try {
+    // Idempotent re-submit: an identical pending request (same teacher,
+    // period, type, amount) returns the existing row instead of a
+    // duplicate. A different amount/type for the same period is a new
+    // request; the decision-time cap keeps total approvals within net.
+    const existing = await db.prepare(
+      "SELECT * FROM advance_requests WHERE teacher_id = ? AND period = ? AND advance_type = ? AND requested_amount = ? AND status = 'Pending' ORDER BY created_at ASC LIMIT 1"
+    ).bind(String(auth.sub), period, advanceType, requested).first();
+    if (existing) {
+      return json(request, env, { ok: true, duplicate: true, request: advancePublicRow(existing), salary_net: net, period_label: label });
+    }
+    let teacherName = null;
+    try {
+      const tRow = await db.prepare('SELECT full_name FROM teachers WHERE id = ?').bind(String(auth.sub)).first();
+      teacherName = (tRow && tRow.full_name) || null;
+    } catch (e) {}
+    const now = new Date().toISOString();
+    const id = advanceGenerateId('ADV-');
+    await db.prepare(
+      'INSERT INTO advance_requests (id, teacher_id, teacher_name, period, advance_type, requested_amount, status, reason, requested_at, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+    ).bind(id, String(auth.sub), teacherName, period, advanceType, requested, 'Pending', reason || null, now, now, now).run();
+    const created = await db.prepare('SELECT * FROM advance_requests WHERE id = ?').bind(id).first();
+    return json(request, env, { ok: true, request: advancePublicRow(created), salary_net: net, period_label: label });
+  } catch (e) {
+    if (isMissingTableError(e)) {
+      return json(request, env, { ok: false, error: 'Service unavailable.' }, 503);
+    }
+    console.error('[advance] request failed:', e && e.message);
+    return json(request, env, { ok: false, error: 'Service unavailable.' }, 503);
+  }
+}
+
+// --- POST /api/advances/decide  { request_id, decision, reviewer_comment?, approved_amount? }
+// Owner or manager ONLY. A teacher can never approve their own request:
+// the role check denies every teacher token, and the reviewer-sub check
+// below additionally denies a manager deciding a request addressed to
+// their own staff record. Manager reviewers are additionally barred from
+// manager-account targets (mirroring the salary-table manager guard).
+async function handleAdvanceDecide(request, env) {
+  if (request.method === 'OPTIONS') return json(request, env, {}, 204);
+  if (request.method !== 'POST') {
+    return json(request, env, { ok: false, error: 'Method not allowed.' }, 405);
+  }
+  const auth = await requireApiAuth(request, env);
+  if (!auth) return unauthorized(request, env);
+  if (auth.role !== 'owner' && auth.role !== 'manager') {
+    return json(request, env, { ok: false, error: 'Access denied.' }, 403);
+  }
+  const db = getDb(env);
+  if (!db) {
+    return json(request, env, { ok: false, error: 'Service unavailable.' }, 503);
+  }
+  if (await d1WindowLimited(db, env, 'advance_decide', 'advdec:' + String(auth.sub), 10 * 60 * 1000, 30)) {
+    return json(request, env, { ok: false, error: 'Too many decisions. Please try again later.' }, 429);
+  }
+  const body = await readAdvanceRequestBody(request);
+  if (!body) {
+    return json(request, env, { ok: false, error: 'Invalid request body.' }, 400);
+  }
+  const requestId = String(body.request_id || '').trim();
+  const decision = String(body.decision || '').trim();
+  if (!requestId) {
+    return json(request, env, { ok: false, error: 'request_id is required.' }, 400);
+  }
+  if (!['approved', 'rejected'].includes(decision)) {
+    return json(request, env, { ok: false, error: 'decision must be approved or rejected.' }, 400);
+  }
+  const reviewerComment = body.reviewer_comment != null ? String(body.reviewer_comment).trim() : '';
+  if (reviewerComment.length > 500) {
+    return json(request, env, { ok: false, error: 'The reviewer comment must be 500 characters or fewer.' }, 400);
+  }
+  let reqRow;
+  try {
+    reqRow = await db.prepare('SELECT * FROM advance_requests WHERE id = ?').bind(requestId).first();
+  } catch (e) {
+    return json(request, env, { ok: false, error: 'Service unavailable.' }, 503);
+  }
+  if (!reqRow) {
+    return json(request, env, { ok: false, error: 'Advance request not found.' }, 404);
+  }
+  // The reviewer must never be the requester, and a manager must never
+  // decide a manager account's request.
+  if (String(reqRow.teacher_id) === String(auth.sub)) {
+    return json(request, env, { ok: false, error: 'Access denied.' }, 403);
+  }
+  if (auth.role === 'manager') {
+    try {
+      // NOTE: select only columns the teachers table actually has
+      // (id, address, witness_name, notes) — employee_type lives inside
+      // the address JSON, never as a column; selecting it throws and
+      // would turn this guard into a 503.
+      const tRow = await db.prepare('SELECT id, address, witness_name, notes FROM teachers WHERE id = ?').bind(String(reqRow.teacher_id)).first();
+      if (tRow && isManagerStaffRecord(tRow)) {
+        return json(request, env, { ok: false, error: 'Access denied.' }, 403);
+      }
+    } catch (e) {
+      return json(request, env, { ok: false, error: 'Service unavailable.' }, 503);
+    }
+  }
+  const storedStatus = String(reqRow.status || '');
+  // Idempotent replay: the same decision again returns the existing
+  // outcome (and the existing adjustment for approvals) with NO new
+  // rows. A different decision on a decided request is a conflict —
+  // decided requests are terminal history, never silently flipped.
+  if (storedStatus === 'Approved' || storedStatus === 'Rejected') {
+    const wanted = decision === 'approved' ? 'Approved' : 'Rejected';
+    if (storedStatus === wanted) {
+      return json(request, env, { ok: true, replayed: true, request: advancePublicRow(reqRow) });
+    }
+    return json(request, env, { ok: false, error: 'This request has already been decided and cannot be changed.' }, 409);
+  }
+  if (storedStatus !== 'Pending') {
+    return json(request, env, { ok: false, error: 'This request is no longer pending.' }, 409);
+  }
+  const now = new Date().toISOString();
+  if (decision === 'rejected') {
+    try {
+      await db.prepare(
+        'UPDATE advance_requests SET status = ?, reviewed_by = ?, reviewer_comment = ?, decided_at = ?, updated_at = ? WHERE id = ? AND status = ?'
+      ).bind('Rejected', String(auth.sub), reviewerComment || null, now, now, requestId, 'Pending').run();
+      await writeAdvanceAuditEntry(db, auth, requestId, 'rejected');
+      const updated = await db.prepare('SELECT * FROM advance_requests WHERE id = ?').bind(requestId).first();
+      return json(request, env, { ok: true, request: advancePublicRow(updated) });
+    } catch (e) {
+      console.error('[advance] reject failed:', e && e.message);
+      return json(request, env, { ok: false, error: 'Service unavailable.' }, 503);
+    }
+  }
+  // --- Approval: create exactly one financial record. ---
+  // approved_amount defaults to the requested amount; a reviewer may
+  // approve LESS (never more). It must fit the CURRENT net payable for
+  // the period — the salary may have changed since the request — so an
+  // approval that would overdraw the period is refused (409) and the
+  // request stays Pending for the reviewer to reject with a comment or
+  // for the teacher to re-request. No silent clamping, no negative net.
+  let approvedAmount = reqRow.requested_amount != null ? Number(reqRow.requested_amount) : NaN;
+  if (body.approved_amount != null && body.approved_amount !== '') {
+    approvedAmount = Number(body.approved_amount);
+  }
+  if (!Number.isFinite(approvedAmount) || approvedAmount <= 0) {
+    return json(request, env, { ok: false, error: 'Approved amount must be a positive number.' }, 400);
+  }
+  // Parent review fix: the comment above promises "never more" — enforce
+  // it. A reviewer may approve less than requested, never more: approving
+  // above what the teacher asked for would grant an unrequested amount.
+  const requestedAmount = reqRow.requested_amount != null ? Number(reqRow.requested_amount) : NaN;
+  if (Number.isFinite(requestedAmount) && approvedAmount > requestedAmount) {
+    return json(request, env, { ok: false, error: 'Approved amount cannot exceed the requested amount.' }, 400);
+  }
+  let salary;
+  try {
+    salary = await resolveAdvanceSalary(db, reqRow.teacher_id, reqRow.period);
+  } catch (e) {
+    return json(request, env, { ok: false, error: 'Service unavailable.' }, 503);
+  }
+  if (!salary) {
+    return json(request, env, { ok: false, error: 'No salary record exists for this period anymore. The request cannot be approved.' }, 422);
+  }
+  const currentNet = salary.netPayable;
+  if (approvedAmount > currentNet) {
+    return json(request, env, { ok: false, error: 'The salary for this period has changed since the request. The approved amount cannot exceed the current net payable.', current_net: currentNet, period_label: salary.monthLabel }, 409);
+  }
+  try {
+    // Crash-window guard: if a previous approval attempt inserted the
+    // adjustment but died before marking the request, reuse it instead
+    // of creating a second one. The request id is embedded in the
+    // adjustment's legacy_json at creation time.
+    const priorAdj = await db.prepare(
+      "SELECT * FROM salary_adjustments WHERE kind = 'advance' AND teacher_id = ? AND period = ? AND legacy_json LIKE ? AND cancelled_at IS NULL ORDER BY created_at ASC LIMIT 1"
+    ).bind(String(reqRow.teacher_id), reqRow.period, '%"advance_request_id":"' + requestId + '"%').first();
+    let adjustmentId;
+    if (priorAdj && priorAdj.id) {
+      adjustmentId = priorAdj.id;
+    } else {
+      adjustmentId = advanceGenerateId('ADJ-');
+      await db.prepare(
+        'INSERT INTO salary_adjustments (id, teacher_id, period, kind, category, amount, advance_remaining, recovery_per_month, reason, adjustment_date, status, created_by, created_at, legacy_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+      ).bind(
+        adjustmentId, String(reqRow.teacher_id), reqRow.period, 'advance', 'Salary Advance', approvedAmount,
+        0, approvedAmount, reqRow.reason || 'Approved advance salary request',
+        now.slice(0, 10), 'Applied', String(auth.sub), now,
+        JSON.stringify({ advance_request_id: requestId, advance_type: reqRow.advance_type, recovery_period: reqRow.period })
+      ).run();
+    }
+    // Fold the advance into the period's slip (table + blob, same
+    // numbers both sides) and recompute net with the canonical formula.
+    const newAdvanceDeducted = salary.advanceDeducted + approvedAmount;
+    const newNet = advanceNetPayable(salary.baseSubtotal, salary.bonus, salary.deductionTotal, newAdvanceDeducted);
+    let slipKey = salary.slipKey || null;
+    if (salary.source === 'table' && salary.slipId) {
+      await db.prepare(
+        'UPDATE salary_slips SET advance_deducted = ?, net_payable = ?, updated_at = ? WHERE id = ?'
+      ).bind(newAdvanceDeducted, newNet, now, salary.slipId).run();
+      slipKey = slipKey || (String(reqRow.teacher_id) + '_' + String(salary.monthLabel || '').replace(/\s+/g, '_'));
+    } else {
+      // No table row (blob-only slip): promote it to a table row first
+      // so the financial record exists in exactly one authoritative
+      // place going forward, then apply the advance to it.
+      const slipNo = salary.slipNo || ('AH-SAL-' + String(reqRow.period).replace('-', '') + '-' + Math.random().toString(36).substring(2, 8).toUpperCase());
+      const newSlipId = advanceGenerateId('SAL-');
+      await db.prepare(
+        'INSERT INTO salary_slips (id, teacher_id, period, slip_no, month_label, base_subtotal, bonus, deduction_total, advance_deducted, net_payable, status, paid_at, created_by, created_at, updated_at, legacy_key) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+      ).bind(
+        newSlipId, String(reqRow.teacher_id), reqRow.period, slipNo, salary.monthLabel,
+        salary.baseSubtotal, salary.bonus, salary.deductionTotal, newAdvanceDeducted, newNet,
+        salary.status, salary.paidAt, String(auth.sub), now, now,
+        slipKey || (String(reqRow.teacher_id) + '_' + String(salary.monthLabel || '').replace(/\s+/g, '_'))
+      ).run();
+      slipKey = slipKey || (String(reqRow.teacher_id) + '_' + String(salary.monthLabel || '').replace(/\s+/g, '_'));
+    }
+    // Blob mirror: the Admin payroll view reads the blob, so the same
+    // advance_deducted + net land in the teacher.address slip entry.
+    // Only that entry's financial fields are touched; every other key
+    // of the address JSON is preserved byte-for-byte in value.
+    try {
+      const tRow = await db.prepare('SELECT id, address FROM teachers WHERE id = ?').bind(String(reqRow.teacher_id)).first();
+      if (tRow) {
+        const meta = parseJsonField(tRow.address);
+        const base = (meta && typeof meta === 'object') ? meta : {};
+        const slips = (base.salary_slips && typeof base.salary_slips === 'object') ? base.salary_slips : {};
+        const entry = (slipKey && slips[slipKey] && typeof slips[slipKey] === 'object') ? { ...slips[slipKey] } : {};
+        entry.teacher_id = String(reqRow.teacher_id);
+        entry.month = salary.monthLabel;
+        entry.base_subtotal = salary.baseSubtotal;
+        entry.bonus = salary.bonus;
+        entry.deduction = salary.deductionTotal;
+        entry.advance_deducted = newAdvanceDeducted;
+        entry.net_payable = newNet;
+        if (!entry.status) entry.status = salary.status;
+        if (!entry.slip_key) entry.slip_key = slipKey;
+        slips[slipKey] = entry;
+        base.salary_slips = slips;
+        await db.prepare('UPDATE teachers SET address = ? WHERE id = ?').bind(JSON.stringify(base), String(reqRow.teacher_id)).run();
+      }
+    } catch (blobErr) {
+      // The table transaction above is already committed; a blob-mirror
+      // failure must not pretend the approval failed. The teacher
+      // preview's table-first merge still shows the advance, and the
+      // admin can re-sync from the table. Logged, not hidden.
+      console.warn('[advance] blob mirror skipped:', blobErr && blobErr.message);
+    }
+    // Mark the request decided LAST, guarded on still-Pending: if two
+    // reviewers race, only the first update lands and the second caller
+    // re-reads the decided row (replay path) instead of double-applying.
+    const upd = await db.prepare(
+      'UPDATE advance_requests SET status = ?, approved_amount = ?, reviewed_by = ?, reviewer_comment = ?, adjustment_id = ?, decided_at = ?, updated_at = ? WHERE id = ? AND status = ?'
+    ).bind('Approved', approvedAmount, String(auth.sub), reviewerComment || null, adjustmentId, now, now, requestId, 'Pending').run();
+    if (!upd || !upd.success || Number(upd.meta && upd.meta.changes || 0) === 0) {
+      const raced = await db.prepare('SELECT * FROM advance_requests WHERE id = ?').bind(requestId).first();
+      if (raced && String(raced.status) === 'Approved' && raced.adjustment_id) {
+        return json(request, env, { ok: true, replayed: true, request: advancePublicRow(raced) });
+      }
+      // The financial rows above were written but the request could not
+      // be marked: report honestly instead of claiming success, so the
+      // reviewer retries the (now idempotent) decision rather than
+      // approving a second time.
+      return json(request, env, { ok: false, error: 'The advance was recorded but the request status could not be updated. Please retry the decision — it will not create a second record.', adjustment_id: adjustmentId }, 503);
+    }
+    await writeAdvanceAuditEntry(db, auth, requestId, 'approved');
+    const updated = await db.prepare('SELECT * FROM advance_requests WHERE id = ?').bind(requestId).first();
+    return json(request, env, {
+      ok: true,
+      request: advancePublicRow(updated),
+      adjustment_id: adjustmentId,
+      updated_slip: {
+        slip_key: slipKey,
+        month: salary.monthLabel,
+        period: reqRow.period,
+        base_subtotal: salary.baseSubtotal,
+        bonus: salary.bonus,
+        deduction: salary.deductionTotal,
+        advance_deducted: newAdvanceDeducted,
+        net_payable: newNet,
+        status: salary.status
+      }
+    });
+  } catch (e) {
+    if (isMissingTableError(e)) {
+      return json(request, env, { ok: false, error: 'Service unavailable.' }, 503);
+    }
+    console.error('[advance] approve failed:', e && e.message);
+    return json(request, env, { ok: false, error: 'Service unavailable.' }, 503);
+  }
+}
+
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
@@ -3467,6 +4013,18 @@ export default {
     // duplicate warnings without ever seeing contacts (Batch 3A, B15).
     if (url.pathname === '/api/families/check-duplicates') {
       return handleFamilyDuplicateCheck(request, env);
+    }
+
+    // 2f. Salary-advance workflow (/api/advances/request, /api/advances/decide).
+    // Request: teacher role ONLY, amounts computed server-side from the
+    // period's salary record. Decide: owner/manager ONLY (a manager never
+    // for a manager account, never the requester); approval creates
+    // exactly one salary_adjustments row. Roles enforced in the handlers.
+    if (url.pathname === '/api/advances/request') {
+      return handleAdvanceRequest(request, env);
+    }
+    if (url.pathname === '/api/advances/decide') {
+      return handleAdvanceDecide(request, env);
     }
 
     // 3. Clean portal URLs without .html

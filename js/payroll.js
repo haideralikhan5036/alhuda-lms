@@ -450,7 +450,11 @@
           const bonus = parseFloat(savedSlip.bonus) || 0;
           const deduction = parseFloat(savedSlip.deduction) || 0;
           const remarks = savedSlip.remarks || '';
-          const netPayable = Math.max(0, baseSubtotal + bonus - deduction);
+          // Canonical net (Batch B): subtract approved advances too.
+          // Legacy slips carry no advance_deducted, so this is identical
+          // to the old formula for them.
+          const advanceDeducted = parseFloat(savedSlip.advance_deducted) || 0;
+          const netPayable = Math.max(0, baseSubtotal + bonus - deduction - advanceDeducted);
 
           if (studentRateItems.length > 0) activeTeachersCount++;
           totalAssignedStudentsCount += studentRateItems.length;
@@ -471,6 +475,7 @@
             remarks,
             net_payable: netPayable,
             status: 'Paid',
+            advance_deducted: advanceDeducted,
             slip_key: slipKey
           };
           ALL_TEACHER_SALARIES[t.id] = compiledSlip;
@@ -547,7 +552,11 @@
           const bonus = savedSlip ? (parseFloat(savedSlip.bonus) || 0) : 0;
           const deduction = savedSlip ? (parseFloat(savedSlip.deduction) || 0) : 0;
           const remarks = savedSlip ? (savedSlip.remarks || '') : '';
-          const netPayable = Math.max(0, baseSubtotal + bonus - deduction);
+          // Canonical net (Batch B): approved advances are NOT lumped
+          // into `deduction` (that would double-count on dual-write),
+          // they live in advance_deducted and are subtracted here.
+          const advanceDeducted = savedSlip ? (parseFloat(savedSlip.advance_deducted) || 0) : 0;
+          const netPayable = Math.max(0, baseSubtotal + bonus - deduction - advanceDeducted);
           const status = savedSlip ? (savedSlip.status || 'Pending') : 'Pending';
 
           if (status === 'Paid') paidCount++;
@@ -567,6 +576,7 @@
             remarks,
             net_payable: netPayable,
             status,
+            advance_deducted: advanceDeducted,
             slip_key: slipKey
           };
 
@@ -578,6 +588,7 @@
         const baseSubtotal = compiledSlip.base_subtotal;
         const bonus = compiledSlip.bonus;
         const deduction = compiledSlip.deduction;
+        const advanceDeducted = compiledSlip.advance_deducted || 0;
         const netPayable = compiledSlip.net_payable;
         const status = compiledSlip.status;
 
@@ -599,11 +610,12 @@
 
         // Adjustments summary
         let adjSummary = '<span class="text-slate-400 text-[11px]">No adjustments</span>';
-        if (bonus > 0 || deduction > 0) {
+        if (bonus > 0 || deduction > 0 || advanceDeducted > 0) {
           adjSummary = `
             <div class="text-[11px] font-mono">
               ${bonus > 0 ? `<span class="text-emerald-700 font-bold block">+${bonus.toLocaleString()} PKR (Bonus)</span>` : ''}
               ${deduction > 0 ? `<span class="text-rose-700 font-bold block">-${deduction.toLocaleString()} PKR (Deduction)</span>` : ''}
+              ${advanceDeducted > 0 ? `<span class="text-amber-700 font-bold block">-${advanceDeducted.toLocaleString()} PKR (Approved Advances)</span>` : ''}
             </div>
           `;
         }
@@ -773,7 +785,15 @@
 
       const bonus = parseFloat(document.getElementById('slipBonus')?.value) || 0;
       const deduction = parseFloat(document.getElementById('slipDeduction')?.value) || 0;
-      const netPayable = Math.max(0, baseSubtotal + bonus - deduction);
+      // Canonical net (Batch B): approved advances on the slip being
+      // edited are subtracted here too — otherwise opening the editor
+      // and re-saving would silently erase the advance from the net.
+      // The advance itself is never editable from this editor; it is
+      // managed through the Requests approval workflow only.
+      const advanceDeducted = (typeof CURRENT_SLIP_DATA !== 'undefined' && CURRENT_SLIP_DATA)
+        ? (parseFloat(CURRENT_SLIP_DATA.advance_deducted) || 0)
+        : 0;
+      const netPayable = Math.max(0, baseSubtotal + bonus - deduction - advanceDeducted);
 
       const baseInp = document.getElementById('slipBaseSubtotal');
       if (baseInp) baseInp.value = baseSubtotal;
@@ -782,9 +802,8 @@
       if (netEl) netEl.innerText = `${netPayable.toLocaleString()} PKR`;
 
       const countEl = document.getElementById('slipTotalStudentsCount');
-      if (countEl) countEl.innerText = `For ${rateInputs.length} Assigned Students (${baseSubtotal.toLocaleString()} Base ${bonus > 0 ? '+ ' + bonus + ' Bonus' : ''} ${deduction > 0 ? '- ' + deduction + ' Deduction' : ''})`;
-
-      return { baseSubtotal, bonus, deduction, netPayable };
+      if (countEl) countEl.innerText = `For ${rateInputs.length} Assigned Students (${baseSubtotal.toLocaleString()} Base ${bonus > 0 ? '+ ' + bonus + ' Bonus' : ''} ${deduction > 0 ? '- ' + deduction + ' Deduction' : ''} ${advanceDeducted > 0 ? '- ' + advanceDeducted + ' Approved Advances' : ''})`;
+      return { baseSubtotal, bonus, deduction, advanceDeducted, netPayable };
     }
 
     function saveSalarySlipRecord() {
@@ -792,7 +811,7 @@
       // Batch 2 (B7): defense in depth — never save a Manager slip in a manager session.
       if (_payrollBlockManagerRecord(CURRENT_SLIP_TEACHER_ID)) return;
 
-      const { baseSubtotal, bonus, deduction, netPayable } = recalculateSlipNetTotal();
+      const { baseSubtotal, bonus, deduction, advanceDeducted, netPayable } = recalculateSlipNetTotal();
       const remarks = (document.getElementById('slipRemarks')?.value || '').trim();
 
       // Collect edited student rates
@@ -821,6 +840,10 @@
         base_subtotal: baseSubtotal,
         bonus,
         deduction,
+        // Batch B: an admin re-save must NEVER wipe approved advances
+        // (the old object literal had no advance_deducted key, so the
+        // next dual-write would have zeroed the table column too).
+        advance_deducted: advanceDeducted || 0,
         remarks,
         net_payable: netPayable,
         status: CURRENT_SLIP_DATA.status || 'Pending',
