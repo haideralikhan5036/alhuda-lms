@@ -4698,14 +4698,14 @@ function _compileTeacher360AggregatedState(teacher, tchSchedules = [], attLogs =
     if (stObj && stObj.assigned_teacher_id && String(stObj.assigned_teacher_id) !== String(teacher.id)) return false;
     return true;
   });
-  const allMatchedStudents = (window.ALL_STUDENTS || []).filter(s => {
+  let allMatchedStudents = (window.ALL_STUDENTS || []).filter(s => {
     if (typeof isStudentSelfDeactivated === 'function' && isStudentSelfDeactivated(s)) return false;
     const st = String(s.status || 'Active').toLowerCase();
     if (st === 'inactive' || st === 'deactivated' || st === 'left' || st === 'deleted' || st === 'trial' || st === 'converted') return false;
     return String(s.assigned_teacher_id || '') === String(teacher.id);
   });
 
-  const activeStudents = allMatchedStudents.filter(s => {
+  let activeStudents = allMatchedStudents.filter(s => {
     const st = String(s.status || 'Active').trim().toLowerCase();
     if (st === 'inactive' || st === 'deactivated' || st === 'left' || st === 'deleted' || st === 'leave') return false;
     try {
@@ -4714,6 +4714,17 @@ function _compileTeacher360AggregatedState(teacher, tchSchedules = [], attLogs =
     } catch (e) {}
     return true;
   });
+
+  // Employees redesign E2 (2026-10-29): Management / Non-Teaching staff
+  // have NO student relationships in their profile data. The aggregates
+  // are emptied HERE, at the data level, so no student count, list or
+  // student-derived figure can reach their profile or salary views.
+  // Salary amounts come from the slip records below and are untouched.
+  if (isManager || isOtherStaff) {
+    allMatchedStudents = [];
+    activeStudents = [];
+    tchSchedules = [];
+  }
 
   // 2. Authoritative Salary & Payroll Engine (Connected directly to alhuda_teacher_salaries & payroll.js)
   let savedSalaries = {};
@@ -5056,7 +5067,7 @@ function _renderTeacher360WorkspaceDOM(teacher, tchSchedules, attLogs, activeTab
   if (!workspace) return;
 
   // Normalize any legacy tab keys
-  const resolvedTab = (activeTab === 'deductions' || activeTab === 'leaves' || activeTab === 'deductions_leaves')
+  let resolvedTab = (activeTab === 'deductions' || activeTab === 'leaves' || activeTab === 'deductions_leaves')
     ? 'deductions_leaves'
     : (activeTab === 'overview' || activeTab === 'biodata')
     ? 'biodata'
@@ -5082,6 +5093,9 @@ function _renderTeacher360WorkspaceDOM(teacher, tchSchedules, attLogs, activeTab
   // not see that account's payroll in any form — the salary tab, the
   // deductions tab and the salary action buttons are owner-only for
   // manager records. Teacher records are completely unaffected.
+  // Employees redesign E2: Management / Non-Teaching profiles have no
+  // Students tab — a students request lands on Bio Data instead.
+  if ((state.isManager || state.isOtherStaff) && resolvedTab === 'students') resolvedTab = 'biodata';
   const mgrViewingManagerRecord = (typeof CURRENT_ROLE !== 'undefined' && CURRENT_ROLE === 'manager' && state.isManager);
   const restrictedPayrollHtml = `
     <div class="p-10 text-center bg-slate-50 rounded-2xl border border-slate-200">
@@ -5104,7 +5118,7 @@ function _renderTeacher360WorkspaceDOM(teacher, tchSchedules, attLogs, activeTab
 
   // TARGET STRUCTURE: ONLY 4 MEANINGFUL SECTIONS IN LOWER TEACHER 360 NAVIGATION
   const navTabs = [
-    { id: 'students', label: 'List of Students', icon: 'fa-user-graduate', count: allMatchedStudents.length },
+    ...((state.isManager || state.isOtherStaff) ? [] : [{ id: 'students', label: 'List of Students', icon: 'fa-user-graduate', count: allMatchedStudents.length }]),
     { id: 'deductions_leaves', label: 'Current Month Deductions & Leaves', icon: 'fa-scale-unbalanced', count: displayDeductionRows.length + leaveRows.length },
     { id: 'biodata', label: 'Bio Data', icon: 'fa-address-card', count: null },
     { id: 'documents', label: 'Documents', icon: 'fa-folder-open', count: documentsList.length }
