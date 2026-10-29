@@ -193,7 +193,7 @@ const TOK_OWNER = await createSessionToken({ sub: 'owner1', role: 'owner' }, WOR
   check('P2-22 owner insert for unassigned student -> 200 (unchanged semantics)', ownerFree.status === 200, ownerFree.text.slice(0, 200));
   // Release discipline: this batch must not bump the release.
   const health = await call('/api/health', { method: 'GET' });
-  check('P2-22 WORKER_RELEASE is the Phase 3 release', health.status === 200 && health.json && health.json.version === '2026-10-29-phase3', health.text.slice(0, 200));
+  check('P2-22 WORKER_RELEASE is the commission release', health.status === 200 && health.json && health.json.version === '2026-10-29-salary-advance', health.text.slice(0, 200));
 }
 
 // ==== Summary =================================================================
