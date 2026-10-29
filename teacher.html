@@ -2420,32 +2420,32 @@ font-family: var(--font-num) !important;
   <!-- ================================================================= -->
   <!-- MODAL: COURSE MATERIALS LIBRARY BOOK PICKER                       -->
   <!-- ================================================================= -->
-  <div id="modalTeacherLibraryPicker" class="fixed inset-0 bg-black/85 backdrop-blur-md z-[94] hidden items-center justify-center p-2 sm:p-4">
-    <div class="bg-slate-900 rounded-2xl w-full max-w-5xl max-h-[92vh] flex flex-col shadow-2xl border border-slate-700 overflow-hidden text-white">
+  <div id="modalTeacherLibraryPicker" class="fixed inset-0 bg-stone-900/60 backdrop-blur-md z-[94] hidden items-center justify-center p-2 sm:p-4">
+    <div class="bg-[#faf6ee] rounded-2xl w-full max-w-5xl max-h-[92vh] flex flex-col shadow-2xl border border-stone-200 overflow-hidden text-stone-800">
       
       <!-- Header -->
-      <div class="bg-slate-950 px-5 py-4 border-b border-slate-800 flex items-center justify-between flex-shrink-0">
+      <div class="bg-white px-5 py-4 border-b border-stone-200 flex items-center justify-between flex-shrink-0">
         <div class="flex items-center gap-3">
-          <div class="w-10 h-10 rounded-xl bg-brandDark flex items-center justify-center text-brandGold text-lg shadow-xs">
+          <div class="w-10 h-10 rounded-xl bg-emerald-50 border border-emerald-100 flex items-center justify-center text-emerald-700 text-lg shadow-xs">
             <i class="fa-solid fa-book-open-reader"></i>
           </div>
           <div>
-            <h3 class="font-extrabold text-base text-white tracking-tight">Official Course Materials Library</h3>
-            <p class="text-[11px] text-emerald-300 mt-0.5">Select verified syllabus material to preview or open in classroom reader</p>
+            <h3 class="font-extrabold text-base text-stone-800 tracking-tight">Official Course Materials Library</h3>
+            <p class="text-[11px] text-emerald-700 mt-0.5">Select verified syllabus material to preview or open in classroom reader</p>
           </div>
         </div>
-        <button onclick="closeTeacherLibraryPicker()" class="w-11 h-11 rounded-xl bg-rose-950/70 hover:bg-rose-900 text-rose-200 border border-rose-800/60 flex items-center justify-center font-black text-lg transition" title="Close" aria-label="Close">&times;</button>
+        <button onclick="closeTeacherLibraryPicker()" class="w-11 h-11 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-500 border border-rose-200 flex items-center justify-center font-black text-lg transition" title="Close" aria-label="Close">&times;</button>
       </div>
 
       <!-- Category Filter Tabs -->
-      <div class="bg-slate-900/80 px-4 sm:px-5 py-3 border-b border-slate-800 flex items-center gap-2 overflow-x-auto touch-scroll no-scrollbar flex-nowrap flex-shrink-0">
-        <span class="text-[11px] text-slate-400 font-semibold mr-1 whitespace-nowrap flex-shrink-0">Filter:</span>
+      <div class="bg-white/70 px-4 sm:px-5 py-3 border-b border-stone-200 flex items-center gap-2 overflow-x-auto touch-scroll no-scrollbar flex-nowrap flex-shrink-0">
+        <span class="text-[11px] text-stone-500 font-semibold mr-1 whitespace-nowrap flex-shrink-0">Filter:</span>
         <button onclick="filterTeacherLibrary('all')" id="libFilterAll" class="lib-filter-btn px-3 py-1 rounded-full text-xs font-bold bg-emerald-800 text-white border border-emerald-600 transition whitespace-nowrap flex-shrink-0">All Materials</button>
-        <button onclick="filterTeacherLibrary('qaida')" id="libFilterQaida" class="lib-filter-btn px-3 py-1 rounded-full text-xs font-bold bg-slate-800 text-slate-300 border border-slate-700 hover:bg-slate-700 transition whitespace-nowrap flex-shrink-0">Qaida & Primers</button>
-        <button onclick="filterTeacherLibrary('quran')" id="libFilterQuran" class="lib-filter-btn px-3 py-1 rounded-full text-xs font-bold bg-slate-800 text-slate-300 border border-slate-700 hover:bg-slate-700 transition whitespace-nowrap flex-shrink-0">Holy Quran</button>
-        <button onclick="filterTeacherLibrary('tafseer')" id="libFilterTafseer" class="lib-filter-btn px-3 py-1 rounded-full text-xs font-bold bg-slate-800 text-slate-300 border border-slate-700 hover:bg-slate-700 transition whitespace-nowrap flex-shrink-0">Tafseer & Trans.</button>
-        <button onclick="filterTeacherLibrary('hadith')" id="libFilterHadith" class="lib-filter-btn px-3 py-1 rounded-full text-xs font-bold bg-slate-800 text-slate-300 border border-slate-700 hover:bg-slate-700 transition whitespace-nowrap flex-shrink-0">Hadith</button>
-        <button onclick="filterTeacherLibrary('essentials')" id="libFilterEssentials" class="lib-filter-btn px-3 py-1 rounded-full text-xs font-bold bg-slate-800 text-slate-300 border border-slate-700 hover:bg-slate-700 transition whitespace-nowrap flex-shrink-0">Essentials</button>
+        <button onclick="filterTeacherLibrary('qaida')" id="libFilterQaida" class="lib-filter-btn px-3 py-1 rounded-full text-xs font-bold bg-white text-stone-600 border border-stone-200 hover:bg-stone-100 transition whitespace-nowrap flex-shrink-0">Qaida & Primers</button>
+        <button onclick="filterTeacherLibrary('quran')" id="libFilterQuran" class="lib-filter-btn px-3 py-1 rounded-full text-xs font-bold bg-white text-stone-600 border border-stone-200 hover:bg-stone-100 transition whitespace-nowrap flex-shrink-0">Holy Quran</button>
+        <button onclick="filterTeacherLibrary('tafseer')" id="libFilterTafseer" class="lib-filter-btn px-3 py-1 rounded-full text-xs font-bold bg-white text-stone-600 border border-stone-200 hover:bg-stone-100 transition whitespace-nowrap flex-shrink-0">Tafseer & Trans.</button>
+        <button onclick="filterTeacherLibrary('hadith')" id="libFilterHadith" class="lib-filter-btn px-3 py-1 rounded-full text-xs font-bold bg-white text-stone-600 border border-stone-200 hover:bg-stone-100 transition whitespace-nowrap flex-shrink-0">Hadith</button>
+        <button onclick="filterTeacherLibrary('essentials')" id="libFilterEssentials" class="lib-filter-btn px-3 py-1 rounded-full text-xs font-bold bg-white text-stone-600 border border-stone-200 hover:bg-stone-100 transition whitespace-nowrap flex-shrink-0">Essentials</button>
       </div>
 
       <!-- Books Grid -->
@@ -2454,15 +2454,15 @@ font-family: var(--font-num) !important;
           <!-- Populated by JS -->
         </div>
         <div id="teacherLibraryEmpty" class="hidden py-16 text-center">
-          <i class="fa-solid fa-book-open text-4xl text-slate-600 mb-3"></i>
-          <p class="text-slate-400 text-sm font-bold">No course materials available.</p>
+          <i class="fa-solid fa-book-open text-4xl text-stone-300 mb-3"></i>
+          <p class="text-stone-500 text-sm font-bold">No course materials available.</p>
         </div>
       </div>
 
       <!-- Footer -->
-      <div class="bg-slate-950 px-5 py-3 border-t border-slate-800 flex items-center justify-between text-xs text-slate-500 flex-shrink-0">
+      <div class="bg-white px-5 py-3 border-t border-stone-200 flex items-center justify-between text-xs text-stone-500 flex-shrink-0">
         <span><i class="fa-solid fa-circle-info text-emerald-600 mr-1"></i>Click Preview to inspect curriculum outline or Read to launch live classroom reader</span>
-        <span class="text-emerald-400 font-mono font-bold" id="libBookCountLabel"></span>
+        <span class="text-emerald-600 font-mono font-bold" id="libBookCountLabel"></span>
       </div>
     </div>
   </div>
@@ -5070,7 +5070,7 @@ font-family: var(--font-num) !important;
       const tabs = { all: 'libFilterAll', qaida: 'libFilterQaida', quran: 'libFilterQuran', tafseer: 'libFilterTafseer', hadith: 'libFilterHadith', essentials: 'libFilterEssentials' };
       Object.values(tabs).forEach(id => {
         const el = document.getElementById(id);
-        if (el) el.className = 'lib-filter-btn px-3 py-1 rounded-full text-xs font-bold bg-slate-800 text-slate-300 border border-slate-700 hover:bg-slate-700 transition whitespace-nowrap flex-shrink-0';
+        if (el) el.className = 'lib-filter-btn px-3 py-1 rounded-full text-xs font-bold bg-white text-stone-600 border border-stone-200 hover:bg-stone-100 transition whitespace-nowrap flex-shrink-0';
       });
       const activeEl = document.getElementById(tabs[category]);
       if (activeEl) activeEl.className = 'lib-filter-btn px-3 py-1 rounded-full text-xs font-bold bg-emerald-800 text-white border border-emerald-600 transition whitespace-nowrap flex-shrink-0';
@@ -5111,7 +5111,7 @@ font-family: var(--font-num) !important;
         const pgInfo = b.total_pages ? `${b.total_pages} pages` : (b.total_pages ? `${b.total_pages} hadith` : 'Course Material');
         const badge = b.category_label || b.categoryLabel || 'Course Material';
         return `
-          <div class="bg-slate-800 hover:bg-slate-750 border border-slate-700 hover:border-emerald-600 rounded-2xl p-0 overflow-hidden text-left transition group shadow-md hover:shadow-emerald-900/30 flex flex-col justify-between">
+          <div class="bg-white border border-stone-200 hover:border-emerald-500 rounded-2xl p-0 overflow-hidden text-left transition group shadow-sm hover:shadow-lg flex flex-col justify-between">
             <!-- Book Cover Gradient (clickable to open preview) -->
             <div onclick="openCourseMaterialPreview('${escapeJsAttr(b.id)}', 1)" class="cursor-pointer bg-gradient-to-br ${gradFrom} h-28 flex flex-col items-center justify-center px-3 relative">
               <div class="w-12 h-12 rounded-xl bg-white/15 flex items-center justify-center text-2xl text-white mb-1 group-hover:scale-105 transition">
@@ -5122,12 +5122,12 @@ font-family: var(--font-num) !important;
             <!-- Book Info & Actions -->
             <div class="p-3 flex-1 flex flex-col justify-between">
               <div>
-                <h4 onclick="openCourseMaterialPreview('${escapeJsAttr(b.id)}', 1)" class="cursor-pointer font-bold text-xs text-white leading-tight line-clamp-2 mb-1 group-hover:text-emerald-300 transition" title="Preview Syllabus">${b.title}</h4>
-                ${b.author ? `<p class="text-[10px] text-slate-400 truncate mb-1">${b.author}</p>` : ''}
+                <h4 onclick="openCourseMaterialPreview('${escapeJsAttr(b.id)}', 1)" class="cursor-pointer font-bold text-xs text-stone-800 leading-tight line-clamp-2 mb-1 group-hover:text-emerald-700 transition" title="Preview Syllabus">${b.title}</h4>
+                ${b.author ? `<p class="text-[10px] text-stone-500 truncate mb-1">${b.author}</p>` : ''}
               </div>
-              <div class="pt-2 mt-2 border-t border-slate-700/60 flex items-center justify-between gap-1.5">
-                <button onclick="openCourseMaterialPreview('${escapeJsAttr(b.id)}', 1)" class="px-2.5 py-1 bg-slate-700/90 hover:bg-slate-600 text-slate-200 text-[10px] font-bold rounded-lg transition flex items-center gap-1 shadow-xs" title="Preview Syllabus & Details">
-                  <i class="fa-solid fa-eye text-emerald-400"></i> Preview
+              <div class="pt-2 mt-2 border-t border-stone-100 flex items-center justify-between gap-1.5">
+                <button onclick="openCourseMaterialPreview('${escapeJsAttr(b.id)}', 1)" class="px-2.5 py-1 bg-stone-100 hover:bg-stone-200 text-stone-600 text-[10px] font-bold rounded-lg transition flex items-center gap-1 shadow-xs" title="Preview Syllabus & Details">
+                  <i class="fa-solid fa-eye text-emerald-600"></i> Preview
                 </button>
                 <button onclick="closeTeacherLibraryPicker(false); openDigitalBookReader('${escapeJsAttr(b.id)}', 1);" class="px-2.5 py-1 bg-emerald-700 hover:bg-emerald-600 text-white text-[10px] font-bold rounded-lg transition flex items-center gap-1 shadow-xs" title="Open Full Reader">
                   <i class="fa-solid fa-book-open"></i> Read

@@ -61,6 +61,19 @@ for (const [label, src] of [['teacher', TEACHER], ['admin', CURR], ['parent', PA
 check('honest load errors preserved (no fabricated pages)',
   TEACHER.includes("'Could not load this page.'") && PARENT.includes("'Could not load this page.'") && CURR.includes("'Could not load this page.'"));
 
+// Course Materials Library picker (teacher) — same paper theme
+// (owner follow-up 2026-10-29: 'ye wala preview bhi theek karo,
+// same as the previous one').
+const libStart = TEACHER.indexOf('id="modalTeacherLibraryPicker"');
+const LIB = TEACHER.slice(libStart, TEACHER.indexOf('id="teacherLibraryGrid"'));
+check('library picker: paper container + white header/footer',
+  LIB.includes('bg-[#faf6ee]') && LIB.includes('Official Course Materials Library'));
+check('library picker: dark shell gone', !LIB.includes('bg-slate-900') && !LIB.includes('bg-slate-950'));
+check('library cards are clean white book cards',
+  TEACHER.includes('bg-white border border-stone-200 hover:border-emerald-500 rounded-2xl p-0 overflow-hidden'));
+check('library filter toggle uses the light palette too',
+  TEACHER.includes("bg-white text-stone-600 border border-stone-200 hover:bg-stone-100 transition whitespace-nowrap flex-shrink-0';"));
+
 const failed = results.filter(r => !r.pass);
 console.log(`\n${results.length - failed.length}/${results.length} checks passed`);
 if (failed.length) { console.log('FAILED: ' + failed.map(f => f.name).join('; ')); process.exit(1); }
