@@ -1069,11 +1069,14 @@
       // Directory KPI cards (owner redesign 2026-10-29): combined
       // families + students per state, with the breakdown line.
       setFVal('famKpiTotalCombined', regularFamilies.length + allStu.length);
-      setFVal('famKpiTotalBreakdown', `${regularFamilies.length} Families \u00B7 ${allStu.length} Students`);
+      setFVal('famKpiTotalFamCount', regularFamilies.length);
+      setFVal('famKpiTotalStuCount', allStu.length);
       setFVal('famKpiActiveCombined', activeFamiliesList.length + activeStus);
-      setFVal('famKpiActiveBreakdown', `${activeFamiliesList.length} Families \u00B7 ${activeStus} Students`);
-      setFVal('famKpiDeactCombined', deactivatedFamiliesList.length + deactivatedStudentsOnly.length);
-      setFVal('famKpiDeactBreakdown', `${deactivatedFamiliesList.length} Families \u00B7 ${deactivatedStudentsOnly.length} Students`);
+      setFVal('famKpiActiveFamCount', activeFamiliesList.length);
+      setFVal('famKpiActiveStuCount', activeStus);
+      setFVal('famKpiDeactivatedCombined', deactivatedFamiliesList.length + deactivatedStudentsOnly.length);
+      setFVal('famKpiDeactivatedFamCount', deactivatedFamiliesList.length);
+      setFVal('famKpiDeactivatedStuCount', deactivatedStudentsOnly.length);
       setFVal('badgeDeactivatedFamiliesHeaderCount', `${deactivatedFamiliesList.length} Deactivated ${deactivatedFamiliesList.length === 1 ? 'Family' : 'Families'}`);
       setFVal('sidebarActiveFamilies', activeFamiliesList.length);
       setFVal('sidebarActiveStudents', activeStus);
@@ -1103,7 +1106,7 @@
     }
     function syncDirectoryKpiCardsUI() {
       const mode = directoryKpiSelectedMode();
-      const base = 'text-left px-4 py-3 rounded-xl flex items-center justify-between gap-3 transition hover:shadow-sm cursor-pointer w-full border ';
+      const base = 'px-3.5 py-2.5 rounded-xl flex flex-col gap-1 transition border ';
       const styles = {
         'famKpiTotal': base + 'bg-slate-50 border-slate-200',
         'famKpiActive': base + 'bg-emerald-50/70 border-emerald-200',
@@ -1122,19 +1125,22 @@
     }
     window.syncDirectoryKpiCardsUI = syncDirectoryKpiCardsUI;
 
-    function setDirectoryKpi(mode) {
-      if (mode === 'deactivated') {
-        CURRENT_STUDENTS_STATUS_FILTER = 'DEACTIVATED';
-        STU_TABLE_PAGE = 1;
-        switchFamiliesViewMode('deactivatedFams');
-        return;
-      }
-      const target = mode === 'total' ? 'ALL' : 'ACTIVE';
-      CURRENT_FAMILIES_STATUS_FILTER = target;
-      CURRENT_STUDENTS_STATUS_FILTER = target;
+    function setDirectoryKpi(mode, target) {
+      const status = mode === 'total' ? 'ALL' : (mode === 'deactivated' ? 'DEACTIVATED' : 'ACTIVE');
+      CURRENT_FAMILIES_STATUS_FILTER = status;
+      CURRENT_STUDENTS_STATUS_FILTER = status;
       FAM_TABLE_PAGE = 1;
       STU_TABLE_PAGE = 1;
-      if (CURRENT_FAMILIES_VIEW !== 'famTable') {
+      if (target === 'students') {
+        if (CURRENT_FAMILIES_VIEW !== 'studentsList') {
+          switchFamiliesViewMode('studentsList');
+        } else {
+          updateStatusFilterPillsUI();
+          renderAllStudentsListTable();
+        }
+      } else if (mode === 'deactivated') {
+        switchFamiliesViewMode('deactivatedFams');
+      } else if (CURRENT_FAMILIES_VIEW !== 'famTable') {
         switchFamiliesViewMode('famTable');
       } else {
         updateStatusFilterPillsUI();
@@ -1373,11 +1379,14 @@
       // Directory KPI cards (owner redesign 2026-10-29): combined
       // families + students per state, with the breakdown line.
       setFVal('famKpiTotalCombined', regularFamilies.length + allStu.length);
-      setFVal('famKpiTotalBreakdown', `${regularFamilies.length} Families \u00B7 ${allStu.length} Students`);
+      setFVal('famKpiTotalFamCount', regularFamilies.length);
+      setFVal('famKpiTotalStuCount', allStu.length);
       setFVal('famKpiActiveCombined', activeFamiliesList.length + activeStus);
-      setFVal('famKpiActiveBreakdown', `${activeFamiliesList.length} Families \u00B7 ${activeStus} Students`);
-      setFVal('famKpiDeactCombined', deactivatedFamiliesList.length + deactivatedStudentsOnly.length);
-      setFVal('famKpiDeactBreakdown', `${deactivatedFamiliesList.length} Families \u00B7 ${deactivatedStudentsOnly.length} Students`);
+      setFVal('famKpiActiveFamCount', activeFamiliesList.length);
+      setFVal('famKpiActiveStuCount', activeStus);
+      setFVal('famKpiDeactivatedCombined', deactivatedFamiliesList.length + deactivatedStudentsOnly.length);
+      setFVal('famKpiDeactivatedFamCount', deactivatedFamiliesList.length);
+      setFVal('famKpiDeactivatedStuCount', deactivatedStudentsOnly.length);
       setFVal('badgeDeactivatedFamiliesHeaderCount', `${deactivatedFamiliesList.length} Deactivated ${deactivatedFamiliesList.length === 1 ? 'Family' : 'Families'}`);
       setFVal('sidebarActiveFamilies', activeFams);
       setFVal('sidebarActiveStudents', activeStus);
