@@ -31,6 +31,7 @@
   <script src="js/modal-a11y.js"></script>
   <script src="js/fee-tables.js"></script>
   <script src="js/lesson-history.js"></script>
+  <script src="js/zoom-links.js"></script>
   <!-- High-Res Client-Side PDF Generation Libraries (html2canvas, jsPDF) -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
@@ -3836,7 +3837,7 @@ font-family: var(--font-num) !important;
         }
 
         const zoomActionBtn = studentZoomLink
-          ? `<button onclick="launchTeacherZoomClass('${escapeJsAttr(todaySlot ? todaySlot.id : (firstScheduleId || 'stu-' + st.id))}', '${escapeJsAttr(studentZoomLink)}', '${escapeJsAttr(st.name || 'Student')}', '${escapeJsAttr(st.id)}')" class="px-2.5 py-1 bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-700 hover:to-teal-800 text-white rounded-lg text-xs font-bold shadow-2xs flex items-center gap-1 transition" title="Start Zoom Class for ${escapeHtml(st.name)}">
+          ? `<button onclick="launchTeacherZoomClass('${escapeJsAttr(todaySlot ? todaySlot.id : (firstScheduleId || 'stu-' + st.id))}', '${escapeJsAttr(studentZoomLink)}', '${escapeJsAttr(st.name || 'Student')}', '${escapeJsAttr(st.id)}')" class="px-2.5 py-1 bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-700 hover:to-teal-800 text-white rounded-lg text-xs font-bold shadow-2xs flex items-center gap-1 transition" title="Join Zoom Class for ${escapeHtml(st.name)}">
                <i class="fa-solid fa-video"></i> Join Zoom
              </button>`
           : `<span class="px-2 py-1 rounded-lg bg-slate-100 text-slate-500 border border-slate-200 text-[10px] font-bold">Class link not set yet</span>`;
@@ -4035,7 +4036,7 @@ font-family: var(--font-num) !important;
         if (effectiveZoomLink) {
           zoomBtn = `
             <button onclick="launchTeacherZoomClassById('${escapeJsAttr(c.id)}')" class="px-3 py-1 bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-700 hover:to-teal-800 text-white rounded-lg text-xs font-black shadow-xs flex items-center gap-1 transition">
-              <i class="fa-solid fa-video"></i> Start Class
+              <i class="fa-solid fa-video"></i> Join Zoom
             </button>
           `;
         }
@@ -8548,6 +8549,17 @@ font-family: var(--font-num) !important;
         lmsNotify('Invalid Class Duration: End Time must be after Start Time.');
         return;
       }
+      // Phase 3: a session link must be a Zoom link (or a bare meeting
+      // code, normalized). Empty falls back to the teacher default below.
+      let customZoomChecked = customZoom;
+      if (customZoom && window.LmsZoomLinks) {
+        const checkedSch = window.LmsZoomLinks.normalizeZoomInput(customZoom);
+        if (!checkedSch.ok) {
+          lmsNotify(checkedSch.error);
+          return;
+        }
+        customZoomChecked = checkedSch.normalized;
+      }
       if (selectedDays.length === 0) {
         lmsNotify('Please select at least one weekly class day (Monday through Sunday).');
         return;
@@ -8578,7 +8590,7 @@ font-family: var(--font-num) !important;
 
         const startTimeSql = `${start24}:00`;
         const endTimeSql = `${end24}:00`;
-        const zoomLink = customZoom || CURRENT_TEACHER.zoom_link || '';
+        const zoomLink = customZoomChecked || CURRENT_TEACHER.zoom_link || '';
 
         // Check existing schedule conflicts using true interval overlap
         const conflictDays = [];

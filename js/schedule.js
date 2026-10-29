@@ -786,6 +786,18 @@
         return;
       }
 
+      // Phase 3: a session link must be a Zoom link (or a bare meeting
+      // code, normalized). Empty keeps the existing link (see below).
+      let newZoomChecked = newZoom;
+      if (newZoom && window.LmsZoomLinks) {
+        const checked = window.LmsZoomLinks.normalizeZoomInput(newZoom);
+        if (!checked.ok) {
+          lmsNotify(checked.error);
+          return;
+        }
+        newZoomChecked = checked.normalized;
+      }
+
       await fetchTeacherSchedules();
       const { scheduleId, studentId, teacherId, dayOfWeek } = ACTIVE_SLOT_ACTION_CONTEXT;
 
@@ -810,7 +822,7 @@
 
       for (const s of slotsToUpdate) {
         const payload = { start_time: newStart, end_time: newEnd };
-        if (newZoom) payload.meeting_link = newZoom;
+        if (newZoomChecked) payload.meeting_link = newZoomChecked;
         await db.from('class_schedules').update(payload).eq('id', s.id);
       }
 

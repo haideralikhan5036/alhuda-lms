@@ -2841,8 +2841,21 @@ async function submitEditSingleStudentForm(e, familyId, studentId) {
   }
 
   const inputZoom = (document.getElementById('fwEditStuZoom')?.value || '').trim();
+  // Phase 3: a manually entered student link must be a Zoom link (or a
+  // bare meeting code, normalized). Invalid input stops the save; the
+  // canonical/existing fallbacks are already stored and are never
+  // re-validated here.
+  let inputZoomChecked = inputZoom;
+  if (inputZoom && window.LmsZoomLinks) {
+    const checkedRe = window.LmsZoomLinks.normalizeZoomInput(inputZoom);
+    if (!checkedRe.ok) {
+      _notify360(checkedRe.error, 'error');
+      return;
+    }
+    inputZoomChecked = checkedRe.normalized;
+  }
   const canonicalZoom = (typeof getCanonicalTeacherZoomLink === 'function') ? getCanonicalTeacherZoomLink(effectiveTeacherId) : '';
-  const finalZoomLink = inputZoom || canonicalZoom || stuMeta.zoom_link || stuMeta.meeting_link || '';
+  const finalZoomLink = inputZoomChecked || canonicalZoom || stuMeta.zoom_link || stuMeta.meeting_link || '';
   stuMeta.zoom_link = finalZoomLink;
   stuMeta.meeting_link = finalZoomLink;
 
@@ -6252,7 +6265,28 @@ async function submitTeacher360EditProfileForm(e, teacherId) {
   const account_number = document.getElementById('t360AccountNo').value.trim();
   const zoom_meeting_id = document.getElementById('t360ZoomId').value.trim();
   const zoom_passcode = document.getElementById('t360ZoomPass').value.trim();
-  const zoom_link = document.getElementById('t360ZoomLink').value.trim();
+  let zoom_link = document.getElementById('t360ZoomLink').value.trim();
+  // Phase 3: a teacher default link must be a Zoom link (or a bare
+  // meeting code, normalized). Invalid input stops the save.
+  if (zoom_link && window.LmsZoomLinks) {
+    const checked360 = window.LmsZoomLinks.normalizeZoomInput(zoom_link);
+    if (!checked360.ok) {
+      _notify360(checked360.error);
+      return;
+    }
+    zoom_link = checked360.normalized;
+  }
+  // Phase 3: capture the PREVIOUS default before overwriting it, so
+  // the sync below can tell synced copies from custom values.
+  let oldZoomLink360 = '';
+  try {
+    const acc360 = JSON.parse(localStorage.getItem('alhuda_teacher_accounts') || '{}')[teacherId] || {};
+    oldZoomLink360 = acc360.zoom_link || '';
+    if (!oldZoomLink360) {
+      const row360 = (window.ALL_TEACHERS || []).find(t => String(t.id) === String(teacherId));
+      oldZoomLink360 = (row360 && row360.zoom_link) || '';
+    }
+  } catch (e) {}
 
   await _persistTeacher360Updates(
     teacherId,
@@ -6262,7 +6296,8 @@ async function submitTeacher360EditProfileForm(e, teacherId) {
       phone,
       alt_phone,
       working_shift,
-      rate_per_slot
+      rate_per_slot,
+      zoom_link
     },
     {
       full_name,
@@ -6289,7 +6324,7 @@ async function submitTeacher360EditProfileForm(e, teacherId) {
   );
 
   if (zoom_link && typeof syncTeacherZoomToAllStudents === 'function') {
-    await syncTeacherZoomToAllStudents(teacherId, zoom_link);
+    await syncTeacherZoomToAllStudents(teacherId, zoom_link, oldZoomLink360);
   }
   if (typeof loadTeachers === 'function') {
     loadTeachers(true);

@@ -137,52 +137,68 @@
     // DEDICATED TEACHER ZOOM CLASSROOM & CENTRAL AUTO-CASCADE SYNC ENGINE
     // =========================================================================
 
-    async function syncTeacherZoomToAllStudents(teacherId, newZoomLink) {
-      if (!teacherId || !newZoomLink) return { success: false, schedulesCount: 0, trialsCount: 0 };
+    async function syncTeacherZoomToAllStudents(teacherId, newZoomLink, oldZoomLink) {
+      // Phase 3 ownership model: only overwrite a value that is EMPTY
+      // or equals the teacher's PREVIOUS default (a synced copy).
+      // Distinct custom/manual values are user-owned and PRESERVED:
+      // a session-specific schedule link, or a manually entered
+      // student link, is never clobbered by a teacher-default change.
+      // When the old default is unknown (''), only empty values sync
+      // (fail closed toward preservation). Trial links are untouched:
+      // trials are not students and may intentionally use other links.
+      if (!teacherId || !newZoomLink) return { success: false, schedulesCount: 0, studentsCount: 0, trialsCount: 0 };
       const cleanLink = newZoomLink.trim();
+      const oldLink = (oldZoomLink || '').trim();
+      const isSyncedCopy = (v) => {
+        const cur = String(v || '').trim();
+        if (!cur) return true;
+        return oldLink !== '' && cur === oldLink;
+      };
       let updatedSchedulesCount = 0;
-      let updatedTrialsCount = 0;
+      let updatedStudentsCount = 0;
 
-      // 1. Cascade update to all weekly class_schedules in Supabase
+      // 1. Cascade update to weekly class_schedules — synced copies only.
       try {
-        const { data, error } = await db.from('class_schedules')
-          .update({ meeting_link: cleanLink })
-          .eq('teacher_id', teacherId)
-          .select('id');
-        if (!error && data) {
-          updatedSchedulesCount = data.length;
+        const { data: scheds } = await db.from('class_schedules')
+          .select('id, meeting_link')
+          .eq('teacher_id', teacherId);
+        for (const sch of (scheds || [])) {
+          if (!isSyncedCopy(sch.meeting_link)) continue;
+          const { error } = await db.from('class_schedules')
+            .update({ meeting_link: cleanLink })
+            .eq('id', sch.id);
+          if (!error) updatedSchedulesCount++;
         }
       } catch (err) {
         console.warn("Supabase schedule zoom sync notice:", err);
       }
 
-      // 2. Cascade update to all in-memory & stored trial classes
-      try {
-        let storedTrials = getStoredTrials();
-        storedTrials.forEach(tr => {
-          if (tr.teacher_id === teacherId) {
-            tr.meeting_link = cleanLink;
-            updatedTrialsCount++;
-          }
-        });
-        saveStoredTrials(storedTrials);
-        ALL_TRIALS = storedTrials;
-      } catch (err) {
-        console.warn("Trial zoom sync notice:", err);
-      }
+      // 2. Trial classes are deliberately NOT synced (see note above).
 
-      // 3. Update Supabase students notes assigned to this teacher
+      // 3. Update students notes assigned to this teacher — synced
+      // copies only, both link keys, plus the profiles mirror cache.
       try {
         const { data: stuList } = await db.from('students')
           .select('id, notes')
           .eq('assigned_teacher_id', teacherId);
-        
+
         if (stuList && stuList.length > 0) {
           for (const s of stuList) {
             try {
               let parsed = JSON.parse(s.notes || '{}');
+              const cur = parsed.meeting_link || parsed.zoom_link || '';
+              if (!isSyncedCopy(cur)) continue;
               parsed.meeting_link = cleanLink;
+              parsed.zoom_link = cleanLink;
               await db.from('students').update({ notes: JSON.stringify(parsed) }).eq('id', s.id);
+              try {
+                const profiles = JSON.parse(localStorage.getItem('alhuda_student_profiles') || '{}');
+                if (profiles[s.id]) {
+                  profiles[s.id].meeting_link = cleanLink;
+                  localStorage.setItem('alhuda_student_profiles', JSON.stringify(profiles));
+                }
+              } catch (e) {}
+              updatedStudentsCount++;
             } catch(e){}
           }
         }
@@ -200,7 +216,8 @@
       return {
         success: true,
         schedulesCount: updatedSchedulesCount,
-        trialsCount: updatedTrialsCount
+        studentsCount: updatedStudentsCount,
+        trialsCount: 0
       };
     }
 
@@ -1441,11 +1458,26 @@
       btn.disabled = true;
       btn.innerText = editTeacherId ? 'Updating Teacher Profile...' : 'Saving & Creating LMS Account...';
 
-      const zoom_link = (document.getElementById('tZoomLink')?.value || '').trim();
+      const zoom_link_raw = (document.getElementById('tZoomLink')?.value || '').trim();
       const zoom_meeting_id = (document.getElementById('tZoomMeetingId')?.value || '').trim();
       const zoom_passcode = (document.getElementById('tZoomPasscode')?.value || '').trim();
       const zoom_host_key = (document.getElementById('tZoomHostKey')?.value || '').trim();
       const auto_sync_zoom = document.getElementById('tZoomAutoSync')?.checked;
+
+      // Phase 3: a teacher default link must be a Zoom link (or a bare
+      // meeting code, normalized). Invalid input stops the save before
+      // anything is written — fail closed, never store a bad link.
+      let zoom_link = zoom_link_raw;
+      if (zoom_link && window.LmsZoomLinks) {
+        const checked = window.LmsZoomLinks.normalizeZoomInput(zoom_link);
+        if (!checked.ok) {
+          btn.disabled = false;
+          btn.innerHTML = '<i class="fa-solid fa-check"></i> <span id="btnSaveTeacherText">Update Teacher Profile</span>';
+          lmsNotify(checked.error, { type: 'error' });
+          return;
+        }
+        zoom_link = checked.normalized;
+      }
 
       if (editTeacherId) {
         // UPDATE MODE — preserve portal credentials (e.g. the login password
@@ -1464,7 +1496,7 @@
           }
         } catch (e) {}
         const { error } = await db.from('teachers').update({
-          full_name, father_name, phone, alt_phone, address: addressToSave, witness_name, witness_phone, rate_per_slot, working_shift
+          full_name, father_name, phone, alt_phone, address: addressToSave, witness_name, witness_phone, rate_per_slot, working_shift, zoom_link
         }).eq('id', editTeacherId);
 
         if (error) {
@@ -1477,6 +1509,17 @@
           return;
         }
 
+        // Phase 3: capture the PREVIOUS default before overwriting it,
+        // so the sync below can tell synced copies from custom values.
+        let oldZoomLink = '';
+        try {
+          const prevAcc = getTeacherAccounts()[editTeacherId] || {};
+          oldZoomLink = prevAcc.zoom_link || '';
+          if (!oldZoomLink) {
+            const prevRow = (ALL_TEACHERS || []).find(t => String(t.id) === String(editTeacherId));
+            oldZoomLink = (prevRow && prevRow.zoom_link) || '';
+          }
+        } catch (e) {}
         saveTeacherAccount(editTeacherId, {
           teacher_id: teacher_id_code,
           username,
@@ -1495,7 +1538,7 @@
         });
 
         if (auto_sync_zoom && zoom_link) {
-          await syncTeacherZoomToAllStudents(editTeacherId, zoom_link);
+          await syncTeacherZoomToAllStudents(editTeacherId, zoom_link, oldZoomLink);
         }
 
         btn.disabled = false;
@@ -1538,7 +1581,7 @@
       } else {
         // INSERT MODE
         const { data, error } = await db.from('teachers').insert([{
-          full_name, father_name, phone, alt_phone, address, witness_name, witness_phone, rate_per_slot, working_shift, status: 'Active'
+          full_name, father_name, phone, alt_phone, address, witness_name, witness_phone, rate_per_slot, working_shift, zoom_link, status: 'Active'
         }]).select();
 
         // Audit P1-3: never fabricate a local_ id and a success message
@@ -1571,7 +1614,7 @@
         });
 
         if (auto_sync_zoom && zoom_link) {
-          await syncTeacherZoomToAllStudents(insertedId, zoom_link);
+          await syncTeacherZoomToAllStudents(insertedId, zoom_link, '');
         }
 
         btn.disabled = false;
