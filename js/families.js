@@ -730,8 +730,21 @@
         }
 
         const zoomInputVal = (document.getElementById('stuTeacherZoomLink')?.value || '').trim();
+        // Phase 3: a manually entered student link must be a Zoom link
+        // (or a bare meeting code, normalized). Invalid input stops the
+        // save; the teacher-canonical fallback is already stored and is
+        // never re-validated here.
+        let zoomInputChecked = zoomInputVal;
+        if (zoomInputVal && window.LmsZoomLinks) {
+          const checkedStu = window.LmsZoomLinks.normalizeZoomInput(zoomInputVal);
+          if (!checkedStu.ok) {
+            lmsNotify(checkedStu.error, { type: 'error' });
+            return;
+          }
+          zoomInputChecked = checkedStu.normalized;
+        }
         const teacherZoomCanonical = getCanonicalTeacherZoomLink(assigned_teacher_id);
-        let resolvedZoomLink = zoomInputVal || teacherZoomCanonical || '';
+        let resolvedZoomLink = zoomInputChecked || teacherZoomCanonical || '';
         if (!resolvedZoomLink) {
           // S8 (Batch 4): an empty resolution must never ERASE a link the
           // student already has stored — keep the existing student-level

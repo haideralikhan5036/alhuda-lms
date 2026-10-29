@@ -2815,6 +2815,59 @@ async function teacherInsertOwnsIds(db, table, sub, values) {
   return false;
 }
 
+// Phase 3 (advance/Zoom commission): a delivered session is terminal.
+// Returns true when a teacher/manager attendance_logs write would move
+// a row OUT of a delivered status. Delivered = Completed, or legacy
+// Present (same meaning). Re-saves WITHIN the delivered set pass, so
+// a legacy Present row can be re-saved as Completed and vice versa.
+// Writes that do not touch status (remarks/notes-only edits) pass.
+// A row that cannot be resolved (no id, no schedule+date) fails closed
+// when it carries a status change — the caller must identify the row.
+// Owner writes are never checked here (repair path).
+async function attendanceDeliveredTransitionDenied(db, scopedBody) {
+  if (!db) return false;
+  const action = scopedBody && scopedBody.action;
+  const DELIVERED = new Set(['Completed', 'Present']);
+  try {
+    if (action === 'update') {
+      const patch = scopedBody.values || {};
+      if (patch.status == null) return false;
+      const next = String(patch.status);
+      const filters = Array.isArray(scopedBody.filters) ? scopedBody.filters : [];
+      const eqFilters = filters.filter(f => f && f.op === 'eq' && f.column && f.value != null && String(f.value) !== '');
+      const usable = eqFilters.filter(f => ['id', 'schedule_id', 'class_date', 'date', 'student_id', 'teacher_id'].includes(f.column));
+      if (usable.length !== filters.length || usable.length === 0) return true;
+      const where = usable.map(f => `${f.column} = ?`).join(' AND ');
+      const params = usable.map(f => f.value);
+      const { results } = await db.prepare(`SELECT status FROM attendance_logs WHERE ${where}`).bind(...params).all();
+      for (const r of (results || [])) {
+        if (DELIVERED.has(String(r.status)) && !DELIVERED.has(next)) return true;
+      }
+      return false;
+    }
+    // insert / upsert: resolve each row by id, else schedule+date.
+    const rows = Array.isArray(scopedBody.values) ? scopedBody.values : [scopedBody.values || {}];
+    for (const row of rows) {
+      if (!row || row.status == null) continue;
+      const next = String(row.status);
+      let existing = null;
+      if (row.id != null && String(row.id) !== '') {
+        existing = await db.prepare('SELECT status FROM attendance_logs WHERE id = ?').bind(String(row.id)).first();
+      } else if (row.schedule_id != null && String(row.schedule_id) !== '') {
+        const dt = String(row.class_date || row.date || '').trim();
+        if (!dt) return true;
+        existing = await db.prepare('SELECT status FROM attendance_logs WHERE schedule_id = ? AND (class_date = ? OR date = ?)').bind(String(row.schedule_id), dt, dt).first();
+      } else {
+        return true;
+      }
+      if (existing && DELIVERED.has(String(existing.status)) && !DELIVERED.has(next)) return true;
+    }
+    return false;
+  } catch (e) {
+    return true;
+  }
+}
+
 // Inject server-side filters so a client can never widen its own scope.
 // The db engine ANDs all filters, so injected constraints always apply.
 // Returns the scoped body, or null to deny.
@@ -3179,6 +3232,17 @@ async function handleScopedDbRequest(ctx, auth) {
   // masked read could not contain, so their edit cannot erase them.
   if (role === 'manager' && action === 'update') {
     await restoreManagerUpdateHiddenSlots(db, scopedBody, scope);
+  }
+  // Phase 3 (advance/Zoom commission): a delivered session is terminal.
+  // The frontend already refuses to move a Completed row, and the
+  // server now enforces it for direct /api/db callers too (teacher and
+  // manager roles; owner stays the repair path). This is the last guard
+  // before delegation, so a denied write lands nowhere.
+  if ((role === 'teacher' || role === 'manager') && table === 'attendance_logs' &&
+      (action === 'insert' || action === 'upsert' || action === 'update')) {
+    if (await attendanceDeliveredTransitionDenied(db, scopedBody)) {
+      return json(request, env, { ok: false, error: 'A completed session cannot be changed to another status.' }, 403);
+    }
   }
 
   const headers = new Headers(request.headers);
