@@ -784,6 +784,9 @@ if (mergedDeleted.length > 0) {
         }
 
         img.onload = function() {
+          const ebA = document.getElementById('readerPageError');
+          if (ebA) ebA.style.display = 'none';
+          img.style.display = '';
           if (spinner) spinner.classList.add('hidden');
           setTimeout(() => {
             initOrResizeAnnotationCanvas();
@@ -844,9 +847,11 @@ if (mergedDeleted.length > 0) {
     // See the teacher reader note (2026-10-29): status-less fetch
     // failures retry twice; the error box names the technical detail.
     let READER_LAST_DETAIL = '';
-    function loadReaderPageImage(img, pageUrl, onFetchError, attempt) {
+    let READER_LOAD_SEQ = 0;
+    function loadReaderPageImage(img, pageUrl, onFetchError, attempt, seq) {
       attempt = attempt || 0;
       if (attempt === 0) {
+        seq = ++READER_LOAD_SEQ;
         if (READER_BLOB_URL) {
           try { URL.revokeObjectURL(READER_BLOB_URL); } catch (e) {}
           READER_BLOB_URL = null;
@@ -865,15 +870,17 @@ if (mergedDeleted.length > 0) {
           return res.blob();
         })
         .then(function (blob) {
+          if (seq !== READER_LOAD_SEQ) return;
           READER_LAST_DETAIL = 'File received OK (' + blob.size + ' bytes, ' + (blob.type || 'unknown type') + ') but the image did not display.';
           READER_BLOB_URL = URL.createObjectURL(blob);
           img.src = READER_BLOB_URL;
         })
         .catch(function (err) {
+          if (seq !== READER_LOAD_SEQ) return;
           if (err && err.status === 401 && typeof window.clearWorkerTokens === 'function') { try { window.clearWorkerTokens(); } catch (e) {} }
           if (!err || !err.status) {
             if (attempt < 2) {
-              setTimeout(function () { loadReaderPageImage(img, pageUrl, onFetchError, attempt + 1); }, 700);
+              setTimeout(function () { loadReaderPageImage(img, pageUrl, onFetchError, attempt + 1, seq); }, 700);
               return;
             }
             READER_LAST_DETAIL = 'Network error after 3 attempts: ' + ((err && err.name) || 'Error') + ': ' + ((err && err.message) || '') + ' - login token: ' + (authVal ? 'present (length ' + authVal.length + ')' : 'MISSING');
