@@ -813,7 +813,13 @@ if (mergedDeleted.length > 0) {
           }, 60);
         };
 
-        loadReaderPageImage(img, pageUrl, function () {
+        loadReaderPageImage(img, pageUrl, function (status) {
+          if (status === 401) {
+            // Session tokens live 8 hours: an expired login must not
+            // look like a broken book page.
+            showReaderPageError(img, spinner, book, CURRENT_READER_PAGE, 'Session expired. Please log in again.');
+            return;
+          }
           // Authenticated fetch failed: run the same honest error/fallback decision.
           if (typeof img.onerror === 'function') {
             const handler = img.onerror;
@@ -841,15 +847,15 @@ if (mergedDeleted.length > 0) {
       const headers = (typeof window.getLmsAuthHeaders === 'function') ? window.getLmsAuthHeaders() : {};
       fetch(pageUrl, { headers: headers })
         .then(function (res) {
-          if (!res.ok) throw new Error('HTTP ' + res.status);
+          if (!res.ok) { const err = new Error('HTTP ' + res.status); err.status = res.status; throw err; }
           return res.blob();
         })
         .then(function (blob) {
           READER_BLOB_URL = URL.createObjectURL(blob);
           img.src = READER_BLOB_URL;
         })
-        .catch(function () {
-          if (typeof onFetchError === 'function') onFetchError();
+        .catch(function (err) {
+          if (typeof onFetchError === 'function') onFetchError(err && err.status);
           else if (spinner) spinner.classList.add('hidden');
         });
     }
