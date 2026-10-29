@@ -101,6 +101,15 @@ const MOVESEG = fnSeg(TEACHER, "canvas.addEventListener('pointermove'", 4200);
 check('annotate: live stroke resets the transform before scaling (no dpr-squared offset)', MOVESEG.includes('if (ctx.resetTransform) ctx.resetTransform();'));
 check('annotate: stroke also ends on a window-level pointerup', TEACHER.includes("window.addEventListener('pointerup', handlePointerEnd);"));
 
+
+// ---- Reader fetch retry + technical detail (2026-10-29, late) ----
+check('teacher loader: status-less failures retry (attempt < 2)', fnSeg(TEACHER, 'function loadTeacherReaderPageImage', 3400).includes('attempt < 2'));
+check('parent loader: status-less failures retry (attempt < 2)', fnSeg(PARENT, 'function loadParentReaderPageImage', 3400).includes('attempt < 2'));
+check('admin loader: status-less failures retry (attempt < 2)', fnSeg(CURR, 'function loadReaderPageImage', 3400).includes('attempt < 2'));
+check('teacher error box: technical detail line rendered', TEACHER.includes('Technical detail: ') && TEACHER.includes('TEACHER_READER_LAST_DETAIL'));
+check('parent error box: technical detail line rendered', PARENT.includes('Technical detail: ') && PARENT.includes('PARENT_READER_LAST_DETAIL'));
+check('admin error box: technical detail line rendered', CURR.includes('Technical detail: ') && CURR.includes('READER_LAST_DETAIL'));
+
 const failed = results.filter(r => !r.pass);
 console.log(`\n${results.length - failed.length}/${results.length} checks passed`);
 if (failed.length) { console.log('FAILED: ' + failed.map(f => f.name).join('; ')); process.exit(1); }

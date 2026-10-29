@@ -3060,27 +3060,43 @@
     // <img> tags cannot send Authorization headers). Revokes prior blob URLs.
     // onFetchError is invoked when the authenticated fetch fails.
     let PARENT_READER_BLOB_URL = null;
-    function loadParentReaderPageImage(img, pageUrl, onFetchError) {
-      if (PARENT_READER_BLOB_URL) {
-        try { URL.revokeObjectURL(PARENT_READER_BLOB_URL); } catch (e) {}
-        PARENT_READER_BLOB_URL = null;
+    // See the teacher reader note (2026-10-29): status-less fetch
+    // failures retry twice; the error box names the technical detail.
+    let PARENT_READER_LAST_DETAIL = '';
+    function loadParentReaderPageImage(img, pageUrl, onFetchError, attempt) {
+      attempt = attempt || 0;
+      if (attempt === 0) {
+        if (PARENT_READER_BLOB_URL) {
+          try { URL.revokeObjectURL(PARENT_READER_BLOB_URL); } catch (e) {}
+          PARENT_READER_BLOB_URL = null;
+        }
+        PARENT_READER_LAST_DETAIL = '';
       }
       if (!pageUrl || pageUrl.indexOf('data:') === 0 || pageUrl.indexOf('blob:') === 0) {
         img.src = pageUrl || '';
         return;
       }
       const headers = (typeof window.getLmsAuthHeaders === 'function') ? window.getLmsAuthHeaders() : {};
+      const authVal = (headers && headers.Authorization) || '';
       fetch(pageUrl, { headers: headers })
         .then(function (res) {
           if (!res.ok) { const err = new Error('HTTP ' + res.status); err.status = res.status; throw err; }
           return res.blob();
         })
         .then(function (blob) {
+          PARENT_READER_LAST_DETAIL = 'File received OK (' + blob.size + ' bytes, ' + (blob.type || 'unknown type') + ') but the image did not display.';
           PARENT_READER_BLOB_URL = URL.createObjectURL(blob);
           img.src = PARENT_READER_BLOB_URL;
         })
         .catch(function (err) {
           if (err && err.status === 401 && typeof window.clearWorkerTokens === 'function') { try { window.clearWorkerTokens(); } catch (e) {} }
+          if (!err || !err.status) {
+            if (attempt < 2) {
+              setTimeout(function () { loadParentReaderPageImage(img, pageUrl, onFetchError, attempt + 1); }, 700);
+              return;
+            }
+            PARENT_READER_LAST_DETAIL = 'Network error after 3 attempts: ' + ((err && err.name) || 'Error') + ': ' + ((err && err.message) || '') + ' - login token: ' + (authVal ? 'present (length ' + authVal.length + ')' : 'MISSING');
+          }
           if (typeof onFetchError === 'function') onFetchError(err && err.status);
         });
     }
@@ -3104,7 +3120,8 @@
       errBox.innerHTML = '<div style="font-size:2.2rem;margin-bottom:.75rem;">&#9888;&#65039;</div>'
         + '<div style="font-weight:700;color:#1e293b;margin-bottom:.35rem;">' + String(reason || 'Page not available.') + '</div>'
         + '<div style="font-size:.85rem;">' + String((book && book.title) || 'Course material')
-        + ' &mdash; page ' + Number(pageNum || 1) + '. The uploaded pages are safe; please try again.</div>';
+        + ' &mdash; page ' + Number(pageNum || 1) + '. The uploaded pages are safe; please try again.</div>'
+        + (PARENT_READER_LAST_DETAIL ? '<div style="font-size:.72rem;color:#94a3b8;margin-top:.6rem;">Technical detail: ' + PARENT_READER_LAST_DETAIL + '</div>' : '');
     }
 
     // Page navigation (Arabic RTL & standard)

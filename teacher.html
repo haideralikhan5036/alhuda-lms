@@ -6087,27 +6087,47 @@ font-family: var(--font-num) !important;
     // <img> tags cannot send Authorization headers). Revokes prior blob URLs.
     // onFetchError is invoked when the authenticated fetch fails.
     let TEACHER_READER_BLOB_URL = null;
-    function loadTeacherReaderPageImage(img, pageUrl, onFetchError) {
-      if (TEACHER_READER_BLOB_URL) {
-        try { URL.revokeObjectURL(TEACHER_READER_BLOB_URL); } catch (e) {}
-        TEACHER_READER_BLOB_URL = null;
+    // Technical detail for the reader error box: WHY the last load failed
+    // (or that the file arrived but did not display). The reader self-test
+    // (2026-10-29) proved the owner's browser intermittently rejects
+    // fetches with 'TypeError: Failed to fetch' while the same request
+    // succeeds moments later — so status-less failures retry twice, and
+    // whatever still fails names itself in the error box.
+    let TEACHER_READER_LAST_DETAIL = '';
+    function loadTeacherReaderPageImage(img, pageUrl, onFetchError, attempt) {
+      attempt = attempt || 0;
+      if (attempt === 0) {
+        if (TEACHER_READER_BLOB_URL) {
+          try { URL.revokeObjectURL(TEACHER_READER_BLOB_URL); } catch (e) {}
+          TEACHER_READER_BLOB_URL = null;
+        }
+        TEACHER_READER_LAST_DETAIL = '';
       }
       if (!pageUrl || pageUrl.indexOf('data:') === 0 || pageUrl.indexOf('blob:') === 0) {
         img.src = pageUrl || '';
         return;
       }
       const headers = (typeof window.getLmsAuthHeaders === 'function') ? window.getLmsAuthHeaders() : {};
+      const authVal = (headers && headers.Authorization) || '';
       fetch(pageUrl, { headers: headers })
         .then(function (res) {
           if (!res.ok) { const err = new Error('HTTP ' + res.status); err.status = res.status; throw err; }
           return res.blob();
         })
         .then(function (blob) {
+          TEACHER_READER_LAST_DETAIL = 'File received OK (' + blob.size + ' bytes, ' + (blob.type || 'unknown type') + ') but the image did not display.';
           TEACHER_READER_BLOB_URL = URL.createObjectURL(blob);
           img.src = TEACHER_READER_BLOB_URL;
         })
         .catch(function (err) {
           if (err && err.status === 401 && typeof window.clearWorkerTokens === 'function') { try { window.clearWorkerTokens(); } catch (e) {} }
+          if (!err || !err.status) {
+            if (attempt < 2) {
+              setTimeout(function () { loadTeacherReaderPageImage(img, pageUrl, onFetchError, attempt + 1); }, 700);
+              return;
+            }
+            TEACHER_READER_LAST_DETAIL = 'Network error after 3 attempts: ' + ((err && err.name) || 'Error') + ': ' + ((err && err.message) || '') + ' - login token: ' + (authVal ? 'present (length ' + authVal.length + ')' : 'MISSING');
+          }
           if (typeof onFetchError === 'function') onFetchError(err && err.status);
           else if (spinner) spinner.classList.add('hidden');
         });
@@ -6133,7 +6153,8 @@ font-family: var(--font-num) !important;
       errBox.innerHTML = '<div style="font-size:2.2rem;margin-bottom:.75rem;">&#9888;&#65039;</div>'
         + '<div style="font-weight:700;color:#1e293b;margin-bottom:.35rem;">' + String(reason || 'Page not available.') + '</div>'
         + '<div style="font-size:.85rem;">' + String((book && book.title) || 'Course material')
-        + ' &mdash; page ' + Number(pageNum || 1) + '. The uploaded pages are safe; please try again.</div>';
+        + ' &mdash; page ' + Number(pageNum || 1) + '. The uploaded pages are safe; please try again.</div>'
+        + (TEACHER_READER_LAST_DETAIL ? '<div style="font-size:.72rem;color:#94a3b8;margin-top:.6rem;">Technical detail: ' + TEACHER_READER_LAST_DETAIL + '</div>' : '');
     }
 
     function generateDynamicSvgPage(book, pageNum) {

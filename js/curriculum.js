@@ -841,27 +841,43 @@ if (mergedDeleted.length > 0) {
     // auth and displayed via a blob URL. Data-URI pages are set directly.
     // onFetchError is invoked when the authenticated fetch fails.
     let READER_BLOB_URL = null;
-    function loadReaderPageImage(img, pageUrl, onFetchError) {
-      if (READER_BLOB_URL) {
-        try { URL.revokeObjectURL(READER_BLOB_URL); } catch (e) {}
-        READER_BLOB_URL = null;
+    // See the teacher reader note (2026-10-29): status-less fetch
+    // failures retry twice; the error box names the technical detail.
+    let READER_LAST_DETAIL = '';
+    function loadReaderPageImage(img, pageUrl, onFetchError, attempt) {
+      attempt = attempt || 0;
+      if (attempt === 0) {
+        if (READER_BLOB_URL) {
+          try { URL.revokeObjectURL(READER_BLOB_URL); } catch (e) {}
+          READER_BLOB_URL = null;
+        }
+        READER_LAST_DETAIL = '';
       }
       if (!pageUrl || pageUrl.indexOf('data:') === 0 || pageUrl.indexOf('blob:') === 0) {
         img.src = pageUrl || '';
         return;
       }
       const headers = (typeof window.getLmsAuthHeaders === 'function') ? window.getLmsAuthHeaders() : {};
+      const authVal = (headers && headers.Authorization) || '';
       fetch(pageUrl, { headers: headers })
         .then(function (res) {
           if (!res.ok) { const err = new Error('HTTP ' + res.status); err.status = res.status; throw err; }
           return res.blob();
         })
         .then(function (blob) {
+          READER_LAST_DETAIL = 'File received OK (' + blob.size + ' bytes, ' + (blob.type || 'unknown type') + ') but the image did not display.';
           READER_BLOB_URL = URL.createObjectURL(blob);
           img.src = READER_BLOB_URL;
         })
         .catch(function (err) {
           if (err && err.status === 401 && typeof window.clearWorkerTokens === 'function') { try { window.clearWorkerTokens(); } catch (e) {} }
+          if (!err || !err.status) {
+            if (attempt < 2) {
+              setTimeout(function () { loadReaderPageImage(img, pageUrl, onFetchError, attempt + 1); }, 700);
+              return;
+            }
+            READER_LAST_DETAIL = 'Network error after 3 attempts: ' + ((err && err.name) || 'Error') + ': ' + ((err && err.message) || '') + ' - login token: ' + (authVal ? 'present (length ' + authVal.length + ')' : 'MISSING');
+          }
           if (typeof onFetchError === 'function') onFetchError(err && err.status);
           else if (spinner) spinner.classList.add('hidden');
         });
@@ -890,7 +906,8 @@ if (mergedDeleted.length > 0) {
       errBox.innerHTML = '<div style="font-size:2.2rem;margin-bottom:.75rem;">&#9888;&#65039;</div>'
         + '<div style="font-weight:700;color:#1e293b;margin-bottom:.35rem;">' + String(reason || 'Page not available.') + '</div>'
         + '<div style="font-size:.85rem;">' + String((book && book.title) || 'Course material')
-        + ' &mdash; page ' + Number(pageNum || 1) + '. Your uploaded pages are safe; please try again or contact the administrator.</div>';
+        + ' &mdash; page ' + Number(pageNum || 1) + '. Your uploaded pages are safe; please try again or contact the administrator.</div>'
+        + (READER_LAST_DETAIL ? '<div style="font-size:.72rem;color:#94a3b8;margin-top:.6rem;">Technical detail: ' + READER_LAST_DETAIL + '</div>' : '');
     }
 
     function renderTafseerTextContent(book, surahOrPage) {
