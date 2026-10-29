@@ -110,6 +110,15 @@ check('teacher error box: technical detail line rendered', TEACHER.includes('Tec
 check('parent error box: technical detail line rendered', PARENT.includes('Technical detail: ') && PARENT.includes('PARENT_READER_LAST_DETAIL'));
 check('admin error box: technical detail line rendered', CURR.includes('Technical detail: ') && CURR.includes('READER_LAST_DETAIL'));
 
+
+// ---- Reader load-sequence guard (2026-10-29, late) ----
+check('teacher loader: load sequence guard present', TEACHER.includes('TEACHER_READER_LOAD_SEQ') && TEACHER.includes('seq !== TEACHER_READER_LOAD_SEQ'));
+check('parent loader: load sequence guard present', PARENT.includes('PARENT_READER_LOAD_SEQ') && PARENT.includes('seq !== PARENT_READER_LOAD_SEQ'));
+check('admin loader: load sequence guard present', CURR.includes('READER_LOAD_SEQ') && CURR.includes('seq !== READER_LOAD_SEQ'));
+check('teacher onload: success clears a stale error box', fnSeg(TEACHER, 'img.onload = () =>', 400).includes("getElementById('readerPageError')"));
+check('parent onload: success clears a stale error box', PARENT.includes("img.onload = () => { const ebP = document.getElementById('readerPageError')"));
+check('admin onload: success clears a stale error box', fnSeg(CURR, 'img.onload = function()', 400).includes("getElementById('readerPageError')"));
+
 const failed = results.filter(r => !r.pass);
 console.log(`\n${results.length - failed.length}/${results.length} checks passed`);
 if (failed.length) { console.log('FAILED: ' + failed.map(f => f.name).join('; ')); process.exit(1); }

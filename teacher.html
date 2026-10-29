@@ -6024,6 +6024,9 @@ font-family: var(--font-num) !important;
         }
 
         img.onload = () => {
+          const ebT = document.getElementById('readerPageError');
+          if (ebT) ebT.style.display = 'none';
+          img.style.display = '';
           if (spinner) spinner.classList.add('hidden');
           applyReaderZoom();
           if (typeof resizeAndSyncAnnotationCanvas === 'function') {
@@ -6094,9 +6097,11 @@ font-family: var(--font-num) !important;
     // succeeds moments later — so status-less failures retry twice, and
     // whatever still fails names itself in the error box.
     let TEACHER_READER_LAST_DETAIL = '';
-    function loadTeacherReaderPageImage(img, pageUrl, onFetchError, attempt) {
+    let TEACHER_READER_LOAD_SEQ = 0;
+    function loadTeacherReaderPageImage(img, pageUrl, onFetchError, attempt, seq) {
       attempt = attempt || 0;
       if (attempt === 0) {
+        seq = ++TEACHER_READER_LOAD_SEQ;
         if (TEACHER_READER_BLOB_URL) {
           try { URL.revokeObjectURL(TEACHER_READER_BLOB_URL); } catch (e) {}
           TEACHER_READER_BLOB_URL = null;
@@ -6115,15 +6120,17 @@ font-family: var(--font-num) !important;
           return res.blob();
         })
         .then(function (blob) {
+          if (seq !== TEACHER_READER_LOAD_SEQ) return;
           TEACHER_READER_LAST_DETAIL = 'File received OK (' + blob.size + ' bytes, ' + (blob.type || 'unknown type') + ') but the image did not display.';
           TEACHER_READER_BLOB_URL = URL.createObjectURL(blob);
           img.src = TEACHER_READER_BLOB_URL;
         })
         .catch(function (err) {
+          if (seq !== TEACHER_READER_LOAD_SEQ) return;
           if (err && err.status === 401 && typeof window.clearWorkerTokens === 'function') { try { window.clearWorkerTokens(); } catch (e) {} }
           if (!err || !err.status) {
             if (attempt < 2) {
-              setTimeout(function () { loadTeacherReaderPageImage(img, pageUrl, onFetchError, attempt + 1); }, 700);
+              setTimeout(function () { loadTeacherReaderPageImage(img, pageUrl, onFetchError, attempt + 1, seq); }, 700);
               return;
             }
             TEACHER_READER_LAST_DETAIL = 'Network error after 3 attempts: ' + ((err && err.name) || 'Error') + ': ' + ((err && err.message) || '') + ' - login token: ' + (authVal ? 'present (length ' + authVal.length + ')' : 'MISSING');

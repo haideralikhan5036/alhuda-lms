@@ -3022,7 +3022,7 @@
           return;
         }
 
-        img.onload = () => { applyParentReaderZoom(); };
+        img.onload = () => { const ebP = document.getElementById('readerPageError'); if (ebP) ebP.style.display = 'none'; img.style.display = ''; applyParentReaderZoom(); };
         img.onerror = () => {
           img.onerror = null;
           if (!isInteractiveBookP) {
@@ -3063,9 +3063,11 @@
     // See the teacher reader note (2026-10-29): status-less fetch
     // failures retry twice; the error box names the technical detail.
     let PARENT_READER_LAST_DETAIL = '';
-    function loadParentReaderPageImage(img, pageUrl, onFetchError, attempt) {
+    let PARENT_READER_LOAD_SEQ = 0;
+    function loadParentReaderPageImage(img, pageUrl, onFetchError, attempt, seq) {
       attempt = attempt || 0;
       if (attempt === 0) {
+        seq = ++PARENT_READER_LOAD_SEQ;
         if (PARENT_READER_BLOB_URL) {
           try { URL.revokeObjectURL(PARENT_READER_BLOB_URL); } catch (e) {}
           PARENT_READER_BLOB_URL = null;
@@ -3084,15 +3086,17 @@
           return res.blob();
         })
         .then(function (blob) {
+          if (seq !== PARENT_READER_LOAD_SEQ) return;
           PARENT_READER_LAST_DETAIL = 'File received OK (' + blob.size + ' bytes, ' + (blob.type || 'unknown type') + ') but the image did not display.';
           PARENT_READER_BLOB_URL = URL.createObjectURL(blob);
           img.src = PARENT_READER_BLOB_URL;
         })
         .catch(function (err) {
+          if (seq !== PARENT_READER_LOAD_SEQ) return;
           if (err && err.status === 401 && typeof window.clearWorkerTokens === 'function') { try { window.clearWorkerTokens(); } catch (e) {} }
           if (!err || !err.status) {
             if (attempt < 2) {
-              setTimeout(function () { loadParentReaderPageImage(img, pageUrl, onFetchError, attempt + 1); }, 700);
+              setTimeout(function () { loadParentReaderPageImage(img, pageUrl, onFetchError, attempt + 1, seq); }, 700);
               return;
             }
             PARENT_READER_LAST_DETAIL = 'Network error after 3 attempts: ' + ((err && err.name) || 'Error') + ': ' + ((err && err.message) || '') + ' - login token: ' + (authVal ? 'present (length ' + authVal.length + ')' : 'MISSING');
