@@ -881,7 +881,7 @@
           </div>
           <div>
             <h3 class="font-black text-sm text-slate-900">Submit Leave Request / Notice</h3>
-            <span class="text-[10px] text-slate-400">Requests are reviewed by the administration.</span>
+            <span class="text-[10px] text-slate-400">Requests are reviewed by the administration. The return date is the first day your child is back in class.</span>
           </div>
         </div>
         <button onclick="closeModal('modalLeaveRequest')" class="text-slate-400 hover:text-slate-700 text-xl font-bold" aria-label="Close">&times;</button>
@@ -894,7 +894,7 @@
             <input type="date" id="leaveDateInput" required class="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-xl font-semibold focus:outline-emerald-600">
           </div>
           <div>
-            <label class="block font-bold text-slate-700 mb-1">End Date:</label>
+            <label class="block font-bold text-slate-700 mb-1">Return Date:</label>
             <input type="date" id="leaveEndDateInput" required class="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-xl font-semibold focus:outline-emerald-600">
           </div>
         </div>
@@ -992,6 +992,13 @@
           PARENT_LESSON_BLOB_URLS.push(url);
           img.src = url;
           img.classList.remove('hidden');
+        } else if (img.isConnected) {
+          // Phase 4 (audit P3-hh): fail visibly, not silently — the
+          // parent sees that an image exists but could not be loaded.
+          const ph = document.createElement('span');
+          ph.className = 'inline-block px-2 py-1 rounded-lg bg-slate-100 border border-slate-200 text-slate-500 text-[10px] font-bold';
+          ph.textContent = 'Lesson image could not be loaded.';
+          img.replaceWith(ph);
         }
       });
     }
@@ -1050,64 +1057,6 @@
       // no owner-set portal password has no credentials yet and cannot log
       // in until the administrator sets one.
       return { username: '', password: '' };
-    }
-
-    async function fetchFamiliesAndStudentsForAuth() {
-      let localParentAccs = {};
-      try {
-        localParentAccs = JSON.parse(localStorage.getItem('alhuda_parent_accounts') || '{}');
-      } catch (e) { localParentAccs = {}; }
-
-      try {
-        const [famRes, stuRes] = await Promise.all([
-          db.from('families').select('*').order('parent_name'),
-          db.from('students').select('*').order('name')
-        ]);
-
-        const rawFamilies = (famRes.data || []).filter(f => isRegularFamilyEntry(f));
-        const rawStudents = (stuRes.data || []).filter(s => isRegularStudentEntry(s));
-
-        let cloudSharedState = null;
-        let cloudUpdatedAt = 0;
-        (famRes.data || []).forEach(f => {
-          if (!f || !f.notes) return;
-          try {
-            const nObj = typeof f.notes === 'object' ? f.notes : JSON.parse(f.notes);
-            if (nObj && nObj.lms_shared_sync && typeof nObj.lms_shared_sync === 'object') {
-              const ts = new Date(nObj.lms_shared_sync.updated_at || 0).getTime() || 0;
-              if (ts >= cloudUpdatedAt) {
-                cloudUpdatedAt = ts;
-                cloudSharedState = nObj.lms_shared_sync;
-              }
-            }
-          } catch (e) {}
-        });
-
-        const mergedParentAccs = { ...(cloudSharedState?.parent_accounts || {}), ...localParentAccs };
-        rawFamilies.forEach(f => {
-          if (!f || !f.id) return;
-          const em = String(f.email || f.parent_email || '').trim();
-          f.email = em;
-          f.parent_email = em;
-          if (!f.notes) return;
-          try {
-            const nObj = typeof f.notes === 'object' ? f.notes : JSON.parse(f.notes);
-            if (nObj && nObj.portal_credentials && nObj.portal_credentials.username) {
-              mergedParentAccs[f.id] = {
-                ...nObj.portal_credentials,
-                email: nObj.portal_credentials.email || em
-              };
-            }
-          } catch (e) {}
-        });
-
-        localStorage.setItem('alhuda_parent_accounts', JSON.stringify(mergedParentAccs));
-        CURRENT_FAMILIES = rawFamilies;
-        return { families: rawFamilies, students: rawStudents, parentAccountsMap: mergedParentAccs };
-      } catch (err) {
-        console.warn('Error loading families/students for auth:', err);
-        return { families: CURRENT_FAMILIES || [], students: [], parentAccountsMap: localParentAccs };
-      }
     }
 
     function toggleParentPassVisibility() {
@@ -1724,10 +1673,12 @@
           const localFees = JSON.parse(localStorage.getItem('alhuda_fee_records') || '[]');
           if (Array.isArray(localFees) && localFees.length > 0) {
             const famIdStr = String(s.family_id || CURRENT_AUTH_FAMILY?.id || '').trim().toLowerCase();
+            // Phase 4 (audit P3-ff): family-id match ONLY. The old
+            // student-name fallback could surface another family's
+            // cached receipts on a shared device when names collide.
             const matched = localFees.filter(r => {
               const rFamId = String(r.familyId || '').trim().toLowerCase();
-              const rStuNames = String(r.studentsNames || '').toLowerCase();
-              return (famIdStr && rFamId === famIdStr) || (s.name && rStuNames.includes(s.name.toLowerCase()));
+              return famIdStr !== '' && rFamId === famIdStr;
             });
             if (matched.length > 0) localMatched = matched;
           }
@@ -1994,38 +1945,40 @@
         { num: 7, name: 'Sunday', short: 'Sun' }
       ];
 
+      // Phase 4 (audit P3-ee): show EVERY slot of the day, not just the
+      // first — a second same-day class (and its own Zoom link) used to
+      // be silently hidden.
+      const slotTimeHtml = (sc) => {
+        const st = sc.start_time ? sc.start_time.slice(0, 5) : '';
+        const et = sc.end_time ? sc.end_time.slice(0, 5) : '';
+        return et ? `${st} - ${et}` : st;
+      };
+      const slotDurBadge = (sc) => {
+        if (!sc.start_time || !sc.end_time) return '';
+        const [sh, sm] = sc.start_time.slice(0, 5).split(':').map(Number);
+        const [eh, em] = sc.end_time.slice(0, 5).split(':').map(Number);
+        const diff = ((eh * 60) + (em || 0)) - ((sh * 60) + (sm || 0));
+        return diff > 0 ? `<span class="px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 text-[9px] font-black">${diff}m</span>` : '';
+      };
       grid.innerHTML = days.map(d => {
-        const match = schedules.find(sc => sc.day_of_week === d.num);
-        const isActive = !!match;
-        let timeStr = '';
-        let durBadge = '';
-        if (match && match.start_time) {
-          const st = match.start_time.slice(0, 5);
-          const et = match.end_time ? match.end_time.slice(0, 5) : '';
-          timeStr = et ? `${st} - ${et}` : st;
-          if (et) {
-            const [sh, sm] = st.split(':').map(Number);
-            const [eh, em] = et.split(':').map(Number);
-            const diff = ((eh * 60) + (em || 0)) - ((sh * 60) + (sm || 0));
-            if (diff > 0) durBadge = `<span class="px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 text-[9px] font-black">${diff}m</span>`;
-          }
-        }
-        const slotZoom = (match?.meeting_link || defaultZoomLink || '').trim();
-
-        return `
-          <div class="rounded-2xl p-4 border transition ${isActive ? 'bg-emerald-50/60 border-emerald-200 text-emerald-950 shadow-xs' : 'bg-slate-50 border-slate-200 text-slate-400'} flex flex-col justify-between min-h-[135px]">
-            <div>
-              <div class="flex items-center justify-between mb-1.5">
-                <span class="font-black text-xs uppercase">${d.short}</span>
-                ${isActive ? (durBadge || '<span class="w-2 h-2 rounded-full bg-emerald-500"></span>') : '<span class="text-[10px] text-slate-400">Off</span>'}
-              </div>
-              <div class="text-[11px] font-bold ${isActive ? 'text-slate-800' : 'text-slate-400'}">${d.name}</div>
-            </div>
-
-            ${isActive ? `
-              <div class="mt-2 pt-2 border-t border-emerald-200/60 space-y-1.5">
-                <div class="text-xs font-black font-mono text-emerald-800">${timeStr}</div>
-                <div class="text-[10px] text-slate-500 truncate">${escapeHtml(teacherName)}</div>
+        const matches = schedules
+          .filter(sc => sc.day_of_week === d.num)
+          .slice()
+          .sort((a, b) => String(a.start_time || '').localeCompare(String(b.start_time || '')));
+        const isActive = matches.length > 0;
+        const headerBadge = !isActive
+          ? '<span class="text-[10px] text-slate-400">Off</span>'
+          : (matches.length > 1
+            ? `<span class="px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 text-[9px] font-black">${matches.length} classes</span>`
+            : (slotDurBadge(matches[0]) || '<span class="w-2 h-2 rounded-full bg-emerald-500"></span>'));
+        const slotsHtml = matches.map(sc => {
+          const slotZoom = (sc.meeting_link || defaultZoomLink || '').trim();
+          return `
+              <div class="space-y-1.5 ${sc !== matches[0] ? 'pt-2 border-t border-emerald-200/40' : ''}">
+                <div class="flex items-center gap-1.5">
+                  <span class="text-xs font-black font-mono text-emerald-800">${slotTimeHtml(sc)}</span>
+                  ${matches.length === 1 ? '' : slotDurBadge(sc)}
+                </div>
                 ${slotZoom && /^https?:\/\//i.test(slotZoom) ? `
                   <a href="${slotZoom}" target="_blank" class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-brandDark hover:bg-brandDarkest text-white font-bold text-[10px] transition w-full justify-center">
                     <i class="fa-solid fa-video text-amber-300"></i> Join Zoom
@@ -2033,6 +1986,23 @@
                 ` : `
                   <div class="text-[9px] font-semibold text-slate-400 italic">Class link not set yet</div>
                 `}
+              </div>`;
+        }).join('');
+
+        return `
+          <div class="rounded-2xl p-4 border transition ${isActive ? 'bg-emerald-50/60 border-emerald-200 text-emerald-950 shadow-xs' : 'bg-slate-50 border-slate-200 text-slate-400'} flex flex-col justify-between min-h-[135px]">
+            <div>
+              <div class="flex items-center justify-between mb-1.5">
+                <span class="font-black text-xs uppercase">${d.short}</span>
+                ${headerBadge}
+              </div>
+              <div class="text-[11px] font-bold ${isActive ? 'text-slate-800' : 'text-slate-400'}">${d.name}</div>
+              ${isActive ? `<div class="text-[10px] text-slate-500 truncate mt-0.5">${escapeHtml(teacherName)}</div>` : ''}
+            </div>
+
+            ${isActive ? `
+              <div class="mt-2 pt-2 border-t border-emerald-200/60 space-y-1.5">
+                ${slotsHtml}
               </div>
             ` : `
               <div class="text-[10px] text-slate-400 mt-2 pt-2 border-t border-slate-200">No classes scheduled.</div>
@@ -3440,7 +3410,7 @@
       const msg = (document.getElementById('leaveMessageText')?.value || '').trim();
 
       if (!startDate || !endDate) {
-        lmsNotify('Please select both a start date and an end date.');
+        lmsNotify('Please select both a start date and a return date.');
         return;
       }
       if (endDate < startDate) {
