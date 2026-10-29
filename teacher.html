@@ -1038,6 +1038,64 @@ font-family: var(--font-num) !important;
           </div>
         </div>
 
+        <!-- CURRENT SALARY SUMMARY + ADVANCE REQUEST (Batch B) -->
+        <div id="tSalStaleNote" class="hidden p-3 rounded-xl bg-amber-50 border border-amber-300 text-amber-900 text-xs font-bold">
+          Showing your last saved salary copy — live data could not be reached. Reconnect and press Refresh Slips to see the latest figures.
+        </div>
+        <div class="bg-white rounded-2xl border border-slate-200 shadow-xs p-4 space-y-3">
+          <div class="flex items-center justify-between flex-wrap gap-2">
+            <h3 class="font-extrabold text-slate-900 text-sm flex items-center gap-2">
+              <i class="fa-solid fa-money-check-dollar text-emerald-600"></i> Current Salary Summary
+            </h3>
+            <span class="text-[11px] text-slate-500">From your latest official slip — never an estimated figure</span>
+          </div>
+          <div id="tSalSummaryBody" class="text-xs text-slate-500">Loading your salary summary...</div>
+        </div>
+        <div class="bg-white rounded-2xl border border-slate-200 shadow-xs p-4 space-y-3">
+          <div class="flex items-center justify-between flex-wrap gap-2">
+            <h3 class="font-extrabold text-slate-900 text-sm flex items-center gap-2">
+              <i class="fa-solid fa-hand-holding-dollar text-emerald-600"></i> Request Advance Salary
+            </h3>
+            <span class="text-[11px] text-slate-500">Approved advances are deducted from that month's salary only</span>
+          </div>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+            <div>
+              <label class="block font-bold text-slate-700 mb-1" for="tAdvPeriod">Salary Period</label>
+              <select id="tAdvPeriod" class="w-full p-2.5 bg-white border border-slate-300 rounded-xl font-bold text-slate-800 text-xs focus:outline-brandEmerald"></select>
+            </div>
+            <div>
+              <label class="block font-bold text-slate-700 mb-1">Advance Type</label>
+              <div class="flex flex-wrap gap-1.5" id="tAdvTypeGroup">
+                <button type="button" data-adv-type="full" onclick="selectAdvanceType('full', this)" class="adv-type-btn px-3.5 py-2 rounded-full border border-slate-300 bg-white text-slate-700 text-[11px] font-bold hover:border-emerald-500 transition">Full Salary Advance</button>
+                <button type="button" data-adv-type="half" onclick="selectAdvanceType('half', this)" class="adv-type-btn px-3.5 py-2 rounded-full border border-slate-300 bg-white text-slate-700 text-[11px] font-bold hover:border-emerald-500 transition">Half Salary Advance</button>
+                <button type="button" data-adv-type="custom" onclick="selectAdvanceType('custom', this)" class="adv-type-btn px-3.5 py-2 rounded-full border border-slate-300 bg-white text-slate-700 text-[11px] font-bold hover:border-emerald-500 transition">Custom Amount</button>
+              </div>
+            </div>
+          </div>
+          <div id="tAdvAmountBox" class="p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-xs">
+            <span class="text-slate-500 font-bold block">You are requesting</span>
+            <span id="tAdvAmountText" class="font-black text-emerald-800 text-base font-mono">—</span>
+            <span id="tAdvAmountHint" class="text-slate-500 block mt-0.5">Select a salary period first.</span>
+          </div>
+          <div id="tAdvCustomBox" class="hidden">
+            <label class="block font-bold text-slate-700 mb-1" for="tAdvCustomAmount">Custom Amount (PKR)</label>
+            <input type="number" id="tAdvCustomAmount" min="1" step="1" placeholder="e.g. 10000" oninput="refreshAdvanceAmountText()" class="w-full p-2.5 bg-white border border-slate-300 rounded-xl font-bold text-slate-800 text-xs focus:outline-brandEmerald">
+            <p class="text-[11px] text-slate-500 mt-1">Must be more than 0 and no more than this period's net payable salary (checked again on the server).</p>
+          </div>
+          <div>
+            <label class="block font-bold text-slate-700 mb-1" for="tAdvReason">Reason / Details (Optional)</label>
+            <input type="text" id="tAdvReason" maxlength="500" placeholder="Short reason for the advance (optional)" class="w-full p-2.5 bg-white border border-slate-300 rounded-xl font-medium text-slate-800 text-xs focus:outline-brandEmerald">
+          </div>
+          <div class="flex items-center gap-2 flex-wrap">
+            <button type="button" id="tAdvSubmitBtn" onclick="submitTeacherAdvanceRequest()" class="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black shadow transition">Submit Advance Request</button>
+            <span class="text-[11px] text-slate-500">Submitting a request does not change your salary. Only an approved request deducts from that month.</span>
+          </div>
+          <div class="border-t pt-3">
+            <h4 class="font-extrabold text-slate-900 text-xs mb-2">My Advance Requests</h4>
+            <div id="tAdvMyList" class="space-y-2 text-xs text-slate-500">Loading your requests...</div>
+          </div>
+        </div>
+
         <!-- SALARIES TABLE CARD -->
         <div class="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
           <div class="p-4 bg-slate-50 border-b border-slate-200 flex justify-between items-center flex-wrap gap-2">
@@ -1057,13 +1115,14 @@ font-family: var(--font-num) !important;
                   <th class="p-3">Assigned Students</th>
                   <th class="p-3">Base Teaching</th>
                   <th class="p-3">Adjustments (Bonus/Ded)</th>
+                  <th class="p-3">Approved Advances</th>
                   <th class="p-3 text-right">Net Payable</th>
                   <th class="p-3 text-center">Status</th>
                   <th class="p-3 text-right">Actions</th>
                 </tr>
               </thead>
               <tbody id="tSalariesTableBody" class="divide-y divide-slate-100">
-                <tr><td colspan="7" class="p-8 text-center text-slate-400">Loading your salary vouchers...</td></tr>
+                <tr><td colspan="8" class="p-8 text-center text-slate-400">Loading your salary vouchers...</td></tr>
               </tbody>
             </table>
           </div>
@@ -2489,6 +2548,11 @@ font-family: var(--font-num) !important;
               <span class="block font-bold mb-1 text-rose-800"><i class="fa-solid fa-minus text-rose-600"></i> Deductions / Advance:</span>
               <div id="tSlipDeduction" class="p-2 bg-white border border-rose-400 rounded-lg font-mono font-bold text-rose-800">0 PKR</div>
             </div>
+          </div>
+
+          <div id="tSlipAdvanceContainer" class="hidden">
+            <span class="block font-bold mb-1 text-amber-800 text-xs"><i class="fa-solid fa-hand-holding-dollar text-amber-600"></i> Approved Advances Deducted (this period):</span>
+            <div id="tSlipAdvance" class="p-2 bg-amber-50 border border-amber-300 rounded-lg font-mono font-bold text-amber-800 text-xs">0 PKR</div>
           </div>
 
           <div id="tSlipRemarksContainer" class="hidden">
@@ -7445,6 +7509,10 @@ font-family: var(--font-num) !important;
       }
 
       // 1. Authoritative Backend Sync: Query fresh teacher row and carrier family shared sync
+      // Batch B: _salCloudOk records whether this live read succeeded —
+      // it feeds the stale-cache note below (shown only when NEITHER live
+      // source answered, i.e. the list is purely the device cache).
+      let _salCloudOk = false;
       try {
         if (typeof db !== 'undefined' && db) {
           const { data: tRow } = await db.from('teachers').select('id, address, working_shift, full_name').eq('id', CURRENT_TEACHER.id).maybeSingle();
@@ -7478,6 +7546,7 @@ font-family: var(--font-num) !important;
           }
 
           try { localStorage.setItem('alhuda_teacher_salaries', JSON.stringify(savedSalaries)); } catch (e) {}
+          _salCloudOk = true;
         }
       } catch (cloudErr) {
         console.warn('[Teacher Salaries Sync] Using cached vouchers:', cloudErr);
@@ -7510,41 +7579,42 @@ font-family: var(--font-num) !important;
         tierEl.innerText = seniorityIncrement > 0 ? `+${seniorityIncrement} PKR / stu` : 'Standard Tier';
       }
 
-      // Batch 3.1 (6D-3): salary read switch (salary_read_v1), read from
-      // the salary_slips table via FeeTables. 'off' (default, or any load
-      // failure) = the blob list above, exactly as before. 'on' = table
-      // rows unioned over the blob list (table wins per slip_key, so a
-      // never-dual-written blob slip still shows — the P2-13 lesson).
-      // 'compare' = display unchanged (blob); table-vs-blob mismatches
-      // are logged to the console for the owner to inspect.
+      // Salary-advance workflow (Batch B): the teacher preview no longer
+      // depends on the salary_read_v1 flag (default off) or on the
+      // device cache. It ALWAYS reads the salary_slips table live and
+      // merges it newest-wins per slip_key over the blob list (via
+      // FeeTables.mergeSlipLists), so an admin edit landing in EITHER
+      // store shows up after refresh. The merged map is written back to
+      // localStorage ONLY as an offline cache: on a live-read failure
+      // the cached list renders with the stale note above, never as if
+      // it were fresh. The flag still gates the Family 360 / admin
+      // compare paths, which are out of this batch's scope.
+      let _salLiveOk = false;
       try {
-        if (window.FeeTables && typeof window.FeeTables.getReadMode === 'function' && typeof window.FeeTables.loadSlipsForTeacher === 'function') {
-          const salaryMode = await window.FeeTables.getReadMode(window.FeeTables.READ_FLAG_SALARY);
-          if (salaryMode === 'on' || salaryMode === 'compare') {
-            const tableSlips = await window.FeeTables.loadSlipsForTeacher(CURRENT_TEACHER.id);
-            if (Array.isArray(tableSlips)) {
-              if (salaryMode === 'compare' && typeof window.FeeTables.diffSlipLists === 'function') {
-                const blobList = Object.entries(savedSalaries).map(([k, v]) => ({ slip_key: k, ...(v || {}) }));
-                const diff = window.FeeTables.diffSlipLists(tableSlips, blobList);
-                if (diff.missingInTable.length || diff.missingInBlob.length || diff.changed.length) {
-                  console.warn('[Teacher Salaries Compare] salary_slips vs blob mismatches:', diff);
-                }
-              } else if (salaryMode === 'on') {
-                tableSlips.forEach((s) => {
-                  if (!s) return;
-                  const key = s.slip_key || s.slipKey || (s.teacher_id != null && s.month ? String(s.teacher_id) + '_' + String(s.month).replace(/\s+/g, '_') : null);
-                  if (key) savedSalaries[key] = { ...(savedSalaries[key] || {}), ...s, teacher_id: s.teacher_id || CURRENT_TEACHER.id };
-                });
-                try { localStorage.setItem('alhuda_teacher_salaries', JSON.stringify(savedSalaries)); } catch (e) {}
-              }
-            } else {
-              console.warn('[Teacher Salaries] salary_slips load failed; keeping blob vouchers.');
-            }
+        if (window.FeeTables && typeof window.FeeTables.loadSlipsForTeacher === 'function') {
+          const tableSlips = await window.FeeTables.loadSlipsForTeacher(CURRENT_TEACHER.id);
+          if (Array.isArray(tableSlips)) {
+            _salLiveOk = true;
+            const blobList = Object.entries(savedSalaries).map(([k, v]) => ({ slip_key: k, ...(v || {}) }));
+            const merged = (typeof window.FeeTables.mergeSlipLists === 'function')
+              ? window.FeeTables.mergeSlipLists(tableSlips, blobList)
+              : tableSlips;
+            savedSalaries = {};
+            merged.forEach((s) => {
+              if (!s) return;
+              const key = s.slip_key || s.slipKey || (s.teacher_id != null && s.month ? String(s.teacher_id) + '_' + String(s.month).replace(/\s+/g, '_') : null);
+              if (key) savedSalaries[key] = { ...s, teacher_id: s.teacher_id || CURRENT_TEACHER.id };
+            });
+            try { localStorage.setItem('alhuda_teacher_salaries', JSON.stringify(savedSalaries)); } catch (e) {}
+          } else {
+            console.warn('[Teacher Salaries] salary_slips load failed; keeping cached vouchers.');
           }
         }
       } catch (salaryErr) {
-        console.warn('[Teacher Salaries] salary read switch failed; keeping blob vouchers:', salaryErr);
+        console.warn('[Teacher Salaries] salary_slips load failed; keeping cached vouchers:', salaryErr);
       }
+      const _salStaleNote = document.getElementById('tSalStaleNote');
+      if (_salStaleNote) _salStaleNote.classList.toggle('hidden', _salLiveOk || _salCloudOk);
 
       // Collect all slips belonging to logged in teacher
       const teacherSlips = [];
@@ -7563,11 +7633,13 @@ font-family: var(--font-num) !important;
         return tB - tA;
       });
 
-      // Compute summary metrics
+      // Compute summary metrics (canonical net, Batch B — see row render).
       let totalPaid = 0;
       let latestMonth = '--';
       teacherSlips.forEach((s, idx) => {
-        const net = parseFloat(s.net_payable) || 0;
+        const net = (window.FeeTables && typeof window.FeeTables.netPayable === 'function')
+          ? window.FeeTables.netPayable(s.base_subtotal, s.bonus, s.deduction, s.advance_deducted)
+          : (parseFloat(s.net_payable) || 0);
         if (s.status === 'Paid') {
           totalPaid += net;
         }
@@ -7577,7 +7649,9 @@ font-family: var(--font-num) !important;
       });
 
       // If no explicit 'Paid' status yet but vouchers exist, fallback to total net of available vouchers
-      const effectiveEarnings = totalPaid > 0 ? totalPaid : teacherSlips.reduce((sum, s) => sum + (parseFloat(s.net_payable) || 0), 0);
+      const effectiveEarnings = totalPaid > 0 ? totalPaid : teacherSlips.reduce((sum, s) => sum + ((window.FeeTables && typeof window.FeeTables.netPayable === 'function')
+        ? window.FeeTables.netPayable(s.base_subtotal, s.bonus, s.deduction, s.advance_deducted)
+        : (parseFloat(s.net_payable) || 0)), 0);
       const earningsEl = document.getElementById('tSalTotalEarnings');
       if (earningsEl) {
         earningsEl.innerText = `PKR ${effectiveEarnings.toLocaleString()}`;
@@ -7590,7 +7664,7 @@ font-family: var(--font-num) !important;
       if (teacherSlips.length === 0) {
         tbody.innerHTML = `
           <tr>
-            <td colspan="7" class="p-8 text-center text-slate-400">
+            <td colspan="8" class="p-8 text-center text-slate-400">
               <div class="max-w-md mx-auto space-y-2.5 py-4">
                 <div class="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-700 flex items-center justify-center mx-auto text-xl shadow-xs">
                   <i class="fa-solid fa-receipt"></i>
@@ -7601,6 +7675,8 @@ font-family: var(--font-num) !important;
             </td>
           </tr>
         `;
+        renderTeacherSalarySummary([]);
+        loadTeacherAdvanceRequests();
         return;
       }
 
@@ -7612,14 +7688,23 @@ font-family: var(--font-num) !important;
           ? `<span class="px-2.5 py-1 rounded-full text-[10px] font-black bg-emerald-100 text-emerald-800 border border-emerald-300 inline-flex items-center gap-1"><i class="fa-solid fa-circle-check text-emerald-600"></i> Paid</span>`
           : `<span class="px-2.5 py-1 rounded-full text-[10px] font-black bg-amber-100 text-amber-800 border border-amber-300 inline-flex items-center gap-1"><i class="fa-solid fa-clock text-amber-600"></i> Pending</span>`;
 
-        const netPayable = parseFloat(s.net_payable) || 0;
+        // Canonical net (Batch B): stored net_payable is authoritative,
+        // but the formula is re-applied at display time so an approved
+        // advance always moves the shown figure, even on a slip whose
+        // stored net predates the advance. Legacy slips (no
+        // advance_deducted) compute exactly as before.
         const baseSubtotal = parseFloat(s.base_subtotal) || 0;
         const bonus = parseFloat(s.bonus) || 0;
         const deduction = parseFloat(s.deduction) || 0;
+        const advanceDeducted = parseFloat(s.advance_deducted) || 0;
+        const netPayable = (window.FeeTables && typeof window.FeeTables.netPayable === 'function')
+          ? window.FeeTables.netPayable(baseSubtotal, bonus, deduction, advanceDeducted)
+          : (parseFloat(s.net_payable) || 0);
         const adjParts = [];
         if (bonus > 0) adjParts.push(`+${bonus.toLocaleString()}`);
         if (deduction > 0) adjParts.push(`-${deduction.toLocaleString()}`);
         const adjText = adjParts.length > 0 ? adjParts.join(' / ') + ' PKR' : '--';
+        const advText = advanceDeducted > 0 ? `-${advanceDeducted.toLocaleString()} PKR` : '--';
 
         return `
           <tr class="hover:bg-slate-50/80 transition">
@@ -7627,6 +7712,7 @@ font-family: var(--font-num) !important;
             <td class="p-3 text-slate-600"><span class="font-bold text-slate-900">${studentCount}</span> Enrolled Students</td>
             <td class="p-3 font-mono text-slate-700 font-bold">${baseSubtotal.toLocaleString()} PKR</td>
             <td class="p-3 text-slate-600 font-mono text-xs">${adjText}</td>
+            <td class="p-3 text-slate-600 font-mono text-xs">${advText}</td>
             <td class="p-3 text-right font-mono font-black text-emerald-800 text-sm">${netPayable.toLocaleString()} PKR</td>
             <td class="p-3 text-center">${statusBadge}</td>
             <td class="p-3 text-right">
@@ -7641,6 +7727,289 @@ font-family: var(--font-num) !important;
             </td>
           </tr>
         `;
+      }).join('');
+      renderTeacherSalarySummary(teacherSlips);
+      loadTeacherAdvanceRequests();
+    }
+
+    // =================================================================
+    // SALARY-ADVANCE WORKFLOW (Batch B) — teacher side
+    // The request form shows server-verified figures only as a preview:
+    // full/half amounts are computed here from the teacher's own slip
+    // for display, but the Worker recomputes them from the authoritative
+    // record on submit and rejects anything that does not fit. A
+    // submitted request changes NOTHING until an owner/manager approves
+    // it through POST /api/advances/decide.
+    // =================================================================
+    let _TADV_SLIPS = [];
+    let _TADV_TYPE = 'full';
+    let _TADV_SUBMITTING = false;
+
+    function _tAdvNetOf(slip) {
+      if (!slip) return 0;
+      if (window.FeeTables && typeof window.FeeTables.netPayable === 'function') {
+        return window.FeeTables.netPayable(slip.base_subtotal, slip.bonus, slip.deduction, slip.advance_deducted);
+      }
+      return parseFloat(slip.net_payable) || 0;
+    }
+
+    function _tAdvPeriodOf(slip) {
+      if (!slip) return null;
+      if (window.FeeTables && typeof window.FeeTables.periodFromLabel === 'function') {
+        return window.FeeTables.periodFromLabel(slip.month);
+      }
+      return null;
+    }
+
+    function _tAdvLabelOf(period) {
+      if (window.FeeTables && typeof window.FeeTables.labelFromPeriod === 'function') {
+        return window.FeeTables.labelFromPeriod(period) || period;
+      }
+      return period;
+    }
+
+    function renderTeacherSalarySummary(teacherSlips) {
+      _TADV_SLIPS = Array.isArray(teacherSlips) ? teacherSlips : [];
+      const body = document.getElementById('tSalSummaryBody');
+      const periodSel = document.getElementById('tAdvPeriod');
+      // Period options: every slip month with a parseable period, newest
+      // first. The advance form can only target a period that HAS a
+      // salary record — the server refuses the rest (422).
+      if (periodSel) {
+        const seen = {};
+        const opts = [];
+        _TADV_SLIPS.forEach((s) => {
+          const p = _tAdvPeriodOf(s);
+          if (p && !seen[p]) { seen[p] = true; opts.push({ period: p, label: s.month || _tAdvLabelOf(p) }); }
+        });
+        opts.sort((a, b) => (a.period < b.period ? 1 : -1));
+        periodSel.innerHTML = opts.length
+          ? opts.map((o) => `<option value="${o.period}">${o.label}</option>`).join('')
+          : '<option value="">No salary record yet</option>';
+        periodSel.onchange = refreshAdvanceAmountText;
+        if (!_TADV_TYPE) _TADV_TYPE = 'full';
+        const firstBtn = document.querySelector('#tAdvTypeGroup [data-adv-type="full"]');
+        if (firstBtn && !document.querySelector('#tAdvTypeGroup .adv-type-active')) selectAdvanceType('full', firstBtn);
+        refreshAdvanceAmountText();
+      }
+      if (!body) return;
+      if (!_TADV_SLIPS.length) {
+        body.innerHTML = `
+          <div class="p-4 text-center bg-slate-50 rounded-xl border border-slate-200">
+            <div class="font-extrabold text-slate-800 text-sm">Salary not yet configured</div>
+            <p class="text-slate-500 mt-1">No official salary slip has been generated for you yet. Your configured salary, advances, and net payable will appear here once Administration generates your first slip. No amount is shown until then.</p>
+          </div>`;
+        return;
+      }
+      // Latest period: max parseable period, else the first (newest-saved) slip.
+      let latest = _TADV_SLIPS[0];
+      _TADV_SLIPS.forEach((s) => {
+        const p = _tAdvPeriodOf(s), lp = _tAdvPeriodOf(latest);
+        if (p && (!lp || p > lp)) latest = s;
+      });
+      const base = parseFloat(latest.base_subtotal) || 0;
+      const bonus = parseFloat(latest.bonus) || 0;
+      const ded = parseFloat(latest.deduction) || 0;
+      const adv = parseFloat(latest.advance_deducted) || 0;
+      const net = _tAdvNetOf(latest);
+      const statusBadge = latest.status === 'Paid'
+        ? '<span class="px-2 py-0.5 rounded-full text-[10px] font-black bg-emerald-100 text-emerald-800 border border-emerald-300">Paid</span>'
+        : '<span class="px-2 py-0.5 rounded-full text-[10px] font-black bg-amber-100 text-amber-800 border border-amber-300">Pending</span>';
+      body.innerHTML = `
+        <div class="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
+          <div class="p-3 bg-slate-50 rounded-xl border border-slate-200"><span class="block text-slate-500 font-bold text-[11px]">Salary Period</span><span class="font-black text-slate-900 text-sm">${latest.month || 'Statement'}</span><span class="block mt-1">${statusBadge}</span></div>
+          <div class="p-3 bg-slate-50 rounded-xl border border-slate-200"><span class="block text-slate-500 font-bold text-[11px]">Configured Salary (Base)</span><span class="font-mono font-black text-slate-900 text-sm">${base.toLocaleString()} PKR</span></div>
+          <div class="p-3 bg-slate-50 rounded-xl border border-slate-200"><span class="block text-slate-500 font-bold text-[11px]">Bonus / Allowances</span><span class="font-mono font-black text-emerald-800 text-sm">+${bonus.toLocaleString()} PKR</span></div>
+          <div class="p-3 bg-slate-50 rounded-xl border border-slate-200"><span class="block text-slate-500 font-bold text-[11px]">Other Deductions</span><span class="font-mono font-black text-rose-800 text-sm">-${ded.toLocaleString()} PKR</span></div>
+          <div class="p-3 bg-amber-50 rounded-xl border border-amber-200"><span class="block text-slate-500 font-bold text-[11px]">Approved Advances Deducted</span><span class="font-mono font-black text-amber-800 text-sm">-${adv.toLocaleString()} PKR</span></div>
+          <div class="p-3 bg-emerald-50 rounded-xl border border-emerald-200"><span class="block text-slate-500 font-bold text-[11px]">Net Salary Payable</span><span class="font-mono font-black text-emerald-800 text-base">${net.toLocaleString()} PKR</span></div>
+        </div>
+        <p class="text-slate-500 mt-2">Net = base + bonus − deductions − approved advances. Pending requests do not reduce this figure; only approved advances do.</p>`;
+    }
+
+    function selectAdvanceType(type, btn) {
+      _TADV_TYPE = type;
+      document.querySelectorAll('#tAdvTypeGroup .adv-type-btn').forEach((b) => {
+        b.classList.remove('adv-type-active', 'bg-emerald-600', 'text-white', 'border-emerald-600');
+      });
+      if (btn) btn.classList.add('adv-type-active', 'bg-emerald-600', 'text-white', 'border-emerald-600');
+      const customBox = document.getElementById('tAdvCustomBox');
+      if (customBox) customBox.classList.toggle('hidden', type !== 'custom');
+      refreshAdvanceAmountText();
+    }
+
+    function _tAdvSelectedSlip() {
+      const periodSel = document.getElementById('tAdvPeriod');
+      const period = periodSel ? periodSel.value : '';
+      if (!period) return null;
+      return _TADV_SLIPS.find((s) => _tAdvPeriodOf(s) === period) || null;
+    }
+
+    function refreshAdvanceAmountText() {
+      const amountText = document.getElementById('tAdvAmountText');
+      const hint = document.getElementById('tAdvAmountHint');
+      if (!amountText || !hint) return;
+      const slip = _tAdvSelectedSlip();
+      if (!slip) {
+        amountText.innerText = '—';
+        hint.innerText = _TADV_SLIPS.length
+          ? 'Select a salary period that has a generated slip.'
+          : 'No salary record yet — an advance can be requested once Administration generates a slip.';
+        return;
+      }
+      const net = _tAdvNetOf(slip);
+      if (!(net > 0)) {
+        amountText.innerText = '—';
+        hint.innerText = 'There is no payable salary for this period to advance against.';
+        return;
+      }
+      if (_TADV_TYPE === 'full') {
+        amountText.innerText = net.toLocaleString() + ' PKR';
+        hint.innerText = 'Full salary advance — the full net payable for ' + (slip.month || 'this period') + '.';
+      } else if (_TADV_TYPE === 'half') {
+        amountText.innerText = Math.floor(net / 2).toLocaleString() + ' PKR';
+        hint.innerText = 'Half salary advance — half of the net payable for ' + (slip.month || 'this period') + '.';
+      } else {
+        const customEl = document.getElementById('tAdvCustomAmount');
+        const custom = customEl ? parseFloat(customEl.value) : NaN;
+        if (Number.isFinite(custom) && custom > 0) {
+          amountText.innerText = custom.toLocaleString() + ' PKR';
+          hint.innerText = custom > net
+            ? 'This exceeds the net payable for this period (' + net.toLocaleString() + ' PKR) and will be refused by the server.'
+            : 'Custom advance for ' + (slip.month || 'this period') + '.';
+        } else {
+          amountText.innerText = '—';
+          hint.innerText = 'Enter a custom amount up to the net payable (' + net.toLocaleString() + ' PKR).';
+        }
+      }
+    }
+
+    function _tAdvAuthHeaders() {
+      try {
+        if (typeof window.getLmsAuthHeaders === 'function') {
+          const h = window.getLmsAuthHeaders() || {};
+          if (h.Authorization || h.authorization) return h;
+        }
+      } catch (e) {}
+      try {
+        const t = sessionStorage.getItem('alhuda_teacher_token');
+        if (t) return { Authorization: 'Bearer ' + t };
+      } catch (e) {}
+      return {};
+    }
+
+    async function submitTeacherAdvanceRequest() {
+      if (_TADV_SUBMITTING) return;
+      if (!CURRENT_TEACHER || !CURRENT_TEACHER.id) { lmsNotify('Please log in again to request an advance.'); return; }
+      const periodSel = document.getElementById('tAdvPeriod');
+      const period = periodSel ? periodSel.value : '';
+      if (!period) { lmsNotify('Select a salary period that has a generated slip first.'); return; }
+      const slip = _tAdvSelectedSlip();
+      const net = slip ? _tAdvNetOf(slip) : 0;
+      if (!(net > 0)) { lmsNotify('There is no payable salary for this period to advance against.'); return; }
+      let customAmount = null;
+      if (_TADV_TYPE === 'custom') {
+        const customEl = document.getElementById('tAdvCustomAmount');
+        customAmount = customEl ? parseFloat(customEl.value) : NaN;
+        if (!Number.isFinite(customAmount) || customAmount <= 0) { lmsNotify('Enter a custom amount greater than 0.'); return; }
+        if (customAmount > net) { lmsNotify('A custom advance cannot exceed the net payable for this period (' + net.toLocaleString() + ' PKR).'); return; }
+      }
+      const reasonEl = document.getElementById('tAdvReason');
+      const reason = reasonEl ? reasonEl.value.trim() : '';
+      if (reason.length > 500) { lmsNotify('The reason must be 500 characters or fewer.'); return; }
+      const btn = document.getElementById('tAdvSubmitBtn');
+      _TADV_SUBMITTING = true;
+      if (btn) btn.disabled = true;
+      try {
+        const res = await fetch(getTeacherWorkerBase() + '/api/advances/request', {
+          method: 'POST',
+          headers: Object.assign({ 'Content-Type': 'application/json' }, _tAdvAuthHeaders()),
+          body: JSON.stringify({ period, advance_type: _TADV_TYPE, custom_amount: customAmount, reason: reason || undefined })
+        });
+        let data = null;
+        try { data = await res.json(); } catch (e) {}
+        if (!res.ok || !data || !data.ok) {
+          lmsNotify((data && data.error) || 'Advance request could not be submitted. Please try again.');
+          return;
+        }
+        if (data.duplicate) {
+          lmsNotify('You already have a pending request for this period. No duplicate was created.');
+        } else {
+          lmsNotify('Advance request submitted. It is now pending review by Administration.');
+        }
+        if (reasonEl) reasonEl.value = '';
+        const customEl = document.getElementById('tAdvCustomAmount');
+        if (customEl) customEl.value = '';
+        refreshAdvanceAmountText();
+        loadTeacherPreviousSalaries();
+      } catch (e) {
+        lmsNotify('Cannot reach the server. The request was NOT submitted.');
+      } finally {
+        _TADV_SUBMITTING = false;
+        if (btn) btn.disabled = false;
+      }
+    }
+
+    async function loadTeacherAdvanceRequests() {
+      const listEl = document.getElementById('tAdvMyList');
+      if (!listEl || !CURRENT_TEACHER || !CURRENT_TEACHER.id) return;
+      let rows = null;
+      try {
+        if (typeof db !== 'undefined' && db) {
+          const res = await db.from('advance_requests').select('*').eq('teacher_id', CURRENT_TEACHER.id).order('requested_at', { ascending: false });
+          if (res && !res.error && Array.isArray(res.data)) rows = res.data;
+        }
+      } catch (e) {}
+      if (!rows) {
+        listEl.innerHTML = '<p>Could not load your requests right now. Your submitted requests are still safe — press Refresh Slips to retry.</p>';
+        return;
+      }
+      // Decision toasts: the LMS has no server-push channel to teachers,
+      // so a status change is announced the first time THIS device sees
+      // it differ from the last-seen status map. First load only sets
+      // the baseline (no toast for old history).
+      let seenMap = {};
+      try { seenMap = JSON.parse(localStorage.getItem('alhuda_advance_decision_states') || '{}'); } catch (e) {}
+      let mapChanged = false;
+      rows.forEach((r) => {
+        const prev = seenMap[r.id];
+        if (prev && prev !== r.status && (r.status === 'Approved' || r.status === 'Rejected')) {
+          if (r.status === 'Approved') {
+            lmsNotify('Your advance salary request has been approved.' + (r.reviewer_comment ? ' Note: ' + r.reviewer_comment : ''));
+          } else {
+            lmsNotify('Your advance salary request has been rejected.' + (r.reviewer_comment ? ' Note: ' + r.reviewer_comment : ''));
+          }
+        }
+        if (prev !== r.status) { seenMap[r.id] = r.status; mapChanged = true; }
+      });
+      if (mapChanged) {
+        try { localStorage.setItem('alhuda_advance_decision_states', JSON.stringify(seenMap)); } catch (e) {}
+      }
+      if (!rows.length) {
+        listEl.innerHTML = '<p>No advance requests yet. Use the form above to submit one.</p>';
+        return;
+      }
+      const typeLabel = (t) => t === 'full' ? 'Full Salary' : t === 'half' ? 'Half Salary' : 'Custom Amount';
+      const badge = (st) => st === 'Approved'
+        ? '<span class="px-2 py-0.5 rounded-full text-[10px] font-black bg-emerald-100 text-emerald-800 border border-emerald-300">Approved</span>'
+        : st === 'Rejected'
+        ? '<span class="px-2 py-0.5 rounded-full text-[10px] font-black bg-rose-100 text-rose-800 border border-rose-300">Rejected</span>'
+        : '<span class="px-2 py-0.5 rounded-full text-[10px] font-black bg-amber-100 text-amber-800 border border-amber-300">Pending</span>';
+      listEl.innerHTML = rows.map((r) => {
+        const reqAmt = parseFloat(r.requested_amount) || 0;
+        const apprAmt = r.approved_amount != null ? parseFloat(r.approved_amount) : null;
+        const when = r.requested_at ? new Date(r.requested_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '';
+        return `
+          <div class="p-3 bg-slate-50 rounded-xl border border-slate-200">
+            <div class="flex items-center justify-between gap-2 flex-wrap">
+              <span class="font-black text-slate-900">${typeLabel(r.advance_type)} — ${reqAmt.toLocaleString()} PKR</span>
+              ${badge(r.status)}
+            </div>
+            <div class="text-slate-500 mt-1">Period: <strong class="text-slate-800">${r.period_label || _tAdvLabelOf(r.period) || r.period}</strong>${when ? ' • Requested: ' + when : ''}</div>
+            ${r.status === 'Approved' && apprAmt != null ? `<div class="text-emerald-800 font-bold mt-0.5">Approved: ${apprAmt.toLocaleString()} PKR — deducted from your ${r.period_label || r.period} salary.</div>` : ''}
+            ${r.reason ? `<div class="text-slate-600 mt-0.5">Reason: ${String(r.reason).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</div>` : ''}
+            ${r.reviewer_comment ? `<div class="text-slate-600 mt-0.5">Reviewer note: ${String(r.reviewer_comment).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</div>` : ''}
+          </div>`;
       }).join('');
     }
 
@@ -7721,7 +8090,12 @@ font-family: var(--font-num) !important;
       const baseSubtotal = parseFloat(slip.base_subtotal) || 0;
       const bonus = parseFloat(slip.bonus) || 0;
       const deduction = parseFloat(slip.deduction) || 0;
-      const netPayable = parseFloat(slip.net_payable) || 0;
+      const advanceDeducted = parseFloat(slip.advance_deducted) || 0;
+      // Canonical net (Batch B): an approved advance always moves the
+      // shown figure; legacy slips (no advance_deducted) are unchanged.
+      const netPayable = (window.FeeTables && typeof window.FeeTables.netPayable === 'function')
+        ? window.FeeTables.netPayable(baseSubtotal, bonus, deduction, advanceDeducted)
+        : (parseFloat(slip.net_payable) || 0);
 
       const baseSubEl = document.getElementById('tSlipBaseSubtotal');
       if (baseSubEl) baseSubEl.innerText = `${baseSubtotal.toLocaleString()} PKR`;
@@ -7731,6 +8105,11 @@ font-family: var(--font-num) !important;
 
       const dedEl = document.getElementById('tSlipDeduction');
       if (dedEl) dedEl.innerText = `${deduction.toLocaleString()} PKR`;
+
+      const advCont = document.getElementById('tSlipAdvanceContainer');
+      const advEl = document.getElementById('tSlipAdvance');
+      if (advCont) advCont.classList.toggle('hidden', !(advanceDeducted > 0));
+      if (advEl) advEl.innerText = `${advanceDeducted.toLocaleString()} PKR`;
 
       const remCont = document.getElementById('tSlipRemarksContainer');
       const remText = document.getElementById('tSlipRemarks');
@@ -7745,7 +8124,7 @@ font-family: var(--font-num) !important;
       if (netEl) netEl.innerText = `${netPayable.toLocaleString()} PKR`;
 
       const countEl = document.getElementById('tSlipTotalStudentsCount');
-      if (countEl) countEl.innerText = `For ${studentsList.length} Assigned Students (${baseSubtotal.toLocaleString()} Base ${bonus > 0 ? '+ ' + bonus + ' Bonus' : ''} ${deduction > 0 ? '- ' + deduction + ' Deduction' : ''})`;
+      if (countEl) countEl.innerText = `For ${studentsList.length} Assigned Students (${baseSubtotal.toLocaleString()} Base ${bonus > 0 ? '+ ' + bonus + ' Bonus' : ''} ${deduction > 0 ? '- ' + deduction + ' Deduction' : ''} ${advanceDeducted > 0 ? '- ' + advanceDeducted + ' Approved Advances' : ''})`;
 
       const modal = document.getElementById('modalTeacherSalarySlip');
       if (modal) {

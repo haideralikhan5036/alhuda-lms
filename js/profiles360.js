@@ -6362,14 +6362,16 @@ async function submitTeacherSalaryAdjustment360(e, teacherId) {
       status: 'Applied'
     });
     existingSlip.deduction = (parseFloat(existingSlip.deduction) || 0) + amount;
-    existingSlip.net_payable = Math.max(0, (parseFloat(existingSlip.base_subtotal) || 2500) + (parseFloat(existingSlip.bonus) || 0) - existingSlip.deduction);
+    // Canonical net (Batch B): approved advances stay subtracted — a
+    // bonus/deduction edit here must not erase the advance's effect.
+    existingSlip.net_payable = Math.max(0, (parseFloat(existingSlip.base_subtotal) || 2500) + (parseFloat(existingSlip.bonus) || 0) - existingSlip.deduction - (parseFloat(existingSlip.advance_deducted) || 0));
     existingSlip.remarks = remarks || category;
     savedSalaries[slipKey] = existingSlip;
     localStorage.setItem('alhuda_teacher_salaries', JSON.stringify(savedSalaries));
     await _persistTeacher360Updates(teacher.id, {}, { deduction_records: deductions });
   } else {
     existingSlip.bonus = (parseFloat(existingSlip.bonus) || 0) + amount;
-    existingSlip.net_payable = Math.max(0, (parseFloat(existingSlip.base_subtotal) || 2500) + existingSlip.bonus - (parseFloat(existingSlip.deduction) || 0));
+    existingSlip.net_payable = Math.max(0, (parseFloat(existingSlip.base_subtotal) || 2500) + existingSlip.bonus - (parseFloat(existingSlip.deduction) || 0) - (parseFloat(existingSlip.advance_deducted) || 0));
     existingSlip.remarks = remarks || category;
     savedSalaries[slipKey] = existingSlip;
     localStorage.setItem('alhuda_teacher_salaries', JSON.stringify(savedSalaries));
@@ -6418,7 +6420,7 @@ async function deleteTeacherDeductionRecord360(teacherId, deductionId) {
       const slipKey = `${teacher.id}_${(target.month || 'September 2026').replace(/\s+/g, '_')}`;
       if (savedSalaries[slipKey]) {
         savedSalaries[slipKey].deduction = Math.max(0, (parseFloat(savedSalaries[slipKey].deduction) || 0) - (parseFloat(target.amount) || 0));
-        savedSalaries[slipKey].net_payable = Math.max(0, (parseFloat(savedSalaries[slipKey].base_subtotal) || 2500) + (parseFloat(savedSalaries[slipKey].bonus) || 0) - savedSalaries[slipKey].deduction);
+        savedSalaries[slipKey].net_payable = Math.max(0, (parseFloat(savedSalaries[slipKey].base_subtotal) || 2500) + (parseFloat(savedSalaries[slipKey].bonus) || 0) - savedSalaries[slipKey].deduction - (parseFloat(savedSalaries[slipKey].advance_deducted) || 0));
         localStorage.setItem('alhuda_teacher_salaries', JSON.stringify(savedSalaries));
       }
     } catch (e) {}

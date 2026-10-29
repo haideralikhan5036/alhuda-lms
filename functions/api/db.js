@@ -33,7 +33,11 @@ const ALLOWED_TABLES = new Set([
   // Batch 6B: financial record tables (fee payments + payroll). See
   // FINANCIAL_TABLES below for the stricter write semantics they get.
   'salary_slips',
-  'salary_adjustments'
+  'salary_adjustments',
+  // Salary-advance workflow (Batch B): teacher requests are read through
+  // this engine (scoped per role in worker.js); writes go through the
+  // dedicated /api/advances/* endpoints, except the owner's repair path.
+  'advance_requests'
 ]);
 
 // Batch 6B: financial record tables. Inserts here are plain INSERTs — a
@@ -330,6 +334,35 @@ const SCHEMA_STATEMENTS = [
     cancel_reason TEXT,
     cancelled_by TEXT,
     legacy_json TEXT
+  )`,
+  // Salary-advance workflow (Batch B, 2026-10-29): a teacher's advance
+  // salary request and its decision. Financial-adjacent: NEVER hard-
+  // deleted (Worker denies deletes for every role, like the financial
+  // tables); a decided request is terminal — no re-decide, no edit of
+  // the decision through this table. The approved amount is materialised
+  // as a salary_adjustments row (kind 'advance') by the decide endpoint,
+  // linked here via adjustment_id; this row itself never moves money.
+  // advance_type: 'full' | 'half' | 'custom'. period: 'YYYY-MM'
+  // (the salary period the advance is recovered from). approved_amount
+  // is NULL while Pending. No amount ever lives in audit_log — the
+  // audit entry for a decision carries only actor + request id + period.
+  `CREATE TABLE IF NOT EXISTS advance_requests (
+    id TEXT PRIMARY KEY,
+    teacher_id TEXT NOT NULL,
+    teacher_name TEXT,
+    period TEXT NOT NULL,
+    advance_type TEXT NOT NULL,
+    requested_amount REAL NOT NULL,
+    approved_amount REAL,
+    status TEXT DEFAULT 'Pending',
+    reason TEXT,
+    reviewer_comment TEXT,
+    reviewed_by TEXT,
+    adjustment_id TEXT,
+    requested_at TEXT,
+    decided_at TEXT,
+    created_at TEXT DEFAULT (datetime('now')),
+    updated_at TEXT
   )`,
   // Batch 7A: authentication-hardening tables (throttle, revocation,
   // per-subject valid-after markers). Additive only; see

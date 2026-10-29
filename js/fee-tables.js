@@ -897,6 +897,54 @@
   }
 
   window.FeeTables = {
+    // Salary-advance workflow (Batch B): the ONE canonical net-payable
+    // formula, shared by the Worker (server-side approval), the teacher
+    // voucher view, and the admin payroll/360 recomputes. Previously the
+    // advance_deducted column existed in the table but NO computation
+    // site subtracted it, so an approved advance could never move a
+    // displayed net. Legacy slips carry 0/undefined there, so their
+    // results are identical to the old base + bonus - deduction formula.
+    netPayable: function (base, bonus, deduction, advanceDeducted) {
+      var v = (parseFloat(base) || 0) + (parseFloat(bonus) || 0) - (parseFloat(deduction) || 0) - (parseFloat(advanceDeducted) || 0);
+      return v > 0 ? v : 0;
+    },
+    // Salary-advance workflow (Batch B): newest-wins merge of the two
+    // slip stores for ONE teacher. The old teacher preview used
+    // table-wins only when the salary_read_v1 flag was 'on' (default
+    // off), so whichever store an admin edit landed in last could be
+    // invisible. Newest-wins per slip_key (by updated_at || saved_at;
+    // undated counts as oldest; exact ties go to the table row) makes
+    // the preview follow the latest edit from EITHER store. Pure.
+    mergeSlipLists: function (tableSlips, blobSlips) {
+      function keyOf(s) {
+        if (!s) return '';
+        if (s.slip_key) return String(s.slip_key);
+        if (s.slipKey) return String(s.slipKey);
+        if (s.teacher_id != null && s.month) return String(s.teacher_id) + '_' + String(s.month).replace(/\s+/g, '_');
+        return '';
+      }
+      function tsOf(s) {
+        var raw = (s && (s.updated_at || s.saved_at)) || '';
+        var ms = Date.parse(String(raw));
+        return Number.isFinite(ms) ? ms : -Infinity;
+      }
+      var byKey = {};
+      (Array.isArray(blobSlips) ? blobSlips : []).forEach(function (s) {
+        var k = keyOf(s);
+        if (k) byKey[k] = s;
+      });
+      (Array.isArray(tableSlips) ? tableSlips : []).forEach(function (s) {
+        var k = keyOf(s);
+        if (!k) return;
+        var cur = byKey[k];
+        if (!cur || tsOf(s) >= tsOf(cur)) byKey[k] = s;
+      });
+      return Object.keys(byKey).map(function (k) { return byKey[k]; });
+    },
+    // 'YYYY-MM' -> 'Month YYYY' (the portal's slip-month label), or null.
+    labelFromPeriod: function (period) {
+      return _labelFromPeriod(period);
+    },
     FEE_TABLES_FLAG_KEY: FEE_TABLES_FLAG_KEY,
     isEnabled: isEnabled,
     periodFromMonthYear: periodFromMonthYear,
