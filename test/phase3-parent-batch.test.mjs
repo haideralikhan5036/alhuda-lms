@@ -141,8 +141,8 @@ check('C receipt-less records show a truthful label (parent template + table + m
   String((PARENT.match(/'Not issued'/g) || []).length));
 check('C collections mapping no longer invents a number (null receiptNo)',
   PARENT.includes('receiptNo: fc.receipt_no || null'));
-check('C worker release is the commission release (2026-10-29-advance-zoom)',
-  WORKER.includes("const WORKER_RELEASE = '2026-10-29-advance-zoom'"));
+check('C worker release is the commission release (2026-10-29-phase4)',
+  WORKER.includes("const WORKER_RELEASE = '2026-10-29-phase4'"));
 
 const failed = results.filter((x) => !x.pass);
 console.log('---');
