@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Reader Self-Test — Al-Huda LMS</title>
+<style>
+  body { font-family: system-ui, sans-serif; background:#faf6ee; color:#1c1917; margin:0; padding:16px; }
+  .card { max-width:640px; margin:0 auto; background:#fff; border:1px solid #e7e0cf; border-radius:16px; padding:20px; box-shadow:0 10px 30px rgba(74,60,35,.12); }
+  h1 { font-size:20px; margin:0 0 4px; }
+  p.sub { color:#78716c; font-size:13px; margin:0 0 16px; }
+  .step { border-top:1px solid #f0ead9; padding:12px 0; font-size:15px; }
+  .step b { display:block; margin-bottom:2px; }
+  .ok { color:#047857; font-weight:700; }
+  .bad { color:#be123c; font-weight:700; }
+  .wait { color:#a8a29e; }
+  .mono { font-family: ui-monospace, monospace; font-size:12px; word-break:break-all; color:#57534e; }
+  img#testImg { max-width:100%; border:1px solid #e7e0cf; border-radius:8px; margin-top:8px; display:none; }
+  button { background:#047857; color:#fff; border:0; border-radius:999px; padding:10px 18px; font-size:15px; font-weight:700; cursor:pointer; }
+</style>
+</head>
+<body>
+<div class="card">
+  <h1>Reader Self-Test</h1>
+  <p class="sub">Ye page aap ke isi browser ke andar book page load karke har step ka result yahin likhta hai. Koi password ya token screen par nahi aata.</p>
+  <button id="runBtn" type="button">Run test</button>
+  <div id="steps"></div>
+  <img id="testImg" alt="Loaded page preview">
+</div>
+<script>
+(function () {
+  var stepsEl = document.getElementById('steps');
+  function addStep(title) {
+    var d = document.createElement('div');
+    d.className = 'step';
+    d.innerHTML = '<b></b><span class="wait">checking...</span><div class="mono"></div>';
+    d.querySelector('b').textContent = title;
+    stepsEl.appendChild(d);
+    return {
+      ok: function (msg, detail) { this.set('ok', msg, detail); },
+      bad: function (msg, detail) { this.set('bad', msg, detail); },
+      set: function (cls, msg, detail) {
+        var s = d.querySelector('span');
+        s.className = cls;
+        s.textContent = msg;
+        if (detail) d.querySelector('.mono').textContent = detail;
+      }
+    };
+  }
+  function portalKeyOrder() {
+    var keys = ['alhuda_owner_token', 'alhuda_manager_token', 'alhuda_teacher_token', 'alhuda_parent_token'];
+    var p = String(location.pathname || '').toLowerCase();
+    var own = null;
+    if (p.indexOf('teacher') !== -1) own = 'alhuda_teacher_token';
+    else if (p.indexOf('parent') !== -1) own = 'alhuda_parent_token';
+    else if (p.indexOf('manager') !== -1) own = 'alhuda_manager_token';
+    if (own) { keys.splice(keys.indexOf(own), 1); keys.unshift(own); }
+    return keys;
+  }
+  function findToken() {
+    var keys = portalKeyOrder();
+    for (var i = 0; i < keys.length; i++) {
+      try {
+        var t = sessionStorage.getItem(keys[i]);
+        if (t) return { role: keys[i].replace('alhuda_', '').replace('_token', ''), token: t };
+      } catch (e) { return { error: 'sessionStorage blocked: ' + e.message }; }
+    }
+    return null;
+  }
+  function pickPageUrl() {
+    try {
+      var books = JSON.parse(localStorage.getItem('alhuda_custom_books') || '[]');
+      for (var i = 0; i < books.length; i++) {
+        var b = books[i];
+        if (b && Array.isArray(b.pages)) {
+          for (var j = 0; j < b.pages.length; j++) {
+            if (b.pages[j]) return { title: b.title || b.id, page: j + 1, url: b.pages[j] };
+          }
+        }
+      }
+    } catch (e) {}
+    return null;
+  }
+  async function run() {
+    stepsEl.innerHTML = '';
+    document.getElementById('testImg').style.display = 'none';
+
+    var sEnv = addStep('1. Browser');
+    sEnv.ok('online = ' + navigator.onLine + ', display scale (dpr) = ' + (window.devicePixelRatio || 1));
+
+    var sTok = addStep('2. Login token (portal jaisa hi dhoondha)');
+    var found = findToken();
+    if (found && found.error) { sTok.bad('Token nahi mila', found.error); return; }
+    if (!found) { sTok.bad('Token NAHI mila — is tab mein login token maujood nahi hai'); return; }
+    sTok.ok('Token mila — role: ' + found.role + ' (length ' + found.token.length + ')');
+
+    var sUrl = addStep('3. Book page ka address (is browser ke saved data se)');
+    var pick = pickPageUrl();
+    if (!pick) { sUrl.bad('Saved books mein koi page address nahi mila'); return; }
+    sUrl.ok(pick.title + ' — page ' + pick.page, pick.url);
+
+    var sA = addStep('4. Baghair login ke page mangna (401 aana chahiye)');
+    try {
+      var rA = await fetch(pick.url, {});
+      sA.ok('Server ne jawab diya: HTTP ' + rA.status + (rA.status === 401 ? ' (bilkul expected)' : ''));
+    } catch (e) {
+      sA.bad('Fetch FAIL ho gaya — server tak pahuncha hi nahi', e.name + ': ' + e.message);
+      return;
+    }
+
+    var sB = addStep('5. Login token ke saath page mangna (200 aana chahiye)');
+    var blob = null;
+    try {
+      var rB = await fetch(pick.url, { headers: { 'Authorization': 'Bearer ' + found.token } });
+      if (!rB.ok) { sB.bad('Server ne mana kar diya: HTTP ' + rB.status); return; }
+      blob = await rB.blob();
+      sB.ok('HTTP 200 — file aa gayi', 'type: ' + blob.type + ', size: ' + blob.size + ' bytes');
+    } catch (e) {
+      sB.bad('Fetch FAIL ho gaya', e.name + ': ' + e.message);
+      return;
+    }
+
+    var sC = addStep('6. Aayi hui file ko tasveer ki tarah kholna');
+    var objUrl = URL.createObjectURL(blob);
+    var img = document.getElementById('testImg');
+    img.onload = function () {
+      sC.ok('Tasveer KHUL gayi — ' + img.naturalWidth + 'x' + img.naturalHeight);
+      img.style.display = 'block';
+    };
+    img.onerror = function () {
+      sC.bad('File aayi lekin tasveer NAHI khuli (decode fail)');
+    };
+    img.src = objUrl;
+  }
+  document.getElementById('runBtn').addEventListener('click', run);
+})();
+</script>
+</body>
+</html>
