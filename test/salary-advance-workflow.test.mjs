@@ -277,7 +277,7 @@ let reqFull, reqCustom;
   check('ui: teacher salary preview no longer consults the salary_read_v1 flag',
     !/loadTeacherPreviousSalaries[\s\S]{0,4000}getReadMode/.test(teacherHtml));
   check('release: WORKER_RELEASE is the commission release',
-    /const WORKER_RELEASE = '2026-10-29-salary-advance'/.test(workerSrc));
+    /const WORKER_RELEASE = '2026-10-29-advance-zoom'/.test(workerSrc));
   check('release: no native alert/confirm/prompt in new teacher advance code',
     !/submitTeacherAdvanceRequest[\s\S]{0,8000}\b(alert|confirm|prompt)\(/.test(teacherHtml));
 }

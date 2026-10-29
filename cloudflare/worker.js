@@ -84,7 +84,7 @@ function corsHeadersFor(request, env) {
 // functions/api/db.js (the D1 schema marker; v2 after Part A). It is hardcoded
 // here on purpose: /api/health must never 500 because D1 is unreachable, and
 // it must never cost an unauthenticated caller a D1 read.
-const WORKER_RELEASE = '2026-10-29-salary-advance';
+const WORKER_RELEASE = '2026-10-29-advance-zoom';
 const HEALTH_SCHEMA_VERSION = '2026-10-29-v3';
 
 // --- Batch 7 Part B: security headers (workers.dev responses) --------------
