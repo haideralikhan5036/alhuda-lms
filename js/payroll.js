@@ -16,9 +16,9 @@
     // Course rates now come from the central Course Payment Settings
     // (js/course-catalogue.js, D1 key course_rates_v1) — the old hardcoded
     // ACADEMY_COURSE_RATES table and the substring rate rules are gone
-    // from the compile path. getStudentCourseSalaryRate below is kept
-    // ONLY as a legacy helper for the Teacher 360 display until Phase 3
-    // converges it onto this compile; payroll itself never calls it.
+    // from the compile path. The legacy substring rate function was
+    // removed in Phase 3 once the Teacher 360 display converged onto
+    // this same engine (no callers remain).
     // ======================================================================
     function payrollSettings() {
       try {
@@ -146,76 +146,6 @@
         }
       }
       return 0;
-    }
-
-    function getStudentCourseSalaryRate(student, scheds, teacherIncrement) {
-      // 1. Detect if Weekend Schedule
-      let isWeekend = false;
-      const dayNums = (scheds || []).map(s => Number(s.day_of_week));
-      if (dayNums.length > 0 && dayNums.every(d => d === 6 || d === 7)) {
-        isWeekend = true;
-      }
-
-      // 2. Parse course details
-      let cName = '';
-      if (student.course_id && typeof student.course_id === 'string' && student.course_id.length > 10) {
-        // Find course name by UUID if matched
-        const matchedCourse = (window.ALL_COURSES_CACHE || []).find(c => c.id === student.course_id);
-        if (matchedCourse) cName = matchedCourse.name;
-      }
-      if (!cName && student.notes) {
-        try {
-          const nObj = JSON.parse(student.notes);
-          cName = nObj.course || nObj.trial_course || '';
-          if (!isWeekend && (nObj.days_per_week || '').toLowerCase().includes('weekend')) {
-            isWeekend = true;
-          }
-        } catch(e) {
-          cName = student.notes;
-        }
-      }
-      cName = (cName || 'Noorani Qaida & Basic Quran').toLowerCase();
-
-      let baseRate = 2200;
-      let courseLabel = 'Noorani Qaida & Basic Quran';
-
-      if (cName.includes('english') && (cName.includes('tafseer') || cName.includes('translation'))) {
-        baseRate = 4500;
-        courseLabel = 'English Translation & Tafseer';
-      } else if (cName.includes('urdu') && (cName.includes('tafseer') || cName.includes('translation'))) {
-        baseRate = 3500;
-        courseLabel = 'Urdu Translation & Tafseer';
-      } else if (cName.includes('tafseer') || cName.includes('translation')) {
-        baseRate = 4500;
-        courseLabel = 'Tafseer & Translation';
-      } else if (cName.includes('islamic') || cName.includes('dua')) {
-        baseRate = 3500;
-        courseLabel = 'Islamic Studies & Duas';
-      } else if (isWeekend) {
-        baseRate = 3200;
-        courseLabel = 'Weekend Quran (Saturday & Sunday)';
-      } else {
-        baseRate = 2200;
-        courseLabel = 'Noorani Qaida / Quran Reading';
-      }
-
-      const finalRate = baseRate + teacherIncrement;
-
-      let scheduleText = 'Regular Days';
-      if (isWeekend) {
-        scheduleText = 'Weekend (Sat - Sun)';
-      } else if (dayNums.length > 0) {
-        scheduleText = `${dayNums.length} Days / Week`;
-      }
-
-      return {
-        baseRate,
-        increment: teacherIncrement,
-        finalRate,
-        courseLabel,
-        scheduleText,
-        isWeekend
-      };
     }
 
     /**
@@ -493,13 +423,6 @@
         students = sRes.data || [];
         ALL_TEACHERS = teachers;
         ALL_STUDENTS = students;
-      }
-
-      if (!window.ALL_COURSES_CACHE || window.ALL_COURSES_CACHE.length === 0) {
-        try {
-          const { data: courses } = await db.from('courses').select('*');
-          window.ALL_COURSES_CACHE = courses || [];
-        } catch(e){}
       }
 
       if (!teachers || teachers.length === 0) {
