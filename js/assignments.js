@@ -170,27 +170,82 @@
   // The engine additionally bounds eligibility by the student's own
   // joining/deactivation dates (as today's proration does), so the
   // synthetic row only supplies WHO + WHICH COURSE + FROM WHEN.
-  function deriveFor(students, realRows) {
+  function deriveFor(students, realRows, schedules) {
     var withReal = {};
     (realRows || _cache || []).forEach(function (r) { withReal[String(r.student_id)] = true; });
     var out = [];
+    var derivedForStudent = {};
     (students || []).forEach(function (s) {
       if (!s || !s.id || withReal[String(s.id)]) return;
-      if (!s.assigned_teacher_id) return;
+      if (String(s.status || '').toLowerCase() === 'trial') return;
       var start = null;
       if (s.joining_date) start = String(s.joining_date).slice(0, 10);
       else if (s.created_at) start = String(s.created_at).slice(0, 10);
-      out.push({
-        id: 'DERIVED-' + s.id,
-        student_id: String(s.id),
-        teacher_id: String(s.assigned_teacher_id),
+      if (s.assigned_teacher_id) {
+        var open = {
+          id: 'DERIVED-' + s.id,
+          student_id: String(s.id),
+          teacher_id: String(s.assigned_teacher_id),
+          course_id: null,
+          course_name: studentCourseName(s) || null,
+          start_date: start,
+          end_date: null,
+          end_reason: null,
+          synthetic: true
+        };
+        out.push(open);
+        derivedForStudent[String(s.id)] = open;
+        return;
+      }
+      // Deactivated with no current teacher: a CLOSED synthetic period
+      // to the teacher held before deactivation, ending on the
+      // deactivation date — the final month's claim, exactly bounded
+      // (the old payroll union claimed it with no end date at all).
+      var notes = {};
+      try { notes = typeof s.notes === 'string' ? (JSON.parse(s.notes) || {}) : (s.notes || {}); } catch (e) { notes = {}; }
+      var prevTeacher = s.previous_teacher_id_before_deactivation || notes.previous_teacher_id_before_deactivation || null;
+      var deactDate = s.deactivation_date || notes.deactivation_date || null;
+      if (prevTeacher && deactDate && /^\d{4}-\d{2}-\d{2}/.test(String(deactDate))) {
+        var closed = {
+          id: 'DERIVED-PREV-' + s.id,
+          student_id: String(s.id),
+          teacher_id: String(prevTeacher),
+          course_id: null,
+          course_name: studentCourseName(s) || null,
+          start_date: start,
+          end_date: String(deactDate).slice(0, 10),
+          end_reason: 'deactivated',
+          synthetic: true
+        };
+        out.push(closed);
+        derivedForStudent[String(s.id)] = closed;
+      }
+    });
+    // Schedule-only legacy links: no assigned teacher and no derived
+    // period, but the student sits in a teacher's schedule.
+    (schedules || []).forEach(function (sch) {
+      if (!sch || !sch.student_id || !sch.teacher_id) return;
+      var stu = null;
+      (students || []).forEach(function (s) { if (String(s.id) === String(sch.student_id)) stu = s; });
+      if (!stu || withReal[String(stu.id)] || derivedForStudent[String(stu.id)]) return;
+      if (stu.assigned_teacher_id) return;
+      if (String(stu.status || '').toLowerCase() === 'trial') return;
+      var start = null;
+      if (stu.joining_date) start = String(stu.joining_date).slice(0, 10);
+      else if (stu.created_at) start = String(stu.created_at).slice(0, 10);
+      var row = {
+        id: 'DERIVED-SCHED-' + stu.id,
+        student_id: String(stu.id),
+        teacher_id: String(sch.teacher_id),
         course_id: null,
-        course_name: studentCourseName(s) || null,
+        course_name: studentCourseName(stu) || null,
         start_date: start,
         end_date: null,
         end_reason: null,
         synthetic: true
-      });
+      };
+      out.push(row);
+      derivedForStudent[String(stu.id)] = row;
     });
     return out;
   }

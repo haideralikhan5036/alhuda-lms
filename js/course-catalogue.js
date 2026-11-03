@@ -38,9 +38,9 @@
       { id: 'crs-quran-reading', name: 'Quran Reading with Tajweed', monthly_rate: 2200, active: true, aliases: ['Nazra Quran with Tajweed', 'Nazra Quran', 'Quran Reading'] },
       { id: 'crs-hifz', name: 'Quran Memorization / Hifz', monthly_rate: 2200, active: true, aliases: ['Quran Memorization (Hifz-ul-Quran)', 'Quran Memorization', 'Hifz'] },
       { id: 'crs-tajweed', name: 'Advanced Tajweed Rules', monthly_rate: 2500, active: true, aliases: ['Advanced Tajweed & Tarteel', 'Tajweed'] },
-      { id: 'crs-tafseer-english', name: 'English Translation & Tafseer', monthly_rate: 4500, active: true, aliases: ['Tafseer-ul-Quran', 'Tafseer & Translation', 'English Tafseer', 'English Translation'] },
-      { id: 'crs-tafseer-urdu', name: 'Urdu Translation & Tafseer', monthly_rate: 3500, active: true, aliases: ['Urdu Tafseer', 'Urdu Translation'] },
-      { id: 'crs-islamic-studies', name: 'Islamic Studies & Tarbiyah', monthly_rate: 3500, active: true, aliases: ['Islamic Studies & Daily Duas', 'Islamic Studies & Duas', 'Islamic Studies'] },
+      { id: 'crs-tafseer-english', name: 'English Translation & Tafseer', monthly_rate: 4500, active: true, weekend_eligible: false, aliases: ['Tafseer-ul-Quran', 'Tafseer & Translation', 'English Tafseer', 'English Translation'] },
+      { id: 'crs-tafseer-urdu', name: 'Urdu Translation & Tafseer', monthly_rate: 3500, active: true, weekend_eligible: false, aliases: ['Urdu Tafseer', 'Urdu Translation'] },
+      { id: 'crs-islamic-studies', name: 'Islamic Studies & Tarbiyah', monthly_rate: 3500, active: true, weekend_eligible: false, aliases: ['Islamic Studies & Daily Duas', 'Islamic Studies & Duas', 'Islamic Studies'] },
       { id: 'crs-arabic', name: 'Arabic Language & Grammar', monthly_rate: 2200, active: true, aliases: ['Arabic Language', 'Arabic'] }
     ],
     updated_at: null,
@@ -64,11 +64,19 @@
     if (Array.isArray(raw.courses) && raw.courses.length) {
       s.courses = raw.courses.map(function (c, i) {
         c = c || {};
+        var cid = String(c.id || ('crs-custom-' + i));
         return {
-          id: String(c.id || ('crs-custom-' + i)),
+          id: cid,
           name: String(c.name || '').trim(),
           monthly_rate: Math.max(0, parseInt(c.monthly_rate, 10) || 0),
           active: c.active !== false,
+          // Weekend-rate eligibility (Phase 2): the legacy engine never
+          // let the weekend programme rate override Tafseer or Islamic
+          // Studies, so those catalogue rows carry weekend_eligible:false.
+          // Rows saved before this field existed get the same default by
+          // id; every other course is weekend-eligible.
+          weekend_eligible: c.weekend_eligible != null ? !!c.weekend_eligible
+            : !(cid === 'crs-tafseer-english' || cid === 'crs-tafseer-urdu' || cid === 'crs-islamic-studies'),
           aliases: Array.isArray(c.aliases) ? c.aliases.map(function (a) { return String(a); }) : [],
           updated_at: c.updated_at || null,
           updated_by: c.updated_by || null

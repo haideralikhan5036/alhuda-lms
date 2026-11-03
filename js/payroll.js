@@ -11,14 +11,122 @@
     // COURSE-BASED AUTO PAYROLL & EDITABLE SLIPS
     // ==========================================
 
-    const ACADEMY_COURSE_RATES = {
-      'noorani_qaida': 2200,
-      'nazra_quran': 2200,
-      'weekend_basic': 3200,
-      'islamic_studies': 3500,
-      'urdu_tafseer': 3500,
-      'english_tafseer': 4500
-    };
+    // ======================================================================
+    // Phase 2 (2026-11-03): assignment-based engine helpers.
+    // Course rates now come from the central Course Payment Settings
+    // (js/course-catalogue.js, D1 key course_rates_v1) — the old hardcoded
+    // ACADEMY_COURSE_RATES table and the substring rate rules are gone
+    // from the compile path. getStudentCourseSalaryRate below is kept
+    // ONLY as a legacy helper for the Teacher 360 display until Phase 3
+    // converges it onto this compile; payroll itself never calls it.
+    // ======================================================================
+    function payrollSettings() {
+      try {
+        if (window.CourseCatalogue) return CourseCatalogue.getSettings();
+      } catch (e) {}
+      return { basic_salary_pkr: 0, weekend_rate: 0, courses: [] };
+    }
+
+    function payrollDateMax(a, b) { return !a ? (b || null) : (!b ? a : (a > b ? a : b)); }
+    function payrollDateMin(a, b) { return !a ? (b || null) : (!b ? a : (a < b ? a : b)); }
+    function payrollDaysInclusive(startStr, endStr) {
+      if (!startStr || !endStr) return 0;
+      const s = Date.parse(String(startStr).slice(0, 10) + 'T00:00:00Z');
+      const e = Date.parse(String(endStr).slice(0, 10) + 'T00:00:00Z');
+      if (isNaN(s) || isNaN(e) || e < s) return 0;
+      return Math.round((e - s) / 86400000) + 1;
+    }
+
+    // Resolve the payable rate for one assignment period from the
+    // catalogue. Returns { ok:false, reason } when the course cannot be
+    // priced — the caller surfaces it in the pre-flight warning list and
+    // excludes the line; there is NO silent default rate anymore.
+    function resolveAssignmentRate(assignment, student, stuScheds, settings) {
+      const name = (assignment && assignment.course_name) || (window.Assignments ? Assignments.studentCourseName(student) : '') || '';
+      const entry = window.CourseCatalogue ? CourseCatalogue.resolveByName(name) : null;
+      const dayNums = (stuScheds || []).map(s => Number(s.day_of_week));
+      const isWeekend = dayNums.length > 0 && dayNums.every(d => d === 6 || d === 7);
+      if (!entry) {
+        return { ok: false, isWeekend, courseName: name, reason: name ? `Course "${name}" is not in the Course Payment Settings list` : 'No course is set for this student' };
+      }
+      if (!entry.active) {
+        return { ok: false, isWeekend, courseName: name, reason: `Course "${entry.name}" is switched off in Course Payment Settings` };
+      }
+      if (!(entry.monthly_rate > 0)) {
+        return { ok: false, isWeekend, courseName: name, reason: `Course "${entry.name}" has no rate in Course Payment Settings` };
+      }
+      if (isWeekend && entry.weekend_eligible !== false && (parseInt(settings && settings.weekend_rate, 10) || 0) > 0) {
+        return { ok: true, baseRate: parseInt(settings.weekend_rate, 10) || 0, courseLabel: 'Weekend Quran (Saturday & Sunday)', isWeekend: true, courseName: name };
+      }
+      return { ok: true, baseRate: entry.monthly_rate, courseLabel: entry.name, isWeekend, courseName: name };
+    }
+
+    // Proration for ONE assignment segment: the overlap of the assignment
+    // period with the month, additionally bounded by the student's own
+    // joining / deactivation dates (the same bounds the legacy whole-
+    // student proration applied). Mirrors the return shape of
+    // calculateStudentMonthlySalaryProration.
+    function assignmentSegmentProration(student, assignment, monthlyRate, monthStr) {
+      const bounds = parsePayrollMonthBounds(monthStr);
+      const { daysInMonth, firstDayStr, lastDayStr } = bounds;
+      const fullRate = Number(monthlyRate) || 0;
+      const { joiningDate, deactivationDate } = extractStudentPayrollDates(student);
+      const statusLower = String(student?.status || '').toLowerCase();
+      const inactiveNoDate = (statusLower === 'inactive' || statusLower === 'left' || statusLower === 'deactivated') && !deactivationDate;
+
+      let start = firstDayStr;
+      start = payrollDateMax(start, joiningDate);
+      start = payrollDateMax(start, assignment && assignment.start_date ? String(assignment.start_date).slice(0, 10) : null);
+      let end = lastDayStr;
+      end = payrollDateMin(end, deactivationDate);
+      end = payrollDateMin(end, assignment && assignment.end_date ? String(assignment.end_date).slice(0, 10) : null);
+
+      const activeDays = inactiveNoDate ? 0 : payrollDaysInclusive(start, end);
+      const proratedRate = activeDays >= daysInMonth ? fullRate : Math.round(fullRate * activeDays / daysInMonth);
+      const reasons = [];
+      if (activeDays > 0 && start > firstDayStr) reasons.push('From ' + start);
+      if (activeDays > 0 && end < lastDayStr) reasons.push('Until ' + end);
+      return {
+        daysInMonth,
+        activeDays,
+        joiningDate,
+        deactivationDate,
+        dailyRate: fullRate / daysInMonth,
+        fullRate,
+        proratedRate,
+        isProrated: activeDays < daysInMonth,
+        prorationLabel: `${activeDays} / ${daysInMonth} Days${reasons.length ? ' • ' + reasons.join(', ') : (activeDays >= daysInMonth ? ' (Full Month)' : '')}`,
+        segStart: start,
+        segEnd: end
+      };
+    }
+
+    // Basic Salary Protection (owner policy, 2026-11-03): the guaranteed
+    // monthly minimum from Course Payment Settings, PRORATED by the
+    // teacher's own eligible days in the month (owner's decision: the
+    // floor is prorated, not paid in full for partial months). Eligible
+    // window = from the teacher's joining date; for a teacher who has
+    // left (status Deactivated — no leaving date is recorded for
+    // teachers), the last payable assignment day of the month stands in
+    // as the employment end.
+    function teacherFloorAmount(teacher, acc, settings, bounds, lastPayableDayStr) {
+      const base = parseInt(settings && settings.basic_salary_pkr, 10) || 0;
+      if (base <= 0 || !teacher) return { floorAmount: 0, eligibleDays: 0 };
+      const joining = (acc && acc.joining_date) || (teacher.created_at ? String(teacher.created_at).slice(0, 10) : null);
+      let start = bounds.firstDayStr;
+      if (joining && joining > start) start = joining;
+      let end = bounds.lastDayStr;
+      if (String(teacher.status || '').toLowerCase() === 'deactivated') {
+        if (!lastPayableDayStr) return { floorAmount: 0, eligibleDays: 0 };
+        if (lastPayableDayStr < end) end = lastPayableDayStr;
+      }
+      const days = payrollDaysInclusive(start, end);
+      if (days <= 0) return { floorAmount: 0, eligibleDays: 0 };
+      return {
+        floorAmount: days >= bounds.daysInMonth ? base : Math.round(base * days / bounds.daysInMonth),
+        eligibleDays: days
+      };
+    }
 
     function getTeacherSeniorityIncrement(teacher, acc) {
       if (!teacher) return 0;
@@ -425,6 +533,19 @@
         }
       }
 
+      // Phase 2 (2026-11-03): the assignment ledger drives the compile.
+      // Real ledger rows are loaded once; students without rows get a
+      // derived period (Assignments.deriveFor), so no live record needed
+      // a backfill write for the new engine to cover everyone.
+      const payrollCfg = payrollSettings();
+      const monthBounds = parsePayrollMonthBounds(selectedMonth);
+      let assignmentRows = [];
+      if (window.Assignments) {
+        try { assignmentRows = await Assignments.loadAll(); } catch (e) { assignmentRows = []; }
+        try { assignmentRows = assignmentRows.concat(Assignments.deriveFor(students, assignmentRows, scheds)); } catch (e) {}
+      }
+      const payrollWarnings = [];
+
       ALL_TEACHER_SALARIES = {};
 
       let totalGrossPayroll = 0;
@@ -438,11 +559,15 @@
 
         const slipKey = `${t.id}_${selectedMonth.replace(/\s+/g, '_')}`;
         const savedSlip = savedSalaries[slipKey] || null;
+        const forceRecalc = !!(window.__PAYROLL_RECALC_KEYS && window.__PAYROLL_RECALC_KEYS.has(slipKey));
+        if (forceRecalc) window.__PAYROLL_RECALC_KEYS.delete(slipKey);
 
-        // Historical Month Protection:
-        // If this month's slip was already marked 'Paid' and has a finalized student snapshot,
-        // preserve the finalized historical record so later student deactivations never alter past paid months.
-        if (savedSlip && savedSlip.status === 'Paid' && Array.isArray(savedSlip.student_items_snapshot) && savedSlip.student_items_snapshot.length > 0) {
+        // Historical Month Protection (Phase 2: freeze on FIRST save):
+        // any saved slip with a finalized student snapshot — Pending or
+        // Paid — is preserved exactly as saved, so later course changes,
+        // rate edits or deactivations never alter it. The slip modal's
+        // Recalculate button is the only way back to a live compile.
+        if (!forceRecalc && savedSlip && Array.isArray(savedSlip.student_items_snapshot) && savedSlip.student_items_snapshot.length > 0) {
           const studentRateItems = savedSlip.student_items_snapshot;
           const baseSubtotal = savedSlip.base_subtotal !== undefined
             ? (parseFloat(savedSlip.base_subtotal) || 0)
@@ -455,10 +580,12 @@
           // to the old formula for them.
           const advanceDeducted = parseFloat(savedSlip.advance_deducted) || 0;
           const netPayable = Math.max(0, baseSubtotal + bonus - deduction - advanceDeducted);
+          const frozenStatus = savedSlip.status || 'Pending';
+          const frozenProtection = parseFloat(savedSlip.basic_protection) || 0;
 
           if (studentRateItems.length > 0) activeTeachersCount++;
           totalAssignedStudentsCount += studentRateItems.length;
-          paidCount++;
+          if (frozenStatus === 'Paid') paidCount++;
           totalGrossPayroll += netPayable;
 
           const compiledSlip = {
@@ -470,80 +597,113 @@
             seniority_increment: teacherIncrement,
             assigned_students: studentRateItems,
             base_subtotal: baseSubtotal,
+            students_subtotal: savedSlip.students_subtotal != null ? (parseFloat(savedSlip.students_subtotal) || 0) : (baseSubtotal - frozenProtection),
+            basic_protection: frozenProtection,
+            floor_amount: parseFloat(savedSlip.floor_amount) || 0,
+            frozen: true,
             bonus,
             deduction,
             remarks,
             net_payable: netPayable,
-            status: 'Paid',
+            status: frozenStatus,
             advance_deducted: advanceDeducted,
             slip_key: slipKey
           };
           ALL_TEACHER_SALARIES[t.id] = compiledSlip;
         } else {
-          // Find all students associated with this teacher (active or deactivated during/after this month)
-          // Method A: from schedules
+          // Phase 2: this teacher's lines come from their assignment
+          // periods overlapping the month (real ledger rows + derived
+          // periods). A mid-month transfer or course change naturally
+          // produces two lines, each paid for its own eligible days —
+          // the old schedule-union + previous-teacher union (and its
+          // double-claim leak) is replaced by the ledger.
           const teacherScheds = (scheds || []).filter(s => s.teacher_id === t.id);
-          const studentIdsFromScheds = [...new Set(teacherScheds.map(s => s.student_id))];
+          const teacherAssignments = assignmentRows.filter(a => String(a.teacher_id) === String(t.id));
 
-          // Method B: from students.assigned_teacher_id OR previous_teacher_id_before_deactivation
-          const studentIdsFromStudents = (students || []).filter(s => {
-            if (s.status === 'Trial') return false;
-            if (s.assigned_teacher_id === t.id) return true;
-            const { previousTeacherId } = extractStudentPayrollDates(s);
-            return previousTeacherId === t.id;
-          }).map(s => s.id);
-
-          const allStudentIds = [...new Set([...studentIdsFromScheds, ...studentIdsFromStudents])];
-
-          // Fetch student objects
-          const candidateStudents = allStudentIds.map(sid => {
-            const fromStu = (students || []).find(s => s.id === sid);
-            const fromSched = teacherScheds.find(s => s.student_id === sid)?.students;
-            return fromStu || fromSched || { id: sid, name: 'Student ' + sid };
-          }).filter(s => s && s.name);
-
-          let baseSubtotal = 0;
+          let studentsSubtotal = 0;
           const studentRateItems = [];
+          const linesByStudent = {};
 
-          candidateStudents.forEach((stu) => {
+          teacherAssignments.forEach((asg) => {
+            const stu = (students || []).find(s => String(s.id) === String(asg.student_id));
+            if (!stu || !stu.name || stu.status === 'Trial') return;
             const stuScheds = teacherScheds.filter(s => s.student_id === stu.id);
-            const rateInfo = getStudentCourseSalaryRate(stu, stuScheds, teacherIncrement);
-            const proration = calculateStudentMonthlySalaryProration(stu, rateInfo.finalRate, selectedMonth);
-
-            // If student was deactivated before this month started or joined after this month ended (activeDays === 0),
-            // skip from this month's active payroll unless currently assigned and admin manually set a custom override.
-            const hasManualOverride = Boolean(savedSlip && savedSlip.students && savedSlip.students[stu.id] !== undefined);
-            if (proration.activeDays === 0 && !hasManualOverride) {
+            const rateInfo = resolveAssignmentRate(asg, stu, stuScheds, payrollCfg);
+            if (!rateInfo.ok) {
+              // Pre-flight: never a silent fallback rate. The student is
+              // excluded and named in the warning strip above the table.
+              payrollWarnings.push({ teacher_name: t.full_name, student_name: stu.name, reason: rateInfo.reason });
               return;
             }
-
-            let finalRate = proration.proratedRate;
-            if (hasManualOverride) {
-              finalRate = parseFloat(savedSlip.students[stu.id]);
-              if (isNaN(finalRate)) finalRate = proration.proratedRate;
-            }
-
-            baseSubtotal += finalRate;
-
-            studentRateItems.push({
-              index: studentRateItems.length + 1,
+            const fullRate = rateInfo.baseRate + teacherIncrement;
+            const proration = assignmentSegmentProration(stu, asg, fullRate, selectedMonth);
+            if (proration.activeDays === 0) return;
+            const item = {
+              index: 0,
+              assignment_id: asg.id || null,
               student_id: stu.id,
               student_name: stu.name,
               course_label: rateInfo.courseLabel,
-              schedule_text: `${rateInfo.scheduleText} (${proration.prorationLabel})`,
+              schedule_text: `${rateInfo.isWeekend ? 'Weekend (Sat - Sun)' : (stuScheds.length ? stuScheds.length + ' Days / Week' : 'Regular Days')} (${proration.prorationLabel})`,
               proration_label: proration.prorationLabel,
               active_days: proration.activeDays,
               days_in_month: proration.daysInMonth,
-              joining_date: proration.joiningDate,
-              deactivation_date: proration.deactivationDate,
+              joining_date: proration.segStart,
+              deactivation_date: proration.segEnd < monthBounds.lastDayStr ? proration.segEnd : proration.deactivationDate,
+              seg_end: proration.segEnd,
               is_prorated: proration.isProrated,
               base_rate: rateInfo.baseRate,
               increment: teacherIncrement,
-              full_monthly_rate: rateInfo.finalRate,
+              full_monthly_rate: fullRate,
               calculated_rate: proration.proratedRate,
-              final_rate: finalRate
-            });
+              final_rate: proration.proratedRate
+            };
+            studentRateItems.push(item);
+            (linesByStudent[stu.id] = linesByStudent[stu.id] || []).push(item);
           });
+
+          // Saved per-student manual amounts on older records (saved
+          // before freeze-on-save existed) still win: the student's
+          // lines are scaled so their total equals the saved amount.
+          if (savedSlip && savedSlip.students) {
+            Object.keys(linesByStudent).forEach((sid) => {
+              if (savedSlip.students[sid] === undefined) return;
+              const target = parseFloat(savedSlip.students[sid]);
+              if (isNaN(target)) return;
+              const lines = linesByStudent[sid];
+              const sum = lines.reduce((accSum, it) => accSum + it.final_rate, 0);
+              if (sum > 0 && target !== sum) {
+                let acc = 0;
+                lines.forEach((it, i) => {
+                  if (i === lines.length - 1) it.final_rate = target - acc;
+                  else { it.final_rate = Math.round(it.final_rate * target / sum); acc += it.final_rate; }
+                });
+              } else if (sum === 0 && target > 0 && lines.length) {
+                lines[0].final_rate = target;
+              }
+            });
+            // A saved amount for a student whose period no longer
+            // overlaps this month re-adds a single manual line (the old
+            // engine's override behaviour).
+            Object.keys(savedSlip.students).forEach((sid) => {
+              if (linesByStudent[sid]) return;
+              const target = parseFloat(savedSlip.students[sid]);
+              if (isNaN(target) || target <= 0) return;
+              const stu = (students || []).find(s => String(s.id) === String(sid));
+              if (!stu) return;
+              studentRateItems.push({
+                index: 0, assignment_id: null, student_id: stu.id, student_name: stu.name,
+                course_label: 'Manual Amount', schedule_text: 'Manual override', proration_label: '',
+                active_days: 0, days_in_month: monthBounds.daysInMonth, joining_date: null,
+                deactivation_date: null, seg_end: monthBounds.lastDayStr, is_prorated: false,
+                base_rate: 0, increment: teacherIncrement, full_monthly_rate: target,
+                calculated_rate: target, final_rate: target
+              });
+            });
+          }
+
+          studentRateItems.forEach((it, i) => { it.index = i + 1; });
+          studentsSubtotal = studentRateItems.reduce((accSum, it) => accSum + (parseFloat(it.final_rate) || 0), 0);
 
           if (studentRateItems.length > 0) activeTeachersCount++;
           totalAssignedStudentsCount += studentRateItems.length;
@@ -556,6 +716,26 @@
           // into `deduction` (that would double-count on dual-write),
           // they live in advance_deducted and are subtracted here.
           const advanceDeducted = savedSlip ? (parseFloat(savedSlip.advance_deducted) || 0) : 0;
+
+          // Basic Salary Protection (Phase 2, owner policy 2026-11-03):
+          // Teaching-category teachers are guaranteed the configured
+          // monthly minimum, prorated by their own eligible days. The
+          // protection is the shortfall only — never added on top of a
+          // higher student-based total, never multiplied per student.
+          let floorAmount = 0;
+          let basicProtection = 0;
+          const isTeachingCategory = !_payrollIsManagerRecord(t, accounts) &&
+            (typeof StaffCategories === 'undefined' || StaffCategories.of(t) === 'teaching');
+          if (isTeachingCategory) {
+            let lastPayableDay = null;
+            studentRateItems.forEach(it => {
+              if (it.seg_end && (!lastPayableDay || it.seg_end > lastPayableDay)) lastPayableDay = it.seg_end;
+            });
+            const floorRes = teacherFloorAmount(t, acc, payrollCfg, monthBounds, lastPayableDay);
+            floorAmount = floorRes.floorAmount;
+            basicProtection = Math.max(0, floorAmount - studentsSubtotal);
+          }
+          const baseSubtotal = studentsSubtotal + basicProtection;
           const netPayable = Math.max(0, baseSubtotal + bonus - deduction - advanceDeducted);
           const status = savedSlip ? (savedSlip.status || 'Pending') : 'Pending';
 
@@ -571,6 +751,10 @@
             seniority_increment: teacherIncrement,
             assigned_students: studentRateItems,
             base_subtotal: baseSubtotal,
+            students_subtotal: studentsSubtotal,
+            basic_protection: basicProtection,
+            floor_amount: floorAmount,
+            frozen: false,
             bonus,
             deduction,
             remarks,
@@ -586,6 +770,8 @@
         const compiledSlip = ALL_TEACHER_SALARIES[t.id];
         const studentRateItems = compiledSlip.assigned_students || [];
         const baseSubtotal = compiledSlip.base_subtotal;
+        const studentsSubtotal = compiledSlip.students_subtotal != null ? compiledSlip.students_subtotal : baseSubtotal;
+        const basicProtection = compiledSlip.basic_protection || 0;
         const bonus = compiledSlip.bonus;
         const deduction = compiledSlip.deduction;
         const advanceDeducted = compiledSlip.advance_deducted || 0;
@@ -610,9 +796,10 @@
 
         // Adjustments summary
         let adjSummary = '<span class="text-slate-400 text-[11px]">No adjustments</span>';
-        if (bonus > 0 || deduction > 0 || advanceDeducted > 0) {
+        if (bonus > 0 || deduction > 0 || advanceDeducted > 0 || basicProtection > 0) {
           adjSummary = `
             <div class="text-[11px] font-mono">
+              ${basicProtection > 0 ? `<span class="text-sky-700 font-bold block">+${basicProtection.toLocaleString()} PKR (Basic Salary Protection)</span>` : ''}
               ${bonus > 0 ? `<span class="text-emerald-700 font-bold block">+${bonus.toLocaleString()} PKR (Bonus)</span>` : ''}
               ${deduction > 0 ? `<span class="text-rose-700 font-bold block">-${deduction.toLocaleString()} PKR (Deduction)</span>` : ''}
               ${advanceDeducted > 0 ? `<span class="text-amber-700 font-bold block">-${advanceDeducted.toLocaleString()} PKR (Approved Advances)</span>` : ''}
@@ -644,7 +831,7 @@
 
             <!-- 3. BASE COURSE TOTAL -->
             <td class="p-3.5">
-              <div class="lms-num-financial font-bold text-slate-900 text-[15px]">PKR ${baseSubtotal.toLocaleString()}</div>
+              <div class="lms-num-financial font-bold text-slate-900 text-[15px]">PKR ${studentsSubtotal.toLocaleString()}</div>
               <span class="text-[11px] text-slate-500 block mt-0.5">From Course Rates</span>
             </td>
 
@@ -687,6 +874,21 @@
       }).join('');
 
       tbody.innerHTML = teacherCardsData;
+
+      // Pre-flight warnings (Phase 2): students whose course could not
+      // be priced from the Course Payment Settings were excluded above —
+      // name them visibly instead of paying a silent fallback rate.
+      const warnEl = document.getElementById('payrollWarnings');
+      if (warnEl) {
+        if (payrollWarnings.length) {
+          warnEl.classList.remove('hidden');
+          warnEl.innerHTML = '<div class="font-extrabold mb-1">⚠ Some students were NOT included in this salary calculation:</div>' +
+            payrollWarnings.map(w => `<div>• ${w.teacher_name} — ${w.student_name}: ${w.reason}. Fix the course in Course Payment Settings or on the student record, then refresh.</div>`).join('');
+        } else {
+          warnEl.classList.add('hidden');
+          warnEl.innerHTML = '';
+        }
+      }
 
       // Update KPI Cards
       const setEl = (id, val) => { const el = document.getElementById(id); if (el) el.innerText = val; };
@@ -764,7 +966,7 @@
                 <td class="p-2.5 text-right">
                   <div class="inline-flex items-center gap-1">
                     <input type="number" class="slip-student-rate w-24 p-1.5 text-right font-mono font-black border border-emerald-400 rounded-lg text-brandDarkest bg-emerald-50/40 focus:bg-white focus:outline-brandEmerald text-xs" 
-                      data-student-id="${s.student_id}" 
+                      data-student-id="${s.student_id}" data-line-key="${s.assignment_id || s.student_id}"
                       value="${s.final_rate}" 
                       oninput="recalculateSlipNetTotal()">
                     <span class="text-[10px] text-slate-400 font-bold">PKR</span>
@@ -785,14 +987,40 @@
       // Update Paid Button
       updateSlipPaidButtonUI(slipData.status === 'Paid');
 
+      // Recalculate is offered only for frozen (previously saved) slips.
+      const recalcBtn = document.getElementById('btnSlipRecalculate');
+      if (recalcBtn) recalcBtn.classList.toggle('hidden', !slipData.frozen);
+
       openModal('modalSalarySlip');
+    }
+
+    // Phase 2: the ONLY way back from a frozen slip to a live compile.
+    // Marks this teacher+month for a one-shot live recompile, then
+    // reopens the modal on the fresh numbers; nothing is written until
+    // the admin saves the slip again.
+    async function recalculateCurrentSlipFromData() {
+      if (!CURRENT_SLIP_DATA || !CURRENT_SLIP_TEACHER_ID) return;
+      if (_payrollBlockManagerRecord(CURRENT_SLIP_TEACHER_ID)) return;
+      const ok = await lmsConfirm({
+        title: 'Recalculate this salary?',
+        message: 'The amounts saved for this month will be replaced by a fresh calculation from the current students, assignments and course rates when you save the slip.',
+        confirmText: 'Recalculate',
+        cancelText: 'Cancel',
+        variant: 'info'
+      });
+      if (!ok) return;
+      (window.__PAYROLL_RECALC_KEYS = window.__PAYROLL_RECALC_KEYS || new Set()).add(CURRENT_SLIP_DATA.slip_key);
+      const tid = CURRENT_SLIP_TEACHER_ID;
+      closeModal('modalSalarySlip');
+      await calculateMonthlySalaries(true);
+      openSalarySlipModal(tid);
     }
 
     function recalculateSlipNetTotal() {
       const rateInputs = document.querySelectorAll('.slip-student-rate');
-      let baseSubtotal = 0;
+      let studentsSubtotal = 0;
       rateInputs.forEach(inp => {
-        baseSubtotal += parseFloat(inp.value) || 0;
+        studentsSubtotal += parseFloat(inp.value) || 0;
       });
 
       const bonus = parseFloat(document.getElementById('slipBonus')?.value) || 0;
@@ -805,17 +1033,30 @@
       const advanceDeducted = (typeof CURRENT_SLIP_DATA !== 'undefined' && CURRENT_SLIP_DATA)
         ? (parseFloat(CURRENT_SLIP_DATA.advance_deducted) || 0)
         : 0;
+      // Basic Salary Protection (Phase 2): the slip carries its prorated
+      // floor from the compile; editing student amounts re-derives the
+      // protection from the floor, exactly like the compile does.
+      const floorAmount = (typeof CURRENT_SLIP_DATA !== 'undefined' && CURRENT_SLIP_DATA)
+        ? (parseFloat(CURRENT_SLIP_DATA.floor_amount) || 0)
+        : 0;
+      const basicProtection = Math.max(0, floorAmount - studentsSubtotal);
+      const baseSubtotal = studentsSubtotal + basicProtection;
       const netPayable = Math.max(0, baseSubtotal + bonus - deduction - advanceDeducted);
 
       const baseInp = document.getElementById('slipBaseSubtotal');
-      if (baseInp) baseInp.value = baseSubtotal;
+      if (baseInp) baseInp.value = studentsSubtotal;
+
+      const protRow = document.getElementById('slipBasicProtectionRow');
+      if (protRow) protRow.classList.toggle('hidden', basicProtection <= 0);
+      const protVal = document.getElementById('slipBasicProtectionVal');
+      if (protVal) protVal.innerText = `+${basicProtection.toLocaleString()} PKR`;
 
       const netEl = document.getElementById('slipNetPayable');
       if (netEl) netEl.innerText = `${netPayable.toLocaleString()} PKR`;
 
       const countEl = document.getElementById('slipTotalStudentsCount');
-      if (countEl) countEl.innerText = `For ${rateInputs.length} Assigned Students (${baseSubtotal.toLocaleString()} Base ${bonus > 0 ? '+ ' + bonus + ' Bonus' : ''} ${deduction > 0 ? '- ' + deduction + ' Deduction' : ''} ${advanceDeducted > 0 ? '- ' + advanceDeducted + ' Approved Advances' : ''})`;
-      return { baseSubtotal, bonus, deduction, advanceDeducted, netPayable };
+      if (countEl) countEl.innerText = `For ${rateInputs.length} Assigned Students (${studentsSubtotal.toLocaleString()} Base ${basicProtection > 0 ? '+ ' + basicProtection.toLocaleString() + ' Basic Protection' : ''} ${bonus > 0 ? '+ ' + bonus + ' Bonus' : ''} ${deduction > 0 ? '- ' + deduction + ' Deduction' : ''} ${advanceDeducted > 0 ? '- ' + advanceDeducted + ' Approved Advances' : ''})`;
+      return { baseSubtotal, studentsSubtotal, basicProtection, floorAmount, bonus, deduction, advanceDeducted, netPayable };
     }
 
     function saveSalarySlipRecord() {
@@ -823,20 +1064,31 @@
       // Batch 2 (B7): defense in depth — never save a Manager slip in a manager session.
       if (_payrollBlockManagerRecord(CURRENT_SLIP_TEACHER_ID)) return;
 
-      const { baseSubtotal, bonus, deduction, advanceDeducted, netPayable } = recalculateSlipNetTotal();
+      const { baseSubtotal, studentsSubtotal, basicProtection, floorAmount, bonus, deduction, advanceDeducted, netPayable } = recalculateSlipNetTotal();
       const remarks = (document.getElementById('slipRemarks')?.value || '').trim();
 
-      // Collect edited student rates
-      const editedStudentRates = {};
+      // Collect edited rates PER LINE (Phase 2: one student can have two
+      // assignment lines in a month — a per-student map would merge them).
+      const editedLineRates = {};
       document.querySelectorAll('.slip-student-rate').forEach(inp => {
-        const sId = inp.getAttribute('data-student-id');
-        editedStudentRates[sId] = parseFloat(inp.value) || 0;
+        const lineKey = inp.getAttribute('data-line-key') || inp.getAttribute('data-student-id');
+        editedLineRates[lineKey] = parseFloat(inp.value) || 0;
       });
 
-      const studentItemsSnapshot = (CURRENT_SLIP_DATA.assigned_students || []).map(item => ({
-        ...item,
-        final_rate: editedStudentRates[item.student_id] !== undefined ? editedStudentRates[item.student_id] : item.final_rate
-      }));
+      const studentItemsSnapshot = (CURRENT_SLIP_DATA.assigned_students || []).map(item => {
+        const lineKey = item.assignment_id || item.student_id;
+        return {
+          ...item,
+          final_rate: editedLineRates[lineKey] !== undefined ? editedLineRates[lineKey] : item.final_rate
+        };
+      });
+
+      // The legacy per-student map is kept as per-student SUMS of the
+      // line amounts, for the older readers that still use it.
+      const editedStudentRates = {};
+      studentItemsSnapshot.forEach(item => {
+        editedStudentRates[item.student_id] = (editedStudentRates[item.student_id] || 0) + (parseFloat(item.final_rate) || 0);
+      });
 
       let savedSalaries = {};
       try {
@@ -850,6 +1102,9 @@
         students: editedStudentRates,
         student_items_snapshot: studentItemsSnapshot,
         base_subtotal: baseSubtotal,
+        students_subtotal: studentsSubtotal,
+        basic_protection: basicProtection,
+        floor_amount: floorAmount,
         bonus,
         deduction,
         // Batch B: an admin re-save must NEVER wipe approved advances
@@ -888,7 +1143,7 @@
       } catch (e) { /* dual-write must never affect the legacy save */ }
 
       calculateMonthlySalaries();
-      lmsNotify(`✅ Salary Slip Saved Successfully!\n\n👨‍🏫 Teacher: ${CURRENT_SLIP_DATA.teacher_name}\n💵 Base Teaching: ${baseSubtotal.toLocaleString()} PKR\n💰 Net Payable: ${netPayable.toLocaleString()} PKR\n📌 Status: ${savedSalaries[slipKey].status}`);
+      lmsNotify(`✅ Salary Slip Saved Successfully!\n\n👨‍🏫 Teacher: ${CURRENT_SLIP_DATA.teacher_name}\n💵 Base Teaching: ${studentsSubtotal.toLocaleString()} PKR${basicProtection > 0 ? `\n🛡 Basic Salary Protection: +${basicProtection.toLocaleString()} PKR` : ''}\n💰 Net Payable: ${netPayable.toLocaleString()} PKR\n📌 Status: ${savedSalaries[slipKey].status}`);
     }
 
     function updateSlipPaidButtonUI(isPaid) {
@@ -1023,8 +1278,8 @@ Assigned Students & Course Breakdown:
 ${studentLines}
 
 ──────────────────
-Base Teaching Amount: ${slipData.base_subtotal.toLocaleString()} PKR
-${slipData.bonus > 0 ? `Bonus / Allowances: +${slipData.bonus.toLocaleString()} PKR\n` : ''}${slipData.deduction > 0 ? `Deductions / Advances: -${slipData.deduction.toLocaleString()} PKR\n` : ''}${slipData.remarks ? `Remarks: ${slipData.remarks}\n` : ''}Total Net Payable Salary: ${slipData.net_payable.toLocaleString()} PKR
+Base Teaching Amount: ${(slipData.students_subtotal != null ? slipData.students_subtotal : slipData.base_subtotal).toLocaleString()} PKR
+${(slipData.basic_protection || 0) > 0 ? `Basic Salary Protection: +${slipData.basic_protection.toLocaleString()} PKR\n` : ''}${slipData.bonus > 0 ? `Bonus / Allowances: +${slipData.bonus.toLocaleString()} PKR\n` : ''}${slipData.deduction > 0 ? `Deductions / Advances: -${slipData.deduction.toLocaleString()} PKR\n` : ''}${slipData.remarks ? `Remarks: ${slipData.remarks}\n` : ''}Total Net Payable Salary: ${slipData.net_payable.toLocaleString()} PKR
 Payment Status: ${slipData.status === 'Paid' ? 'Paid (Disbursed)' : 'Processing (Pending)'}
 ──────────────────
 
@@ -1279,8 +1534,8 @@ ${studentLines}
 ══════════════════════════════════════
 FINANCIAL SETTLEMENT:
 ══════════════════════════════════════
-• Base Teaching Subtotal: PKR ${Number(slipData.base_subtotal || 0).toLocaleString()}
-${slipData.bonus > 0 ? `• Bonus / Allowances: + PKR ${Number(slipData.bonus).toLocaleString()}\n` : ''}${slipData.deduction > 0 ? `• Deductions / Advances: - PKR ${Number(slipData.deduction).toLocaleString()}\n` : ''}${slipData.remarks ? `• Remarks: ${slipData.remarks}\n` : ''}• TOTAL NET PAYABLE: PKR ${Number(slipData.net_payable || 0).toLocaleString()}
+• Base Teaching Subtotal: PKR ${Number(slipData.students_subtotal != null ? slipData.students_subtotal : (slipData.base_subtotal || 0)).toLocaleString()}
+${(slipData.basic_protection || 0) > 0 ? `• Basic Salary Protection: + PKR ${Number(slipData.basic_protection).toLocaleString()}\n` : ''}${slipData.bonus > 0 ? `• Bonus / Allowances: + PKR ${Number(slipData.bonus).toLocaleString()}\n` : ''}${slipData.deduction > 0 ? `• Deductions / Advances: - PKR ${Number(slipData.deduction).toLocaleString()}\n` : ''}${slipData.remarks ? `• Remarks: ${slipData.remarks}\n` : ''}• TOTAL NET PAYABLE: PKR ${Number(slipData.net_payable || 0).toLocaleString()}
 • Disbursed Status: ${slipData.status === 'Paid' ? 'PAID / DISBURSED' : 'PENDING APPROVAL'}
 
 Jazakumullahu Khairan!

@@ -180,7 +180,7 @@ vm.runInContext(SRC, sandbox);
   check('360 edit course is a catalogue <select> (free-text input removed)', p360.includes('<select id="fwEditStuCourse"') && !p360.includes('<input type="text" id="fwEditStuCourse"'));
   check('360 edit populates the course select after render', p360.includes('populate360CourseSelect'));
   const payroll = fs.readFileSync(path.join(REPO_ROOT, 'js/payroll.js'), 'utf8');
-  check('Phase 1 leaves the payroll engine untouched (legacy branches intact)', payroll.includes("cName.includes('tafseer')") && payroll.includes('ACADEMY_COURSE_RATES'));
+  check('Phase 1 left the payroll engine untouched (verified in Phase 1; Phase 2 has since switched the compile to the catalogue — see payroll-engine-catalogue.test.mjs)', payroll.includes("cName.includes('tafseer')") && payroll.includes('resolveAssignmentRate'));
   const wrk = fs.readFileSync(path.join(REPO_ROOT, 'cloudflare/worker.js'), 'utf8');
   check('worker allowlists course_rates_v1 for manager reads only in the read predicate', wrk.includes("k === 'course_rates_v1'"));
 }
