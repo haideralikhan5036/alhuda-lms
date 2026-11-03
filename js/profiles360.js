@@ -2711,7 +2711,7 @@ function openEditSingleStudentModal(familyId, studentId) {
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div>
             <label class="font-extrabold text-slate-700 block mb-1">Course / Subject</label>
-            <input type="text" id="fwEditStuCourse" value="${_esc360(student.course_id || 'Quran Studies')}" class="w-full p-2.5 rounded-xl border border-slate-300 font-bold text-slate-900">
+            <select id="fwEditStuCourse" class="w-full p-2.5 rounded-xl border border-slate-300 font-bold text-slate-900"></select>
           </div>
           <div>
             <label class="font-extrabold text-slate-700 block mb-1">Assigned Teacher</label>
@@ -2749,6 +2749,10 @@ function openEditSingleStudentModal(familyId, studentId) {
       </form>
     `
   );
+  // Course dropdown comes from the central catalogue (Course Payment
+  // Settings); the student's current course is selected, and a legacy
+  // name that is not in the catalogue is preserved as an extra option.
+  if (window.populate360CourseSelect) window.populate360CourseSelect(student && student.course_id ? student.course_id : '');
 }
 
 async function submitEditSingleStudentForm(e, familyId, studentId) {
