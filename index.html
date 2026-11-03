@@ -700,6 +700,11 @@
         <span class="sidebar-icon-box"><i class="fa-solid fa-calculator"></i></span>
         <span class="sidebar-label truncate">Teacher Auto Salary Generation</span>
       </button>
+      <!-- 6.5 Course Payment Settings -->
+      <button onclick="switchTab('tab-settings'); if (window.renderCoursePaymentSettings) renderCoursePaymentSettings();" data-tab="tab-settings" class="sidebar-nav-btn nav-tab role-admin w-full text-left px-2.5 py-2 flex items-center gap-2.5" title="Course Payment Settings">
+        <span class="sidebar-icon-box"><i class="fa-solid fa-gear"></i></span>
+        <span class="sidebar-label truncate">Course Payment Settings</span>
+      </button>
 
       <!-- 7. Leave -->
       <button onclick="switchTab('tab-leaves')" data-tab="tab-leaves" class="sidebar-nav-btn nav-tab role-admin w-full text-left px-2.5 py-2 flex items-center gap-2.5" title="Leave">
@@ -1677,6 +1682,64 @@
             </tbody>
           </table>
         </div>
+      </div>
+    </section>
+
+    <!-- 6.5 COURSE PAYMENT SETTINGS -->
+    <section id="tab-settings" class="tab-content hidden space-y-5">
+      <div class="bg-white rounded-2xl shadow border border-slate-200 p-6 space-y-5">
+        <div>
+          <h3 class="text-xl font-extrabold text-slate-900 flex items-center gap-2"><i class="fa-solid fa-gear text-emerald-600"></i> Course Payment Settings</h3>
+          <p class="text-sm text-slate-500 mt-1">Monthly teacher payment per assigned student, for each course. These rates are managed here only &mdash; the salary system reads them from this list.</p>
+          <p id="courseRatesRoleNote" class="text-sm font-bold text-amber-600 mt-1"></p>
+        </div>
+
+        <div id="courseRatesWarning" class="hidden bg-amber-50 border border-amber-300 text-amber-800 font-bold text-sm rounded-xl px-4 py-3"></div>
+
+        <div class="overflow-x-auto">
+          <table class="w-full text-left">
+            <thead>
+              <tr class="text-xs uppercase tracking-wide text-slate-400">
+                <th class="py-2 pr-3">Course</th>
+                <th class="py-2 pr-3">Monthly Rate (PKR)</th>
+                <th class="py-2 pr-3 text-center">Active</th>
+                <th class="py-2">Last Changed</th>
+              </tr>
+            </thead>
+            <tbody id="courseRatesTableBody"></tbody>
+          </table>
+        </div>
+
+        <div id="courseRatesAddWrap" class="flex flex-wrap items-end gap-3 pt-4 border-t border-slate-100">
+          <div>
+            <label class="block font-bold mb-1 text-slate-700 text-sm">New Course Name</label>
+            <input type="text" id="newCourseName" class="p-2.5 border border-slate-300 rounded-lg font-bold text-slate-800" placeholder="e.g. Spoken Arabic">
+          </div>
+          <div>
+            <label class="block font-bold mb-1 text-slate-700 text-sm">Monthly Rate (PKR)</label>
+            <input type="number" id="newCourseRate" min="1" step="1" class="w-36 p-2.5 border border-slate-300 rounded-lg font-bold text-slate-800" placeholder="2200">
+          </div>
+          <button type="button" onclick="addCatalogueCourse()" class="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-900 text-white font-extrabold">+ Add Course</button>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-4 border-t border-slate-100">
+          <div>
+            <label class="block font-bold mb-1 text-slate-700 text-sm">Weekend Programme Rate (PKR / month)</label>
+            <input type="number" id="weekendRateInput" min="0" step="1" class="w-40 p-2.5 border border-slate-300 rounded-lg font-bold text-slate-900">
+            <p class="text-xs text-slate-400 mt-1">For students whose classes are only on Saturday &amp; Sunday.</p>
+          </div>
+          <div>
+            <label class="block font-bold mb-1 text-slate-700 text-sm">Basic Salary &mdash; Guaranteed Minimum (PKR / month)</label>
+            <input type="number" id="basicSalaryInput" min="0" step="1" class="w-40 p-2.5 border border-slate-300 rounded-lg font-bold text-slate-900">
+            <p class="text-xs text-slate-400 mt-1">Every eligible teacher receives at least this amount per month, even if the student-based total is lower.</p>
+          </div>
+        </div>
+
+        <div class="flex flex-wrap items-center gap-4 pt-2">
+          <button type="button" id="btnSaveCourseRates" onclick="saveCoursePaymentSettings()" class="px-6 py-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold shadow">Save Payment Settings</button>
+          <span id="courseRatesUpdatedInfo" class="text-sm text-slate-500"></span>
+        </div>
+        <p class="text-xs text-slate-400">Rate changes apply to salary months that are not yet saved. Months already saved keep their amounts.</p>
       </div>
     </section>
 
@@ -5916,6 +5979,7 @@
   <script src="js/schedule.js"></script>
   <script src="js/payroll.js"></script>
   <script src="js/fee-tables.js"></script>
+  <script src="js/course-catalogue.js"></script>
   <script src="js/fees.js"></script>
   <script src="js/trials.js"></script>
   <script src="js/leaves.js"></script>
