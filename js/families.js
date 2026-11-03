@@ -794,6 +794,9 @@
           return;
         }
 
+        // Assignment ledger (Phase 2): open the new student's assignment period.
+        if (window.Assignments) Assignments.open({ student_id: id, teacher_id: assigned_teacher_id, course_name: course_id, start_date: joining_date });
+
         if (targetFamilyDeactivated) {
           lmsNotify(`Student enrolled as INACTIVE because family "${targetFamilyRec.parent_name || family_id}" is deactivated. Reactivate the family to activate this student.`, { type: 'warning' });
         }

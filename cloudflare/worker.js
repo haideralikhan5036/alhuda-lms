@@ -84,8 +84,8 @@ function corsHeadersFor(request, env) {
 // functions/api/db.js (the D1 schema marker; v2 after Part A). It is hardcoded
 // here on purpose: /api/health must never 500 because D1 is unreachable, and
 // it must never cost an unauthenticated caller a D1 read.
-const WORKER_RELEASE = '2026-11-03-course-rates';
-const HEALTH_SCHEMA_VERSION = '2026-10-29-v3';
+const WORKER_RELEASE = '2026-11-03-assignments';
+const HEALTH_SCHEMA_VERSION = '2026-11-03-v4';
 
 // --- Batch 7 Part B: security headers (workers.dev responses) --------------
 // Every response the Worker serves carries this set. The Content-Security-
@@ -1954,7 +1954,11 @@ function checkTableAccess(role, table, action) {
   // them with a reason instead. Salary-advance requests are
   // financial-adjacent records with the same rule: a decided request is
   // terminal history, never erased. This runs before the owner allow-all.
-  if (action === 'delete' && ['payments', 'salary_slips', 'salary_adjustments', 'advance_requests'].includes(table)) return 'deny';
+  if (action === 'delete' && ['payments', 'salary_slips', 'salary_adjustments', 'advance_requests', 'student_assignments'].includes(table)) return 'deny';
+  // Assignment-based salary (Phase 2, 2026-11-03): the assignment ledger
+  // is admin-side payroll infrastructure. Teachers and parents have no
+  // access to it at all (their portals keep reading saved slips only).
+  if (table === 'student_assignments' && role !== 'owner' && role !== 'manager') return 'deny';
   if (role === 'owner') return 'allow';
   // Batch 2.1: the audit log is owner-only through this API. The Worker
   // itself writes entries directly (never through /api/db), so no other

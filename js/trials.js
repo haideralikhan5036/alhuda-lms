@@ -1192,6 +1192,12 @@
         convertSaveFailed = true;
       }
 
+      // Assignment ledger (Phase 2): the converted student starts a real
+      // assignment period under the trial's teacher + course.
+      if (!convertSaveFailed && window.Assignments) {
+        Assignments.open({ student_id: canonicalStuId, teacher_id: trial.teacher_id, course_name: trial.course, start_date: joining_date });
+      }
+
       // 5. Expand & Promote Class Schedules from Trial to Active Regular across requested days
       try {
         let daysToSchedule = [1, 2, 3, 4, 5]; // default: 5 Days (Mon - Fri)
