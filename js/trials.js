@@ -452,7 +452,7 @@
 
         const waText = encodeURIComponent(
           `Assalam-o-Alaikum Respected ${t.parent_name},\n` +
-          `This is a message from *Al-Huda Islamic Centre* regarding the 3-Day Free Trial Class for *${t.student_name}*.\n\n` +
+          `This is a message from *${academyName()}* regarding the 3-Day Free Trial Class for *${t.student_name}*.\n\n` +
           `📖 *Course:* ${t.course}\n` +
           `👨‍🏫 *Quran Instructor:* ${teacherName}\n` +
           `⏰ *Class Time:* ${t.pkt_slot} PKT${t.student_time ? ' (' + t.student_time + ')' : ''}\n` +

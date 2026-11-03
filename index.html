@@ -749,6 +749,10 @@
             <span class="sidebar-icon-box"><i class="fa-solid fa-gear"></i></span>
             <span class="sidebar-label truncate">Course Payment Settings</span>
           </button>
+          <button onclick="switchTab('tab-settings-academy'); if (window.renderAcademyProfileSettings) renderAcademyProfileSettings();" data-tab="tab-settings-academy" class="sidebar-nav-btn nav-tab role-admin w-full text-left px-2.5 py-2 flex items-center gap-2.5" title="Academy Profile">
+            <span class="sidebar-icon-box"><i class="fa-solid fa-building-columns"></i></span>
+            <span class="sidebar-label truncate">Academy Profile</span>
+          </button>
         </div>
       </div>
     </nav>
@@ -1698,6 +1702,38 @@
     </section>
 
     <!-- 6.5 COURSE PAYMENT SETTINGS -->
+    <section id="tab-settings-academy" class="tab-content hidden space-y-5">
+      <div class="bg-white rounded-2xl shadow border border-slate-200 p-6 space-y-5">
+        <div>
+          <h3 class="text-xl font-extrabold text-slate-900 flex items-center gap-2"><i class="fa-solid fa-building-columns text-emerald-600"></i> Academy Profile</h3>
+          <p class="text-sm text-slate-500 mt-1">The academy name, official email, phone and address shown on salary slips, fee receipts, reminders and welcome messages. Change them here only &mdash; every new document and message uses these details.</p>
+          <p id="academyProfileRoleNote" class="text-sm font-bold text-amber-600 mt-1"></p>
+        </div>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label class="block text-sm font-bold text-slate-700 mb-1">Academy Name</label>
+            <input id="academyNameInput" type="text" class="w-full p-2.5 border border-slate-300 rounded-lg font-bold text-slate-900" placeholder="Academy name">
+          </div>
+          <div>
+            <label class="block text-sm font-bold text-slate-700 mb-1">Official Email</label>
+            <input id="academyEmailInput" type="email" class="w-full p-2.5 border border-slate-300 rounded-lg font-bold text-slate-900" placeholder="Official email">
+          </div>
+          <div>
+            <label class="block text-sm font-bold text-slate-700 mb-1">Phone / WhatsApp</label>
+            <input id="academyPhoneInput" type="text" class="w-full p-2.5 border border-slate-300 rounded-lg font-bold text-slate-900" placeholder="e.g. +92 300 0000000">
+          </div>
+          <div>
+            <label class="block text-sm font-bold text-slate-700 mb-1">Address</label>
+            <input id="academyAddressInput" type="text" class="w-full p-2.5 border border-slate-300 rounded-lg font-bold text-slate-900" placeholder="Academy address (optional)">
+          </div>
+        </div>
+        <div class="flex items-center gap-3">
+          <button id="btnSaveAcademyProfile" onclick="saveAcademyProfileSettings()" class="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold rounded-xl shadow">Save Academy Profile</button>
+          <span id="academyProfileMeta" class="text-xs text-slate-400 font-bold"></span>
+        </div>
+      </div>
+    </section>
+
     <section id="tab-settings" class="tab-content hidden space-y-5">
       <div class="bg-white rounded-2xl shadow border border-slate-200 p-6 space-y-5">
         <div>
@@ -6000,6 +6036,7 @@
   <script src="js/payroll.js"></script>
   <script src="js/fee-tables.js"></script>
   <script src="js/course-catalogue.js"></script>
+  <script src="js/academy-profile.js"></script>
   <script src="js/assignments.js"></script>
   <script src="js/fees.js"></script>
   <script src="js/trials.js"></script>

@@ -1875,7 +1875,7 @@
       const waBtn = document.getElementById('stuDetailWhatsAppBtn');
       if (waBtn) {
         if (cleanPhone && CURRENT_ROLE !== 'manager') {
-          const waMsg = `Assalam-o-Alaikum,\nRegarding student *${student.name}* (ID: ${student.id}) from *Al-Huda Islamic Centre LMS*.`;
+          const waMsg = `Assalam-o-Alaikum,\nRegarding student *${student.name}* (ID: ${student.id}) from *${academyName()} LMS*.`;
           waBtn.href = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(waMsg)}`;
           waBtn.style.display = 'inline-flex';
         } else {
@@ -1928,7 +1928,7 @@
       const waBtn = document.getElementById('tOptionWhatsAppBtn');
       if (waBtn) {
         if (cleanPhone) {
-          const waMsg = `Assalam-o-Alaikum Teacher *${teacher.full_name}*,\nContact from Al-Huda Islamic Centre Administration.`;
+          const waMsg = `Assalam-o-Alaikum Teacher *${teacher.full_name}*,\nContact from ${academyName()} Administration.`;
           waBtn.href = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(waMsg)}`;
           waBtn.classList.remove('hidden');
           waBtn.classList.add('flex');
