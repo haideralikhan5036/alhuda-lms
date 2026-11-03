@@ -700,12 +700,6 @@
         <span class="sidebar-icon-box"><i class="fa-solid fa-calculator"></i></span>
         <span class="sidebar-label truncate">Teacher Auto Salary Generation</span>
       </button>
-      <!-- 6.5 Course Payment Settings -->
-      <button onclick="switchTab('tab-settings'); if (window.renderCoursePaymentSettings) renderCoursePaymentSettings();" data-tab="tab-settings" class="sidebar-nav-btn nav-tab role-admin w-full text-left px-2.5 py-2 flex items-center gap-2.5" title="Course Payment Settings">
-        <span class="sidebar-icon-box"><i class="fa-solid fa-gear"></i></span>
-        <span class="sidebar-label truncate">Course Payment Settings</span>
-      </button>
-
       <!-- 7. Leave -->
       <button onclick="switchTab('tab-leaves')" data-tab="tab-leaves" class="sidebar-nav-btn nav-tab role-admin w-full text-left px-2.5 py-2 flex items-center gap-2.5" title="Leave">
         <span class="sidebar-icon-box"><i class="fa-solid fa-calendar-minus"></i></span>
@@ -740,6 +734,23 @@
         <span class="sidebar-icon-box"><i class="fa-solid fa-clipboard-user"></i></span>
         <span class="sidebar-label truncate">Daily Attendance &amp; Notes</span>
       </button>
+
+      <!-- 11. Settings (group at the very end of the sidebar) -->
+      <div class="mt-1.5 border-t border-slate-100 pt-1.5">
+        <button type="button" onclick="toggleSettingsGroup()" class="sidebar-nav-btn w-full text-left px-2.5 py-2 flex items-center gap-2.5" title="Settings">
+          <span class="sidebar-icon-box"><i class="fa-solid fa-gears"></i></span>
+          <span class="sidebar-label flex items-center justify-between flex-1 min-w-0">
+            <span class="truncate">Settings</span>
+            <i id="sidebarSettingsChevron" class="fa-solid fa-chevron-down text-[10px] text-slate-400 transition-transform"></i>
+          </span>
+        </button>
+        <div id="sidebarSettingsGroup" class="hidden pl-4 mt-0.5 space-y-0.5">
+          <button onclick="switchTab('tab-settings'); if (window.renderCoursePaymentSettings) renderCoursePaymentSettings();" data-tab="tab-settings" class="sidebar-nav-btn nav-tab role-admin w-full text-left px-2.5 py-2 flex items-center gap-2.5" title="Course Payment Settings">
+            <span class="sidebar-icon-box"><i class="fa-solid fa-gear"></i></span>
+            <span class="sidebar-label truncate">Course Payment Settings</span>
+          </button>
+        </div>
+      </div>
     </nav>
 
     <!-- Sidebar Footer: Active Counters (High-Readability Tabular Numbers) -->
