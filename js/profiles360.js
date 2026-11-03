@@ -2801,6 +2801,7 @@ async function submitEditSingleStudentForm(e, familyId, studentId) {
   }
 
   const oldTeacherId = student.assigned_teacher_id || null;
+  const oldCourseName = (window.Assignments ? Assignments.studentCourseName(student) : '');
 
   if (prevWasInactive && !nextWantsInactive) {
     delete stuMeta.family_deactivated;
@@ -2889,6 +2890,23 @@ async function submitEditSingleStudentForm(e, familyId, studentId) {
   }
   if (typeof invalidateCoreLmsDataCache === 'function') invalidateCoreLmsDataCache();
   if (typeof loadTeachers === 'function') loadTeachers();
+
+  // Assignment ledger (Phase 2): keep the dated assignment history in
+  // step with this edit — a reactivation opens a fresh period; a teacher
+  // or course change closes the old period yesterday and opens the new
+  // one today, so a salary month splits at the change. Fire-and-forget.
+  try {
+    if (window.Assignments) {
+      const _asgToday = Assignments.todayStr();
+      if (prevWasInactive && !nextWantsInactive && effectiveTeacherId) {
+        Assignments.open({ student_id: student.id, teacher_id: effectiveTeacherId, course_name: course_id, start_date: _asgToday });
+      } else if (effectiveTeacherId && oldTeacherId && String(oldTeacherId) !== String(effectiveTeacherId)) {
+        Assignments.transition({ student_id: student.id, teacher_id: effectiveTeacherId, course_name: course_id, start_date: _asgToday, end_reason: 'teacher_changed' });
+      } else if (effectiveTeacherId && course_id && oldCourseName && course_id !== oldCourseName) {
+        Assignments.transition({ student_id: student.id, teacher_id: effectiveTeacherId, course_name: course_id, start_date: _asgToday, end_reason: 'course_changed' });
+      }
+    }
+  } catch (e) {}
 
   await syncFamilyStatusFromStudentsBackend(familyId);
 

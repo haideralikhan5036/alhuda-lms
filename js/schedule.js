@@ -1279,6 +1279,11 @@
           throw stuUpdateErr;
         }
 
+        // Assignment ledger (Phase 2): close the old teacher's period the
+        // day before the shift and open the new teacher's from today, so
+        // the salary month splits between them.
+        if (window.Assignments) Assignments.transition({ student_id: studentId, teacher_id: toTeacherId, course_name: (stuMeta.course_name || stuMeta.course || null), start_date: Assignments.todayStr(), end_reason: 'transferred' });
+
         // 4. Synchronize in-memory ALL_STUDENTS & ALL_FAMILIES & ALL_CLASS_SCHEDULES
         if (stuObj) {
           stuObj.assigned_teacher_id = toTeacherId;

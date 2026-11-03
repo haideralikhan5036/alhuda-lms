@@ -37,7 +37,11 @@ const ALLOWED_TABLES = new Set([
   // Salary-advance workflow (Batch B): teacher requests are read through
   // this engine (scoped per role in worker.js); writes go through the
   // dedicated /api/advances/* endpoints, except the owner's repair path.
-  'advance_requests'
+  'advance_requests',
+  // Assignment-based salary (Phase 2, 2026-11-03): dated student→teacher→
+  // course assignment history. Rows are CLOSED (end_date set), never
+  // hard-deleted — the Worker denies deletes for every role.
+  'student_assignments'
 ]);
 
 // Batch 6B: financial record tables. Inserts here are plain INSERTs — a
@@ -364,6 +368,26 @@ const SCHEMA_STATEMENTS = [
     created_at TEXT DEFAULT (datetime('now')),
     updated_at TEXT
   )`,
+  // Assignment-based salary (Phase 2, 2026-11-03): one row per
+  // student→teacher→course assignment period. start_date/end_date are
+  // 'YYYY-MM-DD'; end_date NULL means the assignment is still open.
+  // course_name is the catalogue course name in force for the period
+  // (course_id carries the catalogue id when known). Rows are closed by
+  // setting end_date + end_reason ('transferred' | 'course_changed' |
+  // 'deactivated' | 'teacher_changed' | 'left' | 'teacher_left'); they
+  // are never hard-deleted (Worker-enforced).
+  `CREATE TABLE IF NOT EXISTS student_assignments (
+    id TEXT PRIMARY KEY,
+    student_id TEXT NOT NULL,
+    teacher_id TEXT NOT NULL,
+    course_id TEXT,
+    course_name TEXT,
+    start_date TEXT NOT NULL,
+    end_date TEXT,
+    end_reason TEXT,
+    created_by TEXT,
+    created_at TEXT DEFAULT (datetime('now'))
+  )`,
   // Batch 7A: authentication-hardening tables (throttle, revocation,
   // per-subject valid-after markers). Additive only; see
   // AUTH_TABLE_STATEMENTS above for the column contract.
@@ -393,7 +417,7 @@ let _schemaInitialized = false;
 // not exist yet) falls back to the full DDL path; a marker-write
 // failure only costs the next cold isolate a DDL replay. Neither
 // failure ever fails the request.
-const SCHEMA_VERSION = '2026-10-29-v3';
+const SCHEMA_VERSION = '2026-11-03-v4';
 const SCHEMA_VERSION_KEY = 'schema_version';
 
 async function ensureSchema(db) {
@@ -472,6 +496,8 @@ async function ensureSchema(db) {
   try { await db.prepare('CREATE UNIQUE INDEX IF NOT EXISTS idx_salary_slips_slip_no_unique ON salary_slips (slip_no)').run(); } catch (e) {}
   try { await db.prepare('CREATE INDEX IF NOT EXISTS idx_salary_slips_teacher_period ON salary_slips (teacher_id, period)').run(); } catch (e) {}
   try { await db.prepare('CREATE INDEX IF NOT EXISTS idx_salary_adjustments_teacher_period ON salary_adjustments (teacher_id, period)').run(); } catch (e) {}
+  try { await db.prepare('CREATE INDEX IF NOT EXISTS idx_assignments_student ON student_assignments (student_id)').run(); } catch (e) {}
+  try { await db.prepare('CREATE INDEX IF NOT EXISTS idx_assignments_teacher ON student_assignments (teacher_id)').run(); } catch (e) {}
   // SLOW-CLASSES FIX: record the schema marker (best effort — never
   // fail the request if this write fails; see the note above).
   try {

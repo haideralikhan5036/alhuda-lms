@@ -473,6 +473,15 @@
         existingMetaObj.schedule_cleared_on_deactivation_at = new Date().toISOString();
       }
 
+      // Assignment ledger (Phase 2): close the student's open assignment
+      // period on the deactivation date. Fire-and-forget — a ledger
+      // failure must never break the deactivation itself.
+      try {
+        if (window.Assignments) {
+          Assignments.closeCurrent(studentId, { end_date: new Date().toISOString().slice(0, 10), end_reason: 'deactivated' });
+        }
+      } catch (e) {}
+
       return {
         previousTeacherId,
         previousTeacherName,
