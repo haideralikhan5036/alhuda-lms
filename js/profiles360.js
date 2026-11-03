@@ -4702,6 +4702,76 @@ async function _persistTeacher360Updates(teacherId, dbFields = {}, customMetaPat
   return true;
 }
 
+// Phase 3 (2026-11-03): a single-teacher compile through the SAME
+// helpers the Salaries tab uses (js/payroll.js), for when the 360 view
+// is opened before the payroll compile has run for the selected month.
+// Returns { studentsSubtotal, basicProtection, floorAmount,
+// baseSubtotal, lines } or null when the payroll helpers are absent.
+function _payrollFiguresForTeacher360(teacher, monthLabel, tchSchedules, isTeachingCategory) {
+  if (typeof resolveAssignmentRate !== 'function' || typeof assignmentSegmentProration !== 'function'
+    || typeof parsePayrollMonthBounds !== 'function' || typeof payrollSettings !== 'function'
+    || !window.CourseCatalogue || !window.Assignments) {
+    return null;
+  }
+  const settings = payrollSettings();
+  const bounds = parsePayrollMonthBounds(monthLabel);
+  const students = window.ALL_STUDENTS || [];
+  const scheds = window.ALL_CLASS_SCHEDULES || [];
+  let rows = (window.ALL_ASSIGNMENTS || []).slice();
+  try { rows = rows.concat(Assignments.deriveFor(students, rows, scheds)); } catch (e) {}
+  const meta = _resolveTeacherCustomMeta(teacher);
+  const seniorityInc = (typeof getTeacherSeniorityIncrement === 'function')
+    ? getTeacherSeniorityIncrement(teacher, meta) : 0;
+  const lines = [];
+  let studentsSubtotal = 0;
+  let lastPayableDay = null;
+  rows.filter(a => String(a.teacher_id) === String(teacher.id)).forEach(asg => {
+    const stu = students.find(s => String(s.id) === String(asg.student_id));
+    if (!stu || !stu.name || stu.status === 'Trial') return;
+    const stuScheds = (tchSchedules || []).filter(sc => String(sc.student_id) === String(stu.id));
+    const rateInfo = resolveAssignmentRate(asg, stu, stuScheds, settings);
+    if (!rateInfo.ok) return;
+    const fullRate = rateInfo.baseRate + seniorityInc;
+    const proration = assignmentSegmentProration(stu, asg, fullRate, monthLabel);
+    if (proration.activeDays === 0) return;
+    lines.push({
+      assignment_id: asg.id || null,
+      student_id: stu.id,
+      student_name: stu.name,
+      course_label: rateInfo.courseLabel,
+      schedule_text: `${rateInfo.isWeekend ? 'Weekend (Sat - Sun)' : (stuScheds.length ? stuScheds.length + ' Days / Week' : 'Regular Days')} (${proration.prorationLabel})`,
+      proration_label: proration.prorationLabel,
+      active_days: proration.activeDays,
+      days_in_month: proration.daysInMonth,
+      joining_date: proration.segStart,
+      deactivation_date: proration.segEnd < bounds.lastDayStr ? proration.segEnd : proration.deactivationDate,
+      seg_end: proration.segEnd,
+      is_prorated: proration.isProrated,
+      base_rate: rateInfo.baseRate,
+      increment: seniorityInc,
+      full_monthly_rate: fullRate,
+      calculated_rate: proration.proratedRate,
+      final_rate: proration.proratedRate
+    });
+    studentsSubtotal += proration.proratedRate;
+    if (proration.segEnd && (!lastPayableDay || proration.segEnd > lastPayableDay)) lastPayableDay = proration.segEnd;
+  });
+  let floorAmount = 0;
+  let basicProtection = 0;
+  if (isTeachingCategory && typeof teacherFloorAmount === 'function') {
+    const floorRes = teacherFloorAmount(teacher, meta, settings, bounds, lastPayableDay);
+    floorAmount = floorRes.floorAmount;
+    basicProtection = Math.max(0, floorAmount - studentsSubtotal);
+  }
+  return {
+    studentsSubtotal,
+    basicProtection,
+    floorAmount,
+    baseSubtotal: studentsSubtotal + basicProtection,
+    lines
+  };
+}
+
 function _compileTeacher360AggregatedState(teacher, tchSchedules = [], attLogs = []) {
   const meta = _resolveTeacherCustomMeta(teacher);
   const empCode = meta.teacher_id || meta.emp_id || (String(teacher.witness_name || '').startsWith('MGR-') || String(teacher.witness_name || '').startsWith('STF-') ? teacher.witness_name : null) || `TCH-001`;
@@ -4760,35 +4830,62 @@ function _compileTeacher360AggregatedState(teacher, tchSchedules = [], attLogs =
     ? getTeacherSeniorityIncrement(teacher, meta)
     : 0;
 
-  // Calculate current month base salary from assigned active students (or fixed staff salary)
-  let currentBaseSubtotal = 0;
-  const studentRateBreakdown = activeStudents.filter(s => String(s.status || '').toLowerCase() !== 'trial').map((stu, idx) => {
-    const stuScheds = (tchSchedules || []).filter(sc => String(sc.student_id).toUpperCase() === String(stu.id).toUpperCase());
-    const rateInfo = (typeof getStudentCourseSalaryRate === 'function')
-      ? getStudentCourseSalaryRate(stu, stuScheds, seniorityInc)
-      : { baseRate: Number(teacher.rate_per_slot || 2200), increment: seniorityInc, finalRate: Number(teacher.rate_per_slot || 2200) + seniorityInc, courseLabel: stu.course_id || 'Quran Studies', scheduleText: 'Regular Slot' };
-    currentBaseSubtotal += rateInfo.finalRate;
-    return {
-      index: idx + 1,
-      student: stu,
-      ...rateInfo
-    };
-  });
-
-  if (currentBaseSubtotal === 0 && (Number(meta.salary) > 0 || Number(teacher.rate_per_slot) > 0)) {
-    currentBaseSubtotal = Number(meta.salary || teacher.rate_per_slot || 2500);
-  }
-
-  // Current Month Deductions & Leaves from authoritative records
+  // Phase 3 (2026-11-03): the current-month figures come from the SAME
+  // payroll engine as the Salaries tab — the compiled slip for the
+  // selected month when the compile has run, otherwise a single-teacher
+  // compile through the shared payroll helpers. The old divergent
+  // calculation (substring rates over assigned students, no proration,
+  // a fixed 2500 fallback, advances ignored) is gone.
   const currentMonthLabel = document.getElementById('salaryMonthSelect')?.value || 'September 2026';
   const currentSlipKey = `${teacher.id}_${currentMonthLabel.replace(/\s+/g, '_')}`;
   const currentSavedSlip = savedSalaries[currentSlipKey] || null;
+
+  const compiledSlip = (window.ALL_TEACHER_SALARIES && window.ALL_TEACHER_SALARIES[teacher.id]
+    && window.ALL_TEACHER_SALARIES[teacher.id].month === currentMonthLabel)
+    ? window.ALL_TEACHER_SALARIES[teacher.id] : null;
+  const engineFigures = compiledSlip
+    ? {
+        studentsSubtotal: compiledSlip.students_subtotal != null ? compiledSlip.students_subtotal : (parseFloat(compiledSlip.base_subtotal) || 0),
+        basicProtection: parseFloat(compiledSlip.basic_protection) || 0,
+        baseSubtotal: parseFloat(compiledSlip.base_subtotal) || 0,
+        lines: compiledSlip.assigned_students || []
+      }
+    : _payrollFiguresForTeacher360(teacher, currentMonthLabel, tchSchedules, !(isManager || isOtherStaff));
+
+  let currentBaseSubtotal = engineFigures ? engineFigures.studentsSubtotal : 0;
+  const currentBasicProtection = engineFigures ? engineFigures.basicProtection : 0;
+  const studentRateBreakdown = (engineFigures ? engineFigures.lines : []).map((item, idx) => {
+    const stu = (window.ALL_STUDENTS || []).find(s => String(s.id) === String(item.student_id)) || { id: item.student_id, name: item.student_name };
+    return {
+      index: idx + 1,
+      student: stu,
+      baseRate: item.base_rate,
+      increment: item.increment || 0,
+      finalRate: item.final_rate,
+      courseLabel: item.course_label,
+      scheduleText: item.schedule_text
+    };
+  });
+
+  // Management / Non-Teaching staff are paid a configured fixed salary,
+  // not per-student amounts (Employees redesign E2): when no slip has
+  // been saved for them, their current base remains that configured
+  // figure. Teaching staff never get this fallback — their base is the
+  // engine's, even when it is zero.
+  if (!currentSavedSlip && (isManager || isOtherStaff) && currentBaseSubtotal === 0 && (Number(meta.salary) > 0 || Number(teacher.rate_per_slot) > 0)) {
+    currentBaseSubtotal = Number(meta.salary || teacher.rate_per_slot || 0);
+  }
 
   const customDeductionsList = Array.isArray(meta.deduction_records) ? meta.deduction_records : [];
   const currentMonthDeductionItems = customDeductionsList.filter(d => !d.month || d.month === currentMonthLabel);
   const itemizedDeductionsSum = currentMonthDeductionItems.reduce((sum, d) => sum + (parseFloat(d.amount) || 0), 0);
   const slipDeductionVal = currentSavedSlip ? (parseFloat(currentSavedSlip.deduction) || 0) : 0;
-  const effectiveCurrentDeductions = Math.max(itemizedDeductionsSum, slipDeductionVal);
+  // Phase 3: when the payroll compile has run, the slip's deduction is
+  // the applied figure (the payroll net is authoritative); the itemized
+  // list still displays below and may hold records not yet on a slip.
+  const effectiveCurrentDeductions = compiledSlip
+    ? (parseFloat(compiledSlip.deduction) || 0)
+    : Math.max(itemizedDeductionsSum, slipDeductionVal);
 
   // If slip has a deduction not yet in itemized list, surface it cleanly as an official payroll deduction row
   const displayDeductionRows = [...currentMonthDeductionItems];
@@ -4805,14 +4902,21 @@ function _compileTeacher360AggregatedState(teacher, tchSchedules = [], attLogs =
     });
   }
 
-  const currentBonusVal = currentSavedSlip ? (parseFloat(currentSavedSlip.bonus) || 0) : (parseFloat(meta.current_bonus) || 0);
-  const currentNetSalary = Math.max(0, currentBaseSubtotal + currentBonusVal - effectiveCurrentDeductions);
+  const currentBonusVal = compiledSlip ? (parseFloat(compiledSlip.bonus) || 0) : (currentSavedSlip ? (parseFloat(currentSavedSlip.bonus) || 0) : (parseFloat(meta.current_bonus) || 0));
+  const currentAdvanceDeducted = compiledSlip ? (parseFloat(compiledSlip.advance_deducted) || 0) : (currentSavedSlip ? (parseFloat(currentSavedSlip.advance_deducted) || 0) : 0);
+  // Canonical net, identical to the payroll engine: students subtotal
+  // + Basic Salary Protection + bonus − deductions − approved advances.
+  const currentNetSalary = compiledSlip
+    ? (parseFloat(compiledSlip.net_payable) || 0)
+    : Math.max(0, currentBaseSubtotal + currentBasicProtection + currentBonusVal - effectiveCurrentDeductions - currentAdvanceDeducted);
 
-  // Build Historical & Current Salary Records List (Strictly without Fixed / Makeup / Fine crossed-out columns!)
+  // Build the salary history from REAL saved slips only (Phase 3: the
+  // old fabricated rows — a hardcoded month list marked 'Paid' with
+  // the current base copied into every past month — are gone, as are
+  // the fallbacks that substituted current figures into old slips).
   const salaryHistoryMap = new Map();
-  const knownMonths = ['October 2025', 'November 2025', 'January 2026', 'March 2026', 'July 2026', 'August 2026', 'September 2026'];
+  const joinDateStr = meta.joining_date || (teacher.created_at ? teacher.created_at.slice(0, 10) : '2025-10-01');
 
-  // First load any explicit saved slips for this teacher
   Object.entries(savedSalaries).forEach(([key, slip]) => {
     if (slip && String(slip.teacher_id) === String(teacher.id)) {
       const mLabel = slip.month || key.replace(`${teacher.id}_`, '').replace(/_/g, ' ');
@@ -4820,45 +4924,42 @@ function _compileTeacher360AggregatedState(teacher, tchSchedules = [], attLogs =
         slipKey: key,
         monthYear: mLabel.replace(/\s+/g, '-'),
         monthRaw: mLabel,
-        studentsCount: slip.students ? Object.keys(slip.students).length : activeStudents.length,
-        baseAmount: parseFloat(slip.base_subtotal ?? currentBaseSubtotal) || currentBaseSubtotal,
-        bonusAmount: parseFloat(slip.bonus || 0) || 0,
-        deductionsAmount: parseFloat(slip.deduction || 0) || 0,
-        paidAmount: parseFloat(slip.net_payable ?? currentNetSalary) || currentNetSalary,
-        status: slip.status || 'Paid',
-        paidDate: (slip.saved_at || '2026-09-25').slice(0, 10),
+        studentsCount: Array.isArray(slip.student_items_snapshot) ? slip.student_items_snapshot.length : (slip.students ? Object.keys(slip.students).length : 0),
+        baseAmount: parseFloat(slip.base_subtotal) || 0,
+        bonusAmount: parseFloat(slip.bonus) || 0,
+        deductionsAmount: parseFloat(slip.deduction) || 0,
+        paidAmount: parseFloat(slip.net_payable) || 0,
+        status: slip.status || 'Pending',
+        paidDate: slip.saved_at ? String(slip.saved_at).slice(0, 10) : '—',
         remarks: slip.remarks || 'Course-Based Monthly Payroll'
       });
     }
   });
 
-  // Ensure current month & historical enrolled months since joining date are represented
+  // Deleted-month tombstones hide even a lingering saved record.
   const deletedSalaryMonths = new Set(Array.isArray(meta.deleted_salary_months) ? meta.deleted_salary_months : []);
-  const joinDateStr = meta.joining_date || (teacher.created_at ? teacher.created_at.slice(0, 10) : '2025-10-01');
-  const joinTimestamp = new Date(joinDateStr).getTime() || new Date('2025-10-01').getTime();
-
-  knownMonths.forEach(mLabel => {
-    const mHyphen = mLabel.replace(/\s+/g, '-');
-    if (deletedSalaryMonths.has(mLabel) || deletedSalaryMonths.has(mHyphen)) return;
-    if (!salaryHistoryMap.has(mLabel)) {
-      const mDate = new Date(`1 ${mLabel}`).getTime();
-      if (!isNaN(mDate) && mDate < joinTimestamp - (31 * 86400000) && mLabel !== currentMonthLabel) return;
-      const isCurrent = mLabel === currentMonthLabel;
-      salaryHistoryMap.set(mLabel, {
-        slipKey: `${teacher.id}_${mLabel.replace(/\s+/g, '_')}`,
-        monthYear: mHyphen,
-        monthRaw: mLabel,
-        studentsCount: activeStudents.length,
-        baseAmount: currentBaseSubtotal,
-        bonusAmount: isCurrent ? currentBonusVal : 0,
-        deductionsAmount: isCurrent ? effectiveCurrentDeductions : 0,
-        paidAmount: isCurrent ? currentNetSalary : currentBaseSubtotal,
-        status: isCurrent ? (currentSavedSlip?.status || 'Pending') : 'Paid',
-        paidDate: isCurrent ? (currentSavedSlip?.saved_at ? currentSavedSlip.saved_at.slice(0, 10) : 'Current Cycle') : mLabel,
-        remarks: isCurrent ? (currentSavedSlip?.remarks || 'Active Payroll Cycle') : 'Disbursed Payroll Record'
-      });
-    }
+  deletedSalaryMonths.forEach(m => {
+    salaryHistoryMap.delete(m);
+    salaryHistoryMap.delete(String(m).replace(/-/g, ' '));
   });
+
+  // The current month's live cycle, when no slip has been saved yet —
+  // one honest row carrying the engine's current figures.
+  if (!salaryHistoryMap.has(currentMonthLabel) && !deletedSalaryMonths.has(currentMonthLabel)) {
+    salaryHistoryMap.set(currentMonthLabel, {
+      slipKey: currentSlipKey,
+      monthYear: currentMonthLabel.replace(/\s+/g, '-'),
+      monthRaw: currentMonthLabel,
+      studentsCount: studentRateBreakdown.length,
+      baseAmount: currentBaseSubtotal + currentBasicProtection,
+      bonusAmount: currentBonusVal,
+      deductionsAmount: effectiveCurrentDeductions,
+      paidAmount: currentNetSalary,
+      status: currentSavedSlip?.status || 'Pending',
+      paidDate: 'Current Cycle',
+      remarks: currentSavedSlip?.remarks || 'Active Payroll Cycle'
+    });
+  }
 
   const salaryRows = Array.from(salaryHistoryMap.values());
 
@@ -4925,6 +5026,8 @@ function _compileTeacher360AggregatedState(teacher, tchSchedules = [], attLogs =
     studentRateBreakdown,
     currentMonthLabel,
     currentBaseSubtotal,
+    currentBasicProtection,
+    currentAdvanceDeducted,
     currentBonusVal,
     effectiveCurrentDeductions,
     currentNetSalary,
@@ -5297,7 +5400,7 @@ function _renderTeacher360WorkspaceDOM(teacher, tchSchedules, attLogs, activeTab
 // SALARY RECORD VIEW (OPENED VIA MAIN ACTION 'SALARY RECORD')
 // ============================================================================
 function _buildTeacherSalaryDetailsTabHtml(state) {
-  const { teacher, salaryRows, currentMonthLabel, currentBaseSubtotal, currentBonusVal, effectiveCurrentDeductions, currentNetSalary } = state;
+  const { teacher, salaryRows, currentMonthLabel, currentBaseSubtotal, currentBasicProtection, currentBonusVal, effectiveCurrentDeductions, currentNetSalary } = state;
 
   return `
     <div class="space-y-5">
@@ -5346,7 +5449,7 @@ function _buildTeacherSalaryDetailsTabHtml(state) {
         <div class="p-3.5 rounded-xl bg-emerald-50/70 border border-emerald-200 flex items-center justify-between">
           <div>
             <span class="text-[11px] font-bold text-emerald-900 uppercase block">Net Payable (${_esc360(currentMonthLabel)})</span>
-            <span class="text-xs text-emerald-700">${currentBonusVal > 0 ? `Includes +PKR ${currentBonusVal.toLocaleString()} Bonus` : 'Verified Net Total'}</span>
+            <span class="text-xs text-emerald-700">${currentBonusVal > 0 ? `Includes +PKR ${currentBonusVal.toLocaleString()} Bonus` : 'Verified Net Total'}${(currentBasicProtection || 0) > 0 ? ` • +PKR ${currentBasicProtection.toLocaleString()} Basic Protection` : ''}</span>
           </div>
           <div class="lms-num-financial text-xl font-black text-emerald-800">Rs. ${currentNetSalary.toLocaleString()}.00</div>
         </div>
@@ -6446,14 +6549,39 @@ async function submitTeacherSalaryAdjustment360(e, teacherId) {
   } catch (err) {}
 
   const slipKey = `${teacher.id}_${month.replace(/\s+/g, '_')}`;
-  const existingSlip = savedSalaries[slipKey] || {
+  // Phase 3: a brand-new slip record created by an adjustment starts
+  // from the payroll engine's figures for that month (never from the
+  // teacher's rate field or a fixed 2500).
+  let stubSlip = {
     teacher_id: teacher.id,
     month,
-    base_subtotal: Number(teacher.rate_per_slot || meta.salary || 2500),
+    base_subtotal: 0,
     bonus: 0,
     deduction: 0,
     status: 'Pending'
   };
+  if (typeof _payrollFiguresForTeacher360 === 'function') {
+    const figs = _payrollFiguresForTeacher360(
+      teacher, month,
+      (window.ALL_CLASS_SCHEDULES || []).filter(sc => String(sc.teacher_id) === String(teacher.id)),
+      !(meta.employee_type === 'manager' || teacher.working_shift === 'Manager')
+    );
+    if (figs) {
+      stubSlip = {
+        teacher_id: teacher.id,
+        month,
+        base_subtotal: figs.baseSubtotal,
+        students_subtotal: figs.studentsSubtotal,
+        basic_protection: figs.basicProtection,
+        floor_amount: figs.floorAmount,
+        student_items_snapshot: figs.lines,
+        bonus: 0,
+        deduction: 0,
+        status: 'Pending'
+      };
+    }
+  }
+  const existingSlip = savedSalaries[slipKey] || stubSlip;
 
   if (adjType === 'deduction') {
     const deductions = Array.isArray(meta.deduction_records) ? meta.deduction_records : [];
@@ -6470,14 +6598,14 @@ async function submitTeacherSalaryAdjustment360(e, teacherId) {
     existingSlip.deduction = (parseFloat(existingSlip.deduction) || 0) + amount;
     // Canonical net (Batch B): approved advances stay subtracted — a
     // bonus/deduction edit here must not erase the advance's effect.
-    existingSlip.net_payable = Math.max(0, (parseFloat(existingSlip.base_subtotal) || 2500) + (parseFloat(existingSlip.bonus) || 0) - existingSlip.deduction - (parseFloat(existingSlip.advance_deducted) || 0));
+    existingSlip.net_payable = Math.max(0, (parseFloat(existingSlip.base_subtotal) || 0) + (parseFloat(existingSlip.bonus) || 0) - existingSlip.deduction - (parseFloat(existingSlip.advance_deducted) || 0));
     existingSlip.remarks = remarks || category;
     savedSalaries[slipKey] = existingSlip;
     localStorage.setItem('alhuda_teacher_salaries', JSON.stringify(savedSalaries));
     await _persistTeacher360Updates(teacher.id, {}, { deduction_records: deductions });
   } else {
     existingSlip.bonus = (parseFloat(existingSlip.bonus) || 0) + amount;
-    existingSlip.net_payable = Math.max(0, (parseFloat(existingSlip.base_subtotal) || 2500) + existingSlip.bonus - (parseFloat(existingSlip.deduction) || 0) - (parseFloat(existingSlip.advance_deducted) || 0));
+    existingSlip.net_payable = Math.max(0, (parseFloat(existingSlip.base_subtotal) || 0) + existingSlip.bonus - (parseFloat(existingSlip.deduction) || 0) - (parseFloat(existingSlip.advance_deducted) || 0));
     existingSlip.remarks = remarks || category;
     savedSalaries[slipKey] = existingSlip;
     localStorage.setItem('alhuda_teacher_salaries', JSON.stringify(savedSalaries));
@@ -6526,7 +6654,7 @@ async function deleteTeacherDeductionRecord360(teacherId, deductionId) {
       const slipKey = `${teacher.id}_${(target.month || 'September 2026').replace(/\s+/g, '_')}`;
       if (savedSalaries[slipKey]) {
         savedSalaries[slipKey].deduction = Math.max(0, (parseFloat(savedSalaries[slipKey].deduction) || 0) - (parseFloat(target.amount) || 0));
-        savedSalaries[slipKey].net_payable = Math.max(0, (parseFloat(savedSalaries[slipKey].base_subtotal) || 2500) + (parseFloat(savedSalaries[slipKey].bonus) || 0) - savedSalaries[slipKey].deduction - (parseFloat(savedSalaries[slipKey].advance_deducted) || 0));
+        savedSalaries[slipKey].net_payable = Math.max(0, (parseFloat(savedSalaries[slipKey].base_subtotal) || 0) + (parseFloat(savedSalaries[slipKey].bonus) || 0) - savedSalaries[slipKey].deduction - (parseFloat(savedSalaries[slipKey].advance_deducted) || 0));
         localStorage.setItem('alhuda_teacher_salaries', JSON.stringify(savedSalaries));
       }
     } catch (e) {}

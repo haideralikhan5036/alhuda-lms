@@ -718,6 +718,11 @@
         return;
       }
 
+      // Phase 3: record the student's course on the schedule rows (the
+      // course_name column existed but no writer ever populated it).
+      const _schedStudent = (window.ALL_STUDENTS || []).find(s => String(s.id) === String(student_id));
+      const _schedCourseName = (_schedStudent && window.Assignments) ? (Assignments.studentCourseName(_schedStudent) || null) : null;
+
       const rows = daysToInsert.map(d => ({
         student_id,
         teacher_id: CURRENT_MATRIX_TEACHER.id,
@@ -725,7 +730,8 @@
         start_time: ACTIVE_START_TIME,
         end_time: ACTIVE_END_TIME,
         meeting_link,
-        status: 'Active'
+        status: 'Active',
+        course_name: _schedCourseName
       }));
 
       const { error } = await db.from('class_schedules').insert(rows);

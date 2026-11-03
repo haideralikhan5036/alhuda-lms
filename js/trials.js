@@ -775,7 +775,8 @@
           end_time: endTime,
           timezone: 'Asia/Karachi',
           meeting_link,
-          status: 'Trial'
+          status: 'Trial',
+          course_name: course || null
         });
       }
 
@@ -1235,7 +1236,8 @@
           end_time: endTime,
           timezone: 'Asia/Karachi',
           meeting_link: permanent_zoom_link || trial.meeting_link || '',
-          status: 'Active'
+          status: 'Active',
+          course_name: trial.course || null
         }));
 
         await trackConvertWrite(db.from('class_schedules').insert(scheduleRows));
