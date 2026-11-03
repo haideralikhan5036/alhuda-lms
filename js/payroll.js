@@ -1191,7 +1191,7 @@
 
       const msg = 
 `Assalamu Alaikum Respected *${slipData.teacher_name}*,
-Al-Huda Islamic Centre - Official Monthly Salary Statement for *${slipData.month}*
+${academyName()} - Official Monthly Salary Statement for *${slipData.month}*
 
 Teacher Name: ${slipData.teacher_name}
 Joining Date: ${slipData.joining_date}
@@ -1207,7 +1207,7 @@ Payment Status: ${slipData.status === 'Paid' ? 'Paid (Disbursed)' : 'Processing 
 ──────────────────
 
 Jazakum Allahu Khairan!
-Al-Huda Islamic Centre Management`;
+${academyName()} Management`;
 
       const url = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(msg)}`;
       window.open(url, '_blank');
@@ -1425,7 +1425,7 @@ Al-Huda Islamic Centre Management`;
         return;
       }
 
-      const subject = `Official Salary Statement [${slipData.month}] — ${slipData.teacher_name} — Al-Huda Islamic Centre`;
+      const subject = `Official Salary Statement [${slipData.month}] — ${slipData.teacher_name} — ${academyName()}`;
 
       let studentLines = '';
       if (slipData.assigned_students && slipData.assigned_students.length > 0) {
@@ -1440,7 +1440,7 @@ Al-Huda Islamic Centre Management`;
 `Assalamu Alaikum wa Rahmatullah Respected ${slipData.teacher_name},
 
 We pray you are in the best of health and Iman.
-Please find below your official monthly salary compensation statement for ${slipData.month} from Al-Huda Islamic Centre.
+Please find below your official monthly salary compensation statement for ${slipData.month} from ${academyName()}.
 
 ══════════════════════════════════════
 TEACHER SALARY VOUCHER DETAILS:
@@ -1462,8 +1462,8 @@ ${(slipData.basic_protection || 0) > 0 ? `• Basic Salary Protection: + PKR ${N
 • Disbursed Status: ${slipData.status === 'Paid' ? 'PAID / DISBURSED' : 'PENDING APPROVAL'}
 
 Jazakumullahu Khairan!
-Al-Huda Islamic Centre Management
-Official Accounts Email: ceoislamiccentre@gmail.com`;
+${academyName()} Management
+Official Accounts Email: ${academyEmail()}`;
 
       const btn = document.getElementById('btnSlipSendEmail');
       const origHtml = btn ? btn.innerHTML : '';
@@ -1486,7 +1486,7 @@ Official Accounts Email: ceoislamiccentre@gmail.com`;
             subject: subject,
             text: plainText,
             html: plainText.replace(/\n/g, '<br/>'),
-            senderName: 'Al-Huda Islamic Centre Payroll (ceoislamiccentre@gmail.com)'
+            senderName: `${academyName()} Payroll (${academyEmail()})`
           });
           slipEmailSent = !!(relayRes && relayRes.success === true);
           if (!slipEmailSent) slipEmailError = (relayRes && relayRes.error) || 'Unknown error';
@@ -1495,7 +1495,7 @@ Official Accounts Email: ceoislamiccentre@gmail.com`;
             to_email: targetEmail,
             subject: subject,
             message: plainText,
-            from_name: 'Al-Huda Islamic Centre Payroll (ceoislamiccentre@gmail.com)'
+            from_name: `${academyName()} Payroll (${academyEmail()})`
           });
           slipEmailSent = true;
         } else {
@@ -1518,7 +1518,7 @@ Official Accounts Email: ceoislamiccentre@gmail.com`;
       } else if (!isSilent) {
         if (typeof lmsNotify === 'function') lmsNotify(`Official Salary Slip email was NOT sent (${slipEmailError || 'Unknown error'}). Opening Gmail so you can send it manually.`, { type: 'error' });
         else lmsNotify(`Official Salary Slip email was NOT sent (${slipEmailError || 'Unknown error'}). Opening Gmail so you can send it manually.`);
-        const gmailUrl = `https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(targetEmail)}&cc=ceoislamiccentre@gmail.com&su=${encodeURIComponent(subject)}&body=${encodeURIComponent(plainText)}`;
+        const gmailUrl = `https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(targetEmail)}&cc=${academyEmail()}&su=${encodeURIComponent(subject)}&body=${encodeURIComponent(plainText)}`;
         window.open(gmailUrl, '_blank');
       } else {
         if (typeof lmsNotify === 'function') lmsNotify(`Official Salary Slip email was NOT sent to ${targetEmail} (${slipEmailError || 'Unknown error'}).`, { type: 'error' });

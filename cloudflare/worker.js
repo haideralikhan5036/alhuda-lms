@@ -84,7 +84,7 @@ function corsHeadersFor(request, env) {
 // functions/api/db.js (the D1 schema marker; v2 after Part A). It is hardcoded
 // here on purpose: /api/health must never 500 because D1 is unreachable, and
 // it must never cost an unauthenticated caller a D1 read.
-const WORKER_RELEASE = '2026-11-03-assignments';
+const WORKER_RELEASE = '2026-11-03-academy-profile';
 const HEALTH_SCHEMA_VERSION = '2026-11-03-v4';
 
 // --- Batch 7 Part B: security headers (workers.dev responses) --------------
@@ -2270,6 +2270,9 @@ function isCatalogSettingsKey(key) {
 // for managers too. WRITES stay catalog-only: applyManagerWriteGuards
 // adjudicates them with isCatalogSettingsKey, which deliberately does NOT
 // include the flags or the logo — toggling the flags is owner-only.
+  // Academy Profile (2026-11-03): managers may READ the academy
+  // profile (their generated messages use the same identity). WRITES
+  // stay owner-only, same as the course catalogue.
 function isManagerReadableSettingsKey(key) {
   const k = String(key || '');
   // Course Payment Settings (2026-11-03): managers may READ the course
@@ -2277,7 +2280,7 @@ function isManagerReadableSettingsKey(key) {
   // settings view need it). WRITES stay owner-only — applyManagerWriteGuards
   // adjudicates writes with isCatalogSettingsKey, which deliberately does
   // NOT include this key.
-  return isCatalogSettingsKey(k) || k === 'alhuda_logo' || k === 'fee_tables_v1' || isFeeReadFlagKey(k) || k === 'alhuda_deleted_books' || k === 'course_rates_v1';
+  return isCatalogSettingsKey(k) || k === 'alhuda_logo' || k === 'fee_tables_v1' || isFeeReadFlagKey(k) || k === 'alhuda_deleted_books' || k === 'course_rates_v1' || k === 'academy_profile_v1';
 }
 
 // URGENT FIX (Issue 2): keys a teacher may READ in system_settings = the

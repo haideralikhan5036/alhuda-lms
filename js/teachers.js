@@ -825,7 +825,7 @@
           studentsCell = `<strong class="text-emerald-700">${activeCount} Student${activeCount === 1 ? '' : 's'}</strong>` +
             (trAll.length ? `<button onclick="viewTeacherTrialsHistory('${t.id}')" class="block text-[10px] text-purple-700 font-bold hover:underline mt-0.5">Trials: ${trActive} active / ${trAll.length} total</button>` : '');
           const cleanPhone = (t.phone || '').replace(/[^0-9]/g, '');
-          const waMsg = `Assalamu Alaikum Respected ${t.full_name},\nWelcome to the Al-Huda Islamic Centre Teacher Operations Portal.\n\n🌐 *Your Personal Portal Link:*\n${window.location.origin}/teacher.html\n\n👤 *Username:* ${creds.username}\n🕒 *Assigned Shift:* ${t.working_shift || '10 Hours Shift'}\n💰 *Slot Rate:* ${t.rate_per_slot || 2200} PKR\n\nYour password will be given to you by the administrator in person or by phone.\nPlease tap the link above to view your timetable, Student List, and lesson logs.\nJazakum Allahu Khairan!`;
+          const waMsg = `Assalamu Alaikum Respected ${t.full_name},\nWelcome to the ${academyName()} Teacher Operations Portal.\n\n🌐 *Your Personal Portal Link:*\n${window.location.origin}/teacher.html\n\n👤 *Username:* ${creds.username}\n🕒 *Assigned Shift:* ${t.working_shift || '10 Hours Shift'}\n💰 *Slot Rate:* ${t.rate_per_slot || 2200} PKR\n\nYour password will be given to you by the administrator in person or by phone.\nPlease tap the link above to view your timetable, Student List, and lesson logs.\nJazakum Allahu Khairan!`;
           actions = `
             <button onclick="open2DMatrixForTeacher('${t.id}')" class="px-2.5 py-1.5 bg-indigo-900 hover:bg-indigo-950 text-white rounded-lg font-bold text-[11px]">Schedule Matrix</button>
             ${(!acc.zoom_link) ? '<span class="text-[10px] text-slate-400 font-semibold self-center">Class link not set yet</span>' : ''}
@@ -838,7 +838,7 @@
           const mgrUsername = meta.username || acc.username || `mgr.${String(t.full_name || '').toLowerCase().replace(/[^a-z]/g, '').slice(0, 8)}`;
           const cleanPhone = (t.phone || '').replace(/[^0-9]/g, '');
           const mgrPortalUrl = `${window.location.origin}/manager.html`;
-          const waMsg = `Assalamu Alaikum Respected ${t.full_name},\nWelcome to Al-Huda Islamic Centre Management Operations.\n\n🌐 *Your Dedicated Manager Portal Link:*\n${mgrPortalUrl}\n\n🆔 *Manager ID:* ${displayId}\n👤 *Login Username:* ${mgrUsername}\n💼 *Role / Title:* ${designation}\n\nYour password will be given to you by the administrator in person or by phone.\nPlease click your portal link to access all management tools, rosters, timetables, and system follow-ups.\nJazakum Allahu Khairan!`;
+          const waMsg = `Assalamu Alaikum Respected ${t.full_name},\nWelcome to ${academyName()} Management Operations.\n\n🌐 *Your Dedicated Manager Portal Link:*\n${mgrPortalUrl}\n\n🆔 *Manager ID:* ${displayId}\n👤 *Login Username:* ${mgrUsername}\n💼 *Role / Title:* ${designation}\n\nYour password will be given to you by the administrator in person or by phone.\nPlease click your portal link to access all management tools, rosters, timetables, and system follow-ups.\nJazakum Allahu Khairan!`;
           actions = !isManagerSession ? `
             <button onclick="setStaffDeactivated('${t.id}', true)" class="px-2.5 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-800 border border-rose-300 rounded-lg font-bold text-[11px]"><i class="fa-solid fa-user-slash mr-1"></i>Deactivate</button>` : '';
         } else {
@@ -897,7 +897,7 @@
       // AUTH HARDENING (Batch 1): copy tools copy the USERNAME only —
       // passwords are never copied, displayed or messaged anymore.
       const url = `${window.location.origin}/teacher.html`;
-      const txt = `Al-Huda Islamic Centre LMS - Teacher Portal\nTeacher: ${teacherName}\nPortal Link: ${url}\nUsername: ${user}\nYour password will be given to you by the administrator in person or by phone.`;
+      const txt = `${academyName()} LMS - Teacher Portal\nTeacher: ${teacherName}\nPortal Link: ${url}\nUsername: ${user}\nYour password will be given to you by the administrator in person or by phone.`;
       navigator.clipboard.writeText(txt);
       lmsNotify(`Copied to clipboard!\n\n${txt}`);
     }
@@ -905,7 +905,7 @@
     function copyManagerCredentials(id, user, managerName, portalUrl) {
       // AUTH HARDENING (Batch 1): copy tools copy the USERNAME only.
       const url = portalUrl || `${window.location.origin}/manager.html`;
-      const txt = `Al-Huda Islamic Centre LMS — Manager Portal\nManager: ${managerName}\nManager ID: ${id}\nPortal Link: ${url}\nUsername: ${user}\nYour password will be given to you by the administrator in person or by phone.`;
+      const txt = `${academyName()} LMS — Manager Portal\nManager: ${managerName}\nManager ID: ${id}\nPortal Link: ${url}\nUsername: ${user}\nYour password will be given to you by the administrator in person or by phone.`;
       navigator.clipboard.writeText(txt);
       lmsNotify(`Copied to clipboard!\n\n${txt}`);
     }

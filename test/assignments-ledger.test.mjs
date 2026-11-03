@@ -115,7 +115,7 @@ fakeDb.seed("INSERT INTO students (id, family_id, name, assigned_teacher_id) VAL
   check('closing a row (update end_date) works', upd.status === 200 && ((afterUpd.json.data || [])[0] || {}).end_reason === 'transferred', 'status ' + upd.status);
 
   const h = await call('/api/health', { method: 'GET' });
-  check('health reports assignments release + schema v4', h.status === 200 && h.json && h.json.version === '2026-11-03-assignments' && h.json.schema === '2026-11-03-v4', JSON.stringify(h.json));
+  check('health reports assignments release + schema v4', h.status === 200 && h.json && h.json.version === '2026-11-03-academy-profile' && h.json.schema === '2026-11-03-v4', JSON.stringify(h.json));
 }
 
 // ---- js/assignments.js executed against a fake db shim ----

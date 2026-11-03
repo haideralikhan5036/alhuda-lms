@@ -1767,7 +1767,7 @@
       if (credAmt > 0) creditMsg += `Advance Credit Deducted: *- ${cur} ${credAmt.toFixed(2)}*\n`;
       if (excessAmt > 0) creditMsg += `Next Month Advance Credit: *+ ${cur} ${excessAmt.toFixed(2)}*\n`;
 
-      const waMsg = `Assalam-o-Alaikum Respected ${r.parentName},\n\n*OFFICIAL TUITION FEE RECEIPT - AL-HUDA ISLAMIC CENTRE*\n--------------------------------------\nReceipt No: *${r.receiptNo}*\nDate: *${r.date}*\nStudent(s): *${r.studentsNames}*\nBilling Period: *${r.month} ${r.year}*\nTotal Due: *${cur} ${parseFloat(r.totalPayable || 0).toFixed(2)}*\n${creditMsg}Amount Paid: *${cur} ${parseFloat(r.amountPaid || 0).toFixed(2)}*\nRemaining Balance: *${cur} ${remaining.toFixed(2)}*\nStatus: *${r.status}*\n--------------------------------------\nJazakAllahu Khairan!\n*Al-Huda Islamic Centre Accounts*`;
+      const waMsg = `Assalam-o-Alaikum Respected ${r.parentName},\n\n*OFFICIAL TUITION FEE RECEIPT - ${academyName().toUpperCase()}*\n--------------------------------------\nReceipt No: *${r.receiptNo}*\nDate: *${r.date}*\nStudent(s): *${r.studentsNames}*\nBilling Period: *${r.month} ${r.year}*\nTotal Due: *${cur} ${parseFloat(r.totalPayable || 0).toFixed(2)}*\n${creditMsg}Amount Paid: *${cur} ${parseFloat(r.amountPaid || 0).toFixed(2)}*\nRemaining Balance: *${cur} ${remaining.toFixed(2)}*\nStatus: *${r.status}*\n--------------------------------------\nJazakAllahu Khairan!\n*${academyName()} Accounts*`;
       const waBtn = document.getElementById('feeInvWhatsAppBtn');
       if (waBtn) {
         if (CURRENT_ROLE === 'manager') {
@@ -2010,6 +2010,7 @@
 
     // Official Academy Email Configuration Helpers
     function getOfficialAcademyEmail() {
+      if (window.AcademyProfile) { try { var _pe = AcademyProfile.get().email; if (_pe) return _pe; } catch (e) {} }
       return localStorage.getItem('alhuda_fee_official_email') || 'ceoislamiccentre@gmail.com';
     }
 
@@ -2092,7 +2093,7 @@
       const remaining = parseFloat(r.remainingBalance || 0).toFixed(2);
       const excessAmt = parseFloat(r.excessPaid || 0).toFixed(2);
 
-      const subject = `Official Tuition Fee Receipt [${rNo}] - ${r.parentName} (${r.month} ${r.year}) - Al-Huda Islamic Centre`;
+      const subject = `Official Tuition Fee Receipt [${rNo}] - ${r.parentName} (${r.month} ${r.year}) - ${academyName()}`;
 
       let proratedNotice = '';
       if (r.isAdvancePayment && r.advanceMonthsCount > 1) {
@@ -2144,7 +2145,7 @@
         `Amount Received: ${cur} ${amountPaid} (${r.paymentMethod || 'Online'})\n` +
         `Remaining Balance: ${cur} ${remaining}\n` +
         (parseFloat(excessAmt) > 0 ? `Advance Credit Carried Forward: + ${cur} ${excessAmt}\n` : '') +
-        `\nJazakAllahu Khairan!\nAl-Huda Islamic Centre Accounts\nOfficial Email: ${offEmail}`;
+        `\nJazakAllahu Khairan!\n${academyName()} Accounts\nOfficial Email: ${offEmail}`;
 
       const btn = document.getElementById('feeInvBtnSendEmail');
       const origHtml = btn ? btn.innerHTML : '';
@@ -2179,7 +2180,7 @@
             subject: subject,
             text: plainText,
             html: plainText.replace(/\n/g, '<br/>'),
-            senderName: `Al-Huda Islamic Centre (${offEmail})`
+            senderName: `${academyName()} (${offEmail})`
           });
           if (relayRes && relayRes.success) dispatchedSuccessfully = true;
         } else if (typeof emailjs !== 'undefined' && window.EMAILJS_PUBLIC_KEY) {
@@ -2188,7 +2189,7 @@
             cc_email: offEmail,
             subject: subject,
             message: plainText,
-            from_name: `Al-Huda Islamic Centre (${offEmail})`
+            from_name: `${academyName()} (${offEmail})`
           });
           dispatchedSuccessfully = true;
         }
@@ -2320,7 +2321,7 @@
       tbody.innerHTML = pendPage.pageRows.map(item => {
         const cleanPhone = (item.whatsapp || '').replace(/[^0-9]/g, '');
         const periodStr = `${item.selectedMonth || targetMonth} ${item.selectedYear || targetYear}`;
-        const waMsg = `Assalam-o-Alaikum Respected ${item.parentName},\nThis is an official fee reminder from *Al-Huda Islamic Centre*.\nOur records show that your tuition fee for the month of *${periodStr}* (*${item.currency} ${item.dueAmount.toFixed(2)}*) for enrolled student(s): *${item.studentsNames}* has not yet reached us.\nKindly pay your fee at the earliest. *If you have already paid, please share the payment screenshot or receipt with us so we can update your account immediately.*\nJazakAllahu Khairan!`;
+        const waMsg = `Assalam-o-Alaikum Respected ${item.parentName},\nThis is an official fee reminder from *${academyName()}*.\nOur records show that your tuition fee for the month of *${periodStr}* (*${item.currency} ${item.dueAmount.toFixed(2)}*) for enrolled student(s): *${item.studentsNames}* has not yet reached us.\nKindly pay your fee at the earliest. *If you have already paid, please share the payment screenshot or receipt with us so we can update your account immediately.*\nJazakAllahu Khairan!`;
         const waUrl = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(waMsg)}`;
 
         const rawEmail = item.email || getFamilyEmailAddress(item.family);
@@ -2399,14 +2400,14 @@
     function buildPendingMonthReminderEmail(item, monthName, year) {
       const offEmail = getOfficialAcademyEmail();
       const periodStr = `${monthName} ${year}`;
-      const subject = `Tuition Fee Reminder (${periodStr}) — ${item.studentsNames} | Al-Huda Islamic Centre`;
+      const subject = `Tuition Fee Reminder (${periodStr}) — ${item.studentsNames} | ${academyName()}`;
 
       const plainText =
 `Assalam-o-Alaikum Respected ${item.parentName},
 
 We pray that you and your family are in the best of health and Iman.
 
-This is a polite official reminder from the Accounts Department of Al-Huda Islamic Centre regarding your monthly tuition fee for the month of ${periodStr}:
+This is a polite official reminder from the Accounts Department of ${academyName()} regarding your monthly tuition fee for the month of ${periodStr}:
 
 • Family ID: ${item.familyId}
 • Enrolled Student(s): ${item.studentsNames}
@@ -2422,7 +2423,7 @@ JazakAllahu Khairan for your continued trust and cooperation!
 
 Warm Islamic Regards,
 Finance & Accounts Department
-Al-Huda Islamic Centre
+${academyName()}
 Official Email: ${offEmail}`;
 
       const htmlBody = `
@@ -2446,7 +2447,7 @@ Official Email: ${offEmail}`;
               <strong>📸 Already Paid? Share Screenshot / Receipt:</strong><br/>
               If you have already paid the fee for <strong>${periodStr}</strong>, kindly share the <strong>payment screenshot or transaction receipt</strong> with us via email (<a href="mailto:${offEmail}" style="color:#047857;font-weight:700;">${offEmail}</a>) or WhatsApp so we can immediately update your fee record.
             </div>
-            <p style="margin-bottom:0;">JazakAllahu Khairan,<br/><strong>Finance &amp; Accounts Department</strong><br/>Al-Huda Islamic Centre</p>
+            <p style="margin-bottom:0;">JazakAllahu Khairan,<br/><strong>Finance &amp; Accounts Department</strong><br/>${academyName()}</p>
           </div>
         </div>
       `;
@@ -2609,7 +2610,7 @@ Official Email: ${offEmail}`;
               subject: subject,
               text: plainText,
               html: htmlBody || plainText.replace(/\n/g, '<br/>'),
-              senderName: `Al-Huda Islamic Centre (${offEmail})`
+              senderName: `${academyName()} (${offEmail})`
             });
             itemSent = !!(relayRes && relayRes.success === true);
             if (relayRes && (relayRes.quotaExceeded === true || relayRes.quotaRemaining === 0)) itemQuotaHit = true;
@@ -2622,7 +2623,7 @@ Official Email: ${offEmail}`;
               subject: subject,
               message: plainText,
               html_content: htmlBody,
-              from_name: `Al-Huda Islamic Centre (${offEmail})`
+              from_name: `${academyName()} (${offEmail})`
             });
             itemSent = true;
           }
@@ -2924,14 +2925,14 @@ Official Email: ${offEmail}`;
 
     function buildDefaulter3PlusEmail(item) {
       const offEmail = getOfficialAcademyEmail();
-      const subject = `URGENT: Tuition Fee Overdue (${item.unpaidMonthsCount} Months Pending) — ${item.studentsNames} | Al-Huda Islamic Centre`;
+      const subject = `URGENT: Tuition Fee Overdue (${item.unpaidMonthsCount} Months Pending) — ${item.studentsNames} | ${academyName()}`;
 
       const plainText =
 `Assalam-o-Alaikum Respected ${item.parentName},
 
 We hope you and your family are well.
 
-This is an urgent fee reminder from the Accounts Department of Al-Huda Islamic Centre. According to our billing ledger, your tuition fee has been pending for ${item.unpaidMonthsCount} months:
+This is an urgent fee reminder from the Accounts Department of ${academyName()}. According to our billing ledger, your tuition fee has been pending for ${item.unpaidMonthsCount} months:
 
 • Family ID: ${item.familyId}
 • Enrolled Student(s): ${item.studentsNames}
@@ -2946,7 +2947,7 @@ If you have already transferred the payment, kindly share the payment screenshot
 JazakAllahu Khairan for your prompt attention!
 
 Finance & Accounts Department
-Al-Huda Islamic Centre
+${academyName()}
 Official Email: ${offEmail}`;
 
       const htmlBody = `
@@ -2969,7 +2970,7 @@ Official Email: ${offEmail}`;
               <strong>📸 Already Paid? Share Screenshot / Receipt:</strong><br/>
               If you have already submitted the payment, please share the <strong>payment screenshot or transaction receipt</strong> via email (<a href="mailto:${offEmail}" style="color:#047857;font-weight:700;">${offEmail}</a>) or WhatsApp right away.
             </div>
-            <p style="margin-bottom:0;">JazakAllahu Khairan,<br/><strong>Finance &amp; Accounts Department</strong><br/>Al-Huda Islamic Centre</p>
+            <p style="margin-bottom:0;">JazakAllahu Khairan,<br/><strong>Finance &amp; Accounts Department</strong><br/>${academyName()}</p>
           </div>
         </div>
       `;
@@ -3084,7 +3085,7 @@ Official Email: ${offEmail}`;
               subject,
               text: plainText,
               html: htmlBody || plainText.replace(/\n/g, '<br/>'),
-              senderName: `Al-Huda Islamic Centre (${offEmail})`
+              senderName: `${academyName()} (${offEmail})`
             });
             itemSent = !!(relayRes && relayRes.success === true);
             if (relayRes && (relayRes.quotaExceeded === true || relayRes.quotaRemaining === 0)) itemQuotaHit = true;
@@ -3097,7 +3098,7 @@ Official Email: ${offEmail}`;
               subject,
               message: plainText,
               html_content: htmlBody,
-              from_name: `Al-Huda Islamic Centre (${offEmail})`
+              from_name: `${academyName()} (${offEmail})`
             });
             itemSent = true;
           }

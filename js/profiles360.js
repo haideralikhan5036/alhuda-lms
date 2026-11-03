@@ -2348,7 +2348,7 @@ function openFamilyCustomEmailModal(familyId) {
   // the real value). Sending routes through the notify endpoint, which
   // resolves the address server-side from the family id.
   const _isMgrCustomEmail = (typeof CURRENT_ROLE !== 'undefined' && CURRENT_ROLE === 'manager') || window.CURRENT_ROLE === 'manager';
-  const defaultSubject = `Academic Update for ${family.parent_name} (${family.id}) — Al-Huda Islamic Centre`;
+  const defaultSubject = `Academic Update for ${family.parent_name} (${family.id}) — ${academyName()}`;
   const defaultBody =
 `Assalamu Alaikum Respected ${family.parent_name},
 
@@ -2358,7 +2358,7 @@ We hope you and your children are doing well.
 
 Warm regards,
 Administration & Management
-Al-Huda Islamic Centre`;
+${academyName()}`;
 
   _openWorkspaceModal(
     `Send Email to Family / Parent`,
@@ -2463,14 +2463,14 @@ async function executeSendFamilyCustomEmail(e, familyId) {
         subject: subject,
         text: body,
         html: body.replace(/\n/g, '<br/>'),
-        senderName: 'Al-Huda Islamic Centre (ceoislamiccentre@gmail.com)'
+        senderName: `${academyName()} (${academyEmail()})`
       });
     } else if (typeof emailjs !== 'undefined' && window.EMAILJS_PUBLIC_KEY) {
       await emailjs.send(window.EMAILJS_SERVICE_ID, window.EMAILJS_TEMPLATE_ID, {
         to_email: toEmail,
         subject: subject,
         message: body,
-        from_name: 'Al-Huda Islamic Centre (ceoislamiccentre@gmail.com)'
+        from_name: `${academyName()} (${academyEmail()})`
       });
     }
   } catch (err) {
@@ -4544,7 +4544,7 @@ function printStudentCertificate360(familyId, studentId, certId) {
       </head>
       <body>
         <div class="cert-box">
-          <div style="font-size:12px;letter-spacing:3px;text-transform:uppercase;color:#64748b;">Al-Huda Islamic Centre • Official Academic Board</div>
+          <div style="font-size:12px;letter-spacing:3px;text-transform:uppercase;color:#64748b;">${academyName()} • Official Academic Board</div>
           <h1>CERTIFICATE OF ACHIEVEMENT</h1>
           <p>This is proudly presented to</p>
           <div class="stu">${_esc360(student.name)}</div>

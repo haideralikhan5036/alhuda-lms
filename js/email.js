@@ -9,11 +9,20 @@
 
     // ==========================================
     // OFFICIAL ACADEMY EMAIL & ZOOM NOTIFICATION ENGINE
-    // Sender: Al-Huda Islamic Centre <ceoislamiccentre@gmail.com>
+    // Sender identity comes from the Academy Profile settings
+    // (js/academy-profile.js); the constants below are the defaults.
     // ==========================================
 
-    const ACADEMY_OFFICIAL_EMAIL = 'ceoislamiccentre@gmail.com';
-    const ACADEMY_NAME = 'Al-Huda Islamic Centre';
+    // Academy identity defaults — js/academy-profile.js refreshes
+    // these from the Academy Profile settings as soon as it loads.
+    let ACADEMY_OFFICIAL_EMAIL = 'ceoislamiccentre@gmail.com';
+    let ACADEMY_NAME = 'Al-Huda Islamic Centre';
+    let ACADEMY_CONTACT_PHONE = '';
+    window.__setAcademyIdentity = function (name, email, phone) {
+      if (name) ACADEMY_NAME = String(name);
+      if (email) ACADEMY_OFFICIAL_EMAIL = String(email);
+      ACADEMY_CONTACT_PHONE = phone ? String(phone) : '';
+    };
 
     function generateWelcomeEmailContent(data) {
       const isTrial = data.type === 'trial';
@@ -32,8 +41,8 @@
         : 'https://alhuda-lms.vercel.app/parent.html';
 
       const subject = isTrial
-        ? `🕌 3-Day Free Quran Trial Confirmation - Al-Huda Islamic Centre`
-        : `🎉 Official Enrollment Confirmation & Portal Access - Al-Huda Islamic Centre`;
+        ? `🕌 3-Day Free Quran Trial Confirmation - ${ACADEMY_NAME}`
+        : `🎉 Official Enrollment Confirmation & Portal Access - ${ACADEMY_NAME}`;
 
       const plainText = 
 `Assalamu Alaikum wa Rahmatullah ${parentName},
@@ -78,7 +87,7 @@ Official Email: ${ACADEMY_OFFICIAL_EMAIL}`;
       const htmlContent = `
         <div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 600px; margin: 0 auto; color: #1e293b; line-height: 1.6;">
           <div style="background: linear-gradient(135deg, #064e3b 0%, #022c22 100%); padding: 24px; text-align: center; border-radius: 12px 12px 0 0; color: #ffffff;">
-            <div style="font-size: 11px; letter-spacing: 2px; text-transform: uppercase; color: #d97706; font-weight: 800; margin-bottom: 4px;">Al-Huda Islamic Centre</div>
+            <div style="font-size: 11px; letter-spacing: 2px; text-transform: uppercase; color: #d97706; font-weight: 800; margin-bottom: 4px;">${ACADEMY_NAME}</div>
             <h1 style="margin: 0; font-size: 20px; font-weight: 800; color: #ffffff;">${isTrial ? '3-Day Free Trial Evaluation' : 'Official Student Enrollment'}</h1>
             <p style="margin: 6px 0 0 0; font-size: 12px; color: #a7f3d0;">Official Academic Confirmation &amp; Portal Access</p>
           </div>
@@ -87,7 +96,7 @@ Official Email: ${ACADEMY_OFFICIAL_EMAIL}`;
             <p style="font-size: 14px; margin-top: 0;"><strong>Assalamu Alaikum wa Rahmatullah ${parentName},</strong></p>
             <p style="font-size: 13px; color: #475569;">
               ${isTrial 
-                ? `We are delighted to welcome <strong>${studentName}</strong> to Al-Huda Islamic Centre for a 3-Day Free Quran Evaluation Trial.`
+                ? `We are delighted to welcome <strong>${studentName}</strong> to ${ACADEMY_NAME} for a 3-Day Free Quran Evaluation Trial.`
                 : `Alhamdulillah! We are pleased to confirm that <strong>${studentName}</strong> has been officially enrolled.`
               }
             </p>
@@ -128,7 +137,7 @@ Official Email: ${ACADEMY_OFFICIAL_EMAIL}`;
             </div>
 
             <div style="margin-top: 24px; padding-top: 16px; border-top: 1px solid #f1f5f9; font-size: 11px; color: #64748b; text-align: center;">
-              <p style="margin: 0 0 4px 0;">Al-Huda Islamic Centre • Management &amp; Administration</p>
+              <p style="margin: 0 0 4px 0;">${ACADEMY_NAME} • Management &amp; Administration${ACADEMY_CONTACT_PHONE ? ' • ' + ACADEMY_CONTACT_PHONE : ''}</p>
               <p style="margin: 0;">Official Support Email: <a href="mailto:${ACADEMY_OFFICIAL_EMAIL}" style="color: #047857; font-weight: bold;">${ACADEMY_OFFICIAL_EMAIL}</a></p>
             </div>
           </div>
@@ -451,7 +460,7 @@ Official Email: ${ACADEMY_OFFICIAL_EMAIL}`;
           subject: subject,
           html: html,
           text: text,
-          senderName: 'Al-Huda Islamic Centre (ceoislamiccentre@gmail.com)'
+          senderName: `${ACADEMY_NAME} (${ACADEMY_OFFICIAL_EMAIL})`
         });
       } catch(e) {
         console.warn('Background email dispatch notice:', e);
@@ -516,7 +525,7 @@ Official Email: ${ACADEMY_OFFICIAL_EMAIL}`;
           subject: compiled.subject,
           html: compiled.htmlContent,
           text: compiled.plainText,
-          senderName: 'Al-Huda Islamic Centre (ceoislamiccentre@gmail.com)'
+          senderName: `${ACADEMY_NAME} (${ACADEMY_OFFICIAL_EMAIL})`
         });
 
         if (relayRes && relayRes.success) {

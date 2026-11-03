@@ -1443,7 +1443,7 @@
         const creds = getParentCreds(f);
         const cleanPhone = (f.whatsapp || '').replace(/[^0-9]/g, '');
         const currentUrl = window.location.origin + window.location.pathname;
-        const waMsg = `Assalam-o-Alaikum Respected ${f.parent_name},\nWelcome to *Al-Huda Islamic Centre LMS*.\nHere are your Parent / Student Portal Login Credentials:\n\n🌐 *Portal Link:* ${currentUrl}\n👨‍👩‍👧 *Family ID:* ${f.id}\n👤 *Username:* ${creds.username}\n💰 *Agreed Monthly Fee:* ${f.currency} ${f.monthly_fee}\n\nYour password will be given to you by the administrator in person or by phone.\nPlease sign in to monitor your children's daily Quran lessons and attendance.\nJazakAllahu Khairan!`;
+        const waMsg = `Assalam-o-Alaikum Respected ${f.parent_name},\nWelcome to *${academyName()} LMS*.\nHere are your Parent / Student Portal Login Credentials:\n\n🌐 *Portal Link:* ${currentUrl}\n👨‍👩‍👧 *Family ID:* ${f.id}\n👤 *Username:* ${creds.username}\n💰 *Agreed Monthly Fee:* ${f.currency} ${f.monthly_fee}\n\nYour password will be given to you by the administrator in person or by phone.\nPlease sign in to monitor your children's daily Quran lessons and attendance.\nJazakAllahu Khairan!`;
         const waUrl = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(waMsg)}`;
         const studentsList = f.students || [];
         const isFamDeact = typeof isFamilyDeactivated === 'function' ? isFamilyDeactivated(f) : ['inactive', 'deactivated'].includes(String(f.status || '').toLowerCase());
