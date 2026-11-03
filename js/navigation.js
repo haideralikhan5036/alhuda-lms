@@ -299,6 +299,17 @@
     // flipping the CURRENT_ROLE global in the console.
     const OWNER_ONLY_TABS = ['tab-owner-managers'];
 
+    // Sidebar Settings group (bottom of the nav): expand/collapse the
+    // sub-options. New settings screens join the group as sub-buttons.
+    function toggleSettingsGroup() {
+      const group = document.getElementById('sidebarSettingsGroup');
+      if (!group) return;
+      const nowHidden = group.classList.toggle('hidden');
+      const chev = document.getElementById('sidebarSettingsChevron');
+      if (chev) chev.style.transform = nowHidden ? '' : 'rotate(180deg)';
+    }
+    window.toggleSettingsGroup = toggleSettingsGroup;
+
     function switchTab(tabId) {
       if (typeof CURRENT_ROLE !== 'undefined' && CURRENT_ROLE === 'manager' && OWNER_ONLY_TABS.includes(tabId)) {
         lmsNotify('Access Denied: This area is available to the Owner only.');
@@ -332,6 +343,15 @@
       const activeBtn = document.querySelector(`.sidebar-nav-btn[data-tab="${tabId}"]`);
       if (activeBtn) {
         activeBtn.classList.add('active');
+      }
+
+      // Settings group: if the active button lives inside the sidebar
+      // Settings group, expand the group so the highlight is visible.
+      const settingsGroup = document.getElementById('sidebarSettingsGroup');
+      if (settingsGroup && activeBtn && settingsGroup.contains(activeBtn)) {
+        settingsGroup.classList.remove('hidden');
+        const chev = document.getElementById('sidebarSettingsChevron');
+        if (chev) chev.style.transform = 'rotate(180deg)';
       }
 
       document.querySelectorAll('.tab-content').forEach(el => {
