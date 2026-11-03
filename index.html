@@ -1665,7 +1665,8 @@
           <span class="text-[11px] text-slate-500 italic">Click "View & Edit Slip" to adjust bonuses, deductions, or student rates</span>
         </div>
         <div class="overflow-x-auto touch-scroll">
-          <table class="w-full text-left text-xs border-collapse min-w-[760px]">
+          <div id="payrollWarnings" class="hidden mb-4 bg-rose-50 border border-rose-300 text-rose-800 text-[13px] font-semibold rounded-xl px-4 py-3 space-y-0.5"></div>
+            <table class="w-full text-left text-xs border-collapse min-w-[760px]">
             <thead class="bg-slate-100 text-slate-700 font-bold border-b border-slate-200 uppercase tracking-wide text-[11px]">
               <tr>
                 <th class="p-3.5">Teacher & Seniority</th>
@@ -4167,6 +4168,11 @@
             <input type="text" id="slipRemarks" placeholder="e.g. Performance bonus for extra weekend classes or advance adjustment" class="w-full p-2 bg-white border border-slate-300 rounded-lg text-xs">
           </div>
 
+          <div id="slipBasicProtectionRow" class="hidden flex justify-between items-center bg-sky-50 p-3 rounded-xl border border-sky-200">
+            <span class="text-[11px] font-bold text-sky-800 uppercase">Basic Salary Protection (minimum guarantee)</span>
+            <span class="font-black text-sky-900 font-mono text-sm" id="slipBasicProtectionVal">+0 PKR</span>
+          </div>
+
           <!-- Net Payable Display -->
           <div class="flex justify-between items-center bg-white p-3 sm:p-3.5 rounded-xl border-2 border-brandDark shadow-xs">
             <div>
@@ -4185,6 +4191,9 @@
         <div class="flex items-center gap-2 flex-wrap">
           <button type="button" onclick="toggleSalaryPaidStatus()" id="btnSlipMarkPaid" class="flex-1 sm:flex-none px-3.5 sm:px-4 py-2 rounded-xl text-xs font-bold border transition flex items-center justify-center gap-1.5 bg-slate-100 text-slate-700 hover:bg-emerald-50 hover:text-emerald-800">
             <i class="fa-solid fa-circle-check"></i> <span id="btnSlipMarkPaidText">Mark as Paid</span>
+          </button>
+          <button type="button" id="btnSlipRecalculate" onclick="recalculateCurrentSlipFromData()" class="hidden flex-1 sm:flex-none px-3.5 sm:px-4 py-2 rounded-xl text-xs font-bold border transition flex items-center justify-center gap-1.5 bg-sky-50 text-sky-800 border-sky-300 hover:bg-sky-100">
+            <i class="fa-solid fa-rotate"></i> <span>Recalculate</span>
           </button>
           <button type="button" id="btnSlipDownloadPdf" onclick="downloadSalarySlipPDF()" class="flex-1 sm:flex-none px-3.5 sm:px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 shadow-2xs">
             <i class="fa-solid fa-file-pdf"></i> Download PDF
