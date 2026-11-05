@@ -67,6 +67,12 @@
       --font-num: 'Plus Jakarta Sans', 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;
     }
 
+    /* Book reader (2026-11-05): when the zoomed page is larger than the
+       view, plain centring pushes its top/left OUTSIDE the scrollable
+       region, so that part of the page can never be scrolled into view.
+       Safe centring keeps the page centred while it fits and aligns it
+       to the start when it overflows, so every edge stays reachable. */
+    #readerContentArea, #readerImageStage { align-items: safe center; justify-content: safe center; }
     body {
       font-family: var(--font-ui);
       font-size: 14.5px;
