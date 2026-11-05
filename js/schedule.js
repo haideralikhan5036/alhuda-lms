@@ -940,7 +940,10 @@
 
     async function executeDeleteSingleDayClass() {
       if (!ACTIVE_SLOT_ACTION_CONTEXT || !ACTIVE_SLOT_ACTION_CONTEXT.scheduleId) return;
-      const { scheduleId } = ACTIVE_SLOT_ACTION_CONTEXT;
+      const { scheduleId, studentId: delStudentId, teacherId: delTeacherId } = ACTIVE_SLOT_ACTION_CONTEXT;
+      // Slot-based salary (Phase 2): snapshot the pair's rows before
+      // the delete for the end-assignment check after it.
+      const _delBeforeRows = (CURRENT_TEACHER_SCHEDULES || []).filter(s => String(s.student_id) === String(delStudentId) && String(s.teacher_id) === String(delTeacherId));
 
       const { error } = await db.from('class_schedules').delete().eq('id', scheduleId);
       if (error) {
@@ -951,11 +954,17 @@
       closeModal('modalMatrixSlotActions');
       ACTIVE_SLOT_ACTION_CONTEXT = null;
       await refreshMatrixAndSchedulesAfterDelete();
+      // If that was the student's last class with this teacher, end
+      // the salary assignment (fire-and-forget, fully guarded).
+      maybeEndAssignmentAfterScheduleDelete(delStudentId, delTeacherId, _delBeforeRows);
     }
 
     async function executeDeleteAllClassesForStudent() {
       if (!ACTIVE_SLOT_ACTION_CONTEXT || !ACTIVE_SLOT_ACTION_CONTEXT.studentId || !ACTIVE_SLOT_ACTION_CONTEXT.teacherId) return;
       const { studentId, teacherId } = ACTIVE_SLOT_ACTION_CONTEXT;
+      // Slot-based salary (Phase 2): snapshot the pair's rows before
+      // the delete for the end-assignment check after it.
+      const _delBeforeRows = (CURRENT_TEACHER_SCHEDULES || []).filter(s => String(s.student_id) === String(studentId) && String(s.teacher_id) === String(teacherId));
 
       const { error } = await db.from('class_schedules')
         .delete()
@@ -970,6 +979,9 @@
       closeModal('modalMatrixSlotActions');
       ACTIVE_SLOT_ACTION_CONTEXT = null;
       await refreshMatrixAndSchedulesAfterDelete();
+      // Every class for this pair is gone: end the salary assignment
+      // (fire-and-forget, fully guarded).
+      maybeEndAssignmentAfterScheduleDelete(studentId, teacherId, _delBeforeRows);
     }
 
     async function handleDeleteSlot(scheduleId) {
@@ -1454,7 +1466,27 @@
           }
           if (rows.some(r => String(r.student_id) === String(studentId))) {
             // Real ledger history exists but no open period with THIS
-            // teacher — not this save's business; leave it untouched.
+            // teacher. Phase 2 (reactivation-after-end): if this save
+            // leaves the student WITH classes for this teacher and the
+            // student is not deactivated, the pair's segment was ended
+            // earlier (schedule-delete hook / End Salary Assignment
+            // action) and is now being booked again — open a fresh
+            // segment from today at the current slot count. Anything
+            // else is not this save's business; leave it untouched.
+            if (!(afterRows || []).length) return;
+            const stu2 = (window.ALL_STUDENTS || []).find(s => String(s.id) === String(studentId));
+            if (!stu2) return;
+            const stu2Lower = String(stu2.status || '').toLowerCase();
+            if (stu2Lower === 'inactive' || stu2Lower === 'deactivated' || stu2Lower === 'left' ||
+                stu2Lower === 'deleted' || stu2Lower === 'trial' || stu2.deactivation_date) return;
+            if (typeof isStudentSelfDeactivated === 'function' && isStudentSelfDeactivated(stu2)) return;
+            Assignments.open({
+              student_id: studentId,
+              teacher_id: teacherId,
+              course_name: Assignments.studentCourseName(stu2) || null,
+              slots: newSlots,
+              start_date: Assignments.todayStr()
+            });
             return;
           }
           // Pure derived period (no real rows yet): materialise it at
@@ -1478,6 +1510,76 @@
         };
         if (Array.isArray(window.ALL_ASSIGNMENTS)) proceed();
         else if (typeof Assignments.loadAll === 'function') Assignments.loadAll().then(proceed);
+      } catch (e) {}
+    }
+
+    // Slot-based salary (Commission #2 Phase 2, 2026-11-05): when a
+    // schedule DELETE leaves a student with no classes at all with a
+    // teacher, the salary assignment for that pair is ended — last
+    // payable day = today (D6) — so accrual stops from tomorrow
+    // (audit §3.3 gap (a): deleting schedule rows used to write
+    // nothing to the ledger, and pay no longer reads schedules).
+    // Deleting one of several rows changes nothing. Fire-and-forget
+    // and fully guarded, like the Phase 1 hook above. beforeRows are
+    // the pair's schedule rows captured immediately before the delete
+    // (they price the materialised segment for derived students,
+    // exactly as in the Phase 1 hook).
+    function maybeEndAssignmentAfterScheduleDelete(studentId, teacherId, beforeRows) {
+      try {
+        if (!window.Assignments || typeof Assignments.endAssignment !== 'function') return;
+        if (!studentId || !teacherId) return;
+        const finish = (remainingCount) => {
+          try {
+            if (remainingCount > 0) return;
+            const proceed = () => {
+              const rows = Array.isArray(window.ALL_ASSIGNMENTS) ? window.ALL_ASSIGNMENTS : [];
+              const openRow = rows.find(r => String(r.student_id) === String(studentId) && String(r.teacher_id) === String(teacherId) && !r.end_date) || null;
+              const stu = (window.ALL_STUDENTS || []).find(s => String(s.id) === String(studentId));
+              const stuName = (stu && stu.name) || studentId;
+              const notifyEnded = () => {
+                if (typeof lmsNotify === 'function') {
+                  lmsNotify(`Salary assignment ended for ${stuName}: no scheduled classes remain with this teacher. Salary accrual stops after ${Assignments.todayStr()} (the last payable day).`, { type: 'info', title: 'Salary Assignment Ended' });
+                }
+              };
+              const endIt = () => Assignments.endAssignment(studentId, {
+                last_payable_date: Assignments.todayStr(),
+                end_reason: 'schedule_ended',
+                teacher_id: teacherId
+              }).then(notifyEnded);
+              if (openRow) { endIt(); return; }
+              if (rows.some(r => String(r.student_id) === String(studentId))) {
+                // Real ledger history exists but nothing is open for
+                // this pair (already ended) — nothing to close.
+                return;
+              }
+              // Pure derived period (no real rows yet): materialise it
+              // from the same start date the derivation uses, then end
+              // it today — otherwise the engine keeps synthesising an
+              // open period from the student's record and pay would
+              // continue even with every class deleted.
+              if (!stu || String(stu.assigned_teacher_id || '') !== String(teacherId)) return;
+              const stLower = String(stu.status || '').toLowerCase();
+              if (stLower === 'inactive' || stLower === 'deactivated' || stLower === 'trial' || stu.deactivation_date) return;
+              const start = stu.joining_date ? String(stu.joining_date).slice(0, 10)
+                : (stu.created_at ? String(stu.created_at).slice(0, 10) : null);
+              if (!start) return;
+              Assignments.open({
+                student_id: studentId,
+                teacher_id: teacherId,
+                course_name: Assignments.studentCourseName(stu) || null,
+                slots: window.PayrollSlots ? PayrollSlots.compute(beforeRows || []) : undefined,
+                start_date: start
+              }).then(endIt);
+            };
+            if (Array.isArray(window.ALL_ASSIGNMENTS)) proceed();
+            else if (typeof Assignments.loadAll === 'function') Assignments.loadAll().then(proceed);
+          } catch (e) {}
+        };
+        // Authoritative remaining count for the pair (the matrix cache
+        // only holds the currently displayed teacher's rows).
+        Promise.resolve(db.from('class_schedules').select('id').eq('student_id', studentId).eq('teacher_id', teacherId))
+          .then(res => finish(Array.isArray(res && res.data) ? res.data.length : 0))
+          .catch(() => {});
       } catch (e) {}
     }
 

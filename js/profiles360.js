@@ -1082,6 +1082,9 @@ function _buildFamilyStudentsTabHtml(family, familyStudents, famSchedules, famLo
     const stLower = rawStatus.toLowerCase();
     const isDeactivated = stLower === 'inactive' || stLower === 'deactivated';
     const isOnLeave = stLower === 'leave' || stLower === 'on leave' || Boolean(stuMeta.on_leave);
+    // Commission #2 Phase 2: the End Salary Assignment action shows
+    // only while the student has an open salary assignment.
+    const openAsgInfo = _studentOpenAssignmentInfo360(stu);
 
     const statusDot = isDeactivated
       ? `<span class="inline-block w-2 h-2 rounded-full bg-rose-500" title="Deactivated"></span>`
@@ -1195,6 +1198,14 @@ function _buildFamilyStudentsTabHtml(family, familyStudents, famSchedules, famLo
                     title="${isDeactivated ? `Reactivate ${_esc360(stu.name)} Only` : `Deactivate ONLY ${_esc360(stu.name)}`}">
               <i class="fa-solid ${isDeactivated ? 'fa-user-check' : 'fa-user-xmark'}"></i>
             </button>
+
+            <!-- 5. End Salary Assignment (Commission #2 Phase 2) — only while an assignment is open -->
+            ${openAsgInfo.open && !isDeactivated ? `
+            <button onclick="openEndSalaryAssignmentModal('${_esc360(family.id)}', '${_esc360(stu.id)}')"
+                    class="w-8 h-8 rounded-lg border border-slate-300 bg-slate-50 hover:bg-slate-100 text-slate-700 inline-flex items-center justify-center transition cursor-pointer"
+                    title="End Salary Assignment for ${_esc360(stu.name)} (stops salary accrual only — classes are NOT changed)">
+              <i class="fa-solid fa-file-invoice-dollar"></i>
+            </button>` : ''}
           </div>
         </td>
       </tr>
@@ -3303,6 +3314,166 @@ function handleStuDeactFeeOptionChange(mode) {
     if (lblSame) lblSame.className = 'flex items-start gap-2.5 p-3 rounded-xl border-2 border-emerald-500 bg-emerald-50/60 cursor-pointer transition';
     if (lblChange) lblChange.className = 'flex items-start gap-2.5 p-3 rounded-xl border border-slate-200 bg-white cursor-pointer transition';
     if (input) input.required = false;
+  }
+}
+
+// ============================================================================
+// Commission #2 Phase 2 (2026-11-05) — END SALARY ASSIGNMENT (audit §3.3, D6)
+// The explicit stop-accrual action: closes the student's open assignment
+// period with a chosen LAST PAYABLE DAY. It touches the salary ledger
+// ONLY — classes, the schedule and the student's status are not changed.
+// ============================================================================
+
+// Does this student currently have an OPEN salary assignment — a real
+// open ledger row, or the derived period the payroll engine synthesises
+// from the student's current record (assigned teacher + not
+// deactivated)? Mirrors Assignments.deriveFor's conditions. Drives the
+// action's visibility and its target teacher.
+function _studentOpenAssignmentInfo360(student) {
+  if (!student) return { open: false, teacherId: null, derived: false };
+  const sid = String(student.id);
+  const rows = Array.isArray(window.ALL_ASSIGNMENTS) ? window.ALL_ASSIGNMENTS : [];
+  const openRows = rows.filter(r => String(r.student_id) === sid && !r.end_date);
+  if (openRows.length) {
+    const mine = openRows.find(r => String(r.teacher_id) === String(student.assigned_teacher_id || '')) || openRows[0];
+    return { open: true, teacherId: mine.teacher_id, derived: false };
+  }
+  if (rows.some(r => String(r.student_id) === sid)) return { open: false, teacherId: null, derived: false };
+  const stLower = String(student.status || '').toLowerCase();
+  const selfDeact = (typeof isStudentSelfDeactivated === 'function')
+    ? isStudentSelfDeactivated(student)
+    : (stLower === 'inactive' || stLower === 'deactivated');
+  if (student.assigned_teacher_id && !selfDeact && stLower !== 'trial' && !student.deactivation_date) {
+    return { open: true, teacherId: student.assigned_teacher_id, derived: true };
+  }
+  return { open: false, teacherId: null, derived: false };
+}
+
+function openEndSalaryAssignmentModal(familyId, studentId) {
+  const famKey = String(familyId || '').toUpperCase();
+  const family = (window.ALL_FAMILIES || []).find(f => String(f.id).toUpperCase() === famKey)
+              || (window.RAW_ALL_FAMILIES || []).find(f => String(f.id).toUpperCase() === famKey);
+  const student = (window.ALL_STUDENTS || []).find(s => String(s.id).toUpperCase() === String(studentId).toUpperCase());
+  if (!family || !student) return;
+
+  const info = _studentOpenAssignmentInfo360(student);
+  if (!info.open) {
+    _notify360(`${student.name} has no open salary assignment to end.`, 'error');
+    return;
+  }
+  const teacher = (window.ALL_TEACHERS || []).find(t => String(t.id) === String(info.teacherId));
+  const teacherName = teacher ? teacher.full_name : (info.teacherId || 'Assigned Teacher');
+  const todayStr = new Date().toISOString().slice(0, 10);
+
+  _openWorkspaceModal(
+    `End Salary Assignment`,
+    `Student: ${student.name} (${student.id}) • Teacher: ${teacherName} (${info.teacherId || ''})`,
+    `
+      <form onsubmit="executeEndSalaryAssignment(event, '${_esc360(family.id)}', '${_esc360(student.id)}')" class="space-y-4 text-xs">
+        <div class="p-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-xs flex items-start gap-2.5">
+          <i class="fa-solid fa-triangle-exclamation text-amber-600 text-sm mt-0.5 shrink-0"></i>
+          <div>
+            <div class="font-extrabold">Stops Salary Accrual Only</div>
+            <div class="text-[11px] text-amber-800 mt-0.5 leading-relaxed">
+              This ends the salary assignment of <strong>${_esc360(student.name)}</strong> with <strong>${_esc360(teacherName)}</strong>.
+              It does <strong>NOT</strong> delete classes, change the schedule, or deactivate the student — it only stops the teacher's salary from accruing after the last payable day below.
+            </div>
+          </div>
+        </div>
+
+        <div class="p-3.5 rounded-xl bg-slate-50 border border-slate-200 space-y-3">
+          <div>
+            <label for="endAsgLastPayableDateInput" class="font-extrabold text-slate-800 text-xs flex items-center gap-1.5">
+              <i class="fa-solid fa-calendar-check text-emerald-600"></i>
+              Last payable day <span class="text-rose-600">*</span>
+            </label>
+            <input type="date" id="endAsgLastPayableDateInput" value="${todayStr}" required
+                   class="w-full mt-1.5 p-2.5 rounded-xl border border-slate-300 bg-white font-mono font-extrabold text-xs text-slate-900 focus:outline-none focus:border-emerald-600">
+            <p class="text-[11px] text-slate-500 mt-1 leading-relaxed">
+              Salary is paid up to and including this day, and stops from the next day. Salary months before this date are not changed.
+            </p>
+          </div>
+          <div>
+            <label for="endAsgReasonSelect" class="font-extrabold text-slate-800 text-xs flex items-center gap-1.5">
+              <i class="fa-solid fa-list-check text-indigo-600"></i>
+              Reason
+            </label>
+            <select id="endAsgReasonSelect"
+                    class="w-full mt-1.5 p-2.5 rounded-xl border border-slate-300 bg-white font-bold text-xs text-slate-900 focus:outline-none focus:border-emerald-600">
+              <option value="schedule_ended">Schedule ended</option>
+              <option value="leave_removed">Student on leave — removed from schedule</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+          <button type="button" onclick="_closeWorkspaceModal()" class="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold">
+            Cancel
+          </button>
+          <button type="submit" id="btnConfirmEndAsg" class="px-5 py-2 rounded-xl bg-slate-800 hover:bg-slate-900 text-white font-extrabold shadow-sm">
+            End Salary Assignment
+          </button>
+        </div>
+      </form>
+    `
+  );
+}
+
+async function executeEndSalaryAssignment(e, familyId, studentId) {
+  e.preventDefault();
+  const famKey = String(familyId || '').toUpperCase();
+  const family = (window.ALL_FAMILIES || []).find(f => String(f.id).toUpperCase() === famKey)
+              || (window.RAW_ALL_FAMILIES || []).find(f => String(f.id).toUpperCase() === famKey);
+  const student = (window.ALL_STUDENTS || []).find(s => String(s.id).toUpperCase() === String(studentId).toUpperCase());
+  if (!family || !student) return;
+
+  const lastPayable = (document.getElementById('endAsgLastPayableDateInput')?.value || '').trim() || new Date().toISOString().slice(0, 10);
+  const reason = document.getElementById('endAsgReasonSelect')?.value || 'schedule_ended';
+  const info = _studentOpenAssignmentInfo360(student);
+  const teacherId = info.teacherId || student.assigned_teacher_id || null;
+
+  const btn = document.getElementById('btnConfirmEndAsg');
+  if (btn) {
+    btn.disabled = true;
+    btn.innerText = 'Ending...';
+  }
+
+  try {
+    if (window.Assignments && typeof Assignments.endAssignment === 'function') {
+      if (info.derived && teacherId) {
+        // A purely derived period has no ledger row to close:
+        // materialise it first (same start date the derivation uses,
+        // the Phase 1 pattern), so the end lands on a real row and
+        // the engine stops synthesising an open period.
+        const start = student.joining_date ? String(student.joining_date).slice(0, 10)
+          : (student.created_at ? String(student.created_at).slice(0, 10) : null);
+        if (start) {
+          await Assignments.open({
+            student_id: student.id,
+            teacher_id: teacherId,
+            course_name: Assignments.studentCourseName(student) || null,
+            start_date: start
+          });
+        }
+      }
+      await Assignments.endAssignment(student.id, {
+        last_payable_date: lastPayable,
+        end_reason: reason,
+        teacher_id: teacherId
+      });
+    }
+    _closeWorkspaceModal();
+    _notify360(`Salary for ${student.name} will stop after ${lastPayable}. Classes/schedule are NOT changed by this action.`);
+    if (typeof calculateMonthlySalaries === 'function') {
+      try { calculateMonthlySalaries(); } catch (err) {}
+    }
+    _renderFamilyWorkspaceDOM();
+  } catch (err) {
+    if (btn) {
+      btn.disabled = false;
+      btn.innerText = 'End Salary Assignment';
+    }
+    console.warn('[LMS] operation failed:', (err?.message || err)); lmsNotify('Error ending the salary assignment. Please try again.', { type: 'error' });
   }
 }
 
