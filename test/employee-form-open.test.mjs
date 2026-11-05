@@ -59,8 +59,11 @@ vm.runInContext(region, ctx);
 // A top-level const lives in the context's lexical scope, not on the
 // global object — read it by evaluating the name inside the context.
 const FIELD_IDS = vm.runInContext('TEACHER_EXTRA_FIELD_IDS', ctx);
-check('TEACHER_EXTRA_FIELD_IDS defined with the 11 field ids',
-  Array.isArray(FIELD_IDS) && FIELD_IDS.length === 11 && FIELD_IDS.includes('tEmail') && FIELD_IDS.includes('tAccountNumber'));
+// Count updated 11 -> 12 for Manager Profile Redesign Phase 3
+// (2026-11-05): the new Management-mode Designation field (tDesignation)
+// rides the same clear/fill list as the other PR #83 extra fields.
+check('TEACHER_EXTRA_FIELD_IDS defined with the 12 field ids',
+  Array.isArray(FIELD_IDS) && FIELD_IDS.length === 12 && FIELD_IDS.includes('tEmail') && FIELD_IDS.includes('tAccountNumber') && FIELD_IDS.includes('tDesignation'));
 
 // ---- Execute: Add New Employee -------------------------------------------
 let err = null;

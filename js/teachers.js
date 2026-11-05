@@ -368,7 +368,8 @@
     // could open. Guarded by test/employee-form-open.test.mjs, which
     // EXECUTES the open functions.)
     const TEACHER_EXTRA_FIELD_IDS = ['tEmail', 'tNationality', 'tQualification2', 'tQualification3',
-      'tExperience', 'tTimezone', 'tMonthlySalary', 'tHourRate', 'tBankName', 'tAccountTitle', 'tAccountNumber'];
+      'tExperience', 'tTimezone', 'tMonthlySalary', 'tHourRate', 'tBankName', 'tAccountTitle', 'tAccountNumber',
+      'tDesignation'];
 
     function clearTeacherExtraFields() {
       TEACHER_EXTRA_FIELD_IDS.forEach(id => {
@@ -382,7 +383,8 @@
         tEmail: acc.email, tNationality: acc.nationality, tQualification2: acc.qualification_02,
         tQualification3: acc.qualification_03, tExperience: acc.experience, tTimezone: acc.timezone,
         tMonthlySalary: acc.monthly_salary, tHourRate: acc.hour_rate, tBankName: acc.bank_name,
-        tAccountTitle: acc.account_title, tAccountNumber: acc.account_number
+        tAccountTitle: acc.account_title, tAccountNumber: acc.account_number,
+        tDesignation: acc.designation
       };
       Object.keys(map).forEach(id => {
         const el = document.getElementById(id);
@@ -397,7 +399,8 @@
         email: v('tEmail'), nationality: v('tNationality'), qualification_02: v('tQualification2'),
         qualification_03: v('tQualification3'), experience: v('tExperience'), timezone: v('tTimezone'),
         monthly_salary: n('tMonthlySalary'), hour_rate: n('tHourRate'), bank_name: v('tBankName'),
-        account_title: v('tAccountTitle'), account_number: v('tAccountNumber')
+        account_title: v('tAccountTitle'), account_number: v('tAccountNumber'),
+        designation: v('tDesignation')
       };
     }
 
@@ -411,6 +414,101 @@
       sel.disabled = false;
       const mgrOpt = sel.querySelector('option[value="management"]');
       if (mgrOpt) mgrOpt.disabled = (typeof CURRENT_ROLE !== 'undefined' && CURRENT_ROLE === 'manager');
+    }
+
+    // Manager Profile Redesign, Stage 2 Phase 3 (2026-11-05): the
+    // Asia/Karachi month — the same computation FixedSalary uses in
+    // js/config.js (duplicated here for the form's month defaults,
+    // because config.js does not export its helper).
+    function _pktMonthForForm() {
+      try {
+        var parts = new Intl.DateTimeFormat('en-CA', {
+          timeZone: 'Asia/Karachi', year: 'numeric', month: '2-digit'
+        }).formatToParts(new Date());
+        var y = '', m = '';
+        parts.forEach(function (p) {
+          if (p.type === 'year') y = p.value;
+          if (p.type === 'month') m = p.value;
+        });
+        if (y && m) return y + '-' + m;
+      } catch (e) { /* fall through to the UTC month */ }
+      return new Date().toISOString().slice(0, 7);
+    }
+
+    // The merged meta the payroll strategy and the 360 resolve a
+    // record's fixed salary from: the account-map entry UNDER the record
+    // meta (address, then notes, then witness_name) — the record meta
+    // wins. Mirrors _fixedSalaryMeta360 in js/profiles360.js.
+    function _teacherFormRecordMeta(teacher) {
+      const tryParse = (v) => {
+        if (typeof v === 'string' && v.trim().startsWith('{')) {
+          try { const o = JSON.parse(v); if (o && typeof o === 'object') return o; } catch (e) {}
+        } else if (v && typeof v === 'object') return v;
+        return null;
+      };
+      let acc = {};
+      try {
+        const accounts = (typeof getTeacherAccounts === 'function') ? getTeacherAccounts() : {};
+        if (teacher && accounts[teacher.id]) acc = accounts[teacher.id];
+      } catch (e) {}
+      const safeAcc = { ...(acc || {}) };
+      delete safeAcc.password;
+      const recMeta = tryParse(teacher && teacher.address) || tryParse(teacher && teacher.notes) || tryParse(teacher && teacher.witness_name) || {};
+      return { ...safeAcc, ...recMeta };
+    }
+
+    // Manager Profile Redesign, Stage 2 Phase 3: the employee form is
+    // category-dynamic. Management mode hides the teacher-only blocks
+    // (rate per slot, seniority increment tier, hour rate, the Zoom
+    // classroom block and the custom shift times) and shows the
+    // Management-only blocks (Role Type + Designation, Fixed Salary
+    // Effective From). Teaching / Non-Teaching restore every block
+    // exactly as before. Role Type 'other_staff' additionally hides the
+    // portal-login block — that record gets no LMS login. This function
+    // only toggles visibility/required flags; it never touches the
+    // category-availability locks above (a signed-in manager still
+    // cannot pick the Management category).
+    function applyStaffCategoryFormMode() {
+      const catSel = document.getElementById('tStaffCategory');
+      const isMgmt = !!catSel && catSel.value === 'management';
+      const setBlock = (id, show, asGrid) => {
+        const el = document.getElementById(id);
+        if (!el) return;
+        el.classList.toggle('hidden', !show);
+        if (asGrid) el.classList.toggle('grid', !!show);
+      };
+
+      // Teacher-only blocks.
+      setBlock('tRateSlotWrap', !isMgmt);
+      setBlock('tIncrementTierWrap', !isMgmt);
+      setBlock('tHourRateWrap', !isMgmt);
+      setBlock('tZoomBlock', !isMgmt);
+      const customBox = document.getElementById('customShiftTimesBox');
+      if (customBox) {
+        if (isMgmt) {
+          customBox.classList.add('hidden');
+          customBox.classList.remove('grid');
+        } else if (typeof handleShiftChange === 'function') {
+          handleShiftChange(document.getElementById('tShift')?.value || '');
+        } else {
+          customBox.classList.add('hidden');
+          customBox.classList.remove('grid');
+        }
+      }
+
+      // Management-only blocks.
+      setBlock('tMgmtRoleWrap', isMgmt, true);
+      setBlock('tSalaryEffectiveWrap', isMgmt);
+
+      // The login block is hidden only for a no-login Management
+      // record; its username is then not required either.
+      const roleSel = document.getElementById('tRoleType');
+      const noLogin = isMgmt && !!roleSel && roleSel.value === 'other_staff';
+      setBlock('tLoginBlock', !noLogin);
+      const userInput = document.getElementById('tUsername');
+      if (userInput) userInput.required = !noLogin;
+      const rateInput = document.getElementById('tRateSlot');
+      if (rateInput) rateInput.required = !isMgmt;
     }
 
     function getNextManagerId() {
@@ -446,6 +544,11 @@
       if (valInput) valInput.value = mgrId;
       const portalId = document.getElementById('tPortalId');
       if (portalId) portalId.value = mgrId;
+      // Phase 3: the Add Manager flow always creates a portal-login
+      // Manager — the Role Type is pre-selected and locked.
+      const roleSelMgr = document.getElementById('tRoleType');
+      if (roleSelMgr) { roleSelMgr.value = 'manager'; roleSelMgr.disabled = true; }
+      applyStaffCategoryFormMode();
     }
 
     function prepareAddTeacherModal() {
@@ -504,6 +607,14 @@
 
       clearTeacherExtraFields();
       syncStaffCategoryAvailability();
+      // Phase 3: a fresh form starts in Teaching mode with the Role
+      // Type reset to a portal-login Manager and the fixed-salary
+      // effective month defaulted to the current month.
+      const roleSelAdd = document.getElementById('tRoleType');
+      if (roleSelAdd) { roleSelAdd.value = 'manager'; roleSelAdd.disabled = false; }
+      const effAdd = document.getElementById('tSalaryEffectiveFrom');
+      if (effAdd) effAdd.value = _pktMonthForForm();
+      applyStaffCategoryFormMode();
 
       const newId = getNextTeacherId();
       const badge = document.getElementById('tGeneratedIdBadge');
@@ -599,6 +710,32 @@
       if (autoSyncCheck) autoSyncCheck.checked = true;
       fillTeacherExtraFields(acc);
       syncStaffCategoryAvailability();
+
+      // Manager Profile Redesign, Stage 2 Phase 3: initialise the
+      // Management-mode fields from the record's stored meta — Role
+      // Type from its employee_type, Designation from the merged meta,
+      // and the salary input from the RESOLVED current fixed salary
+      // (so an untouched salary on save equals the resolved amount and
+      // writes no history entry).
+      const editCategory = (typeof StaffCategories !== 'undefined' && StaffCategories.of) ? StaffCategories.of(teacher) : 'teaching';
+      if (editCategory === 'management') {
+        const formMeta = _teacherFormRecordMeta(teacher);
+        const roleSelEdit = document.getElementById('tRoleType');
+        if (roleSelEdit) {
+          roleSelEdit.value = formMeta.employee_type === 'other_staff' ? 'other_staff' : 'manager';
+          roleSelEdit.disabled = false;
+        }
+        const desigEdit = document.getElementById('tDesignation');
+        if (desigEdit && formMeta.designation) desigEdit.value = formMeta.designation;
+        const effEdit = document.getElementById('tSalaryEffectiveFrom');
+        if (effEdit) effEdit.value = _pktMonthForForm();
+        const salEdit = document.getElementById('tMonthlySalary');
+        if (salEdit && typeof FixedSalary !== 'undefined' && FixedSalary) {
+          const resolvedCurrent = FixedSalary.current(formMeta);
+          salEdit.value = resolvedCurrent > 0 ? resolvedCurrent : '';
+        }
+      }
+      applyStaffCategoryFormMode();
 
       openModal('modalAddTeacher');
     }
@@ -917,17 +1054,32 @@
 
       const full_name = (document.getElementById('tFullName').value || '').trim();
       const phone = (document.getElementById('tPhone').value || '').trim();
-      const username = (document.getElementById('tUsername').value || '').trim();
-      const password = (document.getElementById('tPassword').value || '').trim();
+      let username = (document.getElementById('tUsername').value || '').trim();
+      let password = (document.getElementById('tPassword').value || '').trim();
       const working_shift_val = document.getElementById('tShift').value;
       // Employees redesign E3: canonical Staff Category from the form.
       const staffCategorySel = document.getElementById('tStaffCategory')?.value || 'teaching';
-      const staffCategoryEmpType = (typeof StaffCategories !== 'undefined' && StaffCategories.EMPLOYEE_TYPE)
+      let staffCategoryEmpType = (typeof StaffCategories !== 'undefined' && StaffCategories.EMPLOYEE_TYPE)
         ? (StaffCategories.EMPLOYEE_TYPE[staffCategorySel] || 'teacher') : 'teacher';
       if (staffCategorySel === 'management' && typeof CURRENT_ROLE !== 'undefined' && CURRENT_ROLE === 'manager') {
         lmsNotify('Managers cannot assign the Management Staff category. Please ask the owner.');
         return;
       }
+
+      // Manager Profile Redesign, Stage 2 Phase 3: for a Management
+      // record the Role Type select overrides the category default —
+      // 'manager' writes a portal-login Manager, 'other_staff' writes
+      // a Management Staff record with NO login (its username/password
+      // are discarded here and no account is created on save).
+      const isMgmtRecord = staffCategorySel === 'management';
+      const formRoleType = isMgmtRecord ? (document.getElementById('tRoleType')?.value || 'manager') : '';
+      const isNoLoginRecord = isMgmtRecord && formRoleType === 'other_staff';
+      if (isMgmtRecord && typeof StaffCategories !== 'undefined' && StaffCategories.EMPLOYEE_TYPE) {
+        staffCategoryEmpType = formRoleType === 'other_staff'
+          ? (StaffCategories.EMPLOYEE_TYPE['non-teaching'] || 'other_staff')
+          : (StaffCategories.EMPLOYEE_TYPE.management || 'manager');
+      }
+      if (isNoLoginRecord) { username = ''; password = ''; }
 
       // Mandatory Validations
       if (!full_name) {
@@ -942,7 +1094,7 @@
         return;
       }
 
-      if (!username) {
+      if (!username && !isNoLoginRecord) {
         lmsNotify("Please enter Teacher Portal Username.");
         document.getElementById('tUsername').focus();
         return;
@@ -992,6 +1144,31 @@
       const auto_sync_zoom = document.getElementById('tZoomAutoSync')?.checked;
       const extraFields = readTeacherExtraFields();
 
+      // Manager Profile Redesign, Stage 2 Phase 3: dated fixed-salary
+      // history for Management records. An INSERT with an amount writes
+      // the FIRST history entry; an EDIT appends an entry only when the
+      // typed amount differs from the amount the resolver returns for
+      // the chosen effective month — an unchanged salary writes no
+      // history. The result is applied over the extras in the account
+      // payloads below, so the stored monthly_salary mirror always
+      // matches the resolver exactly.
+      let fixedSalarySpread = null;
+      if (isMgmtRecord && typeof FixedSalary !== 'undefined' && FixedSalary) {
+        const effMonth = String(document.getElementById('tSalaryEffectiveFrom')?.value || '').slice(0, 7) || _pktMonthForForm();
+        const typedAmount = parseFloat(extraFields.monthly_salary) || 0;
+        if (editTeacherId) {
+          const recForMeta = (ALL_TEACHERS || []).find(x => String(x.id) === String(editTeacherId));
+          const metaNow = recForMeta ? _teacherFormRecordMeta(recForMeta) : {};
+          if (typedAmount > 0 && typedAmount !== FixedSalary.amountForMonth(metaNow, effMonth)) {
+            const nextMeta = FixedSalary.appendEntry(metaNow, { amount: typedAmount, effective_from: effMonth, note: '', by: 'Owner' });
+            fixedSalarySpread = { fixed_salary_history: nextMeta.fixed_salary_history, monthly_salary: nextMeta.monthly_salary };
+          }
+        } else if (typedAmount > 0) {
+          const firstMeta = FixedSalary.appendEntry({}, { amount: typedAmount, effective_from: effMonth, note: 'Initial fixed salary', by: 'Owner' });
+          fixedSalarySpread = { fixed_salary_history: firstMeta.fixed_salary_history, monthly_salary: firstMeta.monthly_salary };
+        }
+      }
+
       // Phase 3: a teacher default link must be a Zoom link (or a bare
       // meeting code, normalized). Invalid input stops the save before
       // anything is written — fail closed, never store a bad link.
@@ -1021,10 +1198,30 @@
               origMeta.address = address || origMeta.address || '';
               // Employees redesign E3: persist the chosen category.
               origMeta.employee_type = staffCategoryEmpType;
+              // Phase 3: a no-login record has no account map, so its
+              // form extras + any new salary history live in this
+              // record meta instead (the extras are assigned first,
+              // then the resolver-exact salary pair wins).
+              if (isNoLoginRecord) {
+                Object.assign(origMeta, extraFields);
+                if (fixedSalarySpread) Object.assign(origMeta, fixedSalarySpread);
+              }
               addressToSave = JSON.stringify(origMeta);
             }
           }
         } catch (e) {}
+        // Phase 3: a no-login record whose stored address is still
+        // plain text gets its meta as address JSON (same shape the
+        // merge above produces), so the save never loses it.
+        if (isNoLoginRecord && addressToSave === address) {
+          const noLoginMeta = {
+            residential_address: address, address,
+            employee_type: staffCategoryEmpType
+          };
+          Object.assign(noLoginMeta, extraFields);
+          if (fixedSalarySpread) Object.assign(noLoginMeta, fixedSalarySpread);
+          addressToSave = JSON.stringify(noLoginMeta);
+        }
         // Employees redesign E3: records created by the non-teaching
         // flow keep employee_type in their NOTES meta — update it there
         // too, so a category change is never lost.
@@ -1065,24 +1262,29 @@
             oldZoomLink = (prevRow && prevRow.zoom_link) || '';
           }
         } catch (e) {}
-        saveTeacherAccount(editTeacherId, {
-          teacher_id: teacher_id_code,
-          username,
-          qualification,
-          cnic,
-          gender,
-          working_shift,
-          full_name,
-          phone,
-          joining_date,
-          increment_tier,
-          zoom_link,
-          zoom_meeting_id,
-          zoom_passcode,
-          zoom_host_key,
-          employee_type: staffCategoryEmpType,
-          ...extraFields
-        });
+        // Phase 3: a no-login record gets NO account write at all —
+        // its meta was persisted into the record meta above instead.
+        if (!isNoLoginRecord) {
+          saveTeacherAccount(editTeacherId, {
+            teacher_id: teacher_id_code,
+            username,
+            qualification,
+            cnic,
+            gender,
+            working_shift,
+            full_name,
+            phone,
+            joining_date,
+            increment_tier,
+            zoom_link,
+            zoom_meeting_id,
+            zoom_passcode,
+            zoom_host_key,
+            employee_type: staffCategoryEmpType,
+            ...extraFields,
+            ...(fixedSalarySpread || {})
+          });
+        }
 
         if (auto_sync_zoom && zoom_link) {
           await syncTeacherZoomToAllStudents(editTeacherId, zoom_link, oldZoomLink);
@@ -1124,11 +1326,30 @@
           }
         }
 
-        lmsNotify(`✅ Teacher Profile Updated Successfully!\n\n👨‍🏫 Teacher: ${full_name}\n🆔 Teacher ID: ${teacher_id_code}\n👤 Portal Username: ${username}\n${pwStatusLine}\n🕒 Shift: ${working_shift}\n📹 Zoom: ${zoom_link || 'Not set yet'}`);
+        if (isNoLoginRecord) {
+          lmsNotify(`✅ Staff Profile Updated Successfully!\n\n👤 Name: ${full_name}\n🆔 Employee ID: ${teacher_id_code}\n🏷️ Designation: ${extraFields.designation || 'Management Staff'}\n\nThis record has no portal login (Management Staff — No Login).`);
+        } else {
+          lmsNotify(`✅ Teacher Profile Updated Successfully!\n\n👨‍🏫 Teacher: ${full_name}\n🆔 Teacher ID: ${teacher_id_code}\n👤 Portal Username: ${username}\n${pwStatusLine}\n🕒 Shift: ${working_shift}\n📹 Zoom: ${zoom_link || 'Not set yet'}`);
+        }
       } else {
         // INSERT MODE
+        // Phase 3: a no-login Management record carries its meta in
+        // the row's address JSON (there is no account map for it);
+        // every other record keeps the plain residential address.
+        let insertAddress = address;
+        if (isNoLoginRecord) {
+          const noLoginMeta = {
+            residential_address: address, address,
+            employee_type: staffCategoryEmpType,
+            teacher_id: teacher_id_code,
+            joining_date
+          };
+          Object.assign(noLoginMeta, extraFields);
+          if (fixedSalarySpread) Object.assign(noLoginMeta, fixedSalarySpread);
+          insertAddress = JSON.stringify(noLoginMeta);
+        }
         const { data, error } = await db.from('teachers').insert([{
-          full_name, father_name, phone, alt_phone, address, witness_name, witness_phone, rate_per_slot, working_shift, zoom_link, status: 'Active'
+          full_name, father_name, phone, alt_phone, address: insertAddress, witness_name, witness_phone, rate_per_slot, working_shift, zoom_link, status: 'Active'
         }]).select();
 
         // Audit P1-3: never fabricate a local_ id and a success message
@@ -1143,24 +1364,29 @@
 
         const insertedId = data[0].id;
 
-        saveTeacherAccount(insertedId, {
-          teacher_id: teacher_id_code,
-          username,
-          qualification,
-          cnic,
-          gender,
-          working_shift,
-          full_name,
-          phone,
-          joining_date,
-          increment_tier,
-          zoom_link,
-          zoom_meeting_id,
-          zoom_passcode,
-          zoom_host_key,
-          employee_type: staffCategoryEmpType,
-          ...extraFields
-        });
+        // Phase 3: a no-login record gets NO account write at all —
+        // its meta was persisted into the record itself above.
+        if (!isNoLoginRecord) {
+          saveTeacherAccount(insertedId, {
+            teacher_id: teacher_id_code,
+            username,
+            qualification,
+            cnic,
+            gender,
+            working_shift,
+            full_name,
+            phone,
+            joining_date,
+            increment_tier,
+            zoom_link,
+            zoom_meeting_id,
+            zoom_passcode,
+            zoom_host_key,
+            employee_type: staffCategoryEmpType,
+            ...extraFields,
+            ...(fixedSalarySpread || {})
+          });
+        }
 
         if (auto_sync_zoom && zoom_link) {
           await syncTeacherZoomToAllStudents(insertedId, zoom_link, '');
@@ -1193,7 +1419,11 @@
           }
         }
 
-        lmsNotify(`✅ Teacher Registered Successfully!\n\n👨‍🏫 Teacher: ${full_name}\n🆔 Teacher ID: ${teacher_id_code}\n👤 Portal Username: ${username}\n${newPwStatusLine}\n🕒 Shift: ${working_shift}\n🎓 Qualification: ${qualification || 'As Assigned'}\n\nTeacher can now log into Al-Huda Teacher Portal.`);
+        if (isNoLoginRecord) {
+          lmsNotify(`✅ Management Staff Record Registered Successfully!\n\n👤 Name: ${full_name}\n🆔 Employee ID: ${teacher_id_code}\n🏷️ Designation: ${extraFields.designation || 'Management Staff'}\n\nThis record has no portal login (Management Staff — No Login).`);
+        } else {
+          lmsNotify(`✅ Teacher Registered Successfully!\n\n👨‍🏫 Teacher: ${full_name}\n🆔 Teacher ID: ${teacher_id_code}\n👤 Portal Username: ${username}\n${newPwStatusLine}\n🕒 Shift: ${working_shift}\n🎓 Qualification: ${qualification || 'As Assigned'}\n\nTeacher can now log into Al-Huda Teacher Portal.`);
+        }
       }
     }
 
