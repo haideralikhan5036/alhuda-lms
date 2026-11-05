@@ -184,7 +184,7 @@
       const bounds = parsePayrollMonthBounds(monthStr);
       const { daysInMonth, firstDayStr, lastDayStr } = bounds;
       const fullRate = Number(monthlyRate) || 0;
-      const { joiningDate, deactivationDate } = extractStudentPayrollDates(student);
+      const { joiningDate, deactivationDate, assignmentEndDate } = extractStudentPayrollDates(student);
       const statusLower = String(student?.status || '').toLowerCase();
       const inactiveNoDate = (statusLower === 'inactive' || statusLower === 'left' || statusLower === 'deactivated') && !deactivationDate;
 
@@ -193,6 +193,11 @@
       start = payrollDateMax(start, assignment && assignment.start_date ? String(assignment.start_date).slice(0, 10) : null);
       let end = lastDayStr;
       end = payrollDateMin(end, deactivationDate);
+      // Commission #2 Phase 3: the assignment-end stamp on the student
+      // record bounds the segment exactly like a ledger end_date — the
+      // tighter bound wins, so a derived segment (teacher portal) and
+      // the real ledger segment (Admin) price the same last day.
+      end = payrollDateMin(end, assignmentEndDate);
       end = payrollDateMin(end, assignment && assignment.end_date ? String(assignment.end_date).slice(0, 10) : null);
       end = payrollDateMin(end, asOfStr ? String(asOfStr).slice(0, 10) : null);
 
@@ -206,6 +211,7 @@
         activeDays,
         joiningDate,
         deactivationDate,
+        assignmentEndDate,
         dailyRate: fullRate / daysInMonth,
         fullRate,
         proratedRate,
@@ -316,9 +322,20 @@
      * Extract student metadata (joining_date, deactivation_date, previous_teacher_id_before_deactivation)
      * from student record, JSON notes, and localStorage profile cache.
      * IMPORTANT: Never uses class schedule creation date as joining date.
+     *
+     * Commission #2 Phase 3 (2026-11-05): also returns assignmentEndDate —
+     * the cross-portal consistency stamp written onto the student record
+     * by the Phase 2 stop-accrual action in js/assignments.js (that
+     * action lives in the ledger, which teachers cannot read, so the
+     * teacher portal's derived compile needs the same bound on the
+     * student record itself). Read from the student column of that name when present,
+     * else the notes/profile `assignment_end_date`. Unlike the legacy
+     * deactivation notes value it is NOT gated on the student's status:
+     * an ended student stays Active (their classes continue), and the
+     * stamp is exactly what bounds their pay.
      */
     function extractStudentPayrollDates(student) {
-      if (!student) return { joiningDate: null, deactivationDate: null, previousTeacherId: null };
+      if (!student) return { joiningDate: null, deactivationDate: null, assignmentEndDate: null, previousTeacherId: null };
       let notesObj = {};
       if (student.notes && typeof student.notes === 'string') {
         try { notesObj = JSON.parse(student.notes) || {}; } catch (e) { notesObj = {}; }
@@ -341,9 +358,12 @@
       const rawDeactivation = student.deactivation_date || (!isCurrentlyActive ? (notesObj.deactivation_date || cachedProfile.deactivation_date) : null);
       const deactivationDate = (rawDeactivation && /^\d{4}-\d{2}-\d{2}/.test(String(rawDeactivation))) ? String(rawDeactivation).slice(0, 10) : null;
 
+      const rawAssignmentEnd = student.assignment_end_date || notesObj.assignment_end_date || cachedProfile.assignment_end_date || null;
+      const assignmentEndDate = (rawAssignmentEnd && /^\d{4}-\d{2}-\d{2}/.test(String(rawAssignmentEnd))) ? String(rawAssignmentEnd).slice(0, 10) : null;
+
       const previousTeacherId = student.previous_teacher_id_before_deactivation || notesObj.previous_teacher_id_before_deactivation || cachedProfile.previous_teacher_id_before_deactivation || null;
 
-      return { joiningDate, deactivationDate, previousTeacherId };
+      return { joiningDate, deactivationDate, assignmentEndDate, previousTeacherId };
     }
 
     /**
@@ -590,6 +610,8 @@
           setEl0('payrollKpiTeachers', '0 Active');
           setEl0('payrollKpiStudents', '0 Enrolled');
           setEl0('payrollKpiDisbursed', '0 / 0 Paid');
+          const kpiEarned0 = document.getElementById('payrollKpiEarned');
+          if (kpiEarned0) { kpiEarned0.innerText = ''; kpiEarned0.classList.add('hidden'); }
           return;
         }
       }
@@ -612,6 +634,13 @@
       // for a past month this is the month end, so accrual == potential).
       const pricingVersion = payrollPricingVersion(selectedMonth);
       const accrualAsOf = payrollDateMin(payrollTodayStr(), monthBounds.lastDayStr);
+
+      // Commission #2 Phase 3: earned-to-date displays are shown ONLY
+      // for the current calendar month — for a past month the accrual
+      // equals the potential (noise) and for a future month it is 0.
+      const _payrollNow = new Date();
+      const isCurrentMonth = monthBounds.year === _payrollNow.getFullYear() && monthBounds.monthIndex === _payrollNow.getMonth();
+      let totalEarnedToDate = 0;
 
       ALL_TEACHER_SALARIES = {};
 
@@ -907,6 +936,17 @@
         const netPayable = compiledSlip.net_payable;
         const status = compiledSlip.status;
 
+        // Commission #2 Phase 3: accrual display figures for this row.
+        // A frozen slip's accrual mirrors the month end, so its
+        // earned sub-line is suppressed (and it stays out of the KPI
+        // earned-to-date sum) — the live rows carry the live figures.
+        const accrualInfo = compiledSlip.accrual || null;
+        const showEarnedLines = isCurrentMonth && !compiledSlip.frozen && !!accrualInfo;
+        if (showEarnedLines) totalEarnedToDate += accrualInfo.grossEarned || 0;
+        const accrualAsOfLabel = accrualInfo && accrualInfo.asOf
+          ? new Date(String(accrualInfo.asOf).slice(0, 10) + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })
+          : '';
+
         // Seniority text
         const yrs = Math.floor((new Date() - new Date(compiledSlip.joining_date)) / (365.25 * 24 * 3600 * 1000));
         let seniorityBadge = `<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-700">Base</span>`;
@@ -947,6 +987,7 @@
                 ${seniorityBadge}
                 <span class="text-[10px] text-slate-400 font-mono">${t.phone}</span>
               </div>
+              ${accrualInfo ? `<div class="text-[10px] text-slate-500 font-semibold mt-1">Slots: ${payrollFormatSlots(accrualInfo.totalSlots)} · Daily ≈ PKR ${(accrualInfo.dailyAccrual || 0).toLocaleString('en-US', { maximumFractionDigits: 2 })}</div>` : ''}
             </td>
 
             <!-- 2. ASSIGNED STUDENTS -->
@@ -962,6 +1003,9 @@
             <td class="p-3.5">
               <div class="lms-num-financial font-bold text-slate-900 text-[15px]">PKR ${studentsSubtotal.toLocaleString()}</div>
               <span class="text-[11px] text-slate-500 block mt-0.5">From Course Rates</span>
+              ${showEarnedLines ? `
+              <div class="text-[11px] text-emerald-700 font-bold mt-1">Earned till ${accrualAsOfLabel}: PKR ${(accrualInfo.grossEarned || 0).toLocaleString()}</div>
+              <div class="text-[11px] text-slate-500">Remaining: PKR ${(accrualInfo.remaining || 0).toLocaleString()}</div>` : ''}
             </td>
 
             <!-- 4. BONUS / ADJUSTMENTS -->
@@ -1025,6 +1069,19 @@
       setEl('payrollKpiTeachers', `${activeTeachersCount} Active`);
       setEl('payrollKpiStudents', `${totalAssignedStudentsCount} Enrolled`);
       setEl('payrollKpiDisbursed', `${paidCount} / ${teachers.length} Paid`);
+      // Commission #2 Phase 3: earned-to-date sub-line on the Total
+      // card — current month only, live (non-frozen) slips only, the
+      // same figure the per-teacher rows show.
+      const kpiEarnedEl = document.getElementById('payrollKpiEarned');
+      if (kpiEarnedEl) {
+        if (isCurrentMonth) {
+          kpiEarnedEl.innerText = `Earned to date: ${totalEarnedToDate.toLocaleString()} PKR`;
+          kpiEarnedEl.classList.remove('hidden');
+        } else {
+          kpiEarnedEl.innerText = '';
+          kpiEarnedEl.classList.add('hidden');
+        }
+      }
     }
 
     // OPEN ITEMIZED & EDITABLE SALARY SLIP MODAL

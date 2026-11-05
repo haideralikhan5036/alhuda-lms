@@ -75,6 +75,99 @@
     });
   }
 
+  // ------------------------------------------------------------------
+  // Commission #2 Phase 3 (2026-11-05): the cross-portal consistency
+  // stamp. Teachers cannot read this ledger (the Worker denies it), so
+  // the teacher portal compiles from DERIVED periods — a Phase 2 end
+  // recorded only here would be invisible there and the two portals
+  // would disagree. endAssignment therefore ALSO stamps the student
+  // record: `assignment_end_date` (+ reason) merged into the student's
+  // notes JSON, which the payroll engine honours as a segment bound in
+  // every compile (js/payroll.js assignmentSegmentProration). The
+  // ledger close remains the system of record; the stamp is its
+  // student-visible mirror. open() clears the stamp when a fresh
+  // segment is created, so a re-booking restarts accrual cleanly.
+  // Both helpers are fire-and-forget and fully guarded: a failed stamp
+  // write must never break the ledger action that triggered it.
+  // ------------------------------------------------------------------
+  function findLoadedStudent(studentId) {
+    try {
+      var list = (typeof window !== 'undefined' && window.ALL_STUDENTS) || [];
+      for (var i = 0; i < list.length; i++) {
+        if (list[i] && String(list[i].id) === String(studentId)) return list[i];
+      }
+    } catch (e) {}
+    return null;
+  }
+
+  function parseStudentNotes(stu) {
+    if (!stu) return {};
+    if (stu.notes && typeof stu.notes === 'string') {
+      // Legacy free-text notes (non-JSON) are preserved under `text`,
+      // the same defence js/leaves.js uses — a stamp merge must never
+      // silently drop the original note text.
+      try { return JSON.parse(stu.notes) || {}; } catch (e) { return { text: stu.notes }; }
+    }
+    if (stu.notes && typeof stu.notes === 'object') return Object.assign({}, stu.notes);
+    return {};
+  }
+
+  function writeStudentNotes(studentId, notesObj) {
+    try {
+      if (!hasDb()) return;
+      var notesStr = JSON.stringify(notesObj);
+      var stu = findLoadedStudent(studentId);
+      if (stu) stu.notes = notesStr;
+      Promise.resolve(db.from('students').update({ notes: notesStr }).eq('id', String(studentId)))
+        .catch(function () {});
+    } catch (e) {}
+  }
+
+  function stampStudentAssignmentEnd(studentId, endDateStr, reason) {
+    try {
+      if (!endDateStr) return;
+      var stu = findLoadedStudent(studentId);
+      if (stu) {
+        var notes = parseStudentNotes(stu);
+        notes.assignment_end_date = String(endDateStr).slice(0, 10);
+        notes.assignment_end_reason = reason || null;
+        writeStudentNotes(studentId, notes);
+        return;
+      }
+      // Student record not loaded in this session: fall back to a db
+      // read, and stamp ONLY when a current notes value actually comes
+      // back (a row carrying the notes key) — never overwrite blind.
+      if (!hasDb()) return;
+      Promise.resolve(db.from('students').select('notes').eq('id', String(studentId)))
+        .then(function (res) {
+          if (!res || res.error || !Array.isArray(res.data) || !res.data.length) return;
+          var row = res.data[0];
+          if (!row || !('notes' in row)) return;
+          var merged = parseStudentNotes(row);
+          merged.assignment_end_date = String(endDateStr).slice(0, 10);
+          merged.assignment_end_reason = reason || null;
+          try {
+            Promise.resolve(db.from('students').update({ notes: JSON.stringify(merged) }).eq('id', String(studentId)))
+              .catch(function () {});
+          } catch (e) {}
+        })
+        .catch(function () {});
+    } catch (e) {}
+  }
+
+  function clearStudentAssignmentEndStamp(studentId) {
+    try {
+      var stu = findLoadedStudent(studentId);
+      if (!stu) return;
+      var notes = parseStudentNotes(stu);
+      // Only act when the loaded record actually carries the stamp.
+      if (!notes.assignment_end_date && !stu.assignment_end_date) return;
+      delete notes.assignment_end_date;
+      delete notes.assignment_end_reason;
+      writeStudentNotes(studentId, notes);
+    } catch (e) {}
+  }
+
   // Open a new assignment row. Skips when an identical open row already
   // exists (double-saves, repeat modal opens) — the ledger records
   // periods, not clicks.
@@ -108,6 +201,17 @@
       };
       if (hasSlots) row.slots = slotsVal;
       if (_cache) _cache.push(row);
+      // Phase 3: a fresh segment restarts accrual — clear any
+      // assignment-end stamp a previous end left on the student
+      // record. Runs only on this path (a row is actually being
+      // created), never on the duplicate-guard return above, so the
+      // stop flows that MATERIALISE a segment and then end it
+      // (open() first, endAssignment() second — the Phase 2 order in
+      // the 360 action and the schedule-delete hook) still finish
+      // stamped: this clear is initiated and applied to the loaded
+      // record synchronously here, strictly before any later
+      // endAssignment call can stamp again.
+      clearStudentAssignmentEndStamp(opts.student_id);
       if (!hasDb()) return Promise.resolve(true);
       return Promise.resolve(db.from('student_assignments').insert(row))
         .then(function (res) {
@@ -165,6 +269,15 @@
       opts = opts || {};
       var end = opts.last_payable_date || todayStr();
       var reason = opts.end_reason || 'schedule_ended';
+      // Phase 3 consistency stamp: mirror this end onto the student
+      // record so the teacher portal's derived compile stops on the
+      // same day — but only when this end leaves the student with NO
+      // open segment at all. A teacher-scoped end while another
+      // teacher's segment stays open must not bound that segment.
+      var remainingOpen = opts.teacher_id
+        ? openRowsFor(studentId).filter(function (r) { return String(r.teacher_id) !== String(opts.teacher_id); })
+        : [];
+      if (!remainingOpen.length) stampStudentAssignmentEnd(studentId, end, reason);
       if (!opts.teacher_id) {
         return closeCurrent(studentId, { end_date: end, end_reason: reason });
       }

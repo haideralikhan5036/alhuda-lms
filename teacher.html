@@ -39,6 +39,14 @@
   <script src="curriculum_data.js"></script>
   <script src="js/interactive_qaida.js"></script>
   <script src="js/security.js"></script>
+  <!-- Salary accrual engine — the SAME scripts the Admin portal loads,
+       in the same relative order (Commission #2 Phase 3): payroll.js is
+       declarations-only at load (verified: it executes with no DOM
+       present), so the teacher's live salary card below prices through
+       the identical engine primitives instead of a copied formula. -->
+  <script src="js/payroll.js"></script>
+  <script src="js/course-catalogue.js"></script>
+  <script src="js/assignments.js"></script>
 
   <script>
     tailwind.config = {
@@ -7995,6 +8003,177 @@ font-family: var(--font-num) !important;
       return period;
     }
 
+    // =================================================================
+    // LIVE SALARY ACCRUAL (Commission #2 Phase 3) — BEGIN
+    // (this block is extracted verbatim by test/salary-portal-accrual.test.mjs)
+    // The teacher's own current-month compile. Teachers cannot read
+    // the assignment ledger (Worker-denied), so segments are DERIVED
+    // from the portal's own loaded data — which is exactly why
+    // Assignments.endAssignment also stamps the student record: the
+    // engine honours that stamp as a segment bound here too, so this
+    // portal and the Admin compile stop on the same day. The maths
+    // mirrors _payrollFiguresForTeacher360 (js/profiles360.js) line
+    // for line — same D5 gate, same slot/weekend/Tafseer rules, same
+    // floor compared once on the accrued aggregates.
+    // =================================================================
+    function _teacherAccrualAccount() {
+      // The same account resolution loadTeacherPreviousSalaries uses:
+      // the accounts map (localStorage 'alhuda_teacher_accounts' — the
+      // very store the Admin side reads via getTeacherAccounts), else
+      // the teacher_account meta on the teacher's own record.
+      let accountsMap = {};
+      try { accountsMap = JSON.parse(localStorage.getItem('alhuda_teacher_accounts') || '{}'); } catch (e) {}
+      if (CURRENT_TEACHER && CURRENT_TEACHER.id && accountsMap[CURRENT_TEACHER.id]) return accountsMap[CURRENT_TEACHER.id];
+      const meta = (typeof parseEmployeeMeta === 'function' && CURRENT_TEACHER) ? parseEmployeeMeta(CURRENT_TEACHER.address) : {};
+      return (meta && meta.teacher_account) || {};
+    }
+
+    function compileOwnCurrentMonthAccrual(monthLabel) {
+      try {
+        if (!CURRENT_TEACHER || !CURRENT_TEACHER.id) return null;
+        if (typeof resolveAssignmentRate !== 'function' || typeof assignmentSegmentProration !== 'function'
+          || typeof parsePayrollMonthBounds !== 'function' || typeof payrollSettings !== 'function'
+          || !window.CourseCatalogue || !window.Assignments) return null;
+        const teacher = CURRENT_TEACHER;
+        const settings = payrollSettings();
+        const bounds = parsePayrollMonthBounds(monthLabel);
+        const pricingVersion = (typeof payrollPricingVersion === 'function') ? payrollPricingVersion(monthLabel) : 'v1';
+        const accrualAsOf = (typeof payrollTodayStr === 'function' && typeof payrollDateMin === 'function')
+          ? payrollDateMin(payrollTodayStr(), bounds.lastDayStr) : bounds.lastDayStr;
+        const ownStudents = [...(ACTIVE_ASSIGNED_STUDENTS || []), ...(LEAVE_ASSIGNED_STUDENTS || [])];
+        const ownSchedules = ALL_TEACHER_SCHEDULES || [];
+        let rows = [];
+        try { rows = Assignments.deriveFor(ownStudents, [], ownSchedules); } catch (e) { rows = []; }
+        const acc = _teacherAccrualAccount();
+        const seniorityInc = (typeof getTeacherSeniorityIncrement === 'function')
+          ? getTeacherSeniorityIncrement(teacher, acc) : 0;
+        const lines = [];
+        const rateLinesByLabel = {};
+        let studentsSubtotal = 0;
+        let lastPayableDay = null;
+        rows.filter(a => String(a.teacher_id) === String(teacher.id)).forEach(asg => {
+          const stu = ownStudents.find(s => String(s.id) === String(asg.student_id));
+          if (!stu || !stu.name || stu.status === 'Trial') return;
+          const stuScheds = ownSchedules.filter(sc => String(sc.student_id) === String(stu.id));
+          const rateInfo = resolveAssignmentRate(asg, stu, stuScheds, settings, pricingVersion);
+          if (!rateInfo.ok) return;
+          const lineSlots = (pricingVersion === 'v2' && typeof payrollSegmentSlots === 'function') ? payrollSegmentSlots(asg, stuScheds) : 1;
+          const lineIncrement = (pricingVersion === 'v2' && rateInfo.courseId === 'crs-tafseer-english') ? 0 : seniorityInc;
+          const fullRate = rateInfo.weekendFlat
+            ? rateInfo.baseRate + lineIncrement
+            : (rateInfo.baseRate + lineIncrement) * lineSlots;
+          const proration = assignmentSegmentProration(stu, asg, fullRate, monthLabel);
+          if (proration.activeDays === 0) return;
+          const accrualProration = assignmentSegmentProration(stu, asg, fullRate, monthLabel, accrualAsOf);
+          lines.push({
+            assignment_id: asg.id || null,
+            student_id: stu.id,
+            student_name: stu.name,
+            course_label: rateInfo.courseLabel,
+            slots: lineSlots,
+            accrued_rate: accrualProration.proratedRate,
+            accrued_days: accrualProration.activeDays,
+            active_days: proration.activeDays,
+            days_in_month: proration.daysInMonth,
+            seg_end: proration.segEnd,
+            base_rate: rateInfo.baseRate,
+            increment: lineIncrement,
+            full_monthly_rate: fullRate,
+            final_rate: proration.proratedRate
+          });
+          rateLinesByLabel[rateInfo.courseLabel] = rateInfo.weekendFlat
+            ? `Weekend PKR ${(parseInt(settings.weekend_rate, 10) || 0).toLocaleString()} / student`
+            : `${rateInfo.courseLabel}: PKR ${(rateInfo.baseRate || 0).toLocaleString()} / slot`;
+          studentsSubtotal += proration.proratedRate;
+          if (proration.segEnd && (!lastPayableDay || proration.segEnd > lastPayableDay)) lastPayableDay = proration.segEnd;
+        });
+        // The teacher portal serves teaching staff, so the Basic
+        // Salary Protection floor applies (the Admin compile's
+        // manager-record exclusion is an admin-session concern —
+        // manager records never sign in here).
+        let floorAmount = 0;
+        let basicProtection = 0;
+        if (typeof teacherFloorAmount === 'function') {
+          const floorRes = teacherFloorAmount(teacher, acc, settings, bounds, lastPayableDay);
+          floorAmount = floorRes.floorAmount;
+          basicProtection = Math.max(0, floorAmount - studentsSubtotal);
+        }
+        let accrual = null;
+        if (typeof teacherFloorAmount === 'function' && typeof payrollDaysInclusive === 'function') {
+          const earnedStudents = lines.reduce((s, it) => s + (parseFloat(it.accrued_rate) || 0), 0);
+          const floorAccrued = teacherFloorAmount(teacher, acc, settings, bounds, lastPayableDay, accrualAsOf).floorAmount;
+          const protectionAccrued = Math.max(0, floorAccrued - earnedStudents);
+          const grossEarned = earnedStudents + protectionAccrued;
+          accrual = {
+            asOf: accrualAsOf,
+            earnedStudents,
+            floorAccrued,
+            protectionAccrued,
+            grossEarned,
+            remaining: (studentsSubtotal + basicProtection) - grossEarned,
+            totalSlots: lines.reduce((s, it) => s + (parseFloat(it.slots) || 1), 0),
+            daysElapsed: payrollDaysInclusive(bounds.firstDayStr, accrualAsOf),
+            daysInMonth: bounds.daysInMonth,
+            dailyAccrual: Math.round(((studentsSubtotal + basicProtection) / bounds.daysInMonth) * 100) / 100
+          };
+        }
+        return {
+          studentsSubtotal,
+          basicProtection,
+          floorAmount,
+          baseSubtotal: studentsSubtotal + basicProtection,
+          lines,
+          accrual,
+          pricingVersion,
+          rateLines: Object.values(rateLinesByLabel)
+        };
+      } catch (e) { return null; }
+    }
+
+    function _teacherLiveAccrualHtml(monthLabel) {
+      // Engine stack absent (a shared script failed to load): no live
+      // block at all — the card keeps its exact pre-Phase-3 behaviour.
+      if (typeof resolveAssignmentRate !== 'function' || typeof assignmentSegmentProration !== 'function'
+        || !window.CourseCatalogue || !window.Assignments) return { html: '', figures: false };
+      // SETTINGS GATE (critical): figures render ONLY when the course
+      // rates were actually fetched FROM THE SERVER this session.
+      // getSettings() would silently fall back to built-in defaults,
+      // which could show wrong numbers after an owner rate edit —
+      // until the rates read is permitted and lands, show the notice
+      // line and NO figures.
+      if (typeof CourseCatalogue.fromServer !== 'function' || !CourseCatalogue.fromServer()) {
+        return {
+          html: `<div class="mb-3 p-3.5 rounded-xl border border-slate-200 bg-slate-50 text-slate-500">Your live salary view will appear here after the next system update.</div>`,
+          figures: false
+        };
+      }
+      const fig = compileOwnCurrentMonthAccrual(monthLabel);
+      if (!fig || !fig.accrual) return { html: '', figures: false };
+      const a = fig.accrual;
+      const asOfLabel = a.asOf
+        ? new Date(String(a.asOf).slice(0, 10) + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })
+        : '';
+      const tile = (label, value) => `<div class="p-3 bg-slate-50 rounded-xl border border-slate-200"><span class="block text-slate-500 font-bold text-[11px]">${label}</span><span class="font-mono font-black text-slate-900 text-sm">${value}</span></div>`;
+      const html = `
+        <div class="mb-3">
+          <div class="p-4 rounded-xl border border-emerald-200 bg-emerald-50">
+            <span class="block text-slate-500 font-bold text-[11px]">Live Salary — ${monthLabel}</span>
+            <span class="block font-black text-emerald-800 text-base mt-0.5">Your salary earned so far this month: PKR ${a.grossEarned.toLocaleString()}</span>
+            <span class="block text-slate-500 text-[11px] mt-0.5">Till ${asOfLabel} · grows daily · your official slip appears here once Administration generates it</span>
+          </div>
+          <div class="grid grid-cols-2 sm:grid-cols-3 gap-2.5 mt-2.5">
+            ${tile('Monthly Potential', 'PKR ' + fig.baseSubtotal.toLocaleString())}
+            ${tile('Remaining', 'PKR ' + (a.remaining || 0).toLocaleString())}
+            ${tile('Total Assigned Slots', (typeof payrollFormatSlots === 'function' ? payrollFormatSlots(a.totalSlots) : String(a.totalSlots)))}
+            ${tile('Per-Slot Rate', fig.rateLines.length ? fig.rateLines.join(' · ') : '—')}
+            ${tile('Eligible Days', a.daysElapsed + ' of ' + a.daysInMonth)}
+            ${tile('Daily Accrual', '≈ PKR ' + (a.dailyAccrual || 0).toLocaleString('en-US', { maximumFractionDigits: 2 }))}
+          </div>
+        </div>`;
+      return { html, figures: true };
+    }
+    // ================= LIVE SALARY ACCRUAL — END =================
+
     function renderTeacherSalarySummary(teacherSlips) {
       _TADV_SLIPS = Array.isArray(teacherSlips) ? teacherSlips : [];
       const body = document.getElementById('tSalSummaryBody');
@@ -8064,11 +8243,26 @@ font-family: var(--font-num) !important;
         refreshAdvanceAmountText();
       }
       if (!body) return;
+      // Commission #2 Phase 3: the live accrual block for the CURRENT
+      // month, rendered above the saved-slip content ONLY when no saved
+      // slip exists for the current month — once Administration
+      // generates this month's slip, the slip is the only truth shown.
+      let _liveBlock = { html: '', figures: false };
+      try {
+        const _pkParts = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Karachi', year: 'numeric', month: '2-digit' }).formatToParts(new Date());
+        let _pkY = '', _pkM = '';
+        _pkParts.forEach((p) => { if (p.type === 'year') _pkY = p.value; if (p.type === 'month') _pkM = p.value; });
+        const _curPeriod = (_pkY && _pkM) ? _pkY + '-' + _pkM : null;
+        const _hasCurrentSlip = !!(_curPeriod && _TADV_SLIPS.some((s) => _tAdvPeriodOf(s) === _curPeriod));
+        if (_curPeriod && !_hasCurrentSlip) _liveBlock = _teacherLiveAccrualHtml(_tAdvLabelOf(_curPeriod));
+      } catch (e) { _liveBlock = { html: '', figures: false }; }
       if (!_TADV_SLIPS.length) {
-        body.innerHTML = `
+        body.innerHTML = _liveBlock.html + `
           <div class="p-4 text-center bg-slate-50 rounded-xl border border-slate-200">
             <div class="font-extrabold text-slate-800 text-sm">Salary not yet configured</div>
-            <p class="text-slate-500 mt-1">No official salary slip has been generated for you yet. Your configured salary, advances, and net payable will appear here once Administration generates your first slip. No amount is shown until then.</p>
+            <p class="text-slate-500 mt-1">${_liveBlock.figures
+              ? 'No official salary slip has been generated for you yet. The figures above are your live accrual for the current month; your official slip will appear here once Administration generates it.'
+              : 'No official salary slip has been generated for you yet. Your configured salary, advances, and net payable will appear here once Administration generates your first slip. No amount is shown until then.'}</p>
           </div>`;
         return;
       }
@@ -8086,7 +8280,7 @@ font-family: var(--font-num) !important;
       const statusBadge = latest.status === 'Paid'
         ? '<span class="px-2 py-0.5 rounded-full text-[10px] font-black bg-emerald-100 text-emerald-800 border border-emerald-300">Paid</span>'
         : '<span class="px-2 py-0.5 rounded-full text-[10px] font-black bg-amber-100 text-amber-800 border border-amber-300">Pending</span>';
-      body.innerHTML = `
+      body.innerHTML = _liveBlock.html + `
         <div class="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
           <div class="p-3 bg-slate-50 rounded-xl border border-slate-200"><span class="block text-slate-500 font-bold text-[11px]">Salary Period</span><span class="font-black text-slate-900 text-sm">${latest.month || 'Statement'}</span><span class="block mt-1">${statusBadge}</span></div>
           <div class="p-3 bg-slate-50 rounded-xl border border-slate-200"><span class="block text-slate-500 font-bold text-[11px]">Configured Salary (Base)</span><span class="font-mono font-black text-slate-900 text-sm">${base.toLocaleString()} PKR</span></div>

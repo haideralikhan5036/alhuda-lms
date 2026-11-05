@@ -5243,6 +5243,7 @@ function _compileTeacher360AggregatedState(teacher, tchSchedules = [], attLogs =
     currentMonthLabel,
     currentBaseSubtotal,
     currentBasicProtection,
+    currentAccrual: engineFigures ? (engineFigures.accrual || null) : null,
     currentAdvanceDeducted,
     currentBonusVal,
     effectiveCurrentDeductions,
@@ -5618,6 +5619,19 @@ function _renderTeacher360WorkspaceDOM(teacher, tchSchedules, attLogs, activeTab
 function _buildTeacherSalaryDetailsTabHtml(state) {
   const { teacher, salaryRows, currentMonthLabel, currentBaseSubtotal, currentBasicProtection, currentBonusVal, effectiveCurrentDeductions, currentNetSalary } = state;
 
+  // Commission #2 Phase 3: the current cycle's earned-to-date figure,
+  // from the SAME accrual the Admin Salaries tab shows (the compiled
+  // slip's accrual, or the 360 mirror's). Shown only when the selected
+  // month IS the current calendar month — for any other month the
+  // accrual is either the full potential or zero, never a live figure.
+  const _acc = state.currentAccrual || null;
+  const _accBounds = _acc && typeof parsePayrollMonthBounds === 'function' ? parsePayrollMonthBounds(currentMonthLabel) : null;
+  const _accNow = new Date();
+  const _accIsCurrentMonth = !!(_accBounds && _accBounds.year === _accNow.getFullYear() && _accBounds.monthIndex === _accNow.getMonth());
+  const _accAsOfLabel = _acc && _acc.asOf
+    ? new Date(String(_acc.asOf).slice(0, 10) + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })
+    : '';
+
   return `
     <div class="space-y-5">
       <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-slate-200 pb-3.5">
@@ -5645,7 +5659,7 @@ function _buildTeacherSalaryDetailsTabHtml(state) {
       </div>
 
       <!-- Summary Strip -->
-      <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+      <div class="grid grid-cols-1 sm:grid-cols-2 ${(_acc && _accIsCurrentMonth) ? 'lg:grid-cols-4' : 'lg:grid-cols-3'} gap-3">
         <div class="p-3.5 rounded-xl bg-slate-50 border border-slate-200 flex items-center justify-between">
           <div>
             <span class="text-[11px] font-bold text-slate-500 uppercase block">Course Base Teaching</span>
@@ -5653,6 +5667,15 @@ function _buildTeacherSalaryDetailsTabHtml(state) {
           </div>
           <div class="lms-num-financial text-lg font-black text-slate-900">PKR ${currentBaseSubtotal.toLocaleString()}</div>
         </div>
+
+        ${(_acc && _accIsCurrentMonth) ? `
+        <div class="p-3.5 rounded-xl bg-sky-50/70 border border-sky-200 flex items-center justify-between">
+          <div>
+            <span class="text-[11px] font-bold text-sky-900 uppercase block">Earned So Far</span>
+            <span class="text-xs text-sky-700">Till ${_accAsOfLabel} · ${_acc.daysElapsed} of ${_acc.daysInMonth} days · Remaining PKR ${(_acc.remaining || 0).toLocaleString()}</span>
+          </div>
+          <div class="lms-num-financial text-lg font-black text-sky-800">PKR ${(_acc.grossEarned || 0).toLocaleString()}</div>
+        </div>` : ''}
 
         <div class="p-3.5 rounded-xl bg-rose-50/60 border border-rose-200 flex items-center justify-between">
           <div>
