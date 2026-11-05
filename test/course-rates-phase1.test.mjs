@@ -97,7 +97,11 @@ fakeDb.seed("INSERT INTO system_settings (id, key, value) VALUES ('SYS-LOGO', 'a
   const m = await dbPost(TOK.manager, { table: 'system_settings', action: 'select', filters: eq('key', 'course_rates_v1') });
   check('manager CAN read the course_rates_v1 row', m.status === 200 && ((m.json.data || []).length) === 1 && String(m.json.data[0].value || '').includes('crs-tajweed'), 'status ' + m.status + ' rows ' + ((m.json.data || []).length));
   const t = await dbPost(TOK.teacher, { table: 'system_settings', action: 'select', filters: eq('key', 'course_rates_v1') });
-  check('teacher CANNOT read course_rates_v1', ((t.json.data || []).length) === 0, 'rows ' + ((t.json.data || []).length));
+  // SUPERSEDED 2026-11-05 (Salary Commission #2 Phase 3b): teachers MAY
+  // now read this one key — the teacher portal's live salary card prices
+  // the teacher's own month from these central rates. Writes and all
+  // other keys stay denied (see test/worker-teacher-rates-read.test.mjs).
+  check('teacher CAN read course_rates_v1 (Commission #2 Phase 3b)', t.status === 200 && ((t.json.data || []).length) === 1, 'rows ' + ((t.json.data || []).length));
   const p = await dbPost(TOK.parent, { table: 'system_settings', action: 'select', filters: eq('key', 'course_rates_v1') });
   check('parent CANNOT read course_rates_v1', ((p.json.data || []).length) === 0, 'rows ' + ((p.json.data || []).length));
 

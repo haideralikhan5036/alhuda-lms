@@ -2298,7 +2298,12 @@ function isTeacherReadableSettingsKey(key) {
   // Announcements (2026-10-29): the official-announcements list is
   // published BY the admin FOR teachers/parents — titles and messages
   // only, no contacts or credentials — so both portals may read it.
-  return isCatalogSettingsKey(k) || k === 'alhuda_deleted_books' || isFeeReadFlagKey(k) || k === 'alhuda_official_announcements';
+  // Salary Commission #2 Phase 3 (2026-11-05): + course_rates_v1, so the
+  // teacher portal's live salary card can price the teacher's own month
+  // from the SAME central rates the admin compile uses (rates only — no
+  // contacts, notes or credentials; managers already read this key).
+  // The assignment ledger itself stays fully denied to teachers.
+  return isCatalogSettingsKey(k) || k === 'alhuda_deleted_books' || isFeeReadFlagKey(k) || k === 'alhuda_official_announcements' || k === 'course_rates_v1';
 }
 
 // Lesson History page links: keys a parent may READ in system_settings =
