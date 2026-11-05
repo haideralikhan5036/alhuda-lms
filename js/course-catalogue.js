@@ -52,6 +52,13 @@
 
   var _settings = null;
   var _seedPushDone = false;
+  // Commission #2 Phase 3 (2026-11-05): true only once this session has
+  // actually fetched the stored settings row FROM THE SERVER and
+  // applied it. getSettings() alone proves nothing — it silently falls
+  // back to the localStorage mirror and then to the built-in defaults,
+  // which would show a teacher stale rates after an owner edit. The
+  // teacher portal's live salary card gates its figures on this.
+  var _fromServer = false;
 
   function clone(o) { return JSON.parse(JSON.stringify(o)); }
 
@@ -191,7 +198,7 @@
         if (!res || res.error) return;
         var rows = res.data || [];
         if (rows.length && rows[0] && rows[0].value) {
-          try { applySettings(JSON.parse(rows[0].value)); } catch (e) {}
+          try { applySettings(JSON.parse(rows[0].value)); _fromServer = true; } catch (e) {}
           return;
         }
         // No stored row yet: the owner seeds the defaults once so every
@@ -386,6 +393,7 @@
     resolveByName: resolveByName,
     activeCourses: activeCourses,
     load: loadCourseCatalogue,
+    fromServer: function () { return _fromServer; },
     SETTINGS_KEY: SETTINGS_KEY
   };
   window.populateCourseSelects = populateCourseSelects;
