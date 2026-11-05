@@ -9,6 +9,17 @@
 // inline + js/curriculum.js for the admin portal), adds arrow-key
 // panning / PageUp / PageDown to both keydown handlers, and adds
 // mouse drag panning to the teacher reader.
+// FOLLOW-UP (same day, owner retest): layout zoom alone was NOT
+// enough in a real browser — #readerContentArea and
+// #readerImageStage both centre their content with flex, so the
+// grown page was centred while overflowing and its top/left again
+// fell outside the scrollable region (reproduced in headless
+// Chromium with the real markup chain: at zoom 2.95 the page top
+// sat 607px above the reachable area). Both HTML files therefore
+// also carry a `safe center` alignment rule for those two
+// containers: centred while the page fits, start-aligned when it
+// overflows. Verified in the same Chromium harness: top, bottom
+// and left edges all reachable at 2.95x, zoom-1 centring intact.
 // This suite EXECUTES the real functions from both files in a vm
 // with a fake DOM, in the style of employee-form-open.test.mjs.
 // Run from the repo root:  node test/reader-zoom-scroll.test.mjs
@@ -57,6 +68,15 @@ check('teacher: drag panning exists, gated on annotation being off',
   seg(TEACHER, 'function setupReaderPanning()', 'function toggleReaderFullscreen()').includes('if (ANNOTATION_ACTIVE) return;'));
 check('teacher: reader open wires up drag panning',
   seg(TEACHER, 'function openDigitalBookReader(', 'function populateReaderJumpSelect').includes('setupReaderPanning();'));
+
+// Safe-centre alignment (see header follow-up): the rule lives in the
+// two HTML shells that host the reader stage markup.
+const INDEX = fs.readFileSync(path.join(REPO_ROOT, 'index.html'), 'utf8');
+for (const [label, src] of [['teacher', TEACHER], ['admin', INDEX]]) {
+  check(label + ': safe-centre rule keeps the zoomed page top/left reachable',
+    src.includes('#readerContentArea, #readerImageStage') &&
+    src.includes('align-items: safe center') && src.includes('justify-content: safe center'));
+}
 
 // ============================ fake DOM ==============================
 function makeEl(id) {
