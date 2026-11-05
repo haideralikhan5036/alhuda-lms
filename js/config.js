@@ -309,6 +309,109 @@
       }
     };
     window.StaffCategories = StaffCategories;
+
+    // =========================================================================
+    // FIXED SALARY (Manager Profile Redesign, Stage 2 Phase 1, 2026-11-05):
+    // non-teaching staff are paid a FIXED monthly salary, never student/
+    // slot money. The amount is versioned by a dated history on the record
+    // meta (`fixed_salary_history`: [{ amount, effective_from: 'YYYY-MM',
+    // note, set_by, set_at }]); the legacy `monthly_salary` meta field is
+    // the mirror of the amount currently in force.
+    // Resolution rule (owner's live case, 2026-11-05):
+    //   - NO history entries at all -> the legacy mirror applies to every
+    //     month (it is the only salary information on the record);
+    //   - WITH a history -> the latest entry effective on/before the
+    //     month wins, and a month BEFORE the first entry resolves to 0
+    //     (the salary was not yet in force; the mirror must NOT leak
+    //     backwards past the first dated entry).
+    // =========================================================================
+    function fixedSalaryCurrentMonth() {
+      // The same Asia/Karachi month AttendanceSummary.currentPktMonth
+      // computes — duplicated here because attendance-summary.js loads
+      // AFTER config.js in every portal, so it cannot be relied on.
+      try {
+        var parts = new Intl.DateTimeFormat('en-CA', {
+          timeZone: 'Asia/Karachi', year: 'numeric', month: '2-digit'
+        }).formatToParts(new Date());
+        var y = '', m = '';
+        parts.forEach(function (p) {
+          if (p.type === 'year') y = p.value;
+          if (p.type === 'month') m = p.value;
+        });
+        if (y && m) return y + '-' + m;
+      } catch (e) { /* fall through to local date */ }
+      var d = new Date();
+      return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
+    }
+
+    const FixedSalary = {
+      // The record's dated salary history, normalised: malformed entries
+      // dropped, amounts coerced to numbers, sorted by effective month.
+      historyOf(meta) {
+        const raw = (meta && Array.isArray(meta.fixed_salary_history)) ? meta.fixed_salary_history : [];
+        const out = [];
+        raw.forEach(function (e) {
+          if (!e || typeof e !== 'object') return;
+          const amount = Number(e.amount);
+          const eff = String(e.effective_from || '').slice(0, 7);
+          if (!isFinite(amount) || amount < 0) return;
+          if (!/^\d{4}-\d{2}$/.test(eff)) return;
+          out.push({
+            amount: amount,
+            effective_from: eff,
+            note: e.note != null ? String(e.note) : '',
+            set_by: e.set_by != null ? String(e.set_by) : '',
+            set_at: e.set_at != null ? String(e.set_at) : ''
+          });
+        });
+        out.sort((a, b) => a.effective_from < b.effective_from ? -1 : (a.effective_from > b.effective_from ? 1 : 0));
+        return out;
+      },
+      // The fixed salary in force for a month ('YYYY-MM'; a longer ISO
+      // date string also works — only its first 7 chars are compared).
+      amountForMonth(meta, monthStr) {
+        const m = String(monthStr || '').slice(0, 7);
+        const hist = FixedSalary.historyOf(meta);
+        if (!hist.length) return Number(meta && meta.monthly_salary) || 0;
+        let amount = 0;
+        for (let i = 0; i < hist.length; i++) {
+          if (hist[i].effective_from <= m) amount = hist[i].amount;
+          else break;
+        }
+        return amount;
+      },
+      // The fixed salary in force for the current (Asia/Karachi) month.
+      current(meta) {
+        return FixedSalary.amountForMonth(meta, fixedSalaryCurrentMonth());
+      },
+      // Returns a NEW meta object (the input is never mutated) with the
+      // entry appended — an entry for the SAME effective month REPLACES
+      // that month's entry (the fee-history rule) — and `monthly_salary`
+      // re-mirrored to the amount in force for the current month.
+      // Callers validate first; an invalid entry returns an unchanged
+      // copy of the input meta.
+      appendEntry(meta, entry) {
+        const src = (meta && typeof meta === 'object') ? meta : {};
+        const eff = String((entry && entry.effective_from) || '').slice(0, 7);
+        const amount = Number(entry && entry.amount);
+        if (!/^\d{4}-\d{2}$/.test(eff) || !isFinite(amount) || amount < 0) {
+          return { ...src };
+        }
+        const hist = FixedSalary.historyOf(src).filter(e => e.effective_from !== eff);
+        hist.push({
+          amount: amount,
+          effective_from: eff,
+          note: entry.note != null ? String(entry.note) : '',
+          set_by: entry.by != null ? String(entry.by) : '',
+          set_at: new Date().toISOString()
+        });
+        hist.sort((a, b) => a.effective_from < b.effective_from ? -1 : (a.effective_from > b.effective_from ? 1 : 0));
+        const next = { ...src, fixed_salary_history: hist };
+        next.monthly_salary = FixedSalary.amountForMonth(next, fixedSalaryCurrentMonth());
+        return next;
+      }
+    };
+    window.FixedSalary = FixedSalary;
     window.isEligibleTeacherRecord = isEligibleTeacherRecord;
     window.getEligibleTeachers = getEligibleTeachers;
     window.validateEligibleTeacherBackend = validateEligibleTeacherBackend;

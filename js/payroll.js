@@ -533,6 +533,24 @@
       return false;
     }
 
+    // Manager Profile Redesign, Stage 2 Phase 1 (2026-11-05): the meta a
+    // record's FIXED salary is read from — the record meta JSON (the
+    // teachers-row `address`, falling back to `notes`, then
+    // `witness_name`: the same precedence getEmployeeRoleClassification
+    // uses) merged OVER the account-map entry, so the record meta wins
+    // where both homes carry a value and the account map (which the
+    // employee form also writes monthly_salary into) stays the fallback.
+    function _payrollFixedSalaryMeta(t, acc) {
+      const tryParse = (v) => {
+        if (typeof v === 'string' && v.trim().startsWith('{')) {
+          try { const o = JSON.parse(v); if (o && typeof o === 'object') return o; } catch (e) {}
+        } else if (v && typeof v === 'object') return v;
+        return null;
+      };
+      const recMeta = tryParse(t && t.address) || tryParse(t && t.notes) || tryParse(t && t.witness_name) || {};
+      return { ...(acc || {}), ...recMeta };
+    }
+
     // Accrual block for a FROZEN slip (Commission #2 Phase 1): the
     // frozen maths is never touched — the saved totals simply stand as
     // the month-end position (asOf = month end, nothing remaining).
@@ -718,6 +736,27 @@
           const teacherScheds = (scheds || []).filter(s => s.teacher_id === t.id);
           const teacherAssignments = assignmentRows.filter(a => String(a.teacher_id) === String(t.id));
 
+          // Teaching-category determination (Phase 2, owner policy
+          // 2026-11-03) — hoisted above the line compile because the
+          // fixed-salary branch below is decided here; the Basic Salary
+          // Protection block further down uses this same value.
+          const isTeachingCategory = !_payrollIsManagerRecord(t, accounts) &&
+            (typeof StaffCategories === 'undefined' || StaffCategories.of(t) === 'teaching');
+          // Manager Profile Redesign, Stage 2 Phase 1 (2026-11-05): a
+          // NON-teaching record with NO assignment lines is paid its
+          // FIXED salary — the student/slot compile below produces no
+          // lines for it and its base comes from FixedSalary instead.
+          // A non-teaching record that still carries assignment lines
+          // keeps the legacy student compile, so student-based pay is
+          // never silently zeroed. (In production, managers and other
+          // non-teaching staff cannot be assigned students at all, so
+          // their line set is empty by construction.)
+          const isFixedBasis = !isTeachingCategory && teacherAssignments.length === 0;
+          const fixedMonthKey = `${monthBounds.year}-${String(monthBounds.monthIndex + 1).padStart(2, '0')}`;
+          const fixedBase = (isFixedBasis && typeof FixedSalary !== 'undefined' && FixedSalary)
+            ? FixedSalary.amountForMonth(_payrollFixedSalaryMeta(t, acc), fixedMonthKey)
+            : 0;
+
           let studentsSubtotal = 0;
           const studentRateItems = [];
           const linesByStudent = {};
@@ -784,7 +823,9 @@
           // Saved per-student manual amounts on older records (saved
           // before freeze-on-save existed) still win: the student's
           // lines are scaled so their total equals the saved amount.
-          if (savedSlip && savedSlip.students) {
+          // (Never for a fixed-basis record: its base is the fixed
+          // salary, not per-student amounts.)
+          if (savedSlip && savedSlip.students && !isFixedBasis) {
             Object.keys(linesByStudent).forEach((sid) => {
               if (savedSlip.students[sid] === undefined) return;
               const target = parseFloat(savedSlip.students[sid]);
@@ -852,8 +893,7 @@
           // higher student-based total, never multiplied per student.
           let floorAmount = 0;
           let basicProtection = 0;
-          const isTeachingCategory = !_payrollIsManagerRecord(t, accounts) &&
-            (typeof StaffCategories === 'undefined' || StaffCategories.of(t) === 'teaching');
+          // (isTeachingCategory is determined above the line compile.)
           let lastPayableDay = null;
           studentRateItems.forEach(it => {
             if (it.seg_end && (!lastPayableDay || it.seg_end > lastPayableDay)) lastPayableDay = it.seg_end;
@@ -863,7 +903,9 @@
             floorAmount = floorRes.floorAmount;
             basicProtection = Math.max(0, floorAmount - studentsSubtotal);
           }
-          const baseSubtotal = studentsSubtotal + basicProtection;
+          // Stage 2 Phase 1: a fixed-basis record's base IS its fixed
+          // salary for the month — no student subtotal, no protection.
+          const baseSubtotal = isFixedBasis ? fixedBase : (studentsSubtotal + basicProtection);
 
           // Daily accrual (Commission #2 Phase 1, decision D4): what
           // this teacher has EARNED up to accrualAsOf — per-line accrued
@@ -874,12 +916,22 @@
           // is GROSS earned: bonus / deductions / advances stay
           // month-end slip items and are not baked in. At the month
           // end every accrued figure equals its potential counterpart.
-          const earnedStudents = studentRateItems.reduce((s, it) => s + (parseFloat(it.accrued_rate) || 0), 0);
+          const daysElapsed = payrollDaysInclusive(monthBounds.firstDayStr, accrualAsOf);
+          // Stage 2 Phase 1: a fixed salary accrues LINEARLY across the
+          // month, with the same rounding as a segment proration (full
+          // amount at the month end; Math.round(base x elapsed / days)
+          // before it). No floor, no protection, no slots.
+          const fixedEarned = daysElapsed >= monthBounds.daysInMonth
+            ? fixedBase
+            : Math.round(fixedBase * daysElapsed / monthBounds.daysInMonth);
+          const earnedStudents = isFixedBasis
+            ? fixedEarned
+            : studentRateItems.reduce((s, it) => s + (parseFloat(it.accrued_rate) || 0), 0);
           const floorAccrued = isTeachingCategory
             ? teacherFloorAmount(t, acc, payrollCfg, monthBounds, lastPayableDay, accrualAsOf).floorAmount
             : 0;
-          const protectionAccrued = Math.max(0, floorAccrued - earnedStudents);
-          const grossEarned = earnedStudents + protectionAccrued;
+          const protectionAccrued = isFixedBasis ? 0 : Math.max(0, floorAccrued - earnedStudents);
+          const grossEarned = isFixedBasis ? fixedEarned : (earnedStudents + protectionAccrued);
           const accrual = {
             asOf: accrualAsOf,
             earnedStudents,
@@ -888,7 +940,7 @@
             grossEarned,
             remaining: baseSubtotal - grossEarned,
             totalSlots: studentRateItems.reduce((s, it) => s + (parseFloat(it.slots) || 1), 0),
-            daysElapsed: payrollDaysInclusive(monthBounds.firstDayStr, accrualAsOf),
+            daysElapsed,
             daysInMonth: monthBounds.daysInMonth,
             dailyAccrual: Math.round((baseSubtotal / monthBounds.daysInMonth) * 100) / 100
           };
@@ -904,7 +956,7 @@
             phone: t.phone,
             month: selectedMonth,
             joining_date: acc.joining_date || (t.created_at ? t.created_at.slice(0, 10) : '2025-01-01'),
-            seniority_increment: teacherIncrement,
+            seniority_increment: isFixedBasis ? 0 : teacherIncrement,
             assigned_students: studentRateItems,
             base_subtotal: baseSubtotal,
             students_subtotal: studentsSubtotal,
@@ -919,7 +971,8 @@
             advance_deducted: advanceDeducted,
             slip_key: slipKey,
             pricing_version: pricingVersion,
-            accrual
+            accrual,
+            ...(isFixedBasis ? { pay_basis: 'fixed' } : {})
           };
 
           ALL_TEACHER_SALARIES[t.id] = compiledSlip;
@@ -947,11 +1000,13 @@
           ? new Date(String(accrualInfo.asOf).slice(0, 10) + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })
           : '';
 
-        // Seniority text
+        // Seniority text (read from the compiled slip: a fixed-basis
+        // record's slip carries seniority_increment 0, so it can never
+        // show a per-student increment badge)
         const yrs = Math.floor((new Date() - new Date(compiledSlip.joining_date)) / (365.25 * 24 * 3600 * 1000));
         let seniorityBadge = `<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-700">Base</span>`;
-        if (teacherIncrement > 0) {
-          seniorityBadge = `<span class="px-2 py-0.5 rounded text-[10px] font-extrabold bg-amber-100 text-amber-900 border border-amber-300">+${teacherIncrement} PKR/stu (Yr ${yrs || 1})</span>`;
+        if ((compiledSlip.seniority_increment || 0) > 0) {
+          seniorityBadge = `<span class="px-2 py-0.5 rounded text-[10px] font-extrabold bg-amber-100 text-amber-900 border border-amber-300">+${compiledSlip.seniority_increment} PKR/stu (Yr ${yrs || 1})</span>`;
         }
 
         // Summary breakdown of courses
@@ -987,7 +1042,7 @@
                 ${seniorityBadge}
                 <span class="text-[10px] text-slate-400 font-mono">${t.phone}</span>
               </div>
-              ${accrualInfo ? `<div class="text-[10px] text-slate-500 font-semibold mt-1">Slots: ${payrollFormatSlots(accrualInfo.totalSlots)} · Daily ≈ PKR ${(accrualInfo.dailyAccrual || 0).toLocaleString('en-US', { maximumFractionDigits: 2 })}</div>` : ''}
+              ${accrualInfo ? `<div class="text-[10px] text-slate-500 font-semibold mt-1">${compiledSlip.pay_basis === 'fixed' ? 'Fixed Salary' : `Slots: ${payrollFormatSlots(accrualInfo.totalSlots)}`} · Daily ≈ PKR ${(accrualInfo.dailyAccrual || 0).toLocaleString('en-US', { maximumFractionDigits: 2 })}</div>` : ''}
             </td>
 
             <!-- 2. ASSIGNED STUDENTS -->
@@ -1001,8 +1056,8 @@
 
             <!-- 3. BASE COURSE TOTAL -->
             <td class="p-3.5">
-              <div class="lms-num-financial font-bold text-slate-900 text-[15px]">PKR ${studentsSubtotal.toLocaleString()}</div>
-              <span class="text-[11px] text-slate-500 block mt-0.5">From Course Rates</span>
+              <div class="lms-num-financial font-bold text-slate-900 text-[15px]">PKR ${(compiledSlip.pay_basis === 'fixed' ? baseSubtotal : studentsSubtotal).toLocaleString()}</div>
+              <span class="text-[11px] text-slate-500 block mt-0.5">${compiledSlip.pay_basis === 'fixed' ? 'Fixed Salary' : 'From Course Rates'}</span>
               ${showEarnedLines ? `
               <div class="text-[11px] text-emerald-700 font-bold mt-1">Earned till ${accrualAsOfLabel}: PKR ${(accrualInfo.grossEarned || 0).toLocaleString()}</div>
               <div class="text-[11px] text-slate-500">Remaining: PKR ${(accrualInfo.remaining || 0).toLocaleString()}</div>` : ''}
@@ -1209,6 +1264,15 @@
         studentsSubtotal += parseFloat(inp.value) || 0;
       });
 
+      // Stage 2 Phase 1: a fixed-basis slip has no per-student rate
+      // inputs — its base is the compiled fixed salary carried on the
+      // slip data, so editing bonus/deduction (and saving from this
+      // editor) can never collapse the base to zero.
+      const isFixedSlip = (typeof CURRENT_SLIP_DATA !== 'undefined' && CURRENT_SLIP_DATA)
+        ? CURRENT_SLIP_DATA.pay_basis === 'fixed'
+        : false;
+      if (isFixedSlip) studentsSubtotal = parseFloat(CURRENT_SLIP_DATA.base_subtotal) || 0;
+
       const bonus = parseFloat(document.getElementById('slipBonus')?.value) || 0;
       const deduction = parseFloat(document.getElementById('slipDeduction')?.value) || 0;
       // Canonical net (Batch B): approved advances on the slip being
@@ -1241,7 +1305,7 @@
       if (netEl) netEl.innerText = `${netPayable.toLocaleString()} PKR`;
 
       const countEl = document.getElementById('slipTotalStudentsCount');
-      if (countEl) countEl.innerText = `For ${rateInputs.length} Assigned Students (${studentsSubtotal.toLocaleString()} Base ${basicProtection > 0 ? '+ ' + basicProtection.toLocaleString() + ' Basic Protection' : ''} ${bonus > 0 ? '+ ' + bonus + ' Bonus' : ''} ${deduction > 0 ? '- ' + deduction + ' Deduction' : ''} ${advanceDeducted > 0 ? '- ' + advanceDeducted + ' Approved Advances' : ''})`;
+      if (countEl) countEl.innerText = `${isFixedSlip ? 'Fixed Salary' : `For ${rateInputs.length} Assigned Students`} (${studentsSubtotal.toLocaleString()} Base ${basicProtection > 0 ? '+ ' + basicProtection.toLocaleString() + ' Basic Protection' : ''} ${bonus > 0 ? '+ ' + bonus + ' Bonus' : ''} ${deduction > 0 ? '- ' + deduction + ' Deduction' : ''} ${advanceDeducted > 0 ? '- ' + advanceDeducted + ' Approved Advances' : ''})`;
       return { baseSubtotal, studentsSubtotal, basicProtection, floorAmount, bonus, deduction, advanceDeducted, netPayable };
     }
 
