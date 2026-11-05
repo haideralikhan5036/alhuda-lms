@@ -5291,6 +5291,12 @@ async function openTeacher360Profile(teacherId, initialTab = 'students', skipHis
     ? 'documents'
     : (initialTab === 'salary' || initialTab === 'salary_details')
     ? 'salary'
+    : (initialTab === 'fixed_salary' || initialTab === 'fixed-salary')
+    ? 'fixed_salary'
+    : (initialTab === 'payroll_history' || initialTab === 'payroll-history')
+    ? 'payroll_history'
+    : (initialTab === 'activity' || initialTab === 'admin_activity' || initialTab === 'administrative_activity')
+    ? 'activity'
     : 'students';
 
   _activateFullScreenProfilePage('teacher');
@@ -5417,6 +5423,12 @@ function _renderTeacher360WorkspaceDOM(teacher, tchSchedules, attLogs, activeTab
     ? 'documents'
     : (activeTab === 'salary')
     ? 'salary'
+    : (activeTab === 'fixed_salary')
+    ? 'fixed_salary'
+    : (activeTab === 'payroll_history')
+    ? 'payroll_history'
+    : (activeTab === 'activity')
+    ? 'activity'
     : 'students';
 
   const state = _compileTeacher360AggregatedState(teacher, tchSchedules, attLogs);
@@ -5439,6 +5451,17 @@ function _renderTeacher360WorkspaceDOM(teacher, tchSchedules, attLogs, activeTab
   // Students tab — a students request lands on Bio Data instead.
   if ((state.isManager || state.isOtherStaff) && resolvedTab === 'students') resolvedTab = 'biodata';
   const mgrViewingManagerRecord = (typeof CURRENT_ROLE !== 'undefined' && CURRENT_ROLE === 'manager' && state.isManager);
+  // Manager Profile Redesign, Stage 2 Phase 2 (2026-11-05): the tab
+  // assembly branches on the canonical StaffCategories classification —
+  // non-teaching records gain Fixed Salary + Payroll History, manager
+  // records additionally gain Administrative Activity, and the new tabs
+  // can never render for a teaching record.
+  const staffCat360 = _staffCategory360(teacher);
+  const isNonTeaching360 = staffCat360 ? (staffCat360 !== 'teaching') : (state.isManager || state.isOtherStaff);
+  const isManagerRecord360 = staffCat360 ? (staffCat360 === 'management') : state.isManager;
+  if (!isNonTeaching360 && (resolvedTab === 'fixed_salary' || resolvedTab === 'payroll_history' || resolvedTab === 'activity')) resolvedTab = 'biodata';
+  if (isNonTeaching360 && !isManagerRecord360 && resolvedTab === 'activity') resolvedTab = 'biodata';
+  const headerDesignation360 = (isManagerRecord360 && meta.designation) ? meta.designation : roleDesignation;
   const restrictedPayrollHtml = `
     <div class="p-10 text-center bg-slate-50 rounded-2xl border border-slate-200">
       <i class="fa-solid fa-lock text-3xl text-slate-300 mb-3"></i>
@@ -5463,7 +5486,14 @@ function _renderTeacher360WorkspaceDOM(teacher, tchSchedules, attLogs, activeTab
     ...((state.isManager || state.isOtherStaff) ? [] : [{ id: 'students', label: 'List of Students', icon: 'fa-user-graduate', count: allMatchedStudents.length }]),
     { id: 'deductions_leaves', label: 'Current Month Deductions & Leaves', icon: 'fa-scale-unbalanced', count: displayDeductionRows.length + leaveRows.length },
     { id: 'biodata', label: 'Bio Data', icon: 'fa-address-card', count: null },
-    { id: 'documents', label: 'Documents', icon: 'fa-folder-open', count: documentsList.length }
+    { id: 'documents', label: 'Documents', icon: 'fa-folder-open', count: documentsList.length },
+    ...(isNonTeaching360 ? [
+      { id: 'fixed_salary', label: 'Fixed Salary', icon: 'fa-money-bill-wave', count: null },
+      { id: 'payroll_history', label: 'Payroll History', icon: 'fa-clock-rotate-left', count: null }
+    ] : []),
+    ...(isManagerRecord360 ? [
+      { id: 'activity', label: 'Administrative Activity', icon: 'fa-list-check', count: null }
+    ] : [])
   ];
 
   let activeTabContentHtml = '';
@@ -5477,6 +5507,12 @@ function _renderTeacher360WorkspaceDOM(teacher, tchSchedules, attLogs, activeTab
     activeTabContentHtml = _buildTeacherDocumentsTabHtml(state);
   } else if (resolvedTab === 'salary') {
     activeTabContentHtml = mgrViewingManagerRecord ? restrictedPayrollHtml : _buildTeacherSalaryDetailsTabHtml(state);
+  } else if (resolvedTab === 'fixed_salary') {
+    activeTabContentHtml = _buildTeacherFixedSalaryTabHtml(state);
+  } else if (resolvedTab === 'payroll_history') {
+    activeTabContentHtml = _buildTeacherPayrollHistoryTabHtml(state);
+  } else if (resolvedTab === 'activity') {
+    activeTabContentHtml = _buildTeacherActivityTabHtml(state);
   } else {
     activeTabContentHtml = _buildTeacherStudentsListTabHtml(state, options);
   }
@@ -5511,7 +5547,7 @@ function _renderTeacher360WorkspaceDOM(teacher, tchSchedules, attLogs, activeTab
             </div>
 
             <div class="flex items-center justify-center gap-2 flex-wrap text-xs text-slate-300 mt-1">
-              <span class="font-bold text-emerald-300">${_esc360(roleDesignation)}</span>
+              <span class="font-bold text-emerald-300">${_esc360(headerDesignation360)}</span>
               <span>&bull;</span>
               <span>Shift: <strong class="text-white">${_esc360(teacher.working_shift || 'Regular Shift')}</strong></span>
               <span>&bull;</span>
@@ -5555,12 +5591,14 @@ function _renderTeacher360WorkspaceDOM(teacher, tchSchedules, attLogs, activeTab
             </button>
             `}
 
+            ${isNonTeaching360 ? '' : `
             <button onclick="openTeacherDedicatedScheduleFrom360('${_esc360(teacher.id)}')"
                     class="h-9 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-500 border border-indigo-400/50 text-white text-xs font-extrabold transition inline-flex items-center justify-center gap-1.5 whitespace-nowrap cursor-pointer shadow-xs"
                     title="Open Dedicated 24-Hour / 7-Day Weekly Schedule Matrix">
               <i class="fa-solid fa-calendar-days"></i>
               <span>Schedule</span>
             </button>
+            `}
 
             ${mgrViewingManagerRecord ? '' : `
             <button onclick="openTeacherSalaryAdjustmentModal('${_esc360(teacher.id)}')"
@@ -5611,6 +5649,13 @@ function _renderTeacher360WorkspaceDOM(teacher, tchSchedules, attLogs, activeTab
     <!-- DEDICATED ACTION MODAL CONTAINER FOR TEACHER & FAMILY 360 OPERATIONS -->
     <div id="familyWorkspaceActionModal" class="hidden fixed inset-0 bg-slate-950/70 backdrop-blur-xs z-[110] items-center justify-center p-4"></div>
   `;
+
+  // Administrative Activity rows load after the (synchronous) render —
+  // the audit log is owner-read-only through the API, so only an owner
+  // session ever queries it.
+  if (resolvedTab === 'activity' && isManagerRecord360 && typeof CURRENT_ROLE !== 'undefined' && CURRENT_ROLE === 'owner') {
+    _hydrateTeacher360ActivityTab(teacher);
+  }
 }
 
 // ============================================================================
@@ -5631,6 +5676,10 @@ function _buildTeacherSalaryDetailsTabHtml(state) {
   const _accAsOfLabel = _acc && _acc.asOf
     ? new Date(String(_acc.asOf).slice(0, 10) + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })
     : '';
+  // Stage 2 Phase 2: the Earned-So-Far accrual card is a teaching
+  // concept (slots/students) — non-teaching records never show it;
+  // their pay is the fixed salary on the Fixed Salary tab instead.
+  const _showAccrualCard = !!(_acc && _accIsCurrentMonth) && !_isNonTeaching360(state.teacher, state);
 
   return `
     <div class="space-y-5">
@@ -5659,7 +5708,7 @@ function _buildTeacherSalaryDetailsTabHtml(state) {
       </div>
 
       <!-- Summary Strip -->
-      <div class="grid grid-cols-1 sm:grid-cols-2 ${(_acc && _accIsCurrentMonth) ? 'lg:grid-cols-4' : 'lg:grid-cols-3'} gap-3">
+      <div class="grid grid-cols-1 sm:grid-cols-2 ${_showAccrualCard ? 'lg:grid-cols-4' : 'lg:grid-cols-3'} gap-3">
         <div class="p-3.5 rounded-xl bg-slate-50 border border-slate-200 flex items-center justify-between">
           <div>
             <span class="text-[11px] font-bold text-slate-500 uppercase block">Course Base Teaching</span>
@@ -5668,7 +5717,7 @@ function _buildTeacherSalaryDetailsTabHtml(state) {
           <div class="lms-num-financial text-lg font-black text-slate-900">PKR ${currentBaseSubtotal.toLocaleString()}</div>
         </div>
 
-        ${(_acc && _accIsCurrentMonth) ? `
+        ${_showAccrualCard ? `
         <div class="p-3.5 rounded-xl bg-sky-50/70 border border-sky-200 flex items-center justify-between">
           <div>
             <span class="text-[11px] font-bold text-sky-900 uppercase block">Earned So Far</span>
@@ -5745,6 +5794,543 @@ function _buildTeacherSalaryDetailsTabHtml(state) {
       </div>
     </div>
   `;
+}
+
+// ============================================================================
+// MANAGER PROFILE REDESIGN — STAGE 2 PHASE 2 (2026-11-05)
+// Fixed Salary, Payroll History and Administrative Activity for
+// NON-TEACHING records (StaffCategories 'management' / 'non-teaching').
+// Teaching records never render these tabs; the Teacher 360 is untouched.
+// ============================================================================
+const _FS360_MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+
+function _staffCategory360(teacher) {
+  if (typeof StaffCategories !== 'undefined' && StaffCategories && typeof StaffCategories.of === 'function') {
+    try { return StaffCategories.of(teacher); } catch (e) {}
+  }
+  return null;
+}
+
+function _isNonTeaching360(teacher, state) {
+  const cat = _staffCategory360(teacher);
+  if (cat) return cat !== 'teaching';
+  return !!(state && (state.isManager || state.isOtherStaff));
+}
+
+function _isManagerRecord360(teacher, state) {
+  const cat = _staffCategory360(teacher);
+  if (cat) return cat === 'management';
+  return !!(state && state.isManager);
+}
+
+// The exact determination the Bio Data tab applies to its Monthly Salary
+// and bank lines (Batch 2, B7): manager-account salary figures are
+// owner-only; a signed-in manager sees 'Restricted' instead of amounts.
+function _fixedSalaryAmountsVisible360(state) {
+  return !(typeof CURRENT_ROLE !== 'undefined' && CURRENT_ROLE === 'manager' && state.isManager)
+    && (typeof CURRENT_ROLE === 'undefined' || CURRENT_ROLE === 'owner' || CURRENT_ROLE === 'manager');
+}
+
+// The meta the Phase 1 payroll strategy reads a record's fixed salary
+// from: the account-map entry merged UNDER the record meta (teachers-row
+// `address`, falling back to `notes`, then `witness_name`) — the record
+// meta wins where both homes carry a value (js/payroll.js
+// _payrollFixedSalaryMeta uses the same precedence).
+function _fixedSalaryMeta360(teacher) {
+  const tryParse = (v) => {
+    if (typeof v === 'string' && v.trim().startsWith('{')) {
+      try { const o = JSON.parse(v); if (o && typeof o === 'object') return o; } catch (e) {}
+    } else if (v && typeof v === 'object') return v;
+    return null;
+  };
+  let acc = {};
+  try {
+    const accounts = (typeof getTeacherAccounts === 'function') ? getTeacherAccounts() : {};
+    if (teacher && accounts && accounts[teacher.id]) acc = accounts[teacher.id];
+  } catch (e) {}
+  const safeAcc = { ...(acc || {}) };
+  delete safeAcc.password;
+  const recMeta = tryParse(teacher && teacher.address) || tryParse(teacher && teacher.notes) || tryParse(teacher && teacher.witness_name) || {};
+  return { ...safeAcc, ...recMeta };
+}
+
+function _fsMonthKeyToLabel(key) {
+  const m = String(key || '').slice(0, 7).match(/^(\d{4})-(\d{2})$/);
+  if (!m) return String(key || '');
+  const idx = parseInt(m[2], 10) - 1;
+  return (_FS360_MONTH_NAMES[idx] || '') + ' ' + m[1];
+}
+
+function _fsMonthLabelToKey(label) {
+  const parts = String(label || '').trim().split(/\s+/);
+  if (parts.length !== 2) return '';
+  const idx = _FS360_MONTH_NAMES.findIndex(n => n.toLowerCase() === parts[0].toLowerCase());
+  const yr = parseInt(parts[1], 10);
+  if (idx < 0 || !yr) return '';
+  return yr + '-' + String(idx + 1).padStart(2, '0');
+}
+
+function _fsCurrentMonthKey() {
+  // The Asia/Karachi month, computed exactly like FixedSalary's
+  // fixedSalaryCurrentMonth in js/config.js.
+  try {
+    const parts = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Asia/Karachi', year: 'numeric', month: '2-digit'
+    }).formatToParts(new Date());
+    let y = '', m = '';
+    parts.forEach(p => {
+      if (p.type === 'year') y = p.value;
+      if (p.type === 'month') m = p.value;
+    });
+    if (y && m) return y + '-' + m;
+  } catch (e) { /* fall through to local date */ }
+  const d = new Date();
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
+}
+
+// ----------------------------------------------------------------------------
+// FIXED SALARY TAB
+// ----------------------------------------------------------------------------
+function _buildTeacherFixedSalaryTabHtml(state) {
+  const { teacher } = state;
+  const visible = _fixedSalaryAmountsVisible360(state);
+  const isOwner = (typeof CURRENT_ROLE !== 'undefined' && CURRENT_ROLE === 'owner');
+  const fs = (typeof FixedSalary !== 'undefined' && FixedSalary) ? FixedSalary : null;
+  const fsMeta = _fixedSalaryMeta360(teacher);
+  const hist = fs ? fs.historyOf(fsMeta) : [];
+  const curKey = _fsCurrentMonthKey();
+  const currentAmount = fs ? fs.amountForMonth(fsMeta, curKey) : 0;
+  let sinceKey = '';
+  hist.forEach(e => { if (e.effective_from <= curKey) sinceKey = e.effective_from; });
+  const legacyOnly = !hist.length && (Number(fsMeta.monthly_salary) || 0) > 0;
+  const fmt = (n) => 'PKR ' + Number(n || 0).toLocaleString('en-US');
+
+  const historyRows = hist.slice().reverse().map(e => {
+    const idx = hist.indexOf(e);
+    const prev = idx > 0 ? hist[idx - 1] : null;
+    const change = prev ? (e.amount - prev.amount) : null;
+    const changeTxt = change === null ? '—'
+      : change > 0 ? '+' + fmt(change)
+      : change < 0 ? '-' + fmt(Math.abs(change))
+      : fmt(0);
+    return `
+      <tr class="hover:bg-slate-50/80 transition">
+        <td class="p-3.5 font-mono font-extrabold text-slate-800">${_esc360(_fsMonthKeyToLabel(e.effective_from))}</td>
+        <td class="p-3.5 lms-num-financial font-black text-slate-900">${visible ? fmt(e.amount) : 'Restricted'}</td>
+        <td class="p-3.5 font-mono font-bold ${change !== null && change < 0 ? 'text-rose-700' : 'text-emerald-700'}">${visible ? _esc360(changeTxt) : 'Restricted'}</td>
+        <td class="p-3.5 text-slate-600">${_esc360(e.note || '—')}</td>
+        <td class="p-3.5 text-slate-600">${_esc360(e.set_by || '—')}</td>
+        <td class="p-3.5 font-mono text-slate-500">${_esc360(e.set_at ? String(e.set_at).slice(0, 10) : '—')}</td>
+      </tr>
+    `;
+  }).join('');
+
+  return `
+    <div class="space-y-5">
+      <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-slate-200 pb-3.5">
+        <div>
+          <h3 class="text-base font-black text-slate-900 flex items-center gap-2">
+            <i class="fa-solid fa-money-bill-wave text-emerald-600"></i>
+            <span>Fixed Salary</span>
+          </h3>
+          <p class="text-xs text-slate-500 mt-0.5">This staff member is paid a fixed monthly salary — never per student or per slot. Changes apply from their effective month; saved salary slips stay exactly as saved.</p>
+        </div>
+        ${isOwner ? `
+        <button onclick="openFixedSalaryUpdateModal360('${_esc360(teacher.id)}')"
+                class="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-extrabold inline-flex items-center gap-1.5 transition cursor-pointer shadow-2xs">
+          <i class="fa-solid fa-pen-to-square"></i> Update Fixed Salary
+        </button>
+        ` : ''}
+      </div>
+
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div class="p-4 rounded-xl bg-emerald-50/70 border border-emerald-200 flex items-center justify-between">
+          <div>
+            <span class="text-[11px] font-bold text-emerald-900 uppercase block">Current Fixed Salary</span>
+            <span class="text-xs text-emerald-700">Per month, in force now</span>
+          </div>
+          <div class="lms-num-financial text-xl font-black text-emerald-800">${visible ? (currentAmount > 0 ? fmt(currentAmount) : 'Not set') : 'Restricted'}</div>
+        </div>
+        <div class="p-4 rounded-xl bg-slate-50 border border-slate-200 flex items-center justify-between">
+          <div>
+            <span class="text-[11px] font-bold text-slate-500 uppercase block">Effective Since</span>
+            <span class="text-xs text-slate-400">Month the current amount took effect</span>
+          </div>
+          <div class="text-lg font-black text-slate-900">${sinceKey ? _esc360(_fsMonthKeyToLabel(sinceKey)) : '—'}</div>
+        </div>
+      </div>
+
+      ${legacyOnly ? `
+      <div class="p-3.5 rounded-xl bg-amber-50 border border-amber-300 text-amber-900 text-xs font-bold">
+        <i class="fa-solid fa-circle-info"></i>
+        No dated salary history yet — the amount above is this record's configured monthly salary. Use “Update Fixed Salary” to start the dated history.
+      </div>
+      ` : ''}
+
+      <div class="overflow-x-auto border border-slate-200 rounded-2xl shadow-2xs">
+        <table class="w-full text-left text-xs border-collapse">
+          <thead class="bg-slate-50 text-slate-700 font-extrabold border-b border-slate-200">
+            <tr>
+              <th class="p-3.5">Effective Month</th>
+              <th class="p-3.5">Amount</th>
+              <th class="p-3.5">Change</th>
+              <th class="p-3.5">Note</th>
+              <th class="p-3.5">Set By</th>
+              <th class="p-3.5">Set At</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-slate-100">
+            ${hist.length ? historyRows : `
+              <tr><td colspan="6" class="p-6 text-center text-slate-400">No fixed salary history recorded yet.</td></tr>
+            `}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  `;
+}
+
+function openFixedSalaryUpdateModal360(teacherId) {
+  const teacher = (window.ALL_TEACHERS || []).find(t => String(t.id) === String(teacherId));
+  if (!teacher) return;
+  if (typeof CURRENT_ROLE === 'undefined' || CURRENT_ROLE !== 'owner') {
+    if (typeof lmsNotify === 'function') lmsNotify('Only the System Owner can update a fixed salary.');
+    return;
+  }
+  const curKey = _fsCurrentMonthKey();
+  _openWorkspaceModal('Update Fixed Salary', `${teacher.full_name || ''} — fixed monthly salary`, `
+    <form onsubmit="submitFixedSalaryUpdate360(event, '${_esc360(teacher.id)}')" class="space-y-4 text-sm">
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div>
+          <label class="font-extrabold text-slate-700 block mb-1">New Monthly Amount (PKR) *</label>
+          <input type="number" id="fsUpdAmount" min="1" step="any" required placeholder="e.g. 45000" class="w-full p-2.5 rounded-xl border border-slate-300 font-mono font-bold text-slate-900">
+        </div>
+        <div>
+          <label class="font-extrabold text-slate-700 block mb-1">Effective From (Month) *</label>
+          <input type="month" id="fsUpdEffective" value="${curKey}" required onchange="_fixedSalaryUpdateWarning360('${_esc360(teacher.id)}')" class="w-full p-2.5 rounded-xl border border-slate-300 font-mono font-bold text-slate-800">
+        </div>
+      </div>
+      <div>
+        <label class="font-extrabold text-slate-700 block mb-1">Note (optional)</label>
+        <input type="text" id="fsUpdNote" placeholder="e.g. Annual increment" class="w-full p-2.5 rounded-xl border border-slate-300 font-bold text-slate-800">
+      </div>
+      <div id="fsUpdSlipWarning" class="hidden p-3 rounded-xl bg-amber-50 border border-amber-300 text-amber-900 text-xs font-bold"></div>
+      <div class="flex justify-end gap-2 pt-3 border-t border-slate-100">
+        <button type="button" onclick="_closeWorkspaceModal()" class="px-4 py-2 rounded-xl bg-slate-100 text-slate-700 font-bold cursor-pointer">Cancel</button>
+        <button type="submit" class="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold cursor-pointer">Save Fixed Salary</button>
+      </div>
+    </form>
+  `);
+  _fixedSalaryUpdateWarning360(teacherId);
+}
+
+// Saved-slip warning for the Update Fixed Salary modal: a slip saved for
+// the chosen month is a frozen snapshot — it does NOT change with a new
+// entry (only a Recalculate in the Salaries tab re-resolves it), while
+// the compiled figure for that month follows the new entry.
+function _fixedSalaryUpdateWarning360(teacherId) {
+  const warnEl = document.getElementById('fsUpdSlipWarning');
+  if (!warnEl) return;
+  const effEl = document.getElementById('fsUpdEffective');
+  const effKey = effEl ? String(effEl.value || '').slice(0, 7) : '';
+  const label = effKey ? _fsMonthKeyToLabel(effKey) : '';
+  let hasSlip = false;
+  if (label) {
+    try {
+      const saved = JSON.parse(localStorage.getItem('alhuda_teacher_salaries') || '{}');
+      hasSlip = !!saved[`${teacherId}_${label.replace(/\s+/g, '_')}`];
+    } catch (e) {}
+  }
+  if (hasSlip) {
+    warnEl.innerHTML = `<i class="fa-solid fa-triangle-exclamation"></i> A saved salary slip already exists for ${_esc360(label)}. The saved slip itself will <u>not</u> change — it stays exactly as saved unless it is recalculated in the Salaries tab. The compiled figure for that month will follow this new salary entry.`;
+    warnEl.classList.remove('hidden');
+  } else {
+    warnEl.innerHTML = '';
+    warnEl.classList.add('hidden');
+  }
+}
+
+// The fixed-salary write path: the SAME two meta homes the 360's other
+// record edits write (js/teachers.js saveTeacherAccount for the account
+// map + the teachers-row address JSON via /api/db), with the same merged
+// payload _persistTeacher360Updates builds — but the row update runs
+// FIRST and its result is checked, so a failed save changes neither home
+// (the shared helper swallows the update result, and this flow must
+// know whether the write landed).
+async function _persistFixedSalary360(teacher, customMetaPatch) {
+  const existingMeta = _resolveTeacherCustomMeta(teacher);
+  const updatedMeta = {
+    ...existingMeta,
+    ...customMetaPatch,
+    updated_at: new Date().toISOString()
+  };
+
+  let existingAddrObj = {};
+  try {
+    if (typeof teacher.address === 'string' && teacher.address.trim().startsWith('{')) {
+      existingAddrObj = JSON.parse(teacher.address);
+    }
+  } catch (e) {}
+
+  const mergedAddrJson = JSON.stringify({
+    ...existingAddrObj,
+    ...updatedMeta,
+    residential_address: updatedMeta.residential_address ?? existingAddrObj.residential_address ?? (typeof teacher.address === 'string' && !teacher.address.trim().startsWith('{') ? teacher.address : '')
+  });
+
+  const dbPayload = { address: mergedAddrJson };
+  try {
+    const res = await db.from('teachers').update(dbPayload).eq('id', teacher.id);
+    if (res && res.error) {
+      console.warn('[Teacher 360] Fixed salary save failed:', res.error);
+      return false;
+    }
+  } catch (err) {
+    console.warn('[Teacher 360] Fixed salary save failed:', err);
+    return false;
+  }
+
+  if (typeof saveTeacherAccount === 'function') {
+    saveTeacherAccount(teacher.id, updatedMeta);
+  }
+  Object.assign(teacher, dbPayload);
+  if (typeof invalidateCoreLmsDataCache === 'function') {
+    invalidateCoreLmsDataCache();
+  }
+  delete _TEACHER_360_MEM_CACHE[String(teacher.id).toUpperCase()];
+  return true;
+}
+
+async function submitFixedSalaryUpdate360(e, teacherId) {
+  if (e && typeof e.preventDefault === 'function') e.preventDefault();
+  const teacher = (window.ALL_TEACHERS || []).find(t => String(t.id) === String(teacherId));
+  if (!teacher) return;
+  if (typeof CURRENT_ROLE === 'undefined' || CURRENT_ROLE !== 'owner') {
+    if (typeof lmsNotify === 'function') lmsNotify('Only the System Owner can update a fixed salary.');
+    return;
+  }
+  if (typeof FixedSalary === 'undefined' || !FixedSalary) {
+    if (typeof lmsNotify === 'function') lmsNotify('The fixed salary module is unavailable right now. Please reload the portal.');
+    return;
+  }
+  const amount = parseFloat(document.getElementById('fsUpdAmount')?.value);
+  const eff = String(document.getElementById('fsUpdEffective')?.value || '').slice(0, 7);
+  const note = String(document.getElementById('fsUpdNote')?.value || '').trim();
+  if (!(amount > 0) || !/^\d{4}-\d{2}$/.test(eff)) {
+    if (typeof lmsNotify === 'function') lmsNotify('Please enter an amount above 0 and choose the effective month.');
+    return;
+  }
+  const fsMeta = _fixedSalaryMeta360(teacher);
+  const nextMeta = FixedSalary.appendEntry(fsMeta, { amount, effective_from: eff, note, by: 'Owner' });
+  const ok = await _persistFixedSalary360(teacher, {
+    fixed_salary_history: nextMeta.fixed_salary_history,
+    monthly_salary: nextMeta.monthly_salary
+  });
+  if (!ok) {
+    if (typeof lmsNotify === 'function') lmsNotify('Could not save the fixed salary — the change was not applied. Please try again.', { type: 'error' });
+    return;
+  }
+  _closeWorkspaceModal();
+  if (typeof lmsNotify === 'function') lmsNotify(`Fixed salary updated: PKR ${amount.toLocaleString('en-US')} from ${_fsMonthKeyToLabel(eff)}.`);
+  if (_CURRENT_360_STATE && String(_CURRENT_360_STATE.id) === String(teacher.id)) {
+    _CURRENT_360_STATE.activeTab = 'fixed_salary';
+    const cached = _TEACHER_360_MEM_CACHE[String(teacher.id).toUpperCase()];
+    _renderTeacher360WorkspaceDOM(teacher, cached?.tchSchedules || [], cached?.attLogs || [], 'fixed_salary', _CURRENT_360_STATE.options || {});
+  }
+}
+
+// ----------------------------------------------------------------------------
+// PAYROLL HISTORY TAB — the record's REAL saved slips only, from the same
+// store the 360 salary history is built from (localStorage
+// 'alhuda_teacher_salaries'). No live-cycle row, no fabricated months:
+// a month with no saved slip is simply absent.
+// ----------------------------------------------------------------------------
+function _teacher360SavedSlipRows(teacher) {
+  const meta = _resolveTeacherCustomMeta(teacher);
+  let saved = {};
+  try { saved = JSON.parse(localStorage.getItem('alhuda_teacher_salaries') || '{}'); } catch (e) { saved = {}; }
+  const deleted = new Set(Array.isArray(meta.deleted_salary_months) ? meta.deleted_salary_months.map(m => String(m)) : []);
+  const rows = [];
+  Object.entries(saved || {}).forEach(([key, slip]) => {
+    if (!slip || String(slip.teacher_id) !== String(teacher.id)) return;
+    const mLabel = slip.month || key.replace(`${teacher.id}_`, '').replace(/_/g, ' ');
+    if (deleted.has(mLabel) || deleted.has(String(mLabel).replace(/\s+/g, '-'))) return;
+    rows.push({
+      slipKey: key,
+      monthRaw: mLabel,
+      monthKey: _fsMonthLabelToKey(mLabel),
+      base: parseFloat(slip.base_subtotal) || 0,
+      bonus: parseFloat(slip.bonus) || 0,
+      deduction: parseFloat(slip.deduction) || 0,
+      advance: parseFloat(slip.advance_deducted) || 0,
+      net: parseFloat(slip.net_payable) || 0,
+      status: slip.status || 'Pending'
+    });
+  });
+  rows.sort((a, b) => String(b.monthKey).localeCompare(String(a.monthKey)));
+  return rows;
+}
+
+function _buildTeacherPayrollHistoryTabHtml(state) {
+  const { teacher } = state;
+  const visible = _fixedSalaryAmountsVisible360(state);
+  const rows = _teacher360SavedSlipRows(teacher);
+  const amt = (n) => visible ? ('PKR ' + Number(n || 0).toLocaleString('en-US')) : 'Restricted';
+
+  return `
+    <div class="space-y-5">
+      <div class="border-b border-slate-200 pb-3.5">
+        <h3 class="text-base font-black text-slate-900 flex items-center gap-2">
+          <i class="fa-solid fa-clock-rotate-left text-indigo-600"></i>
+          <span>Payroll History</span>
+        </h3>
+        <p class="text-xs text-slate-500 mt-0.5">Saved salary slips for this staff member. A saved slip is a frozen snapshot — later salary changes never rewrite it.</p>
+      </div>
+
+      <div class="overflow-x-auto border border-slate-200 rounded-2xl shadow-2xs">
+        <table class="w-full text-left text-xs border-collapse">
+          <thead class="bg-slate-50 text-slate-700 font-extrabold border-b border-slate-200">
+            <tr>
+              <th class="p-3.5">Month</th>
+              <th class="p-3.5">Fixed Salary</th>
+              <th class="p-3.5">Bonus</th>
+              <th class="p-3.5">Deduction</th>
+              <th class="p-3.5">Advance Deducted</th>
+              <th class="p-3.5">Net</th>
+              <th class="p-3.5">Status</th>
+              <th class="p-3.5 text-right">Slip</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-slate-100">
+            ${rows.length ? rows.map(row => {
+              const isPaid = String(row.status).toLowerCase() === 'paid';
+              return `
+                <tr class="hover:bg-slate-50/80 transition">
+                  <td class="p-3.5 font-mono font-extrabold text-slate-800">${_esc360(row.monthRaw)}</td>
+                  <td class="p-3.5 lms-num-financial font-bold text-slate-900">${amt(row.base)}</td>
+                  <td class="p-3.5 lms-num-financial text-emerald-700 font-bold">${amt(row.bonus)}</td>
+                  <td class="p-3.5 lms-num-financial text-rose-700 font-bold">${amt(row.deduction)}</td>
+                  <td class="p-3.5 lms-num-financial text-amber-700 font-bold">${amt(row.advance)}</td>
+                  <td class="p-3.5 lms-num-financial font-black text-slate-900">${amt(row.net)}</td>
+                  <td class="p-3.5">
+                    <span class="px-2.5 py-1 rounded-full text-[10px] font-black border ${isPaid ? 'bg-emerald-100 text-emerald-800 border-emerald-300' : 'bg-amber-100 text-amber-900 border-amber-300'}">
+                      ${_esc360(row.status)}
+                    </span>
+                  </td>
+                  <td class="p-3.5 text-right">
+                    <button onclick="openTeacherSalaryRowDetailsModal('${_esc360(teacher.id)}', '${_esc360(row.monthRaw)}')"
+                            class="px-3 py-1.5 rounded-lg border border-amber-500 text-amber-700 hover:bg-amber-50 font-extrabold text-xs transition cursor-pointer">
+                      View Slip
+                    </button>
+                  </td>
+                </tr>
+              `;
+            }).join('') : `
+              <tr><td colspan="8" class="p-6 text-center text-slate-400">No saved salary slips yet for this staff member.</td></tr>
+            `}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  `;
+}
+
+// ----------------------------------------------------------------------------
+// ADMINISTRATIVE ACTIVITY TAB (manager records only)
+// Attribution is EXACT by construction: the Worker issues a manager's
+// session with sub = the teachers-row id and writes audit_log.actor_id =
+// auth.sub verbatim (cloudflare/worker.js writeAuditLogEntries), so rows
+// match this record by actor_id equality. Reads are owner-only through
+// the API — every other role is denied audit_log.
+// ----------------------------------------------------------------------------
+function _buildTeacherActivityTabHtml(state) {
+  const isOwner = (typeof CURRENT_ROLE !== 'undefined' && CURRENT_ROLE === 'owner');
+  const head = `
+    <div class="border-b border-slate-200 pb-3.5">
+      <h3 class="text-base font-black text-slate-900 flex items-center gap-2">
+        <i class="fa-solid fa-list-check text-slate-600"></i>
+        <span>Administrative Activity</span>
+      </h3>
+      <p class="text-xs text-slate-500 mt-0.5">Writes this manager made through the portal, from the append-only audit log (metadata only — never record contents).</p>
+    </div>
+  `;
+  if (!isOwner) {
+    return `
+      <div class="space-y-5">
+        ${head}
+        <div class="p-10 text-center bg-slate-50 rounded-2xl border border-slate-200">
+          <i class="fa-solid fa-lock text-3xl text-slate-300 mb-3"></i>
+          <h4 class="font-extrabold text-slate-700 text-sm">Owner Only</h4>
+          <p class="text-xs text-slate-400 mt-1">The audit log is managed by the System Owner only.</p>
+        </div>
+      </div>
+    `;
+  }
+  return `
+    <div class="space-y-5">
+      ${head}
+      <div id="t360ActivityBody">
+        <div class="p-8 text-center text-slate-400">
+          <i class="fa-solid fa-circle-notch fa-spin text-xl text-indigo-600 mb-2 block"></i>
+          <span class="text-xs font-bold">Loading activity…</span>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+async function _hydrateTeacher360ActivityTab(teacher) {
+  const body = document.getElementById('t360ActivityBody');
+  if (!body || !teacher) return;
+  try {
+    const res = await db.from('audit_log')
+      .select('id, actor_id, actor_role, action, table_name, record_id, created_at')
+      .eq('actor_id', String(teacher.id))
+      .order('created_at', { ascending: false })
+      .limit(50);
+    if (res && res.error) throw res.error;
+    const rows = (res && Array.isArray(res.data)) ? res.data : [];
+    if (!rows.length) {
+      body.innerHTML = `
+        <div class="p-8 text-center bg-slate-50 rounded-2xl border border-slate-200">
+          <i class="fa-solid fa-clipboard-list text-3xl text-slate-300 mb-3"></i>
+          <p class="text-xs font-bold text-slate-500">No recorded administrative activity for this manager yet.</p>
+        </div>
+      `;
+      return;
+    }
+    body.innerHTML = `
+      <div class="overflow-x-auto border border-slate-200 rounded-2xl shadow-2xs">
+        <table class="w-full text-left text-xs border-collapse">
+          <thead class="bg-slate-50 text-slate-700 font-extrabold border-b border-slate-200">
+            <tr>
+              <th class="p-3.5">When</th>
+              <th class="p-3.5">Action</th>
+              <th class="p-3.5">Area</th>
+              <th class="p-3.5">Record</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-slate-100">
+            ${rows.map(r => `
+              <tr class="hover:bg-slate-50/80 transition">
+                <td class="p-3.5 font-mono text-slate-600 whitespace-nowrap">${_esc360(String(r.created_at || '').slice(0, 16).replace('T', ' '))}</td>
+                <td class="p-3.5 font-extrabold text-slate-800">${_esc360(r.action || '')}</td>
+                <td class="p-3.5 text-slate-600">${_esc360(r.table_name || '')}</td>
+                <td class="p-3.5 font-mono text-slate-500">${_esc360(String(r.record_id || '').slice(0, 40))}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      </div>
+    `;
+  } catch (err) {
+    console.warn('[Teacher 360] Activity load notice:', err);
+    body.innerHTML = `
+      <div class="p-8 text-center bg-rose-50 rounded-2xl border border-rose-200">
+        <p class="text-xs font-bold text-rose-600">Activity could not be loaded right now.</p>
+      </div>
+    `;
+  }
 }
 
 // ============================================================================
