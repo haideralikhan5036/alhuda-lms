@@ -245,6 +245,9 @@
         '<td class="py-3 pr-3"><input type="number" min="0" step="1" class="cr-course-rate w-32 p-2 border border-slate-300 rounded-lg font-bold text-slate-900" value="' + c.monthly_rate + '"' + dis + '></td>' +
         '<td class="py-3 pr-3 text-center"><input type="checkbox" class="cr-course-active w-5 h-5 accent-emerald-600" ' + (c.active ? 'checked' : '') + dis + '></td>' +
         '<td class="py-3 text-sm text-slate-500">' + fmtWhen(c) + '</td>' +
+        '<td class="py-3 text-right">' + (owner
+          ? '<button type="button" onclick="deleteCatalogueCourse(\'' + esc(c.id) + '\', this)" class="px-2.5 py-2 bg-white hover:bg-rose-50 text-slate-700 hover:text-rose-700 border border-slate-200 rounded-xl text-xs font-bold transition inline-flex items-center gap-1" title="Delete course"><i class="fa-solid fa-trash-can text-rose-500"></i></button>'
+          : '') + '</td>' +
       '</tr>';
     }).join('');
 
@@ -376,6 +379,159 @@
     if (typeof lmsNotify === 'function') lmsNotify('Course added to the list — press Save to store it for all devices.');
   }
 
+  // ---------------------------------------------------------------------
+  // Restricted course deletion (owner request 2026-11-05)
+  // ---------------------------------------------------------------------
+  // A catalogue course may be deleted ONLY when nothing references it:
+  // courses named by student records, by the student_assignments ledger,
+  // or inside saved salary slips are salary/fee HISTORY and must never be
+  // cascade-deleted. Referenced courses are refused with a pointer to the
+  // Active checkbox (deactivation hides a course from new assignments
+  // while keeping every historical record intact). The reference check
+  // FAILS CLOSED: if any read cannot be completed, nothing is deleted.
+  var _courseDeletesInFlight = {};
+
+  function notifyCourseDelete(msg) {
+    if (typeof lmsNotify === 'function') lmsNotify(msg);
+  }
+
+  // Every raw course string a student record carries: the notes JSON
+  // (course_name || course || trial_course, legacy values may combine
+  // several courses with '/'), plus course_id when it holds a catalogue
+  // id/name rather than a UUID.
+  function studentCourseStrings(student) {
+    var out = [];
+    var notes = student && student.notes;
+    if (typeof notes === 'string') {
+      try { notes = JSON.parse(notes); } catch (e) { notes = null; }
+    }
+    if (notes && typeof notes === 'object') {
+      var cn = notes.course_name || notes.course || notes.trial_course;
+      if (cn) {
+        String(cn).split('/').forEach(function (part) {
+          var p = part.trim();
+          if (p) out.push(p);
+        });
+      }
+    }
+    var cid = student && student.course_id;
+    if (cid && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-/i.test(String(cid))) {
+      out.push(String(cid));
+    }
+    return out;
+  }
+
+  // Counts references to `course` across students, the assignment ledger
+  // and saved salary slips. Returns { error } when verification could not
+  // be completed — the caller must treat that as "do not delete".
+  async function countCourseReferences(course) {
+    if (typeof db === 'undefined' || !db) return { error: new Error('no db client') };
+    var counts = { students: 0, assignments: 0, slips: 0 };
+
+    var sres = await Promise.resolve(db.from('students').select('id, status, notes, course_id'));
+    if (!sres || sres.error) return { error: (sres && sres.error) || new Error('students read failed') };
+    (sres.data || []).forEach(function (st) {
+      var hit = studentCourseStrings(st).some(function (raw) {
+        var r = resolveByName(raw);
+        return r && r.id === course.id;
+      });
+      if (hit) counts.students++;
+    });
+
+    var ares = await Promise.resolve(db.from('student_assignments').select('id, course_name'));
+    if (!ares || ares.error) return { error: (ares && ares.error) || new Error('assignments read failed') };
+    (ares.data || []).forEach(function (row) {
+      var r = row && row.course_name ? resolveByName(row.course_name) : null;
+      if (r && r.id === course.id) counts.assignments++;
+    });
+
+    // Slip payloads: salary_slips rows store the compiled per-student
+    // lines as JSON text in student_items_snapshot, and the whole slip
+    // again in legacy_json (see slipRowFromLegacy in js/fee-tables.js).
+    // The lines carry the course id and/or the course name, so scan the
+    // serialized payloads for either as an exact quoted JSON string.
+    var lres = await Promise.resolve(db.from('salary_slips').select('id, student_items_snapshot, legacy_json'));
+    if (!lres || lres.error) return { error: (lres && lres.error) || new Error('salary_slips read failed') };
+    var idNeedle = JSON.stringify(course.id);
+    var nameNeedle = JSON.stringify(course.name);
+    (lres.data || []).forEach(function (row) {
+      var hay = [row && row.student_items_snapshot, row && row.legacy_json].map(function (v) {
+        return typeof v === 'string' ? v : (v == null ? '' : JSON.stringify(v));
+      }).join('\n');
+      if (hay.indexOf(idNeedle) !== -1 || hay.indexOf(nameNeedle) !== -1) counts.slips++;
+    });
+
+    return { error: null, counts: counts };
+  }
+
+  async function deleteCatalogueCourse(id, btn) {
+    if (!isOwnerSession()) {
+      notifyCourseDelete('Only the Owner can delete courses.');
+      return;
+    }
+    if (_courseDeletesInFlight[id]) return;
+    var course = null;
+    getSettings().courses.forEach(function (c) { if (c.id === id) course = c; });
+    if (!course) return;
+
+    _courseDeletesInFlight[id] = true;
+    if (btn) { try { btn.disabled = true; } catch (e) {} }
+    try {
+      var check = await countCourseReferences(course);
+      if (check.error) {
+        notifyCourseDelete('Could not verify whether this course is in use, so it was not deleted.');
+        return;
+      }
+      var counts = check.counts;
+      var total = counts.students + counts.assignments + counts.slips;
+      if (total > 0) {
+        var parts = [];
+        if (counts.students) parts.push(counts.students + ' student record(s)');
+        if (counts.assignments) parts.push(counts.assignments + ' course assignment(s)');
+        if (counts.slips) parts.push(counts.slips + ' saved salary slip(s)');
+        notifyCourseDelete('"' + course.name + '" cannot be deleted — it is used by ' + parts.join(', ') +
+          '. Untick Active instead: that hides it from new assignments while keeping all history.');
+        return;
+      }
+      if (getSettings().courses.length <= 1) {
+        notifyCourseDelete('At least one course must remain in the list, so this course was not deleted. Untick Active to hide it instead.');
+        return;
+      }
+      var ok = false;
+      if (typeof lmsConfirm === 'function') {
+        ok = await lmsConfirm({
+          title: 'Delete course?',
+          message: '"' + course.name + '" is not used by any student, assignment or saved salary slip. Delete it permanently? This cannot be undone.',
+          confirmText: 'Delete',
+          cancelText: 'Cancel',
+          variant: 'danger'
+        });
+      }
+      if (!ok) return;
+
+      var next = collectSettingsFromForm();
+      next.courses = next.courses.filter(function (c) { return c.id !== id; });
+      if (!next.courses.length) {
+        notifyCourseDelete('At least one course must remain in the list, so this course was not deleted.');
+        return;
+      }
+      next.updated_at = new Date().toISOString();
+      next.updated_by = currentUserLabel();
+
+      var res = await upsertSettingsRow(next);
+      if (res && res.error) {
+        notifyCourseDelete('Could not delete the course — the server did not save the change. Please try again.');
+        return;
+      }
+      applySettings(next);
+      renderCoursePaymentSettings();
+      notifyCourseDelete('Course "' + course.name + '" deleted.');
+    } finally {
+      delete _courseDeletesInFlight[id];
+      if (btn) { try { btn.disabled = false; } catch (e) {} }
+    }
+  }
+
   function resolveByNameIn(settings, name) {
     var target = String(name || '').trim().toLowerCase();
     if (!target) return null;
@@ -401,6 +557,7 @@
   window.renderCoursePaymentSettings = renderCoursePaymentSettings;
   window.saveCoursePaymentSettings = saveCoursePaymentSettings;
   window.addCatalogueCourse = addCatalogueCourse;
+  window.deleteCatalogueCourse = deleteCatalogueCourse;
 
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', loadCourseCatalogue);
