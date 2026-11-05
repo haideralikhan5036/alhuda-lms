@@ -2531,15 +2531,15 @@
       const leaveDotPing = document.getElementById('dotTopCircleLeaveOver');
       const leaveDotSolid = document.getElementById('dotTopCircleLeaveOverSolid');
       const leaveBadge = document.getElementById('badgeTopLeaveOverCount');
-      let overdueLeaves = (typeof OVERDUE_LEAVE_STUDENTS !== 'undefined' && Array.isArray(OVERDUE_LEAVE_STUDENTS)) ? OVERDUE_LEAVE_STUDENTS.length : 0;
-      if (overdueLeaves === 0 && typeof ALL_LEAVE_RECORDS !== 'undefined' && Array.isArray(ALL_LEAVE_RECORDS)) {
-        overdueLeaves = ALL_LEAVE_RECORDS.filter(r => r.status === 'Active' || r.isOverdue).length;
-      }
-      const leaveKpiVal = parseInt(document.getElementById('kpiDashLeave')?.innerText || '0', 10);
-      const effectiveLeaveCount = Math.max(overdueLeaves, leaveKpiVal);
-      if (leaveBadge) leaveBadge.innerText = effectiveLeaveCount;
+      // Single source of truth: the Leave Over badge shows exactly the
+      // students the Return Alerts modal lists (OVERDUE_LEAVE_STUDENTS,
+      // rebuilt by checkLeaveReturnAlertsAndRequests from live student
+      // data). The kpiDashLeave KPI is a different metric (today's
+      // classes on leave) and must NOT feed this badge.
+      const overdueLeaves = (typeof OVERDUE_LEAVE_STUDENTS !== 'undefined' && Array.isArray(OVERDUE_LEAVE_STUDENTS)) ? OVERDUE_LEAVE_STUDENTS.length : 0;
+      if (leaveBadge) leaveBadge.innerText = overdueLeaves;
       if (leaveDotPing && leaveDotSolid) {
-        if (effectiveLeaveCount > 0) {
+        if (overdueLeaves > 0) {
           leaveDotPing.classList.remove('hidden');
           leaveDotSolid.classList.remove('hidden');
         } else {
