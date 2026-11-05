@@ -617,7 +617,22 @@
       openModal('modalBookSlot');
     }
 
+    // Duplicate-schedule prevention (2026-11-05): in-flight guard —
+    // the confirm action cannot run twice concurrently (double-click,
+    // double Enter, re-entrant handler), so one user action can never
+    // submit the same booking twice.
+    let _slotBookingInFlight = false;
     async function handleConfirmSlotBooking(e) {
+      if (_slotBookingInFlight) return;
+      _slotBookingInFlight = true;
+      try {
+        await _handleConfirmSlotBookingImpl(e);
+      } finally {
+        _slotBookingInFlight = false;
+      }
+    }
+
+    async function _handleConfirmSlotBookingImpl(e) {
       e.preventDefault();
       const student_id = document.getElementById('bookStudentSelect').value;
       const meeting_link = (document.getElementById('bookMeetingLink').value || '').trim() || (CURRENT_MATRIX_TEACHER?.zoom_link || '').trim();
@@ -704,10 +719,34 @@
       // with this teacher BEFORE the booking lands, for the
       // duration-change re-segmentation check after the save.
       const _slotsBeforeRows = (CURRENT_TEACHER_SCHEDULES || []).filter(s => String(s.student_id) === String(student_id) && String(s.teacher_id) === String(CURRENT_MATRIX_TEACHER.id));
+
+      // Duplicate-schedule prevention (2026-11-05): days where THIS
+      // student already has a class with THIS teacher at the same day
+      // + start are already booked — exclude them from insertion (the
+      // client twin of the server natural-key guard). The conflict
+      // check below then runs on the remaining days only; a
+      // same-student row on a remaining day at a DIFFERENT overlapping
+      // time still conflicts there (the teacher is busy), as before.
+      const alreadyBookedDays = [];
+      const remainingDays = [];
+      targetDays.forEach(d => {
+        const dup = (CURRENT_TEACHER_SCHEDULES || []).some(s =>
+          String(s.student_id) === String(student_id) &&
+          String(s.teacher_id) === String(CURRENT_MATRIX_TEACHER.id) &&
+          Number(s.day_of_week) === Number(d) &&
+          String(s.start_time || '').trim().slice(0, 5) === ACTIVE_START_TIME);
+        if (dup) alreadyBookedDays.push(d); else remainingDays.push(d);
+      });
+
+      if (remainingDays.length === 0) {
+        lmsNotify(`This student is already booked with ${CURRENT_MATRIX_TEACHER.full_name} on the selected day(s) at ${ACTIVE_START_TIME} — nothing new was added.`);
+        return;
+      }
+
       const conflictingDetails = [];
       const daysToInsert = [];
 
-      targetDays.forEach(d => {
+      remainingDays.forEach(d => {
         const conflicts = findTeacherScheduleConflicts(CURRENT_TEACHER_SCHEDULES, d, ACTIVE_START_TIME, ACTIVE_END_TIME);
         if (conflicts.length > 0) {
           const first = conflicts[0];
@@ -758,6 +797,9 @@
         loadTeachers();
         if (document.getElementById('tab-schedule-search') && !document.getElementById('tab-schedule-search').classList.contains('hidden')) {
           executeScheduleSearch();
+        }
+        if (alreadyBookedDays.length > 0) {
+          lmsNotify(`Class booked for the new day(s). Skipped — already booked at ${ACTIVE_START_TIME}: ${alreadyBookedDays.map(d => DAY_NAMES[d]).join(', ')}.`);
         }
       }
     }

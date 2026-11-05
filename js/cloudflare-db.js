@@ -514,6 +514,48 @@
     }
   }
 
+  // Duplicate-schedule prevention (2026-11-05): the natural key of a
+  // class — mirrors the server guard in functions/api/db.js
+  // (scheduleNaturalKey): (student_id, teacher_id, day_of_week,
+  // start_time) with start_time compared on its first 5 chars.
+  function scheduleNaturalKeyOf(row) {
+    if (!row || typeof row !== 'object') return null;
+    const sid = row.student_id != null ? String(row.student_id).trim() : '';
+    const tid = row.teacher_id != null ? String(row.teacher_id).trim() : '';
+    const dayRaw = row.day_of_week != null ? String(row.day_of_week).trim() : '';
+    const day = /^\d+$/.test(dayRaw) ? String(parseInt(dayRaw, 10)) : dayRaw;
+    const start = row.start_time != null ? String(row.start_time).trim().slice(0, 5) : '';
+    if (!sid || !tid || !day || !start) return null;
+    return sid + '|' + tid + '|' + day + '|' + start;
+  }
+
+  // Read D1's existing class_schedules rows as { ids, byKey } (natural
+  // key -> id). Returns null when they cannot be determined — callers
+  // must treat null as "do not push" (the Batch 7 rule above).
+  async function fetchExistingD1ScheduleKeys() {
+    try {
+      const res = await fetchWithTimeout(`${getApiBase()}/api/db`, {
+        method: 'POST',
+        headers: Object.assign({ 'Content-Type': 'application/json' }, authHeaders()),
+        body: JSON.stringify({ table: 'class_schedules', action: 'select', select: 'id,student_id,teacher_id,day_of_week,start_time' })
+      });
+      if (!res.ok) return null;
+      const json = await res.json();
+      if (!json || !Array.isArray(json.data)) return null;
+      const byKey = new Map();
+      const ids = new Set();
+      for (const r of json.data) {
+        if (!r) continue;
+        ids.add(String(r.id));
+        const k = scheduleNaturalKeyOf(r);
+        if (k && !byKey.has(k)) byKey.set(k, String(r.id));
+      }
+      return { ids, byKey };
+    } catch (e) {
+      return null;
+    }
+  }
+
   async function syncLocalStoreToD1Once(force = false) {
     try {
       const store = loadLocalDbStore();
@@ -538,6 +580,29 @@
           const existingIds = await fetchExistingD1RowIds(table);
           if (!existingIds) continue;
           rows = rows.filter(r => !r || !r.id || !existingIds.has(String(r.id)));
+          if (rows.length === 0) continue;
+        }
+
+        // Duplicate-schedule prevention (2026-11-05): the mirror holds
+        // the same classes under locally-generated ids that never match
+        // the server's, so a whole-mirror upsert used to write a second
+        // copy of every class already in D1 (the Issa duplication in
+        // the investigation). Drop mirror rows whose id is unknown to
+        // D1 AND whose natural key already exists in D1 under another
+        // id; rows whose id EXISTS in D1 keep syncing as today. If the
+        // D1 read fails, skip this table entirely — never push blind.
+        // (The server additionally skips such rows on upsert, so this
+        // is defence in depth, not the only barrier.)
+        if (table === 'class_schedules') {
+          const existing = await fetchExistingD1ScheduleKeys();
+          if (!existing) continue;
+          rows = rows.filter(r => {
+            if (!r) return false;
+            if (r.id && existing.ids.has(String(r.id))) return true;
+            const k = scheduleNaturalKeyOf(r);
+            if (!k) return true;
+            return !existing.byKey.has(k);
+          });
           if (rows.length === 0) continue;
         }
 
