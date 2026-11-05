@@ -3157,10 +3157,53 @@ font-family: var(--font-num) !important;
     // 'mirror' | 'error' }. The render path below turns this into an
     // error/pending banner instead of the "no classes" empty state.
     let _teacherClassesDegraded = null;
-    // ONE bounded automatic retry per degraded episode (fired ~5.5 s
-    // after the failure, just past the 5 s probe cooldown). Cleared by
-    // the next clean live load. Never a loop, never a page reload.
-    let _teacherClassesAutoRetried = false;
+    // LOAD-RETRY LADDER: a degraded episode retries automatically at
+    // ~5 s, ~15 s and ~30 s (max 3 automatic retries), then stops —
+    // never a loop, never a page reload. A clean live load resets the
+    // ladder. A tab-visible / back-online event cancels the pending
+    // step and retries immediately, starting a fresh ladder.
+    const TEACHER_RETRY_LADDER_MS = [5000, 15000, 30000];
+    let _teacherClassesRetryCount = 0;
+    let _teacherClassesRetryTimer = null;
+    // True while a portal load's fetch phase is running; recovery
+    // triggers and ladder steps skip rather than stack a second load
+    // on top of one already in flight.
+    let _teacherLoadInFlight = false;
+
+    function clearTeacherClassesRetryTimer() {
+      if (_teacherClassesRetryTimer !== null) {
+        clearTimeout(_teacherClassesRetryTimer);
+        _teacherClassesRetryTimer = null;
+      }
+    }
+    function resetTeacherClassesRetry() {
+      _teacherClassesRetryCount = 0;
+      clearTeacherClassesRetryTimer();
+    }
+    function scheduleTeacherClassesRetry() {
+      clearTeacherClassesRetryTimer();
+      if (_teacherClassesRetryCount >= TEACHER_RETRY_LADDER_MS.length) return;
+      const delay = TEACHER_RETRY_LADDER_MS[_teacherClassesRetryCount];
+      _teacherClassesRetryCount++;
+      _teacherClassesRetryTimer = setTimeout(() => {
+        _teacherClassesRetryTimer = null;
+        if (_teacherClassesDegraded && CURRENT_TEACHER && !_teacherLoadInFlight) loadTeacherPortalData();
+      }, delay);
+    }
+    // Recovery triggers: the db layer already re-probes when the tab
+    // becomes visible or the network returns, but nothing reloaded the
+    // class list on those events. If the last load was degraded, retry
+    // right away (fresh ladder) instead of waiting for the next
+    // scheduled ladder step.
+    function recoverTeacherClassesIfDegraded() {
+      if (!_teacherClassesDegraded || _teacherLoadInFlight || !CURRENT_TEACHER) return;
+      resetTeacherClassesRetry();
+      loadTeacherPortalData();
+    }
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') recoverTeacherClassesIfDegraded();
+    });
+    window.addEventListener('online', recoverTeacherClassesIfDegraded);
 
     // SLOW-CLASSES FIX: settle one class-load branch independently
     // (admin dashSettleBranch pattern). The 15 s clock starts AFTER the
@@ -3192,6 +3235,7 @@ font-family: var(--font-num) !important;
     // Load Teacher's Live Data from Supabase
     async function loadTeacherPortalData() {
       if (!CURRENT_TEACHER) return;
+      _teacherLoadInFlight = true;
 
       const now = new Date();
       // URGENT FIX (Issue 1, F1.4): PKT day/date/minutes (see getPktNowParts).
@@ -3263,8 +3307,9 @@ font-family: var(--font-num) !important;
       // SLOW-CLASSES FIX: honest failure state. A failed or
       // mirror-served critical branch must never render as "no
       // classes" — the render path below shows an error/pending state
-      // instead, and one bounded auto-retry fires past the probe
-      // cooldown. A clean live load clears both flags.
+      // instead, and a bounded retry ladder (5 s / 15 s / 30 s) keeps
+      // trying while the episode lasts. A clean live load clears the
+      // degraded state and resets the ladder.
       const _critResults = [studentsRes, schedFetchRes, todayLogsRes];
       const _sessionExpired = _critResults.some(r => r && r.error && r.error.code === 'SESSION_EXPIRED');
       const _mirrorServed = _critResults.some(r => r && r._lmsSource === 'mirror');
@@ -3275,14 +3320,13 @@ font-family: var(--font-num) !important;
         _teacherClassesDegraded = { kind: _mirrorServed ? 'mirror' : 'error' };
       } else {
         _teacherClassesDegraded = null;
-        _teacherClassesAutoRetried = false;
+        resetTeacherClassesRetry();
       }
-      if (_teacherClassesDegraded && !_teacherClassesAutoRetried) {
-        _teacherClassesAutoRetried = true;
-        setTimeout(() => {
-          if (_teacherClassesDegraded && CURRENT_TEACHER && typeof loadTeacherPortalData === 'function') loadTeacherPortalData();
-        }, 5500);
-      }
+      if (_teacherClassesDegraded) scheduleTeacherClassesRetry();
+      // Fetch phase done — the renders below are synchronous, so clear
+      // the in-flight flag now: a stuck render can then never block a
+      // recovery trigger or the next ladder step.
+      _teacherLoadInFlight = false;
 
       // Filter strictly to regular, non-deactivated students assigned to THIS teacher
       const regularNonDeactivated = (assignedStudentsRaw || []).filter(s =>
