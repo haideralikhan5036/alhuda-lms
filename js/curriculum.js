@@ -750,9 +750,14 @@ if (mergedDeleted.length > 0) {
         if (prevErr) prevErr.style.display = 'none';
         img.style.display = '';
 
-        // Reset individual image transform - wrapper handles uniform scaling
+        // Reset individual image transform - layout zoom sizes the img itself
         img.style.transform = 'none';
         applyReaderZoom();
+
+        // New page: its zoom-1 base size is captured fresh once it loads,
+        // so each page is layout-zoomed from its own rendered size.
+        READER_BASE_W = 0;
+        READER_BASE_H = 0;
 
         // Get URL with Content-Type awareness (Juz/Para + Language)
         // NOTE (Batch 4, B13): the honesty rule now applies to EVERY book,
@@ -1057,18 +1062,63 @@ if (mergedDeleted.length > 0) {
     let READER_SCROLL_START_X = 0;
     let READER_SCROLL_START_Y = 0;
     let READER_SPACE_DOWN = false;
+    // Layout-zoom base: the page image's rendered size at zoom 1 for the
+    // current page (captured lazily by applyReaderZoom, reset per page).
+    let READER_BASE_W = 0;
+    let READER_BASE_H = 0;
 
     function applyReaderZoom() {
       const wrapper = document.getElementById('readerCanvasWrapper');
       const img = document.getElementById('readerPageImg');
-      if (img) img.style.transform = 'none'; // Never scale image independently!
+      // Layout zoom (owner report 2026-11-05): the page is sized with real
+      // width/height, never a CSS transform. A transformed element overflows
+      // its scroll container in the negative direction, so the top/left of a
+      // zoomed page could never be scrolled into view; with layout size the
+      // stage grows and every edge of the page is reachable by scrolling.
       if (wrapper) {
-        wrapper.style.transform = `scale(${CURRENT_READER_ZOOM})`;
-        wrapper.style.transformOrigin = 'center center';
-        wrapper.style.transition = 'transform 0.15s cubic-bezier(0.2, 0, 0, 1)';
+        wrapper.style.transform = '';
+        wrapper.style.transformOrigin = '';
+        wrapper.style.transition = '';
+      }
+      if (img) {
+        img.style.transform = 'none'; // Never scale image independently!
+        // Lazy base capture: the img's current layout size equals
+        // base * CURRENT_READER_ZOOM (set by the previous zoom pass, or the
+        // plain CSS size at zoom 1 on a freshly loaded page).
+        if (!(READER_BASE_W > 0) && img.clientWidth > 0 && CURRENT_READER_ZOOM > 0) {
+          READER_BASE_W = img.clientWidth / CURRENT_READER_ZOOM;
+          READER_BASE_H = img.clientHeight / CURRENT_READER_ZOOM;
+        }
+        if (READER_BASE_W > 0) {
+          if (CURRENT_READER_ZOOM !== 1) {
+            img.style.width = Math.round(READER_BASE_W * CURRENT_READER_ZOOM) + 'px';
+            img.style.height = Math.round(READER_BASE_H * CURRENT_READER_ZOOM) + 'px';
+            // The Tailwind caps (80vh / 100%) would clip the layout size.
+            img.style.maxWidth = 'none';
+            img.style.maxHeight = 'none';
+            if (wrapper) {
+              wrapper.style.maxWidth = 'none';
+              wrapper.style.maxHeight = 'none';
+            }
+          } else {
+            // Back at zoom 1 the original CSS sizing takes over again.
+            img.style.width = '';
+            img.style.height = '';
+            img.style.maxWidth = '';
+            img.style.maxHeight = '';
+            if (wrapper) {
+              wrapper.style.maxWidth = '';
+              wrapper.style.maxHeight = '';
+            }
+          }
+        }
       }
       const lbl = document.getElementById('readerZoomLevel');
       if (lbl) lbl.innerText = `${Math.round(CURRENT_READER_ZOOM * 100)}%`;
+      // Keep the annotation canvas matched to the page's new layout size.
+      if (typeof initOrResizeAnnotationCanvas === 'function') {
+        initOrResizeAnnotationCanvas();
+      }
       updateReaderPanningState();
     }
 
@@ -1082,8 +1132,8 @@ if (mergedDeleted.length > 0) {
       applyReaderZoom();
       const area = document.getElementById('readerContentArea');
       if (area) {
-        area.scrollLeft = (area.scrollWidth - area.clientWidth) / 2;
-        area.scrollTop = (area.scrollHeight - area.clientHeight) / 2;
+        area.scrollLeft = 0;
+        area.scrollTop = 0;
       }
     }
 
@@ -1729,15 +1779,34 @@ if (mergedDeleted.length > 0) {
         return;
       }
 
-      // 5. Page Navigation: Arrow keys
-      if (e.key === 'ArrowLeft') {
+      // 5. Arrow keys: zoomed in they pan the page (owner request
+      // 2026-11-05); at zoom 1 Left/Right flip pages, Up/Down scroll.
+      if (e.key === 'ArrowLeft' || e.key === 'ArrowRight' || e.key === 'ArrowUp' || e.key === 'ArrowDown') {
         e.preventDefault();
-        changeReaderPage(-1);
+        const area = document.getElementById('readerContentArea');
+        if (CURRENT_READER_ZOOM > 1) {
+          if (area) {
+            if (e.key === 'ArrowLeft') area.scrollLeft -= 90;
+            else if (e.key === 'ArrowRight') area.scrollLeft += 90;
+            else if (e.key === 'ArrowUp') area.scrollTop -= 90;
+            else if (e.key === 'ArrowDown') area.scrollTop += 90;
+          }
+        } else if (e.key === 'ArrowLeft') {
+          changeReaderPage(-1);
+        } else if (e.key === 'ArrowRight') {
+          changeReaderPage(+1);
+        } else if (area) {
+          area.scrollTop += (e.key === 'ArrowUp' ? -90 : 90);
+        }
         return;
       }
-      if (e.key === 'ArrowRight') {
+      if (e.key === 'PageUp' || e.key === 'PageDown') {
         e.preventDefault();
-        changeReaderPage(+1);
+        const area = document.getElementById('readerContentArea');
+        if (area) {
+          const step = Math.round(area.clientHeight * 0.9);
+          area.scrollTop += (e.key === 'PageUp' ? -step : step);
+        }
         return;
       }
 
