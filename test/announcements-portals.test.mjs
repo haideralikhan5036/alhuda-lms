@@ -101,7 +101,7 @@ fakeDb.seed("INSERT INTO system_settings (id, key, value) VALUES ('SYS-LOGO', 'a
   const w = await dbPost(TOK.teacher, { table: 'system_settings', action: 'upsert', values: { id: 'SYS-ANNOUNCEMENTS', key: 'alhuda_official_announcements', value: '[]' } });
   check('teacher WRITE to system_settings still denied', w.status === 403 || (w.json && w.json.ok === false), 'status ' + w.status);
   const h = await call('/api/health', { method: 'GET' });
-  check('health reports the announcements release', h.status === 200 && h.json && h.json.version === '2026-11-03-academy-profile', 'got ' + (h.json && h.json.version));
+  check('health reports the announcements release', h.status === 200 && h.json && h.json.version === '2026-11-05-slots', 'got ' + (h.json && h.json.version));
 }
 
 // ---- Frontend wiring (structural) ----

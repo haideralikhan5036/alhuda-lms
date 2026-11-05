@@ -4715,6 +4715,12 @@ function _payrollFiguresForTeacher360(teacher, monthLabel, tchSchedules, isTeach
   }
   const settings = payrollSettings();
   const bounds = parsePayrollMonthBounds(monthLabel);
+  // Commission #2 Phase 1: price through the SAME D5 gate and accrual
+  // as-of as the Admin compile (js/payroll.js), so the 360 figures can
+  // never disagree with the Salaries tab.
+  const pricingVersion = (typeof payrollPricingVersion === 'function') ? payrollPricingVersion(monthLabel) : 'v1';
+  const accrualAsOf = (typeof payrollTodayStr === 'function' && typeof payrollDateMin === 'function')
+    ? payrollDateMin(payrollTodayStr(), bounds.lastDayStr) : bounds.lastDayStr;
   const students = window.ALL_STUDENTS || [];
   const scheds = window.ALL_CLASS_SCHEDULES || [];
   let rows = (window.ALL_ASSIGNMENTS || []).slice();
@@ -4729,17 +4735,28 @@ function _payrollFiguresForTeacher360(teacher, monthLabel, tchSchedules, isTeach
     const stu = students.find(s => String(s.id) === String(asg.student_id));
     if (!stu || !stu.name || stu.status === 'Trial') return;
     const stuScheds = (tchSchedules || []).filter(sc => String(sc.student_id) === String(stu.id));
-    const rateInfo = resolveAssignmentRate(asg, stu, stuScheds, settings);
+    const rateInfo = resolveAssignmentRate(asg, stu, stuScheds, settings, pricingVersion);
     if (!rateInfo.ok) return;
-    const fullRate = rateInfo.baseRate + seniorityInc;
+    // Mirror of the Admin compile's line pricing (D1/D2/D3/D8 + D5
+    // gate): v2 course lines are (rate + increment) x slots; weekend
+    // lines stay flat; English Tafseer lines carry no increment.
+    const lineSlots = (pricingVersion === 'v2' && typeof payrollSegmentSlots === 'function') ? payrollSegmentSlots(asg, stuScheds) : 1;
+    const lineIncrement = (pricingVersion === 'v2' && rateInfo.courseId === 'crs-tafseer-english') ? 0 : seniorityInc;
+    const fullRate = rateInfo.weekendFlat
+      ? rateInfo.baseRate + lineIncrement
+      : (rateInfo.baseRate + lineIncrement) * lineSlots;
     const proration = assignmentSegmentProration(stu, asg, fullRate, monthLabel);
     if (proration.activeDays === 0) return;
+    const accrualProration = assignmentSegmentProration(stu, asg, fullRate, monthLabel, accrualAsOf);
     lines.push({
       assignment_id: asg.id || null,
       student_id: stu.id,
       student_name: stu.name,
       course_label: rateInfo.courseLabel,
-      schedule_text: `${rateInfo.isWeekend ? 'Weekend (Sat - Sun)' : (stuScheds.length ? stuScheds.length + ' Days / Week' : 'Regular Days')} (${proration.prorationLabel})`,
+      schedule_text: `${pricingVersion === 'v2' ? ((typeof payrollFormatSlots === 'function' ? payrollFormatSlots(lineSlots) : String(lineSlots)) + ' Slot' + (lineSlots === 1 ? '' : 's') + ' • ') : ''}${rateInfo.isWeekend ? (pricingVersion === 'v2' ? 'Weekend (Fri - Mon)' : 'Weekend (Sat - Sun)') : (stuScheds.length ? stuScheds.length + ' Days / Week' : 'Regular Days')} (${proration.prorationLabel})`,
+      slots: lineSlots,
+      accrued_rate: accrualProration.proratedRate,
+      accrued_days: accrualProration.activeDays,
       proration_label: proration.prorationLabel,
       active_days: proration.activeDays,
       days_in_month: proration.daysInMonth,
@@ -4748,7 +4765,7 @@ function _payrollFiguresForTeacher360(teacher, monthLabel, tchSchedules, isTeach
       seg_end: proration.segEnd,
       is_prorated: proration.isProrated,
       base_rate: rateInfo.baseRate,
-      increment: seniorityInc,
+      increment: lineIncrement,
       full_monthly_rate: fullRate,
       calculated_rate: proration.proratedRate,
       final_rate: proration.proratedRate
@@ -4763,12 +4780,38 @@ function _payrollFiguresForTeacher360(teacher, monthLabel, tchSchedules, isTeach
     floorAmount = floorRes.floorAmount;
     basicProtection = Math.max(0, floorAmount - studentsSubtotal);
   }
+  // Daily accrual, assembled exactly like the Admin compile's
+  // compiledSlip.accrual (Phase 3 displays it; Phase 1 keeps the
+  // numbers consistent).
+  let accrual = null;
+  if (typeof teacherFloorAmount === 'function' && typeof payrollDaysInclusive === 'function') {
+    const earnedStudents = lines.reduce((s, it) => s + (parseFloat(it.accrued_rate) || 0), 0);
+    const floorAccrued = isTeachingCategory
+      ? teacherFloorAmount(teacher, meta, settings, bounds, lastPayableDay, accrualAsOf).floorAmount
+      : 0;
+    const protectionAccrued = Math.max(0, floorAccrued - earnedStudents);
+    const grossEarned = earnedStudents + protectionAccrued;
+    accrual = {
+      asOf: accrualAsOf,
+      earnedStudents,
+      floorAccrued,
+      protectionAccrued,
+      grossEarned,
+      remaining: (studentsSubtotal + basicProtection) - grossEarned,
+      totalSlots: lines.reduce((s, it) => s + (parseFloat(it.slots) || 1), 0),
+      daysElapsed: payrollDaysInclusive(bounds.firstDayStr, accrualAsOf),
+      daysInMonth: bounds.daysInMonth,
+      dailyAccrual: Math.round(((studentsSubtotal + basicProtection) / bounds.daysInMonth) * 100) / 100
+    };
+  }
   return {
     studentsSubtotal,
     basicProtection,
     floorAmount,
     baseSubtotal: studentsSubtotal + basicProtection,
-    lines
+    lines,
+    accrual,
+    pricingVersion
   };
 }
 
@@ -4848,7 +4891,9 @@ function _compileTeacher360AggregatedState(teacher, tchSchedules = [], attLogs =
         studentsSubtotal: compiledSlip.students_subtotal != null ? compiledSlip.students_subtotal : (parseFloat(compiledSlip.base_subtotal) || 0),
         basicProtection: parseFloat(compiledSlip.basic_protection) || 0,
         baseSubtotal: parseFloat(compiledSlip.base_subtotal) || 0,
-        lines: compiledSlip.assigned_students || []
+        lines: compiledSlip.assigned_students || [],
+        accrual: compiledSlip.accrual || null,
+        pricingVersion: compiledSlip.pricing_version || null
       }
     : _payrollFiguresForTeacher360(teacher, currentMonthLabel, tchSchedules, !(isManager || isOtherStaff));
 

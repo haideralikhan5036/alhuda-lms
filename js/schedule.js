@@ -700,6 +700,10 @@
 
       // Authoritative Conflict Check: check interval overlap across all selected days
       await fetchTeacherSchedules();
+      // Slot-based salary (Phase 1): snapshot this student's sessions
+      // with this teacher BEFORE the booking lands, for the
+      // duration-change re-segmentation check after the save.
+      const _slotsBeforeRows = (CURRENT_TEACHER_SCHEDULES || []).filter(s => String(s.student_id) === String(student_id) && String(s.teacher_id) === String(CURRENT_MATRIX_TEACHER.id));
       const conflictingDetails = [];
       const daysToInsert = [];
 
@@ -741,6 +745,11 @@
       } else {
         closeModal('modalBookSlot');
         await fetchTeacherSchedules();
+        // Slot-based salary (Phase 1): if this booking changed the
+        // student's session length with this teacher, re-segment the
+        // assignment from today (fire-and-forget, fully guarded).
+        maybeReSegmentAssignmentSlots(student_id, CURRENT_MATRIX_TEACHER.id, _slotsBeforeRows,
+          (CURRENT_TEACHER_SCHEDULES || []).filter(s => String(s.student_id) === String(student_id) && String(s.teacher_id) === String(CURRENT_MATRIX_TEACHER.id)));
         render2DMatrixTable();
         if (typeof invalidateCoreLmsDataCache === 'function') invalidateCoreLmsDataCache();
         if (typeof _TEACHER_360_MEM_CACHE === 'object' && CURRENT_MATRIX_TEACHER?.id) {
@@ -807,6 +816,11 @@
       await fetchTeacherSchedules();
       const { scheduleId, studentId, teacherId, dayOfWeek } = ACTIVE_SLOT_ACTION_CONTEXT;
 
+      // Slot-based salary (Phase 1): snapshot this student's sessions
+      // with this teacher BEFORE the time edit lands, for the
+      // duration-change re-segmentation check after the save.
+      const _slotsBeforeRows = (CURRENT_TEACHER_SCHEDULES || []).filter(s => String(s.student_id) === String(studentId) && String(s.teacher_id) === String(teacherId));
+
       const slotsToUpdate = applyAll
         ? (CURRENT_TEACHER_SCHEDULES || []).filter(s => String(s.student_id) === String(studentId) && String(s.teacher_id) === String(teacherId))
         : (CURRENT_TEACHER_SCHEDULES || []).filter(s => String(s.id) === String(scheduleId));
@@ -834,6 +848,12 @@
 
       closeModal('modalMatrixSlotActions');
       await refreshMatrixAndSchedulesAfterDelete();
+      // Slot-based salary (Phase 1): the refresh above reloaded this
+      // teacher's schedules — if the edit changed the student's
+      // session length, re-segment the assignment from today
+      // (fire-and-forget, fully guarded).
+      maybeReSegmentAssignmentSlots(studentId, teacherId, _slotsBeforeRows,
+        (CURRENT_TEACHER_SCHEDULES || []).filter(s => String(s.student_id) === String(studentId) && String(s.teacher_id) === String(teacherId)));
       if (typeof lmsNotify === 'function') {
         lmsNotify(`Updated class schedule to ${newStart} - ${newEnd} (${dur} Mins).`, { type: 'success', title: 'Schedule Updated' });
       }
@@ -1392,6 +1412,73 @@
           btnConfirm.innerHTML = origBtnHtml || `<i class="fa-solid fa-right-left"></i> Confirm Shift`;
         }
       }
+    }
+
+    // Slot-based salary (Commission #2 Phase 1, 2026-11-05): after a
+    // schedule SAVE changes a student's session length with a teacher,
+    // the assignment ledger is re-segmented — the old slot count stops
+    // yesterday and the new one starts today — so the salary month
+    // prices each part at its own slots (audit Part 4 #3/#4). Mirrors
+    // the shift hook above: fire-and-forget and fully guarded, so a
+    // ledger failure can never break the schedule save itself.
+    // beforeRows/afterRows are the student's schedule rows with this
+    // teacher captured immediately before/after the save.
+    function maybeReSegmentAssignmentSlots(studentId, teacherId, beforeRows, afterRows) {
+      try {
+        if (!window.Assignments || !window.PayrollSlots) return;
+        if (!studentId || !teacherId) return;
+        const newSlots = PayrollSlots.compute(afterRows || []);
+        const startTransition = (oldSlots, openRow) => {
+          if (Number(newSlots) === Number(oldSlots)) return;
+          const stu = (window.ALL_STUDENTS || []).find(s => String(s.id) === String(studentId));
+          const courseName = (openRow && openRow.course_name) || (stu ? (Assignments.studentCourseName(stu) || null) : null);
+          Assignments.transition({
+            student_id: studentId,
+            teacher_id: teacherId,
+            course_name: courseName,
+            slots: newSlots,
+            start_date: Assignments.todayStr(),
+            end_reason: 'duration_change'
+          });
+        };
+        const proceed = () => {
+          const rows = Array.isArray(window.ALL_ASSIGNMENTS) ? window.ALL_ASSIGNMENTS : [];
+          const openRow = rows.find(r => String(r.student_id) === String(studentId) && String(r.teacher_id) === String(teacherId) && !r.end_date) || null;
+          if (openRow) {
+            // The open segment's effective slot count: its stored
+            // value when the row carries one, else the pre-save
+            // schedule shape (what the compile would have used).
+            const stored = parseFloat(openRow.slots);
+            startTransition(!isNaN(stored) && stored > 0 ? stored : PayrollSlots.compute(beforeRows || []), openRow);
+            return;
+          }
+          if (rows.some(r => String(r.student_id) === String(studentId))) {
+            // Real ledger history exists but no open period with THIS
+            // teacher — not this save's business; leave it untouched.
+            return;
+          }
+          // Pure derived period (no real rows yet): materialise it at
+          // the OLD slot count first, from the same start date the
+          // derivation uses, so the transition closes a real segment
+          // yesterday instead of orphaning the days before today.
+          const stu = (window.ALL_STUDENTS || []).find(s => String(s.id) === String(studentId));
+          if (!stu) return;
+          const start = stu.joining_date ? String(stu.joining_date).slice(0, 10)
+            : (stu.created_at ? String(stu.created_at).slice(0, 10) : null);
+          if (!start) return;
+          const oldSlots = PayrollSlots.compute(beforeRows || []);
+          if (Number(newSlots) === Number(oldSlots)) return;
+          Assignments.open({
+            student_id: studentId,
+            teacher_id: teacherId,
+            course_name: Assignments.studentCourseName(stu) || null,
+            slots: oldSlots,
+            start_date: start
+          }).then(() => startTransition(oldSlots, null));
+        };
+        if (Array.isArray(window.ALL_ASSIGNMENTS)) proceed();
+        else if (typeof Assignments.loadAll === 'function') Assignments.loadAll().then(proceed);
+      } catch (e) {}
     }
 
     function refreshOpen360ViewsAfterTeacherShift(studentId, fromTeacherId, toTeacherId) {

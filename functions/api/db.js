@@ -385,6 +385,7 @@ const SCHEMA_STATEMENTS = [
     start_date TEXT NOT NULL,
     end_date TEXT,
     end_reason TEXT,
+    slots REAL,
     created_by TEXT,
     created_at TEXT DEFAULT (datetime('now'))
   )`,
@@ -417,7 +418,7 @@ let _schemaInitialized = false;
 // not exist yet) falls back to the full DDL path; a marker-write
 // failure only costs the next cold isolate a DDL replay. Neither
 // failure ever fails the request.
-const SCHEMA_VERSION = '2026-11-03-v4';
+const SCHEMA_VERSION = '2026-11-05-v5';
 const SCHEMA_VERSION_KEY = 'schema_version';
 
 async function ensureSchema(db) {
@@ -498,6 +499,11 @@ async function ensureSchema(db) {
   try { await db.prepare('CREATE INDEX IF NOT EXISTS idx_salary_adjustments_teacher_period ON salary_adjustments (teacher_id, period)').run(); } catch (e) {}
   try { await db.prepare('CREATE INDEX IF NOT EXISTS idx_assignments_student ON student_assignments (student_id)').run(); } catch (e) {}
   try { await db.prepare('CREATE INDEX IF NOT EXISTS idx_assignments_teacher ON student_assignments (teacher_id)').run(); } catch (e) {}
+  // Commission #2 Phase 1 (schema v5): the segment's slot count for
+  // slot-based salary pricing. Fresh installs carry it from the CREATE
+  // TABLE above; on pre-existing tables ADD COLUMN applies it, and on
+  // tables that already have it the error is swallowed, as above.
+  try { await db.prepare('ALTER TABLE student_assignments ADD COLUMN slots REAL').run(); } catch (e) {}
   // SLOW-CLASSES FIX: record the schema marker (best effort — never
   // fail the request if this write fails; see the note above).
   try {
