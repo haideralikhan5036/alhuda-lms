@@ -11,6 +11,27 @@
     // TRIAL CLASSES MANAGEMENT & 3-DAY EVALUATION
     // ==========================================
 
+    // Duplicate-schedule prevention (2026-11-05): drop schedule rows
+    // whose natural key (student, teacher, day, start — start compared
+    // on its first 5 chars) the student already has in D1, so a
+    // retried trial save or conversion can never write a second copy
+    // of a class. On a read failure the rows pass through unfiltered —
+    // the server natural-key guard is the backstop.
+    async function filterOutExistingScheduleRows(studentId, teacherId, rows) {
+      try {
+        const { data, error } = await db.from('class_schedules')
+          .select('student_id, teacher_id, day_of_week, start_time')
+          .eq('student_id', studentId);
+        if (error || !Array.isArray(data)) return rows;
+        const existing = new Set(data
+          .filter(r => r && String(r.teacher_id) === String(teacherId))
+          .map(r => `${Number(r.day_of_week)}|${String(r.start_time || '').trim().slice(0, 5)}`));
+        return rows.filter(r => !existing.has(`${Number(r.day_of_week)}|${String(r.start_time || '').trim().slice(0, 5)}`));
+      } catch (e) {
+        return rows;
+      }
+    }
+
     function getStoredTrials() {
       try {
         return JSON.parse(localStorage.getItem('alhuda_trial_classes') || '[]');
@@ -781,8 +802,11 @@
       }
 
       try {
-        const { error: trialScheduleError } = await db.from('class_schedules').insert(scheduleRows);
-        if (trialScheduleError) trialSaveFailed = true;
+        const newScheduleRows = await filterOutExistingScheduleRows(trialStuId, teacher_id, scheduleRows);
+        if (newScheduleRows.length > 0) {
+          const { error: trialScheduleError } = await db.from('class_schedules').insert(newScheduleRows);
+          if (trialScheduleError) trialSaveFailed = true;
+        }
       } catch (err) {
         console.warn("Supabase schedule insert notice:", err);
         trialSaveFailed = true;
@@ -1240,7 +1264,15 @@
           course_name: trial.course || null
         }));
 
-        await trackConvertWrite(db.from('class_schedules').insert(scheduleRows));
+        // Duplicate-schedule prevention (2026-11-05): the delete
+        // above normally clears the way; if it (or an earlier partial
+        // conversion) left rows behind, drop the ones whose natural
+        // key already exists instead of duplicating them. If all are
+        // dropped the insert is skipped — conversion continues.
+        const newScheduleRows = await filterOutExistingScheduleRows(canonicalStuId, trial.teacher_id, scheduleRows);
+        if (newScheduleRows.length > 0) {
+          await trackConvertWrite(db.from('class_schedules').insert(newScheduleRows));
+        }
       } catch(err) {
         console.warn("Supabase schedule expansion insert notice:", err);
         convertSaveFailed = true;

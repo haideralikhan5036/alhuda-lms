@@ -8943,8 +8943,24 @@ font-family: var(--font-num) !important;
       if (popHistory) popTeacherModalHistory('modalTeacherAddScheduleSlot');
     }
 
+    // Duplicate-schedule prevention (2026-11-05): in-flight guard —
+    // this submit cannot run twice concurrently, so one action can
+    // never insert the same booking twice (the button disable below
+    // alone does not cover keyboard/programmatic re-entry).
+    let _teacherAddScheduleInFlight = false;
     async function submitTeacherAddScheduleSlot(e) {
       e.preventDefault();
+      if (_teacherAddScheduleInFlight) return;
+      if (!CURRENT_TEACHER || !CURRENT_TEACHER.id) return;
+      _teacherAddScheduleInFlight = true;
+      try {
+        await _submitTeacherAddScheduleSlotImpl(e);
+      } finally {
+        _teacherAddScheduleInFlight = false;
+      }
+    }
+
+    async function _submitTeacherAddScheduleSlotImpl(e) {
       if (!CURRENT_TEACHER || !CURRENT_TEACHER.id) return;
 
       const studentId = document.getElementById('teacherBookStudentSelect')?.value || '';
@@ -9011,11 +9027,33 @@ font-family: var(--font-num) !important;
         const endTimeSql = `${end24}:00`;
         const zoomLink = customZoomChecked || CURRENT_TEACHER.zoom_link || '';
 
+        // Duplicate-schedule prevention (2026-11-05): days where THIS
+        // student already has a class with THIS teacher at the same
+        // day + start are already booked — exclude them from insertion
+        // and from the conflict scan (the client twin of the server
+        // natural-key guard). A same-student row on a remaining day at
+        // a DIFFERENT overlapping time still conflicts below.
+        const alreadyBookedDays = [];
+        const daysToCheck = [];
+        selectedDays.forEach(d => {
+          const dup = (ALL_TEACHER_SCHEDULES || []).some(sc =>
+            String(sc.student_id) === String(studentId) &&
+            String(sc.teacher_id) === String(CURRENT_TEACHER.id) &&
+            Number(sc.day_of_week) === Number(d) &&
+            String(sc.start_time || '').trim().slice(0, 5) === start24);
+          if (dup) alreadyBookedDays.push(d); else daysToCheck.push(d);
+        });
+
+        if (daysToCheck.length === 0) {
+          lmsNotify(`This student is already booked with you on the selected day(s) at ${start24} — nothing new was added.`);
+          return;
+        }
+
         // Check existing schedule conflicts using true interval overlap
         const conflictDays = [];
         const freeDaysToInsert = [];
 
-        selectedDays.forEach(d => {
+        daysToCheck.forEach(d => {
           const conflicts = findTeacherPortalScheduleConflicts(d, start24, end24);
           if (conflicts.length > 0) {
             const first = conflicts[0];
@@ -9052,7 +9090,7 @@ font-family: var(--font-num) !important;
         }
 
         const addedDayNames = freeDaysToInsert.map(d => DAY_NAMES[d]).join(', ');
-        lmsNotify(`✅ Student Added to Schedule!\n\nStudent: ${stuRecord.name} (${stuRecord.id})\nTime: ${format24To12HourLabel(start24)} - ${format24To12HourLabel(end24)} PKT (${durationMins} Minutes)\nDays: ${addedDayNames}`);
+        lmsNotify(`✅ Student Added to Schedule!\n\nStudent: ${stuRecord.name} (${stuRecord.id})\nTime: ${format24To12HourLabel(start24)} - ${format24To12HourLabel(end24)} PKT (${durationMins} Minutes)\nDays: ${addedDayNames}${alreadyBookedDays.length ? `\nSkipped — already booked at ${start24}: ${alreadyBookedDays.map(d => DAY_NAMES[d]).join(', ')}` : ''}`);
       } catch (err) {
         console.warn('[LMS] operation failed:', (err.message || err)); lmsNotify('Schedule Notice. Please try again.', { type: 'error' });
       } finally {

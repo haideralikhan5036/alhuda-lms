@@ -730,6 +730,111 @@ async function findFinancialBatchConflict(d1, table, rows) {
   return null;
 }
 
+// Duplicate-schedule prevention (2026-11-05, investigation
+// DUPLICATE-ASSIGNMENT-INVESTIGATION-2026-11-05 §4/§7): class_schedules
+// has no database uniqueness rule, and booking payloads carry no row
+// id, so any repeated submission (double-click, retry, re-save, or the
+// browser-mirror sync pushing its own locally-id'd copies) used to mint
+// fresh rows for a class that already exists. The natural key of a
+// class is (student_id, teacher_id, day_of_week, start_time) with
+// start_time compared on its first 5 chars ('HH:MM') so 'HH:MM' and
+// 'HH:MM:SS' spellings of the same class collide. Rows missing any key
+// component return null here and are left to existing validation.
+// The Worker delegates /api/db to this module (cloudflare/worker.js
+// imports onRequest from here), so this one guard covers both paths.
+function scheduleNaturalKey(row) {
+  if (!row || typeof row !== 'object') return null;
+  const sid = row.student_id != null ? String(row.student_id).trim() : '';
+  const tid = row.teacher_id != null ? String(row.teacher_id).trim() : '';
+  const dayRaw = row.day_of_week != null ? String(row.day_of_week).trim() : '';
+  const day = /^\d+$/.test(dayRaw) ? String(parseInt(dayRaw, 10)) : dayRaw;
+  const start = row.start_time != null ? String(row.start_time).trim().slice(0, 5) : '';
+  if (!sid || !tid || !day || !start) return null;
+  return sid + '|' + tid + '|' + day + '|' + start;
+}
+
+function scheduleRowId(row) {
+  return row && row.id != null && String(row.id).trim() !== '' ? String(row.id).trim() : null;
+}
+
+// One read of the existing schedule rows for every student named in
+// the batch, indexed by natural key and by id.
+async function loadScheduleKeyIndex(d1, rows) {
+  const byKey = new Map();
+  const ids = new Set();
+  const studentIds = [...new Set(rows.map(r => (r && r.student_id != null ? String(r.student_id).trim() : '')).filter(Boolean))];
+  if (!studentIds.length) return { byKey, ids };
+  const placeholders = studentIds.map(() => '?').join(', ');
+  const { results } = await d1.prepare(
+    `SELECT id, student_id, teacher_id, day_of_week, start_time FROM class_schedules WHERE student_id IN (${placeholders})`
+  ).bind(...studentIds).all();
+  for (const er of results || []) {
+    if (!er) continue;
+    ids.add(String(er.id));
+    const k = scheduleNaturalKey(er);
+    if (k && !byKey.has(k)) byKey.set(k, String(er.id));
+  }
+  return { byKey, ids };
+}
+
+function duplicateScheduleMessage(row) {
+  return `Duplicate class schedule: this student already has a class with this teacher on day ${row.day_of_week} at ${String(row.start_time).trim().slice(0, 5)}`;
+}
+
+// INSERT path: returns { index, message } for the first row whose
+// natural key already exists under a DIFFERENT id — in D1, or earlier
+// in the same batch — or null. A batch that conflicts writes NOTHING
+// (the caller returns 409 before the write loop), mirroring
+// findFinancialBatchConflict. A row repeating its OWN id + key is a
+// replace, not a duplicate.
+async function findScheduleBatchConflict(d1, rows) {
+  const { byKey } = await loadScheduleKeyIndex(d1, rows);
+  const seen = new Map();
+  for (let i = 0; i < rows.length; i++) {
+    const row = rows[i] || {};
+    const k = scheduleNaturalKey(row);
+    if (!k) continue;
+    const thisId = scheduleRowId(row);
+    if (seen.has(k)) {
+      const prevId = seen.get(k);
+      if (!thisId || !prevId || thisId !== prevId) {
+        return { index: i, message: duplicateScheduleMessage(row) };
+      }
+    } else {
+      seen.set(k, thisId);
+    }
+    const existingId = byKey.get(k);
+    if (existingId && existingId !== thisId) {
+      return { index: i, message: duplicateScheduleMessage(row) };
+    }
+  }
+  return null;
+}
+
+// UPSERT path (the mirror sync): returns the rows that may be written.
+// Rows whose id already exists in D1 keep INSERT OR REPLACE semantics.
+// A row with a NEW id whose natural key already exists under a
+// different id is a mirror copy of an existing class — skipped
+// silently so syncs stay idempotent and harmless; within the batch,
+// the first occurrence of a key wins.
+async function filterScheduleUpsertRows(d1, rows) {
+  const { byKey, ids } = await loadScheduleKeyIndex(d1, rows);
+  const seen = new Set();
+  const kept = [];
+  for (const row of rows) {
+    const k = scheduleNaturalKey(row || {});
+    if (!k) { kept.push(row); continue; }
+    const thisId = scheduleRowId(row || {});
+    if (thisId && ids.has(thisId)) { kept.push(row); continue; }
+    if (seen.has(k)) continue;
+    const existingId = byKey.get(k);
+    if (existingId && existingId !== thisId) continue;
+    seen.add(k);
+    kept.push(row);
+  }
+  return kept;
+}
+
 // Batch 6B: map a UNIQUE-constraint failure on a financial table to a
 // clear, user-facing message (returned as HTTP 409 by the insert path).
 // SQLite names the failed column for table constraints
@@ -962,7 +1067,7 @@ export async function onRequest(context) {
 
     // 2. INSERT / UPSERT
     if (action === 'insert' || action === 'upsert') {
-      const rows = Array.isArray(values) ? values : [values || {}];
+      let rows = Array.isArray(values) ? values : [values || {}];
       const inserted = [];
       const isFinancial = FINANCIAL_TABLES.has(table);
 
@@ -1016,6 +1121,29 @@ export async function onRequest(context) {
             409,
             corsHeaders
           );
+        }
+      }
+      // Duplicate-schedule prevention (2026-11-05): class_schedules
+      // gets the same up-front treatment. INSERT pre-validates the
+      // batch's natural keys — a conflicting batch writes NOTHING and
+      // returns 409 (same shape as the financial guard above), so a
+      // repeated booking request can never mint a second copy of a
+      // class. UPSERT (the browser-mirror sync) instead drops natural-
+      // key duplicates under different ids silently, keeping the sync
+      // idempotent; rows whose id already exists keep replace
+      // semantics, and the response keeps its current shape.
+      if (table === 'class_schedules') {
+        if (action === 'insert') {
+          const conflict = await findScheduleBatchConflict(d1, rows);
+          if (conflict) {
+            return jsonResponse(
+              { data: null, error: { message: conflict.message }, failedIndex: conflict.index, insertedIds: [] },
+              409,
+              corsHeaders
+            );
+          }
+        } else {
+          rows = await filterScheduleUpsertRows(d1, rows);
         }
       }
       // Batch 7 (F1.2): a students insert/upsert whose resulting status is
