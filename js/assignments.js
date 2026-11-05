@@ -151,6 +151,38 @@
     } catch (e) { return Promise.resolve(0); }
   }
 
+  // Commission #2 Phase 2 (2026-11-05): the named stop-accrual action
+  // (audit §3.3, owner decision D6). Closes the student's open
+  // assignment period with end_date = the LAST PAYABLE DAY — the
+  // engine's proration treats end_date inclusively, so salary
+  // continues up to and including that day and stops from the next.
+  // With opts.teacher_id, only that teacher's open rows close;
+  // without it, every open row closes (delegated to closeCurrent,
+  // which stays the single writer for the unscoped case and is
+  // itself untouched). Resolves to the number of rows closed.
+  function endAssignment(studentId, opts) {
+    try {
+      opts = opts || {};
+      var end = opts.last_payable_date || todayStr();
+      var reason = opts.end_reason || 'schedule_ended';
+      if (!opts.teacher_id) {
+        return closeCurrent(studentId, { end_date: end, end_reason: reason });
+      }
+      var rows = openRowsFor(studentId).filter(function (r) {
+        return String(r.teacher_id) === String(opts.teacher_id);
+      });
+      rows.forEach(function (r) { r.end_date = end; r.end_reason = reason; });
+      if (!hasDb() || !rows.length) return Promise.resolve(rows.length);
+      return Promise.all(rows.map(function (r) {
+        return Promise.resolve(db.from('student_assignments')
+          .update({ end_date: r.end_date, end_reason: r.end_reason })
+          .eq('id', r.id))
+          .then(function (res) { return !(res && res.error); })
+          .catch(function () { return false; });
+      })).then(function () { return rows.length; });
+    } catch (e) { return Promise.resolve(0); }
+  }
+
   // Transfer / course change: close the current period the day BEFORE the
   // new one starts, then open the new period. This is what makes a month
   // split cleanly between two teachers (or two courses) in the engine.
@@ -278,6 +310,7 @@
     loadAll: loadAll,
     open: open,
     closeCurrent: closeCurrent,
+    endAssignment: endAssignment,
     transition: transition,
     deriveFor: deriveFor,
     studentCourseName: studentCourseName,
