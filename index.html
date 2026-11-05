@@ -1744,7 +1744,7 @@
       <div class="bg-white rounded-2xl shadow border border-slate-200 p-6 space-y-5">
         <div>
           <h3 class="text-xl font-extrabold text-slate-900 flex items-center gap-2"><i class="fa-solid fa-gear text-emerald-600"></i> Course Payment Settings</h3>
-          <p class="text-sm text-slate-500 mt-1">Monthly teacher payment per assigned student, for each course. These rates are managed here only &mdash; the salary system reads them from this list.</p>
+          <p class="text-sm text-slate-500 mt-1">Monthly teacher payment per 30-minute teaching slot, for each course. These rates are managed here only &mdash; the salary system reads them from this list.</p>
           <p id="courseRatesRoleNote" class="text-sm font-bold text-amber-600 mt-1"></p>
         </div>
 
@@ -1755,7 +1755,7 @@
             <thead>
               <tr class="text-xs uppercase tracking-wide text-slate-400">
                 <th class="py-2 pr-3">Course</th>
-                <th class="py-2 pr-3">Monthly Rate (PKR)</th>
+                <th class="py-2 pr-3">Monthly Rate per Slot (PKR)</th>
                 <th class="py-2 pr-3 text-center">Active</th>
                 <th class="py-2">Last Changed</th>
               </tr>
@@ -1770,7 +1770,7 @@
             <input type="text" id="newCourseName" class="p-2.5 border border-slate-300 rounded-lg font-bold text-slate-800" placeholder="e.g. Spoken Arabic">
           </div>
           <div>
-            <label class="block font-bold mb-1 text-slate-700 text-sm">Monthly Rate (PKR)</label>
+            <label class="block font-bold mb-1 text-slate-700 text-sm">Monthly Rate per Slot (PKR)</label>
             <input type="number" id="newCourseRate" min="1" step="1" class="w-36 p-2.5 border border-slate-300 rounded-lg font-bold text-slate-800" placeholder="2200">
           </div>
           <button type="button" onclick="addCatalogueCourse()" class="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-900 text-white font-extrabold">+ Add Course</button>
@@ -1778,9 +1778,9 @@
 
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-4 border-t border-slate-100">
           <div>
-            <label class="block font-bold mb-1 text-slate-700 text-sm">Weekend Programme Rate (PKR / month)</label>
+            <label class="block font-bold mb-1 text-slate-700 text-sm">Weekend Programme Rate (PKR / month, per student)</label>
             <input type="number" id="weekendRateInput" min="0" step="1" class="w-40 p-2.5 border border-slate-300 rounded-lg font-bold text-slate-900">
-            <p class="text-xs text-slate-400 mt-1">For students whose classes are only on Saturday &amp; Sunday.</p>
+            <p class="text-xs text-slate-400 mt-1">Charged once per student &mdash; never per slot &mdash; for students whose classes fall only within Friday to Monday (Fri, Sat, Sun, Mon).</p>
           </div>
           <div>
             <label class="block font-bold mb-1 text-slate-700 text-sm">Basic Salary &mdash; Guaranteed Minimum (PKR / month)</label>

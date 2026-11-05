@@ -88,6 +88,13 @@
           String(r.course_name || '') === String(opts.course_name || '');
       });
       if (dup) return Promise.resolve(false);
+      // Commission #2 Phase 1: a segment may carry its slot count
+      // (opts.slots — schedule duration changes record it so the
+      // segment prices by its own slots, not by today's schedule).
+      // The key is included only when a valid value is supplied, so
+      // every existing caller's insert is byte-identical to before.
+      var slotsVal = parseFloat(opts.slots);
+      var hasSlots = !isNaN(slotsVal) && slotsVal > 0;
       var row = {
         id: genId(),
         student_id: String(opts.student_id),
@@ -99,10 +106,26 @@
         end_reason: null,
         created_by: opts.created_by || currentUserLabel()
       };
+      if (hasSlots) row.slots = slotsVal;
       if (_cache) _cache.push(row);
       if (!hasDb()) return Promise.resolve(true);
       return Promise.resolve(db.from('student_assignments').insert(row))
-        .then(function (res) { return !(res && res.error); })
+        .then(function (res) {
+          if (res && res.error && hasSlots) {
+            // The slots column arrives with schema v5, which deploys
+            // in a later batch than this frontend: until then the live
+            // Worker rejects the unknown column. Retry WITHOUT the new
+            // field so the ledger write itself never starts failing
+            // (the in-cache row keeps its slots for this session, and
+            // the compile falls back to computing slots live).
+            var bare = Object.assign({}, row);
+            delete bare.slots;
+            return Promise.resolve(db.from('student_assignments').insert(bare))
+              .then(function (res2) { return !(res2 && res2.error); })
+              .catch(function () { return false; });
+          }
+          return !(res && res.error);
+        })
         .catch(function () { return false; });
     } catch (e) { return Promise.resolve(false); }
   }
@@ -144,6 +167,7 @@
         teacher_id: opts.teacher_id,
         course_name: opts.course_name,
         course_id: opts.course_id || null,
+        slots: opts.slots,
         start_date: start,
         created_by: opts.created_by || null
       });

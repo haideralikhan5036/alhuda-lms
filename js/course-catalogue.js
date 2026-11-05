@@ -2,7 +2,10 @@
 // Course Catalogue + Course Payment Settings (Phase 1 — 2026-11-03)
 // ----------------------------------------------------------------------------
 // Single source of truth for the academy's course list and the monthly
-// teacher payment rate per assigned student for each course.
+// teacher payment rate PER 30-MINUTE TEACHING SLOT for each course
+// (slot-based pricing, Commission #2 Phase 1, 2026-11-05: a course line
+// pays rate x slots from November 2026 onward; the weekend rate below
+// stays a flat per-student amount).
 //
 // Storage: one row in D1 `system_settings` (id 'SYS-COURSE-RATES',
 // key 'course_rates_v1', value = JSON). The owner writes it; managers may

@@ -27,6 +27,114 @@
       return { basic_salary_pkr: 0, weekend_rate: 0, courses: [] };
     }
 
+    // ======================================================================
+    // Salary Commission #2 Phase 1 (2026-11-05): SLOT-BASED PRICING +
+    // DAILY ACCRUAL — owner decisions D1-D8 (audit §8, as edited by the
+    // owner; report SALARY-SLOT-ACCRUAL-AUDIT-2026-11-05):
+    //  D1 slots = session minutes / 30 from the schedule CLOCK times;
+    //     duplicate rows (same day + start) count once; how many days a
+    //     week the student attends is irrelevant; differing day lengths
+    //     -> the most common length (tie -> the longer); no schedule
+    //     rows -> 1 slot; fractional slots allowed (45 min = 1.5).
+    //  D2 the seniority increment is PER SLOT on course lines:
+    //     full rate = (course rate + increment) x slots.
+    //  D3 the weekend rate stays FLAT per student (weekend rate +
+    //     increment, NEVER x slots) and the weekend day set expands to
+    //     {Mon, Fri, Sat, Sun} = day_of_week {1, 5, 6, 7}.
+    //  D8 lines for English Translation & Tafseer
+    //     (catalogue id crs-tafseer-english, aliases included) are
+    //     EXEMPT from the seniority increment.
+    //  D5 CUTOVER GATE: salary months >= 2026-11 price with the new
+    //     rules ('v2'); months <= 2026-10 reproduce the legacy formula
+    //     EXACTLY ('v1': weekend = days within {6,7} only, full rate =
+    //     base + increment per line, no exemption, slots factor 1).
+    // Both the Admin compile and the Teacher 360 mirror compile price
+    // through these helpers and this one gate, so they cannot disagree.
+    // ======================================================================
+    const PAYROLL_SLOTS_CUTOVER = '2026-11';
+    function payrollPricingVersion(monthStr) {
+      const bounds = parsePayrollMonthBounds(monthStr);
+      const ym = `${bounds.year}-${String(bounds.monthIndex + 1).padStart(2, '0')}`;
+      return ym >= PAYROLL_SLOTS_CUTOVER ? 'v2' : 'v1';
+    }
+
+    // Session length in minutes from the CLOCK times (the stored
+    // duration_mins field contradicts the clock on live rows, so it is
+    // only a fallback for rows missing a time). An end at or before the
+    // start is an overnight session: +24h, like the codebase's other
+    // time helpers treat a midnight end.
+    function payrollSessionMinutes(row) {
+      const toMin = (v) => {
+        const parts = String(v || '').trim().slice(0, 5).split(':').map(Number);
+        return (parts.length < 2 || isNaN(parts[0]) || isNaN(parts[1])) ? null : parts[0] * 60 + parts[1];
+      };
+      const s = toMin(row && row.start_time);
+      const e = toMin(row && row.end_time);
+      if (s == null || e == null) {
+        const dm = parseFloat(row && row.duration_mins);
+        return isNaN(dm) ? 0 : dm;
+      }
+      let d = e - s;
+      if (d <= 0) d += 1440;
+      return d;
+    }
+
+    // D1: the slot count for one student's sessions with one teacher.
+    function payrollComputeSlots(stuScheds) {
+      const rows = Array.isArray(stuScheds) ? stuScheds : [];
+      if (!rows.length) return 1;
+      const seen = new Set();
+      const lengths = [];
+      rows.forEach(r => {
+        if (!r) return;
+        const key = `${Number(r.day_of_week)}|${String(r.start_time || '').trim().slice(0, 5)}`;
+        if (seen.has(key)) return; // duplicate row: the session counts once
+        seen.add(key);
+        const mins = payrollSessionMinutes(r);
+        if (mins > 0) lengths.push(mins);
+      });
+      if (!lengths.length) return 1;
+      const counts = new Map();
+      lengths.forEach(m => counts.set(m, (counts.get(m) || 0) + 1));
+      let best = lengths[0], bestCount = 0;
+      counts.forEach((c, m) => {
+        if (c > bestCount || (c === bestCount && m > best)) { best = m; bestCount = c; }
+      });
+      return best / 30;
+    }
+    window.PayrollSlots = { compute: payrollComputeSlots, sessionMinutes: payrollSessionMinutes };
+
+    function payrollFormatSlots(n) {
+      return String(Math.round((Number(n) || 0) * 100) / 100);
+    }
+
+    // The slot count a compiled line prices with: a real ledger row's
+    // stored `slots` wins — it is that segment's recorded history, so a
+    // later schedule edit cannot rewrite an earlier segment. Derived
+    // periods and rows written before the slots column existed compute
+    // live from the student's current schedules.
+    function payrollSegmentSlots(assignment, stuScheds) {
+      const stored = assignment ? parseFloat(assignment.slots) : NaN;
+      if (!isNaN(stored) && stored > 0) return stored;
+      return payrollComputeSlots(stuScheds);
+    }
+
+    // Weekend test (D3): v1 = every class day within {Sat, Sun}; v2 =
+    // every class day within {Mon, Fri, Sat, Sun} (owner update
+    // 2026-11-05). A Tue/Wed/Thu class anywhere disqualifies, and a
+    // student with no rows is never a weekend student.
+    function payrollIsWeekendStudent(stuScheds, version) {
+      const dayNums = (stuScheds || []).map(s => Number(s && s.day_of_week));
+      if (!dayNums.length) return false;
+      const allowed = version === 'v2' ? [1, 5, 6, 7] : [6, 7];
+      return dayNums.every(d => allowed.includes(d));
+    }
+
+    function payrollTodayStr() {
+      const d = new Date();
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    }
+
     function payrollDateMax(a, b) { return !a ? (b || null) : (!b ? a : (a > b ? a : b)); }
     function payrollDateMin(a, b) { return !a ? (b || null) : (!b ? a : (a < b ? a : b)); }
     function payrollDaysInclusive(startStr, endStr) {
@@ -41,24 +149,26 @@
     // catalogue. Returns { ok:false, reason } when the course cannot be
     // priced — the caller surfaces it in the pre-flight warning list and
     // excludes the line; there is NO silent default rate anymore.
-    function resolveAssignmentRate(assignment, student, stuScheds, settings) {
+    // `version` is the D5 pricing gate ('v1' legacy / 'v2' slot-based)
+    // chosen by the caller from the salary month; omitted = 'v1', the
+    // function's historical behaviour.
+    function resolveAssignmentRate(assignment, student, stuScheds, settings, version) {
       const name = (assignment && assignment.course_name) || (window.Assignments ? Assignments.studentCourseName(student) : '') || '';
       const entry = window.CourseCatalogue ? CourseCatalogue.resolveByName(name) : null;
-      const dayNums = (stuScheds || []).map(s => Number(s.day_of_week));
-      const isWeekend = dayNums.length > 0 && dayNums.every(d => d === 6 || d === 7);
+      const isWeekend = payrollIsWeekendStudent(stuScheds, version);
       if (!entry) {
-        return { ok: false, isWeekend, courseName: name, reason: name ? `Course "${name}" is not in the Course Payment Settings list` : 'No course is set for this student' };
+        return { ok: false, isWeekend, courseName: name, courseId: null, reason: name ? `Course "${name}" is not in the Course Payment Settings list` : 'No course is set for this student' };
       }
       if (!entry.active) {
-        return { ok: false, isWeekend, courseName: name, reason: `Course "${entry.name}" is switched off in Course Payment Settings` };
+        return { ok: false, isWeekend, courseName: name, courseId: entry.id, reason: `Course "${entry.name}" is switched off in Course Payment Settings` };
       }
       if (!(entry.monthly_rate > 0)) {
-        return { ok: false, isWeekend, courseName: name, reason: `Course "${entry.name}" has no rate in Course Payment Settings` };
+        return { ok: false, isWeekend, courseName: name, courseId: entry.id, reason: `Course "${entry.name}" has no rate in Course Payment Settings` };
       }
       if (isWeekend && entry.weekend_eligible !== false && (parseInt(settings && settings.weekend_rate, 10) || 0) > 0) {
-        return { ok: true, baseRate: parseInt(settings.weekend_rate, 10) || 0, courseLabel: 'Weekend Quran (Saturday & Sunday)', isWeekend: true, courseName: name };
+        return { ok: true, baseRate: parseInt(settings.weekend_rate, 10) || 0, courseLabel: version === 'v2' ? 'Weekend Quran (Fri - Mon)' : 'Weekend Quran (Saturday & Sunday)', isWeekend: true, weekendFlat: true, courseName: name, courseId: entry.id };
       }
-      return { ok: true, baseRate: entry.monthly_rate, courseLabel: entry.name, isWeekend, courseName: name };
+      return { ok: true, baseRate: entry.monthly_rate, courseLabel: entry.name, isWeekend, courseName: name, courseId: entry.id };
     }
 
     // Proration for ONE assignment segment: the overlap of the assignment
@@ -66,7 +176,11 @@
     // joining / deactivation dates (the same bounds the legacy whole-
     // student proration applied). Mirrors the return shape of
     // calculateStudentMonthlySalaryProration.
-    function assignmentSegmentProration(student, assignment, monthlyRate, monthStr) {
+    // `asOfStr` (optional, Commission #2 Phase 1): additionally clamp
+    // the payable window at that date — the daily-accrual variant of
+    // the same segment. Without it the whole month is priced, exactly
+    // as before.
+    function assignmentSegmentProration(student, assignment, monthlyRate, monthStr, asOfStr) {
       const bounds = parsePayrollMonthBounds(monthStr);
       const { daysInMonth, firstDayStr, lastDayStr } = bounds;
       const fullRate = Number(monthlyRate) || 0;
@@ -80,6 +194,7 @@
       let end = lastDayStr;
       end = payrollDateMin(end, deactivationDate);
       end = payrollDateMin(end, assignment && assignment.end_date ? String(assignment.end_date).slice(0, 10) : null);
+      end = payrollDateMin(end, asOfStr ? String(asOfStr).slice(0, 10) : null);
 
       const activeDays = inactiveNoDate ? 0 : payrollDaysInclusive(start, end);
       const proratedRate = activeDays >= daysInMonth ? fullRate : Math.round(fullRate * activeDays / daysInMonth);
@@ -109,13 +224,17 @@
     // left (status Deactivated — no leaving date is recorded for
     // teachers), the last payable assignment day of the month stands in
     // as the employment end.
-    function teacherFloorAmount(teacher, acc, settings, bounds, lastPayableDayStr) {
+    // `asOfStr` (optional, Commission #2 Phase 1): clamp the teacher's
+    // eligible window at that date — the accrued floor for daily
+    // accrual, with the same rounding as the full-month floor.
+    function teacherFloorAmount(teacher, acc, settings, bounds, lastPayableDayStr, asOfStr) {
       const base = parseInt(settings && settings.basic_salary_pkr, 10) || 0;
       if (base <= 0 || !teacher) return { floorAmount: 0, eligibleDays: 0 };
       const joining = (acc && acc.joining_date) || (teacher.created_at ? String(teacher.created_at).slice(0, 10) : null);
       let start = bounds.firstDayStr;
       if (joining && joining > start) start = joining;
       let end = bounds.lastDayStr;
+      if (asOfStr && String(asOfStr).slice(0, 10) < end) end = String(asOfStr).slice(0, 10);
       if (String(teacher.status || '').toLowerCase() === 'deactivated') {
         if (!lastPayableDayStr) return { floorAmount: 0, eligibleDays: 0 };
         if (lastPayableDayStr < end) end = lastPayableDayStr;
@@ -394,6 +513,25 @@
       return false;
     }
 
+    // Accrual block for a FROZEN slip (Commission #2 Phase 1): the
+    // frozen maths is never touched — the saved totals simply stand as
+    // the month-end position (asOf = month end, nothing remaining).
+    function frozenSlipAccrual(savedSlip, studentRateItems, baseSubtotal, basicProtection, monthBounds) {
+      const earnedStudents = studentRateItems.reduce((s, it) => s + (parseFloat(it.final_rate) || 0), 0);
+      return {
+        asOf: monthBounds.lastDayStr,
+        earnedStudents,
+        floorAccrued: savedSlip && savedSlip.floor_amount != null ? (parseFloat(savedSlip.floor_amount) || 0) : baseSubtotal,
+        protectionAccrued: parseFloat(basicProtection) || 0,
+        grossEarned: baseSubtotal,
+        remaining: 0,
+        totalSlots: studentRateItems.reduce((s, it) => s + (parseFloat(it.slots) || 1), 0),
+        daysElapsed: monthBounds.daysInMonth,
+        daysInMonth: monthBounds.daysInMonth,
+        dailyAccrual: Math.round((baseSubtotal / monthBounds.daysInMonth) * 100) / 100
+      };
+    }
+
     async function calculateMonthlySalaries(forceRefresh = false) {
       const tbody = document.getElementById('salariesTableBody');
       if (!tbody) return;
@@ -469,6 +607,12 @@
       }
       const payrollWarnings = [];
 
+      // Commission #2 Phase 1: the D5 pricing gate for this month and
+      // the daily-accrual as-of date (today, never past the month end;
+      // for a past month this is the month end, so accrual == potential).
+      const pricingVersion = payrollPricingVersion(selectedMonth);
+      const accrualAsOf = payrollDateMin(payrollTodayStr(), monthBounds.lastDayStr);
+
       ALL_TEACHER_SALARIES = {};
 
       let totalGrossPayroll = 0;
@@ -530,7 +674,9 @@
             net_payable: netPayable,
             status: frozenStatus,
             advance_deducted: advanceDeducted,
-            slip_key: slipKey
+            slip_key: slipKey,
+            pricing_version: pricingVersion,
+            accrual: frozenSlipAccrual(savedSlip, studentRateItems, baseSubtotal, frozenProtection, monthBounds)
           };
           ALL_TEACHER_SALARIES[t.id] = compiledSlip;
         } else {
@@ -551,23 +697,44 @@
             const stu = (students || []).find(s => String(s.id) === String(asg.student_id));
             if (!stu || !stu.name || stu.status === 'Trial') return;
             const stuScheds = teacherScheds.filter(s => s.student_id === stu.id);
-            const rateInfo = resolveAssignmentRate(asg, stu, stuScheds, payrollCfg);
+            const rateInfo = resolveAssignmentRate(asg, stu, stuScheds, payrollCfg, pricingVersion);
             if (!rateInfo.ok) {
               // Pre-flight: never a silent fallback rate. The student is
               // excluded and named in the warning strip above the table.
               payrollWarnings.push({ teacher_name: t.full_name, student_name: stu.name, reason: rateInfo.reason });
               return;
             }
-            const fullRate = rateInfo.baseRate + teacherIncrement;
+            // Commission #2 Phase 1 pricing (owner decisions D1/D2/D3/
+            // D8 behind the D5 gate). v1 reproduces the legacy line
+            // exactly: full rate = base + increment, slots factor 1.
+            // v2 prices course lines PER SLOT — (course rate +
+            // increment) x slots — except weekend lines, which stay
+            // FLAT per student (weekend rate + increment, never x
+            // slots), and English Tafseer lines, whose increment is 0
+            // (D8 exemption).
+            const lineSlots = pricingVersion === 'v2' ? payrollSegmentSlots(asg, stuScheds) : 1;
+            const lineIncrement = (pricingVersion === 'v2' && rateInfo.courseId === 'crs-tafseer-english') ? 0 : teacherIncrement;
+            const fullRate = rateInfo.weekendFlat
+              ? rateInfo.baseRate + lineIncrement
+              : (rateInfo.baseRate + lineIncrement) * lineSlots;
             const proration = assignmentSegmentProration(stu, asg, fullRate, selectedMonth);
             if (proration.activeDays === 0) return;
+            // Daily accrual (D4): the SAME segment priced with its
+            // payable window clamped at accrualAsOf, same rounding.
+            const accrualProration = assignmentSegmentProration(stu, asg, fullRate, selectedMonth, accrualAsOf);
+            const schedKind = rateInfo.isWeekend
+              ? (pricingVersion === 'v2' ? 'Weekend (Fri - Mon)' : 'Weekend (Sat - Sun)')
+              : (stuScheds.length ? stuScheds.length + ' Days / Week' : 'Regular Days');
             const item = {
               index: 0,
               assignment_id: asg.id || null,
               student_id: stu.id,
               student_name: stu.name,
               course_label: rateInfo.courseLabel,
-              schedule_text: `${rateInfo.isWeekend ? 'Weekend (Sat - Sun)' : (stuScheds.length ? stuScheds.length + ' Days / Week' : 'Regular Days')} (${proration.prorationLabel})`,
+              schedule_text: `${pricingVersion === 'v2' ? payrollFormatSlots(lineSlots) + ' Slot' + (lineSlots === 1 ? '' : 's') + ' • ' : ''}${schedKind} (${proration.prorationLabel})`,
+              slots: lineSlots,
+              accrued_rate: accrualProration.proratedRate,
+              accrued_days: accrualProration.activeDays,
               proration_label: proration.prorationLabel,
               active_days: proration.activeDays,
               days_in_month: proration.daysInMonth,
@@ -576,7 +743,7 @@
               seg_end: proration.segEnd,
               is_prorated: proration.isProrated,
               base_rate: rateInfo.baseRate,
-              increment: teacherIncrement,
+              increment: lineIncrement,
               full_monthly_rate: fullRate,
               calculated_rate: proration.proratedRate,
               final_rate: proration.proratedRate
@@ -598,11 +765,17 @@
               if (sum > 0 && target !== sum) {
                 let acc = 0;
                 lines.forEach((it, i) => {
+                  const oldFinal = it.final_rate;
                   if (i === lines.length - 1) it.final_rate = target - acc;
                   else { it.final_rate = Math.round(it.final_rate * target / sum); acc += it.final_rate; }
+                  // Commission #2 Phase 1: the line's accrued amount
+                  // scales by the same ratio, so earned-so-far stays in
+                  // proportion to the manually agreed potential.
+                  if (oldFinal > 0) it.accrued_rate = Math.round((parseFloat(it.accrued_rate) || 0) * it.final_rate / oldFinal);
                 });
               } else if (sum === 0 && target > 0 && lines.length) {
                 lines[0].final_rate = target;
+                lines[0].accrued_rate = target;
               }
             });
             // A saved amount for a student whose period no longer
@@ -620,7 +793,10 @@
                 active_days: 0, days_in_month: monthBounds.daysInMonth, joining_date: null,
                 deactivation_date: null, seg_end: monthBounds.lastDayStr, is_prorated: false,
                 base_rate: 0, increment: teacherIncrement, full_monthly_rate: target,
-                calculated_rate: target, final_rate: target
+                calculated_rate: target, final_rate: target,
+                // Manual amounts are admin-agreed, not time-priced:
+                // they count in full toward both potential and earned.
+                slots: 1, accrued_rate: target, accrued_days: 0
               });
             });
           }
@@ -649,16 +825,44 @@
           let basicProtection = 0;
           const isTeachingCategory = !_payrollIsManagerRecord(t, accounts) &&
             (typeof StaffCategories === 'undefined' || StaffCategories.of(t) === 'teaching');
+          let lastPayableDay = null;
+          studentRateItems.forEach(it => {
+            if (it.seg_end && (!lastPayableDay || it.seg_end > lastPayableDay)) lastPayableDay = it.seg_end;
+          });
           if (isTeachingCategory) {
-            let lastPayableDay = null;
-            studentRateItems.forEach(it => {
-              if (it.seg_end && (!lastPayableDay || it.seg_end > lastPayableDay)) lastPayableDay = it.seg_end;
-            });
             const floorRes = teacherFloorAmount(t, acc, payrollCfg, monthBounds, lastPayableDay);
             floorAmount = floorRes.floorAmount;
             basicProtection = Math.max(0, floorAmount - studentsSubtotal);
           }
           const baseSubtotal = studentsSubtotal + basicProtection;
+
+          // Daily accrual (Commission #2 Phase 1, decision D4): what
+          // this teacher has EARNED up to accrualAsOf — per-line accrued
+          // amounts summed, the floor accrued over the teacher's
+          // eligible window clamped at the same date, and the accrued
+          // protection compared ONCE against the accrued aggregate
+          // (never per line, never added on top). The headline figure
+          // is GROSS earned: bonus / deductions / advances stay
+          // month-end slip items and are not baked in. At the month
+          // end every accrued figure equals its potential counterpart.
+          const earnedStudents = studentRateItems.reduce((s, it) => s + (parseFloat(it.accrued_rate) || 0), 0);
+          const floorAccrued = isTeachingCategory
+            ? teacherFloorAmount(t, acc, payrollCfg, monthBounds, lastPayableDay, accrualAsOf).floorAmount
+            : 0;
+          const protectionAccrued = Math.max(0, floorAccrued - earnedStudents);
+          const grossEarned = earnedStudents + protectionAccrued;
+          const accrual = {
+            asOf: accrualAsOf,
+            earnedStudents,
+            floorAccrued,
+            protectionAccrued,
+            grossEarned,
+            remaining: baseSubtotal - grossEarned,
+            totalSlots: studentRateItems.reduce((s, it) => s + (parseFloat(it.slots) || 1), 0),
+            daysElapsed: payrollDaysInclusive(monthBounds.firstDayStr, accrualAsOf),
+            daysInMonth: monthBounds.daysInMonth,
+            dailyAccrual: Math.round((baseSubtotal / monthBounds.daysInMonth) * 100) / 100
+          };
           const netPayable = Math.max(0, baseSubtotal + bonus - deduction - advanceDeducted);
           const status = savedSlip ? (savedSlip.status || 'Pending') : 'Pending';
 
@@ -684,7 +888,9 @@
             net_payable: netPayable,
             status,
             advance_deducted: advanceDeducted,
-            slip_key: slipKey
+            slip_key: slipKey,
+            pricing_version: pricingVersion,
+            accrual
           };
 
           ALL_TEACHER_SALARIES[t.id] = compiledSlip;
