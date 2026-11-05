@@ -1,7 +1,9 @@
 // Phase 4 Batch 4.1 — teacher/parent frontend honesty (audit P3 items).
 // x:  reschedule default maps stored Completed -> Absent (was: never).
 // y:  no invented 'TCH-001' teacher id; session guard fails honestly.
-// aa: auto-complete once-a-day marker consumed only AFTER verification.
+// aa: was "auto-complete marker consumed only AFTER verification" —
+//     SUPERSEDED 2026-11-05: auto-end was removed entirely (owner
+//     decision), so the marker machinery no longer exists at all.
 // cc: "Total Earnings" counts PAID vouchers only.
 // dd: dead legacy auth helpers removed from teacher.html.
 // ee: parent timetable shows EVERY slot per weekday (was: first only).
@@ -36,11 +38,12 @@ check('y: no TCH-001 fallback anywhere in teacher.html', !TEACHER.includes('TCH-
 check('y: leave submit guards on a live session first',
   TEACHER.includes("if (!CURRENT_TEACHER?.id) throw new Error('Teacher session not found. Please log in again.');"));
 
-// aa — marker consumed after verification only
+// aa — auto-end removed (2026-11-05): no auto-complete, so no marker
+// write exists anywhere; the old ordering concern is moot.
 const markerSets = TEACHER.split('localStorage.setItem(markerKey').length - 1;
-check('aa: marker written exactly once', markerSets === 1, 'count=' + markerSets);
-check('aa: the single marker write happens after the verified check',
-  TEACHER.indexOf('localStorage.setItem(markerKey') > TEACHER.indexOf('if (!verified)'));
+check('aa: auto-complete marker is gone with the auto-end feature', markerSets === 0, 'count=' + markerSets);
+check('aa: no auto-complete machinery remains',
+  !TEACHER.includes('AUTO_PREVIEW_KEY_PREFIX') && !TEACHER.includes('maybeAutoCompleteExpiredClasses'));
 
 // cc — earnings are paid-only
 check('cc: effectiveEarnings is the paid total',

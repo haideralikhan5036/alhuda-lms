@@ -757,6 +757,12 @@ font-family: var(--font-num) !important;
                must never look like "no classes". -->
           <div id="teacherClassesStatusBanner" class="hidden px-4 sm:px-5 pt-4"></div>
 
+          <!-- OVERDUE-CLASS REMINDER (2026-11-05): shown while a started
+               class (Running / Waiting) is past its end time and still
+               un-ended. Classes are never auto-ended; this banner keeps
+               reminding the teacher until they end the class manually. -->
+          <div id="teacherOverdueClassReminder" class="hidden px-4 sm:px-5 pt-4"></div>
+
           <!-- Schedule Table -->
           <div class="overflow-x-auto touch-scroll tcard">
             <table class="w-full text-left text-xs border-collapse min-w-[700px]">
@@ -2691,11 +2697,9 @@ font-family: var(--font-num) !important;
         const now = new Date();
         const el = document.getElementById('liveClock');
         if (el) el.innerText = now.toLocaleTimeString('en-US', { timeZone: 'Asia/Karachi' }) + ' PKT';
-        // URGENT FIX (Issue 1): expiry watcher — fires within a second of
-        // a teacher-started class passing its end time, with no refresh
-        // needed. Guarded inside (modal closed, tab visible, not typing,
-        // one-shot marker); the typeof check covers script load order.
-        try { if (typeof maybeAutoCompleteExpiredClasses === 'function') maybeAutoCompleteExpiredClasses(); } catch (e) {}
+        // NOTE (2026-11-05): no expiry watcher here anymore — classes
+        // are never auto-ended. The overdue-class reminder runs on its
+        // own 30 s interval (see checkOverdueClassReminder).
       }, 1000);
 
       // Strip any URL query parameters (?teacherId=..., ?t=..., ?id=...) so URL parameters NEVER select or identify a user
@@ -3864,6 +3868,11 @@ font-family: var(--font-num) !important;
       const banner = document.getElementById('teacherClassesStatusBanner');
       if (!tbody) return;
 
+      // OVERDUE-CLASS REMINDER: re-render on every classes render —
+      // TODAY_CLASSES is already up to date at this point, and every
+      // return path below passes through here.
+      try { checkOverdueClassReminder(); } catch (e) {}
+
       // SLOW-CLASSES FIX: a failed or mirror-served load is NEVER "no
       // classes". Empty + degraded => error state with Retry (and a
       // login button for expired sessions). Non-empty + degraded =>
@@ -4389,84 +4398,83 @@ font-family: var(--font-num) !important;
       }
     }
 
-    // URGENT FIX (Issue 1, F1.1-F1.3): automatic post-class preview.
-    // There was no auto-end mechanism: expiry only flipped a row badge to
-    // "Slot Ended". This watcher reuses the canonical manual path
-    // (transition -> openAttendanceModal) for teacher-started classes whose
-    // slot has passed. It NEVER auto-completes a never-started class (no
-    // log, or log 'Scheduled'): auto-completing one would fabricate
-    // attendance. It never marks lesson content — the modal opens with
-    // empty/Smart-Resume fields exactly as after a manual complete, and
-    // the teacher marks the lesson.
-    // One-shot semantics: the marker is date-scoped (schedule_id:date) and
-    // stored in localStorage, NOT sessionStorage, because sessionStorage is
-    // per-tab — a second open tab would otherwise fire a second preview
-    // for the same class. The (schedule_id, date) upsert key and the
-    // no-revert guard already prevent duplicate completion rows.
-    const AUTO_PREVIEW_KEY_PREFIX = 'alhuda_auto_preview_shown:';
-    let _autoPreviewInFlight = false;
-    function _isTeacherAttendanceModalOpen() {
-      const m = document.getElementById('modalTeacherAttendance');
-      return !!(m && !m.classList.contains('hidden'));
-    }
-    function _isTeacherTyping() {
-      const tag = document.activeElement ? document.activeElement.tagName : '';
-      return ['INPUT', 'TEXTAREA', 'SELECT'].includes(tag);
-    }
-    async function maybeAutoCompleteExpiredClasses() {
-      if (_autoPreviewInFlight) return;
-      if (typeof document !== 'undefined' && document.visibilityState && document.visibilityState !== 'visible') return;
-      if (_isTeacherAttendanceModalOpen() || _isTeacherTyping()) return;
-      if (!Array.isArray(TODAY_CLASSES) || TODAY_CLASSES.length === 0 || !CURRENT_TEACHER) return;
+    // OVERDUE-CLASS REMINDER (owner decision 2026-11-05): auto-end is
+    // REMOVED from the system — a class is never completed without a
+    // teacher click, and nothing writes a Completed status or an
+    // "ended automatically" note on a timer anymore. A teacher may
+    // start the next class before ending the previous one; this banner
+    // keeps reminding them about every started class (Running /
+    // Waiting) whose slot has ended, until they end it through the
+    // normal COMPLETE CLASS flow. The banner itself writes nothing to
+    // the database and opens no modal. Snoozing hides it for 2
+    // minutes; it then reappears while any overdue class remains.
+    const TEACHER_REMINDER_SNOOZE_MS = 120000;
+    const TEACHER_REMINDER_CHECK_MS = 30000;
+    let _overdueReminderSnoozedUntil = 0;
+
+    function getOverdueStartedClasses() {
+      if (!Array.isArray(TODAY_CLASSES) || !CURRENT_TEACHER) return [];
       const pkt = getPktNowParts();
-      const candidate = TODAY_CLASSES.find(c => {
+      return TODAY_CLASSES.filter(c => {
         if (c.isAdvanceExtra) return false;
         if (typeof c.endMin !== 'number') return false;
         if (pkt.minutes < c.endMin) return false;
         const st = c.log?.status;
-        if (st !== 'Running' && st !== 'Waiting') return false;
-        const key = AUTO_PREVIEW_KEY_PREFIX + String(c.id) + ':' + pkt.date;
-        try { if (localStorage.getItem(key)) return false; } catch (e) {}
-        return true;
+        return st === 'Running' || st === 'Waiting';
       });
-      if (!candidate) return;
-      const markerKey = AUTO_PREVIEW_KEY_PREFIX + String(candidate.id) + ':' + pkt.date;
-      _autoPreviewInFlight = true;
-      try {
-        const timeStr = new Date().toLocaleTimeString('en-US', { timeZone: 'Asia/Karachi', hour: '2-digit', minute: '2-digit', hour12: true });
-        await transitionClassSessionState({
-          scheduleId: candidate.id,
-          studentId: candidate.student_id,
-          teacherId: CURRENT_TEACHER.id,
-          targetStatus: 'Completed',
-          notes: `Class ended automatically at ${timeStr} PKT`
-        });
-        // Audit P1-3: transitionClassSessionState now reports failure
-        // honestly, but still confirm the Completed row exists before
-        // opening the preview. On failure, show the error and do NOT open
-        // it — the teacher can still use the row's COMPLETE CLASS button.
-        let verified = false;
-        try {
-          const { data } = await db.from('attendance_logs').select('status').eq('schedule_id', candidate.id).eq('date', pkt.date);
-          verified = (data || []).some(r => r.status === 'Completed');
-        } catch (e) { verified = false; }
-        if (!verified) {
-          lmsNotify('The class time ended, but the completion could not be saved. Please use COMPLETE CLASS to finish it manually.');
-          return;
-        }
-        // Phase 4 (audit P3-aa): consume the once-a-day marker only now
-        // that completion is verified — a failed save can be retried by
-        // a later tick instead of being silently given up for the day.
-        try { localStorage.setItem(markerKey, '1'); } catch (e) {}
-        await loadTeacherPortalData();
-        openAttendanceModal(candidate.id, candidate.students?.name || 'Student', '', candidate.student_id, 'Completed', '');
-      } catch (e) {
-        console.error('Auto class completion failed:', e);
-        lmsNotify('The class time ended, but the completion could not be saved. Please use COMPLETE CLASS to finish it manually.');
-      } finally {
-        _autoPreviewInFlight = false;
-      }
     }
+
+    function formatPktMinutesLabel(mins) {
+      const total = ((mins % 1440) + 1440) % 1440;
+      const h24 = Math.floor(total / 60);
+      const m = total % 60;
+      const suffix = h24 >= 12 ? 'PM' : 'AM';
+      const h12 = h24 % 12 === 0 ? 12 : h24 % 12;
+      return `${String(h12).padStart(2, '0')}:${String(m).padStart(2, '0')} ${suffix} PKT`;
+    }
+
+    function checkOverdueClassReminder() {
+      const banner = document.getElementById('teacherOverdueClassReminder');
+      if (!banner) return;
+      const overdue = getOverdueStartedClasses();
+      if (overdue.length === 0) {
+        banner.classList.add('hidden');
+        banner.innerHTML = '';
+        _overdueReminderSnoozedUntil = 0;
+        return;
+      }
+      if (Date.now() < _overdueReminderSnoozedUntil) {
+        banner.classList.add('hidden');
+        return;
+      }
+      const rows = overdue.map(c => {
+        const name = c.students?.name || 'Student';
+        return `<div class="flex flex-wrap items-center gap-2 pt-1.5">
+          <span class="font-bold">${escapeHtml(name)}</span>
+          <span>— class time ended at ${formatPktMinutesLabel(c.endMin)}. Please end this class.</span>
+          <button onclick="handleTeacherCompleteClass('${escapeJsAttr(c.id)}', '${escapeJsAttr(c.student_id)}', '${escapeJsAttr(CURRENT_TEACHER.id)}', '${escapeJsAttr(name)}')" class="ml-auto px-3 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-700 text-white font-extrabold">END CLASS</button>
+        </div>`;
+      }).join('');
+      banner.innerHTML = `<div class="rounded-xl border border-rose-300 bg-rose-50 px-4 py-3 text-xs text-rose-800">
+        <div class="flex items-center gap-2">
+          <span class="font-extrabold">⏰ Class time is over — a started class is still open.</span>
+          <button onclick="snoozeOverdueClassReminder()" class="ml-auto px-2 py-0.5 rounded-lg bg-white/70 hover:bg-white border border-rose-200 text-rose-700 font-black" title="Hide for 2 minutes" aria-label="Hide reminder for 2 minutes">✕</button>
+        </div>
+        ${rows}
+      </div>`;
+      banner.classList.remove('hidden');
+    }
+
+    function snoozeOverdueClassReminder() {
+      _overdueReminderSnoozedUntil = Date.now() + TEACHER_REMINDER_SNOOZE_MS;
+      const banner = document.getElementById('teacherOverdueClassReminder');
+      if (banner) banner.classList.add('hidden');
+    }
+
+    // Re-check on a dedicated 30 s interval (NOT the 1 s clock):
+    // catches classes that pass their end time while the page sits
+    // open, and brings the banner back once a snooze expires.
+    setInterval(() => { try { checkOverdueClassReminder(); } catch (e) {} }, TEACHER_REMINDER_CHECK_MS);
 
     function openLeaveAbsentModal(scheduleId, studentId, teacherId, studentName) {
       document.getElementById('leaveAbsentScheduleId').value = scheduleId || '';
