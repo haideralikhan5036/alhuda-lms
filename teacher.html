@@ -4945,18 +4945,193 @@ font-family: var(--font-num) !important;
       return opts.join('');
     }
 
-    function populateTeacherCourseBooks(defaultBookId = null) {
+    // ---- Student-assigned courses for the lesson form -----------------
+    // The attendance modal's Course dropdown lists the books for THIS
+    // student's assigned courses — the student's record (plus the ended
+    // class's own course) is the single source of truth, never the whole
+    // library and never another student's courses. Stored course values
+    // may be a catalogue id ('crs-tafseer-english'), a canonical name, an
+    // alias, or a legacy slash-combined string ('Noorani Qaida / Quran
+    // Reading'); all are resolved through the Course Catalogue when it
+    // is available.
+    function _resolveCatalogueCourse(part) {
+      const target = String(part || '').trim();
+      if (!target) return null;
+      try {
+        if (typeof CourseCatalogue !== 'undefined' && CourseCatalogue) {
+          if (typeof CourseCatalogue.resolveByName === 'function') {
+            const byName = CourseCatalogue.resolveByName(target);
+            if (byName) return byName;
+          }
+          if (typeof CourseCatalogue.getSettings === 'function') {
+            const courses = (CourseCatalogue.getSettings() || {}).courses || [];
+            const lower = target.toLowerCase();
+            for (const c of courses) {
+              if (String(c.id || '').toLowerCase() === lower) return c;
+            }
+          }
+        }
+      } catch (e) {}
+      return null;
+    }
+
+    // Map a course (canonical name + id) to the book family it draws
+    // from: the library categories it matches, a title keyword for
+    // books that carry no category, and an optional language (tafseer).
+    function _courseBookFamily(course) {
+      const s = (((course && course.id) || '') + ' ' + ((course && course.name) || '')).toLowerCase();
+      if (s.includes('tafseer') || s.includes('tafsir')) {
+        let lang = null;
+        if (s.includes('english')) lang = 'en';
+        else if (s.includes('urdu')) lang = 'ur';
+        return { categories: ['tafseer'], keyword: 'tafseer', lang };
+      }
+      if (s.includes('qaida') || s.includes('noorani') || s.includes('madani')) {
+        return { categories: ['qaida'], keyword: 'qaida', lang: null };
+      }
+      if (s.includes('islamic')) {
+        return { categories: ['islamic-studies', 'islamic'], keyword: 'islamic', lang: null };
+      }
+      if (s.includes('arabic')) {
+        return { categories: ['arabic'], keyword: 'arabic', lang: null };
+      }
+      if (s.includes('quran') || s.includes('nazra') || s.includes('hifz') || s.includes('tajweed') || s.includes('recitation')) {
+        return { categories: ['quran'], keyword: 'quran', lang: null };
+      }
+      return null;
+    }
+
+    function _booksForCourseFamily(fam, allBooks) {
+      let matched = (allBooks || []).filter(b => {
+        if (!b) return false;
+        const bc = String(b.category || '').trim().toLowerCase();
+        if (bc) return fam.categories.includes(bc);
+        // No category on the book: fall back to a title keyword match.
+        return String(b.title || '').toLowerCase().includes(fam.keyword);
+      });
+      if (fam.lang) {
+        const langFirst = matched.filter(b => String(b.language || '').trim().toLowerCase().indexOf(fam.lang) === 0);
+        if (langFirst.length) {
+          matched = langFirst.concat(matched.filter(b => !langFirst.includes(b)));
+        }
+      }
+      return matched;
+    }
+
+    // Ordered assigned-course resolution shared by the dropdown
+    // populate: the ended class's own course first, then the student's
+    // stored course(s). Returns { books, classFirstBookId } with books
+    // deduped by id and courses deduped by canonical id/name.
+    function _resolveStudentCourseBooks(student, matchedClass) {
+      const empty = { books: [], classFirstBookId: null };
+      if (!student) return empty;
+      const rawParts = [];
+      const pushParts = (value, fromClass) => {
+        String(value || '').split('/').forEach(p => {
+          const t = String(p || '').trim();
+          if (t) rawParts.push({ text: t, fromClass });
+        });
+      };
+      if (matchedClass && matchedClass.course_name) pushParts(matchedClass.course_name, true);
+      let stored = '';
+      try {
+        if (typeof Assignments !== 'undefined' && Assignments && typeof Assignments.studentCourseName === 'function') {
+          stored = Assignments.studentCourseName(student) || '';
+        }
+      } catch (e) {}
+      if (!stored && student.course_id && typeof student.course_id === 'string') stored = student.course_id;
+      pushParts(stored, false);
+      if (!rawParts.length) return empty;
+
+      const allBooks = getTeacherAllBooks();
+      const seenCourses = new Set();
+      const seenBooks = new Set();
+      const books = [];
+      let classFirstBookId = null;
+      rawParts.forEach(part => {
+        const resolved = _resolveCatalogueCourse(part.text);
+        // A course the admin deactivated in the catalogue is no longer
+        // an active assigned course: it contributes no books.
+        if (resolved && resolved.active === false) return;
+        const course = resolved || { id: '', name: part.text };
+        const courseKey = String(resolved ? (resolved.id || resolved.name) : part.text).trim().toLowerCase();
+        if (!courseKey || seenCourses.has(courseKey)) return;
+        seenCourses.add(courseKey);
+        const fam = _courseBookFamily(course);
+        if (!fam) return;
+        _booksForCourseFamily(fam, allBooks).forEach(b => {
+          if (seenBooks.has(b.id)) return;
+          seenBooks.add(b.id);
+          books.push(b);
+          if (part.fromClass && !classFirstBookId) classFirstBookId = b.id;
+        });
+      });
+      return { books, classFirstBookId };
+    }
+
+    // The ordered, deduped library books for the student's assigned
+    // courses (the ended class's course first, then the student's
+    // stored courses in order). A course matching no book contributes
+    // nothing — no fake options are ever invented here.
+    function getStudentCourseBooks(student, matchedClass) {
+      return _resolveStudentCourseBooks(student, matchedClass).books;
+    }
+
+    // The last attendance-modal student context. The books-refresh
+    // caller passes no context; while the modal is open for a student
+    // the refresh must re-apply THAT student's list, not reset the
+    // dropdown to the global list (or worse, another student's).
+    let _attCourseStudentCtx = null;
+
+    function populateTeacherCourseBooks(defaultBookId = null, studentCtx) {
       const bSelect = document.getElementById('attCourseBookSelect');
       if (!bSelect) return;
-      const allBooks = getTeacherAllBooks();
+      if (studentCtx !== undefined) _attCourseStudentCtx = studentCtx;
+      const ctx = _attCourseStudentCtx;
 
-      bSelect.innerHTML = allBooks.map(b => `
+      if (!ctx || !ctx.student) {
+        const allBooks = getTeacherAllBooks();
+
+        bSelect.innerHTML = allBooks.map(b => `
         <option value="${b.id}">${b.title} (${b.category_label || 'Course'})</option>
       `).join('') + `<option value="${ADDITIONAL_COURSE_ID}">Additional Course</option>`;
 
-      if (defaultBookId) {
-        bSelect.value = defaultBookId;
+        if (defaultBookId) {
+          bSelect.value = defaultBookId;
+        }
+        onTeacherCourseBookChanged(bSelect.value);
+        return;
       }
+
+      const resolved = _resolveStudentCourseBooks(ctx.student, ctx.matchedClass || null);
+      const books = resolved.books;
+
+      if (!books.length) {
+        // No assigned course resolves to a book: never fall back to the
+        // global list, and never let a save write the placeholder as a
+        // book — show the message and open the Additional Course path.
+        bSelect.innerHTML = `<option value="" disabled>No course assigned to this student — ask the admin to assign a course</option>` + `<option value="${ADDITIONAL_COURSE_ID}">Additional Course</option>`;
+        bSelect.value = ADDITIONAL_COURSE_ID;
+        onTeacherCourseBookChanged(bSelect.value);
+        return;
+      }
+
+      bSelect.innerHTML = books.map(b => `
+        <option value="${b.id}">${b.title} (${b.category_label || 'Course'})</option>
+      `).join('') + `<option value="${ADDITIONAL_COURSE_ID}">Additional Course</option>`;
+
+      // Preselect: the requested default (Smart Resume) when it is one
+      // of this student's options, else the ended class's own course's
+      // first book, else the first assigned book.
+      let selected = null;
+      if (defaultBookId && (defaultBookId === ADDITIONAL_COURSE_ID || books.some(b => b.id === defaultBookId))) {
+        selected = defaultBookId;
+      } else if (resolved.classFirstBookId) {
+        selected = resolved.classFirstBookId;
+      } else {
+        selected = books[0].id;
+      }
+      bSelect.value = selected;
       onTeacherCourseBookChanged(bSelect.value);
     }
 
@@ -5633,8 +5808,31 @@ font-family: var(--font-num) !important;
       if (_imgFileInp) _imgFileInp.value = '';
       showTeacherLessonImagePreview(parsedNotes?.image_key || null);
 
-      populateTeacherCourseBooks(suggestedBook);
-      onTeacherCourseBookChanged(suggestedBook, resumePara, nextPage);
+      // Course dropdown from THIS student's assigned courses: resolve
+      // the full student record (the portal's own fetched rows first;
+      // the class's joined student object as fallback) and the class
+      // being ended, then populate with that context. The follow-up
+      // change call runs for the ACTUALLY selected book so Smart Resume
+      // page/para apply when the resumed book is among the student's
+      // books, and never resurrect an unassigned book when it is not.
+      const _attCtxClass = matchedClass
+        || (typeof TODAY_CLASSES !== 'undefined' ? TODAY_CLASSES.find(x => String(x.id) === String(scheduleId)) : null)
+        || (typeof ALL_TEACHER_SCHEDULES !== 'undefined' ? ALL_TEACHER_SCHEDULES.find(x => String(x.id) === String(scheduleId)) : null)
+        || null;
+      const _attCtxStudentId = studentId || (_attCtxClass && (_attCtxClass.student_id || (_attCtxClass.students && _attCtxClass.students.id))) || null;
+      let _attCtxStudent = null;
+      if (_attCtxStudentId) {
+        const _attLists = [ASSIGNED_STUDENTS, ACTIVE_ASSIGNED_STUDENTS, LEAVE_ASSIGNED_STUDENTS];
+        for (const _attList of _attLists) {
+          if (Array.isArray(_attList)) {
+            _attCtxStudent = _attList.find(s => String(s.id) === String(_attCtxStudentId)) || null;
+            if (_attCtxStudent) break;
+          }
+        }
+      }
+      if (!_attCtxStudent && _attCtxClass && _attCtxClass.students) _attCtxStudent = _attCtxClass.students;
+      populateTeacherCourseBooks(suggestedBook, { student: _attCtxStudent, matchedClass: _attCtxClass });
+      onTeacherCourseBookChanged(document.getElementById('attCourseBookSelect')?.value || suggestedBook, resumePara, nextPage);
 
       selectAttendanceStatus((currentStatus === 'Completed' || currentStatus === 'Running' || currentStatus === 'Waiting') ? 'Present' : (currentStatus || 'Present'));
       // Lesson-form simplify: mark the chip matching the restored remark.
