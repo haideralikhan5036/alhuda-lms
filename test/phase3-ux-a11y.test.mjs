@@ -81,8 +81,10 @@ check('LABEL teacher has no unlabeled static close button left',
   unlabeledTimesButtons(TEACHER) === 0, String(unlabeledTimesButtons(TEACHER)));
 check('LABEL parent has no unlabeled static close button left',
   unlabeledTimesButtons(PARENT) === 0, String(unlabeledTimesButtons(PARENT)));
-check('LABEL close-button aria-label counts (index 30, teacher 11, parent 2)',
-  count(INDEX, /aria-label="Close"/g) === 30 &&
+// Index count is 31 since the Course Material Page Editor modal
+// (modalPageEditor, 2026-11-06) added its own labelled close button.
+check('LABEL close-button aria-label counts (index 31, teacher 11, parent 2)',
+  count(INDEX, /aria-label="Close"/g) === 31 &&
   count(TEACHER, /aria-label="Close"/g) === 11 &&
   count(PARENT, /aria-label="Close"/g) === 2,
   `${count(INDEX, /aria-label="Close"/g)}/${count(TEACHER, /aria-label="Close"/g)}/${count(PARENT, /aria-label="Close"/g)}`);

@@ -5362,6 +5362,69 @@
   </div>
 
   <!-- ============================================================ -->
+  <!-- MODAL: COURSE MATERIAL PAGE EDITOR (ADD / REMOVE / REORDER PAGES) -->
+  <!-- ============================================================ -->
+  <div id="modalPageEditor" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 hidden items-center justify-center p-3 sm:p-4 overflow-y-auto">
+    <div class="bg-white rounded-2xl max-w-3xl w-full p-5 border border-slate-200 shadow-2xl space-y-4 my-auto max-h-[94vh] overflow-y-auto">
+      <div class="flex justify-between items-start border-b pb-3">
+        <div>
+          <h3 class="font-black text-base text-brandDark flex items-center gap-2">
+            <i class="fa-solid fa-layer-group text-brandEmerald"></i> Manage Pages — <span id="pageEditorBookTitle">Course Material</span>
+          </h3>
+          <p class="text-xs text-slate-500 mt-0.5">Add, remove or reorder pages. Nothing is saved until you press <b>Save Changes</b>.</p>
+        </div>
+        <button onclick="requestClosePageEditor()" class="text-slate-400 hover:text-slate-600 text-xl font-bold" aria-label="Close">&times;</button>
+      </div>
+
+      <div id="pageEditorParaRow" class="hidden p-3 bg-emerald-50/70 border border-emerald-200 rounded-xl text-xs">
+        <label class="block font-bold mb-1 text-emerald-950 flex items-center gap-1">
+          <i class="fa-solid fa-quran text-brandEmerald"></i> Para / Juz being edited:
+        </label>
+        <select id="pageEditorParaSelect" onchange="pageEditorSelectPara(this.value)" class="w-full p-2 bg-white border border-emerald-300 rounded-xl font-bold text-slate-800 text-xs focus:outline-brandEmerald">
+          <!-- Populated dynamically with the book Paras -->
+        </select>
+        <p class="text-[10px] text-emerald-900/70 mt-1">You edit one Para at a time. Pages of the other Paras are not touched.</p>
+      </div>
+
+      <div class="flex items-center justify-between gap-2 flex-wrap">
+        <span id="pageEditorCount" class="font-mono font-bold text-brandDark bg-slate-200 px-2 py-0.5 rounded text-[10px]">0 pages</span>
+        <span id="pageEditorPending" class="font-bold text-slate-400 text-[11px]"></span>
+      </div>
+
+      <div id="pageEditorUploadErrors" class="hidden p-3 bg-rose-50 border border-rose-200 rounded-xl text-[11px] text-rose-800 font-semibold flex items-center justify-between gap-2 flex-wrap"></div>
+
+      <div id="pageEditorList" class="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-2.5"></div>
+
+      <div class="p-3.5 bg-slate-50 border border-slate-200 rounded-xl space-y-2 text-xs">
+        <label class="block font-bold text-slate-700 flex items-center gap-1.5">
+          <i class="fa-solid fa-file-circle-plus text-brandEmerald"></i> Add Page Scans:
+        </label>
+        <div class="flex items-center gap-2 flex-wrap">
+          <select id="pageEditorInsertMode" class="p-2 bg-white border border-slate-300 rounded-xl font-bold text-slate-800">
+            <option value="end">Add at the end</option>
+            <option value="before">Insert before page…</option>
+          </select>
+          <input type="number" id="pageEditorInsertBefore" min="1" class="w-24 p-2 border border-slate-300 rounded-xl font-semibold" placeholder="Page #">
+          <input type="file" id="pageEditorFiles" multiple accept="image/*" onchange="pageEditorAddFiles(this)" class="flex-1 min-w-[180px] text-xs text-slate-600 file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-bold file:bg-slate-200 file:text-slate-800 hover:file:bg-slate-300 cursor-pointer">
+        </div>
+        <p class="text-[10px] text-slate-400">Images are compressed to WebP and uploaded exactly like a new book upload. New pages show a preview above before you save.</p>
+      </div>
+
+      <div class="flex justify-between items-center border-t pt-3 flex-wrap gap-2">
+        <button type="button" onclick="pageEditorRemoveSelected()" class="px-3 py-2 text-rose-600 hover:bg-rose-50 rounded-xl font-bold border border-rose-200 transition flex items-center gap-1 text-xs">
+          <i class="fa-solid fa-trash-can"></i> Remove Selected
+        </button>
+        <div class="flex gap-2">
+          <button type="button" onclick="requestClosePageEditor()" class="px-4 py-2 border rounded-xl font-bold text-slate-600 hover:bg-slate-100 text-xs">Cancel</button>
+          <button type="button" id="btnSavePageEditor" onclick="savePageEditor()" class="px-5 py-2 bg-brandDark hover:bg-brandDarkest text-white font-black rounded-xl flex items-center gap-1.5 shadow-sm transition text-xs">
+            <i class="fa-solid fa-floppy-disk"></i> Save Changes
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================================================ -->
   <!-- MODAL 1: OFFICIAL PRINTABLE TUITION FEE INVOICE RECEIPT -->
   <!-- ============================================================ -->
   <div id="modalFeeInvoice" class="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 hidden items-center justify-center p-2 sm:p-4 overflow-y-auto">
