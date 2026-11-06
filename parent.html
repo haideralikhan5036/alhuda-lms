@@ -1828,6 +1828,8 @@
           if (en && en.para) progressBits.push(`Para ${escapeHtml(en.para)}`);
           else if (meta?.para) progressBits.push(`Para ${escapeHtml(meta.para)}`);
           if (pageVal !== null && pageVal !== undefined && String(pageVal) !== '') progressBits.push(`Page ${escapeHtml(dispPage)}`);
+          const lb = (en && en.lineBox) || meta?.line_box;
+          if (lb) progressBits.push(escapeHtml(lb));
           const lr = (en && en.lineRange) || meta?.line_range;
           if (lr) progressBits.push(escapeHtml(lr));
         }
@@ -2082,7 +2084,7 @@
         const topic = meta?.book_title
           ? (meta.book_id === 'additional-course'
             ? `${escapeHtml(meta.book_title)}${meta.lesson_name ? ` — ${escapeHtml(meta.lesson_name)}` : ''}${meta.page_reference ? ` • Ref: ${escapeHtml(meta.page_reference)}` : ''}`
-            : `${escapeHtml(meta.book_title)}${meta?.para ? ` • Para ${escapeHtml(meta.para)}` : ''}${pageVal !== null && pageVal !== undefined && String(pageVal) !== '' ? ` (Page ${escapeHtml(dispPageAtt)})` : ''}${((en && en.additionalLesson) || meta?.additional_lesson) ? ` • + ${escapeHtml((en && en.additionalLesson) || meta.additional_lesson)}` : ''}`)
+            : `${escapeHtml(meta.book_title)}${meta?.para ? ` • Para ${escapeHtml(meta.para)}` : ''}${pageVal !== null && pageVal !== undefined && String(pageVal) !== '' ? ` (Page ${escapeHtml(dispPageAtt)})` : ''}${((en && en.lineBox) || meta?.line_box) ? ` • ${escapeHtml((en && en.lineBox) || meta.line_box)}` : ''}${((en && en.additionalLesson) || meta?.additional_lesson) ? ` • + ${escapeHtml((en && en.additionalLesson) || meta.additional_lesson)}` : ''}`)
           : escapeHtml(log.lesson_notes || 'Regular Class Attendance');
         const teacher = log.teachers?.full_name || defaultTeacher;
         const canRead = meta?.book_id && meta.book_id !== 'additional-course' && pageVal !== null && pageVal !== undefined && String(pageVal) !== '';

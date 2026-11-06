@@ -1470,6 +1470,8 @@ function _buildSelectedStudentWorkspaceHtml(family, student, famSchedules, famLo
                   progressBits.push(`Page ${_dispPage360}`);
                 }
                 else if (p.page) progressBits.push('Page ' + String(p.displayPage || p.page));
+                if (en && en.lineBox) progressBits.push(en.lineBox);
+                else if (p.lineBox) progressBits.push(p.lineBox);
                 if (en && en.pageReference) progressBits.push(`Ref: ${en.pageReference}`);
                 else if (p.pageReference) progressBits.push(`Ref: ${p.pageReference}`);
                 if (en && en.lineRange) progressBits.push(en.lineRange);
@@ -1778,6 +1780,7 @@ function _parseLessonDetails360(log) {
       // the optional free-text reference when one was saved.
       const lessonStr = parsed.lesson_name ? ` — ${parsed.lesson_name}` : '';
       const refStr = parsed.page_reference ? ` • Ref: ${parsed.page_reference}` : '';
+      const lineBoxStr = parsed.line_box ? ` • ${parsed.line_box}` : '';
       return {
         hasLesson: true,
         bookTitle,
@@ -1785,12 +1788,13 @@ function _parseLessonDetails360(log) {
         displayPage: displayPage || '',
         para: parsed.para || null,
         lineRange: parsed.line_range || '',
+        lineBox: parsed.line_box || '',
         assessment: parsed.status || parsed.result || 'Completed',
         remarks: parsed.remarks || parsed.notes || '',
         additionalLesson: parsed.additional_lesson || null,
         pageReference: parsed.page_reference || null,
         imageKey: parsed.image_key || null,
-        summaryTitle: `${bookTitle}${lessonStr}${pageStr}${refStr}`
+        summaryTitle: `${bookTitle}${lessonStr}${pageStr}${lineBoxStr}${refStr}`
       };
     }
   } catch (e) {}
@@ -1800,6 +1804,7 @@ function _parseLessonDetails360(log) {
     page: '',
     para: null,
     lineRange: '',
+    lineBox: '',
     assessment: 'Completed',
     remarks: String(raw),
     additionalLesson: null,
