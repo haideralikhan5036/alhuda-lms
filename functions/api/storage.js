@@ -18,6 +18,9 @@
  *    data path), so a standalone Cloudflare Pages deploy cannot expose
  *    this engine. OPTIONS preflights (headers only, no data) are carved
  *    out explicitly.
+ *  - Course-book deletion (2026-11-06): DELETE removes ONE object and is
+ *    scoped to the course_material/ prefix in this engine; the Worker
+ *    admits it for the owner role only. R2 deletes are idempotent.
  * ============================================================================
  */
 
@@ -43,7 +46,7 @@ function buildCorsHeaders(request, env) {
   const origin = request.headers.get('Origin') || '';
 
   const headers = {
-    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+    'Access-Control-Allow-Methods': 'GET, POST, DELETE, OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type, Authorization',
     'Access-Control-Max-Age': '86400',
     'Vary': 'Origin'
@@ -242,6 +245,39 @@ export async function onRequest(context) {
       return jsonResponse({ ok: true, key, url: publicUrl }, 200, corsHeaders);
     } catch (err) {
       console.error('[storage-api] upload failed:', err);
+      return jsonResponse({ ok: false, error: 'internal_error' }, 500, corsHeaders);
+    }
+  }
+
+  // DELETE /api/storage?key=course_material/<file> -> Permanently remove an
+  // object from Cloudflare R2 (added 2026-11-06 for course-book deletion).
+  // Authorization is enforced upstream in cloudflare/worker.js
+  // (handleScopedStorageRequest admits the OWNER role only); the
+  // course_material/ prefix scope is enforced HERE as well, so this engine
+  // can never serve as a general-purpose object delete even if a future
+  // caller reaches it directly. R2 deletes are idempotent — removing a
+  // key that does not exist succeeds — so a retried book deletion whose
+  // first attempt partially completed is safe to run again.
+  if (request.method === 'DELETE') {
+    const key = url.searchParams.get('key');
+    if (!key) {
+      return jsonResponse({ ok: false, error: 'key_required' }, 400, corsHeaders);
+    }
+    if (!key.startsWith('course_material/')) {
+      return jsonResponse({ ok: false, error: 'key_out_of_scope' }, 403, corsHeaders);
+    }
+    if (!bucket) {
+      return jsonResponse(
+        { ok: false, r2_bound: false, error: 'Cloudflare R2 bucket (STORAGE) not bound yet' },
+        503,
+        corsHeaders
+      );
+    }
+    try {
+      await bucket.delete(key);
+      return jsonResponse({ ok: true, key, deleted: true }, 200, corsHeaders);
+    } catch (err) {
+      console.error('[storage-api] delete failed:', err);
       return jsonResponse({ ok: false, error: 'internal_error' }, 500, corsHeaders);
     }
   }

@@ -84,7 +84,7 @@ function corsHeadersFor(request, env) {
 // functions/api/db.js (the D1 schema marker; v2 after Part A). It is hardcoded
 // here on purpose: /api/health must never 500 because D1 is unreachable, and
 // it must never cost an unauthenticated caller a D1 read.
-const WORKER_RELEASE = '2026-11-05-slots';
+const WORKER_RELEASE = '2026-11-06-course-delete';
 const HEALTH_SCHEMA_VERSION = '2026-11-05-v5';
 
 // --- Batch 7 Part B: security headers (workers.dev responses) --------------
@@ -3460,6 +3460,22 @@ async function handleScopedStorageRequest(ctx, auth) {
   if (request.method === 'GET' && !url.searchParams.get('key')) {
     // Batch 7 Part B: internal-invocation marker, as for /api/db (see
     // functions/api/storage.js onRequest). A remote caller can never set it.
+    return handleStorageRequest({ ...ctx, __lmsInternal: true });
+  }
+
+  // Course-material object deletion (2026-11-06): DELETE is OWNER ONLY.
+  // Managers may upload and edit course material, but permanently removing
+  // a book's stored page files is reserved to the owner — the same gate
+  // the frontend applies in js/curriculum.js (handleDeleteCurriculumBook).
+  // This check must run BEFORE the unrestricted pass-through below, which
+  // would otherwise let a manager session straight through. The engine
+  // additionally refuses any key outside course_material/ (see
+  // functions/api/storage.js), so this route can never become a
+  // general-purpose object delete.
+  if (request.method === 'DELETE') {
+    if (role !== 'owner') {
+      return forbidden(request, env);
+    }
     return handleStorageRequest({ ...ctx, __lmsInternal: true });
   }
 
