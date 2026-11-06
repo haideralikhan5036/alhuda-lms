@@ -193,7 +193,7 @@ async function dbPostJson(token, body) {
   const req = new Request('https://worker.test/api/health', { method: 'GET', headers: { 'Origin': ORIGIN } });
   const res = await worker.fetch(req, env, {});
   const h = await res.json().catch(() => null);
-  check('health reports the course-delete release', res.status === 200 && h && h.version === '2026-11-06-course-delete', 'got ' + (h && h.version));
+  check('health reports the course-delete release', res.status === 200 && h && h.version === '2026-11-06-annotated-pages', 'got ' + (h && h.version));
 }
 
 const failed = results.filter((r) => !r.pass).length;

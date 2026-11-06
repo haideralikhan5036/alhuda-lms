@@ -35,6 +35,14 @@
 //    image itself is fetched with auth headers and rendered via a blob URL
 //    (plain <img> tags cannot send Authorization headers, and storage GET
 //    serves Content-Disposition: attachment).
+//  - annotated_pages (2026-11-06) is the multi-page sibling of image_key:
+//    an array of { key, para, page, orig_page, seq } — flattened images of
+//    book pages the teacher marked in the reader, uploaded to R2 and
+//    attached to this same lesson record. `page` is para-relative (the
+//    record convention); `orig_page` is the printed page number captured
+//    at save time so viewers never need a book lookup. Parsed entries are
+//    exposed as annotatedPages with camelCase fields, sorted by seq with
+//    seq renumbered 1..n; absent/invalid -> null, exactly like image_key.
 // Authorization is enforced server-side (Worker role scoping); this module
 // never invents scope. Teacher scope is the UNION from the 2026-10-28 owner
 // correction: logs the teacher personally recorded (teacher_id = sub) OR
@@ -70,6 +78,40 @@
     return Number.isFinite(n) ? n : null;
   }
 
+  // Normalize the raw annotated_pages array from a lesson payload.
+  // Entries without a usable storage key are dropped (a page reference
+  // with no image is meaningless); the rest are ordered by their stored
+  // seq (falling back to array order) and renumbered 1..n so every
+  // consumer can rely on seq as the display order. Returns null when
+  // nothing usable remains — the same "absent" signal as image_key.
+  function normalizeAnnotatedPages(raw) {
+    if (!Array.isArray(raw)) return null;
+    var usable = [];
+    raw.forEach(function (e, idx) {
+      if (!e || typeof e !== 'object') return;
+      var key = typeof e.key === 'string' ? e.key : '';
+      if (!key) return;
+      usable.push({
+        key: key,
+        para: toNumOrNull(e.para),
+        page: toNumOrNull(e.page),
+        origPage: toNumOrNull(e.orig_page != null ? e.orig_page : e.origPage),
+        seq: toNumOrNull(e.seq),
+        _idx: idx
+      });
+    });
+    if (usable.length === 0) return null;
+    usable.sort(function (a, b) {
+      var sa = a.seq === null ? a._idx + 1000000 : a.seq;
+      var sb = b.seq === null ? b._idx + 1000000 : b.seq;
+      if (sa !== sb) return sa - sb;
+      return a._idx - b._idx;
+    });
+    return usable.map(function (e, i) {
+      return { key: e.key, para: e.para, page: e.page, origPage: e.origPage, seq: i + 1 };
+    });
+  }
+
   // Parse the lesson_notes payload (JSON object, or legacy plain text).
   // Returns null only when there is no payload at all.
   function parseLessonNotes(raw) {
@@ -95,6 +137,7 @@
           lessonName: null,
           pageReference: null,
           imageKey: null,
+          annotatedPages: null,
           isAdditionalCourse: false,
           isAdvanceClass: false,
           raw: raw
@@ -118,6 +161,7 @@
       lessonName: parsed.lesson_name || null,
       pageReference: parsed.page_reference || null,
       imageKey: parsed.image_key || null,
+      annotatedPages: normalizeAnnotatedPages(parsed.annotated_pages),
       isAdditionalCourse: parsed.book_id === 'additional-course',
       // Batch 3.3 (audit P2-19): an advance lesson is a lesson FOR A
       // FUTURE DATE recorded today (advance_target_date). It must never
@@ -159,6 +203,7 @@
       lessonName: p ? p.lessonName : null,
       pageReference: p ? p.pageReference : null,
       imageKey: p ? p.imageKey : null,
+      annotatedPages: p ? p.annotatedPages : null,
       isAdditionalCourse: p ? p.isAdditionalCourse : false,
       // Batch 3.3 (audit P2-19): advance by stored status OR by payload
       // flag — both teacher writers set both, but either alone marks the
@@ -678,6 +723,195 @@
              percent: total > 0 ? Math.round((present / total) * 100) : 0 };
   }
 
+  // ---------------------------------------------------------------
+  // Annotated pages viewer (read-only; shared by Teacher history,
+  // Parent lesson cards and the Admin/Manager Student 360). Shows a
+  // lesson's saved annotated page images in seq order with captions
+  // carrying the ORIGINAL page number from the record itself (no book
+  // lookup), prev/next + keyboard navigation, and layout zoom in the
+  // viewer's own scroll stage using the safe-centre pattern (the
+  // zoomed page's top stays reachable — the PR #95/#98 reader fix,
+  // applied to this overlay only; reader globals are untouched). The
+  // record's legacy single image, when present, is shown first as
+  // "Lesson image". Images load through loadLessonImageBlobUrl
+  // (authenticated fetch) — never a raw storage URL — and every blob
+  // URL is revoked on close. A page that fails to load shows an error
+  // in place; the other pages stay navigable. No editing is possible.
+  // ---------------------------------------------------------------
+  var _apv = null; // { items, idx, zoomIdx, baseW, urls, cache, els }
+
+  function annotatedPageCaption(entry, position) {
+    if (!entry) return '';
+    if (entry.origPage !== null && entry.origPage !== undefined && entry.origPage !== '') return 'Page ' + entry.origPage;
+    if (entry.page !== null && entry.page !== undefined && entry.page !== '') return 'Page ' + entry.page;
+    return 'Page ' + ((position || 0) + 1);
+  }
+
+  function _apvEl(tag, cssText, text) {
+    var el = document.createElement(tag);
+    if (cssText) el.style.cssText = cssText;
+    if (text !== undefined && text !== null) el.textContent = text;
+    return el;
+  }
+
+  function _apvApplyZoom() {
+    if (!_apv) return;
+    var steps = [1, 1.5, 2, 2.5, 3];
+    var z = steps[_apv.zoomIdx] || 1;
+    var img = _apv.els.img;
+    _apv.els.zoomLabel.textContent = Math.round(z * 100) + '%';
+    if (z <= 1) {
+      img.style.width = '';
+      img.style.maxWidth = '100%';
+    } else {
+      var base = _apv.baseW || img.clientWidth || img.naturalWidth || 0;
+      if (base > 0) {
+        img.style.maxWidth = 'none';
+        img.style.width = Math.round(base * z) + 'px';
+      }
+    }
+  }
+
+  function _apvShow(idx) {
+    if (!_apv) return;
+    var items = _apv.items;
+    var i = Math.max(0, Math.min(items.length - 1, idx));
+    _apv.idx = i;
+    _apv.zoomIdx = 0;
+    _apv.baseW = 0;
+    var item = items[i];
+    var els = _apv.els;
+    els.counter.textContent = (i + 1) + ' / ' + items.length;
+    els.caption.textContent = item.caption;
+    els.prev.disabled = i <= 0;
+    els.next.disabled = i >= items.length - 1;
+    els.prev.style.opacity = i <= 0 ? '0.4' : '1';
+    els.next.style.opacity = i >= items.length - 1 ? '0.4' : '1';
+    els.img.style.display = 'none';
+    els.msg.style.display = '';
+    els.msg.textContent = 'Loading page…';
+    _apvApplyZoom();
+    var finish = function (url) {
+      if (!_apv || _apv.idx !== i) return;
+      if (!url) {
+        els.msg.textContent = 'This page could not be loaded. Use Prev / Next to view the other pages.';
+        return;
+      }
+      els.img.onload = function () {
+        if (!_apv || _apv.idx !== i) return;
+        _apv.baseW = els.img.clientWidth || 0;
+        els.msg.style.display = 'none';
+        els.img.style.display = '';
+        _apvApplyZoom();
+      };
+      els.img.onerror = function () {
+        if (!_apv || _apv.idx !== i) return;
+        els.msg.style.display = '';
+        els.msg.textContent = 'This page could not be loaded. Use Prev / Next to view the other pages.';
+      };
+      els.img.src = url;
+    };
+    if (_apv.cache[i]) { finish(_apv.cache[i]); return; }
+    loadLessonImageBlobUrl(item.key).then(function (url) {
+      if (url && _apv) _apv.cache[i] = url;
+      finish(url);
+    }).catch(function () { finish(null); });
+  }
+
+  function _apvNav(dir) {
+    if (!_apv) return;
+    _apvShow(_apv.idx + (dir < 0 ? -1 : 1));
+  }
+
+  function _apvKeyHandler(ev) {
+    if (!_apv) return;
+    var t = ev && ev.target;
+    if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable)) return;
+    if (ev.key === 'Escape') closeAnnotatedPagesViewer();
+    else if (ev.key === 'ArrowRight') _apvNav(1);
+    else if (ev.key === 'ArrowLeft') _apvNav(-1);
+  }
+
+  function openAnnotatedPagesViewer(pages, opts) {
+    opts = opts || {};
+    var items = [];
+    if (opts.imageKey) items.push({ key: String(opts.imageKey), caption: 'Lesson image' });
+    var list = normalizeAnnotatedPages(pages) || [];
+    list.forEach(function (p, i) {
+      items.push({ key: p.key, caption: annotatedPageCaption(p, i) });
+    });
+    if (!items.length) return false;
+    if (typeof document === 'undefined' || !document.body || !document.createElement) return false;
+    closeAnnotatedPagesViewer();
+
+    var btnCss = 'background:#065f46;color:#fff;border:1px solid #047857;border-radius:9px;padding:7px 14px;font-size:12px;font-weight:800;cursor:pointer;';
+    var overlay = _apvEl('div', 'position:fixed;inset:0;z-index:130;background:rgba(2,6,23,0.94);display:flex;flex-direction:column;font-family:inherit;');
+    var header = _apvEl('div', 'display:flex;align-items:center;gap:10px;padding:10px 14px;background:#022c22;color:#fff;');
+    var titleEl = _apvEl('div', 'flex:1;font-size:13px;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;', opts.title || 'Annotated pages');
+    var counterEl = _apvEl('div', 'font-size:12px;font-weight:700;color:#a7f3d0;');
+    var closeBtn = _apvEl('button', btnCss, '✕ Close');
+    closeBtn.type = 'button';
+    closeBtn.addEventListener('click', function () { closeAnnotatedPagesViewer(); });
+    header.appendChild(titleEl);
+    header.appendChild(counterEl);
+    header.appendChild(closeBtn);
+
+    var stage = _apvEl('div', 'flex:1;overflow:auto;display:flex;align-items:safe center;justify-content:safe center;padding:14px;');
+    var img = _apvEl('img', 'max-width:100%;height:auto;border-radius:10px;background:#fff;display:none;');
+    img.alt = 'Annotated lesson page';
+    var msg = _apvEl('div', 'color:#e2e8f0;font-size:13px;font-weight:600;text-align:center;max-width:420px;', 'Loading page…');
+    stage.appendChild(img);
+    stage.appendChild(msg);
+
+    var footer = _apvEl('div', 'display:flex;align-items:center;justify-content:center;gap:10px;padding:10px;background:#022c22;flex-wrap:wrap;');
+    var prevBtn = _apvEl('button', btnCss, '‹ Prev');
+    prevBtn.type = 'button';
+    prevBtn.addEventListener('click', function () { _apvNav(-1); });
+    var captionEl = _apvEl('div', 'min-width:90px;text-align:center;color:#fde68a;font-size:13px;font-weight:800;');
+    var zoomOutBtn = _apvEl('button', btnCss, '−');
+    zoomOutBtn.type = 'button';
+    zoomOutBtn.addEventListener('click', function () { if (_apv && _apv.zoomIdx > 0) { _apv.zoomIdx--; _apvApplyZoom(); } });
+    var zoomLabel = _apvEl('div', 'color:#d1fae5;font-size:12px;font-weight:700;min-width:44px;text-align:center;', '100%');
+    var zoomInBtn = _apvEl('button', btnCss, '+');
+    zoomInBtn.type = 'button';
+    zoomInBtn.addEventListener('click', function () { if (_apv && _apv.zoomIdx < 4) { _apv.zoomIdx++; _apvApplyZoom(); } });
+    var nextBtn = _apvEl('button', btnCss, 'Next ›');
+    nextBtn.type = 'button';
+    nextBtn.addEventListener('click', function () { _apvNav(1); });
+    footer.appendChild(prevBtn);
+    footer.appendChild(captionEl);
+    footer.appendChild(zoomOutBtn);
+    footer.appendChild(zoomLabel);
+    footer.appendChild(zoomInBtn);
+    footer.appendChild(nextBtn);
+
+    overlay.appendChild(header);
+    overlay.appendChild(stage);
+    overlay.appendChild(footer);
+    document.body.appendChild(overlay);
+    if (document.addEventListener) document.addEventListener('keydown', _apvKeyHandler);
+
+    _apv = {
+      items: items, idx: 0, zoomIdx: 0, baseW: 0, cache: {},
+      els: { overlay: overlay, img: img, msg: msg, counter: counterEl, caption: captionEl, prev: prevBtn, next: nextBtn, zoomLabel: zoomLabel }
+    };
+    _apvShow(0);
+    return true;
+  }
+
+  function closeAnnotatedPagesViewer() {
+    if (!_apv) return;
+    var state = _apv;
+    _apv = null;
+    Object.keys(state.cache).forEach(function (k) { try { URL.revokeObjectURL(state.cache[k]); } catch (e) {} });
+    if (typeof document !== 'undefined' && document.removeEventListener) document.removeEventListener('keydown', _apvKeyHandler);
+    var ov = state.els && state.els.overlay;
+    if (ov) {
+      if (typeof ov.remove === 'function') ov.remove();
+      else if (ov.parentNode && ov.parentNode.removeChild) ov.parentNode.removeChild(ov);
+    }
+  }
+
   var api = {
     parseLessonNotes: parseLessonNotes,
     normalizeLessonRow: normalizeLessonRow,
@@ -698,7 +932,11 @@
     entryTitle: entryTitle,
     getLessonHistory: getLessonHistory,
     uploadLessonImageOrThrow: uploadLessonImageOrThrow,
-    loadLessonImageBlobUrl: loadLessonImageBlobUrl
+    loadLessonImageBlobUrl: loadLessonImageBlobUrl,
+    openAnnotatedPagesViewer: openAnnotatedPagesViewer,
+    closeAnnotatedPagesViewer: closeAnnotatedPagesViewer,
+    annotatedPageCaption: annotatedPageCaption,
+    normalizeAnnotatedPages: normalizeAnnotatedPages
   };
 
   if (typeof module !== 'undefined' && module.exports) module.exports = api;

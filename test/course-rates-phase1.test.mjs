@@ -116,7 +116,7 @@ fakeDb.seed("INSERT INTO system_settings (id, key, value) VALUES ('SYS-LOGO', 'a
   check('owner CAN write course_rates_v1', ((after2.json.data || []).length) === 1 && String(after2.json.data[0].value || '').includes('3300'), 'value: ' + String((after2.json.data || [])[0]?.value || '').slice(0, 60));
 
   const h = await call('/api/health', { method: 'GET' });
-  check('health reports the course-rates release', h.status === 200 && h.json && h.json.version === '2026-11-06-course-delete', 'got ' + (h.json && h.json.version));
+  check('health reports the course-rates release', h.status === 200 && h.json && h.json.version === '2026-11-06-annotated-pages', 'got ' + (h.json && h.json.version));
 }
 
 // ---- Catalogue module executed in a vm ----
