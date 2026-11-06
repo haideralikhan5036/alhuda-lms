@@ -1321,6 +1321,18 @@ font-family: var(--font-num) !important;
              history views keep rendering it via `image_key`. -->
         <input type="hidden" id="attLessonImageKey" value="">
 
+        <!-- Annotated Pages (2026-11-06): when an existing lesson is
+             reopened, the pages already attached to it (marked in the
+             reader, saved with Save Pages) are listed here so the
+             teacher can see they belong to this record — an edit or
+             re-save keeps them (see claimAnnotatedPagesForLesson). -->
+        <div id="attAnnotatedPagesBox" class="hidden">
+          <label class="block font-bold text-slate-700 mb-1.5">
+            Annotated Pages:
+          </label>
+          <div id="attAnnotatedPagesList" class="flex flex-wrap items-center gap-1.5"></div>
+        </div>
+
         <!-- Remarks: five predefined remarks as selectable chips (NOT a
              dropdown). Tapping a chip fills the remarks box; the teacher
              may still type free text instead. Stored as plain text in
@@ -2220,8 +2232,8 @@ font-family: var(--font-num) !important;
           <button type="button" onclick="clearAnnotationCanvas()" class="px-3 py-1 bg-rose-50 hover:bg-rose-100 text-rose-600 rounded-full text-xs font-bold transition flex items-center gap-1 border border-rose-200 shadow-sm cursor-pointer" title="Clear Canvas">
             <i class="fa-solid fa-trash-can"></i> <span class="hidden sm:inline">Clear</span>
           </button>
-          <button type="button" onclick="downloadAnnotatedPage()" class="px-3.5 py-1 bg-gradient-to-b from-emerald-500 to-emerald-700 hover:from-emerald-400 hover:to-emerald-600 text-white rounded-full text-xs font-black transition flex items-center gap-1 shadow-md shadow-emerald-600/25 cursor-pointer" title="Save / Download Annotated Page">
-            <i class="fa-solid fa-download"></i> <span class="hidden sm:inline">Save Page</span>
+          <button type="button" id="btnSaveAnnotatedPages" onclick="saveAnnotatedPages()" class="px-3.5 py-1 bg-gradient-to-b from-emerald-500 to-emerald-700 hover:from-emerald-400 hover:to-emerald-600 text-white rounded-full text-xs font-black transition flex items-center gap-1 shadow-md shadow-emerald-600/25 cursor-pointer" title="Save annotated pages to the student's lesson">
+            <i class="fa-solid fa-cloud-arrow-up"></i> <span class="hidden sm:inline">Save Pages</span>
           </button>
         </div>
       </div>
@@ -4330,7 +4342,26 @@ font-family: var(--font-num) !important;
         if (lessonNotesPayload) {
           upsertData.lesson_notes = typeof lessonNotesPayload === 'string' ? lessonNotesPayload : JSON.stringify(lessonNotesPayload);
         } else if (notes) {
-          upsertData.lesson_notes = notes;
+          // Annotated Pages / lesson-image preservation: when the row
+          // already carries a lesson payload with an attached image or
+          // annotated pages, the plain completion text must not wipe
+          // them — the lesson-form save that follows re-writes the
+          // payload in full, and the end-class merge reads the prior
+          // record from this row. (Same preservation philosophy as the
+          // Absent/Leave branch below; rows whose prior notes are plain
+          // text — the normal Running-class case — are unaffected.)
+          let preservePayload = false;
+          const priorNotesStr = currentSlot?.log?.lesson_notes;
+          if (priorNotesStr && typeof priorNotesStr === 'string' && priorNotesStr.trim().startsWith('{')) {
+            try {
+              const parsedPrior = JSON.parse(priorNotesStr);
+              if (parsedPrior && typeof parsedPrior === 'object'
+                && (parsedPrior.image_key || (Array.isArray(parsedPrior.annotated_pages) && parsedPrior.annotated_pages.length > 0))) {
+                preservePayload = true;
+              }
+            } catch (e) {}
+          }
+          if (!preservePayload) upsertData.lesson_notes = notes;
         }
       } else if (targetStatus === 'Absent' || targetStatus === 'Leave') {
         // Batch 3.3 (audit P2-26): the Leave/Absent modal used to
@@ -5738,6 +5769,112 @@ font-family: var(--font-num) !important;
       box.classList.remove('hidden');
     }
 
+    // ============================================================
+    // ANNOTATED PAGES — END-CLASS MERGE (2026-11-06)
+    // ------------------------------------------------------------
+    // The reader's Save Pages uploads annotated pages and stages them
+    // in ANNOTATION_SAVED with a student/class context snapshot. The
+    // lesson writers merge the staged pages into the payload HERE, in
+    // the save itself — the only moment the record's identity
+    // (schedule_id, student_id, book) is known for certain. A staged
+    // page is claimed only when its snapshot and book match this
+    // lesson; pages already attached to the record being edited are
+    // carried through (the image_key carry-through pattern, extended).
+    // When nothing is claimed or carried, the payload is left exactly
+    // as before — no annotated_pages key is written.
+    // ============================================================
+    function claimAnnotatedPagesForLesson(opts) {
+      const o = opts || {};
+      const bookId = String(o.bookId || '');
+      const studentId = String(o.studentId || '');
+      if (!bookId || !studentId) return null;
+      const numOrNull = (v) => { const n = Number(v); return Number.isFinite(n) ? n : null; };
+      const byKey = new Map();
+      const stagedPageIdentities = new Set();
+      const claimedKeys = [];
+      // (i) Staged pages claimed by this lesson (skipped entirely when
+      // claimStaged === false, e.g. the Additional Course branch: staged
+      // pages belong to a book and never attach to a book-less lesson).
+      if (o.claimStaged !== false && typeof ANNOTATION_SAVED !== 'undefined') {
+        Object.keys(ANNOTATION_SAVED).forEach(pageKey => {
+          const entry = ANNOTATION_SAVED[pageKey];
+          if (!entry || entry.bookId !== bookId || !entry.context) return;
+          const ctx = entry.context;
+          if (String(ctx.studentId || '') !== studentId) return;
+          if (o.source === 'advance') {
+            // The Advance form's only identity is the student; normal-
+            // class annotations must never leak into an advance record.
+            if (ctx.source !== 'advance') return;
+          } else if (ctx.scheduleId !== null && ctx.scheduleId !== undefined && String(ctx.scheduleId) !== String(o.scheduleId || '')) {
+            return;
+          }
+          stagedPageIdentities.add(String(entry.para) + ':' + String(entry.page));
+          claimedKeys.push(pageKey);
+          byKey.set(entry.key, { key: entry.key, para: numOrNull(entry.para), page: numOrNull(entry.page), orig_page: numOrNull(entry.origPage) });
+        });
+      }
+      // (ii) Pages already attached to the record being edited. A
+      // staged page for the same (para, page) supersedes the prior
+      // image of that page; every other prior page is kept.
+      (Array.isArray(o.prior) ? o.prior : []).forEach(e => {
+        if (!e || typeof e.key !== 'string' || !e.key || byKey.has(e.key)) return;
+        const para = numOrNull(e.para);
+        const page = numOrNull(e.page);
+        if (stagedPageIdentities.has(String(para) + ':' + String(page))) return;
+        byKey.set(e.key, { key: e.key, para: para, page: page, orig_page: numOrNull(e.orig_page != null ? e.orig_page : e.origPage) });
+      });
+      if (byKey.size === 0) return null;
+      const pages = Array.from(byKey.values()).sort((a, b) => ((a.para || 0) - (b.para || 0)) || ((a.page || 0) - (b.page || 0)));
+      pages.forEach((p, i) => { p.seq = i + 1; });
+      return { pages: pages, pageKeys: claimedKeys };
+    }
+
+    // After a lesson save has actually landed, the claimed pages are
+    // part of the record: drop their staging entries (and any on-screen
+    // marks) so they can never be claimed twice or leak onwards.
+    function releaseClaimedAnnotatedPages(pageKeys) {
+      (pageKeys || []).forEach(pageKey => {
+        if (typeof ANNOTATION_SAVED !== 'undefined') delete ANNOTATION_SAVED[pageKey];
+        if (typeof ANNOTATION_STORE !== 'undefined') delete ANNOTATION_STORE[pageKey];
+        if (typeof ANNOTATION_UNDO_STACK !== 'undefined') delete ANNOTATION_UNDO_STACK[pageKey];
+      });
+    }
+
+    // The reopened lesson form lists the pages already attached to the
+    // record (original page numbers where the record carries them).
+    // The pages currently shown in the form's strip, in normalized
+    // viewer shape, so the strip's View button can open them.
+    let _ATT_STRIP_PAGES = [];
+
+    function renderAttAnnotatedPagesStrip(rawPages) {
+      const box = document.getElementById('attAnnotatedPagesBox');
+      const list = document.getElementById('attAnnotatedPagesList');
+      if (!box || !list) return;
+      const pages = (Array.isArray(rawPages) ? rawPages : []).filter(e => e && e.key);
+      _ATT_STRIP_PAGES = (typeof window !== 'undefined' && window.LessonHistory && typeof window.LessonHistory.normalizeAnnotatedPages === 'function')
+        ? (window.LessonHistory.normalizeAnnotatedPages(pages) || [])
+        : [];
+      if (pages.length === 0) {
+        box.classList.add('hidden');
+        list.innerHTML = '';
+        return;
+      }
+      const labelFor = (e) => {
+        const orig = (e.orig_page != null ? e.orig_page : e.origPage);
+        return 'Page ' + (orig != null ? orig : (e.page != null ? e.page : '?'));
+      };
+      list.innerHTML = '<span class="text-[11px] font-bold text-slate-600">' + pages.length + ' annotated page' + (pages.length === 1 ? '' : 's') + ' attached:</span>'
+        + pages.map(e => '<span class="text-[11px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-200 rounded-full px-2 py-0.5">' + labelFor(e) + '</span>').join('')
+        + ' <button type="button" onclick="viewAttAnnotatedStripPages()" class="text-[11px] px-2.5 py-1 rounded-lg bg-teal-700 hover:bg-teal-800 text-white font-extrabold">View</button>';
+      box.classList.remove('hidden');
+    }
+
+    function viewAttAnnotatedStripPages() {
+      if (!_ATT_STRIP_PAGES.length) return;
+      if (!window.LessonHistory || typeof window.LessonHistory.openAnnotatedPagesViewer !== 'function') return;
+      window.LessonHistory.openAnnotatedPagesViewer(_ATT_STRIP_PAGES, { title: 'Annotated pages' });
+    }
+
     function openAttendanceModal(scheduleId, studentName, timeSlot, studentId, currentStatus, currentNotes) {
       let matchedClass = null;
       if (!studentName && scheduleId) {
@@ -5851,6 +5988,12 @@ font-family: var(--font-num) !important;
       const _imgFileInp = document.getElementById('attLessonImageFile');
       if (_imgFileInp) _imgFileInp.value = '';
       showTeacherLessonImagePreview(parsedNotes?.image_key || null);
+      // Annotated Pages: show the pages already attached to this
+      // record; the save below carries them through (prior merge in
+      // claimAnnotatedPagesForLesson, fed from _ATT_PRIOR_NOTES).
+      if (typeof renderAttAnnotatedPagesStrip === 'function') {
+        renderAttAnnotatedPagesStrip(parsedNotes && parsedNotes.annotated_pages);
+      }
 
       // Course dropdown from THIS student's assigned courses: resolve
       // the full student record (the portal's own fetched rows first;
@@ -5943,6 +6086,9 @@ font-family: var(--font-num) !important;
       const date = getPktNowParts().date;
 
       let lesson_notes = '';
+      // Annotated Pages: pageKeys this save claims from the reader's
+      // staging (released only after the row has actually landed).
+      let claimedAnnotatedPageKeys = [];
 
       if (selectedStatus === 'Present' || selectedStatus === 'Advance Class' || selectedStatus === 'Completed') {
         let targetDate = null;
@@ -6059,6 +6205,28 @@ font-family: var(--font-num) !important;
           };
         }
 
+        // Annotated Pages (2026-11-06): merge the pages staged by the
+        // reader's Save Pages into the payload HERE, inside the save —
+        // claimed for THIS student/schedule/book and unioned with any
+        // pages already attached to the record being edited. The
+        // Additional Course branch never claims staged pages (they
+        // belong to a book) but keeps prior pages, so an edit cannot
+        // silently detach them. When nothing is attached, no key is
+        // written and the payload is exactly as before.
+        if (typeof claimAnnotatedPagesForLesson === 'function') {
+          const priorAnnotated = (typeof _ATT_PRIOR_NOTES !== 'undefined' && _ATT_PRIOR_NOTES && Array.isArray(_ATT_PRIOR_NOTES.annotated_pages)) ? _ATT_PRIOR_NOTES.annotated_pages : null;
+          if (bookId === ADDITIONAL_COURSE_ID) {
+            const keptPrior = claimAnnotatedPagesForLesson({ scheduleId: schedule_id, studentId: student_id, bookId: bookId, source: 'attendance', prior: priorAnnotated, claimStaged: false });
+            if (keptPrior && keptPrior.pages.length > 0) sabaqPayload.annotated_pages = keptPrior.pages;
+          } else {
+            const claimedAnn = claimAnnotatedPagesForLesson({ scheduleId: schedule_id, studentId: student_id, bookId: bookId, source: 'attendance', prior: priorAnnotated });
+            if (claimedAnn && claimedAnn.pages.length > 0) {
+              sabaqPayload.annotated_pages = claimedAnn.pages;
+              claimedAnnotatedPageKeys = claimedAnn.pageKeys;
+            }
+          }
+        }
+
         lesson_notes = JSON.stringify(sabaqPayload);
       } else {
         // Lesson History: a status change to Absent/Leave must PRESERVE the
@@ -6109,6 +6277,13 @@ font-family: var(--font-num) !important;
         }
         attSaved = true;
 
+        // Annotated Pages: the claimed pages are part of the record
+        // now — release their staging entries so they cannot be
+        // claimed by a second lesson or leak into another session.
+        if (claimedAnnotatedPageKeys.length > 0 && typeof releaseClaimedAnnotatedPages === 'function') {
+          releaseClaimedAnnotatedPages(claimedAnnotatedPageKeys);
+        }
+
         notifyClassSessionSync({
           scheduleId: schedule_id,
           studentId: student_id,
@@ -6158,6 +6333,13 @@ font-family: var(--font-num) !important;
       CURRENT_READER_BOOK = book;
       CURRENT_READER_PAGE = Number(startPage) || 1;
       CURRENT_READER_ZOOM = 1.0;
+
+      // Annotated Pages: markings belong to the book they were drawn
+      // on. Opening a different book drops other books' UNSAVED marks
+      // (they could never be saved into this book's lesson); pages
+      // already uploaded stay staged in ANNOTATION_SAVED for their own
+      // lesson's merge, which also checks the book.
+      if (typeof pruneAnnotationMarksForOtherBooks === 'function') pruneAnnotationMarksForOtherBooks(book.id);
 
       const isParaBased = (book.category === 'quran' || book.category === 'tafseer' || !!book.paras_data || !!book.paras);
       if (isParaBased) {
@@ -6777,7 +6959,39 @@ font-family: var(--font-num) !important;
       }
     }
 
+    // Annotated Pages: closing the reader must never silently carry
+    // markings into the next student's session (the old engine never
+    // cleared ANNOTATION_STORE at all, so one student's marks reappeared
+    // for the next). Rules: a Save still uploading blocks the close;
+    // UNSAVED (dirty) markings need a conscious discard via lmsConfirm;
+    // pages already uploaded with Save Pages stay staged in
+    // ANNOTATION_SAVED for the end-class merge, while their on-screen
+    // marks are cleared so the next reader session starts clean.
     function closeDigitalBookReader(popHistory = true) {
+      if (typeof ANNOTATION_SAVE_IN_FLIGHT !== 'undefined' && ANNOTATION_SAVE_IN_FLIGHT) {
+        lmsNotify('Annotated pages are still saving — please wait a moment, then close.', { type: 'error' });
+        return;
+      }
+      const dirty = (typeof annotationDirtyPageKeys === 'function') ? annotationDirtyPageKeys() : [];
+      if (dirty.length > 0 && typeof lmsConfirm === 'function') {
+        lmsConfirm({
+          title: 'Unsaved annotations',
+          message: 'You have annotated pages that have not been saved. If you close now, those markings will be discarded.\n\nTo keep them, stay here and press Save Pages first.',
+          confirmText: 'Discard markings',
+          cancelText: 'Stay & Save',
+          variant: 'danger'
+        }).then(function (ok) {
+          if (!ok) return;
+          clearAllAnnotationMarks();
+          performCloseDigitalBookReader(popHistory);
+        });
+        return;
+      }
+      clearAllAnnotationMarks();
+      performCloseDigitalBookReader(popHistory);
+    }
+
+    function performCloseDigitalBookReader(popHistory = true) {
       if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
       if (typeof AlHudaInteractiveQaida !== 'undefined') {
         if (AlHudaInteractiveQaida.stopSequentialAudioTour) AlHudaInteractiveQaida.stopSequentialAudioTour();
@@ -6801,6 +7015,18 @@ font-family: var(--font-num) !important;
     let ANNOTATION_CURRENT_STROKE = 4; // 2, 4, 8, 16
     let ANNOTATION_STORE = {}; // pageKey -> array of action objects
     let ANNOTATION_UNDO_STACK = {}; // pageKey -> array of undone actions
+    // Annotated Pages (2026-11-06): pages the teacher has uploaded with
+    // Save Pages, staged client-side until the end-class save merges
+    // them into the lesson record. pageKey -> { key, bookId, para, page,
+    // origPage, actionCount, fingerprint, context }. `context` is the
+    // student/class snapshot captured when Save Pages was pressed; the
+    // merge (saveAttendanceAndLessonNotes / handleAdvanceClassSubmit)
+    // claims only entries whose snapshot and book match that lesson, so
+    // a page can never attach to the wrong student.
+    let ANNOTATION_SAVED = {};
+    let ANNOTATION_SAVE_IN_FLIGHT = false;
+    let ANNOTATION_SAVE_FAILED = false;
+    let ANNOTATION_STAGING_SEQ = 0;
     let ANNOTATION_IS_DRAWING = false;
     let ANNOTATION_STROKE_POINTS = [];
     let ANNOTATION_SHAPE_START = null;
@@ -7256,6 +7482,7 @@ font-family: var(--font-num) !important;
         ANNOTATION_UNDO_STACK[pageKey].push(action);
       }
       redrawCurrentPageAnnotations();
+      if (typeof refreshAnnotationSaveButton === 'function') refreshAnnotationSaveButton();
     }
 
     function redoAnnotation() {
@@ -7267,6 +7494,7 @@ font-family: var(--font-num) !important;
         ANNOTATION_STORE[pageKey].push(action);
       }
       redrawCurrentPageAnnotations();
+      if (typeof refreshAnnotationSaveButton === 'function') refreshAnnotationSaveButton();
     }
 
     function clearAnnotationCanvas() {
@@ -7276,47 +7504,287 @@ font-family: var(--font-num) !important;
       ANNOTATION_UNDO_STACK[pageKey].push({ type: 'batch_clear', actions: [...ANNOTATION_STORE[pageKey]] });
       ANNOTATION_STORE[pageKey] = [];
       redrawCurrentPageAnnotations();
+      if (typeof refreshAnnotationSaveButton === 'function') refreshAnnotationSaveButton();
     }
 
-    function downloadAnnotatedPage() {
-      const img = document.getElementById('readerPageImg');
-      if (!img) return;
+    // ============================================================
+    // ANNOTATED PAGES — SAVE FLOW (2026-11-06)
+    // ------------------------------------------------------------
+    // The old Save button downloaded a PNG of the current page to the
+    // teacher's device (removed entirely — no download path remains).
+    // Save Pages now flattens EVERY marked page of the current book
+    // (original page + the teacher's markings, at natural resolution),
+    // uploads each via LessonHistory.uploadLessonImageOrThrow (the
+    // THROWING uploader — never uploadToCloudflareR2, whose silent
+    // data-URL fallback would corrupt the record), and stages the
+    // returned R2 keys in ANNOTATION_SAVED. The end-class save merges
+    // the staged keys into the lesson record; until then the pages are
+    // uploaded but NOT yet attached, and the copy says exactly that.
+    // ============================================================
 
-      const exportCanvas = document.createElement('canvas');
-      const natW = img.naturalWidth || img.clientWidth || 800;
-      const natH = img.naturalHeight || img.clientHeight || 1100;
-      exportCanvas.width = natW;
-      exportCanvas.height = natH;
-      const ctx = exportCanvas.getContext('2d');
+    // pageKey is `${bookId}_para${para}_p${page}` (getReaderPageKey);
+    // the book id itself may contain underscores, so parse from the right.
+    function parseReaderPageKey(pageKey) {
+      const m = /^(.*)_para(\d+)_p(\d+)$/.exec(String(pageKey || ''));
+      if (!m) return null;
+      return { bookId: m[1], para: Number(m[2]), page: Number(m[3]) };
+    }
 
-      // Draw base page image
-      try {
-        ctx.drawImage(img, 0, 0, natW, natH);
-      } catch (err) {
-        console.warn('Direct draw failed, drawing fallback:', err);
+    // Cheap change fingerprint for one page's action list: a page whose
+    // marks changed after saving must become dirty again even when the
+    // action COUNT is unchanged (erase one stroke, draw another).
+    function annotationFingerprint(actions) {
+      const s = JSON.stringify(actions || []);
+      let h = 0;
+      for (let i = 0; i < s.length; i++) { h = ((h << 5) - h + s.charCodeAt(i)) | 0; }
+      return s.length + ':' + h;
+    }
+
+    // Who would these pages belong to? Resolved when Save Pages is
+    // pressed, in priority order: (1) the end-class lesson form, when
+    // it is open (the Preview launch path — exact); (2) the Advance
+    // Class form, when it is open (student only — that form has no
+    // schedule of its own); (3) the single Running class, when exactly
+    // one exists (since PR #97 two classes can run at once, so two or
+    // more Running classes mean NO safe inference); otherwise null.
+    function annotationContextSnapshot() {
+      const attModal = document.getElementById('modalTeacherAttendance');
+      if (attModal && !attModal.classList.contains('hidden')) {
+        const sid = document.getElementById('attScheduleId')?.value || '';
+        const stid = document.getElementById('attStudentId')?.value || '';
+        if (sid && stid) return { scheduleId: String(sid), studentId: String(stid), source: 'attendance' };
       }
+      const advModal = document.getElementById('modalTeacherAdvanceClass');
+      if (advModal && !advModal.classList.contains('hidden')) {
+        const astid = document.getElementById('advStudentSelect')?.value || '';
+        if (astid) return { scheduleId: null, studentId: String(astid), source: 'advance' };
+      }
+      const classes = (typeof TODAY_CLASSES !== 'undefined' && Array.isArray(TODAY_CLASSES)) ? TODAY_CLASSES : [];
+      const running = classes.filter(c => c && c.log && c.log.status === 'Running');
+      if (running.length === 1 && running[0].student_id) {
+        return { scheduleId: String(running[0].id), studentId: String(running[0].student_id), source: 'running' };
+      }
+      return null;
+    }
 
-      // Draw all annotations scaled to natural dimensions
-      const pageKey = getReaderPageKey();
-      const actions = ANNOTATION_STORE[pageKey] || [];
-      actions.forEach(action => {
-        drawSingleAnnotationAction(ctx, action, natW, natH);
+    // Page keys of THIS book that carry markings, in lesson order
+    // (para, then para-relative page) — the order `seq` follows.
+    function annotationMarkedPageKeys(bookId) {
+      return Object.keys(ANNOTATION_STORE)
+        .filter(k => {
+          const p = parseReaderPageKey(k);
+          return p && p.bookId === String(bookId) && Array.isArray(ANNOTATION_STORE[k]) && ANNOTATION_STORE[k].length > 0;
+        })
+        .sort((a, b) => {
+          const pa = parseReaderPageKey(a), pb = parseReaderPageKey(b);
+          return (pa.para - pb.para) || (pa.page - pb.page);
+        });
+    }
+
+    function annotationPageIsDirty(pageKey) {
+      const actions = ANNOTATION_STORE[pageKey];
+      if (!Array.isArray(actions) || actions.length === 0) return false;
+      const saved = ANNOTATION_SAVED[pageKey];
+      if (!saved) return true;
+      return saved.fingerprint !== annotationFingerprint(actions);
+    }
+
+    // Every page (any book) whose markings are not yet uploaded.
+    function annotationDirtyPageKeys() {
+      return Object.keys(ANNOTATION_STORE).filter(k => annotationPageIsDirty(k));
+    }
+
+    function clearAllAnnotationMarks() {
+      ANNOTATION_STORE = {};
+      ANNOTATION_UNDO_STACK = {};
+      ANNOTATION_SAVE_FAILED = false;
+      if (typeof redrawCurrentPageAnnotations === 'function') redrawCurrentPageAnnotations();
+      refreshAnnotationSaveButton();
+    }
+
+    // Drop UNSAVED marks belonging to books other than `bookId`
+    // (staged uploads in ANNOTATION_SAVED are kept for their own merge).
+    function pruneAnnotationMarksForOtherBooks(bookId) {
+      [ANNOTATION_STORE, ANNOTATION_UNDO_STACK].forEach(map => {
+        Object.keys(map).forEach(k => {
+          const p = parseReaderPageKey(k);
+          if (p && p.bookId !== String(bookId)) delete map[k];
+        });
       });
+    }
 
-      // Trigger download
+    function refreshAnnotationSaveButton() {
+      const btn = document.getElementById('btnSaveAnnotatedPages');
+      if (!btn || ANNOTATION_SAVE_IN_FLIGHT) return;
+      btn.disabled = false;
+      const span = btn.querySelector('span');
+      const label = ANNOTATION_SAVE_FAILED ? 'Retry Save' : 'Save Pages';
+      if (span) span.textContent = label; else btn.textContent = label;
+    }
+
+    function setAnnotationSaveProgress(done, total) {
+      const btn = document.getElementById('btnSaveAnnotatedPages');
+      if (!btn) return;
+      btn.disabled = true;
+      const span = btn.querySelector('span');
+      const label = 'Saving… ' + done + '/' + total;
+      if (span) span.textContent = label; else btn.textContent = label;
+    }
+
+    // Load one book page as an Image element for compositing, resolving
+    // its URL exactly like renderReaderCurrentPage and fetching storage
+    // pages with the portal's auth headers (plain <img> cannot send
+    // them). Rejects when the page has no real image (e.g. a generated
+    // placeholder) — a fabricated page must never be baked into a
+    // permanent lesson record.
+    function loadReaderPageImageElement(book, para, page) {
+      return new Promise((resolve, reject) => {
+        let pageUrl = '';
+        if (typeof CURRICULUM_DATA !== 'undefined' && typeof CURRICULUM_DATA.getPageUrl === 'function') {
+          pageUrl = CURRICULUM_DATA.getPageUrl(book.id, page, para, book.language);
+        } else if (typeof book.getPageUrl === 'function') {
+          pageUrl = book.getPageUrl(page, para, book.language);
+        } else if (book.pages && book.pages[page - 1]) {
+          pageUrl = book.pages[page - 1];
+        }
+        if (!pageUrl || (typeof pageUrl === 'string' && pageUrl.indexOf('data:image/svg') === 0)) {
+          reject(new Error('Page image is not available.'));
+          return;
+        }
+        const img = new Image();
+        let objectUrl = null;
+        const cleanup = () => { if (objectUrl) { try { URL.revokeObjectURL(objectUrl); } catch (e) {} objectUrl = null; } };
+        img.onload = () => resolve({ img, cleanup });
+        img.onerror = () => { cleanup(); reject(new Error('Page image could not be loaded.')); };
+        if (typeof pageUrl === 'string' && (pageUrl.indexOf('data:') === 0 || pageUrl.indexOf('blob:') === 0)) {
+          img.src = pageUrl;
+          return;
+        }
+        const headers = (typeof window.getLmsAuthHeaders === 'function') ? window.getLmsAuthHeaders() : {};
+        fetch(pageUrl, { headers })
+          .then(res => { if (!res.ok) throw new Error('HTTP ' + res.status); return res.blob(); })
+          .then(blob => { objectUrl = URL.createObjectURL(blob); img.src = objectUrl; })
+          .catch(err => { cleanup(); reject(err); });
+      });
+    }
+
+    // Flatten one page: original image at natural size + the page's
+    // annotation actions replayed over it (the old download's composite
+    // generator, with the sink changed from download to upload).
+    async function buildAnnotatedPageCanvas(book, para, page, actions) {
+      let baseImg = null;
+      let cleanup = null;
+      const liveImg = document.getElementById('readerPageImg');
+      const stage = document.getElementById('readerImageStage');
+      const isCurrentPage = CURRENT_READER_BOOK && String(CURRENT_READER_BOOK.id) === String(book.id)
+        && Number(CURRENT_READER_PARA || 1) === Number(para) && Number(CURRENT_READER_PAGE || 1) === Number(page);
+      if (isCurrentPage && liveImg && liveImg.naturalWidth > 0 && !(stage && stage.classList.contains('hidden'))) {
+        baseImg = liveImg;
+      } else {
+        const loaded = await loadReaderPageImageElement(book, para, page);
+        baseImg = loaded.img;
+        cleanup = loaded.cleanup;
+      }
       try {
-        const dataUrl = exportCanvas.toDataURL('image/png');
-        const bTitle = (CURRENT_READER_BOOK?.title || 'Course').replace(/[^a-zA-Z0-9_-]/g, '_');
-        const filename = `AlHuda_${bTitle}_Page_${CURRENT_READER_PAGE}_Annotated.png`;
-        const link = document.createElement('a');
-        link.download = filename;
-        link.href = dataUrl;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-      } catch (err) {
-        console.error('Download error:', err);
-        console.warn('[LMS] operation failed:', err.message); lmsNotify('Could not export annotated page. Please try again.', { type: 'error' });
+        const exportCanvas = document.createElement('canvas');
+        const natW = baseImg.naturalWidth || baseImg.clientWidth || 800;
+        const natH = baseImg.naturalHeight || baseImg.clientHeight || 1100;
+        exportCanvas.width = natW;
+        exportCanvas.height = natH;
+        const ctx = exportCanvas.getContext('2d');
+        ctx.drawImage(baseImg, 0, 0, natW, natH);
+        (actions || []).forEach(action => {
+          drawSingleAnnotationAction(ctx, action, natW, natH);
+        });
+        return exportCanvas;
+      } finally {
+        if (cleanup) cleanup();
+      }
+    }
+
+    // WebP q0.85 at natural resolution (the course pages themselves are
+    // WebP; text and strokes stay legible at a fraction of PNG size).
+    // Browsers without WebP encoding return a PNG blob instead — that
+    // is accepted as-is; only a total failure throws.
+    function annotatedCanvasToBlob(canvas) {
+      return new Promise((resolve, reject) => {
+        const done = (blob) => { if (blob) resolve(blob); else reject(new Error('Could not create the annotated page image.')); };
+        try {
+          canvas.toBlob(function (blob) {
+            if (blob) { resolve(blob); return; }
+            try { canvas.toBlob(done, 'image/png'); } catch (e) { reject(e); }
+          }, 'image/webp', 0.85);
+        } catch (e) { reject(e); }
+      });
+    }
+
+    async function saveAnnotatedPages() {
+      if (ANNOTATION_SAVE_IN_FLIGHT) return;
+      const book = CURRENT_READER_BOOK;
+      if (!book) return;
+      const pageKeys = annotationMarkedPageKeys(book.id);
+      if (pageKeys.length === 0) {
+        lmsNotify('There are no annotations on any page of this book yet.\n\nMark a page with the Annotate tools first, then press Save Pages.');
+        return;
+      }
+      const context = annotationContextSnapshot();
+      if (!context) {
+        // No student/class can be identified: uploading now would stage
+        // pages nothing may claim. Refuse honestly and keep the marks.
+        lmsNotify('Annotated pages can only be saved from a student\'s class.\n\nOpen this book from the student\'s lesson — for example with the Preview button in the lesson form, or from the class list while the class is running — and press Save Pages again.\n\nYour markings are still on the pages: nothing was uploaded and nothing was lost.', { type: 'error' });
+        return;
+      }
+      if (!window.LessonHistory || typeof window.LessonHistory.uploadLessonImageOrThrow !== 'function') {
+        lmsNotify('Annotated pages cannot be uploaded right now (history module missing). Your markings are still on the pages — please try again.', { type: 'error' });
+        return;
+      }
+      ANNOTATION_SAVE_IN_FLIGHT = true;
+      let doneCount = 0;
+      const failedKeys = [];
+      try {
+        for (const pageKey of pageKeys) {
+          if (!annotationPageIsDirty(pageKey)) { doneCount++; setAnnotationSaveProgress(doneCount, pageKeys.length); continue; }
+          try {
+            const parsed = parseReaderPageKey(pageKey);
+            const actions = ANNOTATION_STORE[pageKey] || [];
+            const canvas = await buildAnnotatedPageCanvas(book, parsed.para, parsed.page, actions);
+            const blob = await annotatedCanvasToBlob(canvas);
+            const origPage = (window.LessonHistory && typeof window.LessonHistory.origPageFor === 'function')
+              ? window.LessonHistory.origPageFor(book, parsed.para, parsed.page) : null;
+            ANNOTATION_STAGING_SEQ++;
+            const stagingId = 's' + ANNOTATION_STAGING_SEQ.toString(36) + Date.now().toString(36);
+            const ext = (blob.type && blob.type.indexOf('png') >= 0) ? 'png' : 'webp';
+            const fname = 'annotated_' + String(book.id).replace(/[^a-zA-Z0-9_-]/g, '_')
+              + '_para' + parsed.para + '_page' + (origPage || parsed.page) + '_' + stagingId + '.' + ext;
+            const file = new File([blob], fname, { type: blob.type || 'image/webp' });
+            const key = await window.LessonHistory.uploadLessonImageOrThrow(file);
+            ANNOTATION_SAVED[pageKey] = {
+              key: key,
+              bookId: String(book.id),
+              para: parsed.para,
+              page: parsed.page,
+              origPage: origPage,
+              actionCount: actions.length,
+              fingerprint: annotationFingerprint(actions),
+              context: context
+            };
+            doneCount++;
+          } catch (err) {
+            console.warn('[LMS] annotated page save failed:', (err && err.message) || err);
+            failedKeys.push(pageKey);
+          }
+          setAnnotationSaveProgress(doneCount, pageKeys.length);
+        }
+      } finally {
+        ANNOTATION_SAVE_IN_FLIGHT = false;
+        ANNOTATION_SAVE_FAILED = failedKeys.length > 0;
+        refreshAnnotationSaveButton();
+      }
+      if (failedKeys.length === 0) {
+        const n = pageKeys.length;
+        lmsNotify('✅ ' + n + ' annotated page' + (n === 1 ? '' : 's') + ' saved.\n\nThey will attach to the student\'s lesson record when you save the lesson at the end of the class.');
+      } else {
+        lmsNotify('⚠️ ' + doneCount + ' of ' + pageKeys.length + ' annotated pages saved.\n\n' + failedKeys.length + ' page(s) could not be uploaded — their markings are still on the pages. Check your connection and press Retry Save; only the remaining pages will be uploaded.', { type: 'error' });
       }
     }
 
@@ -7945,6 +8413,10 @@ font-family: var(--font-num) !important;
             imgHtml = `<a href="${url}" target="_blank" rel="noopener"><img src="${url}" class="max-h-40 rounded-xl border border-slate-200" alt="Lesson image"></a>`;
           }
         }
+        let annotatedHtml = '';
+        if (e.annotatedPages && e.annotatedPages.length > 0) {
+          annotatedHtml = `<div><button onclick="openTeacherAnnotatedPages(${_lhCardIdx})" class="px-3 py-1.5 rounded-lg bg-teal-700 hover:bg-teal-800 text-white text-[11px] font-extrabold transition cursor-pointer">View annotated pages (${e.annotatedPages.length})</button></div>`;
+        }
         cards.push(`
           <div class="border border-slate-200 rounded-2xl p-4 space-y-1.5">
             <div class="flex flex-wrap items-center gap-2 text-xs">
@@ -7960,6 +8432,7 @@ font-family: var(--font-num) !important;
             ${e.remarks ? `<p class="text-xs text-slate-600 bg-slate-50 p-2.5 rounded-xl border border-slate-200/70 italic">"${escapeHtml(e.remarks)}"</p>` : ''}
             <div class="text-[11px] text-slate-500">Actual duration: <strong>${escapeHtml(window.LessonHistory.formatActualDuration(e))}</strong>${schedText ? ` • ${escapeHtml(schedText)}` : ''}</div>
             ${_lhCardCanRead ? `<div><button onclick="openTeacherHistoryLessonPage(${_lhCardIdx})" class="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-extrabold transition cursor-pointer">Read course page</button></div>` : ((e && e.hasLesson && !e.isAdditionalCourse) ? `<div class="text-[11px] text-slate-400 italic">Course page cannot be opened for this record (no course saved with it).</div>` : '')}
+            ${annotatedHtml}
             ${imgHtml}
           </div>
         `);
@@ -7994,6 +8467,17 @@ font-family: var(--font-num) !important;
       const e = _LH_TEACHER_VISIBLE_ENTRIES[idx];
       if (!e) return Promise.resolve({ ok: false, reason: 'NO_BOOK_ID' });
       return openTeacherSavedLessonPage(e.bookId, e.page, e.para, e.language);
+    }
+
+    // Annotated pages: open the shared read-only viewer for a history
+    // entry's saved annotated pages (the legacy single image, when the
+    // record also has one, is shown first inside the viewer).
+    function openTeacherAnnotatedPages(idx) {
+      const e = _LH_TEACHER_VISIBLE_ENTRIES[idx];
+      if (!e || !e.annotatedPages || !e.annotatedPages.length) return;
+      if (!window.LessonHistory || typeof window.LessonHistory.openAnnotatedPagesViewer !== 'function') return;
+      const title = window.LessonHistory.entryTitle ? (window.LessonHistory.entryTitle(e) || 'Annotated pages') : 'Annotated pages';
+      window.LessonHistory.openAnnotatedPagesViewer(e.annotatedPages, { title, imageKey: e.imageKey || null });
     }
 
     // =================================================================
@@ -10365,6 +10849,21 @@ font-family: var(--font-num) !important;
           recorded_at: new Date().toISOString()
         };
 
+        // Annotated Pages (2026-11-06): this writer upserts the same
+        // attendance row shape with the same lesson payload, so it
+        // merges staged pages too — but ONLY pages staged from THIS
+        // Advance form for THIS student (the claim's advance rule:
+        // normal-class annotations never leak into an advance record).
+        // Additional Course advances claim nothing (no book pages).
+        let claimedAnnotatedPageKeys = [];
+        if (!isAdditionalCourse && typeof claimAnnotatedPagesForLesson === 'function') {
+          const claimedAnn = claimAnnotatedPagesForLesson({ scheduleId: schedId, studentId: studentId, bookId: bookId, source: 'advance', prior: null });
+          if (claimedAnn && claimedAnn.pages.length > 0) {
+            sabaqPayload.annotated_pages = claimedAnn.pages;
+            claimedAnnotatedPageKeys = claimedAnn.pageKeys;
+          }
+        }
+
         // Upsert into Supabase attendance_logs
         const { error } = await db.from('attendance_logs').upsert([{
           schedule_id: schedId,
@@ -10383,6 +10882,12 @@ font-family: var(--font-num) !important;
           return;
         }
         advSaved = true;
+
+        // Annotated Pages: release the claimed staging entries now
+        // that they are part of the record (see the end-class writer).
+        if (claimedAnnotatedPageKeys.length > 0 && typeof releaseClaimedAnnotatedPages === 'function') {
+          releaseClaimedAnnotatedPages(claimedAnnotatedPageKeys);
+        }
 
         // Also save in localStorage cache for instant offline resilience
         let advStore = [];

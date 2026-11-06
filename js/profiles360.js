@@ -1490,6 +1490,7 @@ function _buildSelectedStudentWorkspaceHtml(family, student, famSchedules, famLo
                   schedText = `Scheduled: ${mins} min`;
                 }
                 const imageKey = (en && en.imageKey) || p.imageKey || null;
+                const annotatedPages = (en && en.annotatedPages) || p.annotatedPages || null;
                 const result = (en && en.result) || p.assessment || null;
                 const additionalLesson = (en && en.additionalLesson) || p.additionalLesson || null;
                 const remarks = (en && en.remarks) || p.remarks || '';
@@ -1548,6 +1549,14 @@ function _buildSelectedStudentWorkspaceHtml(family, student, famSchedules, famLo
                     ` : ''}
                     ${imageKey ? `
                       <img data-lh-img-key="${_esc360(imageKey)}" class="lh-360-lesson-img hidden max-h-40 rounded-xl border border-slate-200" alt="Lesson image">
+                    ` : ''}
+                    ${annotatedPages && annotatedPages.length ? `
+                      <div>
+                        <button onclick="open360AnnotatedPagesFromInspector(${_lhInspIdx})"
+                                class="px-3 py-1.5 rounded-lg bg-teal-700 hover:bg-teal-800 text-white text-xs font-extrabold transition cursor-pointer">
+                          View annotated pages (${annotatedPages.length})
+                        </button>
+                      </div>
                     ` : ''}
                   </div>
                 `;
@@ -1794,6 +1803,9 @@ function _parseLessonDetails360(log) {
         additionalLesson: parsed.additional_lesson || null,
         pageReference: parsed.page_reference || null,
         imageKey: parsed.image_key || null,
+        annotatedPages: (typeof window !== 'undefined' && window.LessonHistory && window.LessonHistory.normalizeAnnotatedPages)
+          ? window.LessonHistory.normalizeAnnotatedPages(parsed.annotated_pages)
+          : null,
         summaryTitle: `${bookTitle}${lessonStr}${pageStr}${lineBoxStr}${refStr}`
       };
     }
@@ -1810,6 +1822,7 @@ function _parseLessonDetails360(log) {
     additionalLesson: null,
     pageReference: null,
     imageKey: null,
+    annotatedPages: null,
     summaryTitle: String(raw)
   };
 }
@@ -1901,6 +1914,22 @@ function open360LessonPageFromInspector(idx) {
   const log = _LH360_INSPECTOR_ENTRIES[idx];
   if (log) return open360LessonPageForEntry(log._lhEntry || null);
   return Promise.resolve({ ok: false, reason: 'NO_BOOK_ID' });
+}
+
+// Annotated pages: open the shared read-only viewer for an inspector
+// entry's saved annotated pages (pages normalized from the entry or
+// the 360 parser; the legacy single image shows first when present).
+function open360AnnotatedPagesFromInspector(idx) {
+  const log = _LH360_INSPECTOR_ENTRIES[idx];
+  if (!log || !window.LessonHistory || typeof window.LessonHistory.openAnnotatedPagesViewer !== 'function') return;
+  const en = log._lhEntry || null;
+  const p = _parseLessonDetails360(log);
+  const pages = (en && en.annotatedPages) || p.annotatedPages || null;
+  if (!pages || !pages.length) return;
+  window.LessonHistory.openAnnotatedPagesViewer(pages, {
+    title: p.summaryTitle || 'Annotated pages',
+    imageKey: (en && en.imageKey) || p.imageKey || null
+  });
 }
 
 // ============================================================================

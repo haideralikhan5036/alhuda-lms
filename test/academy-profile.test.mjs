@@ -122,7 +122,7 @@ console.log('== structure ==');
   check('email.js identity is dynamic (let + __setAcademyIdentity hook)',
     email.includes('let ACADEMY_NAME') && email.includes('window.__setAcademyIdentity'));
   check('worker: managers may READ academy_profile_v1; release bumped',
-    worker.includes("k === 'academy_profile_v1'") && worker.includes("const WORKER_RELEASE = '2026-11-06-course-delete'"));
+    worker.includes("k === 'academy_profile_v1'") && worker.includes("const WORKER_RELEASE = '2026-11-06-annotated-pages'"));
 }
 
 console.log('== consumers read the profile ==');

@@ -111,7 +111,7 @@ fakeDb.seed("INSERT INTO system_settings (id, key, value) VALUES ('SYS-LOGO', 'a
   const ledger = await dbPost(TOK.teacher, { table: 'student_assignments', action: 'select' });
   check('teacher read of the assignment ledger still denied', ledger.status === 403 || ((ledger.json.data || []).length) === 0, 'status ' + ledger.status);
   const h = await call('/api/health', { method: 'GET' });
-  check('health still reports the slots release + schema v5', h.status === 200 && h.json && h.json.version === '2026-11-06-course-delete' && h.json.schema === '2026-11-05-v5', 'got ' + (h.json && h.json.version) + '/' + (h.json && h.json.schema));
+  check('health still reports the slots release + schema v5', h.status === 200 && h.json && h.json.version === '2026-11-06-annotated-pages' && h.json.schema === '2026-11-05-v5', 'got ' + (h.json && h.json.version) + '/' + (h.json && h.json.schema));
 }
 
 const failed = results.filter(r => !r.pass);

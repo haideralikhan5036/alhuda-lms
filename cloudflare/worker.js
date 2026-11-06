@@ -84,7 +84,7 @@ function corsHeadersFor(request, env) {
 // functions/api/db.js (the D1 schema marker; v2 after Part A). It is hardcoded
 // here on purpose: /api/health must never 500 because D1 is unreachable, and
 // it must never cost an unauthenticated caller a D1 read.
-const WORKER_RELEASE = '2026-11-06-course-delete';
+const WORKER_RELEASE = '2026-11-06-annotated-pages';
 const HEALTH_SCHEMA_VERSION = '2026-11-05-v5';
 
 // --- Batch 7 Part B: security headers (workers.dev responses) --------------
@@ -3399,10 +3399,11 @@ function scopedStorageFolder(role, sub) {
   return `scoped-${role}-${safeSub}`;
 }
 
-// Lesson History: is this R2 key the image_key of an attendance_logs row
-// the caller is allowed to see? Parent = own family's rows; teacher = UNION
-// scope (own recordings OR currently assigned students' rows). The check
-// is a server-side D1 lookup on the record -- never trust in the key itself
+// Lesson History: is this R2 key the image_key — or one of the
+// annotated_pages keys — of an attendance_logs row the caller is allowed
+// to see? Parent = own family's rows; teacher = UNION scope (own
+// recordings OR currently assigned students' rows). The check is a
+// server-side D1 lookup on the record -- never trust in the key itself
 // (no key-guessing: an unrelated key, even a well-formed one, stays 403).
 // Returns false (fail closed) when D1 is unavailable.
 async function isLessonImageKeyReadable(db, role, sub, key) {
@@ -3437,10 +3438,21 @@ async function isLessonImageKeyReadable(db, role, sub, key) {
       try {
         const parsed = typeof notes === 'string' ? JSON.parse(notes) : notes;
         if (parsed && parsed.image_key === key) return true;
+        // Annotated lesson pages (2026-11-06): the same exact-match rule
+        // extended to the record's annotated_pages array — a key recorded
+        // as one of THIS row's annotated page images authorizes the read.
+        // Authorization still derives only from the record, never from
+        // the key's shape.
+        if (parsed && Array.isArray(parsed.annotated_pages)) {
+          for (const entry of parsed.annotated_pages) {
+            if (entry && entry.key === key) return true;
+          }
+        }
       } catch (e) {}
       // Phase 4 (audit P3-g): NO substring fallback — a key merely
       // mentioned inside lesson-notes text must not grant the image.
-      // Only the exact parsed image_key above authorizes the read.
+      // Only the exact parsed image_key / annotated_pages key above
+      // authorizes the read.
     }
     return false;
   } catch (e) {

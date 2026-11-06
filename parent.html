@@ -976,6 +976,7 @@
     let CURRENT_ATTENDANCE = [];
     let CURRENT_FAMILIES = [];
     let LATEST_SABAQ_META = null;
+    let _LH_PARENT_VISIBLE_LOGS = [];
     let CURRENT_PORTAL_CATEGORY = 'all';
     let CURRENT_FEE_MODAL_RECEIPT = null;
     let CURRENT_FEE_HISTORY = [];
@@ -1785,6 +1786,7 @@
       if (!container) return;
 
       LATEST_SABAQ_META = null;
+      _LH_PARENT_VISIBLE_LOGS = logs || [];
 
       if (!logs || logs.length === 0) {
         container.innerHTML = `
@@ -1797,7 +1799,7 @@
         return;
       }
 
-      container.innerHTML = logs.map(log => {
+      container.innerHTML = logs.map((log, _lhParentIdx) => {
         let meta = null;
         if (log.lesson_notes) {
           try {
@@ -1847,6 +1849,7 @@
           schedText = `Scheduled: ${mins} min`;
         }
         const imageKey = (en && en.imageKey) || meta?.image_key || null;
+        const annotatedCount = (en && en.annotatedPages && en.annotatedPages.length) || (Array.isArray(meta?.annotated_pages) ? meta.annotated_pages.filter(p => p && p.key).length : 0);
         const canRead = !isAddCourse && bookId && pageVal !== null && pageVal !== undefined && String(pageVal) !== '';
 
         return `
@@ -1887,6 +1890,9 @@
                 <p class="text-[11px] text-slate-500">Actual duration: <strong>${escapeHtml(actualDur)}</strong>${schedText ? ` • ${escapeHtml(schedText)}` : ''}</p>
                 ${imageKey ? `
                   <img data-lh-img-key="${escapeHtml(imageKey)}" class="hidden max-h-40 rounded-xl border border-slate-200" alt="Lesson image">
+                ` : ''}
+                ${annotatedCount > 0 ? `
+                  <div><button onclick="openParentAnnotatedPages(${_lhParentIdx})" class="px-3 py-1.5 rounded-lg bg-teal-700 hover:bg-teal-800 text-white text-[11px] font-extrabold transition cursor-pointer">View annotated pages (${annotatedCount})</button></div>
                 ` : ''}
               </div>
 
@@ -1944,6 +1950,29 @@
     // reader with the resolved values. A gated-but-unresolvable
     // entry alerts the resolver's honest reason — never another
     // book's page, never page 1.
+    // Annotated pages: open the shared read-only viewer for one of
+    // the rendered lesson cards. The pages come from the card's own
+    // normalized entry (or, failing that, the card's raw payload) —
+    // the Worker still authorizes every image fetch against the
+    // parent's own family, so nothing outside it can be viewed.
+    function openParentAnnotatedPages(idx) {
+      const log = _LH_PARENT_VISIBLE_LOGS[idx];
+      if (!log || !window.LessonHistory || typeof window.LessonHistory.openAnnotatedPagesViewer !== 'function') return;
+      const en = log._lhEntry || null;
+      let pages = (en && en.annotatedPages) || null;
+      let imageKey = (en && en.imageKey) || null;
+      if (!pages || !pages.length) {
+        let meta = null;
+        try { meta = typeof log.lesson_notes === 'string' ? JSON.parse(log.lesson_notes) : log.lesson_notes; } catch (e) {}
+        if (meta) {
+          pages = window.LessonHistory.normalizeAnnotatedPages(meta.annotated_pages);
+          if (!imageKey) imageKey = meta.image_key || null;
+        }
+      }
+      if (!pages || !pages.length) return;
+      window.LessonHistory.openAnnotatedPagesViewer(pages, { title: 'Annotated pages', imageKey });
+    }
+
     async function openParentSavedLessonPage(bookId, page, para, language) {
       if (!window.LessonHistory) { lmsNotify('Course book not found.'); return { ok: false, reason: 'BOOK_NOT_FOUND' }; }
       const entry = { bookId: bookId || null, page: (page === null || page === undefined || page === '') ? null : Number(page), para: (para === null || para === undefined || para === '') ? null : Number(para), language: language || null, isAdditionalCourse: bookId === 'additional-course' };
