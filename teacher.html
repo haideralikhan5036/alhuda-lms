@@ -1284,6 +1284,10 @@ font-family: var(--font-num) !important;
                   <i class="fa-solid fa-eye text-brandGold"></i> View
                 </button>
               </div>
+              <div class="mt-2">
+                <label class="block font-bold text-slate-700 mb-1">Line &amp; Box No. (optional)</label>
+                <input type="text" id="attLineBox" maxlength="120" placeholder="e.g. Line 5, Box 2" class="w-full p-2.5 bg-white border border-slate-300 rounded-xl font-medium text-slate-800 text-xs focus:outline-brandEmerald">
+              </div>
             </div>
             <!-- Lesson-form simplify: Lines / Assessment / Rating are no
                  longer teacher-facing controls in this minimal form. The
@@ -1543,6 +1547,10 @@ font-family: var(--font-num) !important;
                 <button type="button" onclick="previewAdvanceSelectedMaterial()" class="px-2.5 py-2 bg-purple-900 hover:bg-purple-950 text-white rounded-xl font-bold text-xs shadow-xs transition flex items-center gap-1 flex-shrink-0" title="Open Page in Digital Reader">
                   <i class="fa-solid fa-eye text-amber-300"></i> View
                 </button>
+              </div>
+              <div class="mt-2">
+                <label class="block font-bold text-slate-700 mb-1">Line &amp; Box No. (optional)</label>
+                <input type="text" id="advLineBox" maxlength="120" placeholder="e.g. Line 5, Box 2" class="w-full p-2.5 bg-white border border-slate-300 rounded-xl font-medium text-slate-800 text-xs focus:outline-purple-600">
               </div>
             </div>
             <!-- Lesson-form simplify: Lines / Assessment / Rating kept as
@@ -5790,6 +5798,7 @@ font-family: var(--font-num) !important;
           badge.className = 'text-[10px] font-bold text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded-md border border-emerald-300';
         }
         document.getElementById('attLineRange').value = parsedNotes.line_range || '';
+        document.getElementById('attLineBox').value = parsedNotes.line_box || '';
         document.getElementById('attSabaqResult').value = parsedNotes.status || 'Pass';
         document.getElementById('attSabaqRating').value = parsedNotes.rating || '5';
         document.getElementById('attLessonNotes').value = parsedNotes.remarks || '';
@@ -5809,6 +5818,7 @@ font-family: var(--font-num) !important;
         }
 
         document.getElementById('attLineRange').value = parsedNotes.line_range || '';
+        document.getElementById('attLineBox').value = parsedNotes.line_box || '';
         document.getElementById('attSabaqResult').value = parsedNotes.status || 'Pass';
         document.getElementById('attSabaqRating').value = parsedNotes.rating || '5';
         document.getElementById('attLessonNotes').value = parsedNotes.remarks || '';
@@ -5818,6 +5828,7 @@ font-family: var(--font-num) !important;
           badge.className = 'text-[10px] font-bold text-amber-800 bg-amber-100 px-2 py-0.5 rounded-md border border-amber-200';
         }
         document.getElementById('attLineRange').value = '';
+        document.getElementById('attLineBox').value = '';
         document.getElementById('attSabaqResult').value = 'Pass';
         document.getElementById('attSabaqRating').value = '5';
         document.getElementById('attLessonNotes').value = currentNotes || '';
@@ -5946,6 +5957,7 @@ font-family: var(--font-num) !important;
         const bookId = document.getElementById('attCourseBookSelect')?.value || 'holy-quran-16-line';
         const allBooks = getTeacherAllBooks();
         const line_range = (document.getElementById('attLineRange')?.value || '').trim();
+        const line_box = (document.getElementById('attLineBox')?.value || '').trim().slice(0, 120);
         const sabaq_result = document.getElementById('attSabaqResult')?.value || 'Pass';
         const rating = Number(document.getElementById('attSabaqRating')?.value || 5);
         const remarks = (document.getElementById('attLessonNotes')?.value || '').trim();
@@ -6032,6 +6044,10 @@ font-family: var(--font-num) !important;
             // contract is untouched. Null for flat books / unanchored.
             orig_page: (selectedPara !== null && window.LessonHistory) ? window.LessonHistory.origPageFor(book, selectedPara, page) : null,
             line_range: line_range,
+            // Additive: the teacher's free-text line/box note for the
+            // page (optional; null when left blank, absent on records
+            // saved before the field existed).
+            line_box: line_box || null,
             status: sabaq_result,
             rating: rating,
             remarks: remarks,
@@ -7917,6 +7933,7 @@ font-family: var(--font-num) !important;
           const _lhOrig = (window.LessonHistory && e.para) ? window.LessonHistory.origPageForEntry(e, _lhBooks) : null;
           progress.push(`Page ${escapeHtml(_lhOrig !== null && _lhOrig !== undefined ? _lhOrig : e.page)}`);
         }
+        if (e.lineBox) progress.push(escapeHtml(e.lineBox));
         if (e.pageReference) progress.push(`Ref: ${escapeHtml(e.pageReference)}`);
         if (e.lineRange) progress.push(escapeHtml(e.lineRange));
         const progressText = progress.join(' • ');
@@ -9993,6 +10010,8 @@ font-family: var(--font-num) !important;
       if (advImgFile) advImgFile.value = '';
       const advImgKey = document.getElementById('advLessonImageKey');
       if (advImgKey) advImgKey.value = '';
+      const advLineBoxInp = document.getElementById('advLineBox');
+      if (advLineBoxInp) advLineBoxInp.value = '';
 
       // Default target date to Tomorrow
       const tomorrow = new Date();
@@ -10243,6 +10262,7 @@ font-family: var(--font-num) !important;
       const bookId = document.getElementById('advCourseBookSelect')?.value || 'holy-quran-16-line';
       const page = Number(document.getElementById('advCoursePageSelect')?.value || 1);
       const lineRange = (document.getElementById('advLineRange')?.value || '').trim();
+      const lineBox = (document.getElementById('advLineBox')?.value || '').trim().slice(0, 120);
       const sabaqResult = document.getElementById('advSabaqResult')?.value || 'Pass';
       const rating = Number(document.getElementById('advSabaqRating')?.value || 5);
       const remarks = (document.getElementById('advLessonNotes')?.value || '').trim();
@@ -10332,6 +10352,7 @@ font-family: var(--font-num) !important;
           // in the end-class writer — `page` stays para-relative.
           orig_page: (!isAdditionalCourse && selectedPara !== null && book && window.LessonHistory) ? window.LessonHistory.origPageFor(book, selectedPara, page) : null,
           line_range: lineRange,
+          line_box: isAdditionalCourse ? null : (lineBox || null),
           status: sabaqResult,
           rating: rating,
           remarks: remarks,
@@ -10458,7 +10479,7 @@ font-family: var(--font-num) !important;
         lmsNotify(`🌟 Advance Class Successfully Recorded!\n\n` +
           `Student: ${studentName}\n` +
           `Advance Target Date: ${targetDate}\n` +
-          `Lesson: ${bookTitle}${isAdditionalCourse ? ` (${customLesson})` : ` (Page ${page})`}\n` +
+          `Lesson: ${bookTitle}${isAdditionalCourse ? ` (${advAdditionalLesson})` : ` (Page ${page})`}\n` +
           `Status: 🌟 Advance Class Completed${emailNotice}`
         );
 
