@@ -1760,6 +1760,26 @@
     }
 
     // Render Recent Lesson Progress Cards
+    // The ORIGINAL (printed) page number a parent-facing lesson entry
+    // displays: the record's stored orig_page wins, otherwise the
+    // stored para-relative page is converted through the book's
+    // anchors (js/lesson-history.js OrigPages). Returns null when not
+    // convertible — callers then show the stored page exactly as
+    // before. Display-only: reader/open actions always keep the
+    // STORED para-relative value.
+    function parentLessonOrigPage(meta, en, pageVal) {
+      if (!window.LessonHistory || !window.LessonHistory.origPageForEntry) return null;
+      try {
+        const books = (typeof getAllAvailableBooks === 'function') ? getAllAvailableBooks() : [];
+        return window.LessonHistory.origPageForEntry({
+          bookId: (meta && meta.book_id) || null,
+          para: (en && en.para) || (meta && meta.para) || null,
+          page: pageVal,
+          raw: meta || (en && en.raw) || null
+        }, books);
+      } catch (e) { return null; }
+    }
+
     function renderRecentSabaqLogs(logs, defaultTeacher) {
       const container = document.getElementById('parentLessonNotesContainer');
       if (!container) return;
@@ -1794,6 +1814,11 @@
         const bookId = meta?.book_id || null;
         const bookTitle = meta?.book_title || 'Lesson Material';
         const pageVal = (en && en.page !== null && en.page !== undefined) ? en.page : (meta?.page ?? null);
+        // Display page = the ORIGINAL (printed) number when the lesson
+        // is from a para-based book; pageVal itself stays para-relative
+        // for the reader call further down.
+        const _dispOrig = (pageVal !== null && pageVal !== undefined && String(pageVal) !== '') ? parentLessonOrigPage(meta, en, pageVal) : null;
+        const dispPage = _dispOrig != null ? _dispOrig : pageVal;
         const isAddCourse = meta?.book_id === 'additional-course';
         const statusClass = meta?.status === 'Pass' ? 'bg-emerald-100 text-emerald-800 border-emerald-300' : 'bg-amber-100 text-amber-800 border-amber-300';
         // Progress badge: para/page/line ONLY when present -- never a
@@ -1802,7 +1827,7 @@
         if (!isAddCourse) {
           if (en && en.para) progressBits.push(`Para ${escapeHtml(en.para)}`);
           else if (meta?.para) progressBits.push(`Para ${escapeHtml(meta.para)}`);
-          if (pageVal !== null && pageVal !== undefined && String(pageVal) !== '') progressBits.push(`Page ${escapeHtml(pageVal)}`);
+          if (pageVal !== null && pageVal !== undefined && String(pageVal) !== '') progressBits.push(`Page ${escapeHtml(dispPage)}`);
           const lr = (en && en.lineRange) || meta?.line_range;
           if (lr) progressBits.push(escapeHtml(lr));
         }
@@ -1866,7 +1891,7 @@
               <div class="flex items-center justify-start md:justify-end">
                 ${canRead ? `
                 <button onclick="openParentSavedLessonPage('${sanitizeBookId(bookId)}', ${Number(pageVal)}, ${meta?.para ? Number(meta.para) : 'null'}, ${meta?.language ? `'${escapeJsAttr(meta.language)}'` : 'null'})" class="w-full sm:w-auto px-4 py-2.5 rounded-xl bg-gradient-to-r from-emerald-800 to-teal-900 hover:from-emerald-700 hover:to-teal-800 text-white font-black text-xs shadow-sm hover:shadow-md transition flex items-center justify-center gap-1.5">
-                  <i class="fa-solid fa-book-open-reader text-brandGold"></i> Revise Page ${escapeHtml(pageVal)}
+                  <i class="fa-solid fa-book-open-reader text-brandGold"></i> Revise Page ${escapeHtml(dispPage)}
                 </button>
                 ` : ''}
               </div>
@@ -1885,7 +1910,8 @@
         heroBtn.style.display = heroReadable ? '' : 'none';
         if (heroReadable) {
           const paraText = LATEST_SABAQ_META.para ? `Para ${escapeHtml(LATEST_SABAQ_META.para)} • ` : '';
-          heroBtn.innerHTML = `<i class="fa-solid fa-book-open"></i> Read Lesson: ${escapeHtml(LATEST_SABAQ_META.book_title || 'Lesson')} (${paraText}Pg ${escapeHtml(LATEST_SABAQ_META.page)})`;
+          const _heroOrig = parentLessonOrigPage(LATEST_SABAQ_META, null, LATEST_SABAQ_META.page);
+          heroBtn.innerHTML = `<i class="fa-solid fa-book-open"></i> Read Lesson: ${escapeHtml(LATEST_SABAQ_META.book_title || 'Lesson')} (${paraText}Pg ${escapeHtml(_heroOrig != null ? _heroOrig : LATEST_SABAQ_META.page)})`;
         }
       }
     }
@@ -2049,10 +2075,14 @@
         // Lesson History: no fake "Page 1", no first-book fallback.
         const en = log._lhEntry || null;
         const pageVal = (en && en.page !== null && en.page !== undefined) ? en.page : (meta?.page ?? null);
+        // Display page = the ORIGINAL (printed) number for para-book
+        // lessons; pageVal stays para-relative for the Read call.
+        const _attOrig = (pageVal !== null && pageVal !== undefined && String(pageVal) !== '') ? parentLessonOrigPage(meta, en, pageVal) : null;
+        const dispPageAtt = _attOrig != null ? _attOrig : pageVal;
         const topic = meta?.book_title
           ? (meta.book_id === 'additional-course'
             ? `${escapeHtml(meta.book_title)}${meta.lesson_name ? ` — ${escapeHtml(meta.lesson_name)}` : ''}${meta.page_reference ? ` • Ref: ${escapeHtml(meta.page_reference)}` : ''}`
-            : `${escapeHtml(meta.book_title)}${meta?.para ? ` • Para ${escapeHtml(meta.para)}` : ''}${pageVal !== null && pageVal !== undefined && String(pageVal) !== '' ? ` (Page ${escapeHtml(pageVal)})` : ''}${((en && en.additionalLesson) || meta?.additional_lesson) ? ` • + ${escapeHtml((en && en.additionalLesson) || meta.additional_lesson)}` : ''}`)
+            : `${escapeHtml(meta.book_title)}${meta?.para ? ` • Para ${escapeHtml(meta.para)}` : ''}${pageVal !== null && pageVal !== undefined && String(pageVal) !== '' ? ` (Page ${escapeHtml(dispPageAtt)})` : ''}${((en && en.additionalLesson) || meta?.additional_lesson) ? ` • + ${escapeHtml((en && en.additionalLesson) || meta.additional_lesson)}` : ''}`)
           : escapeHtml(log.lesson_notes || 'Regular Class Attendance');
         const teacher = log.teachers?.full_name || defaultTeacher;
         const canRead = meta?.book_id && meta.book_id !== 'additional-course' && pageVal !== null && pageVal !== undefined && String(pageVal) !== '';
@@ -2865,9 +2895,11 @@
           const matchP = book.paras.find(pr => ACTIVE_READER_PAGE >= pr.page_start && ACTIVE_READER_PAGE <= pr.page_end);
           if (matchP) {
             ACTIVE_READER_PARA = matchP.para;
-            if (book.paras_data && book.paras_data[matchP.para]) {
-              ACTIVE_READER_PAGE = Math.max(1, ACTIVE_READER_PAGE - matchP.page_start + 1);
-            }
+            // Convert absolute page to para-relative page via
+            // book.paras (same fix as js/curriculum.js: the old
+            // paras_data gate left paras-only books holding the
+            // GLOBAL number as the para-relative page).
+            ACTIVE_READER_PAGE = Math.max(1, ACTIVE_READER_PAGE - matchP.page_start + 1);
           } else {
             ACTIVE_READER_PARA = 1;
           }
@@ -2981,10 +3013,19 @@
 
       ACTIVE_READER_PAGE = Math.max(1, Math.min(maxPages, ACTIVE_READER_PAGE));
 
+      // Para-based books show the ORIGINAL (printed) page number via
+      // the shared OrigPages helper when it resolves; otherwise the
+      // para-relative labels stay exactly as before.
+      const _prOrigApi = window.LessonHistory || null;
+      const _prOrigNow = (isParaBased && _prOrigApi) ? _prOrigApi.origPageFor(book, ACTIVE_READER_PARA, ACTIVE_READER_PAGE) : null;
+      const _prOrigLast = (isParaBased && _prOrigApi) ? _prOrigApi.lastOrigPageFor(book) : null;
+      const _prShowOrig = _prOrigNow !== null && _prOrigNow !== undefined && _prOrigLast !== null && _prOrigLast !== undefined;
       const pageBadge = document.getElementById('parentReaderPageBadge');
       if (pageBadge) {
         if (isParaBased) {
-          pageBadge.innerText = `Para ${ACTIVE_READER_PARA} • Page ${ACTIVE_READER_PAGE} of ${maxPages}`;
+          pageBadge.innerText = _prShowOrig
+            ? `Para ${ACTIVE_READER_PARA} • Page ${_prOrigNow} of ${_prOrigLast}`
+            : `Para ${ACTIVE_READER_PARA} • Page ${ACTIVE_READER_PAGE} of ${maxPages}`;
         } else {
           pageBadge.innerText = `Page ${ACTIVE_READER_PAGE} of ${maxPages}`;
         }
@@ -2993,7 +3034,7 @@
       const topInd = document.getElementById('parentReaderPageIndicatorTop');
       if (topInd) {
         if (isParaBased) {
-          topInd.innerText = `Juz ${ACTIVE_READER_PARA} • P${ACTIVE_READER_PAGE}`;
+          topInd.innerText = _prShowOrig ? `Juz ${ACTIVE_READER_PARA} • P${_prOrigNow}` : `Juz ${ACTIVE_READER_PARA} • P${ACTIVE_READER_PAGE}`;
         } else {
           topInd.innerText = `${ACTIVE_READER_PAGE} / ${maxPages}`;
         }
@@ -3002,7 +3043,9 @@
       const bottomInd = document.getElementById('parentReaderBottomPageInd');
       if (bottomInd) {
         if (isParaBased) {
-          bottomInd.innerText = `Para ${ACTIVE_READER_PARA} • Page ${ACTIVE_READER_PAGE} of ${maxPages}`;
+          bottomInd.innerText = _prShowOrig
+            ? `Para ${ACTIVE_READER_PARA} • Page ${_prOrigNow} of ${_prOrigLast}`
+            : `Para ${ACTIVE_READER_PARA} • Page ${ACTIVE_READER_PAGE} of ${maxPages}`;
         } else {
           bottomInd.innerText = `Page ${ACTIVE_READER_PAGE} of ${maxPages}`;
         }

@@ -196,6 +196,11 @@ const FN_NAMES = [
   'pageEditorRemoveSelected', 'pageEditorMove', 'pageEditorDismissUploadErrors',
   'pageEditorStagedValues', 'pageEditorIsDirty', 'pageEditorIsStructural',
   'pageEditorBuildUpdatedBook', 'savePageEditor', 'requestClosePageEditor',
+  // Original-page anchors (2026-11-06): the editor section gained these
+  // functions; the extraction list must name them or the vm world lacks
+  // functions the real page loads with the rest of curriculum.js.
+  'pageEditorAnchorValue', 'pageEditorAnchorsDirty', 'pageEditorValidateAnchors',
+  'pageEditorOrigStartChanged',
 ];
 function buildSource() {
   const decl = CURRICULUM.match(/let PAGE_EDITOR = null;/);
