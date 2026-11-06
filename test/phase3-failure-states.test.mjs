@@ -114,8 +114,8 @@ check('D no email content/recipient change (relay call sites untouched)',
 // ==== Part E: batch discipline ==========================================
 check('E no native alert/confirm/prompt calls in fees.js (Batch 8 system only)',
   !/[^a-zA-Z]alert\(|[^a-zA-Z]confirm\(|[^a-zA-Z]prompt\(/.test(FEES));
-check('E worker release is the commission release (2026-11-05-slots)',
-  WORKER.includes("const WORKER_RELEASE = '2026-11-05-slots'"));
+check('E worker release is the commission release (2026-11-06-course-delete)',
+  WORKER.includes("const WORKER_RELEASE = '2026-11-06-course-delete'"));
 check('E no D1 schema change in this batch (no CREATE TABLE / ALTER TABLE)',
   !FEES.includes('CREATE TABLE') && !LEAVES.includes('CREATE TABLE') && !P360.includes('CREATE TABLE'));
 

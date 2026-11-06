@@ -2376,12 +2376,115 @@ if (mergedDeleted.length > 0) {
       }
     }
 
+    // ================================================================
+    // Permanent course-book deletion (2026-11-06). A deleted CUSTOM book
+    // is removed from D1 *and* R2: its stored page files (via the
+    // owner-only storage DELETE route), its BOOK_PAGE rows and its
+    // catalog entry. Built-in books have no D1 catalog entry and no R2
+    // objects, so for them the tombstone remains the whole mechanism,
+    // exactly as before. The catalog removal runs LAST and acts as the
+    // commit point: success is only reported once every phase has
+    // confirmed, and every phase is idempotent, so retrying after a
+    // partial failure is safe.
+    // ================================================================
+    const _bookDeleteInFlight = new Set();
+
+    // A page value names its R2 object only when it is a storage URL
+    // whose `key` parameter sits under course_material/. Data-URI and
+    // placeholder values name no object and are skipped.
+    function _r2KeyFromPageValue(value) {
+      if (!value || typeof value !== 'string') return '';
+      if (value.indexOf('data:') === 0 || value.indexOf('blob:') === 0) return '';
+      try {
+        const parsed = new URL(value, 'https://lms.invalid');
+        const key = parsed.searchParams.get('key') || '';
+        return key.indexOf('course_material/') === 0 ? key : '';
+      } catch (e) {
+        return '';
+      }
+    }
+
+    // Collect a custom book's deletion plan: the R2 object keys its
+    // pages point at — gathered from the local record (pages plus the
+    // per-para arrays) AND from its D1 BOOK_PAGE rows, so pages missing
+    // from the local copy are still caught — and the keys of those D1
+    // rows. Each R2 key keeps one sample page URL so the delete request
+    // can be addressed to the same storage origin that served the page.
+    async function _collectBookDeletionPlan(bookId, book) {
+      const byKey = new Map();
+      const addValue = function (v) {
+        const key = _r2KeyFromPageValue(v);
+        if (key && !byKey.has(key)) byKey.set(key, v);
+      };
+      if (book) {
+        (Array.isArray(book.pages) ? book.pages : []).forEach(addValue);
+        if (book.paras_data && typeof book.paras_data === 'object') {
+          Object.keys(book.paras_data).forEach(function (p) {
+            (Array.isArray(book.paras_data[p]) ? book.paras_data[p] : []).forEach(addValue);
+          });
+        }
+      }
+      const pageRowKeys = [];
+      if (typeof db !== 'undefined' && db && typeof db.from === 'function') {
+        const { data: rows } = await db.from('system_settings').select('id, key, value');
+        if (Array.isArray(rows)) {
+          const prefix = `BOOK_PAGE_${bookId}_`;
+          rows.forEach(function (r) {
+            if (r && r.key && r.key.indexOf(prefix) === 0) {
+              pageRowKeys.push(r.key);
+              addValue(r.value);
+            }
+          });
+        }
+      }
+      return { byKey: byKey, pageRowKeys: pageRowKeys };
+    }
+
+    // Delete ONE stored page file through the owner-only storage DELETE
+    // route (cloudflare/worker.js admits the owner role only;
+    // functions/api/storage.js enforces the course_material/ prefix).
+    // Throws on any failure so the caller stops and reports honestly.
+    async function _deleteStorageObject(key, sampleUrl) {
+      const headers = (typeof window !== 'undefined' && typeof window.getLmsAuthHeaders === 'function') ? window.getLmsAuthHeaders() : {};
+      let url = '/api/storage?key=' + encodeURIComponent(key);
+      try {
+        if (sampleUrl && /^https?:\/\//i.test(sampleUrl)) {
+          url = new URL(sampleUrl).origin + url;
+        }
+      } catch (e) {}
+      const res = await fetch(url, { method: 'DELETE', headers: headers });
+      if (!res || !res.ok) {
+        throw new Error('the storage delete failed (HTTP ' + (res ? res.status : 'no response') + ')');
+      }
+      let body = null;
+      try { body = await res.json(); } catch (e) {}
+      if (body && body.ok === false) {
+        throw new Error('the storage delete was refused by the server');
+      }
+    }
+
     async function handleDeleteCurriculumBook(bookId, bookTitle) {
       if (CURRENT_ROLE === 'manager') {
         lmsNotify("Access Denied: Managers are not authorized to delete course material books. Only the System Owner can delete books.");
         return;
       }
-      if (!(await lmsConfirm(`Are you sure you want to delete course material "${bookTitle || 'this book'}" from the library?`))) {
+      // In-flight guard: a second invocation (grid or modal) while this
+      // book's deletion is already running is ignored. The flag is set
+      // BEFORE the confirmation await — two clicks in the same moment
+      // would otherwise both pass the check above while the first call
+      // is still parked on the dialog.
+      if (_bookDeleteInFlight.has(bookId)) return;
+      _bookDeleteInFlight.add(bookId);
+
+      const customBooks = getCustomBooks();
+      const targetBook = customBooks.find(b => b.id === bookId) || null;
+      const isCustomBook = !!targetBook;
+
+      const confirmMessage = isCustomBook
+        ? `Are you sure you want to PERMANENTLY delete course material "${bookTitle || 'this book'}"?\n\nThe book, all of its page records and its stored page files will be removed from the library and from storage. This cannot be undone. Lessons that referenced this book will show its page as unavailable.`
+        : `Are you sure you want to delete course material "${bookTitle || 'this book'}" from the library?`;
+      if (!(await lmsConfirm(confirmMessage))) {
+        _bookDeleteInFlight.delete(bookId);
         return;
       }
 
@@ -2391,46 +2494,109 @@ if (mergedDeleted.length > 0) {
         modalDelBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Deleting...';
       }
 
+      // Honest partial-failure exit for the custom-book flow: earlier
+      // phases may already have removed files or records, so never claim
+      // nothing happened — report the deletion as INCOMPLETE (retrying
+      // is safe: every phase is idempotent) and leave the book listed.
+      const incomplete = function (detail) {
+        lmsNotify('⚠️ The deletion of "' + (bookTitle || 'this book') + '" is INCOMPLETE.\n\n'
+          + (detail ? detail + '\n\n' : '')
+          + 'Some parts may already have been removed, but the book has NOT been fully deleted and is still shown in the library. Please try again — retrying is safe.', { type: 'error' });
+      };
+
       try {
-        // 1. Remove from custom books if present and await cloud sync.
-        // Batch 2 (S13): if the server refuses the save, STOP and show
-        // the real error — never claim the book was deleted.
-        let customBooks = getCustomBooks();
         const filteredCustom = customBooks.filter(b => b.id !== bookId);
-        const catalogSaved = await saveCustomBooks(filteredCustom);
-        if (!catalogSaved) {
-          lmsNotify('⚠️ Could NOT delete this course material on the server.\n\n'
-            + (_lastCatalogSyncError ? `Server said: ${_lastCatalogSyncError}\n\n` : '')
-            + 'The book has NOT been deleted. Please try again.');
-          return;
-        }
 
-        // 2. Mark ID as deleted in tombstone list so all portals (Admin, Teacher, Parent) filter it out immediately
-        const deletedIds = getDeletedBookIds();
-        if (!deletedIds.includes(bookId)) {
-          deletedIds.push(bookId);
-        }
-        const tombstoneSaved = await saveDeletedBookIds(deletedIds);
-        if (!tombstoneSaved) {
-          lmsNotify('⚠️ Could NOT record this deletion on the server.\n\n'
-            + (_lastCatalogSyncError ? `Server said: ${_lastCatalogSyncError}\n\n` : '')
-            + 'The book may reappear after refresh. Please try again.');
-          return;
-        }
-
-        // 3. Clean up any orphaned custom book page records in system_settings
-        if (typeof db !== 'undefined' && db && typeof db.from === 'function') {
+        if (!isCustomBook) {
+          // Built-in book: no D1 catalog entry and no stored page files,
+          // so the tombstone-only flow is the whole mechanism — kept
+          // exactly as it behaved before this change.
+          // Batch 2 (S13): if the server refuses a save, STOP and show
+          // the real error — never claim the book was deleted.
+          const catalogSavedBuiltIn = await saveCustomBooks(filteredCustom);
+          if (!catalogSavedBuiltIn) {
+            lmsNotify('⚠️ Could NOT delete this course material on the server.\n\n'
+              + (_lastCatalogSyncError ? `Server said: ${_lastCatalogSyncError}\n\n` : '')
+              + 'The book has NOT been deleted. Please try again.');
+            return;
+          }
+          const builtInDeletedIds = getDeletedBookIds();
+          if (!builtInDeletedIds.includes(bookId)) {
+            builtInDeletedIds.push(bookId);
+          }
+          const builtInTombstoneSaved = await saveDeletedBookIds(builtInDeletedIds);
+          if (!builtInTombstoneSaved) {
+            lmsNotify('⚠️ Could NOT record this deletion on the server.\n\n'
+              + (_lastCatalogSyncError ? `Server said: ${_lastCatalogSyncError}\n\n` : '')
+              + 'The book may reappear after refresh. Please try again.');
+            return;
+          }
+          if (typeof db !== 'undefined' && db && typeof db.from === 'function') {
+            try {
+              const { data: pageRows } = await db.from('system_settings').select('id, key');
+              if (Array.isArray(pageRows)) {
+                const prefix = `BOOK_PAGE_${bookId}_`;
+                const orphaned = pageRows.filter(r => r.key && r.key.startsWith(prefix));
+                for (const row of orphaned) {
+                  await db.from('system_settings').delete().eq('id', row.id);
+                }
+              }
+            } catch(e) {
+              console.warn('[Curriculum] Page cleanup notice:', e);
+            }
+          }
+        } else {
+          // Custom book — permanent deletion from D1 + R2.
+          // Phase 1: the stored page files (R2) and the page records
+          // (D1 BOOK_PAGE rows). Nothing in this phase changes what any
+          // portal lists; a failure stops before the commit point.
+          let plan = null;
           try {
-            const { data: pageRows } = await db.from('system_settings').select('id, key');
-            if (Array.isArray(pageRows)) {
-              const prefix = `BOOK_PAGE_${bookId}_`;
-              const orphaned = pageRows.filter(r => r.key && r.key.startsWith(prefix));
-              for (const row of orphaned) {
-                await db.from('system_settings').delete().eq('id', row.id);
+            plan = await _collectBookDeletionPlan(bookId, targetBook);
+          } catch (e) {
+            incomplete('The book\'s page list could not be read from the server.');
+            return;
+          }
+          for (const entry of plan.byKey) {
+            try {
+              await _deleteStorageObject(entry[0], entry[1]);
+            } catch (e) {
+              incomplete('A stored page file could not be removed from storage.');
+              return;
+            }
+          }
+          if (typeof db !== 'undefined' && db && typeof db.from === 'function') {
+            for (const rowKey of plan.pageRowKeys) {
+              const res = await db.from('system_settings').delete().eq('key', rowKey);
+              if (res && res.error) {
+                incomplete('A page record could not be removed from the database.');
+                return;
               }
             }
-          } catch(e) {
-            console.warn('[Curriculum] Page cleanup notice:', e);
+          }
+
+          // Phase 2 (commit): tombstone first, catalog save second. The
+          // tombstone stops any stale device mirror from re-uploading
+          // this book later, and it makes the catalog sync below EXCLUDE
+          // the book: the sync merges the cloud index back into the
+          // local list, but its tombstone filter drops this id, so the
+          // D1 catalog index and the legacy mirror are rewritten WITHOUT
+          // the book instead of re-upserting it. (The old flow wrote the
+          // tombstone only AFTER this save, which is exactly why
+          // deleted books used to come back on refresh.)
+          const deletedIds = getDeletedBookIds();
+          if (!deletedIds.includes(bookId)) {
+            deletedIds.push(bookId);
+          }
+          const tombstoneSaved = await saveDeletedBookIds(deletedIds);
+          if (!tombstoneSaved) {
+            incomplete(_lastCatalogSyncError ? `Server said: ${_lastCatalogSyncError}` : 'The deletion record could not be saved on the server.');
+            return;
+          }
+          const catalogSaved = await saveCustomBooks(filteredCustom);
+          if (!catalogSaved) {
+            incomplete(_lastCatalogSyncError ? `Server said: ${_lastCatalogSyncError}` : 'The catalog could not be updated on the server.');
+            return;
           }
         }
 
@@ -2440,6 +2606,7 @@ if (mergedDeleted.length > 0) {
         console.error('Error deleting book:', err);
         console.warn('[LMS] operation failed:', err.message); lmsNotify('Could not completely delete course material. Please try again.', { type: 'error' });
       } finally {
+        _bookDeleteInFlight.delete(bookId);
         if (modalDelBtn) {
           modalDelBtn.disabled = false;
           modalDelBtn.innerHTML = '<i class="fa-solid fa-trash"></i> Delete Book';
