@@ -71,8 +71,11 @@ check('card cells do not clip lesson text',
   LAYER.includes('.tcard td .truncate') && LAYER.includes('white-space: normal;'));
 
 // ---- E) workflows intact: row actions + handlers still referenced ----
-check('student row actions intact (schedule, history)',
-  TEACHER.includes("openTeacherAddScheduleModal('${escapeJsAttr(st.id)}')") &&
+// Owner marks (2026-11-06): the per-student Schedule action was
+// removed root-and-branch with the Schedule Student feature; the
+// lesson-history row action stays.
+check('student row actions intact (history; schedule removed by owner marks)',
+  !TEACHER.includes('openTeacherAddScheduleModal') &&
   TEACHER.includes("openTeacherLessonHistoryForStudent('${escapeJsAttr(st.id)}')"));
 check('class row actions intact (actionButtons placeholder kept)',
   TEACHER.includes('${actionButtons}'));

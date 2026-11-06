@@ -118,6 +118,54 @@ check('hamburger contract kept (id + handler + aria-label)',
   TEACHER.includes('btnToggleTeacherSidebar" onclick="toggleTeacherSidebar()" aria-label="Toggle navigation sidebar"'));
 
 // ---------------------------------------------------------------------
+// Part A2 — owner marks (2026-11-06): literal removals + scale/junction
+// ---------------------------------------------------------------------
+// (1) Schedule Student removed root-and-branch; shared neighbours stay.
+check('owner marks: no Schedule Student affordance, handler or modal remains',
+  ['Schedule Student', 'openTeacherAddScheduleModal', 'submitTeacherAddScheduleSlot',
+   'modalTeacherAddScheduleSlot', 'sbNavAddSchedule', 'TeacherAddSchedule']
+    .every(s => !TEACHER.includes(s)));
+check('owner marks: reschedule (Change Time) and shared slot helpers survive',
+  TEACHER.includes('openTimeChangeRequestModal') &&
+  TEACHER.includes('function getTeacherSlotDurationMins') &&
+  TEACHER.includes('function parseTeacherTimeToMinutes'));
+// (2) Hero declutter: description + Zoom chip gone; kept pieces stay.
+check('owner marks: hero description paragraph and Zoom Configured chip removed',
+  !TEACHER.includes('operations cockpit') && !TEACHER.includes('heroTeacherZoomStatus') &&
+  !TEACHER.includes('Zoom Configured'));
+check('owner marks: hero keeps greeting, shift chip, status chip, refresh',
+  TEACHER.includes('id="heroTeacherName"') && TEACHER.includes('id="heroTeacherShift"') &&
+  TEACHER.includes('id="heroTeacherStatus"') && TEACHER.includes('loadTeacherPortalData()'));
+// (3) Live/next-class banner card removed; the PR #97 overdue reminder
+// is a different element and stays (behaviour proven in Part C/D).
+check('owner marks: live/next-class status banner removed entirely',
+  !TEACHER.includes('liveClassAlertBanner') && !TEACHER.includes('ALL SESSIONS DONE') &&
+  TEACHER.includes('id="teacherOverdueClassReminder"'));
+// (4) KPI captions removed; titles + number elements stay.
+check('owner marks: KPI caption lines removed, stat numbers stay',
+  ['Active Assigned Students', 'Scheduled Sessions Today', 'Marked Present Today',
+   'Upcoming Slots Today', 'id="statAssignedStudentsSub"']
+    .every(s => !TEACHER.includes(s)) &&
+  ['id="statAssignedStudents"', 'id="statTodayClasses"', 'id="statCompleted"', 'id="statRemaining"']
+    .every(s => TEACHER.includes(s)));
+// (7) All four KPI cards clickable + keyboard-activatable.
+check('owner marks: KPI cards wired to their drill-downs',
+  TEACHER.includes('onclick="switchTeacherPortalTab(\'students\')"') &&
+  TEACHER.includes('onclick="showTeacherTodayKpi(\'all\')"') &&
+  TEACHER.includes('onclick="showTeacherTodayKpi(\'completed\')"') &&
+  TEACHER.includes('onclick="showTeacherTodayKpi(\'remaining\')"'));
+check('owner marks: KPI cards carry button semantics + keyboard activation',
+  (TEACHER.match(/role="button" tabindex="0" onkeydown=/g) || []).length >= 4);
+// (5) Junction: the sidebar scrollbar is not painted (scrolling itself
+// is browser-verified); (6) global scale 77% on body.
+check('owner marks: sidebar scrollbar hidden at the junction',
+  TEACHER.includes('aside#teacherSidebar .custom-sidebar-scroll') &&
+  TEACHER.includes('scrollbar-width: none') &&
+  TEACHER.includes('aside#teacherSidebar .custom-sidebar-scroll::-webkit-scrollbar'));
+check('owner marks: portal scale is 77% (body zoom)',
+  TEACHER.includes('body { zoom: 0.77; }'));
+
+// ---------------------------------------------------------------------
 // Part B — fake DOM built from the REAL markup (ids + initial classes)
 // ---------------------------------------------------------------------
 class FakeEl {
@@ -208,6 +256,7 @@ const code = `
   let CURRENT_TEACHER = { id: 'TCH-FIX', name: 'Fixture Teacher' };
   let CURRENT_TEACHER_TAB = 'dashboard';
   let TODAY_CLASSES = [];
+  let TEACHER_TODAY_FILTER = 'all';
   let _teacherClassesDegraded = null;
   let _overdueReminderSnoozedUntil = 0;
   const TEACHER_REMINDER_SNOOZE_MS = 120000;
@@ -226,9 +275,14 @@ const code = `
   ${extractFunction(TEACHER, 'renderTeacherAnnouncements')}
   ${extractFunction(TEACHER, '_teacherLiveAccrualHtml')}
   ${extractFunction(TEACHER, 'renderTeacherClassesTable')}
+  ${extractFunction(TEACHER, 'syncTeacherTodayFilterChip')}
+  ${extractFunction(TEACHER, 'setTeacherTodayFilter')}
+  ${extractFunction(TEACHER, 'showTeacherTodayKpi')}
   this.__api = { switchTeacherPortalTab, toggleTeacherSidebar, checkOverdueClassReminder,
     renderTeacherAnnouncements, _teacherLiveAccrualHtml, renderTeacherClassesTable,
+    showTeacherTodayKpi, setTeacherTodayFilter,
     setClasses: (c) => { TODAY_CLASSES = c; },
+    getFilter: () => TEACHER_TODAY_FILTER,
     getTab: () => CURRENT_TEACHER_TAB };
 `;
 vm.runInContext(code, sandbox);
@@ -344,6 +398,111 @@ const odEl = registry.get('teacherOverdueClassReminder');
 check('overdue reminder shows for the still-open class (PKT end time passed)',
   !odEl.classList.contains('hidden') && odEl.innerHTML.includes('Bilal Ahmed') &&
   odEl.innerHTML.includes("handleTeacherCompleteClass('SCH-FIX-2'"));
+
+// ---------------------------------------------------------------------
+// Part D — owner marks (8): Completed counts ALL marked classes.
+// The REAL loadTeacherPortalData runs against a fixture db stub whose
+// eq-filtering mirrors the engine's; the fixture day mixes Completed +
+// Present + Absent + Leave + one unmarked class. The KPI counters are
+// locals of the loader whose only consumers are the stat elements, so
+// this proves the display counts directly.
+// ---------------------------------------------------------------------
+sandbox.waitForD1ProbeSettled = async () => {};
+const pkt = vm.runInContext('getPktNowParts()', sandbox);
+const D_STUDENTS = ['Ayesha Khan', 'Bilal Ahmed', 'Fatima Noor', 'Omar Farooq', 'Zainab Ali']
+  .map((name, i) => ({ id: `STU-D${i + 1}`, name, family_id: 'FAM-D1',
+    assigned_teacher_id: 'TCH-FIX', status: 'Active' }));
+const D_STATUSES = ['Completed', 'Present', 'Absent', 'Leave', null];
+const D_SCHEDULES = D_STUDENTS.map((s, i) => ({
+  id: `SCH-D${i + 1}`, student_id: s.id, teacher_id: 'TCH-FIX',
+  day_of_week: pkt.day, start_time: `0${7 + i}:00:00`, end_time: `0${7 + i}:30:00`,
+  course_name: 'Quran Reading', students: { id: s.id, name: s.name },
+}));
+const D_LOGS = D_STATUSES.map((st, i) => st && ({
+  id: `LOG-D${i + 1}`, student_id: D_STUDENTS[i].id, schedule_id: D_SCHEDULES[i].id,
+  teacher_id: 'TCH-FIX', date: pkt.date, status: st, lesson_notes: '',
+})).filter(Boolean);
+const FIXTURE_TABLES = {
+  teachers: [{ id: 'TCH-FIX', full_name: 'Fixture Teacher', working_shift: 'Morning',
+    zoom_link: 'https://zoom.us/j/fixture', status: 'Active', address: '{}' }],
+  students: D_STUDENTS, class_schedules: D_SCHEDULES, attendance_logs: D_LOGS,
+};
+function fixtureDbFrom(table) {
+  const q = { _filters: [], _single: false,
+    select() { return q; },
+    eq(c, v) { q._filters.push([c, v]); return q; },
+    order() { return q; }, limit() { return q; }, offset() { return q; },
+    single() { q._single = true; return q; },
+    then(res, rej) {
+      const rows = (FIXTURE_TABLES[table] || [])
+        .filter(r => q._filters.every(([c, v]) => String(r[c]) === String(v)));
+      const out = q._single
+        ? { data: rows[0] || null, error: null, _lmsSource: 'd1' }
+        : { data: rows, error: null, _lmsSource: 'd1' };
+      return Promise.resolve(out).then(res, rej);
+    } };
+  return q;
+}
+sandbox.db = { from: fixtureDbFrom };
+// Some Part C extractions already carried top-level declarations into
+// the context; declare only the globals that are still missing.
+const blockBPrelude = [];
+for (const [name, init] of [
+  ['ASSIGNED_STUDENTS', '[]'], ['ACTIVE_ASSIGNED_STUDENTS', '[]'],
+  ['LEAVE_ASSIGNED_STUDENTS', '[]'], ['_teacherLoadInFlight', 'false'],
+  ['DAY_NAMES', "['', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']"],
+  ['TEACHER_BRANCH_TIMEOUT_MS', '15000'],
+]) {
+  if (vm.runInContext(`typeof ${name}`, sandbox) === 'undefined') {
+    blockBPrelude.push(`let ${name} = ${init};`);
+  }
+}
+vm.runInContext(`
+  ${blockBPrelude.join('\n')}
+  function scheduleTeacherClassesRetry() {}
+  function resetTeacherClassesRetry() {}
+  ${/* parseEmployeeMeta contains a '{' string literal that defeats the
+       brace counter — extract it by its closing indent instead. */
+    (TEACHER.match(/function parseEmployeeMeta\(rawStr\) \{[\s\S]*?\n    \}/) || [''])[0]}
+  ${extractFunction(TEACHER, 'normalizeTeacherSession')}
+  ${extractFunction(TEACHER, 'isPortalRegularStudent')}
+  ${extractFunction(TEACHER, 'isPortalStudentDeactivated')}
+  ${extractFunction(TEACHER, 'isPortalStudentOnLeave')}
+  ${extractFunction(TEACHER, 'settleTeacherBranch')}
+  ${extractFunction(TEACHER, 'loadTeacherPortalData')}
+  this.__loader = loadTeacherPortalData;
+`, sandbox);
+await sandbox.__loader();
+const statText = (id) => String(registry.get(id).innerText);
+check('owner marks (8): Today total counts every scheduled class',
+  statText('statTodayClasses') === '5', statText('statTodayClasses'));
+check('owner marks (8): Completed counts ALL marked (Completed+Present+Absent+Leave)',
+  statText('statCompleted') === '4', statText('statCompleted'));
+check('owner marks (8): Remaining counts only the not-yet-marked',
+  statText('statRemaining') === '1', statText('statRemaining'));
+check('owner marks (8): Completed + Remaining equals the day total',
+  Number(statText('statCompleted')) + Number(statText('statRemaining')) === Number(statText('statTodayClasses')));
+
+// --- Owner marks (7): KPI drill-down filters on the loader's rows -----
+api.showTeacherTodayKpi('completed');
+let rowsHtml = registry.get('teacherClassesTableBody').innerHTML;
+check('owner marks (7): Completed view lists the Absent and Leave rows with their status',
+  api.getFilter() === 'completed' && rowsHtml.includes('Fatima Noor') &&
+  rowsHtml.includes('Omar Farooq') && rowsHtml.includes('ABSENT') && rowsHtml.includes('LEAVE') &&
+  !rowsHtml.includes('Zainab Ali'));
+check('owner marks (7): filter chip names the Completed view and is visible',
+  !registry.get('todayFilterChip').classList.contains('hidden') &&
+  String(registry.get('todayFilterLabel').innerText).includes('Marked'));
+api.showTeacherTodayKpi('remaining');
+rowsHtml = registry.get('teacherClassesTableBody').innerHTML;
+check('owner marks (7): Remaining view lists only the unmarked class',
+  api.getFilter() === 'remaining' && rowsHtml.includes('Zainab Ali') &&
+  !rowsHtml.includes('Fatima Noor') && !rowsHtml.includes('Ayesha Khan'));
+api.showTeacherTodayKpi('all');
+rowsHtml = registry.get('teacherClassesTableBody').innerHTML;
+check('owner marks (7): Today view restores the full list and hides the chip',
+  api.getFilter() === 'all' && rowsHtml.includes('Zainab Ali') && rowsHtml.includes('Fatima Noor') &&
+  registry.get('todayFilterChip').classList.contains('hidden'));
 
 console.log('---');
 console.log(`teacher-redesign-shell: ${passed} passed, ${failed} failed`);
