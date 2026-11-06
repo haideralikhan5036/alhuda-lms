@@ -345,55 +345,234 @@ font-family: var(--font-num) !important;
       scroll-behavior: auto !important;
     }
   }
+
+  /* ================================================================
+     FLAGSHIP REDESIGN (2026-11-06, owner-approved mockups): emerald
+     glass shell. Interface only — these rules restyle the existing
+     chrome (sidebar / rail / login); no ids, handlers or data flow
+     change. The signature move is the ACTIVE sidebar pill: a white
+     pill flush with the sidebar's right edge whose ::before/::after
+     radial-gradient fillets make it read as one continuous white
+     shape with the content area (mockup technique, lifted verbatim).
+     ================================================================ */
+  .tui-sidebar-glass {
+    background:
+      radial-gradient(130% 46% at 18% -4%, rgba(255,255,255,.16), rgba(255,255,255,0) 60%),
+      radial-gradient(90% 40% at 110% 108%, rgba(212,175,55,.10), rgba(212,175,55,0) 60%),
+      linear-gradient(168deg, #0e6e4b 0%, #095239 34%, #06402c 62%, #032a1e 100%);
+  }
+  .tui-rail-glow {
+    background:
+      radial-gradient(120% 34% at 50% -2%, rgba(255,255,255,.20), rgba(255,255,255,0) 60%),
+      linear-gradient(180deg, #0e6e4b 0%, #074631 52%, #032a1e 100%);
+    border: 1px solid rgba(255,255,255,.22);
+    box-shadow: 0 18px 36px rgba(0,0,0,.30), inset 0 1px 0 rgba(255,255,255,.25);
+  }
+  .tui-login-bg {
+    background:
+      radial-gradient(1000px 560px at 70% -10%, rgba(46,160,110,.55), rgba(46,160,110,0) 60%),
+      radial-gradient(800px 640px at 6% 112%, rgba(10,90,60,.5), rgba(10,90,60,0) 60%),
+      linear-gradient(155deg, #0a5a3e 0%, #06402c 42%, #03231a 78%, #02170f 100%);
+  }
+
+  /* ---- Sidebar nav pills on glass (overrides the white-card rules
+     above; the base .sidebar-nav-btn block stays for safety) ---- */
+  aside#teacherSidebar .sidebar-card-inner {
+    padding: 22px 0 20px 24px;
+  }
+  aside#teacherSidebar .sidebar-nav-btn {
+    width: calc(100% - 24px);
+    gap: 13px;
+    padding: 13px 16px;
+    border-radius: 999px !important;
+    font-size: 0.9rem !important;
+    font-weight: 600 !important;
+    color: #e8f4ee;
+    background: rgba(255,255,255,.07);
+    border: 1px solid transparent;
+    box-shadow: none !important;
+  }
+  aside#teacherSidebar .sidebar-nav-btn:hover:not(.active) {
+    background: rgba(255,255,255,.13) !important;
+    color: #ffffff !important;
+  }
+  aside#teacherSidebar .sidebar-nav-btn .sidebar-icon-box {
+    width: auto;
+    height: auto;
+    border-radius: 0;
+    background: transparent;
+    color: inherit;
+    font-size: 1.02rem;
+  }
+  aside#teacherSidebar .sidebar-nav-btn:hover:not(.active) .sidebar-icon-box {
+    background: transparent;
+    color: #ffffff;
+  }
+  aside#teacherSidebar .sidebar-nav-btn .sidebar-badge {
+    background: rgba(255,255,255,.14);
+    color: #e8f4ee;
+    border-color: rgba(255,255,255,.20);
+  }
+  /* The merging active pill */
+  aside#teacherSidebar .sidebar-nav-btn.active {
+    position: relative;
+    z-index: 5;
+    width: 100%;
+    background: #ffffff !important;
+    color: #07382a !important;
+    font-weight: 700 !important;
+    border-left: 1px solid transparent !important;
+    border-radius: 999px 0 0 999px !important;
+    box-shadow: -14px 10px 30px rgba(0,0,0,.18) !important;
+  }
+  aside#teacherSidebar .sidebar-nav-btn.active .sidebar-icon-box {
+    background: transparent !important;
+    color: #0b5a3c !important;
+  }
+  aside#teacherSidebar .sidebar-nav-btn.active .sidebar-badge {
+    background: #0a4a34;
+    color: #ffffff;
+    border-color: transparent;
+  }
+  aside#teacherSidebar .sidebar-nav-btn.active::before,
+  aside#teacherSidebar .sidebar-nav-btn.active::after {
+    content: '';
+    position: absolute;
+    right: 0;
+    width: 20px;
+    height: 20px;
+    z-index: 5;
+    pointer-events: none;
+  }
+  aside#teacherSidebar .sidebar-nav-btn.active::before {
+    top: -20px;
+    background: radial-gradient(circle at 0 0, rgba(255,255,255,0) 19px, #ffffff 20px);
+  }
+  aside#teacherSidebar .sidebar-nav-btn.active::after {
+    bottom: -20px;
+    background: radial-gradient(circle at 0 100%, rgba(255,255,255,0) 19px, #ffffff 20px);
+  }
+  /* Sidebar scrollbar on glass */
+  aside#teacherSidebar .custom-sidebar-scroll {
+    scrollbar-color: rgba(255,255,255,.28) transparent;
+  }
+  aside#teacherSidebar .custom-sidebar-scroll::-webkit-scrollbar-thumb {
+    background: rgba(255,255,255,.28);
+  }
+  aside#teacherSidebar .custom-sidebar-scroll::-webkit-scrollbar-thumb:hover {
+    background: rgba(255,255,255,.45);
+  }
+
+  /* ---- Collapsed desktop rail (extends the .is-collapsed rules
+     above): icons become circles, the active one a white circle,
+     and the merging fillets switch off (no flush edge in rail). ---- */
+  @media (min-width: 1024px) {
+    aside#teacherSidebar.is-collapsed {
+      width: 5.75rem !important;
+    }
+    aside#teacherSidebar.is-collapsed .sidebar-card-inner {
+      padding: 22px 0 18px 0 !important;
+    }
+    aside#teacherSidebar.is-collapsed .sidebar-nav-btn {
+      width: 48px !important;
+      height: 48px;
+      margin: 0 auto;
+      padding: 0 !important;
+      border-radius: 999px !important;
+      justify-content: center !important;
+    }
+    aside#teacherSidebar.is-collapsed .sidebar-nav-btn.active {
+      border-radius: 999px !important;
+      box-shadow: 0 10px 22px rgba(0,0,0,.30) !important;
+    }
+    aside#teacherSidebar.is-collapsed .sidebar-nav-btn.active::before,
+    aside#teacherSidebar.is-collapsed .sidebar-nav-btn.active::after {
+      display: none;
+    }
+    aside#teacherSidebar.is-collapsed .sidebar-brand-text,
+    aside#teacherSidebar.is-collapsed .sidebar-clock-chip,
+    aside#teacherSidebar.is-collapsed .sidebar-info-block,
+    aside#teacherSidebar.is-collapsed #teacherHeaderBadge {
+      display: none !important;
+    }
+    aside#teacherSidebar.is-collapsed .tui-brand-row {
+      flex-direction: column;
+      align-items: center;
+      gap: 12px;
+      padding-right: 0 !important;
+    }
+    aside#teacherSidebar.is-collapsed .tui-brand-row .tui-brand-actions {
+      margin-left: 0;
+    }
+  }
+
+  /* ---- Mobile slim icon rail ---- */
+  .tui-rail-btn {
+    width: 44px;
+    height: 44px;
+    border-radius: 999px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #dcefe5;
+    background: rgba(255,255,255,.07);
+    font-size: 1rem;
+    flex-shrink: 0;
+    transition: all 0.18s ease;
+    cursor: pointer;
+  }
+  .tui-rail-btn:hover {
+    background: rgba(255,255,255,.15);
+    color: #ffffff;
+  }
+  .tui-rail-btn.active {
+    background: #ffffff;
+    color: #07382a;
+    box-shadow: 0 8px 18px rgba(0,0,0,.30);
+  }
+
+  /* ---- Content surfaces in the new language (Phase 2 helpers) ---- */
+  .tui-card {
+    background: #ffffff;
+    border: 1px solid #eef3ee;
+    border-radius: 24px;
+    box-shadow: 0 10px 28px rgba(7,45,32,.055);
+  }
+  /* Row action buttons become pills across the three main tables */
+  #teacherClassesTableBody button,
+  #teacherStudentListTableBody button,
+  #teacherTrialsTableBody button {
+    border-radius: 999px;
+  }
+  /* Primary class actions: deep-green Start pill / dark Complete pill */
+  #teacherMainContainer button[onclick*="handleTeacherStartClass"] {
+    background: linear-gradient(140deg, #0d5c40, #07382a) !important;
+    color: #ffffff !important;
+    border-color: transparent !important;
+    box-shadow: 0 10px 20px rgba(7,45,32,.25) !important;
+    padding-left: 1.05rem !important;
+    padding-right: 1.05rem !important;
+  }
+  #teacherMainContainer button[onclick*="handleTeacherCompleteClass"] {
+    background: linear-gradient(140deg, #0d5c40, #07382a) !important;
+    box-shadow: 0 10px 20px rgba(7,45,32,.22) !important;
+    padding-left: 1.05rem !important;
+    padding-right: 1.05rem !important;
+  }
 </style>
 </head>
 <body class="bg-slate-50 text-slate-800 font-sans min-h-screen flex flex-col antialiased">
 
-  <!-- ================= TOP NAVIGATION BAR ================= -->
-  <header id="teacherTopHeader" class="hidden bg-brandDarkest text-white border-b border-brandDark/60 sticky top-0 z-50 shadow-md">
-    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
-      
-      <!-- Brand Crest & Title -->
-      <div class="flex items-center gap-3">
-        <!-- Sidebar Drawer & Desktop Rail Toggle (When authenticated) -->
-        <button id="btnToggleTeacherSidebar" onclick="toggleTeacherSidebar()" aria-label="Toggle navigation sidebar" class="hidden p-2 min-h-[44px] min-w-[44px] text-emerald-200 hover:text-white hover:bg-emerald-900/60 rounded-xl transition" title="Toggle Navigation Sidebar">
-          <i class="fa-solid fa-bars text-lg"></i>
-        </button>
-        <a href="teacher.html" class="flex items-center gap-2.5 group" title="Al-Huda Islamic Centre LMS">
-          <img src="alhuda_logo.jpg" alt="Al-Huda Logo" class="w-9 h-9 sm:w-10 sm:h-10 rounded-full border-2 border-brandGold object-cover shadow-sm bg-black shrink-0">
-          <div>
-            <h1 class="font-cinzel text-xs sm:text-sm md:text-base font-bold tracking-wide text-white flex items-center gap-2 leading-tight">
-              AL-HUDA ISLAMIC CENTRE
-            </h1>
-            <p class="text-[10px] text-emerald-300 font-semibold tracking-wider uppercase">
-              Teacher Operations Portal
-            </p>
-          </div>
-        </a>
-      </div>
-
-      <!-- Right Side Actions & User Status -->
-      <div class="flex items-center gap-3">
-        <!-- Live PKT Clock -->
-        <div class="hidden sm:flex items-center gap-1.5 px-3 py-1 rounded-lg bg-emerald-950/70 border border-emerald-800/40 text-emerald-200 text-xs font-mono font-bold">
-          <i class="fa-regular fa-clock text-brandGold"></i>
-          <span id="liveClock">--:--:-- PKT</span>
-        </div>
-
-        <!-- Logged-in Teacher Session Badge -->
-        <div id="teacherHeaderBadge" class="hidden items-center gap-2 px-2.5 sm:px-3 py-1 bg-white/10 border border-white/20 rounded-xl text-xs font-bold text-white shrink-0">
-          <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shrink-0"></span>
-          <span id="headerTeacherName" class="max-w-[70px] sm:max-w-[140px] truncate inline-block">Teacher</span>
-          <button onclick="logoutTeacher()" class="ml-1 sm:ml-2 px-2 py-0.5 rounded bg-rose-600/80 hover:bg-rose-700 text-[10px] text-white transition flex items-center gap-1 shrink-0" title="Logout">
-            <i class="fa-solid fa-power-off"></i> <span class="hidden sm:inline">Logout</span>
-          </button>
-        </div>
-      </div>
-    </div>
-  </header>
+  <!-- Flagship redesign: the old top navigation bar is gone. Its
+       pieces live in the new shell — the brand + live clock + session
+       badge (with Logout) in the emerald sidebar, and the sidebar
+       toggle button in the mobile slim rail. All ids and handlers are
+       unchanged; showDashboardView/showLoginView keep toggling them
+       exactly as before (the #teacherTopHeader lookups are optional-
+       chained in the scripts and simply find nothing now). -->
 
   <!-- ================= 1. LOGIN SCREEN (WHEN NOT AUTHENTICATED) ================= -->
-  <div id="loginView" class="min-h-screen w-full flex flex-col justify-center items-center p-4 sm:p-6 bg-slate-900 bg-gradient-to-br from-slate-950 via-[#022c22] to-slate-900 text-slate-800">
+  <div id="loginView" class="tui-login-bg min-h-screen w-full flex flex-col justify-center items-center p-4 sm:p-6 text-slate-800">
     <div class="max-w-md w-full my-auto">
 
       <!-- Center Brand Identity -->
@@ -415,8 +594,8 @@ font-family: var(--font-num) !important;
       </div>
 
       <!-- Login Card -->
-      <div class="bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden">
-        <div class="p-5 sm:p-6 bg-gradient-to-br from-amber-50/70 to-white border-b border-slate-100 flex items-center gap-3.5">
+      <div class="bg-white rounded-[28px] shadow-2xl border border-white/60 overflow-hidden">
+        <div class="p-5 sm:p-6 bg-gradient-to-br from-[#faf4e1] to-white border-b border-[#f3ecd9] flex items-center gap-3.5">
           <div class="w-12 h-12 rounded-2xl bg-gradient-to-tr from-[#022c22] to-[#064e3b] text-brandGold flex items-center justify-center text-xl shadow-md border border-brandGold/40 shrink-0">
             <i class="fa-solid fa-chalkboard-user text-brandGold"></i>
           </div>
@@ -463,69 +642,109 @@ font-family: var(--font-num) !important;
               </div>
             </div>
 
-            <button type="submit" id="btnSubmitLogin" class="w-full py-3 bg-gradient-to-r from-[#022c22] via-[#064e3b] to-[#047857] text-white font-extrabold text-sm rounded-xl hover:from-[#064e3b] hover:to-[#047857] shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer">
+            <button type="submit" id="btnSubmitLogin" class="w-full py-3 bg-gradient-to-r from-[#022c22] via-[#064e3b] to-[#047857] text-white font-extrabold text-sm rounded-full hover:from-[#064e3b] hover:to-[#047857] shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer">
               <i class="fa-solid fa-right-to-bracket text-brandGold"></i> Login to Teacher Portal
             </button>
           </form>
         </div>
       </div>
 
-      <p class="text-center text-xs text-slate-400 mt-6">
+      <p class="text-center text-xs text-white/50 mt-6">
         &copy; 2026 Al-Huda Islamic Centre. Authorized personnel only.
       </p>
     </div>
   </div>
 
   <!-- ================= MAIN CONTENT WRAPPER ================= -->
-  <main id="teacherMainContainer" class="hidden flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 lg:p-8">
+  <main id="teacherMainContainer" class="hidden flex-1 w-full bg-white">
 
     <!-- ================= 2. TEACHER DASHBOARD VIEW (WHEN AUTHENTICATED) ================= -->
-    <div id="dashboardView" class="hidden">
+    <div id="dashboardView" class="hidden relative">
+
+      <!-- MOBILE SLIM ICON RAIL (flagship redesign): fixed at the left
+           on phones; the menu button opens the labelled sidebar drawer.
+           Rail tab buttons call the same switchTeacherPortalTab with the
+           same tab names as the sidebar; their active state is mirrored
+           by syncTeacherSidebarActiveState via data-rail-tab. -->
+      <div id="teacherMobileRail" class="tui-rail-glow lg:hidden fixed left-2 top-2 bottom-2 z-40 w-[64px] rounded-full flex flex-col items-center py-3 gap-1.5">
+        <div class="w-10 h-10 rounded-full overflow-hidden shrink-0" style="background:rgba(255,255,255,.14); border:1px solid rgba(255,255,255,.28)">
+          <img src="alhuda_logo.jpg" alt="Al-Huda" class="w-full h-full object-cover">
+        </div>
+        <div class="w-5 h-px my-1 shrink-0" style="background:rgba(255,255,255,.18)"></div>
+        <button id="btnToggleTeacherSidebar" onclick="toggleTeacherSidebar()" aria-label="Toggle navigation sidebar" class="hidden tui-rail-btn min-h-[44px] min-w-[44px]" title="Toggle Navigation Sidebar">
+          <i class="fa-solid fa-bars"></i>
+        </button>
+        <button class="tui-rail-btn" data-rail-tab="dashboard" onclick="switchTeacherPortalTab('dashboard'); toggleTeacherSidebar(false);" title="Dashboard">
+          <i class="fa-solid fa-gauge-high"></i>
+        </button>
+        <button class="tui-rail-btn" data-rail-tab="today" onclick="switchTeacherPortalTab('today'); toggleTeacherSidebar(false);" title="Today's Classes">
+          <i class="fa-solid fa-calendar-check"></i>
+        </button>
+        <button class="tui-rail-btn" data-rail-tab="students" onclick="switchTeacherPortalTab('students'); toggleTeacherSidebar(false);" title="Student List">
+          <i class="fa-solid fa-users"></i>
+        </button>
+        <button class="tui-rail-btn" data-rail-tab="history" onclick="switchTeacherPortalTab('history'); toggleTeacherSidebar(false);" title="Lesson History">
+          <i class="fa-solid fa-clock-rotate-left"></i>
+        </button>
+        <button class="tui-rail-btn" data-rail-tab="salaries" onclick="switchTeacherPortalTab('salaries'); toggleTeacherSidebar(false);" title="Previous Salaries">
+          <i class="fa-solid fa-receipt"></i>
+        </button>
+        <button class="tui-rail-btn" data-rail-tab="trials" onclick="switchTeacherPortalTab('trials'); toggleTeacherSidebar(false);" title="Trial Classes">
+          <i class="fa-solid fa-award"></i>
+        </button>
+        <button class="tui-rail-btn" onclick="openTeacherCourseMaterialsLibrary(); toggleTeacherSidebar(false);" title="Course Materials">
+          <i class="fa-solid fa-book-open-reader"></i>
+        </button>
+        <div class="mt-auto w-9 h-9 rounded-full flex items-center justify-center shrink-0" style="background:linear-gradient(140deg,#ecd27a,#c9a227); color:#3d2f05; border:2px solid rgba(255,255,255,.35)">
+          <i class="fa-solid fa-user text-xs"></i>
+        </div>
+      </div>
 
       <!-- Mobile Sidebar Backdrop Overlay -->
       <div id="teacherSidebarBackdrop" onclick="toggleTeacherSidebar(false)" class="fixed inset-0 bg-slate-950/60 backdrop-blur-xs z-40 hidden lg:hidden transition-opacity"></div>
 
-      <!-- Responsive Two-Column Layout: Sidebar (Left) + Operations Cockpit (Right) -->
-      <div class="flex flex-col lg:flex-row gap-6 items-start">
+      <!-- App Shell: emerald glass Sidebar (Left) + white Operations Cockpit (Right) -->
+      <div class="flex flex-col lg:flex-row items-stretch">
 
         <!-- ================= TEACHER PORTAL SIDEBAR ================= -->
-        <aside id="teacherSidebar" class="fixed inset-y-0 left-0 z-50 w-72 bg-white shadow-2xl p-4 flex flex-col transition-all duration-300 -translate-x-full lg:translate-x-0 lg:static lg:z-auto lg:w-64 lg:p-0 lg:bg-transparent lg:shadow-none lg:flex-shrink-0 overflow-y-auto max-h-screen lg:max-h-none lg:overflow-visible">
-          <div class="sidebar-card-inner bg-white rounded-2xl border border-slate-200 shadow-sm p-4 w-full space-y-4 lg:sticky lg:top-20 lg:max-h-[calc(100vh-5.5rem)] overflow-y-auto custom-sidebar-scroll">
+        <aside id="teacherSidebar" class="tui-sidebar-glass fixed inset-y-0 left-0 z-50 w-[292px] max-w-[86vw] text-white shadow-2xl flex flex-col transition-all duration-300 -translate-x-full lg:translate-x-0 lg:sticky lg:top-0 lg:z-auto lg:h-screen lg:flex-shrink-0">
+          <div class="sidebar-card-inner w-full flex-1 min-h-0 space-y-4 overflow-y-auto custom-sidebar-scroll">
 
-            <!-- Mobile Header with Close Button -->
-            <div class="flex items-center justify-between lg:hidden pb-3 border-b border-slate-100">
-              <div class="flex items-center gap-2.5">
-                <div class="w-8 h-8 rounded-xl bg-brandDark text-brandGold flex items-center justify-center font-bold text-sm shadow-xs">
-                  <i class="fa-solid fa-mosque"></i>
-                </div>
-                <div>
-                  <span class="font-extrabold text-xs text-slate-900 block leading-tight">Teacher Portal</span>
-                  <span class="text-[10px] text-slate-400">Navigation Menu</span>
-                </div>
+            <!-- Brand Row (flagship): logo mark + AL-HUDA wordmark; the
+                 collapse toggle stays on desktop, close button on mobile -->
+            <div class="tui-brand-row flex items-center gap-3 pr-6">
+              <div class="w-12 h-12 rounded-full overflow-hidden shrink-0" style="background:rgba(255,255,255,.13); border:1px solid rgba(255,255,255,.26); box-shadow:inset 0 1px 0 rgba(255,255,255,.25)">
+                <img src="alhuda_logo.jpg" alt="Al-Huda" class="w-full h-full object-cover">
               </div>
-              <button onclick="toggleTeacherSidebar(false)" class="w-8 h-8 flex items-center justify-center text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition" title="Close Menu">
-                <i class="fa-solid fa-xmark text-base"></i>
-              </button>
+              <div class="sidebar-brand-text min-w-0">
+                <div class="font-cinzel text-white text-[19px] font-bold tracking-[1.5px] leading-none">AL-HUDA</div>
+                <div class="text-[9.5px] font-bold tracking-[3.2px] mt-[5px]" style="color:#dcbc55">ISLAMIC CENTRE</div>
+              </div>
+              <div class="tui-brand-actions ml-auto flex items-center gap-1.5 shrink-0">
+                <button onclick="toggleTeacherSidebar(false)" class="lg:hidden w-8 h-8 flex items-center justify-center text-white/70 hover:text-white hover:bg-white/10 rounded-full transition" title="Close Menu">
+                  <i class="fa-solid fa-xmark text-base"></i>
+                </button>
+                <button id="btnCollapseDesktopSidebar" onclick="toggleDesktopSidebar()" class="hidden lg:flex w-[30px] h-[30px] items-center justify-center text-white/70 hover:text-white rounded-full transition" style="background:rgba(255,255,255,.09)" title="Collapse / Expand Sidebar (Desktop)">
+                  <i id="desktopCollapseIcon" class="fa-solid fa-chevron-left text-xs"></i>
+                </button>
+              </div>
             </div>
 
-            <!-- Desktop Sidebar Header (Collapse / Expand Rail Toggle) -->
-            <div class="hidden lg:flex items-center justify-between pb-2 border-b border-slate-100">
-              <div class="flex items-center gap-2 min-w-0">
-                <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
-                <span class="sidebar-collapse-label font-black text-[11px] uppercase tracking-wider text-slate-700 truncate">Menu Rail</span>
+            <!-- Live PKT Clock (relocated from the old top header) -->
+            <div class="sidebar-clock-chip pr-6 -mt-2">
+              <div class="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-mono font-bold text-emerald-100 w-max" style="background:rgba(255,255,255,.08); border:1px solid rgba(255,255,255,.14)">
+                <i class="fa-regular fa-clock" style="color:#dcbc55"></i>
+                <span id="liveClock">--:--:-- PKT</span>
               </div>
-              <button id="btnCollapseDesktopSidebar" onclick="toggleDesktopSidebar()" class="w-7 h-7 flex items-center justify-center text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition" title="Collapse / Expand Sidebar (Desktop)">
-                <i id="desktopCollapseIcon" class="fa-solid fa-chevron-left text-xs"></i>
-              </button>
             </div>
 
             <!-- 1. MAIN Group -->
             <div>
-              <p class="sidebar-group-title text-[10px] font-black uppercase tracking-wider text-slate-400 px-3 mb-2 flex items-center justify-between">
+              <p class="sidebar-group-title text-[10px] font-extrabold uppercase tracking-[2.6px] text-white/40 pl-4 pr-6 mb-2.5 flex items-center justify-between">
                 <span>Main</span>
-                <i class="fa-solid fa-compass text-slate-300 text-[10px]"></i>
+                <i class="fa-solid fa-compass text-white/25 text-[10px]"></i>
               </p>
-              <nav class="space-y-1">
+              <nav class="flex flex-col gap-2.5">
                 <!-- Dashboard -->
                 <button id="sbNavDashboard" onclick="switchTeacherPortalTab('dashboard'); toggleTeacherSidebar(false);" class="sidebar-nav-btn active w-full text-left px-3 py-2.5 flex items-center gap-2.5" title="Dashboard">
                   <span class="sidebar-icon-box"><i class="fa-solid fa-gauge-high"></i></span>
@@ -561,12 +780,12 @@ font-family: var(--font-num) !important;
             </div>
 
             <!-- 2. TEACHING Group -->
-            <div class="pt-2 border-t border-slate-100">
-              <p class="sidebar-group-title text-[10px] font-black uppercase tracking-wider text-slate-400 px-3 mb-2 flex items-center justify-between">
+            <div class="pt-4 border-t border-white/10">
+              <p class="sidebar-group-title text-[10px] font-extrabold uppercase tracking-[2.6px] text-white/40 pl-4 pr-6 mb-2.5 flex items-center justify-between">
                 <span>Teaching</span>
-                <i class="fa-solid fa-graduation-cap text-slate-300 text-[10px]"></i>
+                <i class="fa-solid fa-graduation-cap text-white/25 text-[10px]"></i>
               </p>
-              <nav class="space-y-1">
+              <nav class="flex flex-col gap-2.5">
                 <!-- Course Materials (Preserved, Digital Library removed) -->
                 <button id="sbNavCourseMaterials" onclick="openTeacherCourseMaterialsLibrary(); toggleTeacherSidebar(false);" class="sidebar-nav-btn w-full text-left px-3 py-2.5 flex items-center gap-2.5" title="Course Materials & Syllabus Library">
                   <span class="sidebar-icon-box"><i class="fa-solid fa-book-open-reader"></i></span>
@@ -596,27 +815,37 @@ font-family: var(--font-num) !important;
             </div>
 
             <!-- 3. ACTIONS Group -->
-            <div class="pt-2 border-t border-slate-100">
-              <p class="sidebar-group-title text-[10px] font-black uppercase tracking-wider text-slate-400 px-3 mb-2 flex items-center justify-between">
+            <div class="pt-4 border-t border-white/10">
+              <p class="sidebar-group-title text-[10px] font-extrabold uppercase tracking-[2.6px] text-white/40 pl-4 pr-6 mb-2.5 flex items-center justify-between">
                 <span>Quick Actions</span>
-                <i class="fa-solid fa-bolt text-slate-300 text-[10px]"></i>
+                <i class="fa-solid fa-bolt text-white/25 text-[10px]"></i>
               </p>
-              <nav class="space-y-1">
-                <button id="sbNavAddSchedule" onclick="openTeacherAddScheduleModal(); toggleTeacherSidebar(false);" class="sidebar-nav-btn w-full text-left px-3 py-2.5 flex items-center gap-2.5 text-emerald-800 hover:bg-emerald-50" title="+ Schedule Student">
-                  <span class="sidebar-icon-box bg-emerald-50 text-emerald-700"><i class="fa-solid fa-calendar-plus"></i></span>
+              <nav class="flex flex-col gap-2.5">
+                <button id="sbNavAddSchedule" onclick="openTeacherAddScheduleModal(); toggleTeacherSidebar(false);" class="sidebar-nav-btn w-full text-left px-3 py-2.5 flex items-center gap-2.5" title="+ Schedule Student">
+                  <span class="sidebar-icon-box"><i class="fa-solid fa-calendar-plus"></i></span>
                   <span class="sidebar-text truncate font-bold">+ Schedule Student</span>
                 </button>
               </nav>
             </div>
 
-            <!-- Teacher Info Badge in Sidebar -->
-            <div class="pt-2 border-t border-slate-100">
-              <div class="p-3 bg-gradient-to-br from-emerald-50/60 to-slate-50 rounded-xl border border-emerald-100 text-[11px] space-y-1 text-slate-600">
-                <div class="font-bold text-slate-800 flex items-center gap-1.5">
-                  <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-                  <span id="sbTeacherNameDisplay" class="truncate">Teacher Session</span>
+            <!-- Teacher Profile Foot (flagship) + Session Badge / Logout
+                 relocated from the old top header (ids + handlers kept) -->
+            <div class="sidebar-info-block pt-4 mt-1 border-t border-white/10 pr-6">
+              <div class="flex items-center gap-3 pl-1.5">
+                <div class="w-11 h-11 rounded-full shrink-0 flex items-center justify-center" style="background:linear-gradient(140deg,#ecd27a,#c9a227); color:#3d2f05; border:2px solid rgba(255,255,255,.3)">
+                  <i class="fa-solid fa-user text-sm"></i>
                 </div>
-                <div class="text-[10px] text-slate-500 font-medium" id="sbTeacherShiftDisplay">Active Instructor</div>
+                <div class="min-w-0">
+                  <div id="sbTeacherNameDisplay" class="text-white text-[14.5px] font-bold leading-tight truncate">Teacher Session</div>
+                  <div id="sbTeacherShiftDisplay" class="text-[11.5px] mt-[2px] font-medium" style="color:rgba(255,255,255,.55)">Active Instructor</div>
+                </div>
+              </div>
+              <div id="teacherHeaderBadge" class="hidden items-center gap-2 mt-3.5 px-3 py-2 rounded-full text-xs font-bold text-white" style="background:rgba(255,255,255,.08); border:1px solid rgba(255,255,255,.14)">
+                <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shrink-0"></span>
+                <span id="headerTeacherName" class="truncate inline-block">Teacher</span>
+                <button onclick="logoutTeacher()" class="ml-auto px-2.5 py-1 rounded-full bg-rose-600/80 hover:bg-rose-700 text-[10px] text-white transition flex items-center gap-1 shrink-0" title="Logout">
+                  <i class="fa-solid fa-power-off"></i> <span>Logout</span>
+                </button>
               </div>
             </div>
 
@@ -624,32 +853,33 @@ font-family: var(--font-num) !important;
         </aside>
 
         <!-- ================= MAIN OPERATIONS COCKPIT ================= -->
-        <div class="flex-1 w-full min-w-0 space-y-5">
+        <div class="flex-1 w-full min-w-0 space-y-5 bg-white pl-[86px] pr-4 sm:pr-6 lg:px-10 pt-5 lg:pt-9 pb-10">
 
-          <!-- WELCOME HERO BANNER -->
-          <div class="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-sm flex flex-col md:flex-row items-start md:items-center justify-between gap-3.5 sm:gap-4">
+          <!-- WELCOME HERO (flagship: plain on the white content area,
+               gold initials medallion, gold Active chip) -->
+          <div class="flex flex-col md:flex-row items-start md:items-center justify-between gap-3.5 sm:gap-4 px-1">
             <div class="flex items-center gap-3 sm:gap-4 min-w-0">
-              <div class="w-11 h-11 sm:w-14 sm:h-14 rounded-2xl bg-emerald-100 text-brandDark border border-emerald-300 flex items-center justify-center text-xl sm:text-2xl font-black shadow-xs shrink-0">
+              <div class="w-11 h-11 sm:w-14 sm:h-14 rounded-full flex items-center justify-center text-xl sm:text-2xl font-black shrink-0" style="background:linear-gradient(140deg,#ecd27a,#c9a227); color:#3d2f05; border:2px solid #ffffff; box-shadow:0 10px 22px rgba(90,70,10,.22)">
                 <span id="heroInitials">T</span>
               </div>
               <div class="min-w-0 flex-1">
                 <div class="flex items-center gap-1.5 sm:gap-2 flex-wrap">
-                  <h2 class="text-base sm:text-xl font-extrabold text-slate-900 truncate" id="heroTeacherName">Assalam-o-Alaikum, Teacher!</h2>
+                  <h2 class="text-[21px] sm:text-[27px] font-extrabold tracking-[-0.2px] text-[#0c2a20] leading-tight sm:truncate" id="heroTeacherName">Assalam-o-Alaikum, Teacher!</h2>
                   <span id="heroTeacherShift" class="px-2 py-0.5 bg-emerald-50 text-emerald-800 border border-emerald-200 rounded-full font-bold text-[11px] sm:text-xs">Shift</span>
-                  <span id="heroTeacherStatus" class="px-2 py-0.5 bg-brandDark text-white rounded-full font-bold text-[11px] sm:text-xs">Active Instructor</span>
+                  <span id="heroTeacherStatus" class="px-2.5 py-0.5 rounded-full font-bold text-[11px] sm:text-xs" style="background:#f8eed3; color:#8a6a14; border:1px solid #efdfae">Active Instructor</span>
                   <span id="heroTeacherZoomStatus" class="px-2 py-0.5 bg-slate-100 text-slate-600 border border-slate-200 rounded-full font-bold text-[11px] sm:text-xs">Zoom Status</span>
                 </div>
-                <p class="text-xs text-slate-500 mt-1 line-clamp-2 sm:line-clamp-none">
+                <p class="text-[13px] text-[#6d8276] mt-1.5 line-clamp-2 sm:line-clamp-none">
                   Your Al-Huda LMS operations cockpit. Manage today's live classes, record lesson progress, and review your weekly timetable.
                 </p>
               </div>
             </div>
 
             <div class="flex items-center gap-2 w-full md:w-auto flex-wrap sm:flex-nowrap shrink-0">
-              <button onclick="openTeacherAddScheduleModal()" class="flex-1 sm:flex-none px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs rounded-xl transition flex items-center justify-center gap-1.5 shadow-xs whitespace-nowrap">
+              <button onclick="openTeacherAddScheduleModal()" class="flex-1 sm:flex-none px-4 py-2.5 text-white font-extrabold text-xs rounded-full transition flex items-center justify-center gap-1.5 whitespace-nowrap" style="background:linear-gradient(140deg,#0d5c40,#07382a); box-shadow:0 12px 24px rgba(7,45,32,.26)">
                 <i class="fa-solid fa-calendar-plus"></i> + Schedule Student
               </button>
-              <button onclick="loadTeacherPortalData()" class="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl transition flex items-center justify-center gap-1.5 shadow-xs whitespace-nowrap">
+              <button onclick="loadTeacherPortalData()" class="px-4 py-2.5 bg-[#f0f3f1] hover:bg-[#e6ede8] text-[#33473d] font-bold text-xs rounded-full transition flex items-center justify-center gap-1.5 whitespace-nowrap">
                 <i class="fa-solid fa-arrows-rotate"></i> Refresh
               </button>
             </div>
@@ -696,12 +926,12 @@ font-family: var(--font-num) !important;
       </div>
 
       <!-- KEY METRICS STATS CARDS -->
-      <div id="sectionTeacherKpiGrid" class="grid grid-cols-2 sm:grid-cols-4 gap-2.5 sm:gap-4">
+      <div id="sectionTeacherKpiGrid" class="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-5">
         <!-- 1. Assigned Active Students (Student List) -->
-        <div onclick="switchTeacherPortalTab('students')" class="bg-white p-3 sm:p-5 rounded-2xl border border-slate-200 hover:border-emerald-400 shadow-sm flex flex-col justify-between cursor-pointer transition group">
+        <div onclick="switchTeacherPortalTab('students')" class="bg-[#edf5f0] p-3 sm:p-5 rounded-[26px] shadow-sm hover:shadow-md flex flex-col justify-between cursor-pointer transition group">
           <div class="flex items-center justify-between text-slate-500 mb-1">
             <span class="text-[11px] sm:text-xs font-bold uppercase tracking-wider text-slate-600 group-hover:text-brandDark">Student List</span>
-            <span class="w-7 h-7 sm:w-8 sm:h-8 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-700 flex items-center justify-center text-xs sm:text-sm">
+            <span class="w-7 h-7 sm:w-9 sm:h-9 rounded-full bg-white shadow-sm text-emerald-700 flex items-center justify-center text-xs sm:text-sm">
               <i class="fa-solid fa-user-graduate"></i>
             </span>
           </div>
@@ -710,10 +940,10 @@ font-family: var(--font-num) !important;
         </div>
 
         <!-- 2. Today's Classes -->
-        <div onclick="switchTeacherPortalTab('today')" class="bg-white p-3 sm:p-5 rounded-2xl border border-slate-200 hover:border-emerald-400 shadow-sm flex flex-col justify-between cursor-pointer transition">
+        <div onclick="switchTeacherPortalTab('today')" class="bg-white p-3 sm:p-5 rounded-[26px] border border-[#edf1ed] shadow-sm hover:shadow-md flex flex-col justify-between cursor-pointer transition">
           <div class="flex items-center justify-between text-slate-500 mb-1">
             <span class="text-[11px] sm:text-xs font-bold uppercase tracking-wider text-slate-600">Today's Classes</span>
-            <span class="w-7 h-7 sm:w-8 sm:h-8 rounded-xl bg-slate-100 border border-slate-200 text-brandDark flex items-center justify-center text-xs sm:text-sm">
+            <span class="w-7 h-7 sm:w-9 sm:h-9 rounded-full bg-[#f0f3f1] text-brandDark flex items-center justify-center text-xs sm:text-sm">
               <i class="fa-solid fa-calendar-day"></i>
             </span>
           </div>
@@ -722,10 +952,10 @@ font-family: var(--font-num) !important;
         </div>
 
         <!-- 3. Completed Today -->
-        <div class="bg-white p-3 sm:p-5 rounded-2xl border border-teal-200 shadow-sm flex flex-col justify-between">
+        <div class="bg-[#e9f4ef] p-3 sm:p-5 rounded-[26px] shadow-sm flex flex-col justify-between">
           <div class="flex items-center justify-between text-teal-800 mb-1">
             <span class="text-[11px] sm:text-xs font-bold uppercase tracking-wider">Completed</span>
-            <span class="w-7 h-7 sm:w-8 sm:h-8 rounded-xl bg-teal-50 border border-teal-200 text-teal-700 flex items-center justify-center text-xs sm:text-sm">
+            <span class="w-7 h-7 sm:w-9 sm:h-9 rounded-full bg-white shadow-sm text-teal-700 flex items-center justify-center text-xs sm:text-sm">
               <i class="fa-solid fa-circle-check"></i>
             </span>
           </div>
@@ -734,10 +964,10 @@ font-family: var(--font-num) !important;
         </div>
 
         <!-- 4. Remaining Slots -->
-        <div class="bg-white p-3 sm:p-5 rounded-2xl border border-amber-200 shadow-sm flex flex-col justify-between">
+        <div class="bg-[#faf4e1] p-3 sm:p-5 rounded-[26px] shadow-sm flex flex-col justify-between">
           <div class="flex items-center justify-between text-amber-800 mb-1">
             <span class="text-[11px] sm:text-xs font-bold uppercase tracking-wider">Remaining</span>
-            <span class="w-7 h-7 sm:w-8 sm:h-8 rounded-xl bg-amber-50 border border-amber-200 text-amber-700 flex items-center justify-center text-xs sm:text-sm">
+            <span class="w-7 h-7 sm:w-9 sm:h-9 rounded-full bg-white shadow-sm text-amber-700 flex items-center justify-center text-xs sm:text-sm">
               <i class="fa-solid fa-hourglass-half"></i>
             </span>
           </div>
@@ -748,8 +978,8 @@ font-family: var(--font-num) !important;
 
       <!-- SECTION 1: TODAY'S SCHEDULE TABLE -->
       <div id="sectionTeacherToday" class="space-y-4">
-        <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-          <div class="p-4 sm:p-5 border-b border-slate-200 flex flex-wrap justify-between items-center gap-3 bg-slate-50/80">
+        <div class="bg-white rounded-[24px] border border-[#eef3ee] shadow-[0_16px_36px_rgba(12,42,32,0.07)] overflow-hidden">
+          <div class="p-4 sm:p-5 border-b border-[#eef3ee] flex flex-wrap justify-between items-center gap-3">
             <div>
               <h3 class="font-extrabold text-slate-900 text-base flex items-center gap-2">
                 <i class="fa-solid fa-calendar-check text-brandEmerald"></i>
@@ -780,7 +1010,7 @@ font-family: var(--font-num) !important;
           <!-- Schedule Table -->
           <div class="overflow-x-auto touch-scroll tcard">
             <table class="w-full text-left text-xs border-collapse min-w-[700px]">
-              <thead class="bg-slate-100 text-slate-700 font-bold border-b border-slate-200 uppercase tracking-wider text-[11px]">
+              <thead class="bg-[#f7faf7] text-slate-600 font-bold border-b border-[#edf2ed] uppercase tracking-wider text-[11px]">
                 <tr>
                   <th class="p-3.5">Time Slot &amp; Duration</th>
                   <th class="p-3.5">Student Details</th>
@@ -813,8 +1043,8 @@ font-family: var(--font-num) !important;
 
       <!-- SECTION 1B: STUDENT LIST (ALL ACTIVE STUDENTS ASSIGNED TO THIS TEACHER) -->
       <div id="sectionTeacherStudentList" class="hidden space-y-4">
-        <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-          <div class="p-4 sm:p-5 border-b border-slate-200 flex flex-wrap justify-between items-center gap-3 bg-emerald-50/40">
+        <div class="bg-white rounded-[24px] border border-[#eef3ee] shadow-[0_16px_36px_rgba(12,42,32,0.07)] overflow-hidden">
+          <div class="p-4 sm:p-5 border-b border-[#eef3ee] flex flex-wrap justify-between items-center gap-3">
             <div>
               <h3 class="font-extrabold text-slate-900 text-base flex items-center gap-2">
                 <i class="fa-solid fa-users text-brandEmerald"></i>
@@ -832,7 +1062,7 @@ font-family: var(--font-num) !important;
 
           <div class="overflow-x-auto touch-scroll tcard">
             <table class="w-full text-left text-xs border-collapse min-w-[680px]">
-              <thead class="bg-slate-100 text-slate-700 font-bold border-b border-slate-200 uppercase tracking-wider text-[11px]">
+              <thead class="bg-[#f7faf7] text-slate-600 font-bold border-b border-[#edf2ed] uppercase tracking-wider text-[11px]">
                 <tr>
                   <th class="p-3.5 w-14 text-center">#</th>
                   <th class="p-3.5">Student Name</th>
@@ -878,8 +1108,8 @@ font-family: var(--font-num) !important;
            students, plus the teacher's own recordings for students who have
            since shifted away (UNION scope, server-enforced). -->
       <div id="sectionTeacherLessonHistory" class="hidden space-y-4">
-        <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-          <div class="p-4 sm:p-5 border-b border-slate-200 flex flex-wrap justify-between items-center gap-3 bg-emerald-50/40">
+        <div class="bg-white rounded-[24px] border border-[#eef3ee] shadow-[0_16px_36px_rgba(12,42,32,0.07)] overflow-hidden">
+          <div class="p-4 sm:p-5 border-b border-[#eef3ee] flex flex-wrap justify-between items-center gap-3">
             <div>
               <h3 class="font-extrabold text-slate-900 text-base flex items-center gap-2">
                 <i class="fa-solid fa-clock-rotate-left text-brandEmerald"></i>
@@ -920,7 +1150,7 @@ font-family: var(--font-num) !important;
         <!-- 5 TRIAL RETENTION KPI STATS CARDS -->
         <div class="grid grid-cols-2 sm:grid-cols-5 gap-3.5">
           <!-- 1. Total Trials -->
-          <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
+          <div class="bg-[#f7faf7] p-4 rounded-[22px] shadow-sm">
             <div class="flex items-center justify-between text-slate-500 mb-1">
               <span class="text-[10px] font-black uppercase tracking-wider">Total Trials</span>
               <i class="fa-solid fa-graduation-cap text-purple-600 text-xs"></i>
@@ -930,7 +1160,7 @@ font-family: var(--font-num) !important;
           </div>
 
           <!-- 2. Active Ongoing Trials -->
-          <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
+          <div class="bg-[#f7faf7] p-4 rounded-[22px] shadow-sm">
             <div class="flex items-center justify-between text-purple-600 mb-1">
               <span class="text-[10px] font-black uppercase tracking-wider">Active Trials</span>
               <i class="fa-solid fa-clock text-purple-600 text-xs"></i>
@@ -940,7 +1170,7 @@ font-family: var(--font-num) !important;
           </div>
 
           <!-- 3. Converted to Regular -->
-          <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
+          <div class="bg-[#f7faf7] p-4 rounded-[22px] shadow-sm">
             <div class="flex items-center justify-between text-emerald-600 mb-1">
               <span class="text-[10px] font-black uppercase tracking-wider">Converted</span>
               <i class="fa-solid fa-circle-check text-emerald-600 text-xs"></i>
@@ -950,7 +1180,7 @@ font-family: var(--font-num) !important;
           </div>
 
           <!-- 4. Dead / Dropped -->
-          <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
+          <div class="bg-[#f7faf7] p-4 rounded-[22px] shadow-sm">
             <div class="flex items-center justify-between text-slate-500 mb-1">
               <span class="text-[10px] font-black uppercase tracking-wider">Dead / Dropped</span>
               <i class="fa-solid fa-user-xmark text-rose-600 text-xs"></i>
@@ -960,7 +1190,7 @@ font-family: var(--font-num) !important;
           </div>
 
           <!-- 5. Conversion Rate -->
-          <div class="bg-gradient-to-br from-purple-900 to-indigo-950 text-white p-4 rounded-2xl border border-purple-800 shadow-sm col-span-2 sm:col-span-1">
+          <div class="bg-gradient-to-br from-purple-900 to-indigo-950 text-white p-4 rounded-[22px] shadow-sm col-span-2 sm:col-span-1">
             <div class="flex items-center justify-between text-purple-200 mb-1">
               <span class="text-[10px] font-black uppercase tracking-wider">Conversion Rate</span>
               <i class="fa-solid fa-chart-pie text-brandGold text-xs"></i>
@@ -974,8 +1204,8 @@ font-family: var(--font-num) !important;
         </div>
 
         <!-- TRIAL STUDENTS TABLE -->
-        <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-          <div class="p-4 sm:p-5 border-b border-slate-200 flex flex-wrap justify-between items-center gap-3 bg-purple-50/50">
+        <div class="bg-white rounded-[24px] border border-[#eef3ee] shadow-[0_16px_36px_rgba(12,42,32,0.07)] overflow-hidden">
+          <div class="p-4 sm:p-5 border-b border-[#eef3ee] flex flex-wrap justify-between items-center gap-3">
             <div>
               <h3 class="font-extrabold text-slate-900 text-base flex items-center gap-2">
                 <i class="fa-solid fa-graduation-cap text-purple-700"></i>
@@ -990,7 +1220,7 @@ font-family: var(--font-num) !important;
 
           <div class="overflow-x-auto touch-scroll">
             <table class="w-full text-left text-xs border-collapse min-w-[750px]">
-              <thead class="bg-slate-100 text-slate-700 font-bold border-b border-slate-200 uppercase tracking-wider text-[11px]">
+              <thead class="bg-[#f7faf7] text-slate-600 font-bold border-b border-[#edf2ed] uppercase tracking-wider text-[11px]">
                 <tr>
                   <th class="p-3 w-12 text-center">#</th>
                   <th class="p-3">Student Name</th>
@@ -1021,12 +1251,11 @@ font-family: var(--font-num) !important;
           </div>
         </div>
       </div>
-      </div>
 
       <!-- SECTION 3: MY PREVIOUS SALARIES & DISBURSED SLIPS -->
       <div id="sectionTeacherSalaries" class="hidden space-y-4">
         <!-- HEADER -->
-        <div class="bg-gradient-to-r from-emerald-950 via-brandDark to-emerald-900 rounded-2xl p-5 text-white shadow-md border border-emerald-800/40 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+        <div class="bg-gradient-to-r from-emerald-950 via-brandDark to-emerald-900 rounded-[24px] p-5 text-white shadow-md border border-emerald-800/40 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
           <div class="flex items-center gap-3">
             <img src="alhuda_logo.jpg" alt="Al-Huda Islamic Centre" class="w-12 h-12 object-cover rounded-xl border border-emerald-600/40 bg-black shrink-0">
             <div>
@@ -1076,7 +1305,7 @@ font-family: var(--font-num) !important;
         <div id="tSalStaleNote" class="hidden p-3 rounded-xl bg-amber-50 border border-amber-300 text-amber-900 text-xs font-bold">
           Showing your last saved salary copy — live data could not be reached. Reconnect and press Refresh Slips to see the latest figures.
         </div>
-        <div class="bg-white rounded-2xl border border-slate-200 shadow-xs p-4 space-y-3">
+        <div class="bg-white rounded-[24px] border border-[#eef3ee] shadow-[0_16px_36px_rgba(12,42,32,0.07)] p-4 sm:p-5 space-y-3">
           <div class="flex items-center justify-between flex-wrap gap-2">
             <h3 class="font-extrabold text-slate-900 text-sm flex items-center gap-2">
               <i class="fa-solid fa-money-check-dollar text-emerald-600"></i> Current Salary Summary
@@ -1085,7 +1314,7 @@ font-family: var(--font-num) !important;
           </div>
           <div id="tSalSummaryBody" class="text-xs text-slate-500">Loading your salary summary...</div>
         </div>
-        <div class="bg-white rounded-2xl border border-slate-200 shadow-xs p-4 space-y-3">
+        <div class="bg-white rounded-[24px] border border-[#eef3ee] shadow-[0_16px_36px_rgba(12,42,32,0.07)] p-4 sm:p-5 space-y-3">
           <div class="flex items-center justify-between flex-wrap gap-2">
             <h3 class="font-extrabold text-slate-900 text-sm flex items-center gap-2">
               <i class="fa-solid fa-hand-holding-dollar text-emerald-600"></i> Request Advance Salary
@@ -1132,8 +1361,8 @@ font-family: var(--font-num) !important;
         </div>
 
         <!-- SALARIES TABLE CARD -->
-        <div class="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
-          <div class="p-4 bg-slate-50 border-b border-slate-200 flex justify-between items-center flex-wrap gap-2">
+        <div class="bg-white rounded-[24px] border border-[#eef3ee] shadow-[0_16px_36px_rgba(12,42,32,0.07)] overflow-hidden">
+          <div class="p-4 sm:p-5 border-b border-[#eef3ee] flex justify-between items-center flex-wrap gap-2">
             <div>
               <h3 class="font-extrabold text-slate-900 text-sm flex items-center gap-2">
                 <i class="fa-solid fa-receipt text-amber-600"></i> Monthly Compensation Ledger
@@ -1144,7 +1373,7 @@ font-family: var(--font-num) !important;
 
           <div class="overflow-x-auto touch-scroll tcard">
             <table class="w-full text-left text-xs border-collapse min-w-[640px]">
-              <thead class="bg-slate-100 text-slate-700 font-bold border-b border-slate-200 uppercase tracking-wide text-[11px]">
+              <thead class="bg-[#f7faf7] text-slate-600 font-bold border-b border-[#edf2ed] uppercase tracking-wide text-[11px]">
                 <tr>
                   <th class="p-3">Billing Month</th>
                   <th class="p-3">Assigned Students</th>
@@ -1163,6 +1392,8 @@ font-family: var(--font-num) !important;
           </div>
         </div>
       </div>
+      </div>
+
     </div>
   </main>
 
@@ -3859,15 +4090,26 @@ font-family: var(--font-num) !important;
              </button>`
           : `<span class="px-2 py-1 rounded-lg bg-slate-100 text-slate-500 border border-slate-200 text-[10px] font-bold">Class link not set yet</span>`;
 
+        // Flagship rows: avatar initial circle (presentational only).
+        const stAvatarName = String(st.name || 'Student').trim();
+        const stAvatarInitials = stAvatarName.split(/\s+/).filter(Boolean).slice(0, 2).map(w => w.charAt(0).toUpperCase()).join('') || 'S';
+        const ST_AVATAR_BG = ['#0d5c40', '#8a6a14', '#0f766e', '#7c5a10'];
+        const stAvatarBg = ST_AVATAR_BG[(stAvatarName.split('').reduce((a, ch) => a + ch.charCodeAt(0), 0)) % ST_AVATAR_BG.length];
+
         return `
-          <tr class="hover:bg-slate-50 transition">
+          <tr class="hover:bg-[#f7faf7] transition">
             <td data-label="#" class="p-3.5 text-center font-extrabold text-slate-600 font-mono">${idx + 1}</td>
             <td data-label="Student" class="p-3.5">
-              <div class="font-extrabold text-slate-900 text-[13.5px]">${escapeHtml(st.name || 'Student')}</div>
-              <div class="lms-num-id text-slate-600 bg-slate-100 border border-slate-200/80 px-2 py-0.5 rounded inline-block mt-1">ID: ${escapeHtml(st.id)}</div>
+              <div class="flex items-start gap-2.5">
+                <span class="w-9 h-9 rounded-full shrink-0 flex items-center justify-center text-[12px] font-extrabold text-white" style="background:${stAvatarBg}">${stAvatarInitials}</span>
+                <div class="min-w-0">
+                  <div class="font-extrabold text-slate-900 text-[13.5px]">${escapeHtml(st.name || 'Student')}</div>
+                  <div class="lms-num-id text-slate-600 bg-[#f0f3f1] px-2 py-0.5 rounded-full inline-block mt-1">ID: ${escapeHtml(st.id)}</div>
+                </div>
+              </div>
             </td>
             <td data-label="Course" class="p-3.5">
-              <span class="px-2.5 py-1 rounded-lg bg-emerald-50 text-brandEmerald border border-emerald-200 font-bold text-xs inline-block">
+              <span class="px-2.5 py-1 rounded-full bg-emerald-50 text-brandEmerald font-bold text-xs inline-block">
                 ${courseTitle}
               </span>
             </td>
@@ -4145,28 +4387,38 @@ font-family: var(--font-num) !important;
         }
 
         const durDisplay = c.isAdvanceExtra ? 'Advance' : `${c.durationMins || getTeacherSlotDurationMins(c.start_time, c.end_time) || 30}m`;
+        // Flagship rows: avatar initial circle (presentational only).
+        const avatarName = String(c.students?.name || 'Student').trim();
+        const avatarInitials = avatarName.split(/\s+/).filter(Boolean).slice(0, 2).map(w => w.charAt(0).toUpperCase()).join('') || 'S';
+        const AVATAR_BG = ['#0d5c40', '#8a6a14', '#0f766e', '#7c5a10'];
+        const avatarBg = AVATAR_BG[(avatarName.split('').reduce((a, ch) => a + ch.charCodeAt(0), 0)) % AVATAR_BG.length];
 
         return `
           <tr class="${rowClass}">
             <td data-label="Time" class="p-3.5 whitespace-nowrap">
               <div class="flex items-center gap-1.5 flex-wrap">
-                <span class="lms-num-time font-bold text-slate-900 bg-slate-100/90 border border-slate-200 px-2.5 py-1 rounded-lg inline-block whitespace-nowrap">${c.start_time.slice(0,5)} – ${c.end_time.slice(0,5)}</span>
-                <span class="px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-800 border border-emerald-200 font-mono font-extrabold text-[10px]">${durDisplay}</span>
+                <span class="lms-num-time font-bold text-slate-900 bg-[#f0f3f1] px-2.5 py-1 rounded-full inline-block whitespace-nowrap">${c.start_time.slice(0,5)} – ${c.end_time.slice(0,5)}</span>
+                <span class="px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-800 font-mono font-extrabold text-[10px]">${durDisplay}</span>
               </div>
               <div class="mt-1">${timingBadge}</div>
             </td>
             <td data-label="Student" class="p-3.5">
-              <div class="flex items-center gap-1.5 flex-wrap">
-                <span class="font-bold text-slate-900 text-[13.5px]">${c.students?.name || 'Student'}</span>
-                ${isTrialClass 
-                  ? '<span class="px-2 py-0.5 rounded text-[10px] font-extrabold bg-purple-100 text-purple-800 border border-purple-200">✨ Trial Class</span>' 
-                  : '<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">🎓 Regular</span>'}
-                ${reqBadge}
+              <div class="flex items-start gap-2.5">
+                <span class="w-9 h-9 rounded-full shrink-0 flex items-center justify-center text-[12px] font-extrabold text-white" style="background:${avatarBg}">${avatarInitials}</span>
+                <div class="min-w-0">
+                  <div class="flex items-center gap-1.5 flex-wrap">
+                    <span class="font-bold text-slate-900 text-[13.5px]">${c.students?.name || 'Student'}</span>
+                    ${isTrialClass
+                      ? '<span class="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-purple-100 text-purple-800">✨ Trial Class</span>'
+                      : '<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800">🎓 Regular</span>'}
+                    ${reqBadge}
+                  </div>
+                  <div class="lms-num-id text-slate-600 bg-[#f0f3f1] px-2 py-0.5 rounded-full inline-block mt-1">ID: ${c.students?.id || 'STU'}</div>
+                </div>
               </div>
-              <div class="lms-num-id text-slate-600 bg-slate-100 border border-slate-200/80 px-2 py-0.5 rounded inline-block mt-1">ID: ${c.students?.id || 'STU'}</div>
             </td>
             <td data-label="Course" class="p-3.5">
-              <span class="px-2.5 py-1 rounded-lg ${isTrialClass ? 'bg-purple-50 text-purple-900 border-purple-200' : 'bg-emerald-50 text-brandEmerald border-emerald-200'} font-bold text-xs border inline-block">
+              <span class="px-2.5 py-1 rounded-full ${isTrialClass ? 'bg-purple-50 text-purple-900' : 'bg-emerald-50 text-brandEmerald'} font-bold text-xs inline-block">
                 ${courseTitle}
               </span>
             </td>
@@ -8199,6 +8451,11 @@ font-family: var(--font-num) !important;
         const el = document.getElementById(id);
         if (el) el.classList.remove('active');
       });
+      // Flagship redesign: mirror the active tab onto the mobile slim
+      // rail (visual bookkeeping only — same tab names as navMap).
+      document.querySelectorAll('#teacherMobileRail [data-rail-tab]').forEach(btn => {
+        btn.classList.toggle('active', btn.getAttribute('data-rail-tab') === tab);
+      });
       for (const modalId of Object.keys(modalMap)) {
         const modalEl = document.getElementById(modalId);
         if (modalEl && !modalEl.classList.contains('hidden')) {
@@ -8415,10 +8672,10 @@ font-family: var(--font-num) !important;
         }
         let annotatedHtml = '';
         if (e.annotatedPages && e.annotatedPages.length > 0) {
-          annotatedHtml = `<div><button onclick="openTeacherAnnotatedPages(${_lhCardIdx})" class="px-3 py-1.5 rounded-lg bg-teal-700 hover:bg-teal-800 text-white text-[11px] font-extrabold transition cursor-pointer">View annotated pages (${e.annotatedPages.length})</button></div>`;
+          annotatedHtml = `<div><button onclick="openTeacherAnnotatedPages(${_lhCardIdx})" class="px-3 py-1.5 rounded-full bg-teal-700 hover:bg-teal-800 text-white text-[11px] font-extrabold transition cursor-pointer">View annotated pages (${e.annotatedPages.length})</button></div>`;
         }
         cards.push(`
-          <div class="border border-slate-200 rounded-2xl p-4 space-y-1.5">
+          <div class="border border-[#eef3ee] rounded-[20px] p-4 space-y-1.5 shadow-[0_10px_24px_rgba(12,42,32,0.05)] bg-white">
             <div class="flex flex-wrap items-center gap-2 text-xs">
               <span class="font-mono font-black text-slate-900">${escapeHtml(e.date || '')}</span>
               <span class="px-2 py-0.5 rounded text-[10px] font-extrabold bg-slate-100 text-slate-700 border border-slate-200">${escapeHtml(e.status || 'Recorded')}</span>
@@ -8429,9 +8686,9 @@ font-family: var(--font-num) !important;
             ${progressText ? `<div class="text-xs font-bold text-amber-900">${progressText}</div>` : ''}
             ${e.result ? `<div class="text-xs text-slate-600">Result: <strong>${escapeHtml(e.result)}</strong></div>` : ''}
             ${e.additionalLesson ? `<div class="text-xs text-slate-700">Additional lesson: <strong>${escapeHtml(e.additionalLesson)}</strong></div>` : ''}
-            ${e.remarks ? `<p class="text-xs text-slate-600 bg-slate-50 p-2.5 rounded-xl border border-slate-200/70 italic">"${escapeHtml(e.remarks)}"</p>` : ''}
+            ${e.remarks ? `<p class="text-xs text-slate-600 bg-[#f7faf7] p-2.5 rounded-xl italic">"${escapeHtml(e.remarks)}"</p>` : ''}
             <div class="text-[11px] text-slate-500">Actual duration: <strong>${escapeHtml(window.LessonHistory.formatActualDuration(e))}</strong>${schedText ? ` • ${escapeHtml(schedText)}` : ''}</div>
-            ${_lhCardCanRead ? `<div><button onclick="openTeacherHistoryLessonPage(${_lhCardIdx})" class="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-extrabold transition cursor-pointer">Read course page</button></div>` : ((e && e.hasLesson && !e.isAdditionalCourse) ? `<div class="text-[11px] text-slate-400 italic">Course page cannot be opened for this record (no course saved with it).</div>` : '')}
+            ${_lhCardCanRead ? `<div><button onclick="openTeacherHistoryLessonPage(${_lhCardIdx})" class="px-3 py-1.5 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-extrabold transition cursor-pointer">Read course page</button></div>` : ((e && e.hasLesson && !e.isAdditionalCourse) ? `<div class="text-[11px] text-slate-400 italic">Course page cannot be opened for this record (no course saved with it).</div>` : '')}
             ${annotatedHtml}
             ${imgHtml}
           </div>
@@ -8899,7 +9156,7 @@ font-family: var(--font-num) !important;
       // line and NO figures.
       if (typeof CourseCatalogue.fromServer !== 'function' || !CourseCatalogue.fromServer()) {
         return {
-          html: `<div class="mb-3 p-3.5 rounded-xl border border-slate-200 bg-slate-50 text-slate-500">Your live salary view will appear here after the next system update.</div>`,
+          html: `<div class="mb-3 p-3.5 rounded-2xl bg-[#f7faf7] text-slate-500">Your live salary view will appear here after the next system update.</div>`,
           figures: false
         };
       }
@@ -8909,13 +9166,17 @@ font-family: var(--font-num) !important;
       const asOfLabel = a.asOf
         ? new Date(String(a.asOf).slice(0, 10) + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })
         : '';
-      const tile = (label, value) => `<div class="p-3 bg-slate-50 rounded-xl border border-slate-200"><span class="block text-slate-500 font-bold text-[11px]">${label}</span><span class="font-mono font-black text-slate-900 text-sm">${value}</span></div>`;
+      // Flagship: gold progress bar (earned vs monthly potential), from
+      // the same figures already computed above — display only.
+      const earnedPct = fig.baseSubtotal > 0 ? Math.min(100, Math.max(0, Math.round((a.grossEarned / fig.baseSubtotal) * 100))) : 0;
+      const tile = (label, value) => `<div class="p-3 bg-[#f7faf7] rounded-2xl"><span class="block text-slate-500 font-bold text-[11px]">${label}</span><span class="font-mono font-black text-slate-900 text-sm">${value}</span></div>`;
       const html = `
         <div class="mb-3">
-          <div class="p-4 rounded-xl border border-emerald-200 bg-emerald-50">
+          <div class="p-4 sm:p-5 rounded-[20px] bg-[#edf5f0]">
             <span class="block text-slate-500 font-bold text-[11px]">Live Salary — ${monthLabel}</span>
-            <span class="block font-black text-emerald-800 text-base mt-0.5">Your salary earned so far this month: PKR ${a.grossEarned.toLocaleString()}</span>
+            <span class="block font-black text-emerald-900 text-lg mt-0.5">Your salary earned so far this month: PKR ${a.grossEarned.toLocaleString()}</span>
             <span class="block text-slate-500 text-[11px] mt-0.5">Till ${asOfLabel} · grows daily · your official slip appears here once Administration generates it</span>
+            <div class="mt-3 h-[9px] rounded-full overflow-hidden" style="background:rgba(10,60,42,.12)"><div class="h-full rounded-full" style="width:${earnedPct}%; background:linear-gradient(90deg,#dcbc55,#c9a227)"></div></div>
           </div>
           <div class="grid grid-cols-2 sm:grid-cols-3 gap-2.5 mt-2.5">
             ${tile('Monthly Potential', 'PKR ' + fig.baseSubtotal.toLocaleString())}
@@ -9014,7 +9275,7 @@ font-family: var(--font-num) !important;
       } catch (e) { _liveBlock = { html: '', figures: false }; }
       if (!_TADV_SLIPS.length) {
         body.innerHTML = _liveBlock.html + `
-          <div class="p-4 text-center bg-slate-50 rounded-xl border border-slate-200">
+          <div class="p-4 text-center bg-[#f7faf7] rounded-2xl">
             <div class="font-extrabold text-slate-800 text-sm">Salary not yet configured</div>
             <p class="text-slate-500 mt-1">${_liveBlock.figures
               ? 'No official salary slip has been generated for you yet. The figures above are your live accrual for the current month; your official slip will appear here once Administration generates it.'
@@ -9038,10 +9299,10 @@ font-family: var(--font-num) !important;
         : '<span class="px-2 py-0.5 rounded-full text-[10px] font-black bg-amber-100 text-amber-800 border border-amber-300">Pending</span>';
       body.innerHTML = _liveBlock.html + `
         <div class="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
-          <div class="p-3 bg-slate-50 rounded-xl border border-slate-200"><span class="block text-slate-500 font-bold text-[11px]">Salary Period</span><span class="font-black text-slate-900 text-sm">${latest.month || 'Statement'}</span><span class="block mt-1">${statusBadge}</span></div>
-          <div class="p-3 bg-slate-50 rounded-xl border border-slate-200"><span class="block text-slate-500 font-bold text-[11px]">Configured Salary (Base)</span><span class="font-mono font-black text-slate-900 text-sm">${base.toLocaleString()} PKR</span></div>
-          <div class="p-3 bg-slate-50 rounded-xl border border-slate-200"><span class="block text-slate-500 font-bold text-[11px]">Bonus / Allowances</span><span class="font-mono font-black text-emerald-800 text-sm">+${bonus.toLocaleString()} PKR</span></div>
-          <div class="p-3 bg-slate-50 rounded-xl border border-slate-200"><span class="block text-slate-500 font-bold text-[11px]">Other Deductions</span><span class="font-mono font-black text-rose-800 text-sm">-${ded.toLocaleString()} PKR</span></div>
+          <div class="p-3 bg-[#f7faf7] rounded-2xl"><span class="block text-slate-500 font-bold text-[11px]">Salary Period</span><span class="font-black text-slate-900 text-sm">${latest.month || 'Statement'}</span><span class="block mt-1">${statusBadge}</span></div>
+          <div class="p-3 bg-[#f7faf7] rounded-2xl"><span class="block text-slate-500 font-bold text-[11px]">Configured Salary (Base)</span><span class="font-mono font-black text-slate-900 text-sm">${base.toLocaleString()} PKR</span></div>
+          <div class="p-3 bg-[#f7faf7] rounded-2xl"><span class="block text-slate-500 font-bold text-[11px]">Bonus / Allowances</span><span class="font-mono font-black text-emerald-800 text-sm">+${bonus.toLocaleString()} PKR</span></div>
+          <div class="p-3 bg-[#f7faf7] rounded-2xl"><span class="block text-slate-500 font-bold text-[11px]">Other Deductions</span><span class="font-mono font-black text-rose-800 text-sm">-${ded.toLocaleString()} PKR</span></div>
           <div class="p-3 bg-amber-50 rounded-xl border border-amber-200"><span class="block text-slate-500 font-bold text-[11px]">Approved Advances Deducted</span><span class="font-mono font-black text-amber-800 text-sm">-${adv.toLocaleString()} PKR</span></div>
           <div class="p-3 bg-emerald-50 rounded-xl border border-emerald-200"><span class="block text-slate-500 font-bold text-[11px]">Net Salary Payable</span><span class="font-mono font-black text-emerald-800 text-base">${net.toLocaleString()} PKR</span></div>
         </div>
@@ -9250,7 +9511,7 @@ font-family: var(--font-num) !important;
         const apprAmt = r.approved_amount != null ? parseFloat(r.approved_amount) : null;
         const when = r.requested_at ? new Date(r.requested_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '';
         return `
-          <div class="p-3 bg-slate-50 rounded-xl border border-slate-200">
+          <div class="p-3 bg-[#f7faf7] rounded-2xl">
             <div class="flex items-center justify-between gap-2 flex-wrap">
               <span class="font-black text-slate-900">${typeLabel(r.advance_type)} — ${reqAmt.toLocaleString()} PKR</span>
               ${badge(r.status)}
