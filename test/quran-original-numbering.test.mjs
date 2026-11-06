@@ -180,6 +180,20 @@ class FakeSettingsDb {
   }
   _all() { return [...this.rows.values()].map((r) => ({ ...r })); }
   _upsert(vals) {
+    // Perf fix (2026-11-06): the editor save now upserts changed page
+    // rows as ONE array call. The real /api/db engine accepts a values
+    // array and applies rows in order (stopping at the failing row),
+    // so the fake mirrors that: one writeLog entry per row.
+    if (Array.isArray(vals)) {
+      for (const row of vals) {
+        const r = this._upsertOne(row);
+        if (r.error) return r;
+      }
+      return { data: null, error: null };
+    }
+    return this._upsertOne(vals);
+  }
+  _upsertOne(vals) {
     this.writeLog.push({ op: 'upsert', key: vals.key });
     if (this.failUpsertFor && vals.key === this.failUpsertFor) return { data: null, error: { message: 'upsert denied by fake' } };
     this.rows.set(vals.key, { id: vals.id, key: vals.key, value: vals.value });
@@ -247,11 +261,19 @@ const EDITOR_FN_NAMES = [
   'pageEditorBuildUpdatedBook', 'savePageEditor', 'requestClosePageEditor',
   'pageEditorAnchorValue', 'pageEditorAnchorsDirty', 'pageEditorValidateAnchors',
   'pageEditorOrigStartChanged',
+  // Perf fix (2026-11-06): savePageEditor now saves through the scoped
+  // path; its helpers must exist in this vm world too.
+  '_mergeEffectiveBooks', '_catalogIndexOf', '_runBoundedPool',
+  '_upsertPageRowsBatched', '_saveBookPagesScoped',
 ];
 function editorBuildSource() {
   const decl = CURR.match(/let PAGE_EDITOR = null;/);
   if (!decl) throw new Error('PAGE_EDITOR declaration not found in js/curriculum.js');
-  return "let _lastCatalogSyncError = '';\nlet CURRENT_CURRICULUM_CATEGORY = 'all';\n" + decl[0] + '\n'
+  // Perf fix (2026-11-06): _upsertPageRowsBatched reads the module-level
+  // chunk-size const; inject its declaration like PAGE_EDITOR's.
+  const chunkDecl = CURR.match(/const _PAGE_UPSERT_CHUNK = \d+;/);
+  if (!chunkDecl) throw new Error('_PAGE_UPSERT_CHUNK declaration not found in js/curriculum.js');
+  return "let _lastCatalogSyncError = '';\nlet CURRENT_CURRICULUM_CATEGORY = 'all';\n" + decl[0] + '\n' + chunkDecl[0] + '\n'
     + extractFunction(CDATA, 'getBookParaPages') + '\n'
     + EDITOR_FN_NAMES.map((n) => extractFunction(CURR, n)).join('\n');
 }

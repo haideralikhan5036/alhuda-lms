@@ -88,6 +88,17 @@ class FakeSettingsDb {
   }
   _all() { return [...this.rows.values()].map((r) => ({ ...r })); }
   _upsert(vals) {
+    // Perf fix (2026-11-06): the scoped editor save upserts page rows as
+    // an ARRAY in one call (the real shim/engine accept value arrays).
+    // The fake applies rows in order and logs one entry per row, so the
+    // existing write-order assertions keep their meaning.
+    if (Array.isArray(vals)) {
+      for (const row of vals) {
+        const r = this._upsert(row);
+        if (r && r.error) return r;
+      }
+      return { data: null, error: null };
+    }
     this.writeLog.push({ op: 'upsert', key: vals.key });
     if (this.failUpsertFor && vals.key === this.failUpsertFor) {
       return { data: null, error: { message: 'upsert denied by fake' } };
@@ -201,11 +212,20 @@ const FN_NAMES = [
   // functions the real page loads with the rest of curriculum.js.
   'pageEditorAnchorValue', 'pageEditorAnchorsDirty', 'pageEditorValidateAnchors',
   'pageEditorOrigStartChanged',
+  // Perf fix (2026-11-06): savePageEditor now saves through the scoped
+  // path; the extraction list must name its helpers or the vm world
+  // lacks code the real page loads with the rest of curriculum.js.
+  '_mergeEffectiveBooks', '_catalogIndexOf', '_runBoundedPool',
+  '_upsertPageRowsBatched', '_saveBookPagesScoped',
 ];
 function buildSource() {
   const decl = CURRICULUM.match(/let PAGE_EDITOR = null;/);
   if (!decl) throw new Error('PAGE_EDITOR declaration not found in js/curriculum.js');
-  return "let _lastCatalogSyncError = '';\nlet CURRENT_CURRICULUM_CATEGORY = 'all';\n" + decl[0] + '\n'
+  // Perf fix (2026-11-06): _upsertPageRowsBatched reads the module-level
+  // chunk-size const; inject its declaration like PAGE_EDITOR's.
+  const chunkDecl = CURRICULUM.match(/const _PAGE_UPSERT_CHUNK = \d+;/);
+  if (!chunkDecl) throw new Error('_PAGE_UPSERT_CHUNK declaration not found in js/curriculum.js');
+  return "let _lastCatalogSyncError = '';\nlet CURRENT_CURRICULUM_CATEGORY = 'all';\n" + decl[0] + '\n' + chunkDecl[0] + '\n'
     + extractFunction(CURRICULUM_DATA, 'getBookParaPages') + '\n'
     + FN_NAMES.map((n) => extractFunction(CURRICULUM, n)).join('\n');
 }
