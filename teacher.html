@@ -472,8 +472,35 @@ font-family: var(--font-num) !important;
      equivalent of browser zoom. Applied to <body> so the login
      view, the dashboard, every modal/overlay root and the
      JS-created annotated-pages viewer all scale uniformly,
-     exactly as browser zoom would scale them. */
-  body { zoom: 0.77; }
+     exactly as browser zoom would scale them.
+     OWNER (2026-11-07): 77% proved a touch too small — the scale
+     steps up to 85% ("bit bigger, not too much"). This single line
+     is the tuning knob for the whole portal's scale. */
+  body { zoom: 0.85; }
+
+  /* ---- Full-height FIXED sidebar (OWNER, 2026-11-07): the owner
+     rejected the "pocket" — the old desktop sidebar was sticky with
+     height:100vh, and under the body zoom above, 100vh resolves
+     against the UNZOOMED viewport (measured in Chromium at a
+     1920x1080 viewport: computed height 1080 CSS px, rendered box
+     only 831.6 px = 1080 x 0.77), so the green column ended at 77%
+     of the screen with white void beneath it and the last nav
+     items + profile foot pushed below the visible edge. The aside
+     is now position:fixed with top/bottom insets at every size:
+     fixed insets resolve against the zoom-adjusted viewport, so
+     the column spans the full screen height at any zoom and any
+     scroll position. The content column (the aside's next sibling)
+     takes the matching left margin here, driven by the same
+     .is-collapsed state that sets the sidebar's own width. ---- */
+  @media (min-width: 1024px) {
+    .tui-main-col {
+      margin-left: 292px;
+      transition: margin-left .3s ease;
+    }
+    aside#teacherSidebar.is-collapsed + .tui-main-col {
+      margin-left: 5.75rem;
+    }
+  }
 
   /* ---- Collapsed desktop rail (extends the .is-collapsed rules
      above): icons become circles, the active one a white circle,
@@ -719,9 +746,15 @@ font-family: var(--font-num) !important;
       <div class="flex flex-col lg:flex-row items-stretch">
 
         <!-- ================= TEACHER PORTAL SIDEBAR ================= -->
-        <aside id="teacherSidebar" class="tui-sidebar-glass fixed inset-y-0 left-0 z-50 w-[292px] max-w-[86vw] text-white shadow-2xl flex flex-col transition-all duration-300 -translate-x-full lg:translate-x-0 lg:sticky lg:top-0 lg:z-auto lg:h-screen lg:flex-shrink-0">
-          <div class="sidebar-card-inner w-full flex-1 min-h-0 space-y-4 overflow-y-auto custom-sidebar-scroll">
+        <aside id="teacherSidebar" class="tui-sidebar-glass fixed inset-y-0 left-0 z-50 w-[292px] max-w-[86vw] text-white shadow-2xl flex flex-col transition-all duration-300 -translate-x-full lg:translate-x-0 lg:z-auto">
+          <!-- Sidebar layout (2026-11-07): three pinned bands — brand +
+               clock at the top, ONLY the nav groups scroll (middle,
+               invisible scrollbar), profile/session foot pinned at the
+               very bottom — so nothing is ever cut off, at any height. -->
+          <div class="sidebar-card-inner w-full flex-1 min-h-0 flex flex-col space-y-4">
 
+            <!-- Pinned header band: brand + live clock -->
+            <div class="shrink-0 space-y-4">
             <!-- Brand Row (flagship): logo mark + AL-HUDA wordmark; the
                  collapse toggle stays on desktop, close button on mobile -->
             <div class="tui-brand-row flex items-center gap-3 pr-6">
@@ -749,6 +782,12 @@ font-family: var(--font-num) !important;
                 <span id="liveClock">--:--:-- PKT</span>
               </div>
             </div>
+            </div><!-- /pinned header band -->
+
+            <!-- Scrolling nav band: the only part of the sidebar that
+                 scrolls; the invisible-scrollbar rules ride on
+                 .custom-sidebar-scroll exactly as before -->
+            <div class="sidebar-nav-scroll flex-1 min-h-0 overflow-y-auto custom-sidebar-scroll space-y-4">
 
             <!-- 1. MAIN Group -->
             <div>
@@ -825,10 +864,12 @@ font-family: var(--font-num) !important;
                 </button>
               </nav>
             </div>
+            </div><!-- /scrolling nav band -->
 
             <!-- Teacher Profile Foot (flagship) + Session Badge / Logout
-                 relocated from the old top header (ids + handlers kept) -->
-            <div class="sidebar-info-block pt-4 mt-1 border-t border-white/10 pr-6">
+                 relocated from the old top header (ids + handlers kept);
+                 pinned at the sidebar's bottom band (shrink-0) -->
+            <div class="sidebar-info-block shrink-0 pt-4 mt-1 border-t border-white/10 pr-6">
               <div class="flex items-center gap-3 pl-1.5">
                 <div class="w-11 h-11 rounded-full shrink-0 flex items-center justify-center" style="background:linear-gradient(140deg,#ecd27a,#c9a227); color:#3d2f05; border:2px solid rgba(255,255,255,.3)">
                   <i class="fa-solid fa-user text-sm"></i>
@@ -851,7 +892,7 @@ font-family: var(--font-num) !important;
         </aside>
 
         <!-- ================= MAIN OPERATIONS COCKPIT ================= -->
-        <div class="flex-1 w-full min-w-0 space-y-5 bg-white pl-[86px] pr-4 sm:pr-6 lg:px-10 pt-5 lg:pt-9 pb-10">
+        <div class="tui-main-col flex-1 w-full min-w-0 space-y-5 bg-white pl-[86px] pr-4 sm:pr-6 lg:px-10 pt-5 lg:pt-9 pb-10">
 
           <!-- WELCOME HERO (flagship: plain on the white content area,
                gold initials medallion, gold Active chip) -->

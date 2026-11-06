@@ -162,8 +162,28 @@ check('owner marks: sidebar scrollbar hidden at the junction',
   TEACHER.includes('aside#teacherSidebar .custom-sidebar-scroll') &&
   TEACHER.includes('scrollbar-width: none') &&
   TEACHER.includes('aside#teacherSidebar .custom-sidebar-scroll::-webkit-scrollbar'));
-check('owner marks: portal scale is 77% (body zoom)',
-  TEACHER.includes('body { zoom: 0.77; }'));
+check('owner marks: portal scale is 85% (body zoom)',
+  TEACHER.includes('body { zoom: 0.85; }'));
+// (Was 0.77 in PR #117; owner 2026-11-07: 77% proved a touch too
+// small, stepped up to 85% — "bit bigger, not too much".)
+// Full-height fixed sidebar (owner 2026-11-07, "no pocket style"):
+// the old desktop sidebar was sticky + height:100vh, which under the
+// body zoom rendered at only zoom x viewport height. The aside is
+// now fixed with top/bottom insets at every size, the nav groups
+// live in their own scroll band, and the foot is pinned below it.
+check('sidebar fix: aside is fixed full-height, sticky/100vh gone',
+  TEACHER.includes('class="tui-sidebar-glass fixed inset-y-0') &&
+  !TEACHER.includes('lg:sticky') && !TEACHER.includes('lg:h-screen'));
+check('sidebar fix: content column offset matches sidebar widths',
+  TEACHER.includes('.tui-main-col') &&
+  TEACHER.includes('margin-left: 292px') &&
+  TEACHER.includes('aside#teacherSidebar.is-collapsed + .tui-main-col') &&
+  TEACHER.includes('margin-left: 5.75rem'));
+check('sidebar fix: nav band scrolls, brand and foot are pinned bands',
+  TEACHER.includes('class="sidebar-nav-scroll flex-1 min-h-0 overflow-y-auto custom-sidebar-scroll') &&
+  TEACHER.indexOf('sidebar-nav-scroll') < TEACHER.indexOf('id="sbNavSalaries"') &&
+  TEACHER.indexOf('id="sbNavSalaries"') < TEACHER.indexOf('/scrolling nav band') &&
+  TEACHER.indexOf('/scrolling nav band') < TEACHER.indexOf('id="sbTeacherNameDisplay"'));
 
 // ---------------------------------------------------------------------
 // Part B — fake DOM built from the REAL markup (ids + initial classes)
