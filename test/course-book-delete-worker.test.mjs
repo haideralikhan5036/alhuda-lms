@@ -145,6 +145,49 @@ fakeR2._map.set(KDOC, 'bytes-doc');
   check('GET did not remove the object', fakeR2.has(K3));
 }
 
+// --- Perf fix (2026-11-06): IN-list deletes on system_settings via /api/db ---
+// The book-delete row phase removes BOOK_PAGE rows with ONE IN-list
+// delete per chunk instead of one request per row. Proven here against
+// the real engine: the owner may do it; a manager may NOT (the manager
+// write guard requires an eq pin on `key` — which is exactly why the
+// Page Editor's tail prune keeps the eq form), while a manager eq
+// delete of a catalog key stays allowed.
+async function dbPostJson(token, body) {
+  const req = new Request('https://worker.test/api/db', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token, 'Origin': ORIGIN },
+    body: JSON.stringify(body),
+  });
+  const res = await worker.fetch(req, env, {});
+  let json = null;
+  try { json = await res.json(); } catch (e) {}
+  return { status: res.status, json };
+}
+{
+  const keys = ['BOOK_PAGE_custom-PERF_0', 'BOOK_PAGE_custom-PERF_1', 'BOOK_PAGE_custom-PERF_2'];
+  const seed = await dbPostJson(TOK.owner, {
+    table: 'system_settings', action: 'upsert',
+    values: keys.map((k, i) => ({ id: 'SYS-PERF-' + i, key: k, value: 'https://x.test/' + k, updated_at: new Date().toISOString() })),
+  });
+  check('perf: owner array upsert of 3 BOOK_PAGE rows in ONE request -> 200', seed.status === 200 && !seed.json.error, 'got ' + seed.status + ' ' + JSON.stringify(seed.json).slice(0, 120));
+  const readBack = await dbPostJson(TOK.owner, { table: 'system_settings', action: 'select', select: 'key', filters: [{ column: 'key', op: 'in', value: keys }] });
+  check('perf: all 3 seeded rows readable via one IN select', readBack.status === 200 && Array.isArray(readBack.json.data) && readBack.json.data.length === 3, 'got ' + JSON.stringify(readBack.json).slice(0, 120));
+
+  const mgrIn = await dbPostJson(TOK.manager, { table: 'system_settings', action: 'delete', filters: [{ column: 'key', op: 'in', value: keys }] });
+  check('perf: manager IN-list delete -> refused (guard requires eq on key)', mgrIn.status !== 200, 'got ' + mgrIn.status);
+  const stillThere = await dbPostJson(TOK.owner, { table: 'system_settings', action: 'select', select: 'key', filters: [{ column: 'key', op: 'in', value: keys }] });
+  check('perf: rows survive the refused manager IN delete', Array.isArray(stillThere.json.data) && stillThere.json.data.length === 3);
+
+  const ownIn = await dbPostJson(TOK.owner, { table: 'system_settings', action: 'delete', filters: [{ column: 'key', op: 'in', value: keys }] });
+  check('perf: owner IN-list delete of 3 rows in ONE request -> 200', ownIn.status === 200 && !ownIn.json.error, 'got ' + ownIn.status + ' ' + JSON.stringify(ownIn.json).slice(0, 120));
+  const gone = await dbPostJson(TOK.owner, { table: 'system_settings', action: 'select', select: 'key', filters: [{ column: 'key', op: 'in', value: keys }] });
+  check('perf: all 3 rows gone after the single IN delete', Array.isArray(gone.json.data) && gone.json.data.length === 0, 'got ' + JSON.stringify(gone.json).slice(0, 120));
+
+  const mgrEqSeed = await dbPostJson(TOK.owner, { table: 'system_settings', action: 'upsert', values: [{ id: 'SYS-PERF-EQ', key: 'BOOK_PAGE_custom-PERF_9', value: 'v', updated_at: new Date().toISOString() }] });
+  const mgrEq = await dbPostJson(TOK.manager, { table: 'system_settings', action: 'delete', filters: [{ column: 'key', op: 'eq', value: 'BOOK_PAGE_custom-PERF_9' }] });
+  check('perf: manager eq delete of a catalog key stays allowed (editor prune form)', mgrEqSeed.status === 200 && mgrEq.status === 200 && !mgrEq.json.error, 'got ' + mgrEq.status);
+}
+
 // --- Release identity --------------------------------------------------------
 {
   const req = new Request('https://worker.test/api/health', { method: 'GET', headers: { 'Origin': ORIGIN } });

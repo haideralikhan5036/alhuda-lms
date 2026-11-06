@@ -56,6 +56,96 @@
       return ok;
     }
 
+    // The catalog merge shared by every catalog write: read the cloud
+    // index, merge cloud + local (local wins on conflict), then drop
+    // tombstoned ids. SAFETY (catalog-wipe protection): the cloud
+    // catalog is never overwritten with an empty/stale local list;
+    // explicit deletes are enforced via the tombstone list.
+    async function _mergeEffectiveBooks(localBooks) {
+      let cloudBooks = [];
+      try {
+        const { data: idxRows } = await db.from('system_settings').select('value').eq('key', 'alhuda_custom_books_index').limit(1);
+        if (Array.isArray(idxRows) && idxRows.length > 0 && idxRows[0].value) {
+          const parsed = JSON.parse(idxRows[0].value);
+          if (Array.isArray(parsed)) cloudBooks = parsed;
+        }
+      } catch (e) { /* keep cloudBooks empty on read failure */ }
+      const deletedIds = (typeof getDeletedBookIds === 'function') ? getDeletedBookIds() : [];
+      const merged = (Array.isArray(localBooks) ? localBooks : []).slice();
+      cloudBooks.forEach(function (cb) {
+        if (cb && cb.id && !merged.some(function (lb) { return lb && lb.id === cb.id; })) merged.push(cb);
+      });
+      return merged.filter(function (b) { return b && !deletedIds.includes(b.id); });
+    }
+
+    // The catalog index payload for a merged book list: each book's
+    // metadata with its pages stripped (pages live in BOOK_PAGE rows).
+    function _catalogIndexOf(effectiveBooks) {
+      return (effectiveBooks || []).map(function (b) {
+        const pages = Array.isArray(b.pages) ? b.pages : [];
+        return {
+          ...b,
+          pages: [],
+          total_pages: pages.length || b.total_pages || 0
+        };
+      });
+    }
+
+    // Bounded-concurrency runner for independent operations (storage
+    // deletes, row prunes). At most `limit` operations are in flight at
+    // once. With stopOnError, no NEW operation starts after the first
+    // failure (in-flight ones settle) — the caller still receives every
+    // failure. onProgress(done, total) fires after each completion.
+    async function _runBoundedPool(items, limit, worker, opts) {
+      const list = Array.isArray(items) ? items : [];
+      const maxInFlight = Math.max(1, Math.min(Number(limit) || 1, list.length || 1));
+      const stopOnError = !!(opts && opts.stopOnError);
+      const onProgress = (opts && typeof opts.onProgress === 'function') ? opts.onProgress : null;
+      const failures = [];
+      let next = 0;
+      let done = 0;
+      let stopped = false;
+      async function lane() {
+        while (!stopped && next < list.length) {
+          const item = list[next];
+          next++;
+          try {
+            await worker(item);
+          } catch (e) {
+            failures.push({ item: item, error: e });
+            if (stopOnError) stopped = true;
+          }
+          done++;
+          if (onProgress) { try { onProgress(done, list.length); } catch (e) {} }
+        }
+      }
+      const lanes = [];
+      for (let i = 0; i < maxInFlight; i++) lanes.push(lane());
+      await Promise.all(lanes);
+      return { failures: failures };
+    }
+
+    // Upsert BOOK_PAGE-style rows in array batches (the /api/db engine
+    // accepts a values array in ONE request — the old per-row loop made
+    // one HTTP round trip per page). 100 rows per request keeps each
+    // payload modest (page values are short storage URLs). Throws on
+    // the first server error, like the per-row check did.
+    const _PAGE_UPSERT_CHUNK = 100;
+    async function _upsertPageRowsBatched(rows, onProgress) {
+      const list = Array.isArray(rows) ? rows : [];
+      let done = 0;
+      for (let i = 0; i < list.length; i += _PAGE_UPSERT_CHUNK) {
+        const chunk = list.slice(i, i + _PAGE_UPSERT_CHUNK);
+        const res = await db.from('system_settings').upsert(chunk);
+        if (res && res.error) {
+          throw new Error((res.error.message || res.error) + ' (while saving a book page)');
+        }
+        done += chunk.length;
+        if (typeof onProgress === 'function') { try { onProgress(done); } catch (e) {} }
+      }
+      return done;
+    }
+
     async function syncCustomBooksToD1Chunked(books, options) {
       const opts = options || {};
       _lastCatalogSyncError = '';
@@ -66,36 +156,12 @@
         }
         const localBooks = Array.isArray(books) ? books : [];
 
-        // SAFETY (catalog-wipe protection): never overwrite the cloud catalog with
-        // an empty/stale local list. Merge cloud + local instead (local wins on
-        // conflict); explicit deletes are enforced via the tombstone list.
-        let cloudBooks = [];
-        try {
-          const { data: idxRows } = await db.from('system_settings').select('value').eq('key', 'alhuda_custom_books_index').limit(1);
-          if (Array.isArray(idxRows) && idxRows.length > 0 && idxRows[0].value) {
-            const parsed = JSON.parse(idxRows[0].value);
-            if (Array.isArray(parsed)) cloudBooks = parsed;
-          }
-        } catch (e) { /* keep cloudBooks empty on read failure */ }
-        const deletedIds = (typeof getDeletedBookIds === 'function') ? getDeletedBookIds() : [];
-        const merged = localBooks.slice();
-        cloudBooks.forEach(function (cb) {
-          if (cb && cb.id && !merged.some(function (lb) { return lb && lb.id === cb.id; })) merged.push(cb);
-        });
-        const effectiveBooks = merged.filter(function (b) { return b && !deletedIds.includes(b.id); });
-
-        const catalogIndex = [];
+        const effectiveBooks = await _mergeEffectiveBooks(localBooks);
+        const catalogIndex = _catalogIndexOf(effectiveBooks);
         const rowsToUpsert = [];
 
         for (const b of effectiveBooks) {
           const pages = Array.isArray(b.pages) ? b.pages : [];
-          const bookMeta = {
-            ...b,
-            pages: [],
-            total_pages: pages.length || b.total_pages || 0
-          };
-          catalogIndex.push(bookMeta);
-
           for (let i = 0; i < pages.length; i++) {
             const pageKey = `BOOK_PAGE_${b.id}_${i}`;
             rowsToUpsert.push({
@@ -174,6 +240,142 @@
       } catch (e) {
         _lastCatalogSyncError = (e && e.message) ? String(e.message) : String(e);
         console.warn('[Course Material D1 Sync] Notice:', e);
+        return false;
+      }
+    }
+
+    // Scoped page save for the Page Editor (performance fix, 2026-11-06).
+    // The full sync above rewrites EVERY book's EVERY page row, one HTTP
+    // request per row — over a thousand sequential requests at live
+    // scale for an edit that changes a handful of pages. This path
+    // writes ONLY the edited book's changed positions (array-batched),
+    // prunes its tail, then writes the catalog index + mirror — the
+    // same pages-first order and the same final D1 state as the sync's
+    // pagesFirst branch. Other books' rows are never touched.
+    // oldFlat is the book's page array as loaded when the editor opened
+    // (D1 row i holds oldFlat[i]); pruneTo covers sparse records whose
+    // advertised row count exceeds the loaded array (MADANI QAIDA).
+    async function _saveBookPagesScoped(books, bookId, oldFlat, pruneTo, onProgress) {
+      _lastCatalogSyncError = '';
+      try {
+        if (typeof db === 'undefined' || !db || typeof db.from !== 'function') {
+          _lastCatalogSyncError = 'Database connection unavailable.';
+          return false;
+        }
+        const localBooks = Array.isArray(books) ? books : [];
+        const sourceBook = localBooks.find(function (b) { return b && b.id === bookId; }) || null;
+        const effectiveBooks = await _mergeEffectiveBooks(localBooks);
+        const inCatalog = effectiveBooks.some(function (b) { return b && b.id === bookId; });
+
+        const oldPages = Array.isArray(oldFlat) ? oldFlat : [];
+        const newPages = (sourceBook && Array.isArray(sourceBook.pages)) ? sourceBook.pages : [];
+        const changedRows = [];
+        if (inCatalog && sourceBook) {
+          for (let i = 0; i < newPages.length; i++) {
+            if (oldPages[i] !== newPages[i]) {
+              changedRows.push({
+                id: `SYS-${bookId}-P${i}`,
+                key: `BOOK_PAGE_${bookId}_${i}`,
+                value: newPages[i],
+                updated_at: new Date().toISOString()
+              });
+            }
+          }
+        }
+        const pruneKeys = [];
+        if (inCatalog && sourceBook) {
+          const from = newPages.length;
+          const to = Math.max(oldPages.length, Number(pruneTo) || 0);
+          for (let i = from; i < to; i++) pruneKeys.push(`BOOK_PAGE_${bookId}_${i}`);
+        }
+        const totalUnits = changedRows.length + pruneKeys.length + 2;
+        let doneUnits = 0;
+        const report = function () { if (typeof onProgress === 'function') { try { onProgress(doneUnits, totalUnits); } catch (e) {} } };
+
+        // Pages first (upserts, then tail prunes), catalog last — the
+        // hardened order: the index never advertises unwritten pages.
+        await _upsertPageRowsBatched(changedRows, function (n) { doneUnits = n; report(); });
+        doneUnits = changedRows.length;
+        if (pruneKeys.length > 0) {
+          // Prunes stay eq-on-key deletes: the Worker manager guard
+          // accepts only that form for system_settings deletes, so
+          // manager saves keep working. The pool parallelises them.
+          const prune = await _runBoundedPool(pruneKeys, 6, async function (pageKey) {
+            const delRes = await db.from('system_settings').delete().eq('key', pageKey);
+            if (delRes && delRes.error) {
+              throw new Error((delRes.error.message || delRes.error) + ' (while removing a surplus page)');
+            }
+          }, { onProgress: function () { doneUnits++; report(); } });
+          if (prune.failures.length > 0) throw prune.failures[0].error;
+          doneUnits = changedRows.length + pruneKeys.length;
+        }
+        const catalogIndex = _catalogIndexOf(effectiveBooks);
+        const _check = function (res, what) {
+          if (res && res.error) throw new Error((res.error.message || res.error) + ` (while saving ${what})`);
+        };
+        _check(await db.from('system_settings').upsert({
+          id: 'SYS-CUSTOM-BOOKS-INDEX',
+          key: 'alhuda_custom_books_index',
+          value: JSON.stringify(catalogIndex),
+          updated_at: new Date().toISOString()
+        }), 'the catalog index');
+        doneUnits++; report();
+        _check(await db.from('system_settings').upsert({
+          id: 'SYS-CUSTOM-BOOKS-ALL',
+          key: 'alhuda_custom_books',
+          value: JSON.stringify(catalogIndex),
+          updated_at: new Date().toISOString()
+        }), 'the catalog');
+        doneUnits++; report();
+        return true;
+      } catch (e) {
+        _lastCatalogSyncError = (e && e.message) ? String(e.message) : String(e);
+        console.warn('[Course Material Scoped Save] Notice:', e);
+        return false;
+      }
+    }
+
+    // Catalog-only commit for book deletion: persist the local list and
+    // rewrite ONLY the catalog index + mirror rows in D1 — no page
+    // rows. The full sync's per-row rewrite of every OTHER book's pages
+    // (hundreds of no-op round trips) was most of a deletion's cost;
+    // the final catalog state is identical, because the index is built
+    // from the same merged, tombstone-filtered list either way.
+    async function _commitCatalogOnly(books) {
+      let localOk = true;
+      try {
+        localStorage.setItem('alhuda_custom_books', JSON.stringify(books));
+      } catch (e) {
+        localOk = false;
+        console.warn("Could not save custom books to storage:", e);
+      }
+      _lastCatalogSyncError = '';
+      try {
+        if (typeof db === 'undefined' || !db || typeof db.from !== 'function') {
+          _lastCatalogSyncError = 'Database connection unavailable.';
+          return false;
+        }
+        const effectiveBooks = await _mergeEffectiveBooks(books);
+        const catalogIndex = _catalogIndexOf(effectiveBooks);
+        const _check = function (res, what) {
+          if (res && res.error) throw new Error((res.error.message || res.error) + ` (while saving ${what})`);
+        };
+        _check(await db.from('system_settings').upsert({
+          id: 'SYS-CUSTOM-BOOKS-INDEX',
+          key: 'alhuda_custom_books_index',
+          value: JSON.stringify(catalogIndex),
+          updated_at: new Date().toISOString()
+        }), 'the catalog index');
+        _check(await db.from('system_settings').upsert({
+          id: 'SYS-CUSTOM-BOOKS-ALL',
+          key: 'alhuda_custom_books',
+          value: JSON.stringify(catalogIndex),
+          updated_at: new Date().toISOString()
+        }), 'the catalog');
+        return localOk;
+      } catch (e) {
+        _lastCatalogSyncError = (e && e.message) ? String(e.message) : String(e);
+        console.warn('[Course Material Catalog Commit] Notice:', e);
         return false;
       }
     }
@@ -2987,12 +3189,12 @@ if (mergedDeleted.length > 0) {
         btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Saving...';
       }
       try {
-        const cloudOk = await syncCustomBooksToD1Chunked(built.books, {
-          pagesFirst: true,
-          pruneBookId: st.bookId,
-          pruneFromIndex: built.newFlatLen,
-          pruneToIndex: Math.max(built.oldFlatLen, st.oldRowCount || 0)
-        });
+        const cloudOk = await _saveBookPagesScoped(built.books, st.bookId, st.origFlat,
+          Math.max(built.oldFlatLen, st.oldRowCount || 0),
+          function (done, total) {
+            const b = document.getElementById('btnSavePageEditor');
+            if (b) b.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Saving… ' + done + '/' + total;
+          });
         if (!cloudOk) {
           lmsNotify('⚠️ The page changes could NOT be saved.\n\n'
             + (_lastCatalogSyncError ? 'Server said: ' + _lastCatalogSyncError + '\n\n' : '')
@@ -3165,7 +3367,7 @@ if (mergedDeleted.length > 0) {
           // exactly as it behaved before this change.
           // Batch 2 (S13): if the server refuses a save, STOP and show
           // the real error — never claim the book was deleted.
-          const catalogSavedBuiltIn = await saveCustomBooks(filteredCustom);
+          const catalogSavedBuiltIn = await _commitCatalogOnly(filteredCustom);
           if (!catalogSavedBuiltIn) {
             lmsNotify('⚠️ Could NOT delete this course material on the server.\n\n'
               + (_lastCatalogSyncError ? `Server said: ${_lastCatalogSyncError}\n\n` : '')
@@ -3209,21 +3411,42 @@ if (mergedDeleted.length > 0) {
             incomplete('The book\'s page list could not be read from the server.');
             return;
           }
-          for (const entry of plan.byKey) {
-            try {
-              await _deleteStorageObject(entry[0], entry[1]);
-            } catch (e) {
-              incomplete('A stored page file could not be removed from storage.');
-              return;
+          // Performance (2026-11-06): the two phases below used to run
+          // strictly one request at a time — 549 storage deletes plus
+          // 549 row deletes in sequence. Storage deletes now run in a
+          // bounded pool (max 6 in flight; no new delete starts after
+          // the first failure), and the page rows are removed with
+          // IN-list deletes (90 keys per request — book deletion is
+          // owner-only, and the engine + shim both support the `in`
+          // filter; the eq-only form the manager guard requires is not
+          // needed here). Failure honesty is unchanged: any failure
+          // stops the flow with the same INCOMPLETE report.
+          const deleteTotal = plan.byKey.size + plan.pageRowKeys.length;
+          let deleteDone = 0;
+          const deleteProgress = function () {
+            if (modalDelBtn) {
+              modalDelBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Deleting… ' + deleteDone + '/' + deleteTotal;
             }
+          };
+          const storageRun = await _runBoundedPool(Array.from(plan.byKey), 6, async function (entry) {
+            await _deleteStorageObject(entry[0], entry[1]);
+          }, { stopOnError: true, onProgress: function () { deleteDone++; deleteProgress(); } });
+          if (storageRun.failures.length > 0) {
+            incomplete('A stored page file could not be removed from storage.');
+            return;
           }
+          deleteDone = plan.byKey.size;
           if (typeof db !== 'undefined' && db && typeof db.from === 'function') {
-            for (const rowKey of plan.pageRowKeys) {
-              const res = await db.from('system_settings').delete().eq('key', rowKey);
+            const ROW_DELETE_CHUNK = 90;
+            for (let i = 0; i < plan.pageRowKeys.length; i += ROW_DELETE_CHUNK) {
+              const chunk = plan.pageRowKeys.slice(i, i + ROW_DELETE_CHUNK);
+              const res = await db.from('system_settings').delete().in('key', chunk);
               if (res && res.error) {
                 incomplete('A page record could not be removed from the database.');
                 return;
               }
+              deleteDone += chunk.length;
+              deleteProgress();
             }
           }
 
@@ -3245,7 +3468,7 @@ if (mergedDeleted.length > 0) {
             incomplete(_lastCatalogSyncError ? `Server said: ${_lastCatalogSyncError}` : 'The deletion record could not be saved on the server.');
             return;
           }
-          const catalogSaved = await saveCustomBooks(filteredCustom);
+          const catalogSaved = await _commitCatalogOnly(filteredCustom);
           if (!catalogSaved) {
             incomplete(_lastCatalogSyncError ? `Server said: ${_lastCatalogSyncError}` : 'The catalog could not be updated on the server.');
             return;

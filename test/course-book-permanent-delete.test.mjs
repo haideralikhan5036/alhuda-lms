@@ -63,9 +63,15 @@ class SelBuilder {
 class DelBuilder {
   constructor(db) { this._db = db; this._filters = []; }
   eq(col, val) { this._filters.push([col, val]); return this; }
+  // Perf fix (2026-11-06): the book-delete row phase removes page rows
+  // with IN-list deletes (the real shim/engine support the `in`
+  // filter); the fake models it so the flow can run unchanged.
+  in(col, vals) { this._filters.push([col, vals, 'in']); return this; }
   then(res, rej) {
     let result = { data: null, error: null };
-    for (const [c, v] of this._filters) result = this._db._deleteWhere(c, v);
+    for (const f of this._filters) {
+      result = (f[2] === 'in') ? this._db._deleteWhereIn(f[0], f[1]) : this._db._deleteWhere(f[0], f[1]);
+    }
     return Promise.resolve(result).then(res, rej);
   }
 }
@@ -100,6 +106,15 @@ class FakeSettingsDb {
     if (this.failDelete) return { data: null, error: { message: 'delete denied by fake' } };
     for (const [k, r] of [...this.rows.entries()]) {
       if (String(r[col]) === String(val)) this.rows.delete(k);
+    }
+    return { data: null, error: null };
+  }
+  _deleteWhereIn(col, vals) {
+    this.deleteLog.push(col + ' IN (' + (Array.isArray(vals) ? vals.length : 0) + ')');
+    if (this.failDelete) return { data: null, error: { message: 'delete denied by fake' } };
+    const set = new Set((vals || []).map((v) => String(v)));
+    for (const [k, r] of [...this.rows.entries()]) {
+      if (set.has(String(r[col]))) this.rows.delete(k);
     }
     return { data: null, error: null };
   }
@@ -147,6 +162,10 @@ const FN_NAMES = [
   'hydrateCustomBooksFromCloudflareD1', 'getAllAvailableBooks',
   '_r2KeyFromPageValue', '_collectBookDeletionPlan', '_deleteStorageObject',
   'handleDeleteCurriculumBook',
+  // Perf fix (2026-11-06): the delete flow now pools its storage
+  // deletes and commits through the catalog-only path; the extraction
+  // list must name the new helpers or the vm world lacks them.
+  '_runBoundedPool', '_mergeEffectiveBooks', '_catalogIndexOf', '_commitCatalogOnly',
 ];
 function buildSource() {
   const decl = CURRICULUM.match(/const _bookDeleteInFlight = new Set\(\);/);
@@ -260,7 +279,13 @@ const tombstoneIds = (db) => JSON.parse(db.getRow('alhuda_deleted_books').value)
 {
   const w = makeWorld({ storageFail: true });
   await w.run(`handleDeleteCurriculumBook('custom-A', 'Book A')`);
-  check('r2-fail: deletion stops at the first failed object', w.fetchCalls.filter((c) => c.method === 'DELETE').length === 1, String(w.fetchCalls.length));
+  // Perf fix (2026-11-06): storage deletes run in a bounded pool (max
+  // 6 in flight), so "stops at the first failure" now means at most one
+  // pool-width of attempts — never a plough through every object — and
+  // the flow still aborts before touching D1 (asserted below). The old
+  // assertion pinned the sequential count of exactly 1.
+  const r2Attempts = w.fetchCalls.filter((c) => c.method === 'DELETE').length;
+  check('r2-fail: deletion stops at the first failed object (bounded pool: <= 6 attempts)', r2Attempts >= 1 && r2Attempts <= 6, String(r2Attempts));
   check('r2-fail: INCOMPLETE error shown, no success', w.notifications.length === 1 && w.notifications[0].msg.includes('INCOMPLETE') && !w.notifications[0].msg.includes('🗑️'), JSON.stringify(w.notifications.map((n) => n.msg)));
   check('r2-fail: D1 index untouched', JSON.stringify(indexIds(w.db)) === JSON.stringify(['custom-A', 'custom-B']));
   check('r2-fail: BOOK_PAGE rows untouched', w.db.keys().filter((k) => k.startsWith('BOOK_PAGE_custom-A_')).length === 3);
