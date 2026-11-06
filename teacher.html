@@ -452,16 +452,28 @@ font-family: var(--font-num) !important;
     bottom: -20px;
     background: radial-gradient(circle at 0 100%, rgba(255,255,255,0) 19px, #ffffff 20px);
   }
-  /* Sidebar scrollbar on glass */
+  /* Sidebar scrollbar on glass — OWNER MARKS (2026-11-06): the
+     sidebar and the main screen must read as one piece ("mix hona
+     chahiye"). The sidebar's own scrollbar painted a pale strip at
+     the junction, so it is no longer painted at all; the sidebar
+     still scrolls (wheel / touch / keys), the bar is simply hidden. */
   aside#teacherSidebar .custom-sidebar-scroll {
-    scrollbar-color: rgba(255,255,255,.28) transparent;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
   }
-  aside#teacherSidebar .custom-sidebar-scroll::-webkit-scrollbar-thumb {
-    background: rgba(255,255,255,.28);
+  aside#teacherSidebar .custom-sidebar-scroll::-webkit-scrollbar {
+    display: none;
+    width: 0;
+    height: 0;
   }
-  aside#teacherSidebar .custom-sidebar-scroll::-webkit-scrollbar-thumb:hover {
-    background: rgba(255,255,255,.45);
-  }
+
+  /* Portal scale — OWNER MARKS (2026-11-06): everything rendered
+     too large; the owner asked for the portal at 77%, the
+     equivalent of browser zoom. Applied to <body> so the login
+     view, the dashboard, every modal/overlay root and the
+     JS-created annotated-pages viewer all scale uniformly,
+     exactly as browser zoom would scale them. */
+  body { zoom: 0.77; }
 
   /* ---- Collapsed desktop rail (extends the .is-collapsed rules
      above): icons become circles, the active one a white circle,
@@ -814,20 +826,6 @@ font-family: var(--font-num) !important;
               </nav>
             </div>
 
-            <!-- 3. ACTIONS Group -->
-            <div class="pt-4 border-t border-white/10">
-              <p class="sidebar-group-title text-[10px] font-extrabold uppercase tracking-[2.6px] text-white/40 pl-4 pr-6 mb-2.5 flex items-center justify-between">
-                <span>Quick Actions</span>
-                <i class="fa-solid fa-bolt text-white/25 text-[10px]"></i>
-              </p>
-              <nav class="flex flex-col gap-2.5">
-                <button id="sbNavAddSchedule" onclick="openTeacherAddScheduleModal(); toggleTeacherSidebar(false);" class="sidebar-nav-btn w-full text-left px-3 py-2.5 flex items-center gap-2.5" title="+ Schedule Student">
-                  <span class="sidebar-icon-box"><i class="fa-solid fa-calendar-plus"></i></span>
-                  <span class="sidebar-text truncate font-bold">+ Schedule Student</span>
-                </button>
-              </nav>
-            </div>
-
             <!-- Teacher Profile Foot (flagship) + Session Badge / Logout
                  relocated from the old top header (ids + handlers kept) -->
             <div class="sidebar-info-block pt-4 mt-1 border-t border-white/10 pr-6">
@@ -867,18 +865,11 @@ font-family: var(--font-num) !important;
                   <h2 class="text-[21px] sm:text-[27px] font-extrabold tracking-[-0.2px] text-[#0c2a20] leading-tight sm:truncate" id="heroTeacherName">Assalam-o-Alaikum, Teacher!</h2>
                   <span id="heroTeacherShift" class="px-2 py-0.5 bg-emerald-50 text-emerald-800 border border-emerald-200 rounded-full font-bold text-[11px] sm:text-xs">Shift</span>
                   <span id="heroTeacherStatus" class="px-2.5 py-0.5 rounded-full font-bold text-[11px] sm:text-xs" style="background:#f8eed3; color:#8a6a14; border:1px solid #efdfae">Active Instructor</span>
-                  <span id="heroTeacherZoomStatus" class="px-2 py-0.5 bg-slate-100 text-slate-600 border border-slate-200 rounded-full font-bold text-[11px] sm:text-xs">Zoom Status</span>
                 </div>
-                <p class="text-[13px] text-[#6d8276] mt-1.5 line-clamp-2 sm:line-clamp-none">
-                  Your Al-Huda LMS operations cockpit. Manage today's live classes, record lesson progress, and review your weekly timetable.
-                </p>
               </div>
             </div>
 
             <div class="flex items-center gap-2 w-full md:w-auto flex-wrap sm:flex-nowrap shrink-0">
-              <button onclick="openTeacherAddScheduleModal()" class="flex-1 sm:flex-none px-4 py-2.5 text-white font-extrabold text-xs rounded-full transition flex items-center justify-center gap-1.5 whitespace-nowrap" style="background:linear-gradient(140deg,#0d5c40,#07382a); box-shadow:0 12px 24px rgba(7,45,32,.26)">
-                <i class="fa-solid fa-calendar-plus"></i> + Schedule Student
-              </button>
               <button onclick="loadTeacherPortalData()" class="px-4 py-2.5 bg-[#f0f3f1] hover:bg-[#e6ede8] text-[#33473d] font-bold text-xs rounded-full transition flex items-center justify-center gap-1.5 whitespace-nowrap">
                 <i class="fa-solid fa-arrows-rotate"></i> Refresh
               </button>
@@ -888,47 +879,10 @@ font-family: var(--font-num) !important;
       <!-- OFFICIAL ANNOUNCEMENTS (from Admin Portal) -->
       <div id="teacherAnnouncementsBanner" class="hidden mb-4"></div>
 
-      <!-- LIVE / NEXT CLASS PROMINENT CURRENT SESSION CARD -->
-      <div id="liveClassAlertBanner" class="hidden p-4 sm:p-5 rounded-2xl bg-gradient-to-r from-emerald-800 via-teal-900 to-slate-900 text-white shadow-md border border-emerald-500/30 transition-all">
-        <div class="flex flex-col md:flex-row items-start md:items-center justify-between gap-3.5 sm:gap-4">
-          <div class="flex items-center gap-3 sm:gap-3.5 min-w-0 w-full md:w-auto">
-            <div class="w-11 h-11 sm:w-12 sm:h-12 rounded-xl bg-white/15 backdrop-blur-sm flex items-center justify-center text-xl sm:text-2xl text-emerald-200 shrink-0 border border-white/10 shadow-xs">
-              <i class="fa-solid fa-tower-broadcast animate-pulse" id="liveBannerIcon"></i>
-            </div>
-            <div class="min-w-0 flex-1">
-              <div class="flex items-center gap-2 flex-wrap">
-                <span id="liveBannerStatusBadge" class="px-2.5 py-0.5 rounded-full bg-emerald-400 text-slate-950 font-black text-[10px] tracking-wider uppercase shadow-xs">
-                  ● Live Class In Session
-                </span>
-                <span id="liveBannerSlot" class="text-xs font-mono font-bold text-emerald-200">--:-- - --:-- PKT</span>
-              </div>
-              <h3 class="text-sm sm:text-base md:text-lg font-black text-white mt-1 truncate" id="liveBannerStudent">
-                Student Name
-              </h3>
-              <p class="text-xs text-emerald-200/90 truncate mt-0.5" id="liveBannerDetails">
-                Assigned Classroom Session • Auto attendance &amp; lesson notes ready
-              </p>
-            </div>
-          </div>
-
-          <div id="liveBannerActionsContainer" class="flex items-center gap-2 w-full md:w-auto shrink-0 flex-wrap sm:flex-nowrap">
-            <button id="liveBannerJoinBtn" class="flex-1 sm:flex-none px-3.5 sm:px-4 py-2.5 bg-white hover:bg-emerald-50 text-brandDark font-extrabold text-xs rounded-xl shadow-md transition flex items-center justify-center gap-1.5 whitespace-nowrap">
-              <i class="fa-solid fa-video text-emerald-600"></i> Start Class / Join Zoom
-            </button>
-            <span id="liveBannerNoZoomBadge" class="hidden px-3 py-2 rounded-xl bg-white/15 border border-white/25 text-xs font-bold text-emerald-100">
-              Class link not set yet
-            </span>
-            <button id="liveBannerAttBtn" onclick="" class="flex-1 sm:flex-none px-3.5 sm:px-4 py-2.5 bg-emerald-900/80 hover:bg-emerald-900 text-white font-extrabold text-xs rounded-xl border border-emerald-400/40 shadow-sm transition flex items-center justify-center gap-1.5 whitespace-nowrap">
-              <i class="fa-solid fa-clipboard-check text-brandGold"></i> Mark Lesson
-            </button>
-          </div>
-        </div>
-      </div>
-
       <!-- KEY METRICS STATS CARDS -->
       <div id="sectionTeacherKpiGrid" class="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-5">
         <!-- 1. Assigned Active Students (Student List) -->
-        <div onclick="switchTeacherPortalTab('students')" class="bg-[#edf5f0] p-3 sm:p-5 rounded-[26px] shadow-sm hover:shadow-md flex flex-col justify-between cursor-pointer transition group">
+        <div onclick="switchTeacherPortalTab('students')" role="button" tabindex="0" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();this.click();}" class="bg-[#edf5f0] p-3 sm:p-5 rounded-[26px] shadow-sm hover:shadow-md flex flex-col justify-between cursor-pointer transition group">
           <div class="flex items-center justify-between text-slate-500 mb-1">
             <span class="text-[11px] sm:text-xs font-bold uppercase tracking-wider text-slate-600 group-hover:text-brandDark">Student List</span>
             <span class="w-7 h-7 sm:w-9 sm:h-9 rounded-full bg-white shadow-sm text-emerald-700 flex items-center justify-center text-xs sm:text-sm">
@@ -936,11 +890,10 @@ font-family: var(--font-num) !important;
             </span>
           </div>
           <div class="lms-num-kpi text-slate-900 my-0.5 sm:my-1 text-xl sm:text-2xl" id="statAssignedStudents">0</div>
-          <div class="text-[11px] sm:text-xs text-slate-500 font-semibold truncate" id="statAssignedStudentsSub">Active Assigned Students</div>
         </div>
 
         <!-- 2. Today's Classes -->
-        <div onclick="switchTeacherPortalTab('today')" class="bg-white p-3 sm:p-5 rounded-[26px] border border-[#edf1ed] shadow-sm hover:shadow-md flex flex-col justify-between cursor-pointer transition">
+        <div onclick="showTeacherTodayKpi('all')" role="button" tabindex="0" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();this.click();}" class="bg-white p-3 sm:p-5 rounded-[26px] border border-[#edf1ed] shadow-sm hover:shadow-md flex flex-col justify-between cursor-pointer transition">
           <div class="flex items-center justify-between text-slate-500 mb-1">
             <span class="text-[11px] sm:text-xs font-bold uppercase tracking-wider text-slate-600">Today's Classes</span>
             <span class="w-7 h-7 sm:w-9 sm:h-9 rounded-full bg-[#f0f3f1] text-brandDark flex items-center justify-center text-xs sm:text-sm">
@@ -948,11 +901,10 @@ font-family: var(--font-num) !important;
             </span>
           </div>
           <div class="lms-num-kpi text-slate-900 my-0.5 sm:my-1 text-xl sm:text-2xl" id="statTodayClasses">0</div>
-          <div class="text-[11px] sm:text-xs text-slate-500 font-semibold truncate">Scheduled Sessions Today</div>
         </div>
 
         <!-- 3. Completed Today -->
-        <div class="bg-[#e9f4ef] p-3 sm:p-5 rounded-[26px] shadow-sm flex flex-col justify-between">
+        <div onclick="showTeacherTodayKpi('completed')" role="button" tabindex="0" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();this.click();}" class="bg-[#e9f4ef] p-3 sm:p-5 rounded-[26px] shadow-sm hover:shadow-md cursor-pointer transition flex flex-col justify-between">
           <div class="flex items-center justify-between text-teal-800 mb-1">
             <span class="text-[11px] sm:text-xs font-bold uppercase tracking-wider">Completed</span>
             <span class="w-7 h-7 sm:w-9 sm:h-9 rounded-full bg-white shadow-sm text-teal-700 flex items-center justify-center text-xs sm:text-sm">
@@ -960,11 +912,10 @@ font-family: var(--font-num) !important;
             </span>
           </div>
           <div class="lms-num-kpi text-teal-700 my-0.5 sm:my-1 text-xl sm:text-2xl" id="statCompleted">0</div>
-          <div class="text-[11px] sm:text-xs text-teal-700 font-semibold truncate">Marked Present Today</div>
         </div>
 
         <!-- 4. Remaining Slots -->
-        <div class="bg-[#faf4e1] p-3 sm:p-5 rounded-[26px] shadow-sm flex flex-col justify-between">
+        <div onclick="showTeacherTodayKpi('remaining')" role="button" tabindex="0" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();this.click();}" class="bg-[#faf4e1] p-3 sm:p-5 rounded-[26px] shadow-sm hover:shadow-md cursor-pointer transition flex flex-col justify-between">
           <div class="flex items-center justify-between text-amber-800 mb-1">
             <span class="text-[11px] sm:text-xs font-bold uppercase tracking-wider">Remaining</span>
             <span class="w-7 h-7 sm:w-9 sm:h-9 rounded-full bg-white shadow-sm text-amber-700 flex items-center justify-center text-xs sm:text-sm">
@@ -972,7 +923,6 @@ font-family: var(--font-num) !important;
             </span>
           </div>
           <div class="lms-num-kpi text-amber-600 my-0.5 sm:my-1 text-xl sm:text-2xl" id="statRemaining">0</div>
-          <div class="text-[11px] sm:text-xs text-amber-700 font-semibold truncate">Upcoming Slots Today</div>
         </div>
       </div>
 
@@ -991,6 +941,10 @@ font-family: var(--font-num) !important;
             <div class="flex items-center gap-2 flex-wrap">
               <span id="todayCountBadge" class="px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-800 font-extrabold text-xs font-mono border border-emerald-200">
                 0 Classes
+              </span>
+              <span id="todayFilterChip" class="hidden px-2.5 py-1 rounded-full bg-emerald-700 text-white font-extrabold text-xs items-center gap-1.5">
+                <span id="todayFilterLabel">Marked classes only</span>
+                <button type="button" onclick="setTeacherTodayFilter('all')" class="w-4 h-4 rounded-full bg-white/20 hover:bg-white/35 flex items-center justify-center text-[10px] leading-none" title="Show all classes" aria-label="Show all classes">&times;</button>
               </span>
             </div>
           </div>
@@ -1035,7 +989,7 @@ font-family: var(--font-num) !important;
             </div>
             <h4 class="font-bold text-slate-800 text-base">No classes scheduled.</h4>
             <p class="text-xs text-slate-500 mt-1 max-w-sm mx-auto">
-              You have no booked classes scheduled for today. Use "+ Schedule Student" to assign weekly class times for your students.
+              You have no booked classes scheduled for today.
             </p>
           </div>
         </div>
@@ -2113,9 +2067,6 @@ font-family: var(--font-num) !important;
           </div>
         </div>
         <div class="flex items-center gap-2">
-          <button onclick="openTeacherAddScheduleModal()" class="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs rounded-xl transition flex items-center gap-1.5 shadow-xs whitespace-nowrap">
-            <i class="fa-solid fa-calendar-plus"></i> + Schedule Student
-          </button>
           <button onclick="closeWeeklyMatrixModal()" class="w-8 h-8 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-500 hover:text-slate-800 flex items-center justify-center font-bold text-lg transition" title="Close" aria-label="Close">&times;</button>
         </div>
       </div>
@@ -2181,137 +2132,7 @@ font-family: var(--font-num) !important;
   </div>
 
   <!-- ================= MODAL: ADD ASSIGNED STUDENT TO SCHEDULE ================= -->
-  <div id="modalTeacherAddScheduleSlot" class="fixed inset-0 bg-black/70 backdrop-blur-xs z-50 hidden items-center justify-center p-2 sm:p-4 overflow-y-auto">
-    <div class="bg-white rounded-2xl max-w-lg w-full max-h-[94vh] flex flex-col p-4 sm:p-6 shadow-2xl border border-emerald-200 my-auto animate-scaleIn">
-      <div class="flex justify-between items-center border-b pb-3 shrink-0">
-        <div class="flex items-center gap-2.5">
-          <div class="w-10 h-10 rounded-xl bg-emerald-100 text-brandDark flex items-center justify-center font-black text-base shadow-2xs">
-            <i class="fa-solid fa-calendar-plus text-brandEmerald"></i>
-          </div>
-          <div>
-            <h3 class="font-black text-base text-slate-900">Add Student to Schedule</h3>
-            <p class="text-xs text-slate-500">Select an active student from your Student List and define start/end time &amp; duration</p>
-          </div>
-        </div>
-        <button onclick="closeTeacherAddScheduleModal()" class="text-slate-400 hover:text-slate-600 text-xl font-bold" aria-label="Close">&times;</button>
-      </div>
-
-      <form onsubmit="submitTeacherAddScheduleSlot(event)" class="space-y-4 text-xs overflow-y-auto touch-scroll flex-1 pr-1 mt-3">
-        <!-- 1. Select Active Student from Student List -->
-        <div>
-          <label class="block font-bold text-slate-700 mb-1.5">
-            Select Student from Your Student List <span class="text-rose-500">*</span>:
-          </label>
-          <select id="teacherBookStudentSelect" required class="w-full p-2.5 border border-slate-300 rounded-xl font-bold text-slate-900 bg-white focus:outline-brandEmerald">
-            <!-- Populated strictly with ACTIVE assigned students -->
-          </select>
-          <p class="text-[10px] text-slate-500 mt-1">
-            Only active students currently assigned to your Student List are available for scheduling.
-          </p>
-        </div>
-
-        <!-- 2. Class Start Time, End Time & Flexible Duration -->
-        <div class="bg-emerald-50/60 p-3.5 rounded-xl border border-emerald-200 space-y-3">
-          <div class="flex items-center justify-between">
-            <label class="font-extrabold text-brandDark flex items-center gap-1.5">
-              <i class="fa-regular fa-clock text-brandEmerald"></i> Class Start Time &amp; End Time (PKT) <span class="text-rose-500">*</span>:
-            </label>
-            <span id="teacherBookDurationBadge" class="px-2.5 py-0.5 rounded-full text-[10px] font-mono font-extrabold bg-emerald-100 text-emerald-900 border border-emerald-300">
-              30 Minutes
-            </span>
-          </div>
-
-          <div>
-            <label class="block text-[10px] font-bold text-slate-500 mb-1">Quick Slot Jump (or choose any Custom Start &amp; End Time below):</label>
-            <select id="teacherBookTimeSlotSelect" onchange="onTeacherBookPresetSlotChange(this.value)" class="w-full p-2.5 border border-emerald-300 rounded-xl font-bold text-slate-900 bg-white focus:outline-brandEmerald">
-              <!-- Populated with 48 half-hour slots -->
-            </select>
-          </div>
-
-          <!-- Quick Duration Selector -->
-          <div class="flex items-center justify-between gap-1.5 flex-wrap">
-            <span class="text-[10px] font-bold text-slate-600 uppercase tracking-wide">Quick Class Duration:</span>
-            <div class="flex items-center gap-1.5">
-              <button type="button" onclick="setTeacherBookDuration(30)" data-teacher-dur="30" class="px-2.5 py-1 rounded-lg border border-emerald-300 bg-white hover:bg-emerald-600 hover:text-white text-emerald-900 font-extrabold text-[10px] transition">30 Mins</button>
-              <button type="button" onclick="setTeacherBookDuration(45)" data-teacher-dur="45" class="px-2.5 py-1 rounded-lg border border-emerald-300 bg-white hover:bg-emerald-600 hover:text-white text-emerald-900 font-extrabold text-[10px] transition">45 Mins</button>
-              <button type="button" onclick="setTeacherBookDuration(60)" data-teacher-dur="60" class="px-2.5 py-1 rounded-lg border border-emerald-300 bg-white hover:bg-emerald-600 hover:text-white text-emerald-900 font-extrabold text-[10px] transition">60 Mins</button>
-              <button type="button" onclick="setTeacherBookDuration(90)" data-teacher-dur="90" class="px-2.5 py-1 rounded-lg border border-emerald-300 bg-white hover:bg-emerald-600 hover:text-white text-emerald-900 font-extrabold text-[10px] transition">90 Mins</button>
-            </div>
-          </div>
-
-          <!-- Custom Start Time & End Time -->
-          <div class="grid grid-cols-2 gap-2.5">
-            <div>
-              <label class="block font-bold text-slate-700 mb-1 text-[11px]">Start Time (PKT) *:</label>
-              <input type="time" id="teacherBookStartTime" required onchange="onTeacherBookCustomTimeChanged('start')" oninput="onTeacherBookCustomTimeChanged('start')" class="w-full p-2.5 bg-white border border-emerald-300 rounded-xl font-mono font-bold text-slate-900 focus:outline-brandEmerald">
-            </div>
-            <div>
-              <label class="block font-bold text-slate-700 mb-1 text-[11px]">End Time (PKT) *:</label>
-              <input type="time" id="teacherBookEndTime" required onchange="onTeacherBookCustomTimeChanged('end')" oninput="onTeacherBookCustomTimeChanged('end')" class="w-full p-2.5 bg-white border border-emerald-300 rounded-xl font-mono font-bold text-slate-900 focus:outline-brandEmerald">
-            </div>
-          </div>
-
-          <p id="teacherBookSlotOccupiedHint" class="text-[10px] text-amber-800 font-semibold mt-1 hidden"></p>
-        </div>
-
-        <!-- 3. Select Weekly Class Days -->
-        <div>
-          <div class="flex items-center justify-between mb-1.5">
-            <label class="font-bold text-slate-700">Select Weekly Class Days <span class="text-rose-500">*</span>:</label>
-            <div class="flex items-center gap-1.5">
-              <button type="button" onclick="selectTeacherBookPresetDays([1,2,3,4,5])" class="px-2 py-0.5 rounded bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 text-[10px] font-bold">Mon–Fri</button>
-              <button type="button" onclick="selectTeacherBookPresetDays([1,2,3])" class="px-2 py-0.5 rounded bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300 text-[10px] font-bold">Mon–Wed</button>
-              <button type="button" onclick="selectTeacherBookPresetDays([1,2,3,4,5,6])" class="px-2 py-0.5 rounded bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300 text-[10px] font-bold">Mon–Sat</button>
-            </div>
-          </div>
-          <div class="grid grid-cols-4 sm:grid-cols-7 gap-1.5">
-            <label class="flex flex-col items-center p-2 rounded-xl border border-slate-200 bg-slate-50 hover:bg-emerald-50 cursor-pointer">
-              <input type="checkbox" name="teacherBookWeekday" value="1" onchange="updateTeacherAddSlotAvailabilityHint()" checked class="accent-emerald-600 mb-1">
-              <span class="font-extrabold text-[10px] text-slate-800">Mon</span>
-            </label>
-            <label class="flex flex-col items-center p-2 rounded-xl border border-slate-200 bg-slate-50 hover:bg-emerald-50 cursor-pointer">
-              <input type="checkbox" name="teacherBookWeekday" value="2" onchange="updateTeacherAddSlotAvailabilityHint()" checked class="accent-emerald-600 mb-1">
-              <span class="font-extrabold text-[10px] text-slate-800">Tue</span>
-            </label>
-            <label class="flex flex-col items-center p-2 rounded-xl border border-slate-200 bg-slate-50 hover:bg-emerald-50 cursor-pointer">
-              <input type="checkbox" name="teacherBookWeekday" value="3" onchange="updateTeacherAddSlotAvailabilityHint()" checked class="accent-emerald-600 mb-1">
-              <span class="font-extrabold text-[10px] text-slate-800">Wed</span>
-            </label>
-            <label class="flex flex-col items-center p-2 rounded-xl border border-slate-200 bg-slate-50 hover:bg-emerald-50 cursor-pointer">
-              <input type="checkbox" name="teacherBookWeekday" value="4" onchange="updateTeacherAddSlotAvailabilityHint()" checked class="accent-emerald-600 mb-1">
-              <span class="font-extrabold text-[10px] text-slate-800">Thu</span>
-            </label>
-            <label class="flex flex-col items-center p-2 rounded-xl border border-slate-200 bg-slate-50 hover:bg-emerald-50 cursor-pointer">
-              <input type="checkbox" name="teacherBookWeekday" value="5" onchange="updateTeacherAddSlotAvailabilityHint()" checked class="accent-emerald-600 mb-1">
-              <span class="font-extrabold text-[10px] text-slate-800">Fri</span>
-            </label>
-            <label class="flex flex-col items-center p-2 rounded-xl border border-slate-200 bg-slate-50 hover:bg-emerald-50 cursor-pointer">
-              <input type="checkbox" name="teacherBookWeekday" value="6" onchange="updateTeacherAddSlotAvailabilityHint()" class="accent-emerald-600 mb-1">
-              <span class="font-extrabold text-[10px] text-slate-800">Sat</span>
-            </label>
-            <label class="flex flex-col items-center p-2 rounded-xl border border-slate-200 bg-slate-50 hover:bg-emerald-50 cursor-pointer">
-              <input type="checkbox" name="teacherBookWeekday" value="7" onchange="updateTeacherAddSlotAvailabilityHint()" class="accent-emerald-600 mb-1">
-              <span class="font-extrabold text-[10px] text-slate-800">Sun</span>
-            </label>
-          </div>
-        </div>
-
-        <!-- 4. Classroom Zoom Link -->
-        <div>
-          <label class="block font-bold text-slate-700 mb-1">Classroom Zoom Meeting Link / Code:</label>
-          <input type="text" id="teacherBookZoomLink" placeholder="https://zoom.us/j/..." class="w-full p-2.5 border border-slate-300 rounded-xl font-mono text-xs text-slate-800">
-        </div>
-
-        <div class="flex flex-col-reverse sm:flex-row justify-end gap-2 border-t pt-3 shrink-0">
-          <button type="button" onclick="closeTeacherAddScheduleModal()" class="w-full sm:w-auto px-4 py-2 border rounded-xl font-bold text-slate-600 hover:bg-slate-100 text-center">Cancel</button>
-          <button type="submit" id="btnSubmitTeacherAddSchedule" class="w-full sm:w-auto px-5 py-2.5 bg-brandDark hover:bg-brandDarkest text-white font-extrabold rounded-xl flex items-center justify-center gap-1.5 shadow-sm transition">
-            <i class="fa-solid fa-calendar-check text-brandGold"></i> Save to Schedule
-          </button>
-        </div>
-      </form>
-    </div>
-  </div>
-  <!-- ============================================================= -->
+<!-- ============================================================= -->
   <!-- MODAL: IN-LMS INTERACTIVE DIGITAL BOOK READER (HD ENGINE)        -->
   <!-- ============================================================= -->
   <div id="modalDigitalBookReader" class="fixed inset-0 bg-stone-900/60 backdrop-blur-md z-[95] hidden items-center justify-center p-1 sm:p-3">
@@ -3253,17 +3074,6 @@ font-family: var(--font-num) !important;
       document.getElementById('heroInitials').innerText = initials;
       document.getElementById('heroTeacherName').innerText = `Assalam-o-Alaikum, ${CURRENT_TEACHER.full_name}!`;
       document.getElementById('heroTeacherShift').innerText = CURRENT_TEACHER.working_shift || 'Shift Not Set';
-      const zoomHeroEl = document.getElementById('heroTeacherZoomStatus');
-      if (zoomHeroEl) {
-        if (CURRENT_TEACHER.zoom_link && String(CURRENT_TEACHER.zoom_link).trim()) {
-          zoomHeroEl.innerHTML = `<i class="fa-solid fa-video text-emerald-600"></i> Zoom Configured`;
-          zoomHeroEl.className = 'px-2.5 py-0.5 bg-emerald-50 text-emerald-800 border border-emerald-200 rounded-full font-bold text-xs inline-flex items-center gap-1';
-        } else {
-          zoomHeroEl.innerHTML = `<i class="fa-solid fa-video-slash text-slate-400"></i> Class link not set yet`;
-          zoomHeroEl.className = 'px-2.5 py-0.5 bg-slate-100 text-slate-600 border border-slate-200 rounded-full font-bold text-xs inline-flex items-center gap-1';
-        }
-      }
-
       loadTeacherPortalData();
     }
 
@@ -3612,12 +3422,6 @@ font-family: var(--font-num) !important;
       const activeAssignedCount = ACTIVE_ASSIGNED_STUDENTS.length;
       const statAssignedEl = document.getElementById('statAssignedStudents');
       if (statAssignedEl) statAssignedEl.innerText = activeAssignedCount;
-      const statSubEl = document.getElementById('statAssignedStudentsSub');
-      if (statSubEl) {
-        statSubEl.innerText = LEAVE_ASSIGNED_STUDENTS.length > 0
-          ? `Active Assigned (${LEAVE_ASSIGNED_STUDENTS.length} on Leave)`
-          : 'Active Assigned Students';
-      }
       const navStudentBadge = document.getElementById('badgeTeacherStudentListCount');
       if (navStudentBadge) navStudentBadge.innerText = activeAssignedCount;
       const sbStudentBadge = document.getElementById('sbBadgeStudentCount');
@@ -3725,17 +3529,13 @@ font-family: var(--font-num) !important;
           if (log.status === 'Running') {
             status = 'RUNNING';
             badgeClass = 'bg-emerald-600 text-white border-emerald-700 font-extrabold shadow-sm animate-pulse';
-            remainingCount++;
           } else if (log.status === 'Waiting') {
             status = 'WAITING';
             badgeClass = 'bg-amber-100 text-amber-900 border-amber-300 font-extrabold animate-pulse';
-            remainingCount++;
           } else if (log.status === 'Completed' || log.status === 'Present') {
-            completedCount++;
             status = 'COMPLETED';
             badgeClass = 'bg-emerald-100 text-emerald-800 border-emerald-300 font-extrabold';
           } else if (log.status === 'Advance Class') {
-            completedCount++;
             let aMeta = null;
             try { aMeta = JSON.parse(log.lesson_notes); } catch(e){}
             status = `🌟 Advance Class (${aMeta?.advance_target_date ? 'For: ' + aMeta.advance_target_date.slice(5) : 'Preponed'})`;
@@ -3748,7 +3548,6 @@ font-family: var(--font-num) !important;
             badgeClass = 'bg-blue-100 text-blue-800 border-blue-300 font-bold';
           }
         } else if (advanceCover) {
-          completedCount++;
           status = `🌟 Done in Advance (${advanceCover.date ? advanceCover.date.slice(5) : 'Preponed'})`;
           badgeClass = 'bg-gradient-to-r from-purple-100 to-indigo-100 text-purple-900 border-purple-300 font-extrabold shadow-2xs';
         } else {
@@ -3756,15 +3555,27 @@ font-family: var(--font-num) !important;
             status = `LEAVE${leaveMeta?.return_date ? ' (Returns: ' + leaveMeta.return_date.slice(5) + ')' : ''}`;
             badgeClass = 'bg-blue-100 text-blue-900 border-blue-300 font-bold';
           } else {
-            remainingCount++;
           }
         }
+
+        // KPI buckets (owner fix 2026-11-06): a class counts as
+        // Completed once it carries ANY mark for today - Completed /
+        // Present, Advance, Absent or Leave (a Leave student's class is
+        // resolved for the day too) - and as Remaining only while it is
+        // still unmarked, so Completed + Remaining always equals the
+        // day's total. Display-local: these two counters feed nothing
+        // but the two KPI numbers.
+        const isMarked = log
+          ? ['Completed', 'Present', 'Advance Class', 'Absent', 'Leave'].includes(log.status)
+          : (advanceCover ? true : !!isLeaveStudent);
+        if (isMarked) completedCount++; else remainingCount++;
 
         return {
           ...s,
           meeting_link: effectiveZoom,
           log,
           advanceCover,
+          isMarked,
           startMin,
           endMin,
           durationMins,
@@ -3798,6 +3609,7 @@ font-family: var(--font-num) !important;
             students: matchedStudent,
             log: l,
             isAdvanceExtra: true,
+            isMarked: true,
             status: `🌟 Advance Class (For: ${aMeta?.advance_target_date ? aMeta.advance_target_date.slice(5) : 'Target'})`,
             badgeClass: 'bg-purple-100 text-purple-900 border-purple-300 font-extrabold shadow-2xs'
           });
@@ -3806,18 +3618,6 @@ font-family: var(--font-num) !important;
 
       // Sort by start_time
       TODAY_CLASSES.sort((a, b) => (a.startMin || 0) - (b.startMin || 0));
-
-      // Resolve active liveClass and nextClass with high precision:
-      // Priority 1: Any class that is currently 'Running'
-      // Priority 2: Any class that is currently 'Waiting'
-      // Priority 3: Current timeslot class that is not marked (Scheduled)
-      liveClass = TODAY_CLASSES.find(c => c.log && c.log.status === 'Running') ||
-                  TODAY_CLASSES.find(c => c.log && c.log.status === 'Waiting') ||
-                  TODAY_CLASSES.find(c => c.isLive && !c.isLeaveStudent && !c.advanceCover && (!c.log || c.log.status === 'Scheduled')) ||
-                  null;
-
-      // Next class is the first upcoming class that has no completed/absent/leave mark and is not the active liveClass
-      nextClass = TODAY_CLASSES.find(c => c !== liveClass && c.isUpcoming && !c.isLeaveStudent && !c.advanceCover && (!c.log || c.log.status === 'Scheduled' || c.log.status === 'Waiting')) || null;
 
       // Update Metric Badges
       document.getElementById('statTodayClasses').innerText = TODAY_CLASSES.length;
@@ -3828,132 +3628,6 @@ font-family: var(--font-num) !important;
       if (navTodayBadge) navTodayBadge.innerText = TODAY_CLASSES.length;
       const sbTodayBadge = document.getElementById('sbBadgeTodayCount');
       if (sbTodayBadge) sbTodayBadge.innerText = TODAY_CLASSES.length;
-
-      // Live Class Banner / Prominent Current Session Card
-      const liveAlert = document.getElementById('liveClassAlertBanner');
-      if (liveAlert) {
-        liveAlert.classList.remove('hidden'); // Always visible as prominent Current / Next Session card
-        const iconEl = document.getElementById('liveBannerIcon');
-        const badgeEl = document.getElementById('liveBannerStatusBadge');
-        const slotEl = document.getElementById('liveBannerSlot');
-        const studentEl = document.getElementById('liveBannerStudent');
-        const detailsEl = document.getElementById('liveBannerDetails');
-        const actionsContainer = document.getElementById('liveBannerActionsContainer');
-
-        if (liveClass) {
-          const lStatus = liveClass.log?.status || 'Scheduled';
-          const safeStudentName = escapeJsAttr((liveClass.students?.name || 'Student'));
-          if (slotEl) slotEl.innerText = `${liveClass.start_time.slice(0,5)} - ${liveClass.end_time.slice(0,5)} PKT (${liveClass.durationMins || 30}m)`;
-          if (studentEl) studentEl.innerText = `${liveClass.students?.name || 'Student'} • ${liveClass.course || 'Quran Studies'}`;
-
-          if (lStatus === 'Running') {
-            if (iconEl) iconEl.className = 'fa-solid fa-play animate-pulse text-emerald-300';
-            if (badgeEl) {
-              badgeEl.className = 'px-2.5 py-0.5 rounded-full bg-emerald-500 text-slate-950 font-black text-[10px] tracking-wider uppercase shadow-xs animate-pulse';
-              badgeEl.innerText = '● RUNNING';
-            }
-            if (detailsEl) detailsEl.innerHTML = '<span class="text-emerald-200 font-extrabold">● Class is in session! Conduct your class and click COMPLETE CLASS when finished.</span>';
-            if (actionsContainer) {
-              actionsContainer.innerHTML = `
-                <button onclick="handleTeacherCompleteClass('${escapeJsAttr(liveClass.id)}', '${escapeJsAttr(liveClass.student_id)}', '${escapeJsAttr(CURRENT_TEACHER.id)}', '${safeStudentName}')" class="flex-1 sm:flex-none px-4 py-2.5 bg-white hover:bg-emerald-50 text-slate-950 font-black text-xs rounded-xl shadow-md transition flex items-center justify-center gap-1.5 whitespace-nowrap">
-                  <i class="fa-solid fa-circle-check text-emerald-600"></i> COMPLETE CLASS
-                </button>
-                <button onclick="openLeaveAbsentModal('${escapeJsAttr(liveClass.id)}', '${escapeJsAttr(liveClass.student_id)}', '${escapeJsAttr(CURRENT_TEACHER.id)}', '${safeStudentName}')" class="flex-1 sm:flex-none px-3.5 py-2.5 bg-rose-600/90 hover:bg-rose-700 text-white font-extrabold text-xs rounded-xl border border-rose-400/40 shadow-sm transition flex items-center justify-center gap-1.5 whitespace-nowrap">
-                  <i class="fa-solid fa-user-xmark"></i> LEAVE / ABSENT
-                </button>
-                ${liveClass.meeting_link ? `
-                  <button onclick="launchTeacherZoomClass('${escapeJsAttr(liveClass.id)}', '${escapeJsAttr(liveClass.meeting_link)}', '${safeStudentName}', '${escapeJsAttr(liveClass.student_id)}')" class="flex-1 sm:flex-none px-3 py-2.5 bg-white/15 hover:bg-white/25 text-white font-bold text-xs rounded-xl border border-white/20 transition flex items-center justify-center gap-1.5 whitespace-nowrap">
-                    <i class="fa-solid fa-video"></i> Zoom
-                  </button>
-                ` : ''}
-              `;
-            }
-          } else if (lStatus === 'Waiting') {
-            if (iconEl) iconEl.className = 'fa-solid fa-hourglass-half animate-pulse text-amber-300';
-            if (badgeEl) {
-              badgeEl.className = 'px-2.5 py-0.5 rounded-full bg-amber-400 text-slate-950 font-black text-[10px] tracking-wider uppercase shadow-xs animate-pulse';
-              badgeEl.innerText = '⏳ WAITING';
-            }
-            if (detailsEl) detailsEl.innerHTML = '<span class="text-amber-200 font-extrabold animate-pulse">⏳ Zoom meeting launched • Waiting for student! When admitted, click START CLASS below.</span>';
-            if (actionsContainer) {
-              actionsContainer.innerHTML = `
-                <button onclick="handleTeacherStartClass('${escapeJsAttr(liveClass.id)}', '${escapeJsAttr(liveClass.student_id)}', '${escapeJsAttr(CURRENT_TEACHER.id)}')" class="flex-1 sm:flex-none px-4 py-2.5 bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-black text-xs rounded-xl shadow-md transition flex items-center justify-center gap-1.5 whitespace-nowrap animate-pulse">
-                  <i class="fa-solid fa-play"></i> START CLASS
-                </button>
-                <button onclick="openLeaveAbsentModal('${escapeJsAttr(liveClass.id)}', '${escapeJsAttr(liveClass.student_id)}', '${escapeJsAttr(CURRENT_TEACHER.id)}', '${safeStudentName}')" class="flex-1 sm:flex-none px-3.5 py-2.5 bg-rose-600/90 hover:bg-rose-700 text-white font-extrabold text-xs rounded-xl border border-rose-400/40 shadow-sm transition flex items-center justify-center gap-1.5 whitespace-nowrap">
-                  <i class="fa-solid fa-user-xmark"></i> LEAVE / ABSENT
-                </button>
-                ${liveClass.meeting_link ? `
-                  <button onclick="launchTeacherZoomClass('${escapeJsAttr(liveClass.id)}', '${escapeJsAttr(liveClass.meeting_link)}', '${safeStudentName}', '${escapeJsAttr(liveClass.student_id)}')" class="flex-1 sm:flex-none px-3 py-2.5 bg-white/15 hover:bg-white/25 text-white font-bold text-xs rounded-xl border border-white/20 transition flex items-center justify-center gap-1.5 whitespace-nowrap">
-                    <i class="fa-solid fa-video"></i> Re-open Zoom
-                  </button>
-                ` : ''}
-              `;
-            }
-          } else {
-            // Scheduled session
-            if (iconEl) iconEl.className = 'fa-solid fa-tower-broadcast animate-pulse text-emerald-300';
-            if (badgeEl) {
-              badgeEl.className = 'px-2.5 py-0.5 rounded-full bg-emerald-400 text-slate-950 font-black text-[10px] tracking-wider uppercase shadow-xs';
-              badgeEl.innerText = '🕒 SCHEDULED';
-            }
-            if (detailsEl) detailsEl.innerText = 'Assigned Classroom Session • Auto attendance & lesson notes ready';
-            if (actionsContainer) {
-              actionsContainer.innerHTML = `
-                ${liveClass.meeting_link ? `
-                  <button onclick="launchTeacherZoomClass('${escapeJsAttr(liveClass.id)}', '${escapeJsAttr(liveClass.meeting_link)}', '${safeStudentName}', '${escapeJsAttr(liveClass.student_id)}')" class="flex-1 sm:flex-none px-4 py-2.5 bg-white hover:bg-emerald-50 text-brandDark font-extrabold text-xs rounded-xl shadow-md transition flex items-center justify-center gap-1.5 whitespace-nowrap">
-                    <i class="fa-solid fa-video text-emerald-600"></i> Start Zoom
-                  </button>
-                ` : ''}
-                <button onclick="handleTeacherStartClass('${escapeJsAttr(liveClass.id)}', '${escapeJsAttr(liveClass.student_id)}', '${escapeJsAttr(CURRENT_TEACHER.id)}')" class="flex-1 sm:flex-none px-3.5 py-2.5 bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-black text-xs rounded-xl shadow-md transition flex items-center justify-center gap-1.5 whitespace-nowrap">
-                  <i class="fa-solid fa-play"></i> START CLASS
-                </button>
-                <button onclick="openLeaveAbsentModal('${escapeJsAttr(liveClass.id)}', '${escapeJsAttr(liveClass.student_id)}', '${escapeJsAttr(CURRENT_TEACHER.id)}', '${safeStudentName}')" class="flex-1 sm:flex-none px-3.5 py-2.5 bg-rose-600/90 hover:bg-rose-700 text-white font-extrabold text-xs rounded-xl border border-rose-400/40 shadow-sm transition flex items-center justify-center gap-1.5 whitespace-nowrap">
-                  <i class="fa-solid fa-user-xmark"></i> LEAVE / ABSENT
-                </button>
-              `;
-            }
-          }
-        } else if (nextClass) {
-          // 2. NEXT UPCOMING SESSION TODAY
-          const safeNextName = escapeJsAttr((nextClass.students?.name || 'Student'));
-          if (iconEl) iconEl.className = 'fa-solid fa-clock text-amber-300';
-          if (badgeEl) {
-            badgeEl.className = 'px-2.5 py-0.5 rounded-full bg-amber-400 text-slate-950 font-black text-[10px] tracking-wider uppercase shadow-xs';
-            badgeEl.innerText = '🕒 UPCOMING SCHEDULE';
-          }
-          if (slotEl) slotEl.innerText = `Starts at ${nextClass.start_time.slice(0,5)} PKT (${nextClass.durationMins || 30}m)`;
-          if (studentEl) studentEl.innerText = `${nextClass.students?.name || 'Student'} • ${nextClass.course || 'Quran Studies'}`;
-          if (detailsEl) detailsEl.innerText = 'Upcoming scheduled lesson today • Zoom meeting & lesson notes ready';
-
-          if (actionsContainer) {
-            actionsContainer.innerHTML = `
-              ${nextClass.meeting_link ? `
-                <button onclick="launchTeacherZoomClass('${escapeJsAttr(nextClass.id)}', '${escapeJsAttr(nextClass.meeting_link)}', '${safeNextName}', '${escapeJsAttr(nextClass.student_id)}')" class="flex-1 sm:flex-none px-4 py-2.5 bg-white hover:bg-emerald-50 text-brandDark font-extrabold text-xs rounded-xl shadow-md transition flex items-center justify-center gap-1.5 whitespace-nowrap">
-                  <i class="fa-solid fa-video text-emerald-600"></i> Start Zoom
-                </button>
-              ` : ''}
-              <button onclick="handleTeacherStartClass('${escapeJsAttr(nextClass.id)}', '${escapeJsAttr(nextClass.student_id)}', '${escapeJsAttr(CURRENT_TEACHER.id)}')" class="flex-1 sm:flex-none px-3.5 py-2.5 bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-black text-xs rounded-xl shadow-md transition flex items-center justify-center gap-1.5 whitespace-nowrap">
-                <i class="fa-solid fa-play"></i> START CLASS
-              </button>
-              <button onclick="openLeaveAbsentModal('${escapeJsAttr(nextClass.id)}', '${escapeJsAttr(nextClass.student_id)}', '${escapeJsAttr(CURRENT_TEACHER.id)}', '${safeNextName}')" class="flex-1 sm:flex-none px-3.5 py-2.5 bg-rose-600/90 hover:bg-rose-700 text-white font-extrabold text-xs rounded-xl border border-rose-400/40 shadow-sm transition flex items-center justify-center gap-1.5 whitespace-nowrap">
-                <i class="fa-solid fa-user-xmark"></i> LEAVE / ABSENT
-              </button>
-            `;
-          }
-        } else {
-          // 3. ALL SESSIONS COMPLETED OR STANDBY
-          if (iconEl) iconEl.className = 'fa-solid fa-calendar-check text-emerald-400';
-          if (badgeEl) {
-            badgeEl.className = 'px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-400/40 font-bold text-[10px] tracking-wider uppercase';
-            badgeEl.innerText = completedCount > 0 ? '✨ All Sessions Done' : '✨ Classroom Standby';
-          }
-          if (slotEl) slotEl.innerText = `${TODAY_CLASSES.length} Classes Scheduled Today`;
-          if (studentEl) studentEl.innerText = completedCount > 0 ? 'All Today\'s Classes Completed' : 'No Active Session Right Now';
-          if (detailsEl) detailsEl.innerText = completedCount > 0 ? 'Great job! All assigned classes for today have been attended and logged.' : 'You have no active class right now. Check your schedule below or prepare materials.';
-          if (actionsContainer) actionsContainer.innerHTML = '';
-        }
-      }
 
       renderTeacherClassesTable();
       renderTeacherStudentListTable();
@@ -4124,9 +3798,6 @@ font-family: var(--font-num) !important;
             <td data-label="" class="p-3.5 text-right">
               <div class="flex items-center justify-end gap-1.5 flex-wrap">
                 ${zoomActionBtn}
-                <button onclick="openTeacherAddScheduleModal('${escapeJsAttr(st.id)}')" class="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold shadow-2xs flex items-center gap-1 transition" title="Add or schedule weekly class slots for ${escapeHtml(st.name)}">
-                  <i class="fa-solid fa-calendar-plus"></i> ${stuScheds.length > 0 ? '+ Add Slot' : '+ Add to Schedule'}
-                </button>
                 <button onclick="openTeacherLessonHistoryForStudent('${escapeJsAttr(st.id)}')" class="px-2.5 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-800 border border-indigo-200 rounded-lg text-xs font-bold shadow-2xs flex items-center gap-1 transition" title="Full lesson history for ${escapeHtml(st.name)}">
                   <i class="fa-solid fa-clock-rotate-left"></i> History
                 </button>
@@ -4138,11 +3809,49 @@ font-family: var(--font-num) !important;
       }).join('');
     }
 
+    // KPI drill-down filter for the dashboard Today's Classes list
+    // (owner, 2026-11-06): 'all' shows the whole day; 'completed'
+    // shows only classes carrying a mark (isMarked); 'remaining'
+    // shows only the not-yet-marked ones. Pure display state - the
+    // underlying TODAY_CLASSES data is never altered by filtering.
+    let TEACHER_TODAY_FILTER = 'all';
+
+    function setTeacherTodayFilter(filter, scrollToList) {
+      TEACHER_TODAY_FILTER = (filter === 'completed' || filter === 'remaining') ? filter : 'all';
+      renderTeacherClassesTable();
+      if (scrollToList) {
+        const sec = document.getElementById('sectionTeacherToday');
+        if (sec) sec.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    }
+
+    function showTeacherTodayKpi(filter) {
+      if (typeof CURRENT_TEACHER_TAB !== 'undefined' && CURRENT_TEACHER_TAB !== 'dashboard' && CURRENT_TEACHER_TAB !== 'today') {
+        switchTeacherPortalTab('today');
+      }
+      setTeacherTodayFilter(filter, true);
+    }
+
+    function syncTeacherTodayFilterChip() {
+      const chip = document.getElementById('todayFilterChip');
+      const label = document.getElementById('todayFilterLabel');
+      if (!chip) return;
+      if (TEACHER_TODAY_FILTER === 'all') {
+        chip.classList.add('hidden');
+        chip.classList.remove('inline-flex');
+        return;
+      }
+      chip.classList.remove('hidden');
+      chip.classList.add('inline-flex');
+      if (label) label.innerText = TEACHER_TODAY_FILTER === 'completed' ? 'Marked classes only' : 'Not-yet-marked only';
+    }
+
     function renderTeacherClassesTable() {
       const tbody = document.getElementById('teacherClassesTableBody');
       const emptyState = document.getElementById('teacherEmptyState');
       const banner = document.getElementById('teacherClassesStatusBanner');
       if (!tbody) return;
+      try { syncTeacherTodayFilterChip(); } catch (e) {}
 
       // OVERDUE-CLASS REMINDER: re-render on every classes render —
       // TODAY_CLASSES is already up to date at this point, and every
@@ -4183,7 +3892,16 @@ font-family: var(--font-num) !important;
 
       const nowMinutes = new Date().getHours() * 60 + new Date().getMinutes();
 
-      tbody.innerHTML = TODAY_CLASSES.map(c => {
+      const visibleClasses = TEACHER_TODAY_FILTER === 'completed'
+        ? TODAY_CLASSES.filter(c => c.isMarked)
+        : (TEACHER_TODAY_FILTER === 'remaining' ? TODAY_CLASSES.filter(c => !c.isMarked) : TODAY_CLASSES);
+
+      if (visibleClasses.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="6" class="p-6 text-center text-xs text-slate-500">${TEACHER_TODAY_FILTER === 'completed' ? 'No classes have been marked yet today.' : 'All of today\'s classes have been marked.'} <button type="button" onclick="setTeacherTodayFilter('all')" class="ml-1 font-extrabold text-emerald-700 underline">Show all classes</button></td></tr>`;
+        return;
+      }
+
+      tbody.innerHTML = visibleClasses.map(c => {
         let timingBadge = '';
         if (c.isLive) {
           const leftMin = c.endMin - nowMinutes;
@@ -8440,8 +8158,7 @@ font-family: var(--font-num) !important;
       const modalMap = {
         modalWeeklyMatrix: 'sbNavWeekSchedule',
         modalTeacherLibraryPicker: 'sbNavCourseMaterials',
-        modalTeacherAdvanceClass: 'sbNavAdvanceClass',
-        modalTeacherAddScheduleSlot: 'sbNavAddSchedule'
+        modalTeacherAdvanceClass: 'sbNavAdvanceClass'
       };
       Object.values(navMap).forEach(id => {
         const el = document.getElementById(id);
@@ -9766,358 +9483,6 @@ font-family: var(--font-num) !important;
       window.print();
     }
 
-    function selectTeacherBookPresetDays(daysArray) {
-      const set = new Set((daysArray || []).map(Number));
-      document.querySelectorAll('input[name="teacherBookWeekday"]').forEach(cb => {
-        cb.checked = set.has(Number(cb.value));
-      });
-      updateTeacherAddSlotAvailabilityHint();
-    }
-
-    function setTeacherBookDuration(durationMins) {
-      const sInput = document.getElementById('teacherBookStartTime');
-      const eInput = document.getElementById('teacherBookEndTime');
-      const startStr = (sInput && sInput.value) ? sInput.value.slice(0, 5) : '14:00';
-      if (sInput) sInput.value = startStr;
-      const sMin = parseTeacherTimeToMinutes(startStr, false);
-      const targetEndMin = sMin + Number(durationMins || 30);
-      const endStr = targetEndMin >= 1440 ? '23:59' : formatTeacherMinutesToTime24(targetEndMin);
-      if (eInput) eInput.value = endStr;
-      updateTeacherAddSlotAvailabilityHint();
-    }
-
-    function onTeacherBookPresetSlotChange(slotVal) {
-      if (!slotVal) return;
-      const [start24, defaultEnd24] = slotVal.split('|');
-      const sInput = document.getElementById('teacherBookStartTime');
-      const eInput = document.getElementById('teacherBookEndTime');
-      const currentDur = (sInput && eInput && sInput.value && eInput.value)
-        ? getTeacherSlotDurationMins(sInput.value, eInput.value)
-        : 30;
-      const keepDur = (currentDur >= 15 && currentDur <= 240) ? currentDur : 30;
-      if (sInput) sInput.value = start24;
-      const sMin = parseTeacherTimeToMinutes(start24, false);
-      const endStr = (sMin + keepDur) >= 1440 ? '23:59' : formatTeacherMinutesToTime24(sMin + keepDur);
-      if (eInput) eInput.value = endStr || defaultEnd24;
-      updateTeacherAddSlotAvailabilityHint();
-    }
-
-    function onTeacherBookCustomTimeChanged(which) {
-      const sInput = document.getElementById('teacherBookStartTime');
-      const eInput = document.getElementById('teacherBookEndTime');
-      if (!sInput || !eInput) return;
-      if (which === 'start' && sInput.value) {
-        const curDur = getTeacherSlotDurationMins(sInput.getAttribute('data-prev-start') || '14:00', eInput.value || '14:30');
-        const safeDur = (curDur >= 15 && curDur <= 240) ? curDur : 30;
-        const sMin = parseTeacherTimeToMinutes(sInput.value, false);
-        eInput.value = (sMin + safeDur) >= 1440 ? '23:59' : formatTeacherMinutesToTime24(sMin + safeDur);
-      }
-      if (sInput.value) sInput.setAttribute('data-prev-start', sInput.value);
-      updateTeacherAddSlotAvailabilityHint();
-    }
-
-    function updateTeacherAddSlotAvailabilityHint() {
-      const sInput = document.getElementById('teacherBookStartTime');
-      const eInput = document.getElementById('teacherBookEndTime');
-      const durBadge = document.getElementById('teacherBookDurationBadge');
-      const hintEl = document.getElementById('teacherBookSlotOccupiedHint');
-      const submitBtn = document.getElementById('btnSubmitTeacherAddSchedule');
-
-      const start24 = (sInput && sInput.value) ? sInput.value.slice(0, 5) : '';
-      const end24 = (eInput && eInput.value) ? eInput.value.slice(0, 5) : '';
-      const durMins = getTeacherSlotDurationMins(start24, end24);
-
-      document.querySelectorAll('[data-teacher-dur]').forEach(btn => {
-        const bDur = Number(btn.getAttribute('data-teacher-dur'));
-        if (bDur === durMins) {
-          btn.className = 'px-2.5 py-1 rounded-lg border border-emerald-600 bg-emerald-600 text-white font-extrabold text-[10px] shadow-2xs transition';
-        } else {
-          btn.className = 'px-2.5 py-1 rounded-lg border border-emerald-300 bg-white hover:bg-emerald-600 hover:text-white text-emerald-900 font-extrabold text-[10px] transition';
-        }
-      });
-
-      if (durMins <= 0) {
-        if (durBadge) {
-          durBadge.textContent = 'Invalid: End <= Start';
-          durBadge.className = 'px-2.5 py-0.5 rounded-full text-[10px] font-mono font-extrabold bg-rose-100 text-rose-800 border border-rose-300';
-        }
-        if (submitBtn) submitBtn.disabled = true;
-        return;
-      }
-
-      if (submitBtn) submitBtn.disabled = false;
-      if (durBadge) {
-        durBadge.textContent = `${durMins} Minutes (${format24To12HourLabel(start24)} – ${format24To12HourLabel(end24)})`;
-        durBadge.className = 'px-2.5 py-0.5 rounded-full text-[10px] font-mono font-extrabold bg-emerald-100 text-emerald-900 border border-emerald-300';
-      }
-
-      if (!hintEl || !start24 || !end24) return;
-      const occupiedDays = [];
-      for (let d = 1; d <= 7; d++) {
-        const conflicts = findTeacherPortalScheduleConflicts(d, start24, end24);
-        if (conflicts.length > 0) {
-          const first = conflicts[0];
-          occupiedDays.push(`${DAY_NAMES[d]} (${first.studentName}: ${first.startTime}-${first.endTime})`);
-        }
-      }
-
-      if (occupiedDays.length > 0) {
-        hintEl.textContent = `Schedule overlap warning: ${start24} - ${end24} PKT overlaps on: ${occupiedDays.join(', ')}.`;
-        hintEl.classList.remove('hidden');
-      } else {
-        hintEl.textContent = '';
-        hintEl.classList.add('hidden');
-      }
-    }
-
-    function openTeacherAddScheduleModal(preselectStudentId = null) {
-      if (!CURRENT_TEACHER) return;
-      const stuSelect = document.getElementById('teacherBookStudentSelect');
-      const slotSelect = document.getElementById('teacherBookTimeSlotSelect');
-      const sInput = document.getElementById('teacherBookStartTime');
-      const eInput = document.getElementById('teacherBookEndTime');
-      const zoomInput = document.getElementById('teacherBookZoomLink');
-      if (!stuSelect || !slotSelect) return;
-
-      // Strictly populate ONLY ACTIVE students currently assigned to THIS teacher (from Student List)
-      const activeList = (ACTIVE_ASSIGNED_STUDENTS || []).filter(s =>
-        String(s.assigned_teacher_id || '') === String(CURRENT_TEACHER.id) &&
-        isPortalRegularStudent(s) &&
-        !isPortalStudentDeactivated(s) &&
-        !isPortalStudentOnLeave(s)
-      );
-
-      if (activeList.length === 0) {
-        stuSelect.innerHTML = '<option value="">No active students in your Student List</option>';
-      } else {
-        stuSelect.innerHTML = activeList.map(s => {
-          const cTitle = getStudentCourseDisplay(s);
-          return `<option value="${s.id}">${s.name} (${s.id}) — ${cTitle}</option>`;
-        }).join('');
-        if (preselectStudentId && activeList.some(s => String(s.id) === String(preselectStudentId))) {
-          stuSelect.value = preselectStudentId;
-        }
-      }
-
-      // Populate 48 half-hour slots with interval occupancy status
-      let slotOptions = '';
-      let defaultSlot = '';
-      let defaultStart = '14:00';
-      let defaultEnd = '14:30';
-
-      for (let i = 0; i < 48; i++) {
-        const sH = Math.floor(i / 2);
-        const sM = (i % 2) * 30;
-        const eTotal = (i + 1) * 30;
-        const eH = Math.floor(eTotal / 60) % 24;
-        const eM = eTotal % 60;
-        const start24 = `${String(sH).padStart(2, '0')}:${String(sM).padStart(2, '0')}`;
-        const end24 = `${String(eH).padStart(2, '0')}:${String(eM).padStart(2, '0')}`;
-        const val = `${start24}|${end24}`;
-        const lbl = `${format24To12HourLabel(start24)} - ${format24To12HourLabel(end24)} PKT (${start24} - ${end24})`;
-
-        const occNames = [];
-        for (let d = 1; d <= 7; d++) {
-          const cList = findTeacherPortalScheduleConflicts(d, start24, end24);
-          cList.forEach(c => {
-            if (!occNames.includes(c.studentName)) occNames.push(c.studentName);
-          });
-        }
-
-        const prefix = occNames.length > 0 ? `🟡 Booked (${occNames.join(', ')})` : '🟢 FREE / Available';
-        if (!defaultSlot && occNames.length === 0 && sH >= 14) {
-          defaultSlot = val;
-          defaultStart = start24;
-          defaultEnd = end24;
-        }
-        slotOptions += `<option value="${val}">${prefix} — ${lbl}</option>`;
-      }
-      slotSelect.innerHTML = slotOptions;
-      if (defaultSlot) slotSelect.value = defaultSlot;
-      if (sInput) {
-        sInput.value = defaultStart;
-        sInput.setAttribute('data-prev-start', defaultStart);
-      }
-      if (eInput) eInput.value = defaultEnd;
-      if (zoomInput) zoomInput.value = CURRENT_TEACHER.zoom_link || '';
-
-      updateTeacherAddSlotAvailabilityHint();
-
-      const modal = document.getElementById('modalTeacherAddScheduleSlot');
-      if (modal) {
-        modal.classList.remove('hidden');
-        modal.classList.add('flex');
-        pushTeacherModalHistory('modalTeacherAddScheduleSlot');
-      }
-    }
-
-    function closeTeacherAddScheduleModal(popHistory = true) {
-      const modal = document.getElementById('modalTeacherAddScheduleSlot');
-      if (modal) {
-        modal.classList.add('hidden');
-        modal.classList.remove('flex');
-      }
-      if (popHistory) popTeacherModalHistory('modalTeacherAddScheduleSlot');
-    }
-
-    // Duplicate-schedule prevention (2026-11-05): in-flight guard —
-    // this submit cannot run twice concurrently, so one action can
-    // never insert the same booking twice (the button disable below
-    // alone does not cover keyboard/programmatic re-entry).
-    let _teacherAddScheduleInFlight = false;
-    async function submitTeacherAddScheduleSlot(e) {
-      e.preventDefault();
-      if (_teacherAddScheduleInFlight) return;
-      if (!CURRENT_TEACHER || !CURRENT_TEACHER.id) return;
-      _teacherAddScheduleInFlight = true;
-      try {
-        await _submitTeacherAddScheduleSlotImpl(e);
-      } finally {
-        _teacherAddScheduleInFlight = false;
-      }
-    }
-
-    async function _submitTeacherAddScheduleSlotImpl(e) {
-      if (!CURRENT_TEACHER || !CURRENT_TEACHER.id) return;
-
-      const studentId = document.getElementById('teacherBookStudentSelect')?.value || '';
-      const start24 = (document.getElementById('teacherBookStartTime')?.value || '').trim().slice(0, 5);
-      const end24 = (document.getElementById('teacherBookEndTime')?.value || '').trim().slice(0, 5);
-      const customZoom = (document.getElementById('teacherBookZoomLink')?.value || '').trim();
-      const selectedDays = Array.from(document.querySelectorAll('input[name="teacherBookWeekday"]:checked'))
-        .map(cb => Number(cb.value))
-        .filter(d => d >= 1 && d <= 7);
-
-      if (!studentId) {
-        lmsNotify('Please select an active student from your Student List.');
-        return;
-      }
-      if (!start24 || !end24) {
-        lmsNotify('Please specify both a Class Start Time and End Time.');
-        return;
-      }
-      const durationMins = getTeacherSlotDurationMins(start24, end24);
-      if (durationMins <= 0) {
-        lmsNotify('Invalid Class Duration: End Time must be after Start Time.');
-        return;
-      }
-      // Phase 3: a session link must be a Zoom link (or a bare meeting
-      // code, normalized). Empty falls back to the teacher default below.
-      let customZoomChecked = customZoom;
-      if (customZoom && window.LmsZoomLinks) {
-        const checkedSch = window.LmsZoomLinks.normalizeZoomInput(customZoom);
-        if (!checkedSch.ok) {
-          lmsNotify(checkedSch.error);
-          return;
-        }
-        customZoomChecked = checkedSch.normalized;
-      }
-      if (selectedDays.length === 0) {
-        lmsNotify('Please select at least one weekly class day (Monday through Sunday).');
-        return;
-      }
-
-      const btn = document.getElementById('btnSubmitTeacherAddSchedule');
-      if (btn) {
-        btn.disabled = true;
-        btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Saving to Schedule...';
-      }
-
-      try {
-        // Authoritative backend verification: Student must be ACTIVE and assigned to THIS teacher
-        const { data: stuRecord, error: stuErr } = await db.from('students')
-          .select('*, families(id, status)')
-          .eq('id', studentId)
-          .single();
-
-        if (stuErr || !stuRecord) {
-          throw new Error('Student record could not be verified.');
-        }
-        if (String(stuRecord.assigned_teacher_id || '') !== String(CURRENT_TEACHER.id)) {
-          throw new Error('Only students currently assigned to your Student List can be added to your schedule.');
-        }
-        if (isPortalStudentDeactivated(stuRecord) || isPortalStudentOnLeave(stuRecord)) {
-          throw new Error('Only active students (not deactivated or on leave) can be scheduled.');
-        }
-
-        const startTimeSql = `${start24}:00`;
-        const endTimeSql = `${end24}:00`;
-        const zoomLink = customZoomChecked || CURRENT_TEACHER.zoom_link || '';
-
-        // Duplicate-schedule prevention (2026-11-05): days where THIS
-        // student already has a class with THIS teacher at the same
-        // day + start are already booked — exclude them from insertion
-        // and from the conflict scan (the client twin of the server
-        // natural-key guard). A same-student row on a remaining day at
-        // a DIFFERENT overlapping time still conflicts below.
-        const alreadyBookedDays = [];
-        const daysToCheck = [];
-        selectedDays.forEach(d => {
-          const dup = (ALL_TEACHER_SCHEDULES || []).some(sc =>
-            String(sc.student_id) === String(studentId) &&
-            String(sc.teacher_id) === String(CURRENT_TEACHER.id) &&
-            Number(sc.day_of_week) === Number(d) &&
-            String(sc.start_time || '').trim().slice(0, 5) === start24);
-          if (dup) alreadyBookedDays.push(d); else daysToCheck.push(d);
-        });
-
-        if (daysToCheck.length === 0) {
-          lmsNotify(`This student is already booked with you on the selected day(s) at ${start24} — nothing new was added.`);
-          return;
-        }
-
-        // Check existing schedule conflicts using true interval overlap
-        const conflictDays = [];
-        const freeDaysToInsert = [];
-
-        daysToCheck.forEach(d => {
-          const conflicts = findTeacherPortalScheduleConflicts(d, start24, end24);
-          if (conflicts.length > 0) {
-            const first = conflicts[0];
-            conflictDays.push(`${DAY_NAMES[d]} (${first.studentName}: ${first.startTime} - ${first.endTime})`);
-          } else {
-            freeDaysToInsert.push(d);
-          }
-        });
-
-        if (conflictDays.length > 0) {
-          throw new Error(`Schedule Conflict Detected!\n\nThe selected class time (${start24} - ${end24}, ${durationMins} mins) overlaps with an existing class on:\n• ${conflictDays.join('\n• ')}\n\nPlease choose a non-overlapping Start/End time or deselect the conflicting day(s).`);
-        }
-
-        const rowsToInsert = freeDaysToInsert.map(dayNum => ({
-          teacher_id: CURRENT_TEACHER.id,
-          student_id: studentId,
-          day_of_week: dayNum,
-          start_time: startTimeSql,
-          end_time: endTimeSql,
-          meeting_link: zoomLink,
-          status: 'Active'
-        }));
-
-        const { error: insErr } = await db.from('class_schedules').insert(rowsToInsert);
-        if (insErr) throw insErr;
-
-        closeTeacherAddScheduleModal();
-        await loadTeacherPortalData();
-
-        // If Weekly Matrix Modal is currently open, re-render its body too
-        const matrixModal = document.getElementById('modalWeeklyMatrix');
-        if (matrixModal && !matrixModal.classList.contains('hidden')) {
-          openWeeklyMatrixModal();
-        }
-
-        const addedDayNames = freeDaysToInsert.map(d => DAY_NAMES[d]).join(', ');
-        lmsNotify(`✅ Student Added to Schedule!\n\nStudent: ${stuRecord.name} (${stuRecord.id})\nTime: ${format24To12HourLabel(start24)} - ${format24To12HourLabel(end24)} PKT (${durationMins} Minutes)\nDays: ${addedDayNames}${alreadyBookedDays.length ? `\nSkipped — already booked at ${start24}: ${alreadyBookedDays.map(d => DAY_NAMES[d]).join(', ')}` : ''}`);
-      } catch (err) {
-        console.warn('[LMS] operation failed:', (err.message || err)); lmsNotify('Schedule Notice. Please try again.', { type: 'error' });
-      } finally {
-        if (btn) {
-          btn.disabled = false;
-          btn.innerHTML = '<i class="fa-solid fa-calendar-check text-brandGold"></i> Save to Schedule';
-        }
-      }
-    }
-
     async function loadTeacherTrialsData() {
       if (!CURRENT_TEACHER) return;
 
@@ -11366,7 +10731,6 @@ font-family: var(--font-num) !important;
           modalRescheduleRequest: function () { closeRescheduleRequestModal(); },
           modalTimeChangeRequest: function () { closeTimeChangeRequestModal(); },
           modalWeeklyMatrix: function () { closeWeeklyMatrixModal(); },
-          modalTeacherAddScheduleSlot: function () { closeTeacherAddScheduleModal(); },
           modalDigitalBookReader: function () { closeDigitalBookReader(); },
           modalCourseMaterialPreview: function () { closeCourseMaterialPreview(); },
           modalTeacherLibraryPicker: function () { closeTeacherLibraryPicker(); },
@@ -11387,11 +10751,11 @@ font-family: var(--font-num) !important;
     }
 
     // Batch 3.6 (audit P2-32): keep the sidebar highlight following modal
-    // openers — whenever one of the four opener modals shows or hides,
+    // openers — whenever one of the three opener modals shows or hides,
     // re-sync (the sync itself prefers a visible modal over the tab).
     try {
       if (typeof MutationObserver !== 'undefined') {
-        var teacherSidebarModalIds = ['modalWeeklyMatrix', 'modalTeacherLibraryPicker', 'modalTeacherAdvanceClass', 'modalTeacherAddScheduleSlot'];
+        var teacherSidebarModalIds = ['modalWeeklyMatrix', 'modalTeacherLibraryPicker', 'modalTeacherAdvanceClass'];
         var teacherSidebarObserver = new MutationObserver(function () {
           try { syncTeacherSidebarActiveState(CURRENT_TEACHER_TAB); } catch (e) {}
         });

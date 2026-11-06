@@ -230,15 +230,21 @@ check('slot edit: session link validated + normalized value stored',
   SCHEDULE.includes('normalizeZoomInput(newZoom)') && SCHEDULE.includes('payload.meeting_link = newZoomChecked'));
 check('student creation: manual link validated',
   FAMILIES.includes('normalizeZoomInput(zoomInputVal)'));
-check('teacher schedule creation: custom link validated',
-  TEACHER.includes('normalizeZoomInput(customZoom)') && TEACHER.includes('customZoomChecked || CURRENT_TEACHER.zoom_link'));
+// Owner marks (2026-11-06): teacher-side schedule creation was removed
+// root-and-branch (Schedule Student), so its custom-link validation is
+// gone with it; the validator remains loaded and every remaining
+// creation path (360, slot edit, student creation) keeps its check.
+check('teacher schedule creation removed by owner marks (validator still loaded)',
+  !TEACHER.includes('customZoom') && TEACHER.includes('js/zoom-links.js'));
 check('validator: loaded by admin + teacher portals',
   INDEX.includes('js/zoom-links.js') && TEACHER.includes('js/zoom-links.js'));
 check('labels: Scheduled-branch Zoom button says Join Zoom (not Start Class)',
   TEACHER.includes("launchTeacherZoomClassById('${escapeJsAttr(c.id)}')") &&
   TEACHER.includes('<i class="fa-solid fa-video"></i> Join Zoom'));
+// Threshold 4 -> 3 (owner marks, 2026-11-06): the removed live/next
+// banner carried one START CLASS instance; the per-row ones remain.
 check('labels: real Start buttons still say START CLASS',
-  (TEACHER.match(/START CLASS/g) || []).length >= 4);
+  (TEACHER.match(/START CLASS/g) || []).length >= 3);
 check('labels: student-list Zoom title says Join Zoom Class',
   TEACHER.includes('title="Join Zoom Class for'));
 check('launch: https-only check + zoommtg deep link kept',

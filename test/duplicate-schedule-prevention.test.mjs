@@ -242,11 +242,16 @@ function extractFn(src, startMarker) {
   }
 
   const teacherHtml = read('teacher.html');
-  check('teacher.html: in-flight guard + already-booked partition present',
-    teacherHtml.includes('_teacherAddScheduleInFlight') &&
-    teacherHtml.includes('const alreadyBookedDays = [];') &&
-    teacherHtml.includes('const daysToCheck = [];') &&
-    teacherHtml.includes('nothing new was added'));
+  // Owner marks (2026-11-06): the teacher-side booking path itself was
+  // removed root-and-branch (Schedule Student), so its in-flight guard
+  // and already-booked partition are gone with it — there is no longer
+  // a teacher booking surface to guard. Prevention for the remaining
+  // booking paths is the server guard + schedule.js/trials.js checks
+  // elsewhere in this suite.
+  check('teacher.html: teacher booking surface removed (owner marks)',
+    !teacherHtml.includes('_teacherAddScheduleInFlight') &&
+    !teacherHtml.includes('openTeacherAddScheduleModal') &&
+    !teacherHtml.includes('submitTeacherAddScheduleSlot'));
 
   const trials = read('js/trials.js');
   const filterSrc = extractFn(trials, 'async function filterOutExistingScheduleRows(studentId, teacherId, rows)');

@@ -64,9 +64,12 @@ check('MODAL parent has an Escape listener closing the topmost registered modal'
   PARENT.includes("e.key !== 'Escape'") && PARENT.includes('ModalA11y.closeTop()'));
 const teacherClosers = ['modalTeacherAttendance', 'modalClassLeaveAbsent', 'modalTeacherAdvanceClass',
   'modalTeacherLeaveRequest', 'modalRescheduleRequest', 'modalTimeChangeRequest', 'modalWeeklyMatrix',
-  'modalTeacherAddScheduleSlot', 'modalDigitalBookReader', 'modalCourseMaterialPreview',
+  'modalDigitalBookReader', 'modalCourseMaterialPreview',
   'modalTeacherLibraryPicker', 'modalTeacherSalarySlip'];
-check('MODAL teacher watchAllModals maps all 12 modals to their close functions',
+// Owner marks (2026-11-06): modalTeacherAddScheduleSlot was removed
+// root-and-branch with the whole Schedule Student feature, so the
+// closer map now holds 11 modals.
+check('MODAL teacher watchAllModals maps all 11 modals to their close functions',
   TEACHER.includes('watchAllModals') &&
   teacherClosers.every((id) => TEACHER.includes(id + ': function')));
 
@@ -83,9 +86,11 @@ check('LABEL parent has no unlabeled static close button left',
   unlabeledTimesButtons(PARENT) === 0, String(unlabeledTimesButtons(PARENT)));
 // Index count is 31 since the Course Material Page Editor modal
 // (modalPageEditor, 2026-11-06) added its own labelled close button.
-check('LABEL close-button aria-label counts (index 31, teacher 11, parent 2)',
+// Teacher count 11 -> 10 (owner marks, 2026-11-06): the removed
+// Schedule Student modal carried one of the labelled close buttons.
+check('LABEL close-button aria-label counts (index 31, teacher 10, parent 2)',
   count(INDEX, /aria-label="Close"/g) === 31 &&
-  count(TEACHER, /aria-label="Close"/g) === 11 &&
+  count(TEACHER, /aria-label="Close"/g) === 10 &&
   count(PARENT, /aria-label="Close"/g) === 2,
   `${count(INDEX, /aria-label="Close"/g)}/${count(TEACHER, /aria-label="Close"/g)}/${count(PARENT, /aria-label="Close"/g)}`);
 check('LABEL sidebar toggles labelled in teacher + index',
@@ -106,13 +111,14 @@ check('LABEL index carries 26+ label-for associations',
   count(INDEX, /<label for=/g) >= 26, String(count(INDEX, /<label for=/g)));
 
 // ==== P2-32: teacher sidebar follows modal openers ====
-check('SIDEBAR sync maps the 4 opener modals to their buttons',
+// Owner marks (2026-11-06): the Schedule Student opener modal/button
+// were removed with the feature; three opener modals remain mapped.
+check('SIDEBAR sync maps the 3 opener modals to their buttons',
   TEACHER.includes('modalWeeklyMatrix: \'sbNavWeekSchedule\'') &&
   TEACHER.includes('modalTeacherLibraryPicker: \'sbNavCourseMaterials\'') &&
-  TEACHER.includes('modalTeacherAdvanceClass: \'sbNavAdvanceClass\'') &&
-  TEACHER.includes('modalTeacherAddScheduleSlot: \'sbNavAddSchedule\''));
-check('SIDEBAR + Schedule Student button has an id for the map',
-  TEACHER.includes('id="sbNavAddSchedule"'));
+  TEACHER.includes('modalTeacherAdvanceClass: \'sbNavAdvanceClass\''));
+check('SIDEBAR no Schedule Student remnants (owner marks removal)',
+  !TEACHER.includes('sbNavAddSchedule') && !TEACHER.includes('modalTeacherAddScheduleSlot'));
 check('SIDEBAR observer re-syncs on opener-modal visibility changes',
   TEACHER.includes('teacherSidebarObserver') && TEACHER.includes('syncTeacherSidebarActiveState(CURRENT_TEACHER_TAB)'));
 
