@@ -593,10 +593,12 @@ if (mergedDeleted.length > 0) {
           const matchP = book.paras.find(pr => CURRENT_READER_PAGE >= pr.page_start && CURRENT_READER_PAGE <= pr.page_end);
           if (matchP) {
             CURRENT_READER_PARA = matchP.para;
-            // Convert absolute page to para-relative page if appropriate
-            if (book.paras_data && book.paras_data[matchP.para]) {
-              CURRENT_READER_PAGE = Math.max(1, CURRENT_READER_PAGE - matchP.page_start + 1);
-            }
+            // Convert absolute page to para-relative page via book.paras.
+            // (Fix: this conversion used to run only when the book also
+            // carried paras_data, so a paras-only book — the real Quran
+            // book — kept the GLOBAL number as its para-relative page
+            // and the indicator/clamp disagreed with the para slice.)
+            CURRENT_READER_PAGE = Math.max(1, CURRENT_READER_PAGE - matchP.page_start + 1);
           } else {
             CURRENT_READER_PARA = 1;
           }
@@ -706,11 +708,21 @@ if (mergedDeleted.length > 0) {
       // Clamp current page
       CURRENT_READER_PAGE = Math.max(1, Math.min(maxPages, CURRENT_READER_PAGE));
 
-      // Update Page Indicator & Slider
+      // Update Page Indicator & Slider. Para-based books show the
+      // ORIGINAL (printed) page number via the shared OrigPages helper
+      // (js/lesson-history.js); when the book carries no usable paras
+      // anchors the para-relative label is kept exactly as before.
+      const _origApi = (typeof window !== 'undefined' && window.LessonHistory) ? window.LessonHistory
+        : (typeof LessonHistory !== 'undefined' ? LessonHistory : null);
+      const _origNow = (isParaBased && _origApi) ? _origApi.origPageFor(book, CURRENT_READER_PARA, CURRENT_READER_PAGE) : null;
+      const _origLast = (isParaBased && _origApi) ? _origApi.lastOrigPageFor(book) : null;
+      const _showOrig = _origNow !== null && _origNow !== undefined && _origLast !== null && _origLast !== undefined;
       const ind = document.getElementById('readerPageIndicator');
       if (ind) {
         if (isParaBased) {
-          ind.innerText = `Para ${CURRENT_READER_PARA} • Page ${CURRENT_READER_PAGE} of ${maxPages}`;
+          ind.innerText = _showOrig
+            ? `Para ${CURRENT_READER_PARA} • Page ${_origNow} of ${_origLast}`
+            : `Para ${CURRENT_READER_PARA} • Page ${CURRENT_READER_PAGE} of ${maxPages}`;
         } else {
           ind.innerText = `Page ${CURRENT_READER_PAGE} of ${maxPages}`;
         }
@@ -718,7 +730,7 @@ if (mergedDeleted.length > 0) {
       const indTop = document.getElementById('readerPageIndicatorTop');
       if (indTop) {
         if (isParaBased) {
-          indTop.innerText = `Juz ${CURRENT_READER_PARA} • P${CURRENT_READER_PAGE}`;
+          indTop.innerText = _showOrig ? `Juz ${CURRENT_READER_PARA} • P${_origNow}` : `Juz ${CURRENT_READER_PARA} • P${CURRENT_READER_PAGE}`;
         } else {
           indTop.innerText = `${CURRENT_READER_PAGE} / ${maxPages}`;
         }
@@ -2491,6 +2503,54 @@ if (mergedDeleted.length > 0) {
       return [];
     }
 
+    // The pending original-page anchor for one para, parsed from the
+    // editor state (null when the field is empty or not a number).
+    function pageEditorAnchorValue(paraNum) {
+      if (!PAGE_EDITOR) return null;
+      const raw = PAGE_EDITOR.origStarts[String(paraNum)];
+      if (raw === null || raw === undefined || raw === '') return null;
+      const n = Number(raw);
+      return Number.isFinite(n) ? n : null;
+    }
+
+    function pageEditorAnchorsDirty() {
+      if (!PAGE_EDITOR || !PAGE_EDITOR.isPara) return false;
+      return PAGE_EDITOR.paraList.some(function (p) {
+        return pageEditorAnchorValue(p) !== PAGE_EDITOR.origAnchors[String(p)];
+      });
+    }
+
+    // Anchor rules (the duplicate-prevention rule for original page
+    // numbers inside one book): every para's anchor must be a positive
+    // whole number, and anchors must STRICTLY INCREASE from para to
+    // para — a later para may never start on or before an earlier
+    // para's first original page. Returns an error string naming the
+    // conflicting paras, or null when the anchors are valid.
+    function pageEditorValidateAnchors() {
+      if (!PAGE_EDITOR || !PAGE_EDITOR.isPara) return null;
+      let prev = null;
+      let prevPara = null;
+      for (const p of PAGE_EDITOR.paraList) {
+        const raw = PAGE_EDITOR.origStarts[String(p)];
+        const n = (raw === '' || raw === null || raw === undefined) ? NaN : Number(raw);
+        if (!Number.isFinite(n) || !Number.isInteger(n) || n <= 0) {
+          return 'Para ' + p + ': the original page number of its first page must be a positive whole number (it is currently "' + (raw === '' || raw === null || raw === undefined ? '(empty)' : raw) + '"). No changes were saved.';
+        }
+        if (prev !== null && n <= prev) {
+          return 'Original page numbers must increase from Para to Para: Para ' + p + ' would start at original page ' + n + ', but Para ' + prevPara + ' already starts at ' + prev + '. Two Paras cannot share or overlap original page numbers — correct the starting page of Para ' + prevPara + ' or Para ' + p + '. No changes were saved.';
+        }
+        prev = n;
+        prevPara = p;
+      }
+      return null;
+    }
+
+    function pageEditorOrigStartChanged(value) {
+      if (!PAGE_EDITOR || !PAGE_EDITOR.isPara) return;
+      PAGE_EDITOR.origStarts[String(PAGE_EDITOR.para)] = value;
+      renderPageEditor();
+    }
+
     function openPageEditor(bookId) {
       const customBooks = getCustomBooks();
       const book = customBooks.find(function (b) { return b && b.id === bookId; });
@@ -2507,6 +2567,30 @@ if (mergedDeleted.length > 0) {
         lmsNotify("This book's pages are still loading from the server. Please wait a moment and try again.", { type: 'error' });
         return false;
       }
+      // Original (printed) page anchors, per para: the effective anchor
+      // at open is the stored orig_start, else the para's global
+      // page_start, else its running global start. origStarts holds the
+      // admin's pending edits (book-level state — they survive para
+      // switches; only staged PAGE edits are per-para).
+      const origAnchors = {};
+      let _runStart = 1;
+      paraList.forEach(function (p) {
+        const entry = (Array.isArray(book.paras) ? book.paras.find(function (x) { return Number(x.para) === p; }) : null);
+        let a = null;
+        if (entry) {
+          const o = Number(entry.orig_start);
+          if (Number.isFinite(o) && o > 0) a = o;
+          else {
+            const s = Number(entry.page_start);
+            if (Number.isFinite(s) && s > 0) a = s;
+          }
+        }
+        if (a === null) a = _runStart;
+        origAnchors[String(p)] = a;
+        _runStart += (origParaPages[String(p)] || []).length;
+      });
+      const origStarts = {};
+      Object.keys(origAnchors).forEach(function (k) { origStarts[k] = origAnchors[k]; });
       PAGE_EDITOR = {
         bookId: book.id,
         title: book.title || 'Course Material',
@@ -2515,6 +2599,8 @@ if (mergedDeleted.length > 0) {
         para: paraList.length ? paraList[0] : null,
         origParaPages: origParaPages,
         origFlat: origFlat,
+        origAnchors: origAnchors,
+        origStarts: origStarts,
         oldRowCount: Math.max(origFlat.length, Number(book.total_pages) || 0),
         original: [],
         staged: [],
@@ -2563,6 +2649,11 @@ if (mergedDeleted.length > 0) {
         pendingEl.innerText = dirty ? '● Unsaved changes' : '';
         pendingEl.className = dirty ? 'font-bold text-amber-600 text-[11px]' : 'font-bold text-slate-400 text-[11px]';
       }
+      const anchorInput = document.getElementById('pageEditorOrigStart');
+      if (anchorInput && st.isPara) {
+        const av = st.origStarts[String(st.para)];
+        anchorInput.value = (av === null || av === undefined) ? '' : String(av);
+      }
       const errBox = document.getElementById('pageEditorUploadErrors');
       if (errBox) {
         if (st.uploadErrors.length > 0) {
@@ -2586,14 +2677,26 @@ if (mergedDeleted.length > 0) {
         const checked = st.selected[i] ? 'checked' : '';
         const upDis = i === 0 ? 'disabled' : '';
         const downDis = i === st.staged.length - 1 ? 'disabled' : '';
+        // Para books label cards by the ORIGINAL (printed) page number
+        // — anchor + position — with the para-relative position kept as
+        // small context. Flat books keep plain sequence numbers.
+        let cardLabel = 'Page ' + (i + 1);
+        let cardContext = '';
+        if (st.isPara) {
+          const anchor = pageEditorAnchorValue(st.para);
+          const base = anchor !== null ? anchor : st.origAnchors[String(st.para)];
+          if (base !== null && base !== undefined && Number.isFinite(Number(base))) cardLabel = 'Page ' + (Number(base) + i);
+          cardContext = '<div class="text-[10px] leading-tight text-slate-400 font-semibold">Para ' + st.para + ' &bull; page ' + (i + 1) + ' of ' + st.staged.length + '</div>';
+        }
         return '<div class="border border-slate-200 rounded-xl p-2 flex flex-col gap-1.5 bg-white shadow-2xs">'
           + '<div class="relative aspect-[3/4] bg-slate-100 rounded-lg overflow-hidden flex items-center justify-center">'
-          + '<img data-editor-thumb-idx="' + i + '" alt="Page ' + (i + 1) + '" class="object-contain w-full h-full">'
+          + '<img data-editor-thumb-idx="' + i + '" alt="' + cardLabel + '" class="object-contain w-full h-full">'
           + (entry.isNew ? '<span class="absolute top-1 left-1 px-1.5 py-0.5 rounded text-[9px] font-black bg-emerald-600 text-white">NEW</span>' : '')
           + '</div>'
           + '<label class="flex items-center gap-1.5 text-[11px] font-bold text-slate-700 cursor-pointer">'
-          + '<input type="checkbox" ' + checked + ' onchange="pageEditorToggleSelect(' + i + ', this.checked)"> Page ' + (i + 1)
+          + '<input type="checkbox" ' + checked + ' onchange="pageEditorToggleSelect(' + i + ', this.checked)"> ' + cardLabel
           + '</label>'
+          + cardContext
           + '<div class="flex items-center gap-1">'
           + '<button type="button" ' + upDis + ' onclick="pageEditorMove(' + i + ', -1)" class="flex-1 py-1 bg-slate-100 hover:bg-slate-200 disabled:opacity-40 rounded-lg text-[11px] font-black" title="Move page up">↑</button>'
           + '<button type="button" ' + downDis + ' onclick="pageEditorMove(' + i + ', 1)" class="flex-1 py-1 bg-slate-100 hover:bg-slate-200 disabled:opacity-40 rounded-lg text-[11px] font-black" title="Move page down">↓</button>'
@@ -2764,6 +2867,7 @@ if (mergedDeleted.length > 0) {
 
     function pageEditorIsDirty() {
       if (!PAGE_EDITOR) return false;
+      if (pageEditorAnchorsDirty()) return true;
       const vals = pageEditorStagedValues();
       const orig = PAGE_EDITOR.original;
       if (vals.length !== orig.length) return true;
@@ -2829,6 +2933,13 @@ if (mergedDeleted.length > 0) {
             page_end: running + slice.length - 1,
             total_pages: slice.length
           };
+          // Original-page anchor: the admin's pending value wins; the
+          // anchors are keyed by para, NOT recomputed from the new
+          // page_start — inserting/removing scans shifts global
+          // positions, never the printed numbers of the physical book.
+          const _anchor = pageEditorAnchorValue(p);
+          if (_anchor !== null && Number.isInteger(_anchor) && _anchor > 0) meta.orig_start = _anchor;
+          else if (old.orig_start !== undefined && old.orig_start !== null) meta.orig_start = old.orig_start;
           running += slice.length;
           flat.push.apply(flat, slice);
           return meta;
@@ -2852,6 +2963,13 @@ if (mergedDeleted.length > 0) {
       if (!pageEditorIsDirty()) {
         lmsNotify('No changes to save.');
         return false;
+      }
+      if (pageEditorAnchorsDirty()) {
+        const anchorError = pageEditorValidateAnchors();
+        if (anchorError) {
+          lmsNotify('⚠️ Original page numbers\n\n' + anchorError, { type: 'error' });
+          return false;
+        }
       }
       if (pageEditorIsStructural()) {
         const ok = await lmsConfirm('⚠️ Lesson history check\n\nPast lesson records open pages by their page NUMBER. Removing pages or changing their order changes which page those old records will open.\n\nContinue and save these page changes for "' + st.title + '"?');
@@ -3260,6 +3378,7 @@ if (mergedDeleted.length > 0) {
       window.pageEditorRemoveSelected = pageEditorRemoveSelected;
       window.pageEditorMove = pageEditorMove;
       window.pageEditorDismissUploadErrors = pageEditorDismissUploadErrors;
+      window.pageEditorOrigStartChanged = pageEditorOrigStartChanged;
       window.savePageEditor = savePageEditor;
       window.requestClosePageEditor = requestClosePageEditor;
       window.openDigitalBookReader = openDigitalBookReader;

@@ -5168,6 +5168,33 @@ font-family: var(--font-num) !important;
       { para: 30, name: "Amma Yatasa'aloon (عمّ یتساءلون)", page_start: 525, page_end: 548 }
     ];
 
+    // Para list for the lesson forms: the BOOK's own paras win whenever
+    // the book carries them — the hardcoded registries (QURAN_PARAS_INFO
+    // / QURAN_PARAS_LIST) encode an invented 18-pages-per-para scheme
+    // that matches no real book and misplaces boundary pages (e.g. it
+    // puts global page 20 in Para 2; the real Quran book ends Para 1 at
+    // 20). Registry entries are used ONLY as a fallback for books with
+    // no paras data, and to lend names to book paras that lack them.
+    function teacherParasListFor(book) {
+      if (book && Array.isArray(book.paras) && book.paras.length > 0) {
+        const registry = (typeof QURAN_PARAS_INFO !== 'undefined' && Array.isArray(QURAN_PARAS_INFO)) ? QURAN_PARAS_INFO : QURAN_PARAS_LIST;
+        return book.paras.map(p => {
+          const reg = registry.find(r => Number(r.para) === Number(p.para));
+          return {
+            para: p.para,
+            name_en: p.name_en || (reg && reg.name_en) || p.name || ('Para ' + p.para),
+            name: p.name || (reg && reg.name_en) || ('Para ' + p.para),
+            name_ur: p.name_ur || (reg && reg.name_ur) || '',
+            name_ar: p.name_ar || (reg && reg.name_ar) || '',
+            page_start: p.page_start,
+            page_end: p.page_end,
+            total_pages: p.total_pages
+          };
+        });
+      }
+      return (typeof QURAN_PARAS_INFO !== 'undefined' && Array.isArray(QURAN_PARAS_INFO)) ? QURAN_PARAS_INFO : QURAN_PARAS_LIST;
+    }
+
     function onTeacherTafseerLanguageChanged(lang) {
       const allBooks = getTeacherAllBooks();
       const currentBookId = document.getElementById('attCourseBookSelect')?.value;
@@ -5207,10 +5234,15 @@ font-family: var(--font-num) !important;
         : (book?.paras_data?.[String(pNum)] || []);
 
       const opts = [];
+      // Option VALUES stay para-relative (the saved record's `page`
+      // keeps its exact meaning); LABELS show the ORIGINAL (printed)
+      // page number via the shared OrigPages helper.
+      const _origFor = (rel) => (window.LessonHistory ? window.LessonHistory.origPageFor(book, pNum, rel) : null);
       if (paraPages && paraPages.length > 0) {
         // Real uploaded pages for this Juz!
         for (let i = 1; i <= paraPages.length; i++) {
-          opts.push(`<option value="${i}">Page ${i} (Para ${pNum})</option>`);
+          const orig = _origFor(i);
+          opts.push(`<option value="${i}">Page ${orig !== null && orig !== undefined ? orig : i} (Para ${pNum})</option>`);
         }
       } else {
         // Fallback for standard 16-line Mushaf
@@ -5223,7 +5255,8 @@ font-family: var(--font-num) !important;
         }
         for (let i = pStart; i <= pEnd; i++) {
           const offset = i - pStart + 1;
-          opts.push(`<option value="${offset}">Page ${offset} (Para ${pNum} &bull; Overall Pg ${i})</option>`);
+          const orig = _origFor(offset);
+          opts.push(`<option value="${offset}">Page ${orig !== null && orig !== undefined ? orig : i} (Para ${pNum})</option>`);
         }
       }
 
@@ -5271,7 +5304,7 @@ font-family: var(--font-num) !important;
         if (paraContainer) paraContainer.classList.remove('hidden');
         if (paraLabel) paraLabel.innerHTML = '<i class="fa-solid fa-scroll text-brandEmerald"></i> Select Tafseer Para / Juz (1 - 30) *:';
         if (paraSelect) {
-          const parasList = (typeof QURAN_PARAS_INFO !== 'undefined' && Array.isArray(QURAN_PARAS_INFO)) ? QURAN_PARAS_INFO : (book.paras || QURAN_PARAS_LIST);
+          const parasList = teacherParasListFor(book);
           paraSelect.innerHTML = parasList.map(p => `
             <option value="${p.para}">Para ${p.para}: ${p.name_en || p.name || ('Juz ' + p.para)} (${p.name_ur || p.name_ar || ''})</option>
           `).join('');
@@ -5285,7 +5318,7 @@ font-family: var(--font-num) !important;
         if (paraContainer) paraContainer.classList.remove('hidden');
         if (paraLabel) paraLabel.innerHTML = '<i class="fa-solid fa-quran text-brandEmerald"></i> Select Quran Para / Juz (1 - 30) *:';
         if (paraSelect) {
-          const parasList = (typeof QURAN_PARAS_INFO !== 'undefined' && Array.isArray(QURAN_PARAS_INFO)) ? QURAN_PARAS_INFO : (book.paras || QURAN_PARAS_LIST);
+          const parasList = teacherParasListFor(book);
           paraSelect.innerHTML = parasList.map(p => `
             <option value="${p.para}">Para ${p.para}: ${p.name_en || p.name || ('Juz ' + p.para)} (${p.name_ur || p.name_ar || ''})</option>
           `).join('');
@@ -5993,6 +6026,11 @@ font-family: var(--font-num) !important;
             language: selectedLanguage,
             para: selectedPara,
             page: page,
+            // Additive (2026-11-06): the ORIGINAL (printed) page number
+            // shown in the dropdown, stored alongside — `page` above
+            // keeps its exact para-relative meaning and the resolver
+            // contract is untouched. Null for flat books / unanchored.
+            orig_page: (selectedPara !== null && window.LessonHistory) ? window.LessonHistory.origPageFor(book, selectedPara, page) : null,
             line_range: line_range,
             status: sabaq_result,
             rating: rating,
@@ -6113,9 +6151,11 @@ font-family: var(--font-num) !important;
           const matchP = book.paras.find(pr => CURRENT_READER_PAGE >= pr.page_start && CURRENT_READER_PAGE <= pr.page_end);
           if (matchP) {
             CURRENT_READER_PARA = matchP.para;
-            if (book.paras_data && book.paras_data[matchP.para]) {
-              CURRENT_READER_PAGE = Math.max(1, CURRENT_READER_PAGE - matchP.page_start + 1);
-            }
+            // Convert absolute page to para-relative page via
+            // book.paras (same fix as js/curriculum.js: the old
+            // paras_data gate left paras-only books holding the
+            // GLOBAL number as the para-relative page).
+            CURRENT_READER_PAGE = Math.max(1, CURRENT_READER_PAGE - matchP.page_start + 1);
           } else {
             CURRENT_READER_PARA = 1;
           }
@@ -6229,10 +6269,19 @@ font-family: var(--font-num) !important;
 
       CURRENT_READER_PAGE = Math.max(1, Math.min(maxPages, CURRENT_READER_PAGE));
 
+      // Para-based books show the ORIGINAL (printed) page number via
+      // the shared OrigPages helper when it resolves (same rule as
+      // js/curriculum.js); otherwise the para-relative label stays.
+      const _trOrigApi = window.LessonHistory || null;
+      const _trOrigNow = (isParaBased && _trOrigApi) ? _trOrigApi.origPageFor(book, CURRENT_READER_PARA, CURRENT_READER_PAGE) : null;
+      const _trOrigLast = (isParaBased && _trOrigApi) ? _trOrigApi.lastOrigPageFor(book) : null;
+      const _trShowOrig = _trOrigNow !== null && _trOrigNow !== undefined && _trOrigLast !== null && _trOrigLast !== undefined;
       const ind = document.getElementById('readerPageIndicator');
       if (ind) {
         if (isParaBased) {
-          ind.innerText = `Para ${CURRENT_READER_PARA} • Page ${CURRENT_READER_PAGE} of ${maxPages}`;
+          ind.innerText = _trShowOrig
+            ? `Para ${CURRENT_READER_PARA} • Page ${_trOrigNow} of ${_trOrigLast}`
+            : `Para ${CURRENT_READER_PARA} • Page ${CURRENT_READER_PAGE} of ${maxPages}`;
         } else {
           ind.innerText = `Page ${CURRENT_READER_PAGE} of ${maxPages}`;
         }
@@ -6240,7 +6289,7 @@ font-family: var(--font-num) !important;
       const indTop = document.getElementById('readerPageIndicatorTop');
       if (indTop) {
         if (isParaBased) {
-          indTop.innerText = `Juz ${CURRENT_READER_PARA} • P${CURRENT_READER_PAGE}`;
+          indTop.innerText = _trShowOrig ? `Juz ${CURRENT_READER_PARA} • P${_trOrigNow}` : `Juz ${CURRENT_READER_PARA} • P${CURRENT_READER_PAGE}`;
         } else {
           indTop.innerText = `${CURRENT_READER_PAGE} / ${maxPages}`;
         }
@@ -7842,6 +7891,7 @@ font-family: var(--font-num) !important;
       // Scheduled durations from the teacher's own schedules (labelled).
       const schedById = {};
       (ALL_TEACHER_SCHEDULES || []).forEach(sc => { schedById[String(sc.id)] = sc; });
+      const _lhBooks = (typeof getTeacherAllBooks === 'function') ? getTeacherAllBooks() : [];
       const cards = [];
       for (let _lhCardIdx = 0; _lhCardIdx < visible.length; _lhCardIdx++) {
         const e = visible[_lhCardIdx];
@@ -7859,7 +7909,14 @@ font-family: var(--font-num) !important;
         }
         const progress = [];
         if (e.para) progress.push(`Para ${escapeHtml(e.para)}`);
-        if (e.page !== null && e.page !== undefined) progress.push(`Page ${escapeHtml(e.page)}`);
+        if (e.page !== null && e.page !== undefined) {
+          // Para-book lessons display the ORIGINAL (printed) page:
+          // the record's stored orig_page wins, otherwise the stored
+          // para-relative page is converted at render time. Flat-book
+          // lessons are not convertible and render exactly as before.
+          const _lhOrig = (window.LessonHistory && e.para) ? window.LessonHistory.origPageForEntry(e, _lhBooks) : null;
+          progress.push(`Page ${escapeHtml(_lhOrig !== null && _lhOrig !== undefined ? _lhOrig : e.page)}`);
+        }
         if (e.pageReference) progress.push(`Ref: ${escapeHtml(e.pageReference)}`);
         if (e.lineRange) progress.push(escapeHtml(e.lineRange));
         const progressText = progress.join(' • ');
@@ -10065,9 +10122,13 @@ font-family: var(--font-num) !important;
       const paraPages = (typeof getBookParaPages === 'function') ? getBookParaPages(book, pNum) : [];
       let opts = [];
 
+      // Values stay para-relative; labels show the ORIGINAL page
+      // number (same rule as the end-class form).
+      const _advOrigFor = (rel) => (window.LessonHistory ? window.LessonHistory.origPageFor(book, pNum, rel) : null);
       if (paraPages && paraPages.length > 0) {
         for (let i = 1; i <= paraPages.length; i++) {
-          opts.push(`<option value="${i}">Page ${i} (of ${paraPages.length} in Para ${pNum})</option>`);
+          const orig = _advOrigFor(i);
+          opts.push(`<option value="${i}">Page ${orig !== null && orig !== undefined ? orig : i} (Para ${pNum})</option>`);
         }
       } else {
         // Fallback for standard 16-line Mushaf
@@ -10080,7 +10141,8 @@ font-family: var(--font-num) !important;
         }
         for (let i = pStart; i <= pEnd; i++) {
           const offset = i - pStart + 1;
-          opts.push(`<option value="${offset}">Page ${offset} (Para ${pNum} &bull; Overall Pg ${i})</option>`);
+          const orig = _advOrigFor(offset);
+          opts.push(`<option value="${offset}">Page ${orig !== null && orig !== undefined ? orig : i} (Para ${pNum})</option>`);
         }
       }
 
@@ -10124,7 +10186,7 @@ font-family: var(--font-num) !important;
         if (paraContainer) paraContainer.classList.remove('hidden');
         if (paraLabel) paraLabel.innerHTML = '<i class="fa-solid fa-scroll text-purple-700"></i> Select Tafseer Para / Juz (1 - 30) *:';
         if (paraSelect) {
-          const parasList = (typeof QURAN_PARAS_INFO !== 'undefined' && Array.isArray(QURAN_PARAS_INFO)) ? QURAN_PARAS_INFO : (book.paras || QURAN_PARAS_LIST);
+          const parasList = teacherParasListFor(book);
           paraSelect.innerHTML = parasList.map(p => `
             <option value="${p.para}">Para ${p.para}: ${p.name_en || p.name || ('Juz ' + p.para)} (${p.name_ur || p.name_ar || ''})</option>
           `).join('');
@@ -10138,7 +10200,7 @@ font-family: var(--font-num) !important;
         if (paraContainer) paraContainer.classList.remove('hidden');
         if (paraLabel) paraLabel.innerHTML = '<i class="fa-solid fa-quran text-purple-700"></i> Select Quran Para / Juz (1 - 30) *:';
         if (paraSelect) {
-          const parasList = (typeof QURAN_PARAS_INFO !== 'undefined' && Array.isArray(QURAN_PARAS_INFO)) ? QURAN_PARAS_INFO : (book.paras || QURAN_PARAS_LIST);
+          const parasList = teacherParasListFor(book);
           paraSelect.innerHTML = parasList.map(p => `
             <option value="${p.para}">Para ${p.para}: ${p.name_en || p.name || ('Juz ' + p.para)} (${p.name_ur || p.name_ar || ''})</option>
           `).join('');
@@ -10266,6 +10328,9 @@ font-family: var(--font-num) !important;
           language: selectedLanguage,
           para: selectedPara,
           page: isAdditionalCourse ? null : page,
+          // Additive (2026-11-06): ORIGINAL (printed) page number, as
+          // in the end-class writer — `page` stays para-relative.
+          orig_page: (!isAdditionalCourse && selectedPara !== null && book && window.LessonHistory) ? window.LessonHistory.origPageFor(book, selectedPara, page) : null,
           line_range: lineRange,
           status: sabaqResult,
           rating: rating,

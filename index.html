@@ -5384,6 +5384,11 @@
           <!-- Populated dynamically with the book Paras -->
         </select>
         <p class="text-[10px] text-emerald-900/70 mt-1">You edit one Para at a time. Pages of the other Paras are not touched.</p>
+        <div class="mt-2 pt-2 border-t border-emerald-200 flex items-center gap-2 flex-wrap">
+          <label for="pageEditorOrigStart" class="font-bold text-emerald-950">Original page # of this Para's first page:</label>
+          <input type="number" id="pageEditorOrigStart" min="1" step="1" oninput="pageEditorOrigStartChanged(this.value)" class="w-24 p-2 bg-white border border-emerald-300 rounded-xl font-bold text-slate-800 text-xs focus:outline-brandEmerald">
+          <span class="text-[10px] text-emerald-900/70">The printed page number in the book itself. The page cards below are numbered from it, and teachers see these numbers.</span>
+        </div>
       </div>
 
       <div class="flex items-center justify-between gap-2 flex-wrap">

@@ -1454,8 +1454,22 @@ function _buildSelectedStudentWorkspaceHtml(family, student, famSchedules, famLo
                 const title = (window.LessonHistory && en) ? window.LessonHistory.entryTitle(en) : p.summaryTitle;
                 const progressBits = [];
                 if (en && en.para) progressBits.push(`Para ${en.para}`);
-                if (en && en.page !== null && en.page !== undefined) progressBits.push(`Page ${en.page}`);
-                else if (p.page) progressBits.push(String(p.page));
+                if (en && en.page !== null && en.page !== undefined) {
+                  // Display the ORIGINAL (printed) page for para-book
+                  // lessons (stored orig_page wins, else converted);
+                  // en.page itself stays para-relative for the
+                  // resolver-driven open-page action below.
+                  let _dispPage360 = en.page;
+                  if (window.LessonHistory && window.LessonHistory.origPageForEntry) {
+                    try {
+                      const _books360i = (typeof getAllAvailableBooks === 'function') ? getAllAvailableBooks() : [];
+                      const _o360i = window.LessonHistory.origPageForEntry(en, _books360i);
+                      if (_o360i !== null && _o360i !== undefined) _dispPage360 = _o360i;
+                    } catch (e) { /* keep the stored page display */ }
+                  }
+                  progressBits.push(`Page ${_dispPage360}`);
+                }
+                else if (p.page) progressBits.push('Page ' + String(p.displayPage || p.page));
                 if (en && en.pageReference) progressBits.push(`Ref: ${en.pageReference}`);
                 else if (p.pageReference) progressBits.push(`Ref: ${p.pageReference}`);
                 if (en && en.lineRange) progressBits.push(en.lineRange);
@@ -1741,7 +1755,24 @@ function _parseLessonDetails360(log) {
     const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
     if (parsed && typeof parsed === 'object') {
       const bookTitle = parsed.book_title || parsed.sabaq || parsed.course || 'Daily Quran Lesson';
-      const pageStr = parsed.page ? ` • Page ${parsed.page}` : '';
+      // Para-book lessons DISPLAY the ORIGINAL (printed) page: the
+      // payload's stored orig_page wins, otherwise the stored
+      // para-relative page is converted through the book's anchors at
+      // render time. The returned `page` below stays the STORED value —
+      // the resolver and open-page actions depend on it.
+      let displayPage = parsed.page || null;
+      if (parsed.page) {
+        if (parsed.orig_page) {
+          displayPage = parsed.orig_page;
+        } else if (parsed.para && parsed.book_id && typeof window !== 'undefined' && window.LessonHistory && window.LessonHistory.origPageForEntry) {
+          try {
+            const _books360 = (typeof getAllAvailableBooks === 'function') ? getAllAvailableBooks() : [];
+            const _o360 = window.LessonHistory.origPageForEntry({ bookId: parsed.book_id, para: parsed.para, page: parsed.page, raw: parsed }, _books360);
+            if (_o360 !== null && _o360 !== undefined) displayPage = _o360;
+          } catch (e) { /* keep the stored page display */ }
+        }
+      }
+      const pageStr = displayPage ? ` • Page ${displayPage}` : '';
       // Additional Course: page is null, so pageStr is already omitted;
       // surface the teacher-entered lesson name in the title instead, plus
       // the optional free-text reference when one was saved.
@@ -1751,6 +1782,7 @@ function _parseLessonDetails360(log) {
         hasLesson: true,
         bookTitle,
         page: parsed.page || '',
+        displayPage: displayPage || '',
         para: parsed.para || null,
         lineRange: parsed.line_range || '',
         assessment: parsed.status || parsed.result || 'Completed',

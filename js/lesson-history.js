@@ -419,6 +419,167 @@
     return first;
   }
 
+  // ==========================================================================
+  // Original (printed) page numbers for para-based books (2026-11-06).
+  // --------------------------------------------------------------------------
+  // Saved lesson records keep their exact semantics: `page` is
+  // PARA-RELATIVE and the resolver above is unchanged. What the student
+  // sees in the printed mushaf, however, is a continuous ORIGINAL page
+  // number. Each para entry in book.paras may carry an optional
+  // `orig_start` — the original (printed) page number of that para's
+  // FIRST page, anchored by the admin against the physical book (the
+  // stored R2 filenames are positional/para-relative and do NOT carry
+  // the printed number). When `orig_start` is absent it defaults to the
+  // para's existing global `page_start`, so un-anchored books behave
+  // exactly as "printed = global position" with zero migration.
+  // Conversion: original = orig_start + (para-relative page - 1).
+  // All lookups key off book.paras — NEVER the hardcoded registries
+  // (QURAN_PARAS_INFO / QURAN_PARAS_LIST / defaultParaRange), whose
+  // ranges match no real book. A para with no entry in book.paras
+  // converts to null and callers fall back to the stored page display.
+  // ==========================================================================
+  function origParaEntry(book, paraNum) {
+    if (!book || !Array.isArray(book.paras)) return null;
+    var p = Number(paraNum);
+    if (!Number.isFinite(p)) return null;
+    for (var i = 0; i < book.paras.length; i++) {
+      if (book.paras[i] && Number(book.paras[i].para) === p) return book.paras[i];
+    }
+    return null;
+  }
+
+  function origPositiveOrNull(v) {
+    var n = Number(v);
+    return Number.isFinite(n) && n > 0 ? n : null;
+  }
+
+  // Length of one para: the paras_data slice is authoritative where it
+  // exists, then the entry's own total_pages, then its global range.
+  function origParaLength(book, paraNum) {
+    var p = Number(paraNum);
+    if (book && book.paras_data) {
+      if (Array.isArray(book.paras_data[p])) return book.paras_data[p].length;
+      if (Array.isArray(book.paras_data[String(p)])) return book.paras_data[String(p)].length;
+    }
+    var entry = origParaEntry(book, paraNum);
+    if (!entry) return null;
+    var total = origPositiveOrNull(entry.total_pages);
+    if (total !== null) return total;
+    var start = origPositiveOrNull(entry.page_start);
+    var end = origPositiveOrNull(entry.page_end);
+    if (start !== null && end !== null && end >= start) return end - start + 1;
+    return null;
+  }
+
+  // The original page number of a para's first page: the stored anchor
+  // when present, else the para's global page_start (the default).
+  function origStartFor(book, paraNum) {
+    var entry = origParaEntry(book, paraNum);
+    if (!entry) return null;
+    var anchored = origPositiveOrNull(entry.orig_start);
+    if (anchored !== null) return anchored;
+    return origPositiveOrNull(entry.page_start);
+  }
+
+  // [firstOriginal, lastOriginal] for one para, or null when either end
+  // cannot be determined from book.paras.
+  function origRangeFor(book, paraNum) {
+    var start = origStartFor(book, paraNum);
+    var len = origParaLength(book, paraNum);
+    if (start === null || len === null) return null;
+    return [start, start + len - 1];
+  }
+
+  // Para-relative page -> original page number (null when out of the
+  // para's original range or not convertible).
+  function origPageFor(book, paraNum, relPage) {
+    var rel = Number(relPage);
+    if (!Number.isFinite(rel) || rel < 1) return null;
+    var range = origRangeFor(book, paraNum);
+    if (!range) return null;
+    var orig = range[0] + rel - 1;
+    return orig <= range[1] ? orig : null;
+  }
+
+  // Original page number -> para-relative page (null when the original
+  // number lies outside this para's original range).
+  function relPageForOrig(book, paraNum, orig) {
+    var o = Number(orig);
+    if (!Number.isFinite(o)) return null;
+    var range = origRangeFor(book, paraNum);
+    if (!range) return null;
+    if (o < range[0] || o > range[1]) return null;
+    return o - range[0] + 1;
+  }
+
+  // The book's last original page number (the "of N" total readers
+  // show): the greatest original range end across book.paras.
+  function lastOrigPageFor(book) {
+    if (!book || !Array.isArray(book.paras) || book.paras.length === 0) return null;
+    var last = null;
+    for (var i = 0; i < book.paras.length; i++) {
+      var range = origRangeFor(book, book.paras[i] && book.paras[i].para);
+      if (range && (last === null || range[1] > last)) last = range[1];
+    }
+    return last;
+  }
+
+  // The orig_page a record itself stored, if any. New teacher writers
+  // save `orig_page` additively in the lesson_notes payload; it may sit
+  // on the entry (origPage / orig_page), on entry.raw as the payload
+  // object or the notes string, or on the raw attendance row
+  // ({ lesson_notes }). Returns null when the record predates the field.
+  function storedOrigPageOf(entry) {
+    if (!entry || typeof entry !== 'object') return null;
+    var direct = toNumOrNull(entry.origPage != null ? entry.origPage : entry.orig_page);
+    if (direct !== null) return direct;
+    var raw = entry.raw;
+    for (var depth = 0; depth < 3 && raw !== null && raw !== undefined; depth++) {
+      if (typeof raw === 'string') {
+        try { raw = JSON.parse(raw); } catch (e) { return null; }
+        continue;
+      }
+      if (typeof raw === 'object') {
+        var v = toNumOrNull(raw.orig_page != null ? raw.orig_page : raw.origPage);
+        if (v !== null) return v;
+        raw = raw.lesson_notes;
+        continue;
+      }
+      return null;
+    }
+    return null;
+  }
+
+  // The original page number a history entry should DISPLAY: the
+  // record's own stored orig_page when present, otherwise the number
+  // converted from its stored (book, para, para-relative page) through
+  // the book's anchors at render time. Null means "not convertible —
+  // show the stored page as before" (flat books, missing book/para).
+  function origPageForEntry(entry, availableBooks) {
+    if (!entry) return null;
+    var stored = storedOrigPageOf(entry);
+    if (stored !== null) return stored;
+    var page = toNumOrNull(entry.page);
+    var para = toNumOrNull(entry.para);
+    if (page === null || para === null || !entry.bookId) return null;
+    var books = Array.isArray(availableBooks) ? availableBooks : [];
+    var book = null;
+    for (var i = 0; i < books.length; i++) {
+      if (books[i] && books[i].id === entry.bookId) { book = books[i]; break; }
+    }
+    if (!book) return null;
+    return origPageFor(book, para, page);
+  }
+
+  var origPagesApi = {
+    origStartFor: origStartFor,
+    origRangeFor: origRangeFor,
+    origPageFor: origPageFor,
+    relPageForOrig: relPageForOrig,
+    lastOrigPageFor: lastOrigPageFor,
+    origPageForEntry: origPageForEntry
+  };
+
   // Human title for an entry: course/lesson, never a fallback book.
   function entryTitle(entry) {
     if (!entry) return '';
@@ -524,6 +685,12 @@
     formatActualDuration: formatActualDuration,
     resolveLessonPage: resolveLessonPage,
     resolveLessonPageWithRefresh: resolveLessonPageWithRefresh,
+    origStartFor: origStartFor,
+    origRangeFor: origRangeFor,
+    origPageFor: origPageFor,
+    relPageForOrig: relPageForOrig,
+    lastOrigPageFor: lastOrigPageFor,
+    origPageForEntry: origPageForEntry,
     lessonPageReasonMessage: lessonPageReasonMessage,
     entryTitle: entryTitle,
     getLessonHistory: getLessonHistory,
@@ -533,4 +700,5 @@
 
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   global.LessonHistory = api;
+  global.OrigPages = origPagesApi;
 })(typeof window !== 'undefined' ? window : globalThis);
