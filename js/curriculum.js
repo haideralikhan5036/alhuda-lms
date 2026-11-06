@@ -56,7 +56,8 @@
       return ok;
     }
 
-    async function syncCustomBooksToD1Chunked(books) {
+    async function syncCustomBooksToD1Chunked(books, options) {
+      const opts = options || {};
       _lastCatalogSyncError = '';
       try {
         if (typeof db === 'undefined' || !db || typeof db.from !== 'function') {
@@ -116,24 +117,58 @@
           }
         };
 
-        // Upsert catalog index first to immediately update library across all portals
-        _checkUpsert(await db.from('system_settings').upsert({
-          id: 'SYS-CUSTOM-BOOKS-INDEX',
-          key: 'alhuda_custom_books_index',
-          value: JSON.stringify(catalogIndex),
-          updated_at: new Date().toISOString()
-        }), 'the catalog index');
+        const _upsertCatalogIndex = async function () {
+          _checkUpsert(await db.from('system_settings').upsert({
+            id: 'SYS-CUSTOM-BOOKS-INDEX',
+            key: 'alhuda_custom_books_index',
+            value: JSON.stringify(catalogIndex),
+            updated_at: new Date().toISOString()
+          }), 'the catalog index');
+        };
+        const _upsertCatalogMirror = async function () {
+          _checkUpsert(await db.from('system_settings').upsert({
+            id: 'SYS-CUSTOM-BOOKS-ALL',
+            key: 'alhuda_custom_books',
+            value: JSON.stringify(catalogIndex),
+            updated_at: new Date().toISOString()
+          }), 'the catalog');
+        };
+        const _upsertAllPages = async function () {
+          for (const row of rowsToUpsert) {
+            _checkUpsert(await db.from('system_settings').upsert(row), 'a book page');
+          }
+        };
 
-        _checkUpsert(await db.from('system_settings').upsert({
-          id: 'SYS-CUSTOM-BOOKS-ALL',
-          key: 'alhuda_custom_books',
-          value: JSON.stringify(catalogIndex),
-          updated_at: new Date().toISOString()
-        }), 'the catalog');
-
-        // Upsert individual book pages
-        for (const row of rowsToUpsert) {
-          _checkUpsert(await db.from('system_settings').upsert(row), 'a book page');
+        if (opts.pagesFirst) {
+          // Hardened order, used by the page editor's save path: write
+          // the BOOK_PAGE rows FIRST and the catalog index LAST, so a
+          // mid-save failure never leaves the index advertising pages
+          // that were not written (the failure shape behind the live
+          // MADANI QAIDA index/rows mismatch). When the edited book
+          // shrank, its surplus tail rows are deleted in between —
+          // filtered by `key`, the form the Worker manager guard
+          // accepts for system_settings deletes, so manager saves keep
+          // working with no Worker change.
+          await _upsertAllPages();
+          if (opts.pruneBookId) {
+            const pruneFrom = Number(opts.pruneFromIndex) || 0;
+            const pruneTo = Number(opts.pruneToIndex) || 0;
+            for (let i = pruneFrom; i < pruneTo; i++) {
+              const pageKey = `BOOK_PAGE_${opts.pruneBookId}_${i}`;
+              const delRes = await db.from('system_settings').delete().eq('key', pageKey);
+              if (delRes && delRes.error) {
+                throw new Error((delRes.error.message || delRes.error) + ` (while removing surplus page ${i + 1})`);
+              }
+            }
+          }
+          await _upsertCatalogIndex();
+          await _upsertCatalogMirror();
+        } else {
+          // Upsert catalog index first to immediately update library across all portals
+          await _upsertCatalogIndex();
+          await _upsertCatalogMirror();
+          // Upsert individual book pages
+          await _upsertAllPages();
         }
         return true;
       } catch (e) {
@@ -406,9 +441,21 @@ if (mergedDeleted.length > 0) {
         essentials: { badge: 'bg-teal-50 text-teal-800 border-teal-200', icon: 'fa-solid fa-hands-praying', iconColor: 'text-teal-600', grad: 'from-teal-900 via-emerald-950 to-slate-900' }
       };
 
+      // Custom (uploaded) books carry D1 page rows and get the page
+      // editor entry; built-ins have no stored pages to manage. The
+      // getCustomBooks lookup is typeof-guarded so this renderer also
+      // works in contexts where only it was loaded.
+      let customIdSet = new Set();
+      try {
+        if (typeof getCustomBooks === 'function') {
+          customIdSet = new Set(getCustomBooks().map(function (b) { return String(b && b.id); }));
+        }
+      } catch (e) { /* customIdSet stays empty; the id prefix below still applies */ }
+
       container.innerHTML = books.map((book) => {
         const catKey = book.category || 'qaida';
         const style = categoryStyles[catKey] || categoryStyles.qaida;
+        const isCustomBook = customIdSet.has(String(book.id)) || String(book.id).indexOf('custom-') === 0;
         const totalPages = book.total_pages || (book.pages ? book.pages.length : (book.paras ? 548 : 32));
         const totalIndicator = book.total_paras ? `${book.total_paras} Paras` :
                                book.total_surahs ? `${book.total_surahs} Surahs` :
@@ -492,6 +539,15 @@ if (mergedDeleted.length > 0) {
                 <i class="fa-solid fa-pen-to-square text-emerald-600"></i>
                 <span class="hidden sm:inline">Edit</span>
               </button>
+
+              <!-- Page Editor: custom (uploaded) books only — built-ins
+                   have no D1 page rows to add, remove or reorder -->
+              ${isCustomBook ? `
+                <button onclick="openPageEditor('${book.id}')" class="px-2.5 py-2.5 bg-white hover:bg-emerald-50 text-slate-700 hover:text-emerald-800 border border-slate-200 rounded-xl text-xs font-bold transition flex items-center gap-1 shadow-2xs" title="Manage Pages (Add / Remove / Reorder)">
+                  <i class="fa-solid fa-layer-group text-emerald-600"></i>
+                  <span class="hidden sm:inline">Pages</span>
+                </button>
+              ` : ''}
 
               <!-- Secondary: Delete Book (not offered for allowlisted
                    built-ins: they have no D1 record to remove, so Delete
@@ -2376,6 +2432,484 @@ if (mergedDeleted.length > 0) {
       }
     }
 
+    // ============================================================
+    // COURSE MATERIAL PAGE EDITOR (custom / uploaded books only)
+    // ------------------------------------------------------------
+    // Staged page management for ONE book (flat) or ONE para of a
+    // para-based book: add pages (at the end, or inserted before a
+    // chosen page), remove pages (single, or multi-select with a
+    // review confirmation), reorder (move up / down). NOTHING reaches
+    // localStorage or D1 until Save Changes. The save writes the full
+    // desired page state through the chunked catalog sync in its
+    // hardened order (BOOK_PAGE rows first, surplus tail rows deleted
+    // by key, catalog index LAST), so a failed save keeps the staged
+    // changes in the editor and a retry converges.
+    //
+    // Lesson records store only book_id + page NUMBER, so any staged
+    // change that is not a pure append at the end (a removal, an
+    // insert, a reorder) first asks for an explicit confirmation:
+    // shifted page numbers change which page old lesson records open.
+    // ============================================================
+    let PAGE_EDITOR = null;
+
+    function pageEditorEsc(s) {
+      return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+
+    function pageEditorParaList(book) {
+      const seen = new Set();
+      if (book && Array.isArray(book.paras)) {
+        book.paras.forEach(function (p) { if (p && p.para != null && Number(p.para)) seen.add(Number(p.para)); });
+      }
+      if (book && book.paras_data && typeof book.paras_data === 'object') {
+        Object.keys(book.paras_data).forEach(function (k) { if (Number(k)) seen.add(Number(k)); });
+      }
+      return Array.from(seen).sort(function (a, b) { return a - b; });
+    }
+
+    function pageEditorIsParaBook(book) {
+      if (!book) return false;
+      if (pageEditorParaList(book).length === 0) return false;
+      return book.category === 'quran' || book.category === 'tafseer' || !!book.paras_data
+        || (Array.isArray(book.paras) && book.paras.length > 0);
+    }
+
+    // The book's real page values, in order. Hydration preserves page
+    // positions with holes (empty slots) for BOOK_PAGE rows missing in
+    // D1; the editor works on the real rows only, so holes are
+    // compacted out of the working list. (For the one live book whose
+    // index advertises more pages than it has rows, a save therefore
+    // also settles its advertised total to the real count.)
+    function pageEditorRealPages(pages) {
+      return (Array.isArray(pages) ? pages : []).filter(function (v) { return typeof v === 'string' && v.length > 0; });
+    }
+
+    function pageEditorParaPagesOf(book, paraNum) {
+      if (typeof getBookParaPages === 'function') {
+        return pageEditorRealPages(getBookParaPages(book, paraNum));
+      }
+      return [];
+    }
+
+    function openPageEditor(bookId) {
+      const customBooks = getCustomBooks();
+      const book = customBooks.find(function (b) { return b && b.id === bookId; });
+      if (!book) {
+        lmsNotify('This material has no uploaded pages to manage. The page editor is available for uploaded (custom) course materials only.', { type: 'error' });
+        return false;
+      }
+      const isPara = pageEditorIsParaBook(book);
+      const paraList = isPara ? pageEditorParaList(book) : [];
+      const origParaPages = {};
+      paraList.forEach(function (p) { origParaPages[String(p)] = pageEditorParaPagesOf(book, p); });
+      const origFlat = pageEditorRealPages(book.pages);
+      if (!isPara && origFlat.length === 0) {
+        lmsNotify("This book's pages are still loading from the server. Please wait a moment and try again.", { type: 'error' });
+        return false;
+      }
+      PAGE_EDITOR = {
+        bookId: book.id,
+        title: book.title || 'Course Material',
+        isPara: isPara,
+        paraList: paraList,
+        para: paraList.length ? paraList[0] : null,
+        origParaPages: origParaPages,
+        origFlat: origFlat,
+        oldRowCount: Math.max(origFlat.length, Number(book.total_pages) || 0),
+        original: [],
+        staged: [],
+        selected: {},
+        uploadErrors: [],
+        saving: false
+      };
+      pageEditorLoadWorkingList(PAGE_EDITOR.para);
+
+      const titleEl = document.getElementById('pageEditorBookTitle');
+      if (titleEl) titleEl.innerText = PAGE_EDITOR.title;
+      const paraRow = document.getElementById('pageEditorParaRow');
+      if (paraRow) paraRow.classList.toggle('hidden', !isPara);
+      const paraSel = document.getElementById('pageEditorParaSelect');
+      if (paraSel && isPara) {
+        paraSel.innerHTML = paraList.map(function (p) {
+          const meta = (Array.isArray(book.paras) ? book.paras.find(function (x) { return Number(x.para) === p; }) : null);
+          const count = (origParaPages[String(p)] || []).length;
+          return '<option value="' + p + '">Para ' + p + (meta && meta.name_en ? ': ' + pageEditorEsc(meta.name_en) : '') + ' (' + count + ' pages)</option>';
+        }).join('');
+        paraSel.value = String(PAGE_EDITOR.para);
+      }
+      renderPageEditor();
+      openModal('modalPageEditor');
+      return true;
+    }
+
+    function pageEditorLoadWorkingList(para) {
+      if (!PAGE_EDITOR) return;
+      const src = PAGE_EDITOR.isPara ? (PAGE_EDITOR.origParaPages[String(para)] || []) : PAGE_EDITOR.origFlat;
+      PAGE_EDITOR.original = src.slice();
+      PAGE_EDITOR.staged = src.map(function (v) { return { value: v, isNew: false }; });
+      PAGE_EDITOR.selected = {};
+    }
+
+    function renderPageEditor() {
+      if (!PAGE_EDITOR) return;
+      const st = PAGE_EDITOR;
+      const countEl = document.getElementById('pageEditorCount');
+      if (countEl) {
+        countEl.innerText = st.staged.length + ' pages' + (st.isPara ? ' in Para ' + st.para : '') + ' (was ' + st.original.length + ')';
+      }
+      const pendingEl = document.getElementById('pageEditorPending');
+      if (pendingEl) {
+        const dirty = pageEditorIsDirty();
+        pendingEl.innerText = dirty ? '● Unsaved changes' : '';
+        pendingEl.className = dirty ? 'font-bold text-amber-600 text-[11px]' : 'font-bold text-slate-400 text-[11px]';
+      }
+      const errBox = document.getElementById('pageEditorUploadErrors');
+      if (errBox) {
+        if (st.uploadErrors.length > 0) {
+          errBox.classList.remove('hidden');
+          errBox.innerHTML = '<span>⚠️ These files failed to upload and were NOT added: <b>'
+            + st.uploadErrors.map(pageEditorEsc).join(', ')
+            + '</b>. Saving is blocked until you dismiss this notice.</span>'
+            + ' <button type="button" onclick="pageEditorDismissUploadErrors()" class="underline font-black whitespace-nowrap">Dismiss</button>';
+        } else {
+          errBox.classList.add('hidden');
+          errBox.innerHTML = '';
+        }
+      }
+      const listEl = document.getElementById('pageEditorList');
+      if (!listEl) return;
+      if (st.staged.length === 0) {
+        listEl.innerHTML = '<div class="col-span-full py-8 text-center text-xs text-slate-500">No pages in this list yet. Add page scans below.</div>';
+        return;
+      }
+      listEl.innerHTML = st.staged.map(function (entry, i) {
+        const checked = st.selected[i] ? 'checked' : '';
+        const upDis = i === 0 ? 'disabled' : '';
+        const downDis = i === st.staged.length - 1 ? 'disabled' : '';
+        return '<div class="border border-slate-200 rounded-xl p-2 flex flex-col gap-1.5 bg-white shadow-2xs">'
+          + '<div class="relative aspect-[3/4] bg-slate-100 rounded-lg overflow-hidden flex items-center justify-center">'
+          + '<img data-editor-thumb-idx="' + i + '" alt="Page ' + (i + 1) + '" class="object-contain w-full h-full">'
+          + (entry.isNew ? '<span class="absolute top-1 left-1 px-1.5 py-0.5 rounded text-[9px] font-black bg-emerald-600 text-white">NEW</span>' : '')
+          + '</div>'
+          + '<label class="flex items-center gap-1.5 text-[11px] font-bold text-slate-700 cursor-pointer">'
+          + '<input type="checkbox" ' + checked + ' onchange="pageEditorToggleSelect(' + i + ', this.checked)"> Page ' + (i + 1)
+          + '</label>'
+          + '<div class="flex items-center gap-1">'
+          + '<button type="button" ' + upDis + ' onclick="pageEditorMove(' + i + ', -1)" class="flex-1 py-1 bg-slate-100 hover:bg-slate-200 disabled:opacity-40 rounded-lg text-[11px] font-black" title="Move page up">↑</button>'
+          + '<button type="button" ' + downDis + ' onclick="pageEditorMove(' + i + ', 1)" class="flex-1 py-1 bg-slate-100 hover:bg-slate-200 disabled:opacity-40 rounded-lg text-[11px] font-black" title="Move page down">↓</button>'
+          + '<button type="button" onclick="pageEditorRemoveOne(' + i + ')" class="flex-1 py-1 bg-rose-50 hover:bg-rose-100 text-rose-700 rounded-lg text-[11px] font-black" title="Remove this page from the list">✕</button>'
+          + '</div>'
+          + '</div>';
+      }).join('');
+      const imgs = (typeof listEl.querySelectorAll === 'function') ? listEl.querySelectorAll('img[data-editor-thumb-idx]') : [];
+      Array.prototype.forEach.call(imgs, function (img) {
+        const idx = Number(img.getAttribute('data-editor-thumb-idx'));
+        if (st.staged[idx]) loadPageEditorThumb(img, st.staged[idx].value);
+      });
+    }
+
+    // Page thumbnails: storage URLs need the portal's Bearer token,
+    // which a plain img tag cannot send — same auth-fetch pattern as
+    // the reader's loadReaderPageImage, minus its retry machinery.
+    function loadPageEditorThumb(img, pageUrl) {
+      if (!img || !pageUrl) return;
+      if (pageUrl.indexOf('data:') === 0 || pageUrl.indexOf('blob:') === 0) {
+        img.src = pageUrl;
+        return;
+      }
+      if (typeof fetch !== 'function') return;
+      const headers = (typeof window !== 'undefined' && typeof window.getLmsAuthHeaders === 'function') ? window.getLmsAuthHeaders() : {};
+      fetch(pageUrl, { headers: headers })
+        .then(function (res) { if (!res.ok) throw new Error('HTTP ' + res.status); return res.blob(); })
+        .then(function (blob) { img.src = URL.createObjectURL(blob); })
+        .catch(function () { img.alt = 'Preview unavailable'; });
+    }
+
+    async function pageEditorSelectPara(paraNum) {
+      if (!PAGE_EDITOR || !PAGE_EDITOR.isPara) return;
+      const p = Number(paraNum) || PAGE_EDITOR.para;
+      if (p === PAGE_EDITOR.para) return;
+      if (pageEditorIsDirty()) {
+        const ok = await lmsConfirm('You have unsaved changes for Para ' + PAGE_EDITOR.para + '. Switching Para will discard them. Continue?');
+        if (!ok) {
+          const sel = document.getElementById('pageEditorParaSelect');
+          if (sel) sel.value = String(PAGE_EDITOR.para);
+          return;
+        }
+      }
+      PAGE_EDITOR.para = p;
+      PAGE_EDITOR.uploadErrors = [];
+      pageEditorLoadWorkingList(p);
+      renderPageEditor();
+    }
+
+    function pageEditorAddFiles(input) {
+      if (!PAGE_EDITOR || !input || !input.files || input.files.length === 0) return undefined;
+      const modeEl = document.getElementById('pageEditorInsertMode');
+      const beforeEl = document.getElementById('pageEditorInsertBefore');
+      let insertAt = PAGE_EDITOR.staged.length;
+      if (modeEl && modeEl.value === 'before') {
+        const n = Number(beforeEl && beforeEl.value) || (PAGE_EDITOR.staged.length + 1);
+        insertAt = Math.max(0, Math.min(PAGE_EDITOR.staged.length, n - 1));
+      }
+      const files = Array.from(input.files);
+      try { input.value = ''; } catch (e) {}
+      return pageEditorStageFiles(files, insertAt);
+    }
+
+    // Uploads run through the SAME pipeline as book creation:
+    // compressImageToWebP (client-side WebP, which also rejects files
+    // the browser cannot decode as images) then
+    // window.uploadToCloudflareR2 -> POST /api/storage (server-side
+    // image type check + 10 MB cap). One difference, by design: the
+    // upload helper silently falls back to returning the data URI when
+    // storage fails — a data-URI page would bloat D1 and every portal
+    // hydrate, so the editor treats a data: return as a FAILED upload,
+    // names the file, and blocks saving until the notice is dismissed.
+    async function pageEditorUploadPage(file, batchIndex) {
+      const dataUrl = await compressImageToWebP(file);
+      if (typeof window === 'undefined' || typeof window.uploadToCloudflareR2 !== 'function') {
+        throw new Error('page upload is unavailable');
+      }
+      const st = PAGE_EDITOR;
+      const safePrefix = `${(st.title || 'book').replace(/[^a-zA-Z0-9_-]/g, '_')}_${st.isPara ? 'p' + st.para + '_' : ''}page_${(batchIndex || 0) + 1}`;
+      const url = await window.uploadToCloudflareR2(dataUrl, 'course_material', `${safePrefix}.webp`);
+      if (!url || String(url).indexOf('data:') === 0) {
+        throw new Error('page upload failed');
+      }
+      return String(url);
+    }
+
+    async function pageEditorStageFiles(files, insertAt) {
+      if (!PAGE_EDITOR) return false;
+      const st = PAGE_EDITOR;
+      const at = Math.max(0, Math.min(st.staged.length, (insertAt == null ? st.staged.length : insertAt)));
+      const added = [];
+      const failedNames = [];
+      for (let i = 0; i < (files || []).length; i++) {
+        const file = files[i];
+        try {
+          const url = await pageEditorUploadPage(file, i);
+          added.push({ value: url, isNew: true });
+        } catch (e) {
+          failedNames.push((file && file.name) || ('file ' + (i + 1)));
+        }
+      }
+      if (added.length > 0) {
+        st.staged.splice.apply(st.staged, [at, 0].concat(added));
+      }
+      if (failedNames.length > 0) {
+        st.uploadErrors = st.uploadErrors.concat(failedNames);
+        lmsNotify('⚠️ These files could NOT be uploaded and were not added:\n\n' + failedNames.join('\n') + '\n\nSaving is blocked until you dismiss this notice in the page editor.', { type: 'error' });
+      }
+      renderPageEditor();
+      return failedNames.length === 0;
+    }
+
+    function pageEditorToggleSelect(idx, checked) {
+      if (!PAGE_EDITOR) return;
+      if (checked) PAGE_EDITOR.selected[idx] = true;
+      else delete PAGE_EDITOR.selected[idx];
+    }
+
+    function pageEditorRemoveOne(idx) {
+      if (!PAGE_EDITOR) return;
+      if (idx < 0 || idx >= PAGE_EDITOR.staged.length) return;
+      PAGE_EDITOR.staged.splice(idx, 1);
+      PAGE_EDITOR.selected = {};
+      renderPageEditor();
+    }
+
+    async function pageEditorRemoveSelected() {
+      if (!PAGE_EDITOR) return false;
+      const st = PAGE_EDITOR;
+      const idxs = Object.keys(st.selected)
+        .map(Number)
+        .filter(function (i) { return st.selected[i] && i >= 0 && i < st.staged.length; })
+        .sort(function (a, b) { return a - b; });
+      if (idxs.length === 0) {
+        lmsNotify('Select at least one page first (tick its checkbox), then press Remove Selected.');
+        return false;
+      }
+      const numbers = idxs.map(function (i) { return i + 1; });
+      const ok = await lmsConfirm('Remove ' + idxs.length + ' page(s) from the list?\n\nPages: ' + numbers.join(', ') + '\n\nThis is only staged — nothing is removed from the saved book until you press Save Changes.');
+      if (!ok) return false;
+      idxs.sort(function (a, b) { return b - a; }).forEach(function (i) { st.staged.splice(i, 1); });
+      st.selected = {};
+      renderPageEditor();
+      return true;
+    }
+
+    function pageEditorMove(idx, delta) {
+      if (!PAGE_EDITOR) return;
+      const st = PAGE_EDITOR;
+      const j = idx + delta;
+      if (idx < 0 || idx >= st.staged.length || j < 0 || j >= st.staged.length) return;
+      const tmp = st.staged[idx];
+      st.staged[idx] = st.staged[j];
+      st.staged[j] = tmp;
+      st.selected = {};
+      renderPageEditor();
+    }
+
+    function pageEditorDismissUploadErrors() {
+      if (!PAGE_EDITOR) return;
+      PAGE_EDITOR.uploadErrors = [];
+      renderPageEditor();
+    }
+
+    function pageEditorStagedValues() {
+      return PAGE_EDITOR ? PAGE_EDITOR.staged.map(function (e) { return e.value; }) : [];
+    }
+
+    function pageEditorIsDirty() {
+      if (!PAGE_EDITOR) return false;
+      const vals = pageEditorStagedValues();
+      const orig = PAGE_EDITOR.original;
+      if (vals.length !== orig.length) return true;
+      for (let i = 0; i < orig.length; i++) {
+        if (vals[i] !== orig[i]) return true;
+      }
+      return false;
+    }
+
+    // Structural = anything other than a pure append at the end: the
+    // staged list no longer starts with the exact original sequence.
+    // Only structural changes can shift what old lesson records open.
+    function pageEditorIsStructural() {
+      if (!PAGE_EDITOR || !pageEditorIsDirty()) return false;
+      const vals = pageEditorStagedValues();
+      const orig = PAGE_EDITOR.original;
+      if (vals.length < orig.length) return true;
+      for (let i = 0; i < orig.length; i++) {
+        if (vals[i] !== orig[i]) return true;
+      }
+      return false;
+    }
+
+    function pageEditorBuildUpdatedBook() {
+      const st = PAGE_EDITOR;
+      if (!st) return null;
+      const customBooks = getCustomBooks();
+      const idx = customBooks.findIndex(function (b) { return b && b.id === st.bookId; });
+      if (idx < 0) return null;
+      const books = customBooks.slice();
+      const book = JSON.parse(JSON.stringify(customBooks[idx]));
+      const stagedValues = pageEditorStagedValues();
+      let newFlatLen = 0;
+      if (!st.isPara) {
+        book.pages = stagedValues;
+        book.total_pages = stagedValues.length;
+        newFlatLen = stagedValues.length;
+      } else {
+        const slices = {};
+        st.paraList.forEach(function (p) {
+          slices[String(p)] = (Number(p) === Number(st.para)) ? stagedValues : (st.origParaPages[String(p)] || []);
+        });
+        if (book.paras_data && typeof book.paras_data === 'object') {
+          const pd = {};
+          Object.keys(book.paras_data).forEach(function (k) {
+            pd[k] = Array.isArray(book.paras_data[k]) ? book.paras_data[k].slice() : book.paras_data[k];
+          });
+          pd[String(st.para)] = stagedValues.slice();
+          book.paras_data = pd;
+        }
+        const oldParas = Array.isArray(book.paras) ? book.paras : [];
+        let running = 1;
+        const flat = [];
+        book.paras = st.paraList.map(function (p) {
+          const old = oldParas.find(function (x) { return Number(x.para) === Number(p); }) || {};
+          const slice = slices[String(p)] || [];
+          const registry = (typeof QURAN_PARAS_INFO !== 'undefined' && Array.isArray(QURAN_PARAS_INFO)) ? QURAN_PARAS_INFO[Number(p) - 1] : null;
+          const meta = {
+            para: Number(p),
+            name_en: old.name_en || (registry && registry.name_en) || ('Para ' + p),
+            name_ur: old.name_ur || (registry && registry.name_ur) || '',
+            page_start: running,
+            page_end: running + slice.length - 1,
+            total_pages: slice.length
+          };
+          running += slice.length;
+          flat.push.apply(flat, slice);
+          return meta;
+        });
+        book.pages = flat;
+        book.total_pages = flat.length;
+        newFlatLen = flat.length;
+      }
+      book.updated_at = new Date().toISOString();
+      books[idx] = book;
+      return { books: books, book: book, newFlatLen: newFlatLen, oldFlatLen: st.origFlat.length };
+    }
+
+    async function savePageEditor() {
+      if (!PAGE_EDITOR || PAGE_EDITOR.saving) return false;
+      const st = PAGE_EDITOR;
+      if (st.uploadErrors.length > 0) {
+        lmsNotify('⚠️ Saving is blocked: these files failed to upload and were not added:\n\n' + st.uploadErrors.join('\n') + '\n\nDismiss the notice in the page editor to save the remaining pages.', { type: 'error' });
+        return false;
+      }
+      if (!pageEditorIsDirty()) {
+        lmsNotify('No changes to save.');
+        return false;
+      }
+      if (pageEditorIsStructural()) {
+        const ok = await lmsConfirm('⚠️ Lesson history check\n\nPast lesson records open pages by their page NUMBER. Removing pages or changing their order changes which page those old records will open.\n\nContinue and save these page changes for "' + st.title + '"?');
+        if (!ok) return false;
+      }
+      const built = pageEditorBuildUpdatedBook();
+      if (!built) {
+        lmsNotify('This book could not be found in the local library copy. Please refresh the page and try again.', { type: 'error' });
+        return false;
+      }
+      st.saving = true;
+      const btn = document.getElementById('btnSavePageEditor');
+      if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Saving...';
+      }
+      try {
+        const cloudOk = await syncCustomBooksToD1Chunked(built.books, {
+          pagesFirst: true,
+          pruneBookId: st.bookId,
+          pruneFromIndex: built.newFlatLen,
+          pruneToIndex: Math.max(built.oldFlatLen, st.oldRowCount || 0)
+        });
+        if (!cloudOk) {
+          lmsNotify('⚠️ The page changes could NOT be saved.\n\n'
+            + (_lastCatalogSyncError ? 'Server said: ' + _lastCatalogSyncError + '\n\n' : '')
+            + 'Your staged changes are still in the editor — nothing was lost. Please check your connection and press Save Changes again.', { type: 'error' });
+          return false;
+        }
+        try {
+          localStorage.setItem('alhuda_custom_books', JSON.stringify(built.books));
+        } catch (e) {}
+        const savedTitle = st.title;
+        const savedCount = built.newFlatLen;
+        PAGE_EDITOR = null;
+        closeModal('modalPageEditor');
+        loadCurriculumLibrary(CURRENT_CURRICULUM_CATEGORY || 'all');
+        lmsNotify('✅ Pages saved for "' + savedTitle + '". The book now has ' + savedCount + ' pages.');
+        return true;
+      } finally {
+        if (PAGE_EDITOR) PAGE_EDITOR.saving = false;
+        const btn2 = document.getElementById('btnSavePageEditor');
+        if (btn2) {
+          btn2.disabled = false;
+          btn2.innerHTML = '<i class="fa-solid fa-floppy-disk"></i> Save Changes';
+        }
+      }
+    }
+
+    async function requestClosePageEditor() {
+      if (PAGE_EDITOR && pageEditorIsDirty()) {
+        const ok = await lmsConfirm('You have unsaved page changes. Close the editor and discard them?');
+        if (!ok) return;
+      }
+      PAGE_EDITOR = null;
+      closeModal('modalPageEditor');
+    }
+
     // ================================================================
     // Permanent course-book deletion (2026-11-06). A deleted CUSTOM book
     // is removed from D1 *and* R2: its stored page files (via the
@@ -2718,6 +3252,16 @@ if (mergedDeleted.length > 0) {
       window.openEditCustomBookModal = openEditCustomBookModal;
       window.handleEditBookAppendFiles = handleEditBookAppendFiles;
       window.handleUpdateCustomBook = handleUpdateCustomBook;
+      window.openPageEditor = openPageEditor;
+      window.pageEditorSelectPara = pageEditorSelectPara;
+      window.pageEditorAddFiles = pageEditorAddFiles;
+      window.pageEditorToggleSelect = pageEditorToggleSelect;
+      window.pageEditorRemoveOne = pageEditorRemoveOne;
+      window.pageEditorRemoveSelected = pageEditorRemoveSelected;
+      window.pageEditorMove = pageEditorMove;
+      window.pageEditorDismissUploadErrors = pageEditorDismissUploadErrors;
+      window.savePageEditor = savePageEditor;
+      window.requestClosePageEditor = requestClosePageEditor;
       window.openDigitalBookReader = openDigitalBookReader;
       window.openAdminSavedLessonPage = openAdminSavedLessonPage;
       window.hydrateCustomBooksFromCloudflareD1 = hydrateCustomBooksFromCloudflareD1;
