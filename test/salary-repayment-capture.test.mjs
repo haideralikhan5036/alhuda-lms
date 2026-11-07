@@ -4,10 +4,11 @@
 // validated plan fields, rejects bad plans server-side, keeps legacy
 // (plan-less) requests valid, and moves NO money in this phase.
 // Part F: executes the REAL teacher.html advance functions in a vm —
-// flag OFF reproduces today's exact submit payload; flag ON (harness
-// only; the shipped const is false) renders the plan section, drives
-// its dynamic fields, and puts the plan on the payload; the teacher
-// My Advance Requests list words the plan when present.
+// flag OFF reproduces today's exact submit payload; flag ON renders
+// the plan section, drives its dynamic fields, and puts the plan on
+// the payload; the teacher My Advance Requests list words the plan
+// when present. (Phase 2 shipped the const OFF; Phase 3 flipped the
+// shipped const ON — the harness still exercises both positions.)
 // Part A: executes the REAL js/leaves.js review-card renderer — a
 // planned request shows its plan; a plan-less one renders
 // byte-identically to before Phase 2.
@@ -102,10 +103,10 @@ await fakeDb.exec(`CREATE TABLE advance_requests (
   check('W setup: ALTER migration adds repayment_method + installment_amount to a v5 table',
     cols.includes('repayment_method') && cols.includes('installment_amount'), cols.join(','));
   const marker = fakeDb.q1("SELECT value FROM system_settings WHERE key = 'schema_version'");
-  check('W setup: schema marker is v6', marker && marker.value === '2026-11-07-v6', JSON.stringify(marker));
+  check('W setup: schema marker is v6', marker && marker.value === '2026-11-07-v7', JSON.stringify(marker));
   const h = await call('https://worker.test/api/health', { method: 'GET' });
   check('W setup: health reports plan-capture release + schema v6',
-    h.status === 200 && h.data && h.data.version === '2026-11-07-salary-plan-capture' && h.data.schema === '2026-11-07-v6', h.text.slice(0, 200));
+    h.status === 200 && h.data && h.data.version === '2026-11-07-advance-ledger' && h.data.schema === '2026-11-07-v7', h.text.slice(0, 200));
 }
 fakeDb.seed("INSERT INTO teachers (id, full_name, address, status) VALUES (?, ?, ?, ?)",
   'TCH-A', 'Teacher A', JSON.stringify({ salary_slips: {} }), 'Active');
@@ -328,9 +329,15 @@ function bootTeacherVm(flagOn) {
 }
 const runIn = (env, code) => vm.runInContext(code, env.sandbox);
 
-// Static gates: the shipped flag is OFF, the builder is only invoked
-// behind it, and the plan section exists nowhere in static markup.
-check('F static: shipped flag is OFF', TEACHER.includes('const ADVANCE_REPAYMENT_PLANS_ENABLED = false;'));
+// Static gates: the shipped flag is HELD OFF at this merge — Phase 3
+// turns plan capture live together with the ledger Worker release,
+// and the flag flips ON in the small follow-up PR that lands only
+// after the v7 Worker deploy is verified live (until then the live
+// Worker cannot store plan fields, and an old-rules approval of a
+// plan request would deduct the wrong way). The builder is only
+// invoked behind the flag, and the plan section exists nowhere in
+// static markup.
+check('F static: shipped flag is held OFF until the v7 Worker deploy is verified', TEACHER.includes('const ADVANCE_REPAYMENT_PLANS_ENABLED = false;'));
 check('F static: builder invoked only behind the flag',
   TEACHER.includes('if (ADVANCE_REPAYMENT_PLANS_ENABLED) buildAdvanceRepaymentPlanSection();'));
 check('F static: no plan section in static form markup', !TEACHER.includes('id="tAdvPlanSection"'));

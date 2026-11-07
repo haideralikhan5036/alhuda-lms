@@ -84,8 +84,8 @@ function corsHeadersFor(request, env) {
 // functions/api/db.js (the D1 schema marker; v2 after Part A). It is hardcoded
 // here on purpose: /api/health must never 500 because D1 is unreachable, and
 // it must never cost an unauthenticated caller a D1 read.
-const WORKER_RELEASE = '2026-11-07-salary-plan-capture';
-const HEALTH_SCHEMA_VERSION = '2026-11-07-v6';
+const WORKER_RELEASE = '2026-11-07-advance-ledger';
+const HEALTH_SCHEMA_VERSION = '2026-11-07-v7';
 
 // --- Batch 7 Part B: security headers (workers.dev responses) --------------
 // Every response the Worker serves carries this set. The Content-Security-
@@ -1954,7 +1954,7 @@ function checkTableAccess(role, table, action) {
   // them with a reason instead. Salary-advance requests are
   // financial-adjacent records with the same rule: a decided request is
   // terminal history, never erased. This runs before the owner allow-all.
-  if (action === 'delete' && ['payments', 'salary_slips', 'salary_adjustments', 'advance_requests', 'student_assignments'].includes(table)) return 'deny';
+  if (action === 'delete' && ['payments', 'salary_slips', 'salary_adjustments', 'advance_requests', 'advance_recoveries', 'student_assignments'].includes(table)) return 'deny';
   // Assignment-based salary (Phase 2, 2026-11-03): the assignment ledger
   // is admin-side payroll infrastructure. Teachers and parents have no
   // access to it at all (their portals keep reading saved slips only).
@@ -1980,6 +1980,10 @@ function checkTableAccess(role, table, action) {
     // /api/db write that flipped a request to Approved would create no
     // salary record, so manager writes on this table are denied here.
     if (table === 'advance_requests') return action === 'select' ? 'allow' : 'deny';
+    // Salary Restructuring Phase 3: recovery events are written ONLY by
+    // the Worker's apply-recovery endpoint at slip finalization — the
+    // same select-only rule as advance_requests, for the same reason.
+    if (table === 'advance_recoveries') return action === 'select' ? 'allow' : 'deny';
     return 'allow';
   }
 
@@ -2015,6 +2019,11 @@ function checkTableAccess(role, table, action) {
         // (the Salary section's request list). Creation and decisions go
         // through POST /api/advances/*, where amounts are computed and
         // validated server-side — never through a raw /api/db write.
+        return action === 'select' ? 'allow' : 'deny';
+      case 'advance_recoveries':
+        // Salary Restructuring Phase 3: teachers READ their own recovery
+        // history only (repayment history on the salary pages). Writes
+        // happen only inside POST /api/advances/apply-recovery.
         return action === 'select' ? 'allow' : 'deny';
       default:
         return 'deny'; // families, payments
@@ -2696,7 +2705,7 @@ async function applyManagerWriteGuards(db, body, scope) {
   // salary slip or adjustment for a manager account (including their
   // own). Rows are keyed on the real teacher_id column (not blob keys),
   // against scope.managerIds resolved in resolveScopeIds.
-  if (table === 'salary_slips' || table === 'salary_adjustments') {
+  if (table === 'salary_slips' || table === 'salary_adjustments' || table === 'advance_recoveries') {
     const managerIds = (scope && Array.isArray(scope.managerIds)) ? scope.managerIds : [];
     const denyMsg = 'Managers cannot create or edit salary records for manager accounts.';
     if (action === 'insert' || action === 'upsert' || action === 'update') {
@@ -2961,7 +2970,7 @@ function applyDbScope(body, role, sub, scope) {
       }
     } else if (table === 'teachers' && action === 'select') {
       filters.push(eq('id', sub));
-    } else if ((table === 'salary_slips' || table === 'salary_adjustments' || table === 'advance_requests') && action === 'select') {
+    } else if ((table === 'salary_slips' || table === 'salary_adjustments' || table === 'advance_requests' || table === 'advance_recoveries') && action === 'select') {
       // Batch 6B: a teacher reads only their own salary rows. (Writes by
       // teachers on these tables are already denied in checkTableAccess.)
       filters.push(eq('teacher_id', sub));
@@ -3063,6 +3072,7 @@ function rowInScope(role, sub, scope, table, row) {
       case 'trial_students':
       case 'salary_slips':
       case 'salary_adjustments':
+      case 'advance_recoveries':
       case 'advance_requests': return String(row.teacher_id) === sub;
       case 'attendance_logs':
         // UNION scope (mirror of the SQL filter above): own recordings OR
@@ -3083,7 +3093,7 @@ function rowInScope(role, sub, scope, table, row) {
   // manager request in resolveScopeIds; tolerate it being absent.
   // Salary-advance requests follow the same rule: a manager never sees
   // (and therefore never decides) a manager account's advance request.
-  if (role === 'manager' && (table === 'salary_slips' || table === 'salary_adjustments' || table === 'advance_requests')) {
+  if (role === 'manager' && (table === 'salary_slips' || table === 'salary_adjustments' || table === 'advance_requests' || table === 'advance_recoveries')) {
     const managerIds = (scope && Array.isArray(scope.managerIds)) ? scope.managerIds : [];
     return !managerIds.includes(String(row.teacher_id));
   }
@@ -3557,13 +3567,23 @@ async function handleScopedStorageRequest(ctx, auth) {
 // carry 0 there, so their results are unchanged):
 //   net = max(0, base_subtotal + bonus - deduction_total - advance_deducted)
 //
-// Recovery rule (the ONE business rule needing the owner's confirmation):
-// an approved advance is recovered IN FULL from the SAME period it was
-// requested for. The recovery period is stored explicitly on both the
-// request and the adjustment row; no instalment schedule is invented
-// (recovery_per_month = the full approved amount, advance_remaining = 0
-// once applied). If the owner wants multi-month recovery later, that is
-// a new policy decision, not a silent default.
+// Recovery rule — TWO worlds since Salary Restructuring Phase 3
+// (owner decision 2026-11-07, replacing the Batch B single rule for
+// plan-carrying requests only):
+//   * NO plan (repayment_method NULL — legacy requests): the Batch B
+//     rule stands unchanged. An approved advance is recovered IN FULL
+//     from the SAME period it was requested for, folded into that
+//     period's slip at approval time (recovery_per_month = the full
+//     approved amount, advance_remaining = 0 once applied).
+//   * WITH a plan (full / fixed / custom / manual): approval only opens
+//     a ledger balance — salary_adjustments.advance_remaining = the
+//     approved amount, recovery_per_month = the plan installment (full
+//     → the whole amount; manual → 0). No slip is touched at approval.
+//     The balance is recovered later, one finalized slip at a time,
+//     through POST /api/advances/apply-recovery: each slip deducts
+//     min(remaining, per-cycle cap, slip headroom) and records one
+//     advance_recoveries row. Manual balances are never auto-deducted
+//     in Phase 3 (per-cycle submissions arrive in Phase 4).
 //
 // Idempotency: the request id is the idempotency key. A second approval
 // of an already-approved request returns the existing adjustment (no new
@@ -3791,10 +3811,12 @@ async function handleAdvanceRequest(request, env) {
   // Phase 1 (advance/Zoom commission): a period WITHOUT a generated slip
   // is no longer a hard block at REQUEST time. Full/half are undefined
   // without a net, so they still need a slip — but a custom amount may
-  // be requested now; it stays Pending, uncapped, until Administration
-  // generates the slip AND approves it (the decide handler still
-  // requires a slip and caps against the then-current net). Submitting
-  // creates no payment, slip, deduction, or ledger entry.
+  // be requested now; it stays Pending until Administration approves
+  // it. What approval then requires depends on the world (Phase 3):
+  // a plan-carrying request approves into the ledger with no slip at
+  // all; a plan-less request still needs the slip and is capped
+  // against its then-current net (Batch B). Submitting creates no
+  // payment, slip, deduction, or ledger entry.
   const hasSalary = !!salary;
   const net = hasSalary ? salary.netPayable : null;
   if (hasSalary && !(net > 0)) {
@@ -3968,6 +3990,22 @@ async function handleAdvanceDecide(request, env) {
   if (Number.isFinite(requestedAmount) && approvedAmount > requestedAmount) {
     return json(request, env, { ok: false, error: 'Approved amount cannot exceed the requested amount.' }, 400);
   }
+  // --- Salary Restructuring Phase 3: plan-carrying requests approve
+  // into the advance LEDGER, not into the request period's slip. The
+  // slip-existence requirement (422) and the current-net cap (409)
+  // below do NOT apply to them: approval only opens a balance
+  // (salary_adjustments.advance_remaining = approved amount), and the
+  // money moves later, at slip finalization, through
+  // POST /api/advances/apply-recovery — capped per cycle by the plan
+  // and by the slip's own headroom. The only amount cap here is the
+  // requested amount (enforced above, shared by both worlds).
+  // Requests WITHOUT a plan (repayment_method NULL — every request
+  // made before the plan form shipped, and any API-created request
+  // that omits a plan) fall through to the EXACT Batch B behaviour
+  // below, unchanged.
+  if (reqRow.repayment_method != null && String(reqRow.repayment_method) !== '') {
+    return await approveAdvanceWithPlan(request, env, db, auth, reqRow, approvedAmount, reviewerComment, now);
+  }
   let salary;
   try {
     salary = await resolveAdvanceSalary(db, reqRow.teacher_id, reqRow.period);
@@ -4104,6 +4142,229 @@ async function handleAdvanceDecide(request, env) {
   }
 }
 
+// Salary Restructuring Phase 3: approval for a PLAN-carrying advance
+// request. Writes exactly one ledger row in salary_adjustments with
+// advance_remaining = approved amount and recovery_per_month per the
+// plan (full → the whole approved amount; fixed/custom → the stored
+// installment_amount; manual → 0 — automatic recovery never touches a
+// manual balance in this phase). NO slip is read, folded or mirrored:
+// the request period's slip does not need to exist, and approval moves
+// no money. Recovery happens later, per finalized slip, through
+// handleAdvanceApplyRecovery below. The request is marked Approved
+// LAST, guarded on still-Pending, exactly like the Batch B path.
+async function approveAdvanceWithPlan(request, env, db, auth, reqRow, approvedAmount, reviewerComment, now) {
+  const requestId = String(reqRow.id);
+  const method = String(reqRow.repayment_method);
+  const installmentRaw = reqRow.installment_amount != null ? Number(reqRow.installment_amount) : NaN;
+  const hasInstallment = (method === 'fixed' || method === 'custom') && Number.isFinite(installmentRaw) && installmentRaw > 0;
+  const recoveryPerMonth = method === 'full' ? approvedAmount : (hasInstallment ? installmentRaw : 0);
+  const planJson = JSON.stringify({
+    advance_request_id: requestId,
+    advance_type: reqRow.advance_type,
+    recovery_period: reqRow.period,
+    repayment_method: method,
+    installment_amount: hasInstallment ? installmentRaw : null
+  });
+  try {
+    // Crash-window guard (same contract as the Batch B path): if a
+    // previous approval attempt inserted the adjustment but died before
+    // marking the request, reuse that row instead of creating a second
+    // one. Its figures are normalised to THIS approval's plan values —
+    // except that recovery already recorded against it (possible only
+    // if a later slip finalization picked the orphan row up) is never
+    // handed back: remaining = approved − already recovered.
+    const priorAdj = await db.prepare(
+      "SELECT * FROM salary_adjustments WHERE kind = 'advance' AND teacher_id = ? AND period = ? AND legacy_json LIKE ? AND cancelled_at IS NULL ORDER BY created_at ASC LIMIT 1"
+    ).bind(String(reqRow.teacher_id), reqRow.period, '%"advance_request_id":"' + requestId + '"%').first();
+    let adjustmentId;
+    if (priorAdj && priorAdj.id) {
+      adjustmentId = priorAdj.id;
+      const recoveredRow = await db.prepare(
+        'SELECT COALESCE(SUM(amount), 0) AS recovered FROM advance_recoveries WHERE adjustment_id = ?'
+      ).bind(adjustmentId).first();
+      const alreadyRecovered = recoveredRow && recoveredRow.recovered != null ? Number(recoveredRow.recovered) : 0;
+      await db.prepare(
+        'UPDATE salary_adjustments SET amount = ?, advance_remaining = ?, recovery_per_month = ?, legacy_json = ? WHERE id = ?'
+      ).bind(approvedAmount, Math.max(0, approvedAmount - (Number.isFinite(alreadyRecovered) ? alreadyRecovered : 0)), recoveryPerMonth, planJson, adjustmentId).run();
+    } else {
+      adjustmentId = advanceGenerateId('ADJ-');
+      await db.prepare(
+        'INSERT INTO salary_adjustments (id, teacher_id, period, kind, category, amount, advance_remaining, recovery_per_month, reason, adjustment_date, status, created_by, created_at, legacy_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+      ).bind(
+        adjustmentId, String(reqRow.teacher_id), reqRow.period, 'advance', 'Salary Advance', approvedAmount,
+        approvedAmount, recoveryPerMonth, reqRow.reason || 'Approved advance salary request',
+        now.slice(0, 10), 'Applied', String(auth.sub), now, planJson
+      ).run();
+    }
+    // Mark the request decided LAST, guarded on still-Pending (same
+    // race contract as the Batch B path).
+    const upd = await db.prepare(
+      'UPDATE advance_requests SET status = ?, approved_amount = ?, reviewed_by = ?, reviewer_comment = ?, adjustment_id = ?, decided_at = ?, updated_at = ? WHERE id = ? AND status = ?'
+    ).bind('Approved', approvedAmount, String(auth.sub), reviewerComment || null, adjustmentId, now, now, requestId, 'Pending').run();
+    if (!upd || !upd.success || Number(upd.meta && upd.meta.changes || 0) === 0) {
+      const raced = await db.prepare('SELECT * FROM advance_requests WHERE id = ?').bind(requestId).first();
+      if (raced && String(raced.status) === 'Approved' && raced.adjustment_id) {
+        return json(request, env, { ok: true, replayed: true, request: advancePublicRow(raced) });
+      }
+      return json(request, env, { ok: false, error: 'The advance was recorded but the request status could not be updated. Please retry the decision — it will not create a second record.', adjustment_id: adjustmentId }, 503);
+    }
+    await writeAdvanceAuditEntry(db, auth, requestId, 'approved');
+    const updated = await db.prepare('SELECT * FROM advance_requests WHERE id = ?').bind(requestId).first();
+    return json(request, env, {
+      ok: true,
+      request: advancePublicRow(updated),
+      adjustment_id: adjustmentId,
+      repayment_plan: {
+        method,
+        installment_amount: hasInstallment ? installmentRaw : null,
+        recovery_per_month: recoveryPerMonth,
+        advance_remaining: approvedAmount
+      }
+      // Deliberately NO updated_slip: a plan approval touches no slip.
+    });
+  } catch (e) {
+    if (isMissingTableError(e)) {
+      return json(request, env, { ok: false, error: 'Service unavailable.' }, 503);
+    }
+    console.error('[advance] plan approve failed:', e && e.message);
+    return json(request, env, { ok: false, error: 'Service unavailable.' }, 503);
+  }
+}
+
+// Salary Restructuring Phase 3: POST /api/advances/apply-recovery
+// { slip_id } — called by the Admin portal right after a salary slip
+// has been saved (finalized) successfully. The slip's OWN stored
+// advance_deducted is the only figure trusted (never a client-sent
+// amount): the endpoint re-reads the slip, then distributes that total
+// across the teacher's outstanding plan adjustments, oldest first,
+// honouring each adjustment's per-cycle cap (recovery_per_month; 0 for
+// manual plans in this phase, so manual balances are never touched
+// here) on top of whatever this slip already recovered for it. Each
+// deduction is one advance_recoveries row + a GUARDED decrement
+// (advance_remaining >= amount) of the adjustment.
+// IDEMPOTENT: recovery rows already recorded for the slip are returned
+// as-is and nothing moves again — UNIQUE (slip_id, adjustment_id) plus
+// the per-adjustment pre-check make a second finalization, a
+// Recalculate-save cycle, or a retried call a read-only replay.
+async function handleAdvanceApplyRecovery(request, env) {
+  if (request.method === 'OPTIONS') return json(request, env, {}, 204);
+  if (request.method !== 'POST') {
+    return json(request, env, { ok: false, error: 'Method not allowed.' }, 405);
+  }
+  const auth = await requireApiAuth(request, env);
+  if (!auth) return unauthorized(request, env);
+  if (auth.role !== 'owner' && auth.role !== 'manager') {
+    return json(request, env, { ok: false, error: 'Only administration can apply advance recovery.' }, 403);
+  }
+  let body;
+  try {
+    body = await request.json();
+  } catch (e) {
+    return json(request, env, { ok: false, error: 'Invalid JSON body.' }, 400);
+  }
+  const slipId = body && body.slip_id != null ? String(body.slip_id).trim() : '';
+  if (!slipId) return json(request, env, { ok: false, error: 'slip_id is required.' }, 400);
+  const db = getDb(env);
+  if (await d1WindowLimited(db, env, 'advance_recovery', 'advrec:' + String(auth.sub), 10 * 60 * 1000, 30)) {
+    return json(request, env, { ok: false, error: 'Too many recovery attempts. Please wait a few minutes and try again.' }, 429);
+  }
+  try {
+    const slip = await db.prepare('SELECT * FROM salary_slips WHERE id = ?').bind(slipId).first();
+    if (!slip) {
+      return json(request, env, { ok: false, error: 'Salary slip not found.' }, 404);
+    }
+    if (slip.cancelled_at) {
+      return json(request, env, { ok: false, error: 'This salary slip is cancelled; no recovery can be applied to it.' }, 422);
+    }
+    const teacherId = String(slip.teacher_id);
+    // Manager bar (mirrors the decide endpoint): a manager can never
+    // move money on a manager account's records, including their own.
+    if (auth.role === 'manager') {
+      const targetRow = await db.prepare('SELECT id, address FROM teachers WHERE id = ?').bind(teacherId).first();
+      if (!targetRow || isManagerStaffRecord(targetRow)) {
+        return json(request, env, { ok: false, error: 'Managers cannot apply advance recovery for manager accounts.' }, 403);
+      }
+      if (String(auth.sub) === teacherId) {
+        return json(request, env, { ok: false, error: 'You cannot apply advance recovery to your own salary.' }, 403);
+      }
+    }
+    const recoveryPublic = (r) => ({
+      adjustment_id: r.adjustment_id,
+      amount: Number(r.amount) || 0,
+      balance_after: Number(r.balance_after) || 0
+    });
+    const existingRes = await db.prepare(
+      'SELECT * FROM advance_recoveries WHERE slip_id = ? ORDER BY created_at ASC, adjustment_id ASC'
+    ).bind(slipId).all();
+    const existingRows = existingRes && Array.isArray(existingRes.results) ? existingRes.results : [];
+    const alreadyByAdj = {};
+    let alreadyTotal = 0;
+    existingRows.forEach((r) => {
+      alreadyByAdj[String(r.adjustment_id)] = (alreadyByAdj[String(r.adjustment_id)] || 0) + (Number(r.amount) || 0);
+      alreadyTotal += Number(r.amount) || 0;
+    });
+    const outstandingTotal = async () => {
+      const row = await db.prepare(
+        "SELECT COALESCE(SUM(advance_remaining), 0) AS total FROM salary_adjustments WHERE teacher_id = ? AND kind = 'advance' AND cancelled_at IS NULL AND advance_remaining > 0"
+      ).bind(teacherId).first();
+      return row && row.total != null ? Number(row.total) : 0;
+    };
+    const slipAdvanceTotal = slip.advance_deducted != null ? Number(slip.advance_deducted) : 0;
+    let undistributed = Math.max(0, (Number.isFinite(slipAdvanceTotal) ? slipAdvanceTotal : 0) - alreadyTotal);
+    if (!(undistributed > 0)) {
+      // Nothing (left) to apply: pure replay — return what is recorded.
+      return json(request, env, {
+        ok: true,
+        slip_id: slipId,
+        period: slip.period,
+        applied: [],
+        already_applied: existingRows.map(recoveryPublic),
+        outstanding_total: await outstandingTotal()
+      });
+    }
+    const adjRes = await db.prepare(
+      "SELECT * FROM salary_adjustments WHERE teacher_id = ? AND kind = 'advance' AND cancelled_at IS NULL AND advance_remaining > 0 ORDER BY created_at ASC, id ASC"
+    ).bind(teacherId).all();
+    const adjustments = adjRes && Array.isArray(adjRes.results) ? adjRes.results : [];
+    const now = new Date().toISOString();
+    const applied = [];
+    for (const adj of adjustments) {
+      if (!(undistributed > 0)) break;
+      const adjId = String(adj.id);
+      if (alreadyByAdj[adjId] != null) continue; // this slip already recovered from this adjustment
+      const remaining = Number(adj.advance_remaining) || 0;
+      const perCycle = adj.recovery_per_month != null ? Number(adj.recovery_per_month) : 0;
+      if (!(remaining > 0) || !(perCycle > 0)) continue; // manual plans (0) are not auto-recovered in Phase 3
+      const take = Math.min(remaining, perCycle, undistributed);
+      if (!(take > 0)) continue;
+      const upd = await db.prepare(
+        'UPDATE salary_adjustments SET advance_remaining = advance_remaining - ? WHERE id = ? AND advance_remaining >= ? AND NOT EXISTS (SELECT 1 FROM advance_recoveries WHERE slip_id = ? AND adjustment_id = ?)'
+      ).bind(take, adjId, take, slipId, adjId).run();
+      if (!upd || !upd.success || Number(upd.meta && upd.meta.changes || 0) === 0) continue;
+      const balanceAfter = Math.max(0, remaining - take);
+      await db.prepare(
+        "INSERT INTO advance_recoveries (id, adjustment_id, slip_id, teacher_id, period, amount, balance_after, source, requested_amount, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, 'auto', NULL, ?)"
+      ).bind(advanceGenerateId('REC-'), adjId, slipId, teacherId, String(slip.period), take, balanceAfter, now).run();
+      applied.push({ adjustment_id: adjId, amount: take, balance_after: balanceAfter });
+      undistributed -= take;
+    }
+    return json(request, env, {
+      ok: true,
+      slip_id: slipId,
+      period: slip.period,
+      applied,
+      already_applied: existingRows.map(recoveryPublic),
+      outstanding_total: await outstandingTotal()
+    });
+  } catch (e) {
+    if (isMissingTableError(e)) {
+      return json(request, env, { ok: false, error: 'Service unavailable.' }, 503);
+    }
+    console.error('[advance] apply-recovery failed:', e && e.message);
+    return json(request, env, { ok: false, error: 'Service unavailable.' }, 503);
+  }
+}
+
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
@@ -4208,6 +4469,12 @@ export default {
     }
     if (url.pathname === '/api/advances/decide') {
       return handleAdvanceDecide(request, env);
+    }
+    // Salary Restructuring Phase 3: slip-finalization recovery.
+    // Owner/manager only (manager bars enforced in the handler); the
+    // handler trusts ONLY the stored slip row, never a client amount.
+    if (url.pathname === '/api/advances/apply-recovery') {
+      return handleAdvanceApplyRecovery(request, env);
     }
 
     // 3. Clean portal URLs without .html
