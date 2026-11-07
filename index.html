@@ -427,6 +427,139 @@
       justify-content: safe center;
     }
 
+    /* Owner login redesign (2026-11-07): the approved split-card
+       skin for the gate above — emerald illustration panel with the
+       organic seam, white form side, underline inputs, pill CTA.
+       Every class carries the lgn- prefix: the flagship shell
+       (aui-) does not leak into the login view, and these rules do
+       not leak out. Desktop is the split card; below 1024px (the
+       portal breakpoint) the card stacks — compact panel on top,
+       white sheet overlapping it — exactly as the approved mobile
+       mockup. The view keeps the PR #127 fixed inset-0 treatment,
+       so at the 85% portal zoom the dark backdrop stays full-bleed
+       and the card stays centred and reachable on short screens. */
+    .lgn-deco { position: absolute; pointer-events: none; z-index: 0; }
+    .lgn-deco-tl { top: -30px; left: -20px; }
+    .lgn-deco-br { bottom: -46px; right: -30px; opacity: .9; }
+    .lgn-wrap { position: relative; z-index: 1; width: min(1160px, 100%); }
+    .lgn-card {
+      position: relative; width: 100%; height: 640px;
+      background: #ffffff; border-radius: 28px; overflow: hidden;
+      display: flex;
+      box-shadow: 0 44px 90px rgba(0,0,0,.55), 0 6px 22px rgba(0,0,0,.35);
+    }
+    .lgn-panel {
+      position: relative; flex: 0 0 46%; overflow: hidden;
+      background:
+        radial-gradient(620px 420px at 18% -6%, rgba(255,255,255,.09), rgba(255,255,255,0) 60%),
+        linear-gradient(158deg, #0a5c40 0%, #064e3b 46%, #022c22 100%);
+    }
+    .lgn-scene { position: absolute; inset: 0; width: 100%; height: 100%; }
+    .lgn-seam { position: absolute; top: 0; right: -2px; height: 100%; width: 150px; z-index: 3; }
+    .lgn-swoosh { display: none; }
+    .lgn-formside {
+      position: relative; flex: 1; background: #ffffff;
+      display: flex; align-items: center; justify-content: center;
+      padding: 24px 16px;
+    }
+    .lgn-form-inner { width: 382px; max-width: 100%; text-align: center; }
+    .lgn-logo {
+      display: block; margin: 0 auto; width: 78px; height: 78px;
+      border-radius: 50%; object-fit: cover; background: #000;
+      border: 2.5px solid #C5A880; box-shadow: 0 10px 24px rgba(2,44,34,.22);
+    }
+    .lgn-brand {
+      font-family: 'Cinzel', Georgia, serif; font-weight: 800;
+      font-size: 21px; letter-spacing: .045em; color: #022c22; margin-top: 13px;
+    }
+    .lgn-tagline {
+      font-size: 10.5px; font-weight: 600; letter-spacing: .24em;
+      text-transform: uppercase; color: #a5814f; margin-top: 5px;
+    }
+    .lgn-crown-badge {
+      width: 36px; height: 36px; margin: 20px auto 11px; border-radius: 50%;
+      background: linear-gradient(140deg, #064e3b, #022c22);
+      display: flex; align-items: center; justify-content: center;
+      box-shadow: 0 6px 14px rgba(2,44,34,.28);
+      border: 1.5px solid rgba(197,168,128,.55);
+    }
+    .lgn-heading { font-size: 24px; font-weight: 800; color: #0f172a; letter-spacing: -.01em; }
+    .lgn-sub { font-size: 13px; color: #64748b; margin-top: 6px; }
+    .lgn-error {
+      margin-top: 18px; padding: 10px 12px; text-align: left;
+      background: #fff1f2; border: 1px solid #fecdd3; color: #be123c;
+      border-radius: 12px; font-size: 12px; font-weight: 700;
+    }
+    .lgn-form { margin-top: 26px; text-align: left; }
+    .lgn-field { margin-bottom: 22px; }
+    .lgn-label { display: block; font-size: 12px; font-weight: 600; color: #334155; margin-bottom: 2px; }
+    .lgn-req { color: #e11d48; }
+    .lgn-input-row {
+      display: flex; align-items: center; gap: 10px;
+      padding: 9px 2px 10px; border-bottom: 1.5px solid #cbd5e1;
+      color: #94a3b8; transition: border-color .2s, color .2s;
+    }
+    .lgn-input-row:focus-within { border-bottom-color: #047857; color: #047857; }
+    .lgn-input-row > svg { flex: 0 0 auto; }
+    .lgn-input {
+      flex: 1; min-width: 0; padding: 0; border: none; outline: none;
+      background: transparent; font: inherit; font-size: 15px;
+      font-weight: 500; color: #0f172a;
+    }
+    .lgn-input::placeholder { color: #9aa7b5; font-weight: 400; }
+    .lgn-eye {
+      display: flex; padding: 2px; background: none; border: none;
+      color: #94a3b8; font-size: 15px; cursor: pointer;
+    }
+    .lgn-eye:hover { color: #334155; }
+    .lgn-cta {
+      margin-top: 10px; width: 100%; height: 52px; border: none;
+      cursor: pointer; border-radius: 999px; color: #fff; font: inherit;
+      font-size: 15px; font-weight: 700; letter-spacing: .01em;
+      background: linear-gradient(90deg, #022c22 0%, #064e3b 55%, #047857 100%);
+      box-shadow: 0 14px 28px rgba(4,78,59,.35);
+      display: flex; align-items: center; justify-content: center; gap: 11px;
+      transition: box-shadow .2s, transform .2s;
+    }
+    .lgn-cta:hover {
+      box-shadow: 0 18px 34px rgba(4,78,59,.45), 0 0 0 3px rgba(197,168,128,.35);
+      transform: translateY(-1px);
+    }
+    .lgn-cta-chip {
+      width: 30px; height: 30px; border-radius: 50%; background: #C5A880;
+      display: flex; align-items: center; justify-content: center; flex: 0 0 auto;
+    }
+    .lgn-foot { margin-top: 24px; text-align: center; font-size: 12px; color: #8fa3b5; }
+
+    /* Login card, stacked (below the 1024px portal breakpoint):
+       compact illustration panel on top, the white form sheet
+       overlapping it with rounded top corners. */
+    @media (max-width: 1023px) {
+      .lgn-deco { display: none; }
+      .lgn-card { flex-direction: column; height: auto; }
+      .lgn-panel { flex: none; height: 248px; }
+      .lgn-seam { display: none; }
+      .lgn-swoosh {
+        display: block; position: absolute; top: -4px; left: 0;
+        width: 100%; z-index: 2;
+      }
+      .lgn-formside {
+        margin-top: -26px; z-index: 2; border-radius: 26px 26px 0 0;
+        box-shadow: 0 -14px 30px rgba(2,44,34,.18);
+        padding: 26px 22px 30px;
+      }
+      .lgn-logo { width: 64px; height: 64px; }
+      .lgn-brand { font-size: 17.5px; margin-top: 11px; }
+      .lgn-tagline { font-size: 9.5px; margin-top: 4px; }
+      .lgn-crown-badge { width: 32px; height: 32px; margin-top: 16px; margin-bottom: 9px; }
+      .lgn-heading { font-size: 21px; }
+      .lgn-sub { font-size: 12.5px; margin-top: 5px; }
+      .lgn-form { margin-top: 22px; }
+      .lgn-field { margin-bottom: 20px; }
+      .lgn-cta { height: 50px; }
+      .lgn-foot { font-size: 11px; color: #94a3b8; }
+    }
+
     /* Responsive Mobile & Desktop Layout Engine */
     html, body {
       overflow-x: hidden;
@@ -837,70 +970,195 @@
   <!-- ========================================================================== -->
   <!-- OWNER / ADMIN PORTAL LOGIN SCREEN (AUTHENTICATION REQUIRED)                -->
   <!-- ========================================================================== -->
-  <div id="ownerLoginView" class="hidden min-h-screen w-full flex-col justify-center items-center p-4 sm:p-6 bg-slate-900 bg-gradient-to-br from-slate-950 via-[#022c22] to-slate-900 text-slate-800">
-    <div class="max-w-md w-full my-auto">
-      
-      <!-- Center Brand Identity -->
-      <div class="text-center mb-6">
-        <img src="alhuda_logo.jpg" alt="Al-Huda Islamic Centre" class="w-16 h-16 sm:w-20 sm:h-20 rounded-full border-2 border-brandGold object-cover shadow-lg mx-auto mb-3 bg-black">
-        <h1 class="font-cinzel text-lg sm:text-xl font-extrabold text-white tracking-wide">AL-HUDA ISLAMIC CENTRE</h1>
-        <p class="text-xs text-amber-300 font-semibold tracking-wider uppercase mt-0.5">Owner &amp; Admin Control Center</p>
-      </div>
+  <div id="ownerLoginView" class="hidden w-full flex-col items-center p-4 sm:p-6 bg-slate-900 bg-gradient-to-br from-slate-950 via-[#022c22] to-slate-900 text-slate-800">
+    <!-- Login redesign (2026-11-07, owner-approved for all portals):
+         the split-card skin — emerald illustration panel + white form
+         side. The gate contract is unchanged: js/auth.js still shows
+         and hides this view with the hidden/flex classes, and every
+         field id, the submit handler, the password toggle and the
+         error box inside are the originals, only re-skinned. -->
+    <svg class="lgn-deco lgn-deco-tl" aria-hidden="true" width="430" height="150" viewBox="0 0 430 150" fill="none">
+        <path d="M-10 118 C 90 30, 210 128, 320 62 C 370 32, 410 30, 445 44" stroke="#C5A880" stroke-width="5" stroke-linecap="round" stroke-dasharray="13 13" opacity="0.55"/>
+      </svg>
+    <svg class="lgn-deco lgn-deco-br" aria-hidden="true" width="360" height="230" viewBox="0 0 360 230" fill="none">
+        <path d="M30 230 V96 a48 48 0 0 1 48-48 H360" stroke="#047857" stroke-width="9" stroke-linecap="round"/>
+        <path d="M86 230 V132 a40 40 0 0 1 40-40 H360" stroke="#C5A880" stroke-width="9" stroke-linecap="round" opacity="0.75"/>
+      </svg>
+    <div class="lgn-wrap">
+      <div class="lgn-card">
+        <section class="lgn-panel" aria-hidden="true">
+          <svg class="lgn-scene" viewBox="0 0 560 600" preserveAspectRatio="xMidYMid slice">
+                  <!-- soft shapes -->
+                  <circle cx="288" cy="222" r="172" fill="#ffffff" opacity="0.05"/>
+                  <circle cx="288" cy="222" r="128" fill="#C5A880" opacity="0.10"/>
+                  <circle cx="424" cy="98" r="33" fill="none" stroke="#C5A880" stroke-width="2" opacity="0.45"/>
+                  <circle cx="86" cy="128" r="6" fill="#C5A880" opacity="0.6"/>
+                  <circle cx="508" cy="318" r="5" fill="#f5efe0" opacity="0.5"/>
+                  <!-- dashed gold swoosh across the panel -->
+                  <path d="M-10 86 C 120 26, 280 118, 428 52 C 486 27, 536 34, 574 14" fill="none" stroke="#C5A880" stroke-width="4.5" stroke-linecap="round" stroke-dasharray="12 11" opacity="0.85"/>
+                  <!-- crescent + star -->
+                  <path d="M434 148 a24 24 0 1 0 13 41 a19 19 0 1 1 -13 -41 Z" fill="#C5A880" opacity="0.9"/>
+                  <path d="M461 138 l3.2 7.6 7.6 3.2 -7.6 3.2 -3.2 7.6 -3.2 -7.6 -7.6 -3.2 7.6 -3.2 Z" fill="#C5A880"/>
+                  <!-- ground shadow -->
+                  <ellipse cx="292" cy="526" rx="216" ry="13" fill="#000000" opacity="0.20"/>
+          
+                  <!-- plant -->
+                  <g>
+                    <path d="M84 444 C 58 402, 38 384, 18 348 C 56 354, 86 392, 84 444 Z" fill="#10b981"/>
+                    <path d="M84 444 C 78 388, 86 336, 106 292 C 126 344, 112 404, 84 444 Z" fill="#34d399"/>
+                    <path d="M84 444 C 104 402, 130 380, 156 368 C 152 410, 118 438, 84 444 Z" fill="#059669"/>
+                    <path d="M84 444 C 70 414, 52 400, 34 392 C 62 388, 82 412, 84 444 Z" fill="#6ee7b7"/>
+                    <rect x="48" y="438" width="72" height="14" rx="5" fill="#C5A880"/>
+                    <path d="M54 452 L114 452 L107 514 L61 514 Z" fill="#083626"/>
+                    <path d="M54 452 L114 452 L112 470 L56 470 Z" fill="#ffffff" opacity="0.06"/>
+                  </g>
+          
+                  <!-- chair back -->
+                  <rect x="146" y="238" width="158" height="128" rx="20" fill="#052e22"/>
+                  <rect x="146" y="238" width="158" height="128" rx="20" fill="none" stroke="#0b4a36" stroke-width="2"/>
+          
+                  <!-- teacher -->
+                  <g>
+                    <!-- thobe skirt below desk line -->
+                    <path d="M168 350 L282 350 L290 514 L160 514 Z" fill="#eef2f5"/>
+                    <!-- torso -->
+                    <path d="M172 262 C 176 240, 197 227, 225 227 C 253 227, 274 240, 278 262 L 284 356 L 166 356 Z" fill="#f8fafc"/>
+                    <path d="M166 356 L284 356 L282 350 L168 350 Z" fill="#e2e8f0"/>
+                    <!-- placket + buttons -->
+                    <line x1="225" y1="252" x2="225" y2="330" stroke="#dbe3ea" stroke-width="3"/>
+                    <circle cx="225" cy="266" r="2.6" fill="#C5A880"/>
+                    <circle cx="225" cy="288" r="2.6" fill="#C5A880"/>
+                    <circle cx="225" cy="310" r="2.6" fill="#C5A880"/>
+                    <!-- collar -->
+                    <path d="M211 230 L225 245 L239 230 L239 224 L211 224 Z" fill="#e2e8f0"/>
+                    <!-- left arm + hand -->
+                    <path d="M176 260 C 156 296, 152 326, 164 352 L 198 352 C 189 320, 190 290, 198 268 Z" fill="#e7edf2"/>
+                    <ellipse cx="192" cy="354" rx="11" ry="7" fill="#eab892"/>
+                    <!-- right arm reaching to laptop + hand -->
+                    <path d="M274 260 C 298 288, 310 316, 306 346 L 272 350 C 274 320, 268 292, 256 270 Z" fill="#e7edf2"/>
+                    <ellipse cx="292" cy="348" rx="11" ry="7" fill="#eab892"/>
+                    <!-- shoes -->
+                    <ellipse cx="190" cy="520" rx="17" ry="7" fill="#2b2118"/>
+                    <ellipse cx="258" cy="520" rx="17" ry="7" fill="#2b2118"/>
+                    <!-- ears -->
+                    <circle cx="190" cy="184" r="6.5" fill="#eab892"/>
+                    <circle cx="260" cy="184" r="6.5" fill="#eab892"/>
+                    <!-- head -->
+                    <circle cx="225" cy="182" r="34" fill="#eab892"/>
+                    <!-- beard -->
+                    <path d="M195 194 C 197 224, 209 243, 225 245 C 241 243, 253 224, 255 194 C 247 215, 237 223, 225 223 C 213 223, 203 215, 195 194 Z" fill="#263238"/>
+                    <!-- face -->
+                    <ellipse cx="213" cy="186" rx="3.1" ry="4.2" fill="#263238"/>
+                    <ellipse cx="237" cy="186" rx="3.1" ry="4.2" fill="#263238"/>
+                    <path d="M206 176 q7 -4 14 -1" stroke="#263238" stroke-width="2.4" fill="none" stroke-linecap="round"/>
+                    <path d="M230 175 q7 -3 14 1" stroke="#263238" stroke-width="2.4" fill="none" stroke-linecap="round"/>
+                    <path d="M225 190 q3.5 8 -1 11" stroke="#c98a5a" stroke-width="2.4" fill="none" stroke-linecap="round"/>
+                    <path d="M215 207 q10 7 20 0" stroke="#8d5a33" stroke-width="2.6" fill="none" stroke-linecap="round"/>
+                    <!-- white prayer cap (taqiyah) -->
+                    <path d="M190 172 C 190 136, 260 136, 260 172 L 260 179 C 240 168, 210 168, 190 179 Z" fill="#ffffff" stroke="#dfe5ea" stroke-width="1.5"/>
+                    <path d="M199 160 C 212 152, 238 152, 251 160" stroke="#C5A880" stroke-width="2" fill="none" opacity="0.8"/>
+                    <path d="M205 148 C 216 142, 234 142, 245 148" stroke="#C5A880" stroke-width="2" fill="none" opacity="0.55"/>
+                    <!-- headset -->
+                    <path d="M186 170 C 188 126, 262 126, 264 170" fill="none" stroke="#0d2f24" stroke-width="9" stroke-linecap="round"/>
+                    <rect x="177" y="162" width="21" height="36" rx="9" fill="#064e3b" stroke="#C5A880" stroke-width="1.6"/>
+                    <rect x="252" y="162" width="21" height="36" rx="9" fill="#064e3b" stroke="#C5A880" stroke-width="1.6"/>
+                    <path d="M264 194 C 262 208, 254 216, 243 218" fill="none" stroke="#0d2f24" stroke-width="5" stroke-linecap="round"/>
+                    <circle cx="240" cy="218" r="4.5" fill="#C5A880"/>
+                  </g>
+          
+                  <!-- desk -->
+                  <g>
+                    <rect x="132" y="362" width="14" height="150" fill="#3c2b20"/>
+                    <rect x="430" y="362" width="40" height="150" fill="#3c2b20"/>
+                    <rect x="116" y="346" width="364" height="17" rx="5" fill="#54382a"/>
+                    <rect x="116" y="346" width="364" height="6" rx="3" fill="#6d4a36"/>
+                  </g>
+          
+                  <!-- Quran on rehal (on the desk, left) -->
+                  <g>
+                    <path d="M146 350 L208 296 M208 350 L146 296" stroke="#b98a4a" stroke-width="7" stroke-linecap="round"/>
+                    <path d="M138 306 C 155 290, 174 288, 188 299 C 202 288, 221 290, 238 306 L 233 330 C 218 317, 201 315, 188 324 C 175 315, 158 317, 143 330 Z" fill="#065f46"/>
+                    <path d="M142 302 C 158 288, 175 286, 188 296 C 201 286, 218 288, 234 302 L 230 324 C 216 312, 200 310, 188 319 C 176 310, 160 312, 146 324 Z" fill="#fff7e6"/>
+                    <line x1="188" y1="296" x2="188" y2="319" stroke="#d9c9a3" stroke-width="2"/>
+                    <path d="M152 304 q12 -6 26 -3 M152 313 q12 -6 26 -3 M198 301 q14 -3 26 3 M198 310 q14 -3 26 3" stroke="#9db8a4" stroke-width="2.2" fill="none" stroke-linecap="round"/>
+                  </g>
+          
+                  <!-- laptop with class screen -->
+                  <g>
+                    <rect x="304" y="268" width="98" height="80" rx="7" fill="#0f172a" stroke="#475569" stroke-width="2"/>
+                    <rect x="312" y="276" width="82" height="64" rx="4" fill="#ecfdf5"/>
+                    <circle cx="353" cy="272" r="0" fill="none"/>
+                    <path d="M353 294 C 345 288, 335 287, 329 291 L 329 318 C 335 314, 345 314, 353 320 C 361 314, 371 314, 377 318 L 377 291 C 371 287, 361 288, 353 294 Z" fill="#064e3b"/>
+                    <path d="M353 294 L353 320" stroke="#C5A880" stroke-width="1.6"/>
+                    <rect x="337" y="328" width="32" height="4.5" rx="2.25" fill="#a7f3d0"/>
+                    <path d="M296 360 L410 360 L420 348 L286 348 Z" fill="#334155"/>
+                    <rect x="330" y="351" width="46" height="4" rx="2" fill="#64748b"/>
+                  </g>
+          
+                  <!-- floating live-class chip -->
+                  <g>
+                    <rect x="318" y="192" width="118" height="42" rx="13" fill="#ffffff" opacity="0.97"/>
+                    <circle cx="340" cy="213" r="11" fill="#064e3b"/>
+                    <path d="M336 206 L347 213 L336 220 Z" fill="#C5A880"/>
+                    <circle cx="360" cy="206" r="3.4" fill="#e11d48"/>
+                    <text x="368" y="211" font-family="Inter, sans-serif" font-size="11.5" font-weight="700" fill="#022c22" letter-spacing="1">LIVE</text>
+                    <text x="360" y="226" font-family="Inter, sans-serif" font-size="9.5" font-weight="500" fill="#64748b">Quran Class</text>
+                  </g>
+                </svg>
+          <svg class="lgn-seam" viewBox="0 0 150 640" preserveAspectRatio="none" aria-hidden="true">
+                  <path d="M150 0 L150 640 L70 640 C 96 540, 52 470, 66 360 C 78 268, 128 200, 116 110 C 108 52, 124 14, 150 0 Z" fill="#ffffff"/>
+                </svg>
+          <svg class="lgn-swoosh" aria-hidden="true" viewBox="0 0 390 60" fill="none" preserveAspectRatio="none">
+                  <path d="M-8 46 C 80 6, 190 54, 300 20 C 340 8, 372 10, 400 22" stroke="#C5A880" stroke-width="4" stroke-linecap="round" stroke-dasharray="11 10" opacity="0.8"/>
+                </svg>
+        </section>
+        <section class="lgn-formside">
+          <div class="lgn-form-inner">
+            <img src="alhuda_logo.jpg" alt="Al-Huda Islamic Centre" class="lgn-logo">
+            <h1 class="lgn-brand">AL-HUDA ISLAMIC CENTRE</h1>
+            <p class="lgn-tagline">Owner &amp; Admin Control Center</p>
+            <div class="lgn-crown-badge"><svg width="19" height="19" viewBox="0 0 24 24" fill="#C5A880"><path d="M3.5 18.5 2 8.5l5.2 3.8L12 5.6l4.8 6.7L22 8.5l-1.5 10h-17Zm.4 2.2h16.2v1.6H3.9v-1.6Z"/></svg></div>
+            <h2 class="lgn-heading">Owner &amp; Director Login</h2>
+            <p class="lgn-sub">Sign in with authorized credentials to access LMS Admin</p>
 
-      <!-- Login Card -->
-      <div class="bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden">
-        <div class="p-5 sm:p-6 bg-gradient-to-br from-amber-50/70 to-white border-b border-slate-100 flex items-center gap-3.5">
-          <div class="w-12 h-12 rounded-2xl bg-gradient-to-tr from-[#022c22] to-[#064e3b] text-brandGold flex items-center justify-center text-xl shadow-md border border-brandGold/40 shrink-0">
-            <i class="fa-solid fa-crown text-brandGold"></i>
-          </div>
-          <div>
-            <h2 class="text-base sm:text-lg font-extrabold text-slate-900">Owner &amp; Director Login</h2>
-            <p class="text-xs text-slate-500">Sign in with authorized credentials to access LMS Admin</p>
-          </div>
-        </div>
-
-        <div class="p-5 sm:p-6">
-          <div id="ownerLoginErrorMsg" class="hidden mb-4 p-3 bg-rose-50 border border-rose-200 text-rose-700 rounded-xl text-xs font-bold flex items-center gap-2">
-            <i class="fa-solid fa-circle-exclamation"></i>
-            <span id="ownerLoginErrorText">Invalid username or password.</span>
-          </div>
-
-          <form onsubmit="handleOwnerSignIn(event)" class="space-y-4 text-xs" autocomplete="off">
-            <div>
-              <label for="ownerLoginUsername" class="block font-bold text-slate-700 mb-1.5">
-                Username / Admin ID <span class="text-rose-500">*</span>
-              </label>
-              <div class="relative">
-                <i class="fa-solid fa-user-shield absolute left-3.5 top-3 text-slate-400"></i>
-                <input type="text" id="ownerLoginUsername" required placeholder="Enter username" autocomplete="username"
-                  class="w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-300 rounded-xl font-bold text-slate-900 focus:bg-white focus:outline-brandEmerald focus:border-brandEmerald text-xs">
-              </div>
+            <div id="ownerLoginErrorMsg" class="hidden lgn-error flex items-center gap-2">
+              <i class="fa-solid fa-circle-exclamation"></i>
+              <span id="ownerLoginErrorText">Invalid username or password.</span>
             </div>
 
-            <div>
-              <div class="flex items-center justify-between mb-1.5">
-                <label for="ownerLoginPassword" class="font-bold text-slate-700">
-                  Password <span class="text-rose-500">*</span>
+            <form onsubmit="handleOwnerSignIn(event)" class="lgn-form" autocomplete="off">
+              <div class="lgn-field">
+                <label for="ownerLoginUsername" class="lgn-label">
+                  Username / Admin ID <span class="lgn-req">*</span>
                 </label>
+                <div class="lgn-input-row">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="8" r="3.6"/><path d="M5 19.2c1.3-3.3 4-4.8 7-4.8s5.7 1.5 7 4.8"/></svg>
+                  <input type="text" id="ownerLoginUsername" required placeholder="Enter username" autocomplete="username" class="lgn-input">
+                </div>
               </div>
-              <div class="relative">
-                <i class="fa-solid fa-lock absolute left-3.5 top-3 text-slate-400"></i>
-                <input type="password" id="ownerLoginPassword" required placeholder="Enter password" autocomplete="current-password"
-                  class="w-full pl-9 pr-10 py-2.5 bg-slate-50 border border-slate-300 rounded-xl font-bold text-slate-900 focus:bg-white focus:outline-brandEmerald focus:border-brandEmerald text-xs">
-                <button type="button" onclick="toggleOwnerPassVisibility()" aria-label="Show or hide password" class="absolute right-3 top-2.5 text-slate-400 hover:text-slate-700" title="Show / Hide Password">
-                  <i id="ownerPassToggleIcon" class="fa-regular fa-eye"></i>
-                </button>
-              </div>
-            </div>
 
-            <button type="submit" id="btnSubmitOwnerLogin" class="w-full py-3 bg-gradient-to-r from-[#022c22] via-[#064e3b] to-[#047857] text-white font-extrabold text-sm rounded-xl hover:from-[#064e3b] hover:to-[#047857] shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer">
-              <i class="fa-solid fa-right-to-bracket text-brandGold"></i> Login to Control Center
-            </button>
-          </form>
-        </div>
+              <div class="lgn-field">
+                <label for="ownerLoginPassword" class="lgn-label">
+                  Password <span class="lgn-req">*</span>
+                </label>
+                <div class="lgn-input-row">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="5.5" y="10.5" width="13" height="9.5" rx="2"/><path d="M8.5 10.5V8a3.5 3.5 0 0 1 7 0v2.5"/><circle cx="12" cy="15.2" r="1.3" fill="currentColor" stroke="none"/></svg>
+                  <input type="password" id="ownerLoginPassword" required placeholder="Enter password" autocomplete="current-password" class="lgn-input">
+                  <button type="button" onclick="toggleOwnerPassVisibility()" aria-label="Show or hide password" class="lgn-eye" title="Show / Hide Password">
+                    <i id="ownerPassToggleIcon" class="fa-regular fa-eye"></i>
+                  </button>
+                </div>
+              </div>
+
+              <button type="submit" id="btnSubmitOwnerLogin" class="lgn-cta">
+                <span class="lgn-cta-chip"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#022c22" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 12h11M11.5 6l6 6-6 6"/></svg></span> Login to Control Center
+              </button>
+            </form>
+          </div>
+        </section>
       </div>
-      
-      <p class="text-center text-xs text-slate-400 mt-6">
+
+      <p class="lgn-foot">
         &copy; 2026 Al-Huda Islamic Centre. Authorized personnel only.
       </p>
     </div>
