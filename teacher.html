@@ -8966,6 +8966,18 @@ font-family: var(--font-num) !important;
     let _TADV_PLAN = 'full';
     let _TADV_PLAN_FIXED_AMOUNT = 5000;
 
+    // SALARY RESTRUCTURING PHASE 4 — manual per-cycle submissions.
+    // The "Manual Repayment" section (submit this period's repayment
+    // amount for a manual-plan advance + the submissions history with
+    // submitted vs final amounts) is built by script ONLY when this
+    // flag is true — the same sequencing pattern as Phase 2: the
+    // section depends on the Phase 4 Worker endpoints
+    // (/api/advances/manual-*), which are NOT live yet, so the flag
+    // ships OFF and the Request page stays byte-identical to Phase 3
+    // until the v8 Worker deploy is verified and the flag is flipped.
+    const ADVANCE_MANUAL_SUBMISSIONS_ENABLED = false;
+    let _TADV_MANUAL_SUBMITTING = false;
+
     function _tAdvNetOf(slip) {
       if (!slip) return 0;
       if (window.FeeTables && typeof window.FeeTables.netPayable === 'function') {
@@ -9593,22 +9605,50 @@ font-family: var(--font-num) !important;
       // teacher). balanceByRequest maps a request to its remaining
       // balance via the request's adjustment_id; outstandingTotal feeds
       // the Salary Slips summary strip.
+      // Phase 4: lastChangeByRequest carries the latest admin plan
+      // change per request (from the adjustment's stored plan
+      // history), and manualAdvances collects this teacher's approved
+      // MANUAL-plan advances with an open balance for the manual
+      // submissions section.
       const balanceByRequest = {};
+      const lastChangeByRequest = {};
+      const manualAdvances = [];
       let outstandingTotal = 0;
       try {
         if (typeof db !== 'undefined' && db) {
           const adjRes = await db.from('salary_adjustments').select('*').eq('teacher_id', CURRENT_TEACHER.id).eq('kind', 'advance');
           const adjRows = (adjRes && !adjRes.error && Array.isArray(adjRes.data)) ? adjRes.data : [];
           const remainingByAdj = {};
+          const planMetaByAdj = {};
+          const adjPeriodById = {};
           adjRows.forEach((a) => {
             if (!a || a.cancelled_at) return;
             const rem = parseFloat(a.advance_remaining) || 0;
             remainingByAdj[String(a.id)] = rem;
+            adjPeriodById[String(a.id)] = a.period || null;
+            try {
+              const m = JSON.parse(a.legacy_json || 'null');
+              if (m && typeof m === 'object') planMetaByAdj[String(a.id)] = m;
+            } catch (e) {}
             if (rem > 0) outstandingTotal += rem;
           });
           rows.forEach((r) => {
             if (r && r.adjustment_id && remainingByAdj[String(r.adjustment_id)] != null) {
               balanceByRequest[String(r.id)] = remainingByAdj[String(r.adjustment_id)];
+            }
+            if (r && r.adjustment_id) {
+              const meta = planMetaByAdj[String(r.adjustment_id)];
+              if (meta && Array.isArray(meta.plan_changes) && meta.plan_changes.length) {
+                lastChangeByRequest[String(r.id)] = meta.plan_changes[meta.plan_changes.length - 1];
+              }
+              if (meta && meta.repayment_method === 'manual' && r.status === 'Approved' && (remainingByAdj[String(r.adjustment_id)] || 0) > 0) {
+                manualAdvances.push({
+                  request: r,
+                  adjustment_id: String(r.adjustment_id),
+                  remaining: remainingByAdj[String(r.adjustment_id)],
+                  advancePeriod: adjPeriodById[String(r.adjustment_id)] || r.period
+                });
+              }
             }
           });
         }
@@ -9673,10 +9713,169 @@ font-family: var(--font-num) !important;
               ? `<div class="text-emerald-800 font-bold mt-0.5">Approved: ${apprAmt.toLocaleString()} PKR${balanceByRequest[String(r.id)] != null ? ` — remaining balance: ${Math.max(0, balanceByRequest[String(r.id)]).toLocaleString()} PKR` : ''}. Recovered from your salaries per the plan below.</div>`
               : `<div class="text-emerald-800 font-bold mt-0.5">Approved: ${apprAmt.toLocaleString()} PKR — deducted from your ${r.period_label || r.period} salary.</div>`) : ''}
             ${planText(r) ? `<div class="text-slate-600 mt-0.5">${planText(r)}</div>` : ''}
+            ${lastChangeByRequest[String(r.id)] ? `<div class="text-indigo-700 mt-0.5">Plan changed by Administration${lastChangeByRequest[String(r.id)].changed_at ? ' on ' + new Date(lastChangeByRequest[String(r.id)].changed_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : ''} — the plan shown above is the current one.${lastChangeByRequest[String(r.id)].reason ? ' Reason: ' + String(lastChangeByRequest[String(r.id)].reason).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;') : ''}</div>` : ''}
             ${r.reason ? `<div class="text-slate-600 mt-0.5">Reason: ${String(r.reason).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</div>` : ''}
             ${r.reviewer_comment ? `<div class="text-slate-600 mt-0.5">Reviewer note: ${String(r.reviewer_comment).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</div>` : ''}
           </div>`;
       }).join('');
+      // Salary Restructuring Phase 4: the Manual Repayment section.
+      // Built ONLY when ADVANCE_MANUAL_SUBMISSIONS_ENABLED is on (the
+      // typeof guard keeps this safe in harnesses that load this
+      // function without the flag declaration); with the flag off
+      // nothing is built and the page is exactly the Phase 3 page.
+      if ((typeof ADVANCE_MANUAL_SUBMISSIONS_ENABLED !== 'undefined') && ADVANCE_MANUAL_SUBMISSIONS_ENABLED) {
+        const mp = renderTeacherManualSection(manualAdvances);
+        if (mp && typeof mp.catch === 'function') mp.catch(function () {});
+      }
+    }
+
+    // SALARY RESTRUCTURING PHASE 4 — Manual Repayment section
+    // (flag-gated builder, same pattern as the Phase 2 plan section:
+    // created by script only, never in the static markup, so with
+    // ADVANCE_MANUAL_SUBMISSIONS_ENABLED off this card does not exist
+    // in the DOM at all). For each approved MANUAL-plan advance with
+    // a balance still open, the teacher picks a salary period and
+    // submits how much to repay from that salary; Administration
+    // confirms or adjusts it on that month's slip. The history below
+    // always shows the SUBMITTED amount next to the FINAL amount that
+    // was (or will be) deducted, with the admin's reason when the
+    // amount was adjusted or the submission rejected (Decision 7).
+    function buildTeacherManualSection() {
+      let section = document.getElementById('tAdvManualSection');
+      if (section) return section;
+      const listEl = document.getElementById('tAdvMyList');
+      if (!listEl || !listEl.parentElement || !listEl.parentElement.parentElement) return null;
+      section = document.createElement('div');
+      section.id = 'tAdvManualSection';
+      section.className = 'bg-white rounded-[24px] border border-[#eef3ee] shadow-[0_16px_36px_rgba(12,42,32,0.07)] p-4 sm:p-5 space-y-3';
+      section.innerHTML = `
+          <h3 class="font-extrabold text-slate-900 text-sm flex items-center gap-2">
+            <i class="fa-solid fa-hand-holding-dollar text-teal-600"></i> Manual Repayment
+          </h3>
+          <p class="text-[11px] text-slate-500">Your advance is on the Manual Deduction plan: before a salary is generated, submit how much to repay from that salary. Administration confirms the amount on the slip. If you submit nothing for a month, nothing is deducted that month.</p>
+          <div id="tAdvManualBody" class="space-y-2 text-xs text-slate-500">Loading...</div>`;
+      listEl.parentElement.parentElement.insertBefore(section, listEl.parentElement);
+      return section;
+    }
+
+    function _tManualPeriodOptions(fromPeriod) {
+      const out = [];
+      const m = /^(\d{4})-(\d{2})$/.exec(String(fromPeriod || ''));
+      if (!m) return out;
+      let y = Number(m[1]);
+      let mo = Number(m[2]);
+      const pkt = new Date(Date.now() + 5 * 3600 * 1000);
+      const cur = pkt.toISOString().slice(0, 7);
+      for (let i = 0; i < 36; i++) {
+        const p = y + '-' + String(mo).padStart(2, '0');
+        out.push(p);
+        if (p >= cur) break;
+        mo += 1;
+        if (mo > 12) { mo = 1; y += 1; }
+      }
+      return out;
+    }
+
+    async function renderTeacherManualSection(manualAdvances) {
+      const section = buildTeacherManualSection();
+      if (!section) return;
+      const body = document.getElementById('tAdvManualBody');
+      if (!body) return;
+      if (!manualAdvances || !manualAdvances.length) {
+        section.classList.add('hidden');
+        return;
+      }
+      section.classList.remove('hidden');
+      let manRows = [];
+      try {
+        if (typeof db !== 'undefined' && db) {
+          const res = await db.from('advance_manual_requests').select('*').eq('teacher_id', CURRENT_TEACHER.id).order('created_at', { ascending: false });
+          if (res && !res.error && Array.isArray(res.data)) manRows = res.data;
+        }
+      } catch (e) {}
+      const esc = (s) => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+      const adjIds = {};
+      manualAdvances.forEach((ma) => { adjIds[String(ma.adjustment_id)] = true; });
+      const myRows = manRows.filter((x) => x && adjIds[String(x.adjustment_id)]);
+      const statusLine = (x) => {
+        const submitted = (parseFloat(x.amount) || 0).toLocaleString();
+        const label = _tAdvLabelOf(x.period) || x.period;
+        if (x.recovery_id) {
+          const applied = (parseFloat(x.applied_amount) || 0).toLocaleString();
+          let s = 'Deducted from your ' + label + ' salary: ' + applied + ' PKR (you submitted ' + submitted + ' PKR).';
+          if (x.status === 'adjusted') s += ' Administration set the amount' + (x.admin_reason ? ' — reason: ' + esc(x.admin_reason) : '') + '.';
+          return s;
+        }
+        if (x.status === 'pending') return 'Submitted ' + submitted + ' PKR for ' + label + ' — waiting for Administration to confirm it on that salary slip.';
+        if (x.status === 'confirmed') return 'Confirmed: ' + submitted + ' PKR will be deducted from your ' + label + ' salary.';
+        if (x.status === 'adjusted') {
+          const fin = (parseFloat(x.admin_amount) || 0).toLocaleString();
+          return 'Administration set the ' + label + ' deduction to ' + fin + ' PKR (you submitted ' + submitted + ' PKR).' + (x.admin_reason ? ' Reason: ' + esc(x.admin_reason) : '');
+        }
+        if (x.status === 'rejected') return 'Not accepted for ' + label + ' — nothing was deducted.' + (x.admin_reason ? ' Reason: ' + esc(x.admin_reason) : '');
+        return '';
+      };
+      const forms = manualAdvances.map((ma) => {
+        const periods = _tManualPeriodOptions(ma.advancePeriod);
+        const curPeriod = periods.length ? periods[periods.length - 1] : ma.advancePeriod;
+        return `
+          <div class="p-3 bg-[#f7faf7] rounded-2xl space-y-2">
+            <div class="font-black text-slate-900">Manual advance — remaining balance: ${(parseFloat(ma.remaining) || 0).toLocaleString()} PKR</div>
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
+              <div>
+                <label class="block font-bold text-slate-700 mb-1" for="tManPeriod-${ma.adjustment_id}">Salary period</label>
+                <select id="tManPeriod-${ma.adjustment_id}" class="w-full p-2.5 bg-white border border-slate-300 rounded-xl font-bold text-slate-800 text-xs focus:outline-brandEmerald">${periods.map((p) => `<option value="${p}" ${p === curPeriod ? 'selected' : ''}>${_tAdvLabelOf(p) || p}</option>`).join('')}</select>
+              </div>
+              <div>
+                <label class="block font-bold text-slate-700 mb-1" for="tManAmount-${ma.adjustment_id}">Repay from that salary (PKR)</label>
+                <input type="number" id="tManAmount-${ma.adjustment_id}" min="1" step="1" placeholder="e.g. 4000" class="w-full p-2.5 bg-white border border-slate-300 rounded-xl font-bold text-slate-800 text-xs focus:outline-brandEmerald">
+              </div>
+              <div class="flex items-end">
+                <button type="button" onclick="submitTeacherManualRepayment('${ma.adjustment_id}')" class="w-full px-4 py-2.5 bg-teal-600 hover:bg-teal-700 text-white rounded-xl text-xs font-black shadow transition">Submit Repayment</button>
+              </div>
+            </div>
+            <p class="text-[11px] text-slate-500">One active submission per period. The amount cannot exceed your remaining balance (checked again on the server).</p>
+          </div>`;
+      }).join('');
+      const history = myRows.length
+        ? `<div class="space-y-1.5">${myRows.map((x) => `<div class="p-2.5 bg-white border border-slate-200 rounded-xl text-slate-600">${statusLine(x)}</div>`).join('')}</div>`
+        : '<p>No repayments submitted yet.</p>';
+      body.innerHTML = forms + history;
+    }
+
+    async function submitTeacherManualRepayment(adjustmentId) {
+      if (_TADV_MANUAL_SUBMITTING) return;
+      if (!CURRENT_TEACHER || !CURRENT_TEACHER.id) { lmsNotify('Please log in again to submit a repayment.'); return; }
+      const periodEl = document.getElementById('tManPeriod-' + adjustmentId);
+      const amountEl = document.getElementById('tManAmount-' + adjustmentId);
+      const period = periodEl ? periodEl.value : '';
+      const amount = amountEl ? parseFloat(amountEl.value) : NaN;
+      if (!period) { lmsNotify('Choose the salary period for this repayment.'); return; }
+      if (!Number.isFinite(amount) || amount <= 0) { lmsNotify('Enter the repayment amount for that salary (more than 0).'); return; }
+      _TADV_MANUAL_SUBMITTING = true;
+      try {
+        const res = await fetch(getTeacherWorkerBase() + '/api/advances/manual-request', {
+          method: 'POST',
+          headers: Object.assign({ 'Content-Type': 'application/json' }, _tAdvAuthHeaders()),
+          body: JSON.stringify({ adjustment_id: adjustmentId, period, amount })
+        });
+        let data = null;
+        try { data = await res.json(); } catch (e) {}
+        if (!res.ok || !data || !data.ok) {
+          lmsNotify((data && data.error) || 'The repayment could not be submitted. Please try again.');
+          return;
+        }
+        if (data.duplicate) {
+          lmsNotify('You already have an active repayment submission for that period — it is shown below. No duplicate was created.');
+        } else {
+          lmsNotify('Repayment submitted for ' + (_tAdvLabelOf(period) || period) + '. Administration will confirm it when that salary is generated.');
+        }
+        loadTeacherAdvanceRequests();
+      } catch (e) {
+        lmsNotify('Cannot reach the server. The repayment was NOT submitted.');
+      } finally {
+        _TADV_MANUAL_SUBMITTING = false;
+      }
     }
 
     function viewTeacherSalarySlip(slipKey) {

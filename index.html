@@ -4263,6 +4263,16 @@
             <span class="font-black text-amber-900 font-mono text-sm" id="slipAdvanceRecoveryVal">-0 PKR</span>
           </div>
 
+          <!-- Salary Restructuring Phase 4: manual advance repayment
+               submissions for this teacher + period (Confirm / Adjust /
+               Reject at slip time) and the open repayment plans with
+               their change forms. Both containers are filled by
+               js/payroll.js ONLY when matching rows exist -- they stay
+               empty and invisible on every other slip. -->
+          <div id="slipManualAdvanceBlock"></div>
+
+          <div id="slipPlanChangeBlock"></div>
+
           <!-- Net Payable Display -->
           <div class="flex justify-between items-center bg-white p-3 sm:p-3.5 rounded-xl border-2 border-brandDark shadow-xs">
             <div>

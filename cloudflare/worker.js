@@ -84,8 +84,8 @@ function corsHeadersFor(request, env) {
 // functions/api/db.js (the D1 schema marker; v2 after Part A). It is hardcoded
 // here on purpose: /api/health must never 500 because D1 is unreachable, and
 // it must never cost an unauthenticated caller a D1 read.
-const WORKER_RELEASE = '2026-11-07-advance-ledger';
-const HEALTH_SCHEMA_VERSION = '2026-11-07-v7';
+const WORKER_RELEASE = '2026-11-07-manual-cycles';
+const HEALTH_SCHEMA_VERSION = '2026-11-07-v8';
 
 // --- Batch 7 Part B: security headers (workers.dev responses) --------------
 // Every response the Worker serves carries this set. The Content-Security-
@@ -1954,7 +1954,7 @@ function checkTableAccess(role, table, action) {
   // them with a reason instead. Salary-advance requests are
   // financial-adjacent records with the same rule: a decided request is
   // terminal history, never erased. This runs before the owner allow-all.
-  if (action === 'delete' && ['payments', 'salary_slips', 'salary_adjustments', 'advance_requests', 'advance_recoveries', 'student_assignments'].includes(table)) return 'deny';
+  if (action === 'delete' && ['payments', 'salary_slips', 'salary_adjustments', 'advance_requests', 'advance_recoveries', 'advance_manual_requests', 'student_assignments'].includes(table)) return 'deny';
   // Assignment-based salary (Phase 2, 2026-11-03): the assignment ledger
   // is admin-side payroll infrastructure. Teachers and parents have no
   // access to it at all (their portals keep reading saved slips only).
@@ -1984,6 +1984,11 @@ function checkTableAccess(role, table, action) {
     // the Worker's apply-recovery endpoint at slip finalization — the
     // same select-only rule as advance_requests, for the same reason.
     if (table === 'advance_recoveries') return action === 'select' ? 'allow' : 'deny';
+    // Salary Restructuring Phase 4: manual per-cycle submissions are
+    // written ONLY by the Worker's /api/advances/manual-* endpoints
+    // (submit + decide) — managers read them (their Requests/slip
+    // surfaces) but never write them through this engine.
+    if (table === 'advance_manual_requests') return action === 'select' ? 'allow' : 'deny';
     return 'allow';
   }
 
@@ -2024,6 +2029,12 @@ function checkTableAccess(role, table, action) {
         // Salary Restructuring Phase 3: teachers READ their own recovery
         // history only (repayment history on the salary pages). Writes
         // happen only inside POST /api/advances/apply-recovery.
+        return action === 'select' ? 'allow' : 'deny';
+      case 'advance_manual_requests':
+        // Salary Restructuring Phase 4: teachers READ their own manual
+        // repayment submissions only (submitted vs final amounts on the
+        // Request Advance Salary page). Submission and decisions go
+        // through POST /api/advances/manual-*, never a raw write.
         return action === 'select' ? 'allow' : 'deny';
       default:
         return 'deny'; // families, payments
@@ -2705,7 +2716,7 @@ async function applyManagerWriteGuards(db, body, scope) {
   // salary slip or adjustment for a manager account (including their
   // own). Rows are keyed on the real teacher_id column (not blob keys),
   // against scope.managerIds resolved in resolveScopeIds.
-  if (table === 'salary_slips' || table === 'salary_adjustments' || table === 'advance_recoveries') {
+  if (table === 'salary_slips' || table === 'salary_adjustments' || table === 'advance_recoveries' || table === 'advance_manual_requests') {
     const managerIds = (scope && Array.isArray(scope.managerIds)) ? scope.managerIds : [];
     const denyMsg = 'Managers cannot create or edit salary records for manager accounts.';
     if (action === 'insert' || action === 'upsert' || action === 'update') {
@@ -2970,7 +2981,7 @@ function applyDbScope(body, role, sub, scope) {
       }
     } else if (table === 'teachers' && action === 'select') {
       filters.push(eq('id', sub));
-    } else if ((table === 'salary_slips' || table === 'salary_adjustments' || table === 'advance_requests' || table === 'advance_recoveries') && action === 'select') {
+    } else if ((table === 'salary_slips' || table === 'salary_adjustments' || table === 'advance_requests' || table === 'advance_recoveries' || table === 'advance_manual_requests') && action === 'select') {
       // Batch 6B: a teacher reads only their own salary rows. (Writes by
       // teachers on these tables are already denied in checkTableAccess.)
       filters.push(eq('teacher_id', sub));
@@ -3073,6 +3084,7 @@ function rowInScope(role, sub, scope, table, row) {
       case 'salary_slips':
       case 'salary_adjustments':
       case 'advance_recoveries':
+      case 'advance_manual_requests':
       case 'advance_requests': return String(row.teacher_id) === sub;
       case 'attendance_logs':
         // UNION scope (mirror of the SQL filter above): own recordings OR
@@ -3093,7 +3105,7 @@ function rowInScope(role, sub, scope, table, row) {
   // manager request in resolveScopeIds; tolerate it being absent.
   // Salary-advance requests follow the same rule: a manager never sees
   // (and therefore never decides) a manager account's advance request.
-  if (role === 'manager' && (table === 'salary_slips' || table === 'salary_adjustments' || table === 'advance_requests' || table === 'advance_recoveries')) {
+  if (role === 'manager' && (table === 'salary_slips' || table === 'salary_adjustments' || table === 'advance_requests' || table === 'advance_recoveries' || table === 'advance_manual_requests')) {
     const managerIds = (scope && Array.isArray(scope.managerIds)) ? scope.managerIds : [];
     return !managerIds.includes(String(row.teacher_id));
   }
@@ -3582,8 +3594,24 @@ async function handleScopedStorageRequest(ctx, auth) {
 //     The balance is recovered later, one finalized slip at a time,
 //     through POST /api/advances/apply-recovery: each slip deducts
 //     min(remaining, per-cycle cap, slip headroom) and records one
-//     advance_recoveries row. Manual balances are never auto-deducted
-//     in Phase 3 (per-cycle submissions arrive in Phase 4).
+//     advance_recoveries row.
+//   * MANUAL plans (Phase 4): a manual balance has no automatic
+//     per-cycle amount. Before a salary is generated the teacher
+//     submits that period's repayment (POST /api/advances/
+//     manual-request, one active submission per teacher+period) and
+//     Administration confirms it, adjusts it (reason required) or
+//     rejects it (POST /api/advances/manual-decide). The
+//     confirmed/adjusted amount is that period's cap inside
+//     apply-recovery, recorded with source 'manual' and
+//     requested_amount = the teacher's submitted amount. No
+//     submission (or a rejected one) = no deduction that period
+//     (owner Decision 7).
+//   * PLAN CHANGES (Phase 4, owner Decision 6): an admin may change
+//     an OPEN plan balance's method/installment through POST
+//     /api/advances/change-plan — reason required, future cycles
+//     only; the change is appended to the adjustment's plan history
+//     (legacy_json.plan_changes) and mirrored onto the originating
+//     advance_requests row so the teacher sees the current plan.
 //
 // Idempotency: the request id is the idempotency key. A second approval
 // of an already-approved request returns the existing adjustment (no new
@@ -3721,6 +3749,75 @@ function advancePublicRow(row) {
     requested_at: row.requested_at || null,
     decided_at: row.decided_at || null
   };
+}
+
+// Salary Restructuring Phase 4: one manual per-cycle repayment
+// submission, as the portals may see it. final_amount is the amount
+// that counts for the period BEFORE finalization (the admin's
+// adjusted amount when adjusted, else the submitted amount) and the
+// actually-deducted amount (applied_amount) once the slip finalized.
+function manualPublicRow(row) {
+  if (!row || typeof row !== 'object') return null;
+  const submitted = row.amount != null ? Number(row.amount) : 0;
+  const adminAmount = row.admin_amount != null ? Number(row.admin_amount) : null;
+  const applied = row.applied_amount != null ? Number(row.applied_amount) : null;
+  return {
+    id: row.id,
+    teacher_id: row.teacher_id,
+    adjustment_id: row.adjustment_id,
+    period: row.period,
+    period_label: advancePeriodLabel(row.period),
+    amount: submitted,
+    status: row.status,
+    admin_amount: adminAmount,
+    admin_reason: row.admin_reason || null,
+    final_amount: applied != null ? applied : (row.status === 'adjusted' && adminAmount != null ? adminAmount : submitted),
+    applied_amount: applied,
+    recovery_id: row.recovery_id || null,
+    decided_by: row.decided_by || null,
+    decided_at: row.decided_at || null,
+    created_at: row.created_at || null,
+    updated_at: row.updated_at || null
+  };
+}
+
+// The amount a decided manual submission contributes to its period:
+// the admin's adjusted amount when adjusted, else the submitted one.
+// NaN for undecided/rejected rows (they contribute nothing).
+function manualDecidedAmount(row) {
+  if (!row) return NaN;
+  if (row.status === 'adjusted') return row.admin_amount != null ? Number(row.admin_amount) : NaN;
+  if (row.status === 'confirmed') return row.amount != null ? Number(row.amount) : NaN;
+  return NaN;
+}
+
+// Metadata-only audit entry for Phase 4 advance actions (manual
+// decisions, plan changes). Same convention as writeAdvanceAuditEntry:
+// actor + action + record id only — amounts and reasons live on the
+// business rows, never in audit_log. Best-effort.
+async function writeAdvancePhase4AuditEntry(db, auth, action, tableName, recordId) {
+  try {
+    if (!db) return;
+    const now = new Date().toISOString();
+    const entryId = 'AUD-' + now.replace(/[^0-9]/g, '').slice(0, 17) + '-' + Math.random().toString(36).slice(2, 8);
+    await db.prepare(
+      'INSERT INTO audit_log (id, actor_id, actor_role, action, table_name, record_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)'
+    ).bind(entryId, String(auth.sub || ''), String(auth.role || ''), action, tableName, String(recordId), now).run();
+  } catch (e) {
+    console.warn('[advance] phase-4 audit write skipped:', e && e.message);
+  }
+}
+
+// The repayment plan stored on a plan ledger row (salary_adjustments
+// .legacy_json, written by approveAdvanceWithPlan; advance_request_id
+// is always the FIRST key — the crash-window LIKE match depends on
+// it). Returns null for legacy Batch B rows, which carry no plan.
+function parseAdjustmentPlan(adj) {
+  if (!adj || typeof adj !== 'object') return null;
+  let meta = null;
+  try { meta = JSON.parse(adj.legacy_json || 'null'); } catch (e) { meta = null; }
+  if (!meta || typeof meta !== 'object' || !meta.repayment_method) return null;
+  return meta;
 }
 
 async function readAdvanceRequestBody(request) {
@@ -4146,12 +4243,13 @@ async function handleAdvanceDecide(request, env) {
 // request. Writes exactly one ledger row in salary_adjustments with
 // advance_remaining = approved amount and recovery_per_month per the
 // plan (full → the whole approved amount; fixed/custom → the stored
-// installment_amount; manual → 0 — automatic recovery never touches a
-// manual balance in this phase). NO slip is read, folded or mirrored:
-// the request period's slip does not need to exist, and approval moves
-// no money. Recovery happens later, per finalized slip, through
-// handleAdvanceApplyRecovery below. The request is marked Approved
-// LAST, guarded on still-Pending, exactly like the Batch B path.
+// installment_amount; manual → 0 — a manual balance recovers only
+// through decided per-cycle submissions, Phase 4). NO slip is read,
+// folded or mirrored: the request period's slip does not need to
+// exist, and approval moves no money. Recovery happens later, per
+// finalized slip, through handleAdvanceApplyRecovery below. The
+// request is marked Approved LAST, guarded on still-Pending, exactly
+// like the Batch B path.
 async function approveAdvanceWithPlan(request, env, db, auth, reqRow, approvedAmount, reviewerComment, now) {
   const requestId = String(reqRow.id);
   const method = String(reqRow.repayment_method);
@@ -4237,11 +4335,18 @@ async function approveAdvanceWithPlan(request, env, db, auth, reqRow, approvedAm
 // advance_deducted is the only figure trusted (never a client-sent
 // amount): the endpoint re-reads the slip, then distributes that total
 // across the teacher's outstanding plan adjustments, oldest first,
-// honouring each adjustment's per-cycle cap (recovery_per_month; 0 for
-// manual plans in this phase, so manual balances are never touched
-// here) on top of whatever this slip already recovered for it. Each
-// deduction is one advance_recoveries row + a GUARDED decrement
+// honouring each adjustment's per-cycle cap (recovery_per_month) on
+// top of whatever this slip already recovered for it. Each deduction
+// is one advance_recoveries row + a GUARDED decrement
 // (advance_remaining >= amount) of the adjustment.
+// Phase 4: a MANUAL adjustment's per-cycle cap is not its
+// recovery_per_month (0) but the CONFIRMED/ADJUSTED manual submission
+// for the slip's period (advance_manual_requests); its deduction is
+// recorded with source 'manual' and requested_amount = the teacher's
+// submitted amount, and the submission is stamped consumed
+// (recovery_id + applied_amount). No decided submission for the
+// period — or only a rejected/pending one — means the manual balance
+// contributes ZERO to this slip (owner Decision 7).
 // IDEMPOTENT: recovery rows already recorded for the slip are returned
 // as-is and nothing moves again — UNIQUE (slip_id, adjustment_id) plus
 // the per-adjustment pre-check make a second finalization, a
@@ -4291,7 +4396,9 @@ async function handleAdvanceApplyRecovery(request, env) {
     const recoveryPublic = (r) => ({
       adjustment_id: r.adjustment_id,
       amount: Number(r.amount) || 0,
-      balance_after: Number(r.balance_after) || 0
+      balance_after: Number(r.balance_after) || 0,
+      source: r.source || 'auto',
+      requested_amount: r.requested_amount != null ? Number(r.requested_amount) : null
     });
     const existingRes = await db.prepare(
       'SELECT * FROM advance_recoveries WHERE slip_id = ? ORDER BY created_at ASC, adjustment_id ASC'
@@ -4333,8 +4440,28 @@ async function handleAdvanceApplyRecovery(request, env) {
       const adjId = String(adj.id);
       if (alreadyByAdj[adjId] != null) continue; // this slip already recovered from this adjustment
       const remaining = Number(adj.advance_remaining) || 0;
-      const perCycle = adj.recovery_per_month != null ? Number(adj.recovery_per_month) : 0;
-      if (!(remaining > 0) || !(perCycle > 0)) continue; // manual plans (0) are not auto-recovered in Phase 3
+      if (!(remaining > 0)) continue;
+      // Phase 4: resolve this adjustment's per-cycle cap for THIS
+      // slip's period. Automatic plans use recovery_per_month. A
+      // manual plan uses the period's decided (confirmed/adjusted)
+      // submission instead; with none decided, the manual balance is
+      // skipped entirely — zero recovery this cycle.
+      const planMeta = parseAdjustmentPlan(adj);
+      let perCycle = adj.recovery_per_month != null ? Number(adj.recovery_per_month) : 0;
+      let recoverySource = 'auto';
+      let recoveryRequestedAmount = null;
+      let manualRow = null;
+      if (planMeta && String(planMeta.repayment_method) === 'manual') {
+        manualRow = await db.prepare(
+          "SELECT * FROM advance_manual_requests WHERE teacher_id = ? AND adjustment_id = ? AND period = ? AND status IN ('confirmed', 'adjusted') AND recovery_id IS NULL ORDER BY created_at ASC LIMIT 1"
+        ).bind(teacherId, adjId, String(slip.period)).first();
+        if (!manualRow) continue; // no decided submission for this period
+        const decided = manualDecidedAmount(manualRow);
+        perCycle = Number.isFinite(decided) ? decided : 0;
+        recoverySource = 'manual';
+        recoveryRequestedAmount = manualRow.amount != null ? Number(manualRow.amount) : null;
+      }
+      if (!(perCycle > 0)) continue;
       const take = Math.min(remaining, perCycle, undistributed);
       if (!(take > 0)) continue;
       const upd = await db.prepare(
@@ -4342,10 +4469,20 @@ async function handleAdvanceApplyRecovery(request, env) {
       ).bind(take, adjId, take, slipId, adjId).run();
       if (!upd || !upd.success || Number(upd.meta && upd.meta.changes || 0) === 0) continue;
       const balanceAfter = Math.max(0, remaining - take);
+      const recoveryId = advanceGenerateId('REC-');
       await db.prepare(
-        "INSERT INTO advance_recoveries (id, adjustment_id, slip_id, teacher_id, period, amount, balance_after, source, requested_amount, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, 'auto', NULL, ?)"
-      ).bind(advanceGenerateId('REC-'), adjId, slipId, teacherId, String(slip.period), take, balanceAfter, now).run();
-      applied.push({ adjustment_id: adjId, amount: take, balance_after: balanceAfter });
+        'INSERT INTO advance_recoveries (id, adjustment_id, slip_id, teacher_id, period, amount, balance_after, source, requested_amount, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+      ).bind(recoveryId, adjId, slipId, teacherId, String(slip.period), take, balanceAfter, recoverySource, recoveryRequestedAmount, now).run();
+      if (manualRow) {
+        // Consume the submission: it can never feed a second slip.
+        // Guarded on still-unconsumed — a concurrent finalization
+        // that already stamped it leaves this stamp a no-op (the
+        // recovery row above is this slip's own record either way).
+        await db.prepare(
+          'UPDATE advance_manual_requests SET recovery_id = ?, applied_amount = ?, updated_at = ? WHERE id = ? AND recovery_id IS NULL'
+        ).bind(recoveryId, take, now, String(manualRow.id)).run();
+      }
+      applied.push({ adjustment_id: adjId, amount: take, balance_after: balanceAfter, source: recoverySource, requested_amount: recoveryRequestedAmount });
       undistributed -= take;
     }
     return json(request, env, {
@@ -4361,6 +4498,438 @@ async function handleAdvanceApplyRecovery(request, env) {
       return json(request, env, { ok: false, error: 'Service unavailable.' }, 503);
     }
     console.error('[advance] apply-recovery failed:', e && e.message);
+    return json(request, env, { ok: false, error: 'Service unavailable.' }, 503);
+  }
+}
+
+// ============================================================================
+// Salary Restructuring Phase 4 — manual per-cycle repayments + plan
+// changes (owner Decisions 6 + 7, 2026-11-07).
+// ============================================================================
+
+// --- POST /api/advances/manual-request  { adjustment_id, period, amount }
+// Teacher role ONLY; the teacher id comes from the token. The target
+// must be the teacher's OWN manual-plan ledger row with a balance
+// still open. One ACTIVE submission per teacher+period: if one is
+// already active (pending, or decided but not yet consumed by a
+// finalized slip), the EXISTING row is returned with duplicate: true
+// instead of writing a second one — the partial UNIQUE index on
+// advance_manual_requests is the race-proof backstop for the
+// check-then-insert below. A period whose slip is already finalized
+// refuses new submissions (409): that cycle's recovery has run.
+async function handleAdvanceManualRequest(request, env) {
+  if (request.method === 'OPTIONS') return json(request, env, {}, 204);
+  if (request.method !== 'POST') {
+    return json(request, env, { ok: false, error: 'Method not allowed.' }, 405);
+  }
+  const auth = await requireApiAuth(request, env);
+  if (!auth) return unauthorized(request, env);
+  if (auth.role !== 'teacher') {
+    return json(request, env, { ok: false, error: 'Access denied.' }, 403);
+  }
+  const db = getDb(env);
+  if (!db) {
+    return json(request, env, { ok: false, error: 'Service unavailable.' }, 503);
+  }
+  if (await d1WindowLimited(db, env, 'advance_manual_request', 'advman:' + String(auth.sub), 10 * 60 * 1000, 10)) {
+    return json(request, env, { ok: false, error: 'Too many submissions. Please try again later.' }, 429);
+  }
+  const body = await readAdvanceRequestBody(request);
+  if (!body) {
+    return json(request, env, { ok: false, error: 'Invalid request body.' }, 400);
+  }
+  const adjustmentId = String(body.adjustment_id || '').trim();
+  if (!adjustmentId) {
+    return json(request, env, { ok: false, error: 'adjustment_id is required.' }, 400);
+  }
+  const period = String(body.period || '').trim();
+  if (!advancePeriodLabel(period)) {
+    return json(request, env, { ok: false, error: 'A valid salary period (YYYY-MM) is required.' }, 400);
+  }
+  if (period > advanceCurrentPktPeriod()) {
+    return json(request, env, { ok: false, error: 'A repayment cannot be submitted for a future salary period.' }, 400);
+  }
+  const amount = Number(body.amount);
+  if (!Number.isFinite(amount) || amount <= 0) {
+    return json(request, env, { ok: false, error: 'The repayment amount must be greater than zero.' }, 400);
+  }
+  try {
+    const adj = await db.prepare('SELECT * FROM salary_adjustments WHERE id = ?').bind(adjustmentId).first();
+    if (!adj) {
+      return json(request, env, { ok: false, error: 'Advance not found.' }, 404);
+    }
+    if (String(adj.teacher_id) !== String(auth.sub)) {
+      return json(request, env, { ok: false, error: 'Access denied.' }, 403);
+    }
+    if (String(adj.kind) !== 'advance' || adj.cancelled_at) {
+      return json(request, env, { ok: false, error: 'This advance is no longer open.' }, 422);
+    }
+    const plan = parseAdjustmentPlan(adj);
+    if (!plan || String(plan.repayment_method) !== 'manual') {
+      return json(request, env, { ok: false, error: 'This advance does not use the manual repayment plan.' }, 400);
+    }
+    const remaining = Number(adj.advance_remaining) || 0;
+    if (!(remaining > 0)) {
+      return json(request, env, { ok: false, error: 'This advance is already fully repaid.' }, 422);
+    }
+    if (adj.period && period < String(adj.period)) {
+      return json(request, env, { ok: false, error: 'The repayment period cannot be earlier than the advance period.' }, 400);
+    }
+    if (amount > remaining) {
+      return json(request, env, { ok: false, error: 'The repayment amount cannot exceed the remaining advance balance.', advance_remaining: remaining }, 400);
+    }
+    const slip = await db.prepare(
+      'SELECT id FROM salary_slips WHERE teacher_id = ? AND period = ? AND cancelled_at IS NULL LIMIT 1'
+    ).bind(String(auth.sub), period).first();
+    if (slip) {
+      return json(request, env, { ok: false, error: 'A salary slip for this period has already been finalized, so a repayment for it can no longer be submitted.' }, 409);
+    }
+    const active = await db.prepare(
+      "SELECT * FROM advance_manual_requests WHERE teacher_id = ? AND period = ? AND status IN ('pending', 'confirmed', 'adjusted') AND recovery_id IS NULL ORDER BY created_at ASC LIMIT 1"
+    ).bind(String(auth.sub), period).first();
+    if (active) {
+      return json(request, env, { ok: true, duplicate: true, manual_request: manualPublicRow(active) });
+    }
+    const now = new Date().toISOString();
+    const id = advanceGenerateId('AMR-');
+    try {
+      await db.prepare(
+        'INSERT INTO advance_manual_requests (id, teacher_id, adjustment_id, period, amount, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+      ).bind(id, String(auth.sub), adjustmentId, period, amount, 'pending', now, now).run();
+    } catch (insErr) {
+      // The partial UNIQUE index fired: a concurrent submission won.
+      // Return the winner's row exactly like the pre-check duplicate.
+      if (insErr && /unique/i.test(String(insErr.message || ''))) {
+        const winner = await db.prepare(
+          "SELECT * FROM advance_manual_requests WHERE teacher_id = ? AND period = ? AND status IN ('pending', 'confirmed', 'adjusted') AND recovery_id IS NULL ORDER BY created_at ASC LIMIT 1"
+        ).bind(String(auth.sub), period).first();
+        if (winner) {
+          return json(request, env, { ok: true, duplicate: true, manual_request: manualPublicRow(winner) });
+        }
+      }
+      throw insErr;
+    }
+    const created = await db.prepare('SELECT * FROM advance_manual_requests WHERE id = ?').bind(id).first();
+    return json(request, env, { ok: true, manual_request: manualPublicRow(created), advance_remaining: remaining });
+  } catch (e) {
+    if (isMissingTableError(e)) {
+      return json(request, env, { ok: false, error: 'Service unavailable.' }, 503);
+    }
+    console.error('[advance] manual-request failed:', e && e.message);
+    return json(request, env, { ok: false, error: 'Service unavailable.' }, 503);
+  }
+}
+
+// --- POST /api/advances/manual-list  { period?, teacher_id? }
+// Teachers see ONLY their own submissions. Owner sees all. Managers
+// see all EXCEPT manager-account teachers' rows and their own — the
+// same bar the decide endpoints enforce (a manager never handles a
+// manager account's money, including their own record).
+async function handleAdvanceManualList(request, env) {
+  if (request.method === 'OPTIONS') return json(request, env, {}, 204);
+  if (request.method !== 'POST') {
+    return json(request, env, { ok: false, error: 'Method not allowed.' }, 405);
+  }
+  const auth = await requireApiAuth(request, env);
+  if (!auth) return unauthorized(request, env);
+  if (auth.role !== 'owner' && auth.role !== 'manager' && auth.role !== 'teacher') {
+    return json(request, env, { ok: false, error: 'Access denied.' }, 403);
+  }
+  const db = getDb(env);
+  if (!db) {
+    return json(request, env, { ok: false, error: 'Service unavailable.' }, 503);
+  }
+  if (await d1WindowLimited(db, env, 'advance_manual_list', 'advmanlist:' + String(auth.sub), 10 * 60 * 1000, 30)) {
+    return json(request, env, { ok: false, error: 'Too many requests. Please try again later.' }, 429);
+  }
+  let body = {};
+  try {
+    const parsed = await request.json();
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) body = parsed;
+  } catch (e) { /* an empty body means "no filters" */ }
+  const period = body.period != null ? String(body.period).trim() : '';
+  if (period && !advancePeriodLabel(period)) {
+    return json(request, env, { ok: false, error: 'A valid salary period (YYYY-MM) is required.' }, 400);
+  }
+  try {
+    const clauses = [];
+    const binds = [];
+    if (auth.role === 'teacher') {
+      clauses.push('teacher_id = ?');
+      binds.push(String(auth.sub));
+    } else if (body.teacher_id != null && String(body.teacher_id).trim() !== '') {
+      clauses.push('teacher_id = ?');
+      binds.push(String(body.teacher_id).trim());
+    }
+    if (period) {
+      clauses.push('period = ?');
+      binds.push(period);
+    }
+    const sql = 'SELECT * FROM advance_manual_requests' + (clauses.length ? ' WHERE ' + clauses.join(' AND ') : '') + ' ORDER BY created_at DESC LIMIT 200';
+    const res = await db.prepare(sql).bind(...binds).all();
+    let rows = res && Array.isArray(res.results) ? res.results : [];
+    if (auth.role === 'manager') {
+      const tRes = await db.prepare('SELECT id, address, witness_name, notes FROM teachers').all();
+      const managerIds = new Set(((tRes && tRes.results) || []).filter((t) => isManagerStaffRecord(t)).map((t) => String(t.id)));
+      rows = rows.filter((r) => String(r.teacher_id) !== String(auth.sub) && !managerIds.has(String(r.teacher_id)));
+    }
+    return json(request, env, { ok: true, manual_requests: rows.map(manualPublicRow) });
+  } catch (e) {
+    if (isMissingTableError(e)) {
+      return json(request, env, { ok: false, error: 'Service unavailable.' }, 503);
+    }
+    console.error('[advance] manual-list failed:', e && e.message);
+    return json(request, env, { ok: false, error: 'Service unavailable.' }, 503);
+  }
+}
+
+// --- POST /api/advances/manual-decide  { manual_request_id, decision, admin_amount?, admin_reason? }
+// Owner or manager ONLY, at slip time. decision: 'confirmed' (the
+// submitted amount stands), 'adjusted' (admin_amount replaces it —
+// a reason is REQUIRED, owner Decision 7), or 'rejected' (reason
+// REQUIRED; the period then recovers nothing). A decided submission
+// is terminal: the same decision again replays idempotently, a
+// different one is a 409. The usual bars apply: never the reviewer's
+// own record; a manager never decides a manager account's submission.
+async function handleAdvanceManualDecide(request, env) {
+  if (request.method === 'OPTIONS') return json(request, env, {}, 204);
+  if (request.method !== 'POST') {
+    return json(request, env, { ok: false, error: 'Method not allowed.' }, 405);
+  }
+  const auth = await requireApiAuth(request, env);
+  if (!auth) return unauthorized(request, env);
+  if (auth.role !== 'owner' && auth.role !== 'manager') {
+    return json(request, env, { ok: false, error: 'Access denied.' }, 403);
+  }
+  const db = getDb(env);
+  if (!db) {
+    return json(request, env, { ok: false, error: 'Service unavailable.' }, 503);
+  }
+  if (await d1WindowLimited(db, env, 'advance_manual_decide', 'advmandec:' + String(auth.sub), 10 * 60 * 1000, 30)) {
+    return json(request, env, { ok: false, error: 'Too many decisions. Please try again later.' }, 429);
+  }
+  const body = await readAdvanceRequestBody(request);
+  if (!body) {
+    return json(request, env, { ok: false, error: 'Invalid request body.' }, 400);
+  }
+  const manualId = String(body.manual_request_id || '').trim();
+  const decision = String(body.decision || '').trim();
+  if (!manualId) {
+    return json(request, env, { ok: false, error: 'manual_request_id is required.' }, 400);
+  }
+  if (!['confirmed', 'adjusted', 'rejected'].includes(decision)) {
+    return json(request, env, { ok: false, error: 'decision must be confirmed, adjusted, or rejected.' }, 400);
+  }
+  const adminReason = body.admin_reason != null ? String(body.admin_reason).trim() : '';
+  if (adminReason.length > 500) {
+    return json(request, env, { ok: false, error: 'The reason must be 500 characters or fewer.' }, 400);
+  }
+  if ((decision === 'adjusted' || decision === 'rejected') && !adminReason) {
+    return json(request, env, { ok: false, error: 'A reason is required when adjusting or rejecting a submitted repayment.' }, 400);
+  }
+  let adminAmount = null;
+  if (decision === 'adjusted') {
+    adminAmount = Number(body.admin_amount);
+    if (!Number.isFinite(adminAmount) || adminAmount <= 0) {
+      return json(request, env, { ok: false, error: 'An adjusted repayment needs an amount greater than zero.' }, 400);
+    }
+  }
+  try {
+    const row = await db.prepare('SELECT * FROM advance_manual_requests WHERE id = ?').bind(manualId).first();
+    if (!row) {
+      return json(request, env, { ok: false, error: 'Manual repayment submission not found.' }, 404);
+    }
+    if (String(row.teacher_id) === String(auth.sub)) {
+      return json(request, env, { ok: false, error: 'Access denied.' }, 403);
+    }
+    if (auth.role === 'manager') {
+      const tRow = await db.prepare('SELECT id, address, witness_name, notes FROM teachers WHERE id = ?').bind(String(row.teacher_id)).first();
+      if (tRow && isManagerStaffRecord(tRow)) {
+        return json(request, env, { ok: false, error: 'Access denied.' }, 403);
+      }
+    }
+    if (row.recovery_id) {
+      return json(request, env, { ok: false, error: 'This repayment has already been applied to a finalized salary slip and cannot be changed.' }, 409);
+    }
+    if (String(row.status) !== 'pending') {
+      if (String(row.status) === decision) {
+        return json(request, env, { ok: true, replayed: true, manual_request: manualPublicRow(row) });
+      }
+      return json(request, env, { ok: false, error: 'This submission has already been decided and cannot be changed.' }, 409);
+    }
+    if (decision === 'adjusted') {
+      const adj = await db.prepare('SELECT * FROM salary_adjustments WHERE id = ?').bind(String(row.adjustment_id)).first();
+      if (!adj || adj.cancelled_at) {
+        return json(request, env, { ok: false, error: 'The advance behind this submission is no longer open.' }, 422);
+      }
+      const remaining = Number(adj.advance_remaining) || 0;
+      if (adminAmount > remaining) {
+        return json(request, env, { ok: false, error: 'The adjusted amount cannot exceed the remaining advance balance.', advance_remaining: remaining }, 400);
+      }
+    }
+    const now = new Date().toISOString();
+    const upd = await db.prepare(
+      'UPDATE advance_manual_requests SET status = ?, admin_amount = ?, admin_reason = ?, decided_by = ?, decided_at = ?, updated_at = ? WHERE id = ? AND status = ?'
+    ).bind(decision, decision === 'adjusted' ? adminAmount : null, adminReason || null, String(auth.sub), now, now, manualId, 'pending').run();
+    if (!upd || !upd.success || Number(upd.meta && upd.meta.changes || 0) === 0) {
+      const raced = await db.prepare('SELECT * FROM advance_manual_requests WHERE id = ?').bind(manualId).first();
+      if (raced && String(raced.status) === decision) {
+        return json(request, env, { ok: true, replayed: true, manual_request: manualPublicRow(raced) });
+      }
+      return json(request, env, { ok: false, error: 'This submission has already been decided and cannot be changed.' }, 409);
+    }
+    await writeAdvancePhase4AuditEntry(db, auth, decision === 'confirmed' ? 'advance_manual_confirm' : decision === 'adjusted' ? 'advance_manual_adjust' : 'advance_manual_reject', 'advance_manual_requests', manualId);
+    const updated = await db.prepare('SELECT * FROM advance_manual_requests WHERE id = ?').bind(manualId).first();
+    return json(request, env, { ok: true, manual_request: manualPublicRow(updated) });
+  } catch (e) {
+    if (isMissingTableError(e)) {
+      return json(request, env, { ok: false, error: 'Service unavailable.' }, 503);
+    }
+    console.error('[advance] manual-decide failed:', e && e.message);
+    return json(request, env, { ok: false, error: 'Service unavailable.' }, 503);
+  }
+}
+
+// --- POST /api/advances/change-plan  { adjustment_id, repayment_method?, installment_amount?, reason }
+// Owner or manager ONLY (owner Decision 6): change the repayment
+// plan of an OPEN plan balance. A reason is REQUIRED. The change
+// applies to FUTURE cycles only: recovery_per_month is recomputed
+// (full → the remaining balance; fixed/custom → the installment;
+// manual → 0), the stored plan is updated on the ledger row AND
+// mirrored onto the originating advance_requests row (so the teacher
+// sees the current plan), and the change is appended to the row's
+// legacy_json.plan_changes history. Past advance_recoveries rows and
+// finalized slips are NEVER touched. The usual bars apply: never
+// the reviewer's own record; managers never touch manager accounts.
+async function handleAdvanceChangePlan(request, env) {
+  if (request.method === 'OPTIONS') return json(request, env, {}, 204);
+  if (request.method !== 'POST') {
+    return json(request, env, { ok: false, error: 'Method not allowed.' }, 405);
+  }
+  const auth = await requireApiAuth(request, env);
+  if (!auth) return unauthorized(request, env);
+  if (auth.role !== 'owner' && auth.role !== 'manager') {
+    return json(request, env, { ok: false, error: 'Access denied.' }, 403);
+  }
+  const db = getDb(env);
+  if (!db) {
+    return json(request, env, { ok: false, error: 'Service unavailable.' }, 503);
+  }
+  if (await d1WindowLimited(db, env, 'advance_change_plan', 'advplan:' + String(auth.sub), 10 * 60 * 1000, 30)) {
+    return json(request, env, { ok: false, error: 'Too many plan changes. Please try again later.' }, 429);
+  }
+  const body = await readAdvanceRequestBody(request);
+  if (!body) {
+    return json(request, env, { ok: false, error: 'Invalid request body.' }, 400);
+  }
+  const adjustmentId = String(body.adjustment_id || '').trim();
+  if (!adjustmentId) {
+    return json(request, env, { ok: false, error: 'adjustment_id is required.' }, 400);
+  }
+  const reason = body.reason != null ? String(body.reason).trim() : '';
+  if (!reason) {
+    return json(request, env, { ok: false, error: 'A reason is required to change a repayment plan.' }, 400);
+  }
+  if (reason.length > 500) {
+    return json(request, env, { ok: false, error: 'The reason must be 500 characters or fewer.' }, 400);
+  }
+  const hasMethod = body.repayment_method != null && String(body.repayment_method).trim() !== '';
+  const hasInstallment = body.installment_amount != null && body.installment_amount !== '';
+  if (!hasMethod && !hasInstallment) {
+    return json(request, env, { ok: false, error: 'Nothing to change: provide a repayment method and/or an installment amount.' }, 400);
+  }
+  try {
+    const adj = await db.prepare("SELECT * FROM salary_adjustments WHERE id = ? AND kind = 'advance'").bind(adjustmentId).first();
+    if (!adj) {
+      return json(request, env, { ok: false, error: 'Advance not found.' }, 404);
+    }
+    if (String(adj.teacher_id) === String(auth.sub)) {
+      return json(request, env, { ok: false, error: 'Access denied.' }, 403);
+    }
+    if (auth.role === 'manager') {
+      const tRow = await db.prepare('SELECT id, address, witness_name, notes FROM teachers WHERE id = ?').bind(String(adj.teacher_id)).first();
+      if (tRow && isManagerStaffRecord(tRow)) {
+        return json(request, env, { ok: false, error: 'Access denied.' }, 403);
+      }
+    }
+    if (adj.cancelled_at) {
+      return json(request, env, { ok: false, error: 'This advance is cancelled; its plan can no longer be changed.' }, 422);
+    }
+    const plan = parseAdjustmentPlan(adj);
+    if (!plan) {
+      return json(request, env, { ok: false, error: 'This advance has no repayment plan to change (it predates repayment plans).' }, 400);
+    }
+    const remaining = Number(adj.advance_remaining) || 0;
+    if (!(remaining > 0)) {
+      return json(request, env, { ok: false, error: 'This advance is fully recovered; its plan can no longer be changed.' }, 422);
+    }
+    const currentMethod = String(plan.repayment_method);
+    const currentInstallment = plan.installment_amount != null ? Number(plan.installment_amount) : null;
+    const newMethod = hasMethod ? String(body.repayment_method).trim() : currentMethod;
+    if (!['full', 'fixed', 'custom', 'manual'].includes(newMethod)) {
+      return json(request, env, { ok: false, error: 'Repayment method must be full, fixed, custom, or manual.' }, 400);
+    }
+    let newInstallment = null;
+    if (newMethod === 'fixed' || newMethod === 'custom') {
+      const raw = hasInstallment ? Number(body.installment_amount) : currentInstallment;
+      if (raw == null || !Number.isFinite(raw) || raw <= 0) {
+        return json(request, env, { ok: false, error: 'A fixed or custom repayment plan needs an installment amount greater than zero.' }, 400);
+      }
+      newInstallment = raw;
+    }
+    if (newMethod === currentMethod && newInstallment === currentInstallment) {
+      return json(request, env, { ok: false, error: 'The new plan is the same as the current plan.' }, 400);
+    }
+    const newRecoveryPerMonth = newMethod === 'full' ? remaining : (newMethod === 'manual' ? 0 : newInstallment);
+    const now = new Date().toISOString();
+    const changeEntry = {
+      from_method: currentMethod,
+      from_installment: currentInstallment,
+      to_method: newMethod,
+      to_installment: newInstallment,
+      reason,
+      changed_by: String(auth.sub),
+      changed_at: now
+    };
+    // Rebuild the stored plan JSON with advance_request_id FIRST (the
+    // crash-window LIKE match depends on that key order), the plan
+    // fields updated, and the change appended to the history.
+    const newMeta = {};
+    newMeta.advance_request_id = plan.advance_request_id;
+    for (const k of Object.keys(plan)) {
+      if (k === 'advance_request_id' || k === 'plan_changes' || k === 'repayment_method' || k === 'installment_amount') continue;
+      newMeta[k] = plan[k];
+    }
+    newMeta.repayment_method = newMethod;
+    newMeta.installment_amount = newInstallment;
+    const history = Array.isArray(plan.plan_changes) ? plan.plan_changes.slice() : [];
+    history.push(changeEntry);
+    newMeta.plan_changes = history;
+    await db.prepare(
+      'UPDATE salary_adjustments SET recovery_per_month = ?, legacy_json = ? WHERE id = ? AND cancelled_at IS NULL'
+    ).bind(newRecoveryPerMonth, JSON.stringify(newMeta), adjustmentId).run();
+    if (plan.advance_request_id) {
+      await db.prepare(
+        'UPDATE advance_requests SET repayment_method = ?, installment_amount = ?, updated_at = ? WHERE id = ?'
+      ).bind(newMethod, newInstallment, now, String(plan.advance_request_id)).run();
+    }
+    await writeAdvancePhase4AuditEntry(db, auth, 'advance_plan_change', 'salary_adjustments', adjustmentId);
+    return json(request, env, {
+      ok: true,
+      adjustment_id: adjustmentId,
+      repayment_plan: {
+        method: newMethod,
+        installment_amount: newInstallment,
+        recovery_per_month: newRecoveryPerMonth,
+        advance_remaining: remaining
+      },
+      plan_change: changeEntry
+    });
+  } catch (e) {
+    if (isMissingTableError(e)) {
+      return json(request, env, { ok: false, error: 'Service unavailable.' }, 503);
+    }
+    console.error('[advance] change-plan failed:', e && e.message);
     return json(request, env, { ok: false, error: 'Service unavailable.' }, 503);
   }
 }
@@ -4475,6 +5044,24 @@ export default {
     // handler trusts ONLY the stored slip row, never a client amount.
     if (url.pathname === '/api/advances/apply-recovery') {
       return handleAdvanceApplyRecovery(request, env);
+    }
+    // Salary Restructuring Phase 4: manual per-cycle repayments.
+    // manual-request: teacher role ONLY (own manual-plan advance).
+    // manual-list: teacher sees own rows; owner/manager see the
+    // review surface (manager-account bars enforced in the handler).
+    // manual-decide + change-plan: owner/manager ONLY, reasons
+    // enforced server-side (owner Decisions 6 + 7).
+    if (url.pathname === '/api/advances/manual-request') {
+      return handleAdvanceManualRequest(request, env);
+    }
+    if (url.pathname === '/api/advances/manual-list') {
+      return handleAdvanceManualList(request, env);
+    }
+    if (url.pathname === '/api/advances/manual-decide') {
+      return handleAdvanceManualDecide(request, env);
+    }
+    if (url.pathname === '/api/advances/change-plan') {
+      return handleAdvanceChangePlan(request, env);
     }
 
     // 3. Clean portal URLs without .html

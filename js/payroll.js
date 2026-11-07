@@ -577,7 +577,11 @@
     // always carry advance_remaining = 0, so they never appear here.
 
     // One compile-wide read: { teacherId: [{ adjustment_id, remaining,
-    // recovery_per_month, method }] }, oldest first (FIFO recovery).
+    // recovery_per_month, method, manual_amounts }] }, oldest first
+    // (FIFO recovery). Phase 4: a manual entry's manual_amounts maps
+    // period -> { amount, requested_amount, manual_request_id } for
+    // that period's DECIDED (confirmed/adjusted) and not-yet-consumed
+    // submission — the only manual figure a compile may plan with.
     async function loadAdvanceLedgerForCompile() {
       const map = {};
       try {
@@ -599,32 +603,71 @@
             adjustment_id: r.id,
             remaining,
             recovery_per_month: parseFloat(r.recovery_per_month) || 0,
-            method
+            method,
+            manual_amounts: {}
           });
         });
+        // Phase 4: decided manual submissions (confirmed/adjusted,
+        // not yet consumed by a finalized slip), keyed onto their
+        // ledger entry by adjustment + period.
+        try {
+          const mRes = await db.from('advance_manual_requests').select('*');
+          const mRows = (mRes && !mRes.error && Array.isArray(mRes.data)) ? mRes.data : [];
+          mRows.forEach((m) => {
+            if (!m || m.recovery_id) return;
+            if (m.status !== 'confirmed' && m.status !== 'adjusted') return;
+            const finalAmount = m.status === 'adjusted'
+              ? (parseFloat(m.admin_amount) || 0)
+              : (parseFloat(m.amount) || 0);
+            if (!(finalAmount > 0)) return;
+            const entries = map[String(m.teacher_id)] || [];
+            const entry = entries.find((e) => String(e.adjustment_id) === String(m.adjustment_id));
+            if (entry) {
+              entry.manual_amounts[String(m.period)] = {
+                amount: finalAmount,
+                requested_amount: parseFloat(m.amount) || 0,
+                manual_request_id: m.id
+              };
+            }
+          });
+        } catch (e) { /* manual read failure: manual plans plan zero, as before */ }
       } catch (e) { /* ledger read failure: compile proceeds with no planned recovery */ }
       return map;
     }
 
     // Pure planner (unit-tested): distribute this period's recovery
     // across a teacher's outstanding plan advances, oldest first. Each
-    // advance contributes min(remaining, recovery_per_month) — a
-    // manual plan carries recovery_per_month 0 and contributes nothing
-    // in Phase 3 — and the total never exceeds the headroom that keeps
-    // the slip's net >= 0. Final installments cap at the remaining
-    // balance by construction.
-    function computeAdvanceRecoveryPlan(rows, headroom) {
+    // automatic advance contributes min(remaining, recovery_per_month)
+    // — and the total never exceeds the headroom that keeps the slip's
+    // net >= 0. Final installments cap at the remaining balance by
+    // construction. Phase 4: a MANUAL advance contributes its decided
+    // submission amount for `period` (entry.manual_amounts, loaded
+    // above) — with no decided submission for the period it
+    // contributes nothing (owner Decision 7).
+    function computeAdvanceRecoveryPlan(rows, headroom, period) {
       let left = Math.max(0, parseFloat(headroom) || 0);
       let total = 0;
       const items = [];
       const list = Array.isArray(rows) ? rows : [];
       list.forEach((r) => {
         const remaining = parseFloat(r.remaining) || 0;
-        const perCycle = parseFloat(r.recovery_per_month) || 0;
+        let perCycle = parseFloat(r.recovery_per_month) || 0;
+        let source = 'auto';
+        let manualRequestId = null;
+        let requestedAmount = null;
+        if (r.method === 'manual') {
+          const decided = (period && r.manual_amounts) ? r.manual_amounts[String(period)] : null;
+          perCycle = decided ? (parseFloat(decided.amount) || 0) : 0;
+          if (decided) {
+            source = 'manual';
+            manualRequestId = decided.manual_request_id || null;
+            requestedAmount = decided.requested_amount != null ? (parseFloat(decided.requested_amount) || 0) : null;
+          }
+        }
         if (!(remaining > 0) || !(perCycle > 0) || !(left > 0)) return;
         const take = Math.min(remaining, perCycle, left);
         if (!(take > 0)) return;
-        items.push({ adjustment_id: r.adjustment_id, method: r.method || null, amount: take, balance_after: Math.max(0, remaining - take) });
+        items.push({ adjustment_id: r.adjustment_id, method: r.method || null, amount: take, balance_after: Math.max(0, remaining - take), source, manual_request_id: manualRequestId, requested_amount: requestedAmount });
         total += take;
         left -= take;
       });
@@ -743,6 +786,245 @@
       if (typeof CURRENT_SLIP_DATA === 'undefined' || !CURRENT_SLIP_DATA || CURRENT_SLIP_DATA !== slipData) return;
       remEl.innerText = `Remaining advance after this slip: ${Math.max(0, remainingAfter).toLocaleString()} PKR (recorded)`;
     }
+
+    // ================= SALARY RESTRUCTURING PHASE 4 — MANUAL CYCLES + PLAN CHANGES =================
+    // Two data-driven blocks inside the slip modal (containers in
+    // index.html: #slipManualAdvanceBlock + #slipPlanChangeBlock).
+    // Both render ONLY when matching rows exist for this teacher —
+    // on every other slip they stay empty and invisible, so they are
+    // safe to ship ahead of the Phase 4 Worker deploy.
+
+    function _slipEsc(s) {
+      return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+    function _slipPlanWords(method, installment) {
+      const inst = installment != null ? (parseFloat(installment) || 0) : null;
+      if (method === 'full') return 'Full Deduction — entire remaining balance from the next eligible salary';
+      if (method === 'fixed') return 'Fixed Installment' + (inst ? ' — ' + inst.toLocaleString() + ' PKR per salary' : '');
+      if (method === 'custom') return 'Custom Installment' + (inst ? ' — ' + inst.toLocaleString() + ' PKR per salary' : '');
+      if (method === 'manual') return 'Manual Deduction — teacher submits an amount before each salary';
+      return method || '';
+    }
+    function _slipPeriodOf(slipData) {
+      try {
+        const b = parsePayrollMonthBounds(slipData && slipData.month);
+        return b.year + '-' + String(b.monthIndex + 1).padStart(2, '0');
+      } catch (e) { return null; }
+    }
+
+    // Manual submissions for THIS teacher + THIS slip's period, plus
+    // the teacher's open plan balances with their change forms.
+    async function renderSlipAdvancePhase4Blocks(slipData) {
+      const manualEl = document.getElementById('slipManualAdvanceBlock');
+      const planEl = document.getElementById('slipPlanChangeBlock');
+      if (!manualEl && !planEl) return;
+      if (manualEl) manualEl.innerHTML = '';
+      if (planEl) planEl.innerHTML = '';
+      if (!slipData || typeof db === 'undefined' || !db || typeof db.from !== 'function') return;
+      const teacherId = String(slipData.teacher_id);
+      const period = _slipPeriodOf(slipData);
+      const isFrozen = !!slipData.frozen;
+      try {
+        // ---- Manual submissions for this period ----
+        if (manualEl && period) {
+          const mRes = await db.from('advance_manual_requests').select('*').eq('teacher_id', teacherId);
+          const mRows = ((mRes && !mRes.error && Array.isArray(mRes.data)) ? mRes.data : [])
+            .filter((m) => m && String(m.period) === period)
+            .sort((a, b) => String(a.created_at || '') < String(b.created_at || '') ? -1 : 1);
+          if (mRows.length) {
+            manualEl.innerHTML = `
+          <div class="p-3.5 rounded-xl border border-teal-200 bg-teal-50 space-y-2.5">
+            <div>
+              <span class="text-[11px] font-bold text-teal-800 uppercase block">Manual Advance Repayment — this period</span>
+              <span class="text-[11px] text-teal-700 font-semibold">The teacher submitted the amount below for this salary. Confirm it, adjust it (reason required) or reject it BEFORE saving the slip — the decided amount is what this slip deducts.</span>
+            </div>
+            ${mRows.map((m) => _slipManualRowHtml(m, isFrozen)).join('')}
+          </div>`;
+          }
+        }
+        // ---- Open plan balances + plan changes ----
+        if (planEl) {
+          const aRes = await db.from('salary_adjustments').select('*').eq('teacher_id', teacherId).eq('kind', 'advance');
+          const aRows = ((aRes && !aRes.error && Array.isArray(aRes.data)) ? aRes.data : [])
+            .filter((a) => a && !a.cancelled_at && (parseFloat(a.advance_remaining) || 0) > 0);
+          const plans = [];
+          aRows.forEach((a) => {
+            let meta = null;
+            try { meta = JSON.parse(a.legacy_json || 'null'); } catch (e) { meta = null; }
+            if (!meta || !meta.repayment_method) return; // legacy rows have no plan to change
+            plans.push({ adj: a, meta });
+          });
+          if (plans.length) {
+            planEl.innerHTML = `
+          <div class="p-3.5 rounded-xl border border-indigo-200 bg-indigo-50 space-y-2.5">
+            <div>
+              <span class="text-[11px] font-bold text-indigo-800 uppercase block">Repayment Plans — open advance balances</span>
+              <span class="text-[11px] text-indigo-700 font-semibold">Changing a plan needs a reason and applies to FUTURE salary cycles only. Past deductions are never rewritten.</span>
+            </div>
+            ${plans.map((p) => _slipPlanRowHtml(p.adj, p.meta)).join('')}
+          </div>`;
+          }
+        }
+      } catch (e) { /* best-effort blocks: the slip itself is unaffected */ }
+    }
+
+    function _slipManualRowHtml(m, isFrozen) {
+      const submitted = (parseFloat(m.amount) || 0).toLocaleString();
+      const head = `<div class="flex items-center justify-between gap-2 flex-wrap">
+          <span class="font-black text-slate-800 text-xs">Submitted repayment: ${submitted} PKR</span>
+          <span class="text-[10px] font-bold text-slate-500">${_slipEsc(m.id)}</span>
+        </div>`;
+      if (m.recovery_id) {
+        return `<div class="p-2.5 bg-white rounded-lg border border-teal-100">${head}
+          <div class="text-[11px] text-teal-800 font-bold mt-1">Applied on the finalized slip: ${(parseFloat(m.applied_amount) || 0).toLocaleString()} PKR deducted.</div></div>`;
+      }
+      if (m.status === 'rejected') {
+        return `<div class="p-2.5 bg-white rounded-lg border border-teal-100">${head}
+          <div class="text-[11px] text-rose-700 font-bold mt-1">Rejected — no deduction this period.${m.admin_reason ? ' Reason: ' + _slipEsc(m.admin_reason) : ''}</div></div>`;
+      }
+      if (m.status === 'confirmed' || m.status === 'adjusted') {
+        const fin = m.status === 'adjusted' ? (parseFloat(m.admin_amount) || 0) : (parseFloat(m.amount) || 0);
+        return `<div class="p-2.5 bg-white rounded-lg border border-teal-100">${head}
+          <div class="text-[11px] text-teal-800 font-bold mt-1">${m.status === 'adjusted' ? 'Adjusted to ' + fin.toLocaleString() + ' PKR' : 'Confirmed at ' + fin.toLocaleString() + ' PKR'} — this amount is deducted when the slip is saved.${m.admin_reason ? ' Reason: ' + _slipEsc(m.admin_reason) : ''}</div></div>`;
+      }
+      // Pending.
+      if (isFrozen) {
+        return `<div class="p-2.5 bg-white rounded-lg border border-teal-100">${head}
+          <div class="text-[11px] text-slate-500 font-semibold mt-1">Still pending — this slip is already finalized, so it can no longer be decided for this period.</div></div>`;
+      }
+      return `<div class="p-2.5 bg-white rounded-lg border border-teal-100 space-y-2">${head}
+        <div class="flex flex-wrap items-center gap-1.5">
+          <button type="button" onclick="decideSlipManualRequest('${_slipEsc(m.id)}', 'confirmed')" class="px-3 py-1.5 bg-teal-600 hover:bg-teal-700 text-white rounded-lg text-[11px] font-black">Confirm ${submitted} PKR</button>
+          <input type="number" id="slipManualAmt-${_slipEsc(m.id)}" min="1" step="1" placeholder="Adjusted PKR" class="w-28 p-1.5 border border-slate-300 rounded-lg text-[11px] font-bold">
+          <input type="text" id="slipManualReason-${_slipEsc(m.id)}" maxlength="500" placeholder="Reason (required to adjust or reject)" class="flex-1 min-w-[160px] p-1.5 border border-slate-300 rounded-lg text-[11px]">
+          <button type="button" onclick="decideSlipManualRequest('${_slipEsc(m.id)}', 'adjusted')" class="px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-white rounded-lg text-[11px] font-black">Adjust</button>
+          <button type="button" onclick="decideSlipManualRequest('${_slipEsc(m.id)}', 'rejected')" class="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-[11px] font-black">Reject</button>
+        </div></div>`;
+    }
+
+    function _slipPlanRowHtml(adj, meta) {
+      const remaining = parseFloat(adj.advance_remaining) || 0;
+      const changes = Array.isArray(meta.plan_changes) ? meta.plan_changes : [];
+      const last = changes.length ? changes[changes.length - 1] : null;
+      return `<div class="p-2.5 bg-white rounded-lg border border-indigo-100 space-y-2">
+        <div class="flex items-center justify-between gap-2 flex-wrap">
+          <span class="font-black text-slate-800 text-xs">Advance balance: ${remaining.toLocaleString()} PKR</span>
+          <span class="text-[10px] font-bold text-slate-500">${_slipEsc(adj.id)}</span>
+        </div>
+        <div class="text-[11px] text-slate-600">Current plan: <strong class="text-slate-800">${_slipEsc(_slipPlanWords(meta.repayment_method, meta.installment_amount))}</strong></div>
+        ${last ? `<div class="text-[11px] text-indigo-700">Last changed by Administration${last.changed_at ? ' on ' + _slipEsc(String(last.changed_at).slice(0, 10)) : ''}: now ${_slipEsc(_slipPlanWords(last.to_method, last.to_installment))}. Reason: ${_slipEsc(last.reason || '')}</div>` : ''}
+        <div class="flex flex-wrap items-center gap-1.5">
+          <select id="slipPlanMethod-${_slipEsc(adj.id)}" class="p-1.5 border border-slate-300 rounded-lg text-[11px] font-bold">
+            <option value="full" ${meta.repayment_method === 'full' ? 'selected' : ''}>Full Deduction</option>
+            <option value="fixed" ${meta.repayment_method === 'fixed' ? 'selected' : ''}>Fixed Installment</option>
+            <option value="custom" ${meta.repayment_method === 'custom' ? 'selected' : ''}>Custom Installment</option>
+            <option value="manual" ${meta.repayment_method === 'manual' ? 'selected' : ''}>Manual Deduction</option>
+          </select>
+          <input type="number" id="slipPlanInst-${_slipEsc(adj.id)}" min="1" step="1" placeholder="PKR / salary" value="${meta.installment_amount != null ? (parseFloat(meta.installment_amount) || '') : ''}" class="w-28 p-1.5 border border-slate-300 rounded-lg text-[11px] font-bold">
+          <input type="text" id="slipPlanReason-${_slipEsc(adj.id)}" maxlength="500" placeholder="Reason (required)" class="flex-1 min-w-[160px] p-1.5 border border-slate-300 rounded-lg text-[11px]">
+          <button type="button" onclick="submitSlipPlanChange('${_slipEsc(adj.id)}')" class="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-[11px] font-black">Change Plan</button>
+        </div>
+      </div>`;
+    }
+
+    // After a manual decision lands, an UNFINALIZED slip whose
+    // advance figure came from the plan (not from a saved record) is
+    // re-planned in place so the amount this slip will deduct — and
+    // its net — reflects the decision before the admin saves.
+    async function _refreshOpenSlipPlanAfterManualDecision() {
+      const slipData = (typeof CURRENT_SLIP_DATA !== 'undefined') ? CURRENT_SLIP_DATA : null;
+      if (!slipData || slipData.frozen) return;
+      if (!(slipData.advance_recovery || (parseFloat(slipData.advance_deducted) || 0) === 0)) return; // a saved figure stands
+      try {
+        const ledger = await loadAdvanceLedgerForCompile();
+        const period = _slipPeriodOf(slipData);
+        const headroom = Math.max(0, (parseFloat(slipData.base_subtotal) || 0) + (parseFloat(slipData.bonus) || 0) - (parseFloat(slipData.deduction) || 0));
+        const plan = computeAdvanceRecoveryPlan(ledger[String(slipData.teacher_id)] || [], headroom, period);
+        slipData.advance_deducted = plan.total;
+        slipData.advance_recovery = plan.total > 0 ? plan : null;
+        recalculateSlipNetTotal();
+      } catch (e) { /* the saved slip + server remain authoritative */ }
+    }
+
+    async function _postAdvanceAdmin(path, payload) {
+      const token = _payrollAdvanceAuthToken();
+      if (!token) throw new Error('no-token');
+      const resp = await fetch(_payrollAdvanceWorkerBase() + path, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+        body: JSON.stringify(payload)
+      });
+      const data = await resp.json().catch(() => null);
+      if (!resp.ok || !data || !data.ok) {
+        throw new Error((data && data.error) || ('HTTP ' + resp.status));
+      }
+      return data;
+    }
+
+    async function decideSlipManualRequest(manualId, decision) {
+      const payload = { manual_request_id: manualId, decision };
+      if (decision === 'adjusted' || decision === 'rejected') {
+        const amtEl = document.getElementById('slipManualAmt-' + manualId);
+        const reasonEl = document.getElementById('slipManualReason-' + manualId);
+        const reason = reasonEl ? reasonEl.value.trim() : '';
+        if (!reason) { lmsNotify('A reason is required to adjust or reject a submitted repayment.'); return; }
+        payload.admin_reason = reason;
+        if (decision === 'adjusted') {
+          const amt = amtEl ? parseFloat(amtEl.value) : NaN;
+          if (!Number.isFinite(amt) || amt <= 0) { lmsNotify('Enter the adjusted repayment amount (more than 0).'); return; }
+          payload.admin_amount = amt;
+        }
+      }
+      try {
+        await _postAdvanceAdmin('/api/advances/manual-decide', payload);
+        lmsNotify(decision === 'confirmed'
+          ? 'Manual repayment confirmed — it will be deducted when this slip is saved.'
+          : decision === 'adjusted'
+            ? 'Manual repayment adjusted — the adjusted amount will be deducted when this slip is saved.'
+            : 'Manual repayment rejected — nothing will be deducted for this period.', { type: 'success' });
+      } catch (e) {
+        lmsNotify('The decision could not be saved (' + (e && e.message ? e.message : 'network error') + '). Nothing was changed.', { type: 'error' });
+        return;
+      }
+      await _refreshOpenSlipPlanAfterManualDecision();
+      if (typeof CURRENT_SLIP_DATA !== 'undefined' && CURRENT_SLIP_DATA) {
+        const p = renderSlipAdvancePhase4Blocks(CURRENT_SLIP_DATA);
+        if (p && typeof p.catch === 'function') p.catch(function () {});
+      }
+    }
+    window.decideSlipManualRequest = decideSlipManualRequest;
+
+    async function submitSlipPlanChange(adjustmentId) {
+      const methodEl = document.getElementById('slipPlanMethod-' + adjustmentId);
+      const instEl = document.getElementById('slipPlanInst-' + adjustmentId);
+      const reasonEl = document.getElementById('slipPlanReason-' + adjustmentId);
+      const reason = reasonEl ? reasonEl.value.trim() : '';
+      if (!reason) { lmsNotify('A reason is required to change a repayment plan.'); return; }
+      const method = methodEl ? methodEl.value : '';
+      const payload = { adjustment_id: adjustmentId, repayment_method: method, reason };
+      if (method === 'fixed' || method === 'custom') {
+        const inst = instEl ? parseFloat(instEl.value) : NaN;
+        if (!Number.isFinite(inst) || inst <= 0) { lmsNotify('Enter the installment amount per salary (more than 0).'); return; }
+        payload.installment_amount = inst;
+      }
+      try {
+        await _postAdvanceAdmin('/api/advances/change-plan', payload);
+        lmsNotify('Repayment plan updated. The new plan applies from the next salary cycle — past deductions are unchanged.', { type: 'success' });
+      } catch (e) {
+        lmsNotify('The plan change could not be saved (' + (e && e.message ? e.message : 'network error') + '). Nothing was changed.', { type: 'error' });
+        return;
+      }
+      // The open slip keeps the figures it was compiled with (future
+      // cycles only); the payroll table recompiles behind the modal.
+      const p = calculateMonthlySalaries();
+      if (p && typeof p.catch === 'function') p.catch(function () {});
+      if (typeof CURRENT_SLIP_DATA !== 'undefined' && CURRENT_SLIP_DATA) {
+        const p2 = renderSlipAdvancePhase4Blocks(CURRENT_SLIP_DATA);
+        if (p2 && typeof p2.catch === 'function') p2.catch(function () {});
+      }
+    }
+    window.submitSlipPlanChange = submitSlipPlanChange;
+    window.renderSlipAdvancePhase4Blocks = renderSlipAdvancePhase4Blocks;
 
     async function calculateMonthlySalaries(forceRefresh = false) {
       const tbody = document.getElementById('salariesTableBody');
@@ -1132,7 +1414,8 @@
           // the server applied — or will apply — exactly once).
           let advanceRecoveryPlan = null;
           if (!(advanceDeducted > 0)) {
-            const planRes = computeAdvanceRecoveryPlan(advanceLedgerByTeacher[String(t.id)] || [], Math.max(0, baseSubtotal + bonus - deduction));
+            const compilePeriod = monthBounds.year + '-' + String(monthBounds.monthIndex + 1).padStart(2, '0');
+            const planRes = computeAdvanceRecoveryPlan(advanceLedgerByTeacher[String(t.id)] || [], Math.max(0, baseSubtotal + bonus - deduction), compilePeriod);
             if (planRes.total > 0) {
               advanceDeducted = planRes.total;
               advanceRecoveryPlan = planRes;
@@ -1427,6 +1710,16 @@
       try {
         const p = fillSlipAdvanceRemainingFromRecords(slipData);
         if (p && typeof p.catch === 'function') p.catch(function () {});
+      } catch (e) {}
+
+      // Salary Restructuring Phase 4: manual repayment submissions
+      // for this teacher + period (decide before saving) and the
+      // open repayment plans with their change forms. Data-driven:
+      // the blocks render only when matching rows exist (async,
+      // best-effort — the slip itself is unaffected).
+      try {
+        const p4 = renderSlipAdvancePhase4Blocks(slipData);
+        if (p4 && typeof p4.catch === 'function') p4.catch(function () {});
       } catch (e) {}
 
       // Update Paid Button
