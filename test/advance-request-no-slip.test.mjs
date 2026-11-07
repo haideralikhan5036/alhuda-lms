@@ -95,7 +95,7 @@ const pastPeriod = '2026-09';
   const t = fakeDb.q1("SELECT name FROM sqlite_master WHERE type='table' AND name='advance_requests'");
   check('setup: advance_requests table created by schema boot', !!t);
   const marker = fakeDb.q1("SELECT value FROM system_settings WHERE key = 'schema_version'");
-  check('setup: schema marker is the bumped v3 (Batch B miss repaired)', marker && marker.value === '2026-11-07-v7', JSON.stringify(marker));
+  check('setup: schema marker is the bumped v3 (Batch B miss repaired)', marker && marker.value === '2026-11-07-v8', JSON.stringify(marker));
 }
 fakeDb.seed("INSERT INTO teachers (id, full_name, address, status) VALUES (?, ?, ?, ?)",
   'TCH-NOSLIP', 'Teacher No Slip', JSON.stringify({ salary_slips: {} }), 'Active');
@@ -211,7 +211,7 @@ check('structural: teacher submit surfaces the pending-slip state',
 check('structural: worker refuses full/half without a slip with a plain message',
   WORKER.includes('A full or half advance needs a generated salary slip for this period'));
 check('structural: schema version bumped to v3 in db.js and worker health constant',
-  DBJS.includes("const SCHEMA_VERSION = '2026-11-07-v7'") && WORKER.includes("const HEALTH_SCHEMA_VERSION = '2026-11-07-v7'"));
+  DBJS.includes("const SCHEMA_VERSION = '2026-11-07-v8'") && WORKER.includes("const HEALTH_SCHEMA_VERSION = '2026-11-07-v8'"));
 check('structural: migration SQL creates advance_requests idempotently',
   MIGRATION.includes('CREATE TABLE IF NOT EXISTS advance_requests'));
 

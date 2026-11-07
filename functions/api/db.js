@@ -45,6 +45,15 @@ const ALLOWED_TABLES = new Set([
   // (teachers: own rows only). UNIQUE (slip_id, adjustment_id) is the
   // hard double-deduction guard.
   'advance_recoveries',
+  // Salary Restructuring Phase 4 (2026-11-07): per-cycle MANUAL
+  // repayment submissions. A teacher with a manual-plan advance
+  // submits an amount for one salary period; Administration confirms,
+  // adjusts (with a reason) or rejects it at slip time through the
+  // Worker's /api/advances/manual-* endpoints — the ONLY writers.
+  // Read through this engine scoped per role in worker.js (teachers:
+  // own rows only), like advance_recoveries. Rows are never
+  // hard-deleted (Worker-enforced, like the other financial tables).
+  'advance_manual_requests',
   // Assignment-based salary (Phase 2, 2026-11-03): dated student→teacher→
   // course assignment history. Rows are CLOSED (end_date set), never
   // hard-deleted — the Worker denies deletes for every role.
@@ -408,6 +417,44 @@ const SCHEMA_STATEMENTS = [
     created_at TEXT DEFAULT (datetime('now')),
     UNIQUE (slip_id, adjustment_id)
   )`,
+  // Salary Restructuring Phase 4 (2026-11-07): per-cycle manual
+  // repayment submissions. A teacher whose approved advance carries
+  // the 'manual' repayment plan submits ONE amount per salary period
+  // (amount); Administration confirms it as-is, adjusts it
+  // (admin_amount + admin_reason, reason REQUIRED) or rejects it
+  // (admin_reason REQUIRED) when that period's slip is generated.
+  // status: 'pending' | 'confirmed' | 'adjusted' | 'rejected'. The
+  // confirmed/adjusted amount is that period's planned recovery; it
+  // becomes a real deduction only at slip finalization, when
+  // /api/advances/apply-recovery writes the advance_recoveries row
+  // (source 'manual', requested_amount = this row's amount) and stamps
+  // recovery_id + applied_amount here. No row for a period (or a
+  // rejected one) means ZERO recovery that period — owner Decision 7.
+  // ONE ACTIVE submission per (teacher_id, period): "active" =
+  // status IN ('pending','confirmed','adjusted') AND recovery_id IS
+  // NULL. Enforced by the partial UNIQUE index below (SQLite/D1
+  // support partial indexes; the Worker additionally pre-checks and
+  // returns the existing row, so the index is the race-proof backstop,
+  // not the user-facing error path). Rows are never hard-deleted.
+  `CREATE TABLE IF NOT EXISTS advance_manual_requests (
+    id TEXT PRIMARY KEY,
+    teacher_id TEXT NOT NULL,
+    adjustment_id TEXT NOT NULL,
+    period TEXT NOT NULL,
+    amount REAL NOT NULL,
+    status TEXT DEFAULT 'pending',
+    admin_amount REAL,
+    admin_reason TEXT,
+    applied_amount REAL,
+    recovery_id TEXT,
+    decided_by TEXT,
+    decided_at TEXT,
+    created_at TEXT DEFAULT (datetime('now')),
+    updated_at TEXT
+  )`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS idx_advance_manual_requests_active
+     ON advance_manual_requests (teacher_id, period)
+     WHERE status IN ('pending', 'confirmed', 'adjusted') AND recovery_id IS NULL`,
   // Assignment-based salary (Phase 2, 2026-11-03): one row per
   // student→teacher→course assignment period. start_date/end_date are
   // 'YYYY-MM-DD'; end_date NULL means the assignment is still open.
@@ -458,7 +505,7 @@ let _schemaInitialized = false;
 // not exist yet) falls back to the full DDL path; a marker-write
 // failure only costs the next cold isolate a DDL replay. Neither
 // failure ever fails the request.
-const SCHEMA_VERSION = '2026-11-07-v7';
+const SCHEMA_VERSION = '2026-11-07-v8';
 const SCHEMA_VERSION_KEY = 'schema_version';
 
 async function ensureSchema(db) {
@@ -569,7 +616,8 @@ function generateId(table) {
     trial_students: 'TRL-',
     system_settings: 'SYS-',
     salary_slips: 'SAL-',
-    salary_adjustments: 'ADJ-'
+    salary_adjustments: 'ADJ-',
+    advance_manual_requests: 'AMR-'
   };
   const prefix = prefixMap[table] || 'ID-';
   return prefix + Date.now().toString(36).toUpperCase() + '-' + Math.random().toString(36).substring(2, 6).toUpperCase();
