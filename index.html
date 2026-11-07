@@ -441,17 +441,19 @@
         position: fixed !important;
         top: 0 !important;
         bottom: 0 !important;
-        left: -285px !important;
-        width: 285px !important;
+        left: 0 !important;
+        transform: translateX(-110%) !important;
+        width: 292px !important;
+        max-width: 86vw !important;
         height: auto !important;
         z-index: 60 !important;
-        padding: 0.25rem !important;
+        padding: 0 !important;
         box-sizing: border-box !important;
         box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.35) !important;
         transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
       }
       #mainAppSidebar.sidebar-mobile-open {
-        transform: translateX(285px) !important;
+        transform: translateX(0) !important;
       }
       #mainContentArea {
         margin-left: 0 !important;
@@ -467,27 +469,27 @@
     @media (min-width: 1024px) {
       #mainAppSidebar {
         position: fixed !important;
-        top: 56px !important;
+        top: 0 !important;
         bottom: 0 !important;
         left: 0 !important;
-        width: 232px !important;
+        width: 312px !important;
         height: auto !important;
-        padding: 0.25rem !important;
+        padding: 0 !important;
         box-sizing: border-box !important;
         z-index: 40 !important;
         transform: none !important;
         transition: width 0.25s ease-in-out !important;
       }
       #mainContentArea {
-        margin-left: 232px !important;
-        width: calc(100% - 232px) !important;
-        max-width: calc(100% - 232px) !important;
+        margin-left: 312px !important;
+        width: calc(100% - 312px) !important;
+        max-width: calc(100% - 312px) !important;
         padding: 0.85rem 1.15rem 1.5rem 1.15rem !important;
         box-sizing: border-box !important;
         overflow-x: hidden !important;
       }
       #mainAppSidebar.sidebar-collapsed {
-        width: 60px !important;
+        width: 92px !important;
         padding: 0.25rem !important;
       }
       #mainAppSidebar.sidebar-collapsed nav {
@@ -538,9 +540,9 @@
         display: none !important;
       }
       #mainContentArea.sidebar-collapsed {
-        margin-left: 60px !important;
-        width: calc(100% - 60px) !important;
-        max-width: calc(100% - 60px) !important;
+        margin-left: 92px !important;
+        width: calc(100% - 92px) !important;
+        max-width: calc(100% - 92px) !important;
         padding: 0.85rem 1.15rem 1.5rem 1.15rem !important;
       }
     }
@@ -569,6 +571,264 @@
     .emp-table tr { border-bottom: 10px solid #f1f5f9; padding: 6px 2px; }
     .emp-table td { border-bottom: none; padding: 5px 12px; }
     .emp-table td[data-label]::before { content: attr(data-label); display: block; font-size: 10px; text-transform: uppercase; letter-spacing: .04em; color: #94a3b8; font-weight: 700; margin-bottom: 2px; }
+  }
+
+  /* ================================================================
+     FLAGSHIP REDESIGN (2026-11-07, owner-approved mockups): the
+     teacher portal's emerald-glass shell applied to the admin
+     portal (owner + manager — the same file). Interface only: no
+     ids, handlers or data flow change. The old full-width top
+     header is gone — its brand + live clock live in the sidebar's
+     pinned header band, its toggle button / teacher session pill /
+     role badge + Logout moved into the persistent search bar (now
+     the slim top bar of the content column), and the sidebar foot
+     keeps the live counters. The signature move is the ACTIVE
+     sidebar pill: a white pill flush with the sidebar's right edge
+     whose ::before/::after radial-gradient fillets make it read as
+     one continuous white shape with the (now white) content area —
+     the teacher technique, lifted verbatim.
+     ================================================================ */
+  .aui-sidebar-glass {
+    background:
+      radial-gradient(130% 46% at 18% -4%, rgba(255,255,255,.16), rgba(255,255,255,0) 60%),
+      radial-gradient(90% 40% at 110% 108%, rgba(212,175,55,.10), rgba(212,175,55,0) 60%),
+      linear-gradient(168deg, #0e6e4b 0%, #095239 34%, #06402c 62%, #032a1e 100%);
+  }
+  .aui-rail-glow {
+    background:
+      radial-gradient(120% 34% at 50% -2%, rgba(255,255,255,.20), rgba(255,255,255,0) 60%),
+      linear-gradient(180deg, #0e6e4b 0%, #074631 52%, #032a1e 100%);
+    border: 1px solid rgba(255,255,255,.22);
+    box-shadow: 0 18px 36px rgba(0,0,0,.30), inset 0 1px 0 rgba(255,255,255,.25);
+  }
+  /* ---- Sidebar base on glass ---- */
+  aside#mainAppSidebar {
+    color: #ffffff;
+    border-right: none;
+    box-shadow: 24px 0 48px -24px rgba(2,32,22,.35);
+  }
+  aside#mainAppSidebar .aui-sidebar-inner {
+    padding: 22px 0 18px 24px;
+  }
+  /* The nav band is the only scrolling part; its scrollbar is not
+     painted (the junction must read as one piece, as on teacher). */
+  aside#mainAppSidebar .aui-nav-scroll {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+  aside#mainAppSidebar .aui-nav-scroll::-webkit-scrollbar {
+    display: none;
+    width: 0;
+    height: 0;
+  }
+
+  /* ---- Nav pills on glass (overrides the white-sidebar base rules
+     above; the base .sidebar-nav-btn block stays for safety) ---- */
+  aside#mainAppSidebar .sidebar-nav-btn {
+    width: calc(100% - 24px);
+    gap: 13px;
+    padding: 11px 15px;
+    border-radius: 999px !important;
+    font-size: 0.9rem !important;
+    font-weight: 600 !important;
+    color: #e8f4ee;
+    background: rgba(255,255,255,.07);
+    border: 1px solid transparent;
+    box-shadow: none !important;
+  }
+  aside#mainAppSidebar .sidebar-nav-btn:hover:not(.active) {
+    background: rgba(255,255,255,.13) !important;
+    color: #ffffff !important;
+  }
+  aside#mainAppSidebar .sidebar-nav-btn .sidebar-icon-box {
+    width: auto;
+    height: auto;
+    border-radius: 0;
+    background: transparent;
+    color: inherit;
+    font-size: 1.02rem;
+  }
+  aside#mainAppSidebar .sidebar-nav-btn:hover:not(.active) .sidebar-icon-box {
+    background: transparent;
+    color: #ffffff;
+  }
+  /* The one long label ("Teacher Auto Salary Generation") gets the
+     mockup's smaller size so it stays on one line at 312px. */
+  aside#mainAppSidebar .sidebar-nav-btn .aui-label-long {
+    font-size: 13px;
+    letter-spacing: -.2px;
+  }
+  /* The merging active pill */
+  aside#mainAppSidebar .sidebar-nav-btn.active {
+    position: relative;
+    z-index: 5;
+    width: 100%;
+    background: #ffffff !important;
+    color: #07382a !important;
+    font-weight: 700 !important;
+    border-left: 1px solid transparent !important;
+    border-radius: 999px 0 0 999px !important;
+    box-shadow: -14px 10px 30px rgba(0,0,0,.18) !important;
+  }
+  aside#mainAppSidebar .sidebar-nav-btn.active .sidebar-icon-box {
+    background: transparent !important;
+    color: #0b5a3c !important;
+  }
+  aside#mainAppSidebar .sidebar-nav-btn.active::before,
+  aside#mainAppSidebar .sidebar-nav-btn.active::after {
+    content: '';
+    position: absolute;
+    right: 0;
+    width: 20px;
+    height: 20px;
+    z-index: 5;
+    pointer-events: none;
+  }
+  aside#mainAppSidebar .sidebar-nav-btn.active::before {
+    top: -20px;
+    background: radial-gradient(circle at 0 0, rgba(255,255,255,0) 19px, #ffffff 20px);
+  }
+  aside#mainAppSidebar .sidebar-nav-btn.active::after {
+    bottom: -20px;
+    background: radial-gradient(circle at 0 100%, rgba(255,255,255,0) 19px, #ffffff 20px);
+  }
+
+  /* ---- Settings sub-options: indented pills whose active state
+     still reaches the sidebar's right edge and merges ---- */
+  aside#mainAppSidebar #sidebarSettingsGroup {
+    padding-left: 0;
+  }
+  aside#mainAppSidebar #sidebarSettingsGroup .sidebar-nav-btn {
+    margin-left: 24px;
+    width: calc(100% - 48px);
+    padding: 10px 13px;
+    font-size: 0.81rem !important;
+  }
+  aside#mainAppSidebar #sidebarSettingsGroup .sidebar-nav-btn.active {
+    width: calc(100% - 24px);
+  }
+  aside#mainAppSidebar #sidebarSettingsChevron {
+    color: rgba(255,255,255,.5) !important;
+  }
+
+  /* ---- Sidebar foot counters on glass ---- */
+  aside#mainAppSidebar .aui-counter-row {
+    background: rgba(255,255,255,.07);
+    border: 1px solid rgba(255,255,255,.12);
+    color: #e8f4ee;
+    border-radius: 16px;
+    box-shadow: none;
+  }
+  aside#mainAppSidebar #sidebarActiveFamilies,
+  aside#mainAppSidebar #sidebarActiveStudents {
+    background: rgba(0,0,0,.30);
+    color: #ffffff;
+    border-color: transparent;
+  }
+
+  /* ---- Collapsed desktop rail: icon circles, fillets off, text
+     hidden (mirrors the teacher rail; the layout engine above only
+     sets the 92px geometry) ---- */
+  @media (min-width: 1024px) {
+    aside#mainAppSidebar.sidebar-collapsed .aui-sidebar-inner {
+      padding: 22px 0 18px 0;
+    }
+    aside#mainAppSidebar.sidebar-collapsed .sidebar-nav-btn {
+      width: 48px !important;
+      height: 48px;
+      margin: 0 auto;
+      padding: 0 !important;
+      border-radius: 999px !important;
+      justify-content: center !important;
+    }
+    aside#mainAppSidebar.sidebar-collapsed .sidebar-nav-btn.active {
+      border-radius: 999px !important;
+      box-shadow: 0 10px 22px rgba(0,0,0,.30) !important;
+    }
+    aside#mainAppSidebar.sidebar-collapsed .sidebar-nav-btn.active::before,
+    aside#mainAppSidebar.sidebar-collapsed .sidebar-nav-btn.active::after {
+      display: none;
+    }
+    aside#mainAppSidebar.sidebar-collapsed #sidebarSettingsGroup {
+      margin-top: 8px;
+    }
+    aside#mainAppSidebar.sidebar-collapsed #sidebarSettingsGroup .sidebar-nav-btn {
+      margin-left: auto;
+      width: 48px !important;
+    }
+    aside#mainAppSidebar.sidebar-collapsed .aui-brand-text,
+    aside#mainAppSidebar.sidebar-collapsed .aui-clock-chip,
+    aside#mainAppSidebar.sidebar-collapsed .aui-brand-actions {
+      display: none !important;
+    }
+    aside#mainAppSidebar.sidebar-collapsed .aui-brand-row {
+      flex-direction: column;
+      align-items: center;
+      padding-right: 0 !important;
+    }
+  }
+
+  /* ---- Mobile slim icon rail ---- */
+  .aui-rail-btn {
+    width: 44px;
+    height: 44px;
+    border-radius: 999px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #dcefe5;
+    background: rgba(255,255,255,.07);
+    font-size: 1rem;
+    flex-shrink: 0;
+    transition: all 0.18s ease;
+    cursor: pointer;
+  }
+  .aui-rail-btn:hover {
+    background: rgba(255,255,255,.15);
+    color: #ffffff;
+  }
+  .aui-rail-btn.active {
+    background: #ffffff;
+    color: #07382a;
+    box-shadow: 0 8px 18px rgba(0,0,0,.30);
+  }
+  @media (max-width: 1023px) {
+    /* content clears the fixed slim rail on phones */
+    #mainContentArea {
+      padding-left: 84px !important;
+    }
+  }
+
+  /* ---- Content surfaces in the new language ---- */
+  #mainContentArea {
+    background: #ffffff;
+  }
+  #globalPersistentTopSearchBar {
+    border-radius: 24px;
+    border-color: #eef3ee;
+    box-shadow: 0 10px 28px rgba(7,45,32,.055);
+  }
+  #tab-dashboard .kpi-dash-card {
+    border-radius: 24px;
+  }
+  #tab-dashboard .aui-dash-banner {
+    border-radius: 24px;
+    background: #edf5f0;
+    border-color: #e1eee5;
+  }
+  #dashGraphsSection > div {
+    border-radius: 24px;
+    border-color: #eef3ee;
+    box-shadow: 0 10px 28px rgba(7,45,32,.055);
+  }
+  #dashClassesSection {
+    border-radius: 24px;
+    border-color: #dfe9e2;
+  }
+  /* Section cards across the tabs take the same radius (radius
+     only — no layout, colour or data change). */
+  .tab-content .bg-white.rounded-2xl {
+    border-radius: 24px;
   }
 </style>
 </head>
@@ -651,62 +911,105 @@
   <!-- ========================================================================== -->
   <div id="mainAppWrapper" class="hidden flex-col min-h-screen w-full">
 
-  <!-- TOP HEADER -->
-  <header class="bg-gradient-to-r from-[#022c22] via-[#064e3b] to-[#047857] text-white h-[56px] px-3 sm:px-5 border-b-4 border-[#d97706] sticky top-0 z-50 shadow-md flex items-center w-full box-border">
-    <div class="w-full flex justify-between items-center gap-2 min-w-0">
-      <!-- Left Branding Anchor: Sidebar Toggle + Logo + AL-HUDA ISLAMIC CENTRE (Protected from multi-line compression & Back button shifts) -->
-      <div class="flex items-center gap-2 sm:gap-2.5 min-w-0 flex-1">
-        <!-- Sidebar Toggle Button (Mobile & Desktop) -->
-        <button onclick="toggleSidebar()" aria-label="Toggle navigation sidebar" class="w-11 h-11 rounded-xl bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition shrink-0 active:scale-95 shadow-2xs cursor-pointer" title="Toggle Navigation Sidebar">
-          <i class="fa-solid fa-bars text-sm sm:text-base"></i>
-        </button>
+  <!-- Hidden internals relocated from the old top header (flagship
+       redesign): js/auth.js keeps the role select in sync, and the
+       legacy badge counters are still written by their owners — all
+       stay in the DOM, simply not displayed. -->
+  <div class="hidden">
+    <select id="userRoleSelect" onchange="switchUserRole(this.value)">
+      <option value="owner">Owner</option>
+      <option value="manager">Manager</option>
+      <option value="teacher">Teacher</option>
+      <option value="student">Student/Parent</option>
+    </select>
+  </div>
+  <div class="hidden" aria-hidden="true">
+    <button onclick="openAdminTeacherRequestsModal()"><span id="badgePendingTeacherRequests">0</span></button>
+    <button id="btnReturnAlertsBell" onclick="openReturnAlertsModal()"><span id="badgeReturnAlertsCount">0</span></button>
+  </div>
 
-        <div onclick="switchTab('tab-dashboard')" class="cursor-pointer flex items-center gap-2 sm:gap-2.5 min-w-0" title="Return to Dashboard">
-          <img src="alhuda_logo.jpg" alt="Al-Huda Logo" class="w-8 h-8 sm:w-9 sm:h-9 rounded-full border-2 border-brandGold object-cover shadow-sm bg-black shrink-0">
-          <div class="min-w-0">
-            <h1 class="font-cinzel text-xs sm:text-sm md:text-base lg:text-lg font-bold tracking-wide leading-tight whitespace-nowrap truncate">AL-HUDA ISLAMIC CENTRE</h1>
-          </div>
-        </div>
-      </div>
-
-      <!-- RIGHT ACTIONS: Role Session Pill (Back button removed by owner 2026-10-29 — navigation handles returning) -->
-      <div class="flex items-center gap-1.5 sm:gap-2 shrink-0">
-
-        <!-- Logged-in Teacher Session Badge -->
-        <div id="teacherSessionPill" class="hidden items-center gap-1.5 bg-emerald-950/80 border border-emerald-400/50 px-2.5 py-1 rounded-full text-xs font-semibold text-emerald-200 shadow-sm shrink-0">
-          <span class="truncate max-w-[110px] sm:max-w-[160px]"><i class="fa-solid fa-chalkboard-user text-emerald-400 text-xs"></i> <span id="teacherActiveName">Teacher</span></span>
-          <button onclick="logoutTeacherPortal()" class="text-amber-300 hover:text-amber-100 font-bold ml-1 text-[11px] underline shrink-0" title="Exit Teacher Portal">Logout</button>
-        </div>
-
-        <!-- Hidden Role Select for internal JS role synchronization -->
-        <div class="hidden">
-          <select id="userRoleSelect" onchange="switchUserRole(this.value)">
-            <option value="owner">Owner</option>
-            <option value="manager">Manager</option>
-            <option value="teacher">Teacher</option>
-            <option value="student">Student/Parent</option>
-          </select>
-        </div>
-
-        <!-- Dynamic Security / Role Badge (Batch 3.6, audit P2-33: visible at all sizes, not desktop-only) -->
-        <div id="headerRoleSecurityBadge" class="shrink-0"></div>
-
-        <!-- Hidden legacy duplicate header notification buttons (Already prominently displayed in #globalPersistentTopSearchBar right below) -->
-        <div class="hidden" aria-hidden="true">
-          <button onclick="openAdminTeacherRequestsModal()"><span id="badgePendingTeacherRequests">0</span></button>
-          <button id="btnReturnAlertsBell" onclick="openReturnAlertsModal()"><span id="badgeReturnAlertsCount">0</span></button>
-        </div>
-      </div>
+  <!-- MOBILE SLIM ICON RAIL (flagship redesign): fixed at the left on
+       phones; the menu button opens the labelled sidebar drawer via
+       the same toggleSidebar(), and the tab buttons call the same
+       switchTab() with the same tab names as the sidebar. Their
+       active state mirrors the sidebar pill (rail sync script below
+       the sidebar). -->
+  <div id="adminMobileRail" class="aui-rail-glow lg:hidden fixed left-2 top-2 bottom-2 z-40 w-[64px] rounded-full flex flex-col items-center py-3 gap-1.5">
+    <div class="w-10 h-10 rounded-full overflow-hidden shrink-0" style="background:rgba(255,255,255,.14); border:1px solid rgba(255,255,255,.28)">
+      <img src="alhuda_logo.jpg" alt="Al-Huda" class="w-full h-full object-cover">
     </div>
-  </header>
+    <div class="w-5 h-px my-1 shrink-0" style="background:rgba(255,255,255,.18)"></div>
+    <button onclick="toggleSidebar()" aria-label="Open navigation menu" class="aui-rail-btn min-h-[44px] min-w-[44px]" title="Open Navigation Menu">
+      <i class="fa-solid fa-bars"></i>
+    </button>
+    <button class="aui-rail-btn" data-rail-tab="tab-dashboard" onclick="switchTab('tab-dashboard')" title="Main Dashboard">
+      <i class="fa-solid fa-chart-pie"></i>
+    </button>
+    <button class="aui-rail-btn" data-rail-tab="tab-families" onclick="switchTab('tab-families')" title="Families">
+      <i class="fa-solid fa-people-roof"></i>
+    </button>
+    <button class="aui-rail-btn" data-rail-tab="tab-teachers" onclick="switchTab('tab-teachers')" title="Employees">
+      <i class="fa-solid fa-user-tie"></i>
+    </button>
+    <button class="aui-rail-btn" data-rail-tab="tab-invoices" onclick="switchTab('tab-invoices')" title="Fee Management">
+      <i class="fa-solid fa-wallet"></i>
+    </button>
+    <button class="aui-rail-btn" data-rail-tab="tab-salaries" onclick="switchTab('tab-salaries')" title="Teacher Auto Salary Generation">
+      <i class="fa-solid fa-calculator"></i>
+    </button>
+    <button class="aui-rail-btn" data-rail-tab="tab-leaves" onclick="switchTab('tab-leaves')" title="Leave">
+      <i class="fa-solid fa-calendar-minus"></i>
+    </button>
+  </div>
+
+
 
   <!-- SIDEBAR BACKDROP (Mobile overlay) -->
   <div id="sidebarBackdrop" onclick="toggleSidebar()" class="hidden fixed inset-0 bg-black/60 backdrop-blur-sm z-50 lg:hidden transition-opacity"></div>
 
   <!-- COLLAPSIBLE LEFT SIDEBAR (Mobile Off-Canvas Drawer / Desktop Collapsible) -->
-  <aside id="mainAppSidebar" class="bg-white border-r border-slate-200/90 shadow-xl flex flex-col overflow-hidden">
+  <aside id="mainAppSidebar" class="aui-sidebar-glass flex flex-col overflow-hidden">
+    <!-- Sidebar layout (flagship redesign): three pinned bands — brand
+         + live clock at the top, ONLY the nav groups scroll (middle,
+         invisible scrollbar), live counters pinned at the bottom. -->
+    <div class="aui-sidebar-inner w-full flex-1 min-h-0 flex flex-col">
+
+      <!-- Pinned header band: brand + live clock (relocated from the
+           old top header; the admin boot already ticks #liveClock) -->
+      <div class="shrink-0">
+        <div class="aui-brand-row flex items-center gap-3 pr-6">
+          <div onclick="switchTab('tab-dashboard')" class="cursor-pointer flex items-center gap-3 min-w-0" title="Return to Dashboard">
+            <div class="w-12 h-12 rounded-full overflow-hidden shrink-0" style="background:rgba(255,255,255,.13); border:1px solid rgba(255,255,255,.26); box-shadow:inset 0 1px 0 rgba(255,255,255,.25)">
+              <img src="alhuda_logo.jpg" alt="Al-Huda Logo" class="w-full h-full object-cover">
+            </div>
+            <div class="aui-brand-text min-w-0">
+              <div class="font-cinzel text-white text-[19px] font-bold tracking-[1.5px] leading-none">AL-HUDA</div>
+              <div class="text-[9.5px] font-bold tracking-[3.2px] mt-[5px]" style="color:#dcbc55">ISLAMIC CENTRE</div>
+            </div>
+          </div>
+          <div class="aui-brand-actions ml-auto flex items-center gap-1.5 shrink-0">
+            <button onclick="toggleSidebar()" aria-label="Close navigation sidebar" class="lg:hidden w-8 h-8 flex items-center justify-center text-white/70 hover:text-white hover:bg-white/10 rounded-full transition" title="Close Menu">
+              <i class="fa-solid fa-xmark text-base"></i>
+            </button>
+            <button onclick="toggleSidebar()" aria-label="Collapse or expand sidebar" class="hidden lg:flex w-[30px] h-[30px] items-center justify-center text-white/70 hover:text-white rounded-full transition" style="background:rgba(255,255,255,.09)" title="Collapse / Expand Sidebar (Desktop)">
+              <i class="fa-solid fa-chevron-left text-xs"></i>
+            </button>
+          </div>
+        </div>
+
+        <!-- Live PKT Clock -->
+        <div class="aui-clock-chip mt-4">
+          <div class="inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-[11px] font-mono font-bold text-emerald-100" style="background:rgba(255,255,255,.08); border:1px solid rgba(255,255,255,.14)">
+            <i class="fa-regular fa-clock" style="color:#dcbc55"></i>
+            <span id="liveClock">--:--:-- PKT</span>
+          </div>
+        </div>
+      </div><!-- /pinned header band -->
+
     <!-- Primary & Secondary Nav Items -->
-    <nav class="flex flex-col gap-1 p-2.5 flex-1 overflow-y-auto touch-scroll">
+    <nav class="aui-nav-scroll flex-1 min-h-0 overflow-y-auto touch-scroll flex flex-col gap-2 mt-5">
+      <p class="sidebar-group-title sidebar-label text-[10px] font-extrabold uppercase tracking-[2.6px] text-white/40 pl-4 pr-6 mb-1">Main</p>
+
       <!-- 1. Main Dashboard -->
       <button onclick="switchTab('tab-dashboard')" data-tab="tab-dashboard" class="sidebar-nav-btn nav-tab active w-full text-left px-2.5 py-2 flex items-center gap-2.5" title="Main Dashboard">
         <span class="sidebar-icon-box"><i class="fa-solid fa-chart-pie"></i></span>
@@ -743,7 +1046,7 @@
       <!-- 6. Teacher Auto Salary Generation -->
       <button onclick="switchTab('tab-salaries')" data-tab="tab-salaries" class="sidebar-nav-btn nav-tab role-admin w-full text-left px-2.5 py-2 flex items-center gap-2.5" title="Teacher Auto Salary Generation">
         <span class="sidebar-icon-box"><i class="fa-solid fa-calculator"></i></span>
-        <span class="sidebar-label truncate">Teacher Auto Salary Generation</span>
+        <span class="sidebar-label truncate aui-label-long">Teacher Auto Salary Generation</span>
       </button>
       <!-- 7. Leave -->
       <button onclick="switchTab('tab-leaves')" data-tab="tab-leaves" class="sidebar-nav-btn nav-tab role-admin w-full text-left px-2.5 py-2 flex items-center gap-2.5" title="Leave">
@@ -761,9 +1064,7 @@
       </button>
 
       <!-- Divider for Preserved Academic & Operations Modules -->
-      <div class="my-1.5 border-t border-slate-100 pt-1.5 sidebar-label">
-        <span class="px-2.5 text-[10px] font-extrabold uppercase tracking-wider text-slate-400 block mb-1">Academic &amp; Operations</span>
-      </div>
+      <p class="sidebar-group-title sidebar-label text-[10px] font-extrabold uppercase tracking-[2.6px] text-white/40 pl-4 pr-6 mt-4 mb-1">Academic &amp; Operations</p>
 
       <!-- 9. Course Materials (Preserved with Book/Library Icon) -->
       <button onclick="switchTab('tab-curriculum')" data-tab="tab-curriculum" class="sidebar-nav-btn nav-tab w-full text-left px-2.5 py-2 flex items-center gap-2.5" title="Course Materials">
@@ -781,7 +1082,7 @@
       </button>
 
       <!-- 11. Settings (group at the very end of the sidebar) -->
-      <div class="mt-1.5 border-t border-slate-100 pt-1.5">
+      <div class="mt-4 pt-4 border-t border-white/10">
         <button type="button" onclick="toggleSettingsGroup()" class="sidebar-nav-btn w-full text-left px-2.5 py-2 flex items-center gap-2.5" title="Settings">
           <span class="sidebar-icon-box"><i class="fa-solid fa-gears"></i></span>
           <span class="sidebar-label flex items-center justify-between flex-1 min-w-0">
@@ -803,24 +1104,54 @@
     </nav>
 
     <!-- Sidebar Footer: Active Counters (High-Readability Tabular Numbers) -->
-    <div class="p-2.5 border-t border-slate-200/80 bg-slate-50/70 space-y-1.5 sidebar-label">
-      <div class="flex items-center justify-between px-2.5 py-1.5 rounded-xl bg-white border border-slate-200/90 text-xs font-bold text-slate-700 shadow-2xs">
+    <div class="shrink-0 pt-4 mt-4 border-t border-white/10 pr-6 space-y-1.5 sidebar-label">
+      <div class="flex items-center justify-between px-2.5 py-1.5 aui-counter-row text-xs font-bold">
         <span class="flex items-center gap-2"><i class="fa-solid fa-people-roof text-brandEmerald"></i> Active Families</span>
         <span id="sidebarActiveFamilies" class="font-num font-extrabold text-sm text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200">0</span>
       </div>
-      <div class="flex items-center justify-between px-2.5 py-1.5 rounded-xl bg-white border border-slate-200/90 text-xs font-bold text-slate-700 shadow-2xs">
+      <div class="flex items-center justify-between px-2.5 py-1.5 aui-counter-row text-xs font-bold">
         <span class="flex items-center gap-2"><i class="fa-solid fa-user-graduate text-teal-600"></i> Active Students</span>
         <span id="sidebarActiveStudents" class="font-num font-extrabold text-sm text-teal-800 bg-teal-50 px-2 py-0.5 rounded-md border border-teal-200">0</span>
       </div>
     </div>
+    </div><!-- /aui-sidebar-inner -->
   </aside>
+
+  <!-- Rail active-state mirror (flagship redesign): the mobile rail
+       buttons are shortcuts into the same switchTab(); this small
+       observer mirrors the sidebar pill's .active tab onto the rail
+       button with the matching data-rail-tab. Pure chrome — it reads
+       classes only and never touches data or routing. -->
+  <script>
+    (function syncAdminRailActiveState() {
+      var rail = document.getElementById('adminMobileRail');
+      var sidebar = document.getElementById('mainAppSidebar');
+      if (!rail || !sidebar) return;
+      function sync() {
+        var active = sidebar.querySelector('.sidebar-nav-btn.active');
+        var tab = active ? active.getAttribute('data-tab') : null;
+        rail.querySelectorAll('[data-rail-tab]').forEach(function (btn) {
+          btn.classList.toggle('active', btn.getAttribute('data-rail-tab') === tab);
+        });
+      }
+      new MutationObserver(sync).observe(sidebar, { attributes: true, attributeFilter: ['class'], subtree: true });
+      sync();
+    })();
+  </script>
 
   <!-- MAIN WRAPPER (Fluid on mobile, offset on desktop) -->
   <main id="mainContentArea" class="w-full flex-grow transition-all duration-300 ease-in-out">
 
     <!-- GLOBAL PERSISTENT SEARCH & QUICK OPERATIONS HEADER BAR (VISIBLE ON EVERY LMS PAGE & PROFILE) -->
-    <div id="globalPersistentTopSearchBar" class="bg-white px-4 py-2.5 rounded-2xl border border-slate-200/90 shadow-xs mb-4 flex flex-wrap items-center justify-between gap-3 relative z-30">
-      
+    <div id="globalPersistentTopSearchBar" class="bg-white px-4 py-2.5 rounded-[24px] border border-slate-200/90 shadow-xs mb-4 flex flex-wrap items-center justify-between gap-3 relative z-30">
+
+      <!-- Sidebar Toggle Button (Mobile & Desktop) — relocated from
+           the old top header; toggleSidebar() opens the drawer on
+           mobile and collapses the rail on desktop, as before -->
+      <button onclick="toggleSidebar()" aria-label="Toggle navigation sidebar" class="w-11 h-11 rounded-full bg-[#0b3d2a] hover:bg-[#0e4d34] text-white flex items-center justify-center transition shrink-0 active:scale-95 shadow-md cursor-pointer" title="Toggle Navigation Sidebar">
+        <i class="fa-solid fa-bars text-sm sm:text-base"></i>
+      </button>
+
       <!-- Left: Modern Global Search Input (Students, Families, Employees, Trials by Name, ID or Phone) -->
       <div class="relative flex items-center gap-2 w-full sm:w-auto flex-1 max-w-md" id="dashGlobalSearchContainer">
         <div class="relative w-full group">
@@ -855,6 +1186,17 @@
           class="hidden absolute left-0 right-0 top-full mt-2 bg-white rounded-2xl border border-slate-200 shadow-2xl max-h-96 overflow-y-auto z-50 divide-y divide-slate-100"
         ></div>
       </div>
+
+      <!-- RIGHT ACTIONS: Logged-in Teacher Session Pill + Dynamic
+           Security / Role Badge (relocated from the old top header;
+           js/auth.js fills the badge per session role, including its
+           Logout button) -->
+      <div id="teacherSessionPill" class="hidden items-center gap-1.5 bg-emerald-950/80 border border-emerald-400/50 px-2.5 py-1 rounded-full text-xs font-semibold text-emerald-200 shadow-sm shrink-0">
+        <span class="truncate max-w-[110px] sm:max-w-[160px]"><i class="fa-solid fa-chalkboard-user text-emerald-400 text-xs"></i> <span id="teacherActiveName">Teacher</span></span>
+        <button onclick="logoutTeacherPortal()" class="text-amber-300 hover:text-amber-100 font-bold ml-1 text-[11px] underline shrink-0" title="Exit Teacher Portal">Logout</button>
+      </div>
+
+      <div id="headerRoleSecurityBadge" class="shrink-0"></div>
 
       <!-- Right/Center: 4 Global LMS Action Badges (Leave Over, Teacher Time/Attendance Requests, Official Announcements, Parent Complaints Inbox) -->
       <div class="grid grid-cols-2 sm:flex sm:items-center gap-2 sm:flex-wrap w-full sm:w-auto justify-end">
@@ -943,7 +1285,7 @@
     <section id="tab-dashboard" class="tab-content block max-w-[1200px] mx-auto w-full">
 
       <!-- SPACIOUS CLEAN OPEN BANNER AREA (UNCLUTTERED & SLEEK) -->
-      <div class="bg-[#f4f7f6] border border-slate-200/70 rounded-xl px-4 sm:px-6 py-3.5 sm:py-4 mb-5 flex items-center justify-between">
+      <div class="bg-[#f4f7f6] border border-slate-200/70 rounded-xl aui-dash-banner px-4 sm:px-6 py-3.5 sm:py-4 mb-5 flex items-center justify-between">
         <div class="flex items-center gap-3.5 min-w-0">
           <div class="w-10 h-10 sm:w-11 sm:h-11 rounded-xl bg-white shadow-xs border border-slate-100 text-cyan-600 flex items-center justify-center text-base shrink-0">
             <i class="fa-solid fa-inbox"></i>
