@@ -452,17 +452,27 @@ font-family: var(--font-num) !important;
     bottom: -20px;
     background: radial-gradient(circle at 0 100%, rgba(255,255,255,0) 19px, #ffffff 20px);
   }
-  /* ---- Salary group (owner 2026-11-07): a "Salary" parent header
-     with two subordinate sub-options inside the sidebar. The parent
-     is a label row, not a tab. The sub-options are indented, smaller
-     pills; the indent is margin, so when Salary Slips is active its
-     white pill still reaches the sidebar's right edge and merges
-     into the content exactly like the other tabs' pills. ---- */
+  /* ---- Salary group (owner 2026-11-07; Salary Restructuring
+     Phase 1): an EXPANDABLE "Salary" parent button with two
+     subordinate sub-options inside the sidebar. The group starts
+     expanded; collapsing adds .is-collapsed to the group, which
+     hides the subnav (expanded sidebar + drawer only — the
+     collapsed desktop rail keeps its own rules below). The
+     sub-options are indented, smaller pills; the indent is margin,
+     so when a sub-option is active its white pill still reaches
+     the sidebar's right edge and merges into the content exactly
+     like the other tabs' pills. ---- */
   aside#teacherSidebar .sidebar-salary-parent {
     display: flex;
     align-items: center;
     gap: 13px;
+    width: 100%;
     padding: 13px 16px 7px;
+    background: transparent;
+    border: 0;
+    cursor: pointer;
+    text-align: left;
+    font: inherit;
     color: #ffffff;
     font-size: 0.9rem;
     font-weight: 700;
@@ -471,10 +481,22 @@ font-family: var(--font-num) !important;
     color: #dcbc55;
     font-size: 1.02rem;
   }
+  aside#teacherSidebar .sidebar-salary-parent .sidebar-salary-chevron {
+    margin-left: auto;
+    font-size: 0.68rem;
+    color: rgba(255,255,255,.5);
+    transition: transform .25s ease;
+  }
+  aside#teacherSidebar .sidebar-salary-group.is-collapsed .sidebar-salary-chevron {
+    transform: rotate(-90deg);
+  }
   aside#teacherSidebar .sidebar-subnav {
     display: flex;
     flex-direction: column;
     gap: 8px;
+  }
+  aside#teacherSidebar:not(.is-collapsed) .sidebar-salary-group.is-collapsed .sidebar-subnav {
+    display: none;
   }
   aside#teacherSidebar .sidebar-sub-btn {
     margin-left: 24px;
@@ -485,11 +507,6 @@ font-family: var(--font-num) !important;
   }
   aside#teacherSidebar .sidebar-sub-btn.active {
     width: calc(100% - 24px);
-  }
-  /* One-shot highlight ring when the sidebar's Request Advance
-     Salary door lands the teacher on the request card. */
-  .tui-advance-flash {
-    box-shadow: 0 0 0 3px rgba(201,162,39,.55), 0 16px 36px rgba(12,42,32,0.07) !important;
   }
   /* Sidebar scrollbar on glass — OWNER MARKS (2026-11-06): the
      sidebar and the main screen must read as one piece ("mix hona
@@ -903,26 +920,30 @@ font-family: var(--font-num) !important;
                   <span id="sbBadgeTrialCount" class="sidebar-badge ml-auto text-[10px] font-mono px-2 py-0.5 rounded-full bg-purple-100 text-purple-800 font-extrabold border border-purple-200">0</span>
                 </button>
 
-                <!-- Salary group (owner 2026-11-07): a "Salary" parent
-                     with two sub-options. "Salary Slips" IS the former
-                     "Previous Salaries" door — same button id, same
-                     'salaries' tab, same Slips badge — renamed and
-                     nested, not duplicated. "Request Advance Salary"
-                     lands on the existing advance request form inside
-                     the salaries section (see
-                     openTeacherAdvanceSalaryRequest). -->
-                <div class="sidebar-salary-group">
-                  <div class="sidebar-salary-parent">
+                <!-- Salary group (owner 2026-11-07; Salary
+                     Restructuring Phase 1): an EXPANDABLE "Salary"
+                     parent with two sub-options, each now its OWN
+                     page. "Salary Slips" is the former "Previous
+                     Salaries" door — same button id, same 'salaries'
+                     tab. "Request Advance Salary" opens the dedicated
+                     advance page ('advance' tab); the form moved out
+                     of the slips section into its own section
+                     (#sectionTeacherAdvanceRequest). The group starts
+                     EXPANDED; collapsing it is a pure sidebar
+                     preference (localStorage), never routing. -->
+                <div class="sidebar-salary-group" id="sbSalaryGroup">
+                  <button type="button" id="sbSalaryGroupToggle" class="sidebar-salary-parent" onclick="toggleTeacherSalaryGroup()" aria-expanded="true" title="Salary — show or hide its options">
                     <span class="sidebar-icon-box"><i class="fa-solid fa-money-check-dollar"></i></span>
                     <span class="sidebar-text truncate">Salary</span>
-                  </div>
+                    <i class="fa-solid fa-chevron-down sidebar-salary-chevron"></i>
+                  </button>
                   <div class="sidebar-subnav">
                     <button id="sbNavSalaries" onclick="switchTeacherPortalTab('salaries'); toggleTeacherSidebar(false);" class="sidebar-nav-btn sidebar-sub-btn w-full text-left px-3 py-2.5 flex items-center gap-2.5" title="Salary Slips — Previous Salaries & Disbursed Slips">
                       <span class="sidebar-icon-box"><i class="fa-solid fa-receipt"></i></span>
                       <span class="sidebar-text truncate">Salary Slips</span>
                       <span id="sbBadgeSalariesCount" class="sidebar-badge ml-auto text-[10px] font-mono px-2 py-0.5 rounded-full bg-amber-100 text-amber-900 font-extrabold border border-amber-200">Slips</span>
                     </button>
-                    <button id="sbNavAdvanceSalary" onclick="openTeacherAdvanceSalaryRequest(); toggleTeacherSidebar(false);" class="sidebar-nav-btn sidebar-sub-btn sidebar-sub-advance w-full text-left px-3 py-2.5 flex items-center gap-2.5" title="Request Advance Salary">
+                    <button id="sbNavAdvanceSalary" onclick="switchTeacherPortalTab('advance'); toggleTeacherSidebar(false);" class="sidebar-nav-btn sidebar-sub-btn sidebar-sub-advance w-full text-left px-3 py-2.5 flex items-center gap-2.5" title="Request Advance Salary">
                       <span class="sidebar-icon-box"><i class="fa-solid fa-hand-holding-dollar"></i></span>
                       <span class="sidebar-text truncate">Request Advance Salary</span>
                     </button>
@@ -1362,7 +1383,10 @@ font-family: var(--font-num) !important;
           </div>
         </div>
 
-        <!-- CURRENT SALARY SUMMARY + ADVANCE REQUEST (Batch B) -->
+        <!-- CURRENT SALARY SUMMARY (Batch B; the advance request
+             form that used to sit below this card moved to its own
+             dedicated page — #sectionTeacherAdvanceRequest — in
+             Salary Restructuring Phase 1) -->
         <div id="tSalStaleNote" class="hidden p-3 rounded-xl bg-amber-50 border border-amber-300 text-amber-900 text-xs font-bold">
           Showing your last saved salary copy — live data could not be reached. Reconnect and press Refresh Slips to see the latest figures.
         </div>
@@ -1375,13 +1399,62 @@ font-family: var(--font-num) !important;
           </div>
           <div id="tSalSummaryBody" class="text-xs text-slate-500">Loading your salary summary...</div>
         </div>
-        <div id="tAdvanceRequestCard" class="bg-white rounded-[24px] border border-[#eef3ee] shadow-[0_16px_36px_rgba(12,42,32,0.07)] p-4 sm:p-5 space-y-3">
-          <div class="flex items-center justify-between flex-wrap gap-2">
-            <h3 class="font-extrabold text-slate-900 text-sm flex items-center gap-2">
-              <i class="fa-solid fa-hand-holding-dollar text-emerald-600"></i> Request Advance Salary
-            </h3>
-            <span class="text-[11px] text-slate-500">Approved advances are deducted from that month's salary only</span>
+        <!-- SALARIES TABLE CARD -->
+        <div class="bg-white rounded-[24px] border border-[#eef3ee] shadow-[0_16px_36px_rgba(12,42,32,0.07)] overflow-hidden">
+          <div class="p-4 sm:p-5 border-b border-[#eef3ee] flex justify-between items-center flex-wrap gap-2">
+            <div>
+              <h3 class="font-extrabold text-slate-900 text-sm flex items-center gap-2">
+                <i class="fa-solid fa-receipt text-amber-600"></i> Monthly Compensation Ledger
+              </h3>
+              <p class="text-xs text-slate-500">Itemized official statements disbursed by Al-Huda Accounts Management</p>
+            </div>
           </div>
+
+          <div class="overflow-x-auto touch-scroll tcard">
+            <table class="w-full text-left text-xs border-collapse min-w-[640px]">
+              <thead class="bg-[#f7faf7] text-slate-600 font-bold border-b border-[#edf2ed] uppercase tracking-wide text-[11px]">
+                <tr>
+                  <th class="p-3">Billing Month</th>
+                  <th class="p-3">Assigned Students</th>
+                  <th class="p-3">Base Teaching</th>
+                  <th class="p-3">Adjustments (Bonus/Ded)</th>
+                  <th class="p-3">Approved Advances</th>
+                  <th class="p-3 text-right">Net Payable</th>
+                  <th class="p-3 text-center">Status</th>
+                  <th class="p-3 text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody id="tSalariesTableBody" class="divide-y divide-slate-100">
+                <tr><td colspan="8" class="p-8 text-center text-slate-400">Loading your salary vouchers...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- SECTION 4: REQUEST ADVANCE SALARY (dedicated page.
+           Salary Restructuring Phase 1: the Batch B request form and
+           the My Advance Requests list moved OUT of the Salary Slips
+           section into this full-page section of their own. The form
+           fields, ids and submit path are byte-identical — only the
+           DOM moved.) -->
+      <div id="sectionTeacherAdvanceRequest" class="hidden space-y-4">
+        <!-- HEADER -->
+        <div class="bg-gradient-to-r from-emerald-950 via-brandDark to-emerald-900 rounded-[24px] p-5 text-white shadow-md border border-emerald-800/40 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+          <div class="flex items-center gap-3">
+            <img src="alhuda_logo.jpg" alt="Al-Huda Islamic Centre" class="w-12 h-12 object-cover rounded-xl border border-emerald-600/40 bg-black shrink-0">
+            <div>
+              <div class="flex items-center gap-2 flex-wrap">
+                <h2 class="text-lg font-black tracking-tight font-serif">Request Advance Salary</h2>
+                <span class="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-amber-400 text-slate-950">Pending Until Approved</span>
+              </div>
+              <p class="text-xs text-emerald-200 mt-0.5">Request an advance against a salary period. Approved advances are deducted from that month's salary only.</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- REQUEST FORM -->
+        <div class="bg-white rounded-[24px] border border-[#eef3ee] shadow-[0_16px_36px_rgba(12,42,32,0.07)] p-4 sm:p-5 space-y-3">
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
             <div>
               <label class="block font-bold text-slate-700 mb-1" for="tAdvPeriod">Salary Period</label>
@@ -1415,42 +1488,14 @@ font-family: var(--font-num) !important;
             <button type="button" id="tAdvSubmitBtn" onclick="submitTeacherAdvanceRequest()" class="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black shadow transition">Submit Advance Request</button>
             <span class="text-[11px] text-slate-500">Submitting a request does not change your salary. Only an approved request deducts from that month.</span>
           </div>
-          <div class="border-t pt-3">
-            <h4 class="font-extrabold text-slate-900 text-xs mb-2">My Advance Requests</h4>
-            <div id="tAdvMyList" class="space-y-2 text-xs text-slate-500">Loading your requests...</div>
-          </div>
         </div>
 
-        <!-- SALARIES TABLE CARD -->
-        <div class="bg-white rounded-[24px] border border-[#eef3ee] shadow-[0_16px_36px_rgba(12,42,32,0.07)] overflow-hidden">
-          <div class="p-4 sm:p-5 border-b border-[#eef3ee] flex justify-between items-center flex-wrap gap-2">
-            <div>
-              <h3 class="font-extrabold text-slate-900 text-sm flex items-center gap-2">
-                <i class="fa-solid fa-receipt text-amber-600"></i> Monthly Compensation Ledger
-              </h3>
-              <p class="text-xs text-slate-500">Itemized official statements disbursed by Al-Huda Accounts Management</p>
-            </div>
-          </div>
-
-          <div class="overflow-x-auto touch-scroll tcard">
-            <table class="w-full text-left text-xs border-collapse min-w-[640px]">
-              <thead class="bg-[#f7faf7] text-slate-600 font-bold border-b border-[#edf2ed] uppercase tracking-wide text-[11px]">
-                <tr>
-                  <th class="p-3">Billing Month</th>
-                  <th class="p-3">Assigned Students</th>
-                  <th class="p-3">Base Teaching</th>
-                  <th class="p-3">Adjustments (Bonus/Ded)</th>
-                  <th class="p-3">Approved Advances</th>
-                  <th class="p-3 text-right">Net Payable</th>
-                  <th class="p-3 text-center">Status</th>
-                  <th class="p-3 text-right">Actions</th>
-                </tr>
-              </thead>
-              <tbody id="tSalariesTableBody" class="divide-y divide-slate-100">
-                <tr><td colspan="8" class="p-8 text-center text-slate-400">Loading your salary vouchers...</td></tr>
-              </tbody>
-            </table>
-          </div>
+        <!-- MY ADVANCE REQUESTS -->
+        <div class="bg-white rounded-[24px] border border-[#eef3ee] shadow-[0_16px_36px_rgba(12,42,32,0.07)] p-4 sm:p-5 space-y-3">
+          <h3 class="font-extrabold text-slate-900 text-sm flex items-center gap-2">
+            <i class="fa-solid fa-clock-rotate-left text-emerald-600"></i> My Advance Requests
+          </h3>
+          <div id="tAdvMyList" class="space-y-2 text-xs text-slate-500">Loading your requests...</div>
         </div>
       </div>
       </div>
@@ -3175,6 +3220,11 @@ font-family: var(--font-num) !important;
       if (window.innerWidth >= 1024) {
         toggleDesktopSidebar(savedCollapsed);
       }
+
+      // Restore the Salary group's collapsed preference (Salary
+      // Restructuring Phase 1 — presentational only, any width; the
+      // group starts expanded when no preference was saved).
+      restoreTeacherSalaryGroupState();
 
       // Populate hero
       const initials = (CURRENT_TEACHER.full_name || 'T').split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase();
@@ -8257,7 +8307,8 @@ font-family: var(--font-num) !important;
         students: 'sbNavStudents',
         history: 'sbNavHistory',
         trials: 'sbNavTrials',
-        salaries: 'sbNavSalaries'
+        salaries: 'sbNavSalaries',
+        advance: 'sbNavAdvanceSalary'
       };
       // Batch 3.6 (audit P2-32): sidebar modal openers are buttons, not
       // tabs, so the old navMap left the highlight on the previous view
@@ -8300,10 +8351,12 @@ font-family: var(--font-num) !important;
     // mirrored into the URL hash (replaceState only — no history
     // entries are ever pushed, so Back behaves exactly as before), and
     // on entry the portal reopens the hashed tab instead of always
-    // landing on the Dashboard. Only the six sidebar tabs participate;
-    // modals, the Course Materials library, the weekly matrix and the
-    // reader never touch the hash.
-    const TEACHER_PORTAL_TABS = ['dashboard', 'today', 'students', 'history', 'trials', 'salaries'];
+    // landing on the Dashboard. Only the sidebar tabs participate
+    // (the two salary pages included: #salaries = Salary Slips,
+    // #advance = Request Advance Salary); modals, the Course
+    // Materials library, the weekly matrix and the reader never
+    // touch the hash.
+    const TEACHER_PORTAL_TABS = ['dashboard', 'today', 'students', 'history', 'trials', 'salaries', 'advance'];
     function recordTeacherTabInHash(tab) {
       try {
         if (typeof window === 'undefined' || !window.history || typeof window.history.replaceState !== 'function' || !window.location) return;
@@ -8334,6 +8387,11 @@ font-family: var(--font-num) !important;
       const secHistory = document.getElementById('sectionTeacherLessonHistory');
       const secTrials = document.getElementById('sectionTeacherTrials');
       const secSalaries = document.getElementById('sectionTeacherSalaries');
+      const secAdvance = document.getElementById('sectionTeacherAdvanceRequest');
+      // Salary Restructuring Phase 1: the dedicated advance page is
+      // visible for the 'advance' tab only — handled here once,
+      // instead of adding a hide line to every branch below.
+      if (secAdvance) secAdvance.classList.toggle('hidden', tab !== 'advance');
 
       if (tab === 'dashboard') {
         if (secKpi) secKpi.classList.remove('hidden');
@@ -8396,33 +8454,52 @@ font-family: var(--font-num) !important;
           secSalaries.scrollIntoView({ behavior: 'smooth', block: 'start' });
         }
         loadTeacherPreviousSalaries();
+      } else if (tab === 'advance') {
+        if (secKpi) secKpi.classList.add('hidden');
+        if (secToday) secToday.classList.add('hidden');
+        if (secStudents) secStudents.classList.add('hidden');
+        if (secHistory) secHistory.classList.add('hidden');
+        if (secTrials) secTrials.classList.add('hidden');
+        if (secSalaries) secSalaries.classList.add('hidden');
+        if (secAdvance) {
+          secAdvance.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+        // The request form's period select and the My Requests list
+        // are fed by the same loader the slips page uses (it renders
+        // into the — currently hidden — slips section too, harmless),
+        // so the form is fully live even when the teacher lands here
+        // first, e.g. via a #advance refresh restore.
+        loadTeacherPreviousSalaries();
       }
     }
 
-    // Salary sidebar sub-option (owner 2026-11-07): "Request Advance
-    // Salary". The advance request form is an inline card inside the
-    // salaries section (Batch B — #tAdvanceRequestCard), NOT a modal,
-    // so this door switches to the salaries tab first, then scrolls
-    // the request card into view, flashes it once and focuses its
-    // first field. The form and its submit path
-    // (submitTeacherAdvanceRequest) are untouched.
-    function openTeacherAdvanceSalaryRequest() {
-      switchTeacherPortalTab('salaries');
-      const card = document.getElementById('tAdvanceRequestCard');
-      if (card) {
-        if (typeof card.scrollIntoView === 'function') {
-          card.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        }
-        card.classList.add('tui-advance-flash');
-        setTimeout(() => card.classList.remove('tui-advance-flash'), 1600);
-      }
-      const periodSel = document.getElementById('tAdvPeriod');
-      if (periodSel && typeof periodSel.focus === 'function') {
-        setTimeout(() => {
-          try { periodSel.focus({ preventScroll: true }); }
-          catch (e) { periodSel.focus(); }
-        }, 350);
-      }
+    // Salary sidebar group (Salary Restructuring Phase 1): the
+    // "Salary" parent is expandable. It starts EXPANDED; toggling it
+    // only shows/hides the two sub-options in the sidebar — a pure
+    // sidebar preference persisted in localStorage. It never affects
+    // routing: both salary pages stay reachable via their tabs, the
+    // hash and the mobile rail exactly as before. (This replaces the
+    // PR #119 scroll-and-flash opener: "Request Advance Salary" is a
+    // plain tab switch to the dedicated advance page now, so the
+    // scroll/flash/focus plumbing and the request-card anchor it
+    // targeted are gone.)
+    function toggleTeacherSalaryGroup() {
+      const group = document.getElementById('sbSalaryGroup');
+      if (!group) return;
+      const collapsed = group.classList.toggle('is-collapsed');
+      const toggle = document.getElementById('sbSalaryGroupToggle');
+      if (toggle) toggle.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+      try { localStorage.setItem('alhuda_teacher_salary_group_collapsed', collapsed ? 'true' : 'false'); } catch (e) {}
+    }
+
+    function restoreTeacherSalaryGroupState() {
+      let collapsed = false;
+      try { collapsed = localStorage.getItem('alhuda_teacher_salary_group_collapsed') === 'true'; } catch (e) {}
+      if (!collapsed) return;
+      const group = document.getElementById('sbSalaryGroup');
+      if (group) group.classList.add('is-collapsed');
+      const toggle = document.getElementById('sbSalaryGroupToggle');
+      if (toggle) toggle.setAttribute('aria-expanded', 'false');
     }
 
     // =================================================================

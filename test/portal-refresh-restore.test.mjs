@@ -8,7 +8,12 @@
 // This suite EXECUTES the real switch + restore code of all three
 // portals in vm worlds over fake DOMs with a recording fake history:
 //   teacher.html  — syncTeacherSidebarActiveState + hash helpers +
-//                   switchTeacherPortalTab (one contiguous real chunk)
+//                   switchTeacherPortalTab (one contiguous real chunk;
+//                   since Salary Restructuring Phase 1 the chunk ends
+//                   at toggleTeacherSalaryGroup — the PR #119 opener
+//                   that used to bound it no longer exists — and the
+//                   teacher tab set has SEVEN tabs: the dedicated
+//                   'advance' page joined 'salaries')
 //   parent.html   — hash helpers + switchPortalTab (contiguous chunk)
 //   js/navigation.js — the whole real file (admin switchTab engine)
 // Boot cases per portal: valid hash restores through the REAL switch
@@ -93,18 +98,25 @@ function fakeBrowser(pathname, initialHash = '') {
 // TEACHER PORTAL
 // ---------------------------------------------------------------------
 const T_START = TEACHER.indexOf('function syncTeacherSidebarActiveState');
-const T_END = TEACHER.indexOf('function openTeacherAdvanceSalaryRequest');
+// Phase 1 (reason): the chunk used to end at openTeacherAdvanceSalaryRequest;
+// that function was removed when the advance form became a dedicated
+// page, so the chunk now ends at its successor in the same spot,
+// toggleTeacherSalaryGroup (the switch function sits between them).
+const T_END = TEACHER.indexOf('function toggleTeacherSalaryGroup');
 const TEACHER_CHUNK = TEACHER.slice(T_START, T_END);
 check('teacher: real chunk extracted (sync + helpers + switch)',
   T_START > -1 && T_END > T_START && TEACHER_CHUNK.includes('function switchTeacherPortalTab')
   && TEACHER_CHUNK.includes('function restoreTeacherTabFromHash'));
 
+// Phase 1 (reason): the dedicated advance page is a seventh section
+// in the show/hide world — hidden at boot like the other non-default
+// sections.
 const T_SECTIONS = ['sectionTeacherKpiGrid', 'sectionTeacherToday', 'sectionTeacherStudentList',
-  'sectionTeacherLessonHistory', 'sectionTeacherTrials', 'sectionTeacherSalaries'];
+  'sectionTeacherLessonHistory', 'sectionTeacherTrials', 'sectionTeacherSalaries', 'sectionTeacherAdvanceRequest'];
 function makeTeacherWorld(hash = '') {
   const els = {};
-  for (const id of T_SECTIONS) els[id] = fakeEl(id, id === 'sectionTeacherLessonHistory' || id === 'sectionTeacherStudentList' || id === 'sectionTeacherTrials' || id === 'sectionTeacherSalaries' ? ['hidden'] : []);
-  for (const id of ['sbNavDashboard', 'sbNavToday', 'sbNavStudents', 'sbNavHistory', 'sbNavTrials', 'sbNavSalaries']) els[id] = fakeEl(id);
+  for (const id of T_SECTIONS) els[id] = fakeEl(id, id === 'sectionTeacherLessonHistory' || id === 'sectionTeacherStudentList' || id === 'sectionTeacherTrials' || id === 'sectionTeacherSalaries' || id === 'sectionTeacherAdvanceRequest' ? ['hidden'] : []);
+  for (const id of ['sbNavDashboard', 'sbNavToday', 'sbNavStudents', 'sbNavHistory', 'sbNavTrials', 'sbNavSalaries', 'sbNavAdvanceSalary']) els[id] = fakeEl(id);
   const railBtns = ['dashboard', 'today', 'students', 'history', 'trials', 'salaries'].map(t => fakeEl('rail-' + t, [], { 'data-rail-tab': t }));
   const browser = fakeBrowser('/teacher', hash);
   const loaderCalls = [];
@@ -164,6 +176,23 @@ const tVisible = w => T_SECTIONS.filter(id => !w.els[id].classList.contains('hid
   check('teacher: boot with #dashboard is a no-op (default already shown)',
     JSON.stringify(tVisible(wDash)) === JSON.stringify(['sectionTeacherKpiGrid', 'sectionTeacherToday'])
     && wDash.loaderCalls.length === 0);
+}
+{ // Phase 1: the dedicated advance page records + restores #advance
+  const w = makeTeacherWorld('');
+  vm.runInContext("switchTeacherPortalTab('advance')", w.sandbox);
+  check('teacher: switch to advance shows only the advance section',
+    JSON.stringify(tVisible(w)) === JSON.stringify(['sectionTeacherAdvanceRequest']), JSON.stringify(tVisible(w)));
+  check('teacher: switch records #advance via replaceState, never pushState',
+    w.browser.calls.replace.length === 1 && w.browser.calls.replace[0] === '/teacher#advance'
+    && w.browser.calls.push.length === 0 && w.browser.loc.hash === '#advance',
+    JSON.stringify(w.browser.calls));
+  check('teacher: advance switch fires the shared salaries loader (form feed)',
+    w.loaderCalls.includes('salaries'));
+  const wBoot = makeTeacherWorld('#advance');
+  vm.runInContext('restoreTeacherTabFromHash()', wBoot.sandbox);
+  check('teacher: boot with #advance reopens the Request Advance Salary page',
+    JSON.stringify(tVisible(wBoot)) === JSON.stringify(['sectionTeacherAdvanceRequest']),
+    JSON.stringify(tVisible(wBoot)));
 }
 
 // ---------------------------------------------------------------------

@@ -6,7 +6,8 @@
 //   2. the REAL switchTeacherPortalTab, extracted and executed in a vm
 //      over a fake DOM built from the REAL markup (ids + initial
 //      hidden state), shows/hides exactly the same sections per tab
-//      as before the redesign — for all six tabs;
+//      as before the redesign — for all seven tabs (the seventh,
+//      'advance', arrived with the salary pages split, see point 7);
 //   3. the sidebar buttons AND the new mobile rail buttons carry
 //      onclick handlers that call the same switchTeacherPortalTab with
 //      the same tab names (arguments are read from the real markup and
@@ -27,6 +28,16 @@
 //      matrix above covers it unchanged) and Request Advance Salary
 //      runs the REAL openTeacherAdvanceSalaryRequest, which must land
 //      on the salaries tab with the advance request card targeted.
+//   8. Salary Restructuring Phase 1 (2026-11-07): the group parent is
+//      now EXPANDABLE (starts expanded; collapsed state is a
+//      localStorage sidebar preference, executed here through the real
+//      toggle/restore functions) and the two sub-options are separate
+//      PAGES: Salary Slips keeps the 'salaries' tab/section with NO
+//      request UI inside it, and Request Advance Salary switches to a
+//      dedicated 'advance' tab/section holding the moved form + My
+//      Advance Requests list. The PR #119 scroll/flash opener and its
+//      request-card anchor are removed root-and-branch — the checks
+//      that pinned them are replaced below, each with its reason.
 // Run from the repo root:  node test/teacher-redesign-shell.test.mjs
 import fs from 'node:fs';
 import path from 'node:path';
@@ -51,6 +62,8 @@ function check(name, cond, detail = '') {
 const SECTION_IDS = [
   'sectionTeacherKpiGrid', 'sectionTeacherToday', 'sectionTeacherStudentList',
   'sectionTeacherLessonHistory', 'sectionTeacherTrials', 'sectionTeacherSalaries',
+  // Phase 1 (2026-11-07): the dedicated Request Advance Salary page.
+  'sectionTeacherAdvanceRequest',
 ];
 for (const id of SECTION_IDS) {
   check(`section exists exactly once: ${id}`,
@@ -94,6 +107,8 @@ function buttonOnclickById(id) {
 const NAVMAP = {
   dashboard: 'sbNavDashboard', today: 'sbNavToday', students: 'sbNavStudents',
   history: 'sbNavHistory', trials: 'sbNavTrials', salaries: 'sbNavSalaries',
+  // Phase 1: the Advance sub-option is a tab door of its own now.
+  advance: 'sbNavAdvanceSalary',
 };
 for (const [tab, id] of Object.entries(NAVMAP)) {
   const oc = buttonOnclickById(id);
@@ -104,7 +119,11 @@ const railButtons = [...TEACHER.matchAll(/<button[^>]*data-rail-tab="(\w+)"[^>]*
   .map(m => ({ tab: m[1], onclick: m[2] }));
 check('mobile rail has one button per tab (6)', railButtons.length === 6,
   JSON.stringify(railButtons.map(r => r.tab)));
-for (const tab of Object.keys(NAVMAP)) {
+// Phase 1: the rail intentionally has NO 'advance' button (the
+// collapsed rail keeps only the Salary Slips icon, as in PR #119), so
+// the rail wiring loop covers the six rail tabs, not the NAVMAP.
+const RAIL_TABS = ['dashboard', 'today', 'students', 'history', 'trials', 'salaries'];
+for (const tab of RAIL_TABS) {
   const rb = railButtons.find(r => r.tab === tab);
   check(`rail button [${tab}] calls switchTeacherPortalTab('${tab}')`,
     !!rb && rb.onclick.includes(`switchTeacherPortalTab('${tab}')`),
@@ -218,25 +237,54 @@ check('salary group: slips sub-option is the renamed former door',
   TEACHER.includes('<span class="sidebar-text truncate">Salary Slips</span>') &&
   !TEACHER.includes('<span class="sidebar-text truncate">Previous Salaries</span>') &&
   /<button id="sbNavSalaries"[^>]*class="[^"]*sidebar-sub-btn/.test(TEACHER));
-// The Advance sub-option is wired to the real opener (executed in
-// Part C), styled as a sub-option, and hidden on the collapsed rail
-// (sidebar/drawer-only by design; the rail keeps the slips icon).
+// The Advance sub-option is styled as a sub-option and hidden on
+// the collapsed rail (sidebar/drawer-only by design; the rail keeps
+// the slips icon).
+// PHASE 1 CHANGE (reason): PR #119 wired this button to a scroll /
+// flash OPENER into the salaries section. The advance form is now a
+// dedicated page, so the button is a plain tab switch like every
+// other door — the opener check is re-pinned to the switch.
 const advBtnOnclick = buttonOnclickById('sbNavAdvanceSalary');
-check('salary group: advance sub-option wired to the real opener',
-  !!advBtnOnclick && advBtnOnclick.includes('openTeacherAdvanceSalaryRequest()'),
+check('salary group: advance sub-option wired to the advance tab switch (Phase 1)',
+  !!advBtnOnclick && advBtnOnclick.includes("switchTeacherPortalTab('advance')"),
   String(advBtnOnclick));
 check('salary group: collapsed rail hides parent + advance sub-option',
   TEACHER.includes('aside#teacherSidebar.is-collapsed .sidebar-salary-parent') &&
   TEACHER.includes('aside#teacherSidebar.is-collapsed .sidebar-sub-advance'));
-// The opener's target: the existing Batch B advance request card,
-// given an anchor id (exactly once) inside the salaries section.
-check('salary group: advance request card anchor exists once, inside the salaries section',
-  TEACHER.split('id="tAdvanceRequestCard"').length - 1 === 1 &&
-  (ancestryOf('tAdvanceRequestCard') || []).some(a => a.id === 'sectionTeacherSalaries'));
+// PHASE 1 REMOVALS (reason): the scroll/flash opener, its one-shot
+// flash class and the request-card anchor it targeted are dead
+// plumbing once the sub-option is a tab switch — all three must be
+// gone root-and-branch, exactly as Schedule Student was in PR #117.
+check('phase 1: PR #119 scroll/flash plumbing removed root-and-branch',
+  !TEACHER.includes('openTeacherAdvanceSalaryRequest') &&
+  !TEACHER.includes('tAdvanceRequestCard') &&
+  !TEACHER.includes('tui-advance-flash'));
+// PHASE 1 SPLIT (reason): the request form + My Advance Requests list
+// moved OUT of the slips section into the dedicated advance section;
+// the slips section keeps the ledger + summary and NO request UI.
+check('phase 1: advance form + My Requests live in the dedicated advance section',
+  (ancestryOf('tAdvPeriod') || []).some(a => a.id === 'sectionTeacherAdvanceRequest') &&
+  (ancestryOf('tAdvSubmitBtn') || []).some(a => a.id === 'sectionTeacherAdvanceRequest') &&
+  (ancestryOf('tAdvMyList') || []).some(a => a.id === 'sectionTeacherAdvanceRequest'));
+check('phase 1: slips section holds NO request form elements',
+  !(ancestryOf('tAdvPeriod') || []).some(a => a.id === 'sectionTeacherSalaries') &&
+  !(ancestryOf('tAdvMyList') || []).some(a => a.id === 'sectionTeacherSalaries') &&
+  (ancestryOf('tSalariesTableBody') || []).some(a => a.id === 'sectionTeacherSalaries') &&
+  (ancestryOf('tSalSummaryBody') || []).some(a => a.id === 'sectionTeacherSalaries'));
 check('salary group: the existing advance form pieces are untouched',
   TEACHER.includes('id="tAdvPeriod"') && TEACHER.includes('id="tAdvSubmitBtn"') &&
   TEACHER.includes("onclick=\"submitTeacherAdvanceRequest()\"") &&
   TEACHER.includes('id="tAdvMyList"'));
+// PHASE 1 EXPANDABLE PARENT (reason: owner decision D3): the parent
+// is a real button wired to the real toggle, carries the chevron,
+// starts expanded (no is-collapsed in the shipped markup), the
+// collapse CSS rule hides the subnav, and the preference key exists.
+check('phase 1: salary parent is an expandable button, starts expanded',
+  /<button type="button" id="sbSalaryGroupToggle"[^>]*onclick="toggleTeacherSalaryGroup\(\)"/.test(TEACHER) &&
+  TEACHER.includes('fa-chevron-down sidebar-salary-chevron') &&
+  !/<div class="sidebar-salary-group is-collapsed"/.test(TEACHER) &&
+  TEACHER.includes('.sidebar-salary-group.is-collapsed .sidebar-subnav') &&
+  TEACHER.includes('alhuda_teacher_salary_group_collapsed'));
 
 // ---------------------------------------------------------------------
 // Part B — fake DOM built from the REAL markup (ids + initial classes)
@@ -261,6 +309,10 @@ class FakeEl {
     };
   }
   getAttribute(k) { return k in this._attrs ? this._attrs[k] : null; }
+  // Phase 1 harness fix (reason): the real salary-group toggle calls
+  // setAttribute('aria-expanded', ...) — FakeEl only had getAttribute,
+  // so executing the real toggle would have thrown on a stub gap.
+  setAttribute(k, v) { this._attrs[k] = String(v); }
   scrollIntoView() {}
 }
 const registry = new Map();
@@ -295,10 +347,20 @@ function extractFunction(src, name) {
   return src.slice(start, i);
 }
 const calls = [];
+// Phase 1 harness change (reason): localStorage is now a stateful
+// map — the real salary-group toggle persists its collapsed state
+// through it and the executed checks below read the value back.
+// Missing keys still return null, so every pre-existing consumer
+// (sidebar collapse etc.) sees identical semantics.
+const lsStore = new Map();
 const sandbox = {
   console,
   document: documentStub,
-  localStorage: { getItem: () => null, setItem: () => {}, removeItem: () => {} },
+  localStorage: {
+    getItem: (k) => (lsStore.has(k) ? lsStore.get(k) : null),
+    setItem: (k, v) => { lsStore.set(k, String(v)); },
+    removeItem: (k) => { lsStore.delete(k); },
+  },
   setTimeout: () => 0, clearTimeout: () => {},
   // Recorders for the data loaders the switch function triggers.
   renderTeacherStudentListTable: () => calls.push('renderStudents'),
@@ -353,7 +415,10 @@ const code = `
   ${TEACHER_TABS_CONST}
   ${extractFunction(TEACHER, 'recordTeacherTabInHash')}
   ${extractFunction(TEACHER, 'switchTeacherPortalTab')}
-  ${extractFunction(TEACHER, 'openTeacherAdvanceSalaryRequest')}
+  ${/* Phase 1 (reason): the PR #119 opener extraction is replaced by
+       the real group toggle + restore — the opener no longer exists. */
+    extractFunction(TEACHER, 'toggleTeacherSalaryGroup')}
+  ${extractFunction(TEACHER, 'restoreTeacherSalaryGroupState')}
   ${extractFunction(TEACHER, 'toggleTeacherSidebar')}
   ${extractFunction(TEACHER, 'getOverdueStartedClasses')}
   ${extractFunction(TEACHER, 'checkOverdueClassReminder')}
@@ -365,7 +430,8 @@ const code = `
   ${extractFunction(TEACHER, 'showTeacherTodayKpi')}
   this.__api = { switchTeacherPortalTab, toggleTeacherSidebar, checkOverdueClassReminder,
     renderTeacherAnnouncements, _teacherLiveAccrualHtml, renderTeacherClassesTable,
-    showTeacherTodayKpi, setTeacherTodayFilter, openTeacherAdvanceSalaryRequest,
+    showTeacherTodayKpi, setTeacherTodayFilter, toggleTeacherSalaryGroup,
+    restoreTeacherSalaryGroupState,
     setClasses: (c) => { TODAY_CLASSES = c; },
     getFilter: () => TEACHER_TODAY_FILTER,
     getTab: () => CURRENT_TEACHER_TAB };
@@ -374,13 +440,17 @@ vm.runInContext(code, sandbox);
 const api = sandbox.__api;
 
 // --- Tab switching matrix (the pre-redesign visibility contract) -----
+// Phase 1 (reason): the matrix gains the dedicated advance section —
+// hidden on every pre-existing tab, the only visible section on the
+// new 'advance' tab. The six original rows are otherwise unchanged.
 const EXPECT = {
-  dashboard: { sectionTeacherKpiGrid: 1, sectionTeacherToday: 1, sectionTeacherStudentList: 0, sectionTeacherLessonHistory: 0, sectionTeacherTrials: 0, sectionTeacherSalaries: 0 },
-  today:     { sectionTeacherKpiGrid: 1, sectionTeacherToday: 1, sectionTeacherStudentList: 0, sectionTeacherLessonHistory: 0, sectionTeacherTrials: 0, sectionTeacherSalaries: 0 },
-  students:  { sectionTeacherKpiGrid: 1, sectionTeacherToday: 0, sectionTeacherStudentList: 1, sectionTeacherLessonHistory: 0, sectionTeacherTrials: 0, sectionTeacherSalaries: 0 },
-  history:   { sectionTeacherKpiGrid: 0, sectionTeacherToday: 0, sectionTeacherStudentList: 0, sectionTeacherLessonHistory: 1, sectionTeacherTrials: 0, sectionTeacherSalaries: 0 },
-  trials:    { sectionTeacherKpiGrid: 0, sectionTeacherToday: 0, sectionTeacherStudentList: 0, sectionTeacherLessonHistory: 0, sectionTeacherTrials: 1, sectionTeacherSalaries: 0 },
-  salaries:  { sectionTeacherKpiGrid: 0, sectionTeacherToday: 0, sectionTeacherStudentList: 0, sectionTeacherLessonHistory: 0, sectionTeacherTrials: 0, sectionTeacherSalaries: 1 },
+  dashboard: { sectionTeacherKpiGrid: 1, sectionTeacherToday: 1, sectionTeacherStudentList: 0, sectionTeacherLessonHistory: 0, sectionTeacherTrials: 0, sectionTeacherSalaries: 0, sectionTeacherAdvanceRequest: 0 },
+  today:     { sectionTeacherKpiGrid: 1, sectionTeacherToday: 1, sectionTeacherStudentList: 0, sectionTeacherLessonHistory: 0, sectionTeacherTrials: 0, sectionTeacherSalaries: 0, sectionTeacherAdvanceRequest: 0 },
+  students:  { sectionTeacherKpiGrid: 1, sectionTeacherToday: 0, sectionTeacherStudentList: 1, sectionTeacherLessonHistory: 0, sectionTeacherTrials: 0, sectionTeacherSalaries: 0, sectionTeacherAdvanceRequest: 0 },
+  history:   { sectionTeacherKpiGrid: 0, sectionTeacherToday: 0, sectionTeacherStudentList: 0, sectionTeacherLessonHistory: 1, sectionTeacherTrials: 0, sectionTeacherSalaries: 0, sectionTeacherAdvanceRequest: 0 },
+  trials:    { sectionTeacherKpiGrid: 0, sectionTeacherToday: 0, sectionTeacherStudentList: 0, sectionTeacherLessonHistory: 0, sectionTeacherTrials: 1, sectionTeacherSalaries: 0, sectionTeacherAdvanceRequest: 0 },
+  salaries:  { sectionTeacherKpiGrid: 0, sectionTeacherToday: 0, sectionTeacherStudentList: 0, sectionTeacherLessonHistory: 0, sectionTeacherTrials: 0, sectionTeacherSalaries: 1, sectionTeacherAdvanceRequest: 0 },
+  advance:   { sectionTeacherKpiGrid: 0, sectionTeacherToday: 0, sectionTeacherStudentList: 0, sectionTeacherLessonHistory: 0, sectionTeacherTrials: 0, sectionTeacherSalaries: 0, sectionTeacherAdvanceRequest: 1 },
 };
 for (const [tab, matrix] of Object.entries(EXPECT)) {
   api.switchTeacherPortalTab(tab);
@@ -397,8 +467,16 @@ for (const [tab, matrix] of Object.entries(EXPECT)) {
     JSON.stringify(sbActive));
   const railActive = railEls.filter(e => e.classList.contains('active'))
     .map(e => e.getAttribute('data-rail-tab'));
-  check(`tab '${tab}' activates only its rail button`, railActive.length === 1 && railActive[0] === tab,
-    JSON.stringify(railActive));
+  // Phase 1 (reason): the rail has no 'advance' button by design, so
+  // on the advance tab NO rail button may be active; every other tab
+  // keeps the one-active-rail-button contract.
+  if (tab === 'advance') {
+    check(`tab 'advance' activates no rail button (rail keeps the slips icon only)`,
+      railActive.length === 0, JSON.stringify(railActive));
+  } else {
+    check(`tab '${tab}' activates only its rail button`, railActive.length === 1 && railActive[0] === tab,
+      JSON.stringify(railActive));
+  }
 }
 check('tab switches still trigger their data loaders',
   calls.includes('renderStudents') && calls.includes('renderHistory') &&
@@ -417,24 +495,58 @@ for (const rb of railButtons) {
   check(`rail [${rb.tab}] onclick argument lands on tab '${rb.tab}'`, api.getTab() === rb.tab && arg === rb.tab);
 }
 
-// --- Salary group: the Advance door, executed for real ----------------
-// The REAL opener must (a) land on the salaries tab with exactly the
-// salaries visibility matrix, (b) leave the Salary Slips pill active,
-// and (c) target the real advance request card (its one-shot flash
-// class is added synchronously; the suite's setTimeout stub never
-// fires, so the class remaining proves the opener added it).
-api.openTeacherAdvanceSalaryRequest();
-check('salary group: advance door lands on the salaries tab',
-  api.getTab() === 'salaries' &&
-  !registry.get('sectionTeacherSalaries').classList.contains('hidden') &&
-  registry.get('sectionTeacherToday').classList.contains('hidden') &&
-  registry.get('sectionTeacherStudentList').classList.contains('hidden') &&
-  registry.get('sectionTeacherLessonHistory').classList.contains('hidden') &&
-  registry.get('sectionTeacherTrials').classList.contains('hidden'));
-check('salary group: advance door leaves the Salary Slips pill active',
-  registry.get('sbNavSalaries').classList.contains('active'));
-check('salary group: advance door targets the real request card (flash applied)',
-  registry.get('tAdvanceRequestCard').classList.contains('tui-advance-flash'));
+// --- Salary group Phase 1: the two pages + the expandable parent,
+// executed for real. (Reason for replacing the PR #119 block below:
+// the scroll/flash opener it executed no longer exists — the Advance
+// sub-option is a tab switch now, and the parent toggle is the new
+// executed behaviour.)
+{
+  const loadsBefore = calls.filter(c => c === 'loadSalaries').length;
+  api.switchTeacherPortalTab('advance');
+  check('phase 1: advance tab shows only the dedicated advance page',
+    api.getTab() === 'advance' &&
+    !registry.get('sectionTeacherAdvanceRequest').classList.contains('hidden') &&
+    registry.get('sectionTeacherSalaries').classList.contains('hidden') &&
+    registry.get('sectionTeacherToday').classList.contains('hidden') &&
+    registry.get('sectionTeacherStudentList').classList.contains('hidden') &&
+    registry.get('sectionTeacherLessonHistory').classList.contains('hidden') &&
+    registry.get('sectionTeacherTrials').classList.contains('hidden'));
+  check('phase 1: advance tab lights the Request Advance Salary pill (not Slips)',
+    registry.get('sbNavAdvanceSalary').classList.contains('active') &&
+    !registry.get('sbNavSalaries').classList.contains('active'));
+  check('phase 1: advance tab fires the shared salaries loader (period select + My Requests feed)',
+    calls.filter(c => c === 'loadSalaries').length === loadsBefore + 1,
+    JSON.stringify(calls));
+  api.switchTeacherPortalTab('salaries');
+  check('phase 1: leaving for Salary Slips hides the advance page again',
+    !registry.get('sectionTeacherSalaries').classList.contains('hidden') &&
+    registry.get('sectionTeacherAdvanceRequest').classList.contains('hidden'));
+}
+{
+  const group = registry.get('sbSalaryGroup');
+  const toggleBtn = registry.get('sbSalaryGroupToggle');
+  check('phase 1: salary group starts expanded', !group.classList.contains('is-collapsed'));
+  api.toggleTeacherSalaryGroup();
+  check('phase 1: toggle collapses the group, mirrors aria + persists the preference',
+    group.classList.contains('is-collapsed') &&
+    toggleBtn.getAttribute('aria-expanded') === 'false' &&
+    lsStore.get('alhuda_teacher_salary_group_collapsed') === 'true');
+  api.toggleTeacherSalaryGroup();
+  check('phase 1: second toggle re-expands and persists that too',
+    !group.classList.contains('is-collapsed') &&
+    toggleBtn.getAttribute('aria-expanded') === 'true' &&
+    lsStore.get('alhuda_teacher_salary_group_collapsed') === 'false');
+  lsStore.set('alhuda_teacher_salary_group_collapsed', 'true');
+  api.restoreTeacherSalaryGroupState();
+  check('phase 1: boot restore re-applies a saved collapsed preference',
+    group.classList.contains('is-collapsed') &&
+    toggleBtn.getAttribute('aria-expanded') === 'false');
+  group.classList.remove('is-collapsed');
+  lsStore.set('alhuda_teacher_salary_group_collapsed', 'false');
+  api.restoreTeacherSalaryGroupState();
+  check('phase 1: boot restore with no collapsed preference leaves the group expanded',
+    !group.classList.contains('is-collapsed'));
+}
 
 // --- Mobile drawer mechanics on the real elements ---------------------
 const sidebarEl = registry.get('teacherSidebar');
@@ -607,6 +719,62 @@ rowsHtml = registry.get('teacherClassesTableBody').innerHTML;
 check('owner marks (7): Today view restores the full list and hides the chip',
   api.getFilter() === 'all' && rowsHtml.includes('Zainab Ali') && rowsHtml.includes('Fatima Noor') &&
   registry.get('todayFilterChip').classList.contains('hidden'));
+
+// ---------------------------------------------------------------------
+// Part E — Phase 1: the moved advance form, executed end-to-end.
+// The REAL submitTeacherAdvanceRequest + loadTeacherAdvanceRequests
+// run against stubbed fetch/db: the submit must POST the exact same
+// payload shape to the same endpoint as before the move, and the
+// My Requests renderer must paint the fixture row into #tAdvMyList —
+// the element whose ancestry (Part A3) now sits in the dedicated
+// advance section. This is what proves the DOM move changed nothing
+// about the request workflow itself.
+// ---------------------------------------------------------------------
+const advNotes = [];
+const advFetchCalls = [];
+sandbox.lmsNotify = (m) => advNotes.push(String(m));
+sandbox.fetch = async (url, opts) => {
+  advFetchCalls.push({ url: String(url), opts });
+  return { ok: true, json: async () => ({ ok: true }) };
+};
+sandbox.getTeacherWorkerBase = () => '';
+vm.runInContext(`
+  let _TADV_SLIPS = [];
+  let _TADV_TYPE = 'custom';
+  let _TADV_SUBMITTING = false;
+  ${extractFunction(TEACHER, '_tAdvNetOf')}
+  ${extractFunction(TEACHER, '_tAdvPeriodOf')}
+  ${extractFunction(TEACHER, '_tAdvLabelOf')}
+  ${extractFunction(TEACHER, '_tAdvSelectedSlip')}
+  ${extractFunction(TEACHER, 'refreshAdvanceAmountText')}
+  ${extractFunction(TEACHER, '_tAdvAuthHeaders')}
+  ${extractFunction(TEACHER, 'submitTeacherAdvanceRequest')}
+  ${extractFunction(TEACHER, 'loadTeacherAdvanceRequests')}
+  this.__adv = { submitTeacherAdvanceRequest, loadTeacherAdvanceRequests };
+`, sandbox);
+registry.get('tAdvPeriod').value = '2026-11';
+registry.get('tAdvCustomAmount').value = '5000';
+registry.get('tAdvReason').value = 'Fixture reason';
+await sandbox.__adv.submitTeacherAdvanceRequest();
+check('phase 1: submit handler POSTs the unchanged payload to /api/advances/request',
+  advFetchCalls.length === 1 && advFetchCalls[0].url.endsWith('/api/advances/request') &&
+  advFetchCalls[0].opts.method === 'POST' &&
+  (() => { try { const b = JSON.parse(advFetchCalls[0].opts.body);
+    return b.period === '2026-11' && b.advance_type === 'custom' && b.custom_amount === 5000 && b.reason === 'Fixture reason';
+  } catch (e) { return false; } })(),
+  JSON.stringify(advFetchCalls));
+check('phase 1: submit confirms through the existing notify path',
+  advNotes.some(n => n.includes('Advance request submitted')), JSON.stringify(advNotes));
+const ADV_ROWS = [{ id: 'ADV-FIX-1', advance_type: 'custom', requested_amount: 5000,
+  approved_amount: null, status: 'Pending', period: '2026-11', period_label: 'November 2026',
+  requested_at: '2026-11-05T00:00:00Z', reason: 'Fixture reason', reviewer_comment: null }];
+sandbox.db = { from: () => { const q = { select: () => q, eq: () => q, order: () => q,
+  then: (res, rej) => Promise.resolve({ data: ADV_ROWS, error: null }).then(res, rej) }; return q; } };
+await sandbox.__adv.loadTeacherAdvanceRequests();
+const myListHtml = registry.get('tAdvMyList').innerHTML;
+check('phase 1: My Advance Requests renders the fixture row on the new page',
+  myListHtml.includes('Custom Amount — 5,000 PKR') && myListHtml.includes('Pending') &&
+  myListHtml.includes('November 2026'), myListHtml.slice(0, 160));
 
 console.log('---');
 console.log(`teacher-redesign-shell: ${passed} passed, ${failed} failed`);
