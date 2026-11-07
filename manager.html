@@ -47,6 +47,12 @@
       scroll-behavior: auto !important;
     }
   }
+  /* Portal scale (2026-11-07): match the admin/teacher portals at 85%.
+     The body is fixed inset-0 so its gradient covers the full screen
+     under zoom - a min-h-screen body renders short and leaves a pale
+     strip at the bottom (the same defect fixed on the owner login
+     view in PR #127). Flex centring from the body classes is kept. */
+  body { zoom: 0.85; position: fixed; inset: 0; overflow-y: auto; }
   </style>
 </head>
 <body class="bg-slate-900 bg-gradient-to-br from-slate-950 via-[#022c22] to-slate-900 text-slate-800 font-sans min-h-screen flex flex-col justify-center items-center p-4 sm:p-6 antialiased">
