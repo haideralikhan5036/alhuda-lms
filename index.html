@@ -389,6 +389,44 @@
     .slot-booked { background-color: #eff6ff; border: 1.5px solid #93c5fd; color: #1e40af; }
     .matrix-table th, .matrix-table td { border: 1px solid #e2e8f0; }
 
+    /* Portal scale — OWNER (2026-11-07): the admin portal joins the
+       teacher portal at 85% ("admin and manager portal ko bhi 85%
+       zoom per krdo"). The manager portal is this same portal under
+       a manager session, so this one rule covers both. Applied to
+       <body> so the login view, the dashboard and every modal and
+       overlay root scale uniformly, exactly as browser zoom would
+       scale them. This single line is the tuning knob for the whole
+       portal's scale. */
+    body { zoom: 0.85; }
+
+    /* Sidebar full height under the zoom above — the same fix the
+       teacher portal needed (PR #118): the sidebar rules in the
+       layout engine below sized this column with 100vh, and 100vh
+       resolves against the UNZOOMED viewport, so at 85% a vh-sized
+       fixed column renders short and ends above the bottom of the
+       screen (the "pocket": nav items and the sidebar foot clipped
+       below the visible edge). The column is therefore stretched
+       with top/bottom INSETS instead of a vh height: fixed insets
+       resolve against the zoom-adjusted viewport, so the column
+       spans the full screen height at any zoom. At zoom 1 the
+       rendered geometry is unchanged. */
+
+    /* The login view gets the same inset treatment: it is a
+       full-screen gate whose min-h-screen (100vh) rendered short
+       under the zoom, leaving a pale strip of the light body
+       background under its dark gradient (measured in Chromium:
+       the view ended at 918px on a 1080px screen). Pinned with
+       inset 0 it spans the real screen at any zoom; its own
+       overflow keeps the card reachable on short screens, and
+       safe centring keeps the card top reachable when it scrolls
+       (the reader's safe-center rule, above). */
+    #ownerLoginView {
+      position: fixed;
+      inset: 0;
+      overflow-y: auto;
+      justify-content: safe center;
+    }
+
     /* Responsive Mobile & Desktop Layout Engine */
     html, body {
       overflow-x: hidden;
@@ -405,7 +443,7 @@
         bottom: 0 !important;
         left: -285px !important;
         width: 285px !important;
-        height: 100vh !important;
+        height: auto !important;
         z-index: 60 !important;
         padding: 0.25rem !important;
         box-sizing: border-box !important;
@@ -430,9 +468,10 @@
       #mainAppSidebar {
         position: fixed !important;
         top: 56px !important;
+        bottom: 0 !important;
         left: 0 !important;
         width: 232px !important;
-        height: calc(100vh - 56px) !important;
+        height: auto !important;
         padding: 0.25rem !important;
         box-sizing: border-box !important;
         z-index: 40 !important;
