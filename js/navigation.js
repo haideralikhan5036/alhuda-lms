@@ -310,6 +310,53 @@
     }
     window.toggleSettingsGroup = toggleSettingsGroup;
 
+    // Refresh restore (owner 2026-11-07): the active top-level tab is
+    // mirrored into the URL hash so a browser refresh reopens the same
+    // tab instead of the Dashboard. The hash is written with
+    // replaceState AFTER recordNavigation's own pushState, so the
+    // in-app history stack and Back behaviour stay exactly as they
+    // were. Only genuine top-level tabs participate — the sidebar
+    // destinations plus the tab-content sections — and the 360°
+    // profile workspace is deliberately excluded: a refresh from a
+    // profile returns to the last real tab, never into the profile.
+    function adminTopLevelTabIds() {
+      const ids = new Set();
+      document.querySelectorAll('.sidebar-nav-btn[data-tab]').forEach(btn => {
+        const t = btn.getAttribute('data-tab');
+        if (t) ids.add(t);
+      });
+      document.querySelectorAll('.tab-content').forEach(el => {
+        if (el.id) ids.add(el.id);
+      });
+      ids.delete('tab-profile-360');
+      return ids;
+    }
+    let lastAdminTopLevelTab = null;
+    function recordAdminTabInHash(tabId) {
+      try {
+        if (typeof window === 'undefined' || !window.history || typeof window.history.replaceState !== 'function' || !window.location) return;
+        lastAdminTopLevelTab = tabId;
+        window.history.replaceState(window.history.state, document.title, window.location.pathname + '#' + tabId);
+      } catch (e) {}
+    }
+    function adminTabKeyFromHash() {
+      try {
+        if (typeof window === 'undefined' || !window.location) return '';
+        return String(window.location.hash || '').replace(/^#/, '');
+      } catch (e) { return ''; }
+    }
+    function restoreAdminTabFromHash() {
+      const key = adminTabKeyFromHash();
+      if (!key || key === 'tab-dashboard') return;
+      if (!adminTopLevelTabIds().has(key)) return;
+      // Respect the owner-only guard silently at boot — switchTab
+      // would bounce a manager with an "Access Denied" notice, which
+      // must not fire just because a stale hash survived a role change.
+      if (typeof CURRENT_ROLE !== 'undefined' && CURRENT_ROLE === 'manager' && OWNER_ONLY_TABS.includes(key)) return;
+      switchTab(key);
+    }
+    window.restoreAdminTabFromHash = restoreAdminTabFromHash;
+
     function switchTab(tabId) {
       if (typeof CURRENT_ROLE !== 'undefined' && CURRENT_ROLE === 'manager' && OWNER_ONLY_TABS.includes(tabId)) {
         lmsNotify('Access Denied: This area is available to the Owner only.');
@@ -324,6 +371,19 @@
 
       if (!isNavigatingHistory) {
         recordNavigation(targetId, null);
+      }
+
+      // Refresh restore: mirror the tab into the hash AFTER
+      // recordNavigation (its pushState resets the URL to the bare
+      // pathname, which would wipe a hash written any earlier). A
+      // non-top-level destination (the 360° workspace) gets the last
+      // real tab's hash re-asserted onto its pushed entry, so a
+      // refresh from a profile returns to that tab — the hash itself
+      // still never names the profile.
+      if (adminTopLevelTabIds().has(targetId)) {
+        recordAdminTabInHash(targetId);
+      } else if (lastAdminTopLevelTab) {
+        recordAdminTabInHash(lastAdminTopLevelTab);
       }
 
       // Auto-close mobile drawer when user navigates on small screens

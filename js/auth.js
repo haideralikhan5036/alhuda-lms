@@ -310,6 +310,11 @@
         if (typeof ensureCoreLmsDataLoaded === 'function') {
           ensureCoreLmsDataLoaded().then(() => {
             if (typeof loadDashboardData === 'function') loadDashboardData();
+            // Refresh restore (owner 2026-11-07): a hash that was in
+            // the URL before sign-in lands the owner on that tab.
+            if (typeof window.restoreAdminTabFromHash === 'function') {
+              try { window.restoreAdminTabFromHash(); } catch (e) {}
+            }
           });
         }
       } else {
