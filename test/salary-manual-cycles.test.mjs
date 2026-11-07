@@ -18,9 +18,11 @@
 // the period, adjusted figure, no-submission zero, Phase 3 signature
 // back-compat), and compile integration across months.
 // Part T executes the REAL teacher.html functions in a vm: the
-// manual section ships behind ADVANCE_MANUAL_SUBMISSIONS_ENABLED =
-// false (nothing built while off, even without the const declared),
-// and with the flag on (harness only) renders submitted-vs-final
+// manual section ships behind ADVANCE_MANUAL_SUBMISSIONS_ENABLED
+// (shipped ON since the flip PR, after the v8 Worker deploy was
+// verified live on 2026-11-07; nothing built while off, even without
+// the const declared), and with the flag on renders
+// submitted-vs-final
 // amounts with the admin reason and posts submissions correctly.
 // Run from the repo root:  node test/salary-manual-cycles.test.mjs
 // Requires: node >= 22.5 (node:sqlite).
@@ -746,7 +748,7 @@ function bootTeacherManual(flagMode) {
 }
 const runT = (env, code) => vm.runInContext(code, env.sandbox);
 
-check('T static: the shipped manual flag is OFF', TEACHER.includes('const ADVANCE_MANUAL_SUBMISSIONS_ENABLED = false;'));
+check('T static: the shipped manual flag is ON (v8 Worker deploy verified live)', TEACHER.includes('const ADVANCE_MANUAL_SUBMISSIONS_ENABLED = true;'));
 check('T static: no manual section exists in the static markup (script-built only)', !TEACHER.includes('id="tAdvManualSection"'));
 check('T static: the section render is invoked only behind the flag guard',
   TEACHER.includes("typeof ADVANCE_MANUAL_SUBMISSIONS_ENABLED !== 'undefined') && ADVANCE_MANUAL_SUBMISSIONS_ENABLED"));
