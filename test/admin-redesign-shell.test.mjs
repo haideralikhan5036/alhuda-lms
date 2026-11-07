@@ -5,9 +5,10 @@
 //   1. the functional inventory survived: every shell id exists
 //      exactly once (header children relocated, none dropped), the
 //      data-tab set and tab-content sections are unchanged, and the
-//      login view is byte-for-byte the pre-redesign one (the owner
-//      commissioned a SEPARATE login redesign — this build excludes
-//      it on purpose, so no aui-login hooks may exist);
+//      login view was byte-for-byte the pre-redesign one in THIS
+//      build (a separate commission, excluded on purpose then); the
+//      follow-up login redesign (2026-11-07) has since re-skinned it
+//      with its own lgn- landmarks — it still carries no aui- hooks;
 //   2. the flagship shell is present: glass sidebar with three pinned
 //      bands (brand + live clock / scrolling nav / counters foot),
 //      the white active pill merging into the content via radial
@@ -49,7 +50,7 @@ const count = (hay, needle) => hay.split(needle).length - 1;
 // Part A — functional inventory on the real markup
 // ---------------------------------------------------------------------
 const SHELL_IDS = [
-  // login view (untouched by this redesign — ids still present)
+  // login view (re-skinned later by the login redesign — ids kept)
   'ownerLoginView', 'ownerLoginUsername', 'ownerLoginPassword',
   'ownerPassToggleIcon', 'btnSubmitOwnerLogin', 'ownerLoginErrorMsg',
   // app shell
@@ -162,12 +163,22 @@ for (const r of RAIL) {
 check('mobile rail menu button opens the drawer via toggleSidebar()',
   /<div id="adminMobileRail"[\s\S]{0,1200}?onclick="toggleSidebar\(\)"/.test(INDEX));
 
-// Login view: intentionally untouched (separate owner commission).
-check('login view carries NO redesign hooks (excluded on purpose)',
+// Login view: excluded from THIS redesign on purpose; the exclusion
+// was lifted by the follow-up login redesign (2026-11-07), which
+// re-skinned the gate with its own lgn- classes. The pins below now
+// assert the new landmarks + the untouched form contract instead of
+// the old card classes (reason: the separate commission has landed).
+check('login view carries NO flagship hooks (aui- stays out of the gate)',
   !INDEX.includes('aui-login'));
-check('login card + submit keep their pre-redesign classes',
-  INDEX.includes('<div class="bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden">') &&
-  INDEX.includes('text-white font-extrabold text-sm rounded-xl'));
+check('login view carries the new lgn- landmarks (split card + panel + form side)',
+  INDEX.includes('class="lgn-card"') && INDEX.includes('class="lgn-panel"') &&
+  INDEX.includes('class="lgn-formside"'));
+check('login submit keeps its id + real label inside the pill CTA',
+  INDEX.includes('id="btnSubmitOwnerLogin" class="lgn-cta"') &&
+  INDEX.includes('Login to Control Center'));
+check('login form keeps the real submit handler + password toggle wiring',
+  INDEX.includes('onsubmit="handleOwnerSignIn(event)"') &&
+  INDEX.includes('onclick="toggleOwnerPassVisibility()"'));
 
 // ---------------------------------------------------------------------
 // Part B — flagship CSS + geometry + dashboard pins
