@@ -69,10 +69,13 @@ check('form: submit row wraps',
 check('form: month select is full-width',
   TEACHER.includes('id="tAdvPeriod" class="w-full'));
 
-// No helper text deleted.
+// No helper text deleted. (Phase 3 reason: the advance-page header
+// sentence was REPLACED, not deleted — "deducted from that month's
+// salary only" is false for repayment-plan requests, whose balances
+// are recovered across future salaries per the chosen plan.)
 for (const helper of ['Must be more than 0 and no more than this period',
   'Submitting a request does not change your salary',
-  'Approved advances are deducted from that month',
+  'Approved advances are recovered from your salaries',
   'From your latest official slip']) {
   check(`form: helper text kept ("${helper.slice(0, 32)}…")`, TEACHER.includes(helper));
 }

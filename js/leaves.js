@@ -503,11 +503,12 @@
       return String(v == null ? '' : v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
     }
 
-    // Salary Restructuring Phase 2: the teacher's repayment plan, in
-    // plain words. Returns '' for legacy requests (no plan stored), so
-    // the review card below renders byte-identically for them. The
-    // plan is display-only in this phase — approval behaviour is
-    // unchanged until Phase 3 wires recovery to it.
+    // Salary Restructuring: the teacher's repayment plan, in plain
+    // words. Returns '' for legacy requests (no plan stored), so the
+    // review card below renders byte-identically for them. Since
+    // Phase 3 the plan DRIVES approval: approving a plan request opens
+    // a ledger balance that later slips recover against (see the
+    // Worker's decide/apply-recovery handlers).
     function _advancePlanText(req) {
       const m = req && req.repayment_method;
       if (!m) return '';
@@ -558,7 +559,7 @@
             </div>
             <div>
               <span class="text-slate-500 font-bold block text-[11px]">Recovery Period:</span>
-              <span class="font-extrabold text-slate-800">${_advanceEsc(periodLabel)} (same period)</span>
+              <span class="font-extrabold text-slate-800">${req.repayment_method ? 'Future salaries — per the repayment plan below' : _advanceEsc(periodLabel) + ' (same period)'}</span>
             </div>
             ${_advancePlanText(req) ? `
             <div class="sm:col-span-2">
@@ -571,7 +572,7 @@
               </div>
             ` : ''}
           </div>
-          <p class="text-[11px] text-slate-500">Approving creates one salary record for this teacher and deducts the amount from the ${ _advanceEsc(periodLabel)} salary. The server re-checks the amount against the current net payable before approving.</p>
+          ${req.repayment_method ? `<p class="text-[11px] text-slate-500">Approving opens an outstanding advance balance of the approved amount for this teacher — no salary is deducted yet. Later salary slips recover it according to the repayment plan above, and each recovery is recorded against the slip that made it.</p>` : `<p class="text-[11px] text-slate-500">Approving creates one salary record for this teacher and deducts the amount from the ${ _advanceEsc(periodLabel)} salary. The server re-checks the amount against the current net payable before approving.</p>`}
 
           <div class="flex items-center justify-end gap-2 border-t pt-2.5">
             <button onclick="handleDeclineAdvanceRequest('${_advanceEsc(req.id)}')" class="px-3.5 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-800 border border-rose-300 rounded-xl text-xs font-bold transition flex items-center gap-1">
@@ -646,9 +647,12 @@
       const teacherName = (item && item.teacher && item.teacher.full_name) || 'this teacher';
       const amount = item && item.request ? (parseFloat(item.request.requested_amount) || 0) : 0;
       const periodLabel = (item && item.request && (item.request.period_label || item.request.period)) || '';
+      const isPlanRequest = !!(item && item.request && item.request.repayment_method);
       const ok = await lmsConfirm({
         title: 'Approve salary advance?',
-        message: `Approve a ${amount.toLocaleString()} PKR advance for ${teacherName} (salary period ${periodLabel})? This creates one salary record and deducts the amount from that month's salary.`,
+        message: isPlanRequest
+          ? `Approve a ${amount.toLocaleString()} PKR advance for ${teacherName}? This opens an outstanding advance balance, recovered from future salaries according to the teacher's repayment plan (${_advancePlanText(item.request)}). No salary is deducted now.`
+          : `Approve a ${amount.toLocaleString()} PKR advance for ${teacherName} (salary period ${periodLabel})? This creates one salary record and deducts the amount from that month's salary.`,
         confirmText: 'Approve Advance',
         cancelText: 'Cancel',
         variant: 'info'
@@ -673,7 +677,11 @@
       if (result.data && result.data.updated_slip && item && item.teacher) {
         _mirrorApprovedSlipToAdminCache(result.data.updated_slip, item.teacher.id);
       }
-      lmsNotify('Advance approved. The salary record has been created and the teacher will see the updated salary.');
+      if (result.data && result.data.repayment_plan) {
+        lmsNotify('Advance approved. An outstanding balance of ' + amount.toLocaleString() + ' PKR is now recorded for the teacher and will be recovered from future salaries per the repayment plan.');
+      } else {
+        lmsNotify('Advance approved. The salary record has been created and the teacher will see the updated salary.');
+      }
       await _refreshAdvanceQueueAndModal();
     }
 

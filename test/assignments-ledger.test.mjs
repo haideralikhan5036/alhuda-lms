@@ -115,7 +115,7 @@ fakeDb.seed("INSERT INTO students (id, family_id, name, assigned_teacher_id) VAL
   check('closing a row (update end_date) works', upd.status === 200 && ((afterUpd.json.data || [])[0] || {}).end_reason === 'transferred', 'status ' + upd.status);
 
   const h = await call('/api/health', { method: 'GET' });
-  check('health reports assignments release + schema v4', h.status === 200 && h.json && h.json.version === '2026-11-07-salary-plan-capture' && h.json.schema === '2026-11-07-v6', JSON.stringify(h.json));
+  check('health reports assignments release + schema v4', h.status === 200 && h.json && h.json.version === '2026-11-07-advance-ledger' && h.json.schema === '2026-11-07-v7', JSON.stringify(h.json));
 }
 
 // ---- js/assignments.js executed against a fake db shim ----
@@ -190,7 +190,7 @@ const A = sandbox.window.Assignments;
   const p360 = fs.readFileSync(path.join(REPO_ROOT, 'js/profiles360.js'), 'utf8');
   check('360 edit handles reactivation + teacher change + course change', p360.includes("end_reason: 'teacher_changed'") && p360.includes("end_reason: 'course_changed'") && p360.includes('const oldCourseName'));
   const dbjs = fs.readFileSync(path.join(REPO_ROOT, 'functions/api/db.js'), 'utf8');
-  check('schema creates student_assignments + allowlists it', dbjs.includes('CREATE TABLE IF NOT EXISTS student_assignments') && dbjs.includes("'student_assignments'") && dbjs.includes("SCHEMA_VERSION = '2026-11-07-v6'"));
+  check('schema creates student_assignments + allowlists it', dbjs.includes('CREATE TABLE IF NOT EXISTS student_assignments') && dbjs.includes("'student_assignments'") && dbjs.includes("SCHEMA_VERSION = '2026-11-07-v7'"));
 }
 
 const failed = results.filter((r) => !r.pass);

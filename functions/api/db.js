@@ -38,6 +38,13 @@ const ALLOWED_TABLES = new Set([
   // this engine (scoped per role in worker.js); writes go through the
   // dedicated /api/advances/* endpoints, except the owner's repair path.
   'advance_requests',
+  // Salary Restructuring Phase 3 (2026-11-07): one row per ACTUAL
+  // advance-recovery deduction event, written ONLY by the Worker's
+  // /api/advances/apply-recovery endpoint when a salary slip is
+  // finalized. Read through this engine scoped per role in worker.js
+  // (teachers: own rows only). UNIQUE (slip_id, adjustment_id) is the
+  // hard double-deduction guard.
+  'advance_recoveries',
   // Assignment-based salary (Phase 2, 2026-11-03): dated student→teacher→
   // course assignment history. Rows are CLOSED (end_date set), never
   // hard-deleted — the Worker denies deletes for every role.
@@ -377,6 +384,30 @@ const SCHEMA_STATEMENTS = [
     created_at TEXT DEFAULT (datetime('now')),
     updated_at TEXT
   )`,
+  // Salary Restructuring Phase 3 (2026-11-07): advance recovery events.
+  // Written ONLY at salary-slip finalization by POST
+  // /api/advances/apply-recovery — never at approval time and never by
+  // the portals directly. balance_after is the adjustment's
+  // advance_remaining immediately after this deduction; source is
+  // 'auto' for plan-driven recovery (Phase 4 adds 'manual');
+  // requested_amount stays NULL for auto rows (Phase 4 records the
+  // teacher's submitted manual amount there). The UNIQUE constraint
+  // makes a replayed finalization a no-op instead of a second
+  // deduction. Rows are never hard-deleted (Worker-enforced, like the
+  // other financial tables).
+  `CREATE TABLE IF NOT EXISTS advance_recoveries (
+    id TEXT PRIMARY KEY,
+    adjustment_id TEXT NOT NULL,
+    slip_id TEXT NOT NULL,
+    teacher_id TEXT NOT NULL,
+    period TEXT NOT NULL,
+    amount REAL NOT NULL,
+    balance_after REAL NOT NULL,
+    source TEXT NOT NULL DEFAULT 'auto',
+    requested_amount REAL,
+    created_at TEXT DEFAULT (datetime('now')),
+    UNIQUE (slip_id, adjustment_id)
+  )`,
   // Assignment-based salary (Phase 2, 2026-11-03): one row per
   // student→teacher→course assignment period. start_date/end_date are
   // 'YYYY-MM-DD'; end_date NULL means the assignment is still open.
@@ -427,7 +458,7 @@ let _schemaInitialized = false;
 // not exist yet) falls back to the full DDL path; a marker-write
 // failure only costs the next cold isolate a DDL replay. Neither
 // failure ever fails the request.
-const SCHEMA_VERSION = '2026-11-07-v6';
+const SCHEMA_VERSION = '2026-11-07-v7';
 const SCHEMA_VERSION_KEY = 'schema_version';
 
 async function ensureSchema(db) {

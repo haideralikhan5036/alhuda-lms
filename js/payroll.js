@@ -570,6 +570,180 @@
       };
     }
 
+    // ================= SALARY RESTRUCTURING PHASE 3 — PLAN ADVANCE LEDGER =================
+    // Outstanding plan advances live in salary_adjustments (kind
+    // 'advance', advance_remaining > 0, plan metadata in legacy_json —
+    // written by the Worker's decide endpoint). Batch B legacy rows
+    // always carry advance_remaining = 0, so they never appear here.
+
+    // One compile-wide read: { teacherId: [{ adjustment_id, remaining,
+    // recovery_per_month, method }] }, oldest first (FIFO recovery).
+    async function loadAdvanceLedgerForCompile() {
+      const map = {};
+      try {
+        if (typeof db === 'undefined' || !db || typeof db.from !== 'function') return map;
+        let query = db.from('salary_adjustments').select('*').eq('kind', 'advance');
+        if (query && typeof query.order === 'function') query = query.order('created_at', { ascending: true });
+        const res = await query;
+        const rows = (res && !res.error && Array.isArray(res.data)) ? res.data : [];
+        rows.forEach((r) => {
+          if (!r || r.cancelled_at) return;
+          const remaining = parseFloat(r.advance_remaining) || 0;
+          if (!(remaining > 0)) return;
+          let meta = null;
+          try { meta = JSON.parse(r.legacy_json || 'null'); } catch (e) { meta = null; }
+          const method = meta && meta.repayment_method ? String(meta.repayment_method) : null;
+          if (!method) return; // not a plan ledger row
+          const key = String(r.teacher_id);
+          (map[key] = map[key] || []).push({
+            adjustment_id: r.id,
+            remaining,
+            recovery_per_month: parseFloat(r.recovery_per_month) || 0,
+            method
+          });
+        });
+      } catch (e) { /* ledger read failure: compile proceeds with no planned recovery */ }
+      return map;
+    }
+
+    // Pure planner (unit-tested): distribute this period's recovery
+    // across a teacher's outstanding plan advances, oldest first. Each
+    // advance contributes min(remaining, recovery_per_month) — a
+    // manual plan carries recovery_per_month 0 and contributes nothing
+    // in Phase 3 — and the total never exceeds the headroom that keeps
+    // the slip's net >= 0. Final installments cap at the remaining
+    // balance by construction.
+    function computeAdvanceRecoveryPlan(rows, headroom) {
+      let left = Math.max(0, parseFloat(headroom) || 0);
+      let total = 0;
+      const items = [];
+      const list = Array.isArray(rows) ? rows : [];
+      list.forEach((r) => {
+        const remaining = parseFloat(r.remaining) || 0;
+        const perCycle = parseFloat(r.recovery_per_month) || 0;
+        if (!(remaining > 0) || !(perCycle > 0) || !(left > 0)) return;
+        const take = Math.min(remaining, perCycle, left);
+        if (!(take > 0)) return;
+        items.push({ adjustment_id: r.adjustment_id, method: r.method || null, amount: take, balance_after: Math.max(0, remaining - take) });
+        total += take;
+        left -= take;
+      });
+      const outstandingAfter = list.reduce((s, r) => s + (parseFloat(r.remaining) || 0), 0) - total;
+      return { total, items, outstanding_after: Math.max(0, outstandingAfter) };
+    }
+    window.PayrollAdvanceRecovery = { compute: computeAdvanceRecoveryPlan, loadLedger: loadAdvanceLedgerForCompile };
+
+    // Auth + base for the apply-recovery call (same pattern as
+    // js/leaves.js uses for the decide endpoint; falls back to the
+    // shared helpers when they are loaded).
+    function _payrollAdvanceAuthToken() {
+      try {
+        if (typeof _advanceAdminToken === 'function') { const t = _advanceAdminToken(); if (t) return t; }
+      } catch (e) {}
+      try {
+        if (typeof getOwnerToken === 'function') { const t = getOwnerToken(); if (t) return t; }
+      } catch (e) {}
+      try {
+        const s = sessionStorage.getItem('alhuda_lms_owner_token') || sessionStorage.getItem('alhuda_lms_session_token');
+        if (s) return s;
+      } catch (e) {}
+      try {
+        if (typeof getLmsAuthHeaders === 'function') {
+          const h = getLmsAuthHeaders();
+          if (h && h.Authorization) return String(h.Authorization).replace(/^Bearer\s+/i, '');
+        }
+      } catch (e) {}
+      return null;
+    }
+    function _payrollAdvanceWorkerBase() {
+      try {
+        if (typeof _advanceWorkerBase === 'function') { const b = _advanceWorkerBase(); if (b) return b; }
+      } catch (e) {}
+      try {
+        if (typeof resolveWorkerBaseForEmail === 'function') {
+          const b = resolveWorkerBaseForEmail();
+          if (b) return b;
+        }
+      } catch (e) {}
+      return 'https://alhuda-lms.ceoislamiccentre.workers.dev';
+    }
+
+    // After a slip with a planned advance recovery has been saved to
+    // the salary_slips table, ask the Worker to APPLY that recovery to
+    // the ledger (advance_recoveries rows + guarded balance
+    // decrements). The endpoint trusts only the stored slip, so this
+    // call carries just the slip id. Idempotent server-side: re-saving
+    // or recalculating the same slip moves nothing twice. Failures are
+    // surfaced honestly — the slip stands, balances are untouched, and
+    // saving the slip again retries the application.
+    async function applyAdvanceRecoveryAfterSlipSave(slipRowId, advanceDeducted) {
+      try {
+        if (!slipRowId || !(parseFloat(advanceDeducted) > 0)) return;
+        const token = _payrollAdvanceAuthToken();
+        if (!token) return;
+        const resp = await fetch(_payrollAdvanceWorkerBase() + '/api/advances/apply-recovery', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+          body: JSON.stringify({ slip_id: slipRowId })
+        });
+        const data = await resp.json().catch(() => null);
+        if (resp.ok && data && data.ok) {
+          if (Array.isArray(data.applied) && data.applied.length > 0) {
+            const moved = data.applied.reduce((s, a) => s + (parseFloat(a.amount) || 0), 0);
+            if (typeof lmsNotify === 'function') {
+              lmsNotify(`Advance recovery applied: ${moved.toLocaleString()} PKR deducted against outstanding advance balance(s). Remaining advance balance: ${(parseFloat(data.outstanding_total) || 0).toLocaleString()} PKR.`, { type: 'success' });
+            }
+          }
+          // Recompile so the table/modal reflect the server balances.
+          const p = calculateMonthlySalaries();
+          if (p && typeof p.catch === 'function') p.catch(function () {});
+        } else if (typeof lmsNotify === 'function') {
+          lmsNotify('The salary slip was saved, but the advance recovery could not be applied (' + ((data && data.error) || ('HTTP ' + resp.status)) + '). Save the slip again to retry — no balance was changed.', { type: 'error' });
+        }
+      } catch (e) { /* network failure: slip stands; a re-save retries idempotently */ }
+    }
+    window.applyAdvanceRecoveryAfterSlipSave = applyAdvanceRecoveryAfterSlipSave;
+
+    // Salary Restructuring Phase 3: for a FINALIZED slip (one whose
+    // recovery was applied at save), the authoritative "remaining
+    // advance after this slip" comes from the records: this slip's
+    // advance_recoveries rows carry each recovered advance's balance
+    // right after the deduction; advances this slip did not touch keep
+    // their current remaining. Sum = the teacher's outstanding advance
+    // balance as it stood when this slip was finalized (exact in the
+    // normal one-advance-at-a-time flow). Best-effort: any read failure
+    // leaves the line as recalculateSlipNetTotal rendered it.
+    async function fillSlipAdvanceRemainingFromRecords(slipData) {
+      const remEl = document.getElementById('slipAdvanceRemainingVal');
+      if (!remEl || !slipData || !(parseFloat(slipData.advance_deducted) > 0)) return;
+      if (typeof db === 'undefined' || !db || typeof db.from !== 'function') return;
+      const bounds = parsePayrollMonthBounds(slipData.month);
+      const period = bounds.year + '-' + String(bounds.monthIndex + 1).padStart(2, '0');
+      const slipRes = await db.from('salary_slips').select('id')
+        .eq('teacher_id', String(slipData.teacher_id)).eq('period', period);
+      const slipRows = (slipRes && !slipRes.error && Array.isArray(slipRes.data)) ? slipRes.data : [];
+      if (!slipRows.length || !slipRows[0].id) return;
+      const recRes = await db.from('advance_recoveries').select('*').eq('slip_id', String(slipRows[0].id));
+      const recRows = (recRes && !recRes.error && Array.isArray(recRes.data)) ? recRes.data : [];
+      if (!recRows.length) return; // Batch B fold or not yet applied — no recorded figure to show
+      const touched = {};
+      let remainingAfter = 0;
+      recRows.forEach((r) => {
+        touched[String(r.adjustment_id)] = true;
+        remainingAfter += parseFloat(r.balance_after) || 0;
+      });
+      const adjRes = await db.from('salary_adjustments').select('*')
+        .eq('teacher_id', String(slipData.teacher_id)).eq('kind', 'advance');
+      const adjRows = (adjRes && !adjRes.error && Array.isArray(adjRes.data)) ? adjRes.data : [];
+      adjRows.forEach((r) => {
+        if (!r || r.cancelled_at || touched[String(r.id)]) return;
+        remainingAfter += parseFloat(r.advance_remaining) || 0;
+      });
+      // The modal may have moved on to another slip meanwhile.
+      if (typeof CURRENT_SLIP_DATA === 'undefined' || !CURRENT_SLIP_DATA || CURRENT_SLIP_DATA !== slipData) return;
+      remEl.innerText = `Remaining advance after this slip: ${Math.max(0, remainingAfter).toLocaleString()} PKR (recorded)`;
+    }
+
     async function calculateMonthlySalaries(forceRefresh = false) {
       const tbody = document.getElementById('salariesTableBody');
       if (!tbody) return;
@@ -645,6 +819,9 @@
         try { assignmentRows = await Assignments.loadAll(); } catch (e) { assignmentRows = []; }
         try { assignmentRows = assignmentRows.concat(Assignments.deriveFor(students, assignmentRows, scheds)); } catch (e) {}
       }
+      // Salary Restructuring Phase 3: outstanding plan-advance ledger
+      // rows for the planned-recovery computation in the live branch.
+      const advanceLedgerByTeacher = await loadAdvanceLedgerForCompile();
       const payrollWarnings = [];
 
       // Commission #2 Phase 1: the D5 pricing gate for this month and
@@ -884,7 +1061,7 @@
           // Canonical net (Batch B): approved advances are NOT lumped
           // into `deduction` (that would double-count on dual-write),
           // they live in advance_deducted and are subtracted here.
-          const advanceDeducted = savedSlip ? (parseFloat(savedSlip.advance_deducted) || 0) : 0;
+          let advanceDeducted = savedSlip ? (parseFloat(savedSlip.advance_deducted) || 0) : 0;
 
           // Basic Salary Protection (Phase 2, owner policy 2026-11-03):
           // Teaching-category teachers are guaranteed the configured
@@ -944,6 +1121,23 @@
             daysInMonth: monthBounds.daysInMonth,
             dailyAccrual: Math.round((baseSubtotal / monthBounds.daysInMonth) * 100) / 100
           };
+          // Salary Restructuring Phase 3: planned advance recovery.
+          // When this period has NO saved advance figure, the planned
+          // recovery from the teacher's outstanding plan advances
+          // becomes the slip's advance_deducted — capped per advance
+          // by its per-cycle amount and overall by the headroom that
+          // keeps this slip's net at >= 0. A saved figure always wins:
+          // it is the period's recorded truth (a Batch B same-period
+          // fold, or a previous save of this period, whose recovery
+          // the server applied — or will apply — exactly once).
+          let advanceRecoveryPlan = null;
+          if (!(advanceDeducted > 0)) {
+            const planRes = computeAdvanceRecoveryPlan(advanceLedgerByTeacher[String(t.id)] || [], Math.max(0, baseSubtotal + bonus - deduction));
+            if (planRes.total > 0) {
+              advanceDeducted = planRes.total;
+              advanceRecoveryPlan = planRes;
+            }
+          }
           const netPayable = Math.max(0, baseSubtotal + bonus - deduction - advanceDeducted);
           const status = savedSlip ? (savedSlip.status || 'Pending') : 'Pending';
 
@@ -969,6 +1163,7 @@
             net_payable: netPayable,
             status,
             advance_deducted: advanceDeducted,
+            advance_recovery: advanceRecoveryPlan,
             slip_key: slipKey,
             pricing_version: pricingVersion,
             accrual,
@@ -1026,7 +1221,7 @@
               ${basicProtection > 0 ? `<span class="text-sky-700 font-bold block">+${basicProtection.toLocaleString()} PKR (Basic Salary Protection)</span>` : ''}
               ${bonus > 0 ? `<span class="text-emerald-700 font-bold block">+${bonus.toLocaleString()} PKR (Bonus)</span>` : ''}
               ${deduction > 0 ? `<span class="text-rose-700 font-bold block">-${deduction.toLocaleString()} PKR (Deduction)</span>` : ''}
-              ${advanceDeducted > 0 ? `<span class="text-amber-700 font-bold block">-${advanceDeducted.toLocaleString()} PKR (Approved Advances)</span>` : ''}
+              ${advanceDeducted > 0 ? `<span class="text-amber-700 font-bold block">-${advanceDeducted.toLocaleString()} PKR (${compiledSlip.advance_recovery ? 'Advance Recovery' : 'Approved Advances'})</span>` : ''}
             </div>
           `;
         }
@@ -1225,6 +1420,15 @@
 
       recalculateSlipNetTotal();
 
+      // Salary Restructuring Phase 3: for a finalized slip, replace
+      // the remaining-advance line with the figure from the recorded
+      // recovery rows (async, best-effort — the projection/recorded
+      // line from recalculateSlipNetTotal stands until this lands).
+      try {
+        const p = fillSlipAdvanceRemainingFromRecords(slipData);
+        if (p && typeof p.catch === 'function') p.catch(function () {});
+      } catch (e) {}
+
       // Update Paid Button
       updateSlipPaidButtonUI(slipData.status === 'Paid');
 
@@ -1303,6 +1507,26 @@
 
       const netEl = document.getElementById('slipNetPayable');
       if (netEl) netEl.innerText = `${netPayable.toLocaleString()} PKR`;
+
+      // Salary Restructuring Phase 3: the Advance Recovery row. The
+      // amount is the slip's advance_deducted (never editable here);
+      // the remaining-balance line shows the plan projection for a
+      // fresh compile, and fillSlipAdvanceRemainingFromRecords swaps
+      // in the recorded figure for finalized (frozen) slips.
+      const advRow = document.getElementById('slipAdvanceRecoveryRow');
+      if (advRow) {
+        advRow.classList.toggle('hidden', !(advanceDeducted > 0));
+        advRow.classList.toggle('flex', advanceDeducted > 0);
+        const advVal = document.getElementById('slipAdvanceRecoveryVal');
+        if (advVal) advVal.innerText = `-${advanceDeducted.toLocaleString()} PKR`;
+        const remEl = document.getElementById('slipAdvanceRemainingVal');
+        if (remEl) {
+          const plan = (typeof CURRENT_SLIP_DATA !== 'undefined' && CURRENT_SLIP_DATA) ? CURRENT_SLIP_DATA.advance_recovery : null;
+          remEl.innerText = (plan && advanceDeducted > 0)
+            ? `Remaining advance after this slip: ${(parseFloat(plan.outstanding_after) || 0).toLocaleString()} PKR`
+            : '';
+        }
+      }
 
       const countEl = document.getElementById('slipTotalStudentsCount');
       if (countEl) countEl.innerText = `${isFixedSlip ? 'Fixed Salary' : `For ${rateInputs.length} Assigned Students`} (${studentsSubtotal.toLocaleString()} Base ${basicProtection > 0 ? '+ ' + basicProtection.toLocaleString() + ' Basic Protection' : ''} ${bonus > 0 ? '+ ' + bonus + ' Bonus' : ''} ${deduction > 0 ? '- ' + deduction + ' Deduction' : ''} ${advanceDeducted > 0 ? '- ' + advanceDeducted + ' Approved Advances' : ''})`;
@@ -1388,6 +1612,18 @@
                 localStorage.setItem('alhuda_teacher_salaries', JSON.stringify(savedSalaries));
               }
             } catch (e) { /* slip_no write-back is best-effort */ }
+            // Salary Restructuring Phase 3: the slip is now finalized
+            // in the table — apply its planned advance recovery to the
+            // ledger. Only on a confirmed table write (res.ok + row
+            // id): if the slip save failed, no balance may move. The
+            // endpoint is idempotent, so the Recalculate → Save cycle
+            // cannot double-apply.
+            try {
+              if (res && res.ok && res.row && res.row.id) {
+                const p = applyAdvanceRecoveryAfterSlipSave(res.row.id, savedSalaries[slipKey].advance_deducted);
+                if (p && typeof p.catch === 'function') p.catch(function () {});
+              }
+            } catch (e) { /* recovery application is retried by any later save */ }
           }).catch(function () {});
         }
       } catch (e) { /* dual-write must never affect the legacy save */ }

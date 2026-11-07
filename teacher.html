@@ -1399,6 +1399,11 @@ font-family: var(--font-num) !important;
           </div>
           <div id="tSalSummaryBody" class="text-xs text-slate-500">Loading your salary summary...</div>
         </div>
+        <!-- Salary Restructuring Phase 3: total advance balance still
+             outstanding (shown only when > 0; filled by
+             renderTeacherAdvanceOutstanding from the teacher's own
+             salary_adjustments balances). -->
+        <div id="tSalAdvanceOutstanding" class="hidden p-3.5 rounded-2xl bg-amber-50 border border-amber-200 text-amber-900 text-xs font-bold"></div>
         <!-- SALARIES TABLE CARD -->
         <div class="bg-white rounded-[24px] border border-[#eef3ee] shadow-[0_16px_36px_rgba(12,42,32,0.07)] overflow-hidden">
           <div class="p-4 sm:p-5 border-b border-[#eef3ee] flex justify-between items-center flex-wrap gap-2">
@@ -1448,7 +1453,7 @@ font-family: var(--font-num) !important;
                 <h2 class="text-lg font-black tracking-tight font-serif">Request Advance Salary</h2>
                 <span class="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-amber-400 text-slate-950">Pending Until Approved</span>
               </div>
-              <p class="text-xs text-emerald-200 mt-0.5">Request an advance against a salary period. Approved advances are deducted from that month's salary only.</p>
+              <p class="text-xs text-emerald-200 mt-0.5">Request an advance against a salary period. Approved advances are recovered from your salaries according to the repayment plan you choose.</p>
             </div>
           </div>
         </div>
@@ -1486,7 +1491,7 @@ font-family: var(--font-num) !important;
           </div>
           <div class="flex items-center gap-2 flex-wrap">
             <button type="button" id="tAdvSubmitBtn" onclick="submitTeacherAdvanceRequest()" class="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black shadow transition">Submit Advance Request</button>
-            <span class="text-[11px] text-slate-500">Submitting a request does not change your salary. Only an approved request deducts from that month.</span>
+            <span class="text-[11px] text-slate-500">Submitting a request does not change your salary. Only an approved request creates a balance, recovered per your repayment plan.</span>
           </div>
         </div>
 
@@ -8949,14 +8954,14 @@ font-family: var(--font-num) !important;
     let _TADV_TYPE = 'full';
     let _TADV_SUBMITTING = false;
 
-    // SALARY RESTRUCTURING PHASE 2 — repayment-plan capture (DORMANT).
-    // The Advance Repayment Plan section is built into the request
-    // form, and the submit payload gains repayment_method /
-    // installment_amount, ONLY when this flag is true. Phase 3 flips
-    // it after the Worker release that acts on plan fields is
-    // deployed. With the flag OFF (as shipped) the builder never runs,
-    // the form DOM is exactly today's, and the submit payload is the
-    // exact Batch B payload.
+    // SALARY RESTRUCTURING — repayment-plan capture (LIVE since
+    // Phase 3). The Advance Repayment Plan section is built into the
+    // request form, and the submit payload gains repayment_method /
+    // installment_amount, ONLY when this flag is true. Phase 2 shipped
+    // it OFF (capture dormant); Phase 3 flips it ON together with the
+    // Worker release that acts on plan fields (approval opens a ledger
+    // balance; finalized slips recover it per the plan). The flag
+    // stays as the single kill-switch for plan capture.
     const ADVANCE_REPAYMENT_PLANS_ENABLED = false;
     let _TADV_PLAN = 'full';
     let _TADV_PLAN_FIXED_AMOUNT = 5000;
@@ -9217,7 +9222,7 @@ font-family: var(--font-num) !important;
           } catch (e) {}
           const curHasSlip = curPeriod && _TADV_SLIPS.some((s) => _tAdvPeriodOf(s) === curPeriod);
           if (curPeriod && !curHasSlip) {
-            periodNote.innerText = 'No slip has been generated for ' + curLabel + ' yet — you can still request an advance for it below (custom amount only). It stays pending until Administration generates the slip and approves it.';
+            periodNote.innerText = 'No slip has been generated for ' + curLabel + ' yet — you can still request an advance for it below (custom amount only). It stays pending until Administration approves it.';
             periodNote.classList.remove('hidden');
           } else {
             periodNote.innerText = '';
@@ -9328,7 +9333,7 @@ font-family: var(--font-num) !important;
         const custom = customEl ? parseFloat(customEl.value) : NaN;
         if (Number.isFinite(custom) && custom > 0) {
           amountText.innerText = custom.toLocaleString() + ' PKR';
-          hint.innerText = 'Custom advance for ' + periodLabel + ' (no slip yet). It stays pending until Administration generates the slip and approves it.';
+          hint.innerText = 'Custom advance for ' + periodLabel + ' (no slip yet). It stays pending until Administration approves it.';
         } else {
           amountText.innerText = '—';
           hint.innerText = 'No slip has been generated for ' + periodLabel + ' yet. Enter a custom amount — full/half advances need a generated slip.';
@@ -9532,7 +9537,7 @@ font-family: var(--font-num) !important;
         if (data.duplicate) {
           lmsNotify('You already have a pending request for this period. No duplicate was created.');
         } else if (data.salary_pending) {
-          lmsNotify('Advance request submitted. No slip exists for this period yet — it stays pending until Administration generates the slip and approves it.');
+          lmsNotify('Advance request submitted. No slip exists for this period yet — it stays pending until Administration approves it.');
         } else {
           lmsNotify('Advance request submitted. It is now pending review by Administration.');
         }
@@ -9551,6 +9556,24 @@ font-family: var(--font-num) !important;
       }
     }
 
+    // Salary Restructuring Phase 3: the "Advance Outstanding" strip on
+    // the Salary Slips page. Rendered only when the teacher still owes
+    // an advance balance (> 0); hidden otherwise. Fed by
+    // loadTeacherAdvanceRequests from the teacher's OWN
+    // salary_adjustments rows (Worker-scoped to this teacher).
+    function renderTeacherAdvanceOutstanding(total) {
+      const el = document.getElementById('tSalAdvanceOutstanding');
+      if (!el) return;
+      const t = parseFloat(total) || 0;
+      if (t > 0) {
+        el.innerHTML = 'Advance Outstanding: <span class="font-mono font-black">' + t.toLocaleString() + ' PKR</span> — this balance is recovered from your coming salaries according to your repayment plan.';
+        el.classList.remove('hidden');
+      } else {
+        el.innerHTML = '';
+        el.classList.add('hidden');
+      }
+    }
+
     async function loadTeacherAdvanceRequests() {
       const listEl = document.getElementById('tAdvMyList');
       if (!listEl || !CURRENT_TEACHER || !CURRENT_TEACHER.id) return;
@@ -9565,6 +9588,32 @@ font-family: var(--font-num) !important;
         listEl.innerHTML = '<p>Could not load your requests right now. Your submitted requests are still safe — press Refresh Slips to retry.</p>';
         return;
       }
+      // Phase 3: this teacher's advance ledger balances (own rows only —
+      // the Worker scopes salary_adjustments reads to the signed-in
+      // teacher). balanceByRequest maps a request to its remaining
+      // balance via the request's adjustment_id; outstandingTotal feeds
+      // the Salary Slips summary strip.
+      const balanceByRequest = {};
+      let outstandingTotal = 0;
+      try {
+        if (typeof db !== 'undefined' && db) {
+          const adjRes = await db.from('salary_adjustments').select('*').eq('teacher_id', CURRENT_TEACHER.id).eq('kind', 'advance');
+          const adjRows = (adjRes && !adjRes.error && Array.isArray(adjRes.data)) ? adjRes.data : [];
+          const remainingByAdj = {};
+          adjRows.forEach((a) => {
+            if (!a || a.cancelled_at) return;
+            const rem = parseFloat(a.advance_remaining) || 0;
+            remainingByAdj[String(a.id)] = rem;
+            if (rem > 0) outstandingTotal += rem;
+          });
+          rows.forEach((r) => {
+            if (r && r.adjustment_id && remainingByAdj[String(r.adjustment_id)] != null) {
+              balanceByRequest[String(r.id)] = remainingByAdj[String(r.adjustment_id)];
+            }
+          });
+        }
+      } catch (e) {}
+      if (typeof renderTeacherAdvanceOutstanding === 'function') renderTeacherAdvanceOutstanding(outstandingTotal);
       // Decision toasts: the LMS has no server-push channel to teachers,
       // so a status change is announced the first time THIS device sees
       // it differ from the last-seen status map. First load only sets
@@ -9591,8 +9640,9 @@ font-family: var(--font-num) !important;
         return;
       }
       const typeLabel = (t) => t === 'full' ? 'Full Salary' : t === 'half' ? 'Half Salary' : 'Custom Amount';
-      // Phase 2: the chosen repayment plan, in plain words, shown only
-      // when the request actually carries one (legacy rows have NULL).
+      // Salary Restructuring: the chosen repayment plan, in plain
+      // words, shown only when the request actually carries one
+      // (legacy rows have NULL).
       const planText = (r) => {
         const m = r && r.repayment_method;
         if (!m) return '';
@@ -9619,7 +9669,9 @@ font-family: var(--font-num) !important;
               ${badge(r.status)}
             </div>
             <div class="text-slate-500 mt-1">Period: <strong class="text-slate-800">${r.period_label || _tAdvLabelOf(r.period) || r.period}</strong>${when ? ' • Requested: ' + when : ''}</div>
-            ${r.status === 'Approved' && apprAmt != null ? `<div class="text-emerald-800 font-bold mt-0.5">Approved: ${apprAmt.toLocaleString()} PKR — deducted from your ${r.period_label || r.period} salary.</div>` : ''}
+            ${r.status === 'Approved' && apprAmt != null ? (r.repayment_method
+              ? `<div class="text-emerald-800 font-bold mt-0.5">Approved: ${apprAmt.toLocaleString()} PKR${balanceByRequest[String(r.id)] != null ? ` — remaining balance: ${Math.max(0, balanceByRequest[String(r.id)]).toLocaleString()} PKR` : ''}. Recovered from your salaries per the plan below.</div>`
+              : `<div class="text-emerald-800 font-bold mt-0.5">Approved: ${apprAmt.toLocaleString()} PKR — deducted from your ${r.period_label || r.period} salary.</div>`) : ''}
             ${planText(r) ? `<div class="text-slate-600 mt-0.5">${planText(r)}</div>` : ''}
             ${r.reason ? `<div class="text-slate-600 mt-0.5">Reason: ${String(r.reason).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</div>` : ''}
             ${r.reviewer_comment ? `<div class="text-slate-600 mt-0.5">Reviewer note: ${String(r.reviewer_comment).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</div>` : ''}
