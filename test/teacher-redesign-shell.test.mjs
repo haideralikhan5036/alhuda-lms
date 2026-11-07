@@ -742,6 +742,13 @@ vm.runInContext(`
   let _TADV_SLIPS = [];
   let _TADV_TYPE = 'custom';
   let _TADV_SUBMITTING = false;
+  // Phase 2 harness fix (reason): the real submit handler now reads
+  // the Phase 2 repayment-plan flag const. The prelude declares it
+  // with its SHIPPED value (false), so this block keeps asserting the
+  // unchanged Batch B payload — now also proving flag-off behaviour.
+  const ADVANCE_REPAYMENT_PLANS_ENABLED = false;
+  let _TADV_PLAN = 'full';
+  let _TADV_PLAN_FIXED_AMOUNT = 5000;
   ${extractFunction(TEACHER, '_tAdvNetOf')}
   ${extractFunction(TEACHER, '_tAdvPeriodOf')}
   ${extractFunction(TEACHER, '_tAdvLabelOf')}

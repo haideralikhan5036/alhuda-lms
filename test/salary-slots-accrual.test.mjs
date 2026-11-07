@@ -535,12 +535,12 @@ console.log('== structural: schema, release, hook, labels ==');
 {
   const dbjs = fs.readFileSync(path.join(REPO_ROOT, 'functions/api/db.js'), 'utf8');
   check('schema bumped to v5 with the slots column (CREATE + ALTER patch)',
-    dbjs.includes("const SCHEMA_VERSION = '2026-11-05-v5'") &&
+    dbjs.includes("const SCHEMA_VERSION = '2026-11-07-v6'") &&
     dbjs.includes('slots REAL') &&
     dbjs.includes('ALTER TABLE student_assignments ADD COLUMN slots REAL'));
   const worker = fs.readFileSync(path.join(REPO_ROOT, 'cloudflare/worker.js'), 'utf8');
   check('worker release + health schema bumped in sync',
-    worker.includes("const WORKER_RELEASE = '2026-11-06-annotated-pages'") && worker.includes("const HEALTH_SCHEMA_VERSION = '2026-11-05-v5'"));
+    worker.includes("const WORKER_RELEASE = '2026-11-07-salary-plan-capture'") && worker.includes("const HEALTH_SCHEMA_VERSION = '2026-11-07-v6'"));
   const sched = fs.readFileSync(path.join(REPO_ROOT, 'js/schedule.js'), 'utf8');
   check("duration-change hook: re-segment helper exists and both schedule save paths call it",
     sched.includes('function maybeReSegmentAssignmentSlots(') &&

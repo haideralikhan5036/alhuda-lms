@@ -350,12 +350,21 @@ const SCHEMA_STATEMENTS = [
   // (the salary period the advance is recovered from). approved_amount
   // is NULL while Pending. No amount ever lives in audit_log — the
   // audit entry for a decision carries only actor + request id + period.
+  // Salary Restructuring Phase 2 (2026-11-07): repayment-plan capture.
+  // repayment_method: 'full' | 'fixed' | 'custom' | 'manual', chosen by
+  // the teacher at request time; installment_amount is set only for
+  // fixed/custom. Both are NULL on legacy requests (submitted before
+  // plan capture, or by older clients). The columns are CAPTURE-ONLY in
+  // Phase 2: the decide endpoint and every money path ignore them —
+  // Phase 3 wires them into recovery.
   `CREATE TABLE IF NOT EXISTS advance_requests (
     id TEXT PRIMARY KEY,
     teacher_id TEXT NOT NULL,
     teacher_name TEXT,
     period TEXT NOT NULL,
     advance_type TEXT NOT NULL,
+    repayment_method TEXT,
+    installment_amount REAL,
     requested_amount REAL NOT NULL,
     approved_amount REAL,
     status TEXT DEFAULT 'Pending',
@@ -418,7 +427,7 @@ let _schemaInitialized = false;
 // not exist yet) falls back to the full DDL path; a marker-write
 // failure only costs the next cold isolate a DDL replay. Neither
 // failure ever fails the request.
-const SCHEMA_VERSION = '2026-11-05-v5';
+const SCHEMA_VERSION = '2026-11-07-v6';
 const SCHEMA_VERSION_KEY = 'schema_version';
 
 async function ensureSchema(db) {
@@ -504,6 +513,12 @@ async function ensureSchema(db) {
   // TABLE above; on pre-existing tables ADD COLUMN applies it, and on
   // tables that already have it the error is swallowed, as above.
   try { await db.prepare('ALTER TABLE student_assignments ADD COLUMN slots REAL').run(); } catch (e) {}
+  // Salary Restructuring Phase 2 (schema v6): repayment-plan columns on
+  // advance_requests (fresh installs carry them from the CREATE TABLE
+  // above; ADD COLUMN applies them to pre-existing tables and the error
+  // is swallowed where they already exist, as above).
+  try { await db.prepare('ALTER TABLE advance_requests ADD COLUMN repayment_method TEXT').run(); } catch (e) {}
+  try { await db.prepare('ALTER TABLE advance_requests ADD COLUMN installment_amount REAL').run(); } catch (e) {}
   // SLOW-CLASSES FIX: record the schema marker (best effort — never
   // fail the request if this write fails; see the note above).
   try {

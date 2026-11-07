@@ -8949,6 +8949,18 @@ font-family: var(--font-num) !important;
     let _TADV_TYPE = 'full';
     let _TADV_SUBMITTING = false;
 
+    // SALARY RESTRUCTURING PHASE 2 — repayment-plan capture (DORMANT).
+    // The Advance Repayment Plan section is built into the request
+    // form, and the submit payload gains repayment_method /
+    // installment_amount, ONLY when this flag is true. Phase 3 flips
+    // it after the Worker release that acts on plan fields is
+    // deployed. With the flag OFF (as shipped) the builder never runs,
+    // the form DOM is exactly today's, and the submit payload is the
+    // exact Batch B payload.
+    const ADVANCE_REPAYMENT_PLANS_ENABLED = false;
+    let _TADV_PLAN = 'full';
+    let _TADV_PLAN_FIXED_AMOUNT = 5000;
+
     function _tAdvNetOf(slip) {
       if (!slip) return 0;
       if (window.FeeTables && typeof window.FeeTables.netPayable === 'function') {
@@ -9149,6 +9161,9 @@ font-family: var(--font-num) !important;
 
     function renderTeacherSalarySummary(teacherSlips) {
       _TADV_SLIPS = Array.isArray(teacherSlips) ? teacherSlips : [];
+      // Phase 2 (flag-gated): build the dormant repayment-plan section
+      // into the advance form. No-op unless the flag is on.
+      if (ADVANCE_REPAYMENT_PLANS_ENABLED) buildAdvanceRepaymentPlanSection();
       const body = document.getElementById('tSalSummaryBody');
       const periodSel = document.getElementById('tAdvPeriod');
       // Period options: every slip month with a parseable period, newest
@@ -9348,6 +9363,99 @@ font-family: var(--font-num) !important;
       }
     }
 
+    // SALARY RESTRUCTURING PHASE 2 — repayment-plan section (flag-gated
+    // builder). The section is created by script, never written into
+    // the static form markup, so with ADVANCE_REPAYMENT_PLANS_ENABLED
+    // off the form DOM stays exactly as it was. Fixed and Custom stay
+    // DISTINCT options (preset chips vs the teacher's own amount) even
+    // though Phase 3 will run both through one recovery engine.
+    function buildAdvanceRepaymentPlanSection() {
+      if (document.getElementById('tAdvPlanSection')) return;
+      const reasonEl = document.getElementById('tAdvReason');
+      if (!reasonEl || !reasonEl.parentElement || !reasonEl.parentElement.parentElement) return;
+      const section = document.createElement('div');
+      section.id = 'tAdvPlanSection';
+      section.className = 'p-3.5 bg-[#f7faf7] border border-slate-200 rounded-2xl space-y-2.5';
+      section.innerHTML = `
+        <div>
+          <span class="block font-bold text-slate-700">Advance Repayment Plan</span>
+          <p class="text-[11px] text-slate-500 mt-0.5">How would you like to repay this advance?</p>
+        </div>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-1.5" id="tAdvPlanGroup">
+          <button type="button" data-adv-plan="full" onclick="selectAdvanceRepaymentPlan('full')" class="adv-plan-btn text-left p-3 rounded-xl border border-slate-300 bg-white transition hover:border-emerald-500">
+            <span class="block font-black text-slate-800 text-xs">Full Deduction</span>
+            <span class="block text-[11px] text-slate-500 mt-0.5">The entire advance amount will be deducted from my next eligible salary.</span>
+          </button>
+          <button type="button" data-adv-plan="fixed" onclick="selectAdvanceRepaymentPlan('fixed')" class="adv-plan-btn text-left p-3 rounded-xl border border-slate-300 bg-white transition hover:border-emerald-500">
+            <span class="block font-black text-slate-800 text-xs">Fixed Installment</span>
+            <span class="block text-[11px] text-slate-500 mt-0.5">A fixed amount is deducted from every upcoming salary until the advance is repaid.</span>
+          </button>
+          <button type="button" data-adv-plan="custom" onclick="selectAdvanceRepaymentPlan('custom')" class="adv-plan-btn text-left p-3 rounded-xl border border-slate-300 bg-white transition hover:border-emerald-500">
+            <span class="block font-black text-slate-800 text-xs">Custom Installment</span>
+            <span class="block text-[11px] text-slate-500 mt-0.5">I choose my own amount to be deducted from every upcoming salary.</span>
+          </button>
+          <button type="button" data-adv-plan="manual" onclick="selectAdvanceRepaymentPlan('manual')" class="adv-plan-btn text-left p-3 rounded-xl border border-slate-300 bg-white transition hover:border-emerald-500">
+            <span class="block font-black text-slate-800 text-xs">Manual Deduction</span>
+            <span class="block text-[11px] text-slate-500 mt-0.5">I decide how much to repay before each salary is generated.</span>
+          </button>
+        </div>
+        <div id="tAdvPlanFixedBox" class="hidden">
+          <span class="block font-bold text-slate-700 mb-1">Installment per salary</span>
+          <div class="flex flex-wrap gap-1.5" id="tAdvPlanFixedChips">
+            <button type="button" data-adv-plan-fixed="5000" onclick="selectAdvancePlanFixedAmount(5000, this)" class="adv-plan-fixed-chip px-3.5 py-2 rounded-full border border-slate-300 bg-white text-slate-700 text-[11px] font-bold hover:border-emerald-500 transition">PKR 5,000 / salary</button>
+            <button type="button" data-adv-plan-fixed="10000" onclick="selectAdvancePlanFixedAmount(10000, this)" class="adv-plan-fixed-chip px-3.5 py-2 rounded-full border border-slate-300 bg-white text-slate-700 text-[11px] font-bold hover:border-emerald-500 transition">PKR 10,000 / salary</button>
+          </div>
+          <p class="text-[11px] text-slate-500 mt-1">The last salary deducts only what is left of the advance — never more than the remaining balance.</p>
+        </div>
+        <div id="tAdvPlanCustomBox" class="hidden">
+          <label class="block font-bold text-slate-700 mb-1" for="tAdvPlanCustomAmount">Your amount per salary (PKR)</label>
+          <input type="number" id="tAdvPlanCustomAmount" min="1" step="1" placeholder="e.g. 3000" class="w-full p-2.5 bg-white border border-slate-300 rounded-xl font-bold text-slate-800 text-xs focus:outline-brandEmerald">
+          <p class="text-[11px] text-slate-500 mt-1">Deducted from every upcoming salary until the advance is repaid. Must be more than 0 and no more than the advance amount (checked again on the server).</p>
+        </div>
+        <p id="tAdvPlanManualNote" class="hidden text-[11px] text-slate-600 bg-white border border-slate-200 rounded-xl p-2.5">Before each salary is generated you can submit how much to repay that month, and Administration confirms it on the slip. If you submit nothing for a month, nothing is deducted that month.</p>`;
+      reasonEl.parentElement.parentElement.insertBefore(section, reasonEl.parentElement);
+      selectAdvanceRepaymentPlan('full');
+      selectAdvancePlanFixedAmount(_TADV_PLAN_FIXED_AMOUNT);
+    }
+
+    function selectAdvanceRepaymentPlan(method) {
+      _TADV_PLAN = method;
+      document.querySelectorAll('#tAdvPlanGroup .adv-plan-btn').forEach((b) => {
+        const active = b.getAttribute('data-adv-plan') === method;
+        b.classList.toggle('adv-plan-active', active);
+        b.classList.toggle('border-emerald-600', active);
+        b.classList.toggle('bg-emerald-50', active);
+        // The base card carries bg-white + border-slate-300; remove
+        // them while active so the emerald state wins regardless of
+        // generated-stylesheet order (same conflict class as the
+        // adv-type pills).
+        b.classList.toggle('bg-white', !active);
+        b.classList.toggle('border-slate-300', !active);
+      });
+      const fixedBox = document.getElementById('tAdvPlanFixedBox');
+      if (fixedBox) fixedBox.classList.toggle('hidden', method !== 'fixed');
+      const customBox = document.getElementById('tAdvPlanCustomBox');
+      if (customBox) customBox.classList.toggle('hidden', method !== 'custom');
+      const manualNote = document.getElementById('tAdvPlanManualNote');
+      if (manualNote) manualNote.classList.toggle('hidden', method !== 'manual');
+    }
+
+    function selectAdvancePlanFixedAmount(amount, btn) {
+      _TADV_PLAN_FIXED_AMOUNT = amount;
+      document.querySelectorAll('#tAdvPlanFixedChips .adv-plan-fixed-chip').forEach((b) => {
+        const active = Number(b.getAttribute('data-adv-plan-fixed')) === amount;
+        b.classList.toggle('adv-plan-fixed-active', active);
+        b.classList.toggle('bg-emerald-600', active);
+        b.classList.toggle('text-white', active);
+        b.classList.toggle('border-emerald-600', active);
+        // Remove the conflicting base colours while active (see
+        // selectAdvanceRepaymentPlan) so the label never washes out.
+        b.classList.toggle('bg-white', !active);
+        b.classList.toggle('text-slate-700', !active);
+        b.classList.toggle('border-slate-300', !active);
+      });
+    }
+
     function _tAdvAuthHeaders() {
       try {
         if (typeof window.getLmsAuthHeaders === 'function') {
@@ -9382,14 +9490,38 @@ font-family: var(--font-num) !important;
       const reasonEl = document.getElementById('tAdvReason');
       const reason = reasonEl ? reasonEl.value.trim() : '';
       if (reason.length > 500) { lmsNotify('The reason must be 500 characters or fewer.'); return; }
+      // Phase 2 (flag-gated): validate + collect the repayment plan.
+      // With ADVANCE_REPAYMENT_PLANS_ENABLED off, planFields stays null
+      // and the payload below is the exact Batch B payload.
+      let planFields = null;
+      if (ADVANCE_REPAYMENT_PLANS_ENABLED) {
+        const requestedAmt = _TADV_TYPE === 'full' ? net : _TADV_TYPE === 'half' ? Math.floor(net / 2) : customAmount;
+        if (_TADV_PLAN === 'fixed') {
+          if (!(Number.isFinite(_TADV_PLAN_FIXED_AMOUNT) && _TADV_PLAN_FIXED_AMOUNT > 0)) { lmsNotify('Choose a fixed installment amount for your repayment plan.'); return; }
+          planFields = { repayment_method: 'fixed', installment_amount: _TADV_PLAN_FIXED_AMOUNT };
+        } else if (_TADV_PLAN === 'custom') {
+          const planEl = document.getElementById('tAdvPlanCustomAmount');
+          const planAmt = planEl ? parseFloat(planEl.value) : NaN;
+          if (!Number.isFinite(planAmt) || planAmt <= 0) { lmsNotify('Enter your repayment amount per salary (more than 0).'); return; }
+          if (requestedAmt > 0 && planAmt > requestedAmt) { lmsNotify('Your repayment per salary cannot exceed the advance amount (' + requestedAmt.toLocaleString() + ' PKR).'); return; }
+          planFields = { repayment_method: 'custom', installment_amount: planAmt };
+        } else {
+          planFields = { repayment_method: _TADV_PLAN };
+        }
+      }
       const btn = document.getElementById('tAdvSubmitBtn');
       _TADV_SUBMITTING = true;
       if (btn) btn.disabled = true;
       try {
+        const payload = { period, advance_type: _TADV_TYPE, custom_amount: customAmount, reason: reason || undefined };
+        if (planFields) {
+          payload.repayment_method = planFields.repayment_method;
+          if (planFields.installment_amount != null) payload.installment_amount = planFields.installment_amount;
+        }
         const res = await fetch(getTeacherWorkerBase() + '/api/advances/request', {
           method: 'POST',
           headers: Object.assign({ 'Content-Type': 'application/json' }, _tAdvAuthHeaders()),
-          body: JSON.stringify({ period, advance_type: _TADV_TYPE, custom_amount: customAmount, reason: reason || undefined })
+          body: JSON.stringify(payload)
         });
         let data = null;
         try { data = await res.json(); } catch (e) {}
@@ -9407,6 +9539,8 @@ font-family: var(--font-num) !important;
         if (reasonEl) reasonEl.value = '';
         const customEl = document.getElementById('tAdvCustomAmount');
         if (customEl) customEl.value = '';
+        const planCustomEl = document.getElementById('tAdvPlanCustomAmount');
+        if (planCustomEl) planCustomEl.value = '';
         refreshAdvanceAmountText();
         loadTeacherPreviousSalaries();
       } catch (e) {
@@ -9457,6 +9591,18 @@ font-family: var(--font-num) !important;
         return;
       }
       const typeLabel = (t) => t === 'full' ? 'Full Salary' : t === 'half' ? 'Half Salary' : 'Custom Amount';
+      // Phase 2: the chosen repayment plan, in plain words, shown only
+      // when the request actually carries one (legacy rows have NULL).
+      const planText = (r) => {
+        const m = r && r.repayment_method;
+        if (!m) return '';
+        const inst = r.installment_amount != null ? (parseFloat(r.installment_amount) || 0) : null;
+        if (m === 'full') return 'Repayment plan: Full Deduction — the entire advance comes out of your next eligible salary.';
+        if (m === 'fixed') return 'Repayment plan: Fixed Installment' + (inst ? ' — ' + inst.toLocaleString() + ' PKR per salary' : '') + '.';
+        if (m === 'custom') return 'Repayment plan: Custom Installment' + (inst ? ' — ' + inst.toLocaleString() + ' PKR per salary' : '') + '.';
+        if (m === 'manual') return 'Repayment plan: Manual Deduction — you choose how much to repay before each salary; a month with no submission has no deduction.';
+        return '';
+      };
       const badge = (st) => st === 'Approved'
         ? '<span class="px-2 py-0.5 rounded-full text-[10px] font-black bg-emerald-100 text-emerald-800 border border-emerald-300">Approved</span>'
         : st === 'Rejected'
@@ -9474,6 +9620,7 @@ font-family: var(--font-num) !important;
             </div>
             <div class="text-slate-500 mt-1">Period: <strong class="text-slate-800">${r.period_label || _tAdvLabelOf(r.period) || r.period}</strong>${when ? ' • Requested: ' + when : ''}</div>
             ${r.status === 'Approved' && apprAmt != null ? `<div class="text-emerald-800 font-bold mt-0.5">Approved: ${apprAmt.toLocaleString()} PKR — deducted from your ${r.period_label || r.period} salary.</div>` : ''}
+            ${planText(r) ? `<div class="text-slate-600 mt-0.5">${planText(r)}</div>` : ''}
             ${r.reason ? `<div class="text-slate-600 mt-0.5">Reason: ${String(r.reason).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</div>` : ''}
             ${r.reviewer_comment ? `<div class="text-slate-600 mt-0.5">Reviewer note: ${String(r.reviewer_comment).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</div>` : ''}
           </div>`;

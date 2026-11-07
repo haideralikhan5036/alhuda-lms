@@ -503,6 +503,22 @@
       return String(v == null ? '' : v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
     }
 
+    // Salary Restructuring Phase 2: the teacher's repayment plan, in
+    // plain words. Returns '' for legacy requests (no plan stored), so
+    // the review card below renders byte-identically for them. The
+    // plan is display-only in this phase — approval behaviour is
+    // unchanged until Phase 3 wires recovery to it.
+    function _advancePlanText(req) {
+      const m = req && req.repayment_method;
+      if (!m) return '';
+      const inst = req.installment_amount != null ? (parseFloat(req.installment_amount) || 0) : null;
+      if (m === 'full') return 'Full Deduction — entire advance from the next eligible salary';
+      if (m === 'fixed') return 'Fixed' + (inst ? ' — PKR ' + inst.toLocaleString() + ' per salary' : '');
+      if (m === 'custom') return 'Custom' + (inst ? ' — PKR ' + inst.toLocaleString() + ' per salary' : '');
+      if (m === 'manual') return 'Manual — teacher decides an amount before each salary';
+      return '';
+    }
+
     function renderAdvanceSalaryRequestItem(item) {
       const req = item.request || {};
       const teacher = item.teacher || {};
@@ -544,6 +560,11 @@
               <span class="text-slate-500 font-bold block text-[11px]">Recovery Period:</span>
               <span class="font-extrabold text-slate-800">${_advanceEsc(periodLabel)} (same period)</span>
             </div>
+            ${_advancePlanText(req) ? `
+            <div class="sm:col-span-2">
+              <span class="text-slate-500 font-bold block text-[11px]">Repayment Plan:</span>
+              <span class="font-extrabold text-slate-800">${_advanceEsc(_advancePlanText(req))}</span>
+            </div>` : ''}
             ${req.reason ? `
               <div class="sm:col-span-2 text-slate-700 italic bg-white p-2 rounded-lg border border-emerald-200/70">
                 &ldquo;${_advanceEsc(req.reason)}&rdquo;

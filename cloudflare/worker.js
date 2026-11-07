@@ -84,8 +84,8 @@ function corsHeadersFor(request, env) {
 // functions/api/db.js (the D1 schema marker; v2 after Part A). It is hardcoded
 // here on purpose: /api/health must never 500 because D1 is unreachable, and
 // it must never cost an unauthenticated caller a D1 read.
-const WORKER_RELEASE = '2026-11-06-annotated-pages';
-const HEALTH_SCHEMA_VERSION = '2026-11-05-v5';
+const WORKER_RELEASE = '2026-11-07-salary-plan-capture';
+const HEALTH_SCHEMA_VERSION = '2026-11-07-v6';
 
 // --- Batch 7 Part B: security headers (workers.dev responses) --------------
 // Every response the Worker serves carries this set. The Content-Security-
@@ -3689,6 +3689,8 @@ function advancePublicRow(row) {
     period: row.period,
     period_label: advancePeriodLabel(row.period),
     advance_type: row.advance_type,
+    repayment_method: row.repayment_method || null,
+    installment_amount: row.installment_amount != null ? Number(row.installment_amount) : null,
     requested_amount: Number(row.requested_amount) || 0,
     approved_amount: row.approved_amount != null ? Number(row.approved_amount) : null,
     status: row.status,
@@ -3712,7 +3714,7 @@ async function readAdvanceRequestBody(request) {
   return body;
 }
 
-// --- POST /api/advances/request  { period, advance_type, custom_amount?, reason? }
+// --- POST /api/advances/request  { period, advance_type, custom_amount?, reason?, repayment_method?, installment_amount? }
 // Teacher role ONLY. The teacher id comes from the token, never the body:
 // a teacher can request only for their own authenticated account. Full
 // and half amounts are computed here from the authoritative salary
@@ -3754,6 +3756,31 @@ async function handleAdvanceRequest(request, env) {
   const reason = body.reason != null ? String(body.reason).trim() : '';
   if (reason.length > 500) {
     return json(request, env, { ok: false, error: 'The reason must be 500 characters or fewer.' }, 400);
+  }
+  // Salary Restructuring Phase 2: repayment-plan capture. The teacher
+  // may attach a repayment plan (full | fixed | custom | manual) plus
+  // an installment amount for fixed/custom. The plan is VALIDATED here,
+  // stored on the request row, and shown to reviewers — but NO money
+  // path reads it in this phase: approval still folds same-period
+  // exactly as Batch B until Phase 3 rewires recovery. Both fields are
+  // OPTIONAL: a request without them (older client) stays valid and
+  // stores NULLs, i.e. a legacy request. For full/manual any client-
+  // supplied installment is DISCARDED server-side (stored NULL) rather
+  // than trusted.
+  let repaymentMethod = null;
+  let installmentAmount = null;
+  if (body.repayment_method != null && String(body.repayment_method).trim() !== '') {
+    repaymentMethod = String(body.repayment_method).trim();
+    if (!['full', 'fixed', 'custom', 'manual'].includes(repaymentMethod)) {
+      return json(request, env, { ok: false, error: 'Repayment method must be full, fixed, custom, or manual.' }, 400);
+    }
+    if (repaymentMethod === 'fixed' || repaymentMethod === 'custom') {
+      const inst = Number(body.installment_amount);
+      if (!Number.isFinite(inst) || inst <= 0) {
+        return json(request, env, { ok: false, error: 'A fixed or custom repayment plan needs an installment amount greater than zero.' }, 400);
+      }
+      installmentAmount = inst;
+    }
   }
   let salary;
   try {
@@ -3811,8 +3838,8 @@ async function handleAdvanceRequest(request, env) {
     const now = new Date().toISOString();
     const id = advanceGenerateId('ADV-');
     await db.prepare(
-      'INSERT INTO advance_requests (id, teacher_id, teacher_name, period, advance_type, requested_amount, status, reason, requested_at, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
-    ).bind(id, String(auth.sub), teacherName, period, advanceType, requested, 'Pending', reason || null, now, now, now).run();
+      'INSERT INTO advance_requests (id, teacher_id, teacher_name, period, advance_type, repayment_method, installment_amount, requested_amount, status, reason, requested_at, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+    ).bind(id, String(auth.sub), teacherName, period, advanceType, repaymentMethod, installmentAmount, requested, 'Pending', reason || null, now, now, now).run();
     const created = await db.prepare('SELECT * FROM advance_requests WHERE id = ?').bind(id).first();
     return json(request, env, { ok: true, request: advancePublicRow(created), salary_net: net, salary_pending: !hasSalary, period_label: label });
   } catch (e) {
