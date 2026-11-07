@@ -325,6 +325,15 @@ const sandbox = {
 sandbox.window = sandbox;
 sandbox.window.innerWidth = 390;
 vm.createContext(sandbox);
+// Refresh restore (2026-11-07): switchTeacherPortalTab now consults
+// the real TEACHER_PORTAL_TABS const and calls recordTeacherTabInHash;
+// both are extracted verbatim below so the executed switch stays the
+// real one (same precedent as TEACHER_TODAY_FILTER in the PR #117
+// round). The vm window has no history/location, so the recorder's
+// own guard makes it a no-op here — hash behaviour itself is executed
+// end-to-end in test/portal-refresh-restore.test.mjs.
+const TEACHER_TABS_CONST = (TEACHER.match(/const TEACHER_PORTAL_TABS = \[[^\]]*\];/) || [])[0] || '';
+check('refresh restore: TEACHER_PORTAL_TABS const found for the vm prelude', TEACHER_TABS_CONST.length > 0);
 const code = `
   let CURRENT_TEACHER = { id: 'TCH-FIX', name: 'Fixture Teacher' };
   let CURRENT_TEACHER_TAB = 'dashboard';
@@ -341,6 +350,8 @@ const code = `
   ${extractFunction(TEACHER, 'getTeacherSlotDurationMins')}
   ${extractFunction(TEACHER, 'resolveEffectiveClassZoomLink')}
   ${extractFunction(TEACHER, 'syncTeacherSidebarActiveState')}
+  ${TEACHER_TABS_CONST}
+  ${extractFunction(TEACHER, 'recordTeacherTabInHash')}
   ${extractFunction(TEACHER, 'switchTeacherPortalTab')}
   ${extractFunction(TEACHER, 'openTeacherAdvanceSalaryRequest')}
   ${extractFunction(TEACHER, 'toggleTeacherSidebar')}

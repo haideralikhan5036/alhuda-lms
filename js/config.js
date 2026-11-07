@@ -1023,6 +1023,12 @@
       corePromise.then(() => {
         try { loadDashboardData(); } catch (e) {}
 
+        // Refresh restore (owner 2026-11-07): reopen the hashed tab
+        // once the default dashboard boot has completed.
+        if (typeof window.restoreAdminTabFromHash === 'function') {
+          try { window.restoreAdminTabFromHash(); } catch (e) {}
+        }
+
         // 2. Hydrate background views from the shared in-memory cache
         setTimeout(() => {
           loadFamiliesAndStudents();

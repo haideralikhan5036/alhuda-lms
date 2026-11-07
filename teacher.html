@@ -3182,6 +3182,7 @@ font-family: var(--font-num) !important;
       document.getElementById('heroTeacherName').innerText = `Assalam-o-Alaikum, ${CURRENT_TEACHER.full_name}!`;
       document.getElementById('heroTeacherShift').innerText = CURRENT_TEACHER.working_shift || 'Shift Not Set';
       loadTeacherPortalData();
+      restoreTeacherTabFromHash();
     }
 
     function showLoginView() {
@@ -8295,8 +8296,36 @@ font-family: var(--font-num) !important;
       }
     }
 
+    // Refresh restore (owner 2026-11-07): the active top-level tab is
+    // mirrored into the URL hash (replaceState only — no history
+    // entries are ever pushed, so Back behaves exactly as before), and
+    // on entry the portal reopens the hashed tab instead of always
+    // landing on the Dashboard. Only the six sidebar tabs participate;
+    // modals, the Course Materials library, the weekly matrix and the
+    // reader never touch the hash.
+    const TEACHER_PORTAL_TABS = ['dashboard', 'today', 'students', 'history', 'trials', 'salaries'];
+    function recordTeacherTabInHash(tab) {
+      try {
+        if (typeof window === 'undefined' || !window.history || typeof window.history.replaceState !== 'function' || !window.location) return;
+        window.history.replaceState(window.history.state, document.title, window.location.pathname + '#' + tab);
+      } catch (e) {}
+    }
+    function teacherTabKeyFromHash() {
+      try {
+        if (typeof window === 'undefined' || !window.location) return '';
+        return String(window.location.hash || '').replace(/^#/, '');
+      } catch (e) { return ''; }
+    }
+    function restoreTeacherTabFromHash() {
+      const key = teacherTabKeyFromHash();
+      if (!key || key === 'dashboard') return;
+      if (!TEACHER_PORTAL_TABS.includes(key)) return;
+      if (typeof switchTeacherPortalTab === 'function') switchTeacherPortalTab(key);
+    }
+
     function switchTeacherPortalTab(tab) {
       CURRENT_TEACHER_TAB = tab;
+      if (TEACHER_PORTAL_TABS.includes(tab)) recordTeacherTabInHash(tab);
       syncTeacherSidebarActiveState(tab);
 
       const secKpi = document.getElementById('sectionTeacherKpiGrid');

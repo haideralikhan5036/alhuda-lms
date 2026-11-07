@@ -1134,6 +1134,7 @@
       populateStudentDropdown();
       await renderCurrentStudentData();
       renderPortalLibrary();
+      restoreParentTabFromHash();
     }
 
     // Initialization
@@ -2587,12 +2588,39 @@
     // ==========================================
     // PORTAL TABS & CURRICULUM LIBRARY LOGIC
     // ==========================================
+    // Refresh restore (owner 2026-11-07): the active top-level tab is
+    // mirrored into the URL hash (replaceState only — no history
+    // entries are ever pushed, so Back behaves exactly as before), and
+    // on entry the portal reopens the hashed tab instead of always
+    // landing on the Dashboard. Only the five nav tabs participate;
+    // the book reader and student switching never touch the hash.
+    const PARENT_PORTAL_TABS = ['tab-dashboard', 'tab-library', 'tab-timetable', 'tab-attendance', 'tab-fees'];
+    function recordParentTabInHash(tabId) {
+      try {
+        if (typeof window === 'undefined' || !window.history || typeof window.history.replaceState !== 'function' || !window.location) return;
+        window.history.replaceState(window.history.state, document.title, window.location.pathname + '#' + tabId);
+      } catch (e) {}
+    }
+    function parentTabKeyFromHash() {
+      try {
+        if (typeof window === 'undefined' || !window.location) return '';
+        return String(window.location.hash || '').replace(/^#/, '');
+      } catch (e) { return ''; }
+    }
+    function restoreParentTabFromHash() {
+      const key = parentTabKeyFromHash();
+      if (!key || key === 'tab-dashboard') return;
+      if (!PARENT_PORTAL_TABS.includes(key)) return;
+      if (typeof switchPortalTab === 'function') switchPortalTab(key);
+    }
+
     function switchPortalTab(tabId) {
       document.querySelectorAll('.portal-tab-content').forEach(s => s.classList.add('hidden'));
       document.querySelectorAll('.portal-nav-btn').forEach(b => b.classList.remove('active'));
 
       const target = document.getElementById(tabId);
       if (target) target.classList.remove('hidden');
+      if (PARENT_PORTAL_TABS.includes(tabId)) recordParentTabInHash(tabId);
 
       const btnMap = {
         'tab-dashboard': 'navBtn_dashboard',
