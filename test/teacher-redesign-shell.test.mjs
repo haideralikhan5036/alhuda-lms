@@ -21,6 +21,12 @@
 //   6. Today's Classes rows still render through the real renderer
 //      with working Start Class / Complete Class handlers, avatar
 //      initials, and the ${actionButtons} slot intact.
+//   7. the sidebar Salary group (owner 2026-11-07): a "Salary" parent
+//      with exactly two sub-options — Salary Slips is the renamed
+//      former "Previous Salaries" door (same button id + tab, so the
+//      matrix above covers it unchanged) and Request Advance Salary
+//      runs the REAL openTeacherAdvanceSalaryRequest, which must land
+//      on the salaries tab with the advance request card targeted.
 // Run from the repo root:  node test/teacher-redesign-shell.test.mjs
 import fs from 'node:fs';
 import path from 'node:path';
@@ -186,6 +192,53 @@ check('sidebar fix: nav band scrolls, brand and foot are pinned bands',
   TEACHER.indexOf('/scrolling nav band') < TEACHER.indexOf('id="sbTeacherNameDisplay"'));
 
 // ---------------------------------------------------------------------
+// Part A3 — Salary group (owner 2026-11-07). Purely additive checks:
+// the group reuses the existing 'salaries' tab and button id, so the
+// NAVMAP / matrix checks above needed NO changes — the reasons each
+// new check exists are recorded inline.
+// ---------------------------------------------------------------------
+// The parent exists as a labelled header row (icon + "Salary"), sits
+// where the old standalone item sat (after Trial Classes, inside the
+// nav band), and precedes both sub-options.
+check('salary group: "Salary" parent header present in the sidebar',
+  TEACHER.includes('class="sidebar-salary-parent"') &&
+  TEACHER.includes('<span class="sidebar-text truncate">Salary</span>') &&
+  TEACHER.includes('fa-money-check-dollar'));
+check('salary group: parent + sub-options sit after Trial Classes, in order',
+  TEACHER.indexOf('id="sbNavTrials"') < TEACHER.indexOf('class="sidebar-salary-parent"') &&
+  TEACHER.indexOf('class="sidebar-salary-parent"') < TEACHER.indexOf('id="sbNavSalaries"') &&
+  TEACHER.indexOf('id="sbNavSalaries"') < TEACHER.indexOf('id="sbNavAdvanceSalary"') &&
+  TEACHER.indexOf('id="sbNavAdvanceSalary"') < TEACHER.indexOf('/scrolling nav band'));
+// Salary Slips is the renamed door: same button, label now "Salary
+// Slips", sub-option styling hooks present; the old standalone
+// sidebar label is gone (the section's own header text
+// "Previous Salaries & Compensation" is page content, not the
+// sidebar item, and correctly stays).
+check('salary group: slips sub-option is the renamed former door',
+  TEACHER.includes('<span class="sidebar-text truncate">Salary Slips</span>') &&
+  !TEACHER.includes('<span class="sidebar-text truncate">Previous Salaries</span>') &&
+  /<button id="sbNavSalaries"[^>]*class="[^"]*sidebar-sub-btn/.test(TEACHER));
+// The Advance sub-option is wired to the real opener (executed in
+// Part C), styled as a sub-option, and hidden on the collapsed rail
+// (sidebar/drawer-only by design; the rail keeps the slips icon).
+const advBtnOnclick = buttonOnclickById('sbNavAdvanceSalary');
+check('salary group: advance sub-option wired to the real opener',
+  !!advBtnOnclick && advBtnOnclick.includes('openTeacherAdvanceSalaryRequest()'),
+  String(advBtnOnclick));
+check('salary group: collapsed rail hides parent + advance sub-option',
+  TEACHER.includes('aside#teacherSidebar.is-collapsed .sidebar-salary-parent') &&
+  TEACHER.includes('aside#teacherSidebar.is-collapsed .sidebar-sub-advance'));
+// The opener's target: the existing Batch B advance request card,
+// given an anchor id (exactly once) inside the salaries section.
+check('salary group: advance request card anchor exists once, inside the salaries section',
+  TEACHER.split('id="tAdvanceRequestCard"').length - 1 === 1 &&
+  (ancestryOf('tAdvanceRequestCard') || []).some(a => a.id === 'sectionTeacherSalaries'));
+check('salary group: the existing advance form pieces are untouched',
+  TEACHER.includes('id="tAdvPeriod"') && TEACHER.includes('id="tAdvSubmitBtn"') &&
+  TEACHER.includes("onclick=\"submitTeacherAdvanceRequest()\"") &&
+  TEACHER.includes('id="tAdvMyList"'));
+
+// ---------------------------------------------------------------------
 // Part B — fake DOM built from the REAL markup (ids + initial classes)
 // ---------------------------------------------------------------------
 class FakeEl {
@@ -289,6 +342,7 @@ const code = `
   ${extractFunction(TEACHER, 'resolveEffectiveClassZoomLink')}
   ${extractFunction(TEACHER, 'syncTeacherSidebarActiveState')}
   ${extractFunction(TEACHER, 'switchTeacherPortalTab')}
+  ${extractFunction(TEACHER, 'openTeacherAdvanceSalaryRequest')}
   ${extractFunction(TEACHER, 'toggleTeacherSidebar')}
   ${extractFunction(TEACHER, 'getOverdueStartedClasses')}
   ${extractFunction(TEACHER, 'checkOverdueClassReminder')}
@@ -300,7 +354,7 @@ const code = `
   ${extractFunction(TEACHER, 'showTeacherTodayKpi')}
   this.__api = { switchTeacherPortalTab, toggleTeacherSidebar, checkOverdueClassReminder,
     renderTeacherAnnouncements, _teacherLiveAccrualHtml, renderTeacherClassesTable,
-    showTeacherTodayKpi, setTeacherTodayFilter,
+    showTeacherTodayKpi, setTeacherTodayFilter, openTeacherAdvanceSalaryRequest,
     setClasses: (c) => { TODAY_CLASSES = c; },
     getFilter: () => TEACHER_TODAY_FILTER,
     getTab: () => CURRENT_TEACHER_TAB };
@@ -351,6 +405,25 @@ for (const rb of railButtons) {
   api.switchTeacherPortalTab(arg);
   check(`rail [${rb.tab}] onclick argument lands on tab '${rb.tab}'`, api.getTab() === rb.tab && arg === rb.tab);
 }
+
+// --- Salary group: the Advance door, executed for real ----------------
+// The REAL opener must (a) land on the salaries tab with exactly the
+// salaries visibility matrix, (b) leave the Salary Slips pill active,
+// and (c) target the real advance request card (its one-shot flash
+// class is added synchronously; the suite's setTimeout stub never
+// fires, so the class remaining proves the opener added it).
+api.openTeacherAdvanceSalaryRequest();
+check('salary group: advance door lands on the salaries tab',
+  api.getTab() === 'salaries' &&
+  !registry.get('sectionTeacherSalaries').classList.contains('hidden') &&
+  registry.get('sectionTeacherToday').classList.contains('hidden') &&
+  registry.get('sectionTeacherStudentList').classList.contains('hidden') &&
+  registry.get('sectionTeacherLessonHistory').classList.contains('hidden') &&
+  registry.get('sectionTeacherTrials').classList.contains('hidden'));
+check('salary group: advance door leaves the Salary Slips pill active',
+  registry.get('sbNavSalaries').classList.contains('active'));
+check('salary group: advance door targets the real request card (flash applied)',
+  registry.get('tAdvanceRequestCard').classList.contains('tui-advance-flash'));
 
 // --- Mobile drawer mechanics on the real elements ---------------------
 const sidebarEl = registry.get('teacherSidebar');

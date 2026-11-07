@@ -452,6 +452,45 @@ font-family: var(--font-num) !important;
     bottom: -20px;
     background: radial-gradient(circle at 0 100%, rgba(255,255,255,0) 19px, #ffffff 20px);
   }
+  /* ---- Salary group (owner 2026-11-07): a "Salary" parent header
+     with two subordinate sub-options inside the sidebar. The parent
+     is a label row, not a tab. The sub-options are indented, smaller
+     pills; the indent is margin, so when Salary Slips is active its
+     white pill still reaches the sidebar's right edge and merges
+     into the content exactly like the other tabs' pills. ---- */
+  aside#teacherSidebar .sidebar-salary-parent {
+    display: flex;
+    align-items: center;
+    gap: 13px;
+    padding: 13px 16px 7px;
+    color: #ffffff;
+    font-size: 0.9rem;
+    font-weight: 700;
+  }
+  aside#teacherSidebar .sidebar-salary-parent .sidebar-icon-box {
+    color: #dcbc55;
+    font-size: 1.02rem;
+  }
+  aside#teacherSidebar .sidebar-subnav {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  aside#teacherSidebar .sidebar-sub-btn {
+    margin-left: 24px;
+    width: calc(100% - 48px);
+    padding: 10px 13px;
+    gap: 10px;
+    font-size: 0.81rem !important;
+  }
+  aside#teacherSidebar .sidebar-sub-btn.active {
+    width: calc(100% - 24px);
+  }
+  /* One-shot highlight ring when the sidebar's Request Advance
+     Salary door lands the teacher on the request card. */
+  .tui-advance-flash {
+    box-shadow: 0 0 0 3px rgba(201,162,39,.55), 0 16px 36px rgba(12,42,32,0.07) !important;
+  }
   /* Sidebar scrollbar on glass — OWNER MARKS (2026-11-06): the
      sidebar and the main screen must read as one piece ("mix hona
      chahiye"). The sidebar's own scrollbar painted a pale strip at
@@ -532,6 +571,14 @@ font-family: var(--font-num) !important;
     aside#teacherSidebar.is-collapsed .sidebar-clock-chip,
     aside#teacherSidebar.is-collapsed .sidebar-info-block,
     aside#teacherSidebar.is-collapsed #teacherHeaderBadge {
+      display: none !important;
+    }
+    /* Collapsed rail: the Salary parent label and the Advance
+       sub-option have no rail representation (the rail keeps only
+       the Salary Slips icon button, as before); the full group
+       lives in the expanded sidebar and the mobile drawer. */
+    aside#teacherSidebar.is-collapsed .sidebar-salary-parent,
+    aside#teacherSidebar.is-collapsed .sidebar-sub-advance {
       display: none !important;
     }
     aside#teacherSidebar.is-collapsed .tui-brand-row {
@@ -856,12 +903,31 @@ font-family: var(--font-num) !important;
                   <span id="sbBadgeTrialCount" class="sidebar-badge ml-auto text-[10px] font-mono px-2 py-0.5 rounded-full bg-purple-100 text-purple-800 font-extrabold border border-purple-200">0</span>
                 </button>
 
-                <!-- Previous Salaries (Single Source of Truth) -->
-                <button id="sbNavSalaries" onclick="switchTeacherPortalTab('salaries'); toggleTeacherSidebar(false);" class="sidebar-nav-btn w-full text-left px-3 py-2.5 flex items-center gap-2.5" title="Previous Salaries & Disbursed Slips">
-                  <span class="sidebar-icon-box"><i class="fa-solid fa-receipt"></i></span>
-                  <span class="sidebar-text truncate">Previous Salaries</span>
-                  <span id="sbBadgeSalariesCount" class="sidebar-badge ml-auto text-[10px] font-mono px-2 py-0.5 rounded-full bg-amber-100 text-amber-900 font-extrabold border border-amber-200">Slips</span>
-                </button>
+                <!-- Salary group (owner 2026-11-07): a "Salary" parent
+                     with two sub-options. "Salary Slips" IS the former
+                     "Previous Salaries" door — same button id, same
+                     'salaries' tab, same Slips badge — renamed and
+                     nested, not duplicated. "Request Advance Salary"
+                     lands on the existing advance request form inside
+                     the salaries section (see
+                     openTeacherAdvanceSalaryRequest). -->
+                <div class="sidebar-salary-group">
+                  <div class="sidebar-salary-parent">
+                    <span class="sidebar-icon-box"><i class="fa-solid fa-money-check-dollar"></i></span>
+                    <span class="sidebar-text truncate">Salary</span>
+                  </div>
+                  <div class="sidebar-subnav">
+                    <button id="sbNavSalaries" onclick="switchTeacherPortalTab('salaries'); toggleTeacherSidebar(false);" class="sidebar-nav-btn sidebar-sub-btn w-full text-left px-3 py-2.5 flex items-center gap-2.5" title="Salary Slips — Previous Salaries & Disbursed Slips">
+                      <span class="sidebar-icon-box"><i class="fa-solid fa-receipt"></i></span>
+                      <span class="sidebar-text truncate">Salary Slips</span>
+                      <span id="sbBadgeSalariesCount" class="sidebar-badge ml-auto text-[10px] font-mono px-2 py-0.5 rounded-full bg-amber-100 text-amber-900 font-extrabold border border-amber-200">Slips</span>
+                    </button>
+                    <button id="sbNavAdvanceSalary" onclick="openTeacherAdvanceSalaryRequest(); toggleTeacherSidebar(false);" class="sidebar-nav-btn sidebar-sub-btn sidebar-sub-advance w-full text-left px-3 py-2.5 flex items-center gap-2.5" title="Request Advance Salary">
+                      <span class="sidebar-icon-box"><i class="fa-solid fa-hand-holding-dollar"></i></span>
+                      <span class="sidebar-text truncate">Request Advance Salary</span>
+                    </button>
+                  </div>
+                </div>
               </nav>
             </div>
             </div><!-- /scrolling nav band -->
@@ -1309,7 +1375,7 @@ font-family: var(--font-num) !important;
           </div>
           <div id="tSalSummaryBody" class="text-xs text-slate-500">Loading your salary summary...</div>
         </div>
-        <div class="bg-white rounded-[24px] border border-[#eef3ee] shadow-[0_16px_36px_rgba(12,42,32,0.07)] p-4 sm:p-5 space-y-3">
+        <div id="tAdvanceRequestCard" class="bg-white rounded-[24px] border border-[#eef3ee] shadow-[0_16px_36px_rgba(12,42,32,0.07)] p-4 sm:p-5 space-y-3">
           <div class="flex items-center justify-between flex-wrap gap-2">
             <h3 class="font-extrabold text-slate-900 text-sm flex items-center gap-2">
               <i class="fa-solid fa-hand-holding-dollar text-emerald-600"></i> Request Advance Salary
@@ -8301,6 +8367,32 @@ font-family: var(--font-num) !important;
           secSalaries.scrollIntoView({ behavior: 'smooth', block: 'start' });
         }
         loadTeacherPreviousSalaries();
+      }
+    }
+
+    // Salary sidebar sub-option (owner 2026-11-07): "Request Advance
+    // Salary". The advance request form is an inline card inside the
+    // salaries section (Batch B — #tAdvanceRequestCard), NOT a modal,
+    // so this door switches to the salaries tab first, then scrolls
+    // the request card into view, flashes it once and focuses its
+    // first field. The form and its submit path
+    // (submitTeacherAdvanceRequest) are untouched.
+    function openTeacherAdvanceSalaryRequest() {
+      switchTeacherPortalTab('salaries');
+      const card = document.getElementById('tAdvanceRequestCard');
+      if (card) {
+        if (typeof card.scrollIntoView === 'function') {
+          card.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+        card.classList.add('tui-advance-flash');
+        setTimeout(() => card.classList.remove('tui-advance-flash'), 1600);
+      }
+      const periodSel = document.getElementById('tAdvPeriod');
+      if (periodSel && typeof periodSel.focus === 'function') {
+        setTimeout(() => {
+          try { periodSel.focus({ preventScroll: true }); }
+          catch (e) { periodSel.focus(); }
+        }, 350);
       }
     }
 
