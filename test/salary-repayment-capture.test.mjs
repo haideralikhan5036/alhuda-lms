@@ -329,15 +329,13 @@ function bootTeacherVm(flagOn) {
 }
 const runIn = (env, code) => vm.runInContext(code, env.sandbox);
 
-// Static gates: the shipped flag is HELD OFF at this merge — Phase 3
-// turns plan capture live together with the ledger Worker release,
-// and the flag flips ON in the small follow-up PR that lands only
-// after the v7 Worker deploy is verified live (until then the live
-// Worker cannot store plan fields, and an old-rules approval of a
-// plan request would deduct the wrong way). The builder is only
+// Static gates: the shipped flag is ON — the v7 Worker deploy
+// (release 2026-11-07-advance-ledger) was verified live via
+// /api/health on 2026-11-07 before this flip landed, so plan
+// capture is live together with the ledger. The builder is only
 // invoked behind the flag, and the plan section exists nowhere in
 // static markup.
-check('F static: shipped flag is held OFF until the v7 Worker deploy is verified', TEACHER.includes('const ADVANCE_REPAYMENT_PLANS_ENABLED = false;'));
+check('F static: shipped flag is ON (v7 Worker deploy verified live)', TEACHER.includes('const ADVANCE_REPAYMENT_PLANS_ENABLED = true;'));
 check('F static: builder invoked only behind the flag',
   TEACHER.includes('if (ADVANCE_REPAYMENT_PLANS_ENABLED) buildAdvanceRepaymentPlanSection();'));
 check('F static: no plan section in static form markup', !TEACHER.includes('id="tAdvPlanSection"'));
