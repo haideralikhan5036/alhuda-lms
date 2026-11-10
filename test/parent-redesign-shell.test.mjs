@@ -73,11 +73,16 @@ for (const id of SHELL_IDS) {
     'count=' + count(PARENT, `id="${id}"`));
 }
 
-// Login region byte-identical to main @ d64a83c (post PR #130). The
-// hash covers everything from the login section comment to the main
-// content comment; it may only change when the login commission
-// itself changes the view.
-const LOGIN_REGION_SHA256 = 'a12d097ca1707e0a5e6a8c8df39a6cd4eec64bf0fbdfaa6bf9f1a7ad888f63ea';
+// Login region byte-identical to main. The hash covers everything
+// from the login section comment to the main content comment; it may
+// only change when the login commission itself changes the view.
+// RE-PINNED 2026-11-10: the fee-style login re-skin (owner
+// instruction: match the Fee Management portal login) deliberately
+// redesigned this region — the split-card lgn- skin was replaced by
+// the dark flg- card — so the freeze now pins the NEW region. Every
+// login id inside it is unchanged (asserted above and in
+// login-redesign.test.mjs).
+const LOGIN_REGION_SHA256 = 'f4f1ecc9385049c20b6633535bd4f4d6d76b14aca1b274a2f60005cd93ad4f2e';
 {
   const a = PARENT.indexOf('<!-- ================= 1. PARENT / STUDENT LOGIN SCREEN');
   const b = PARENT.indexOf('<!-- ================= 2. MAIN CONTENT WRAPPER');

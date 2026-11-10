@@ -165,16 +165,18 @@ check('mobile rail menu button opens the drawer via toggleSidebar()',
 
 // Login view: excluded from THIS redesign on purpose; the exclusion
 // was lifted by the follow-up login redesign (2026-11-07), which
-// re-skinned the gate with its own lgn- classes. The pins below now
-// assert the new landmarks + the untouched form contract instead of
-// the old card classes (reason: the separate commission has landed).
+// re-skinned the gate with its own lgn- classes, and lifted again by
+// the fee-style login re-skin (2026-11-10, owner instruction: match
+// the Fee Management portal login), which replaced the lgn- skin
+// with flg- classes. The pins below assert the current landmarks +
+// the untouched form contract (reason: the newer commission landed).
 check('login view carries NO flagship hooks (aui- stays out of the gate)',
   !INDEX.includes('aui-login'));
-check('login view carries the new lgn- landmarks (split card + panel + form side)',
-  INDEX.includes('class="lgn-card"') && INDEX.includes('class="lgn-panel"') &&
-  INDEX.includes('class="lgn-formside"'));
+check('login view carries the fee-style flg- landmarks (dark card + pill field + gold CTA)',
+  INDEX.includes('class="flg-card"') && INDEX.includes('class="flg-pill"') &&
+  INDEX.includes('class="flg-cta"'));
 check('login submit keeps its id + real label inside the pill CTA',
-  INDEX.includes('id="btnSubmitOwnerLogin" class="lgn-cta"') &&
+  INDEX.includes('id="btnSubmitOwnerLogin" class="flg-cta"') &&
   INDEX.includes('Login to Control Center'));
 check('login form keeps the real submit handler + password toggle wiring',
   INDEX.includes('onsubmit="handleOwnerSignIn(event)"') &&
