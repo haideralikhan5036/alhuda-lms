@@ -22,6 +22,13 @@
 //     success state and bursts exactly 30 confetti pieces.
 // End-to-end execution of the real handlers in Chromium (stubbed
 // /api/auth) is recorded with the build in the goal files.
+// LOGIN RESILIENCE (2026-11-10): the REAL parent + manager sign-in
+// handlers are also executed below (extracted verbatim into a vm
+// over the fake DOM) with scripted fetch sequences, proving the new
+// retry loop: a network throw or a 502/503 first attempt no longer
+// fails the sign-in, persistent failure lands on the existing
+// unreachable message after exactly 3 attempts, and a 401 is never
+// retried.
 import { readFileSync, writeFileSync, mkdtempSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
@@ -313,6 +320,174 @@ for (const s of SURFACES) {
   }
   ok(wrap.classList.contains('flg-is-success'), `${s.file}: real success applies the success state`);
   ok(layer.children.length === 30, `${s.file}: success bursts exactly 30 confetti pieces (got ${layer.children.length})`);
+}
+
+// ---------------------------------------------------------------------
+// LOGIN RESILIENCE (2026-11-10) — executed: the REAL parent + manager
+// sign-in handlers against scripted fetch sequences.
+// ---------------------------------------------------------------------
+function extractFunction(src, name) {
+  let start = src.indexOf(`function ${name}(`);
+  if (start < 0) throw new Error('function not found: ' + name);
+  if (src.slice(start - 6, start) === 'async ') start -= 6;
+  let i = src.indexOf('{', start);
+  let depth = 0;
+  for (; i < src.length; i++) {
+    if (src[i] === '{') depth++;
+    else if (src[i] === '}') { depth--; if (depth === 0) { i++; break; } }
+  }
+  return src.slice(start, i);
+}
+
+// --- parent: parentServerLogin classifies the outcome ---------------
+function bootParentLogin(fetchImpl) {
+  const src = read('parent.html');
+  const sandbox = { console, setTimeout, clearTimeout, fetch: fetchImpl };
+  sandbox.window = { location: { hostname: 'alhuda-lms.vercel.app' } };
+  vm.createContext(sandbox);
+  vm.runInContext(`
+    ${extractFunction(src, 'getParentWorkerBase')}
+    ${extractFunction(src, 'parentServerLogin')}
+    this.__login = parentServerLogin;
+  `, sandbox);
+  return sandbox.__login;
+}
+{
+  let calls = 0;
+  const login = bootParentLogin(async () => {
+    calls++;
+    if (calls === 1) throw new Error('network down');
+    return { ok: true, status: 200, json: async () => ({ ok: true, token: 'ptok', id: 'FAM-1' }) };
+  });
+  const r = await login('fam1', 'correct');
+  ok(calls === 2 && r.ok === true && r.token === 'ptok',
+    'parent login: network throw then success returns the token (2 fetches)');
+}
+{
+  let calls = 0;
+  const login = bootParentLogin(async () => {
+    calls++;
+    if (calls === 1) return { ok: false, status: 503, json: async () => ({}) };
+    return { ok: true, status: 200, json: async () => ({ ok: true, token: 'ptok', id: 'FAM-1' }) };
+  });
+  const r = await login('fam1', 'correct');
+  ok(calls === 2 && r.ok === true && r.token === 'ptok',
+    'parent login: 503 then success returns the token (2 fetches)');
+}
+{
+  let calls = 0;
+  const login = bootParentLogin(async () => { calls++; throw new Error('network down'); });
+  const r = await login('fam1', 'correct');
+  ok(calls === 3 && r.unreachable === true,
+    'parent login: all attempts down reports unreachable after exactly 3 fetches');
+}
+{
+  let calls = 0;
+  const login = bootParentLogin(async () => {
+    calls++;
+    return { ok: false, status: 401, json: async () => ({ error: 'no_password_set' }) };
+  });
+  const r = await login('fam1', 'correct');
+  ok(calls === 1 && r.unauthorized === true && r.error === 'no_password_set',
+    'parent login: 401 is never retried and keeps its error code (1 fetch)');
+}
+
+// --- manager: the real gate handler, full flow ------------------------
+function bootManagerLogin(fetchImpl) {
+  const src = read('manager.html');
+  const registry = new Map();
+  for (const m of src.matchAll(/<(\w+)[^>]*\bid="([^"]+)"[^>]*>/g)) {
+    const tag = m[0];
+    const cls = (tag.match(/class="([^"]*)"/) || [])[1] || '';
+    const type = (tag.match(/type="([^"]*)"/) || [])[1] || '';
+    if (!registry.has(m[2])) registry.set(m[2], new FakeEl(m[2], cls, { type }));
+  }
+  const sessionStore = new Map();
+  const localStore = new Map();
+  const storage = (store) => ({
+    getItem: (k) => (store.has(k) ? store.get(k) : null),
+    setItem: (k, v) => { store.set(k, String(v)); },
+    removeItem: (k) => { store.delete(k); },
+  });
+  const replaced = [];
+  const sandbox = {
+    console, setTimeout, clearTimeout, fetch: fetchImpl,
+    sessionStorage: storage(sessionStore),
+    localStorage: storage(localStore),
+    document: {
+      getElementById: (id) => registry.get(id) || null,
+      createElement: () => new FakeEl('', '', {}),
+    },
+  };
+  sandbox.window = {
+    location: { hostname: 'alhuda-lms.vercel.app', replace: (u) => replaced.push(u) },
+  };
+  vm.createContext(sandbox);
+  vm.runInContext(`
+    async function fetchManagersFromBackend() { return { managers: [], accountsMap: {} }; }
+    function resolveManagerCredentials() { return { emp_id: '', username: '', role_title: '' }; }
+    ${extractFunction(src, 'handleManagerSignIn')}
+    this.__login = handleManagerSignIn;
+  `, sandbox);
+  return { login: sandbox.__login, registry, sessionStore, replaced };
+}
+const mgrOkResponse = () => ({
+  ok: true, status: 200,
+  json: async () => ({ ok: true, token: 'mtok', id: 'MGR-001', emp_id: 'MGR-001', full_name: 'Mgr', username: 'mgr' }),
+});
+{
+  let calls = 0;
+  const b = bootManagerLogin(async () => {
+    calls++;
+    if (calls === 1) throw new Error('network down');
+    return mgrOkResponse();
+  });
+  b.registry.get('mgrLoginUsername').value = 'mgr';
+  b.registry.get('mgrLoginPassword').value = 'correct';
+  await b.login({ preventDefault() {} });
+  ok(calls === 2 && b.sessionStore.get('alhuda_manager_token') === 'mtok' &&
+    !!b.sessionStore.get('alhuda_manager_session') &&
+    b.replaced.includes('index.html?role=manager') &&
+    b.registry.get('mgrLoginErrorMsg').classList.contains('hidden'),
+    'manager login: network throw then success stores the session and redirects, NO error shown');
+}
+{
+  let calls = 0;
+  const b = bootManagerLogin(async () => {
+    calls++;
+    if (calls === 1) return { ok: false, status: 503, json: async () => ({}) };
+    return mgrOkResponse();
+  });
+  b.registry.get('mgrLoginUsername').value = 'mgr';
+  b.registry.get('mgrLoginPassword').value = 'correct';
+  await b.login({ preventDefault() {} });
+  ok(calls === 2 && b.sessionStore.get('alhuda_manager_token') === 'mtok' &&
+    b.replaced.includes('index.html?role=manager'),
+    'manager login: 503 then success stores the session and redirects');
+}
+{
+  let calls = 0;
+  const b = bootManagerLogin(async () => { calls++; throw new Error('network down'); });
+  b.registry.get('mgrLoginUsername').value = 'mgr';
+  b.registry.get('mgrLoginPassword').value = 'correct';
+  await b.login({ preventDefault() {} });
+  ok(calls === 3 && !b.sessionStore.get('alhuda_manager_token') &&
+    b.registry.get('mgrLoginErrorText').innerText === 'Cannot reach the server. Please try again.' &&
+    !b.registry.get('mgrLoginErrorMsg').classList.contains('hidden'),
+    'manager login: all attempts down shows the existing unreachable message after 3 fetches');
+}
+{
+  let calls = 0;
+  const b = bootManagerLogin(async () => {
+    calls++;
+    return { ok: false, status: 401, json: async () => ({ error: 'no_password_set' }) };
+  });
+  b.registry.get('mgrLoginUsername').value = 'mgr';
+  b.registry.get('mgrLoginPassword').value = 'correct';
+  await b.login({ preventDefault() {} });
+  ok(calls === 1 &&
+    b.registry.get('mgrLoginErrorText').innerText === 'No password set. Ask the administrator to set one.',
+    'manager login: 401 is never retried and keeps its exact message (1 fetch)');
 }
 
 if (failures === 0) console.log('login-redesign: all assertions passed');
