@@ -828,15 +828,29 @@
       // worker verifies credentials against D1 and only accepts owner-set
       // hashed passwords. There is NO local fallback: if the server cannot
       // be reached, the login stops with a clear message.
+      // LOGIN RESILIENCE (2026-11-10): retry the login POST up to 3
+      // attempts on a network throw or a 502/503 edge status (~700ms,
+      // then ~1500ms between attempts) — one dropped connection on
+      // mobile data no longer fails the sign-in outright. The button
+      // stays in its Authenticating state across the retries.
       let res = null;
-      try {
-        res = await fetch(workerBase() + '/api/auth/staff-login', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ role: 'manager', identifier: usernameInput, password: passwordInput })
-        });
-      } catch (err) {
-        res = null; // network error -> unreachable below
+      const mgrLoginRetryDelays = [700, 1500];
+      for (let attempt = 0; attempt < 3; attempt++) {
+        if (attempt > 0) {
+          await new Promise((resolve) => setTimeout(resolve, mgrLoginRetryDelays[attempt - 1]));
+        }
+        try {
+          res = await fetch(workerBase() + '/api/auth/staff-login', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ role: 'manager', identifier: usernameInput, password: passwordInput })
+          });
+        } catch (err) {
+          res = null; // network error -> retry, then unreachable below
+          continue;
+        }
+        if ((res.status === 502 || res.status === 503) && attempt < 2) continue;
+        break;
       }
 
       if (!res || res.status === 404 || res.status === 500 || res.status === 503) {

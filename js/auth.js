@@ -15,8 +15,8 @@
     // hardcoded credentials in this file anymore, and no client-side session
     // can be forged from DevTools. The worker is the real enforcer: every
     // /api/db and /api/storage call re-validates the token server-side.
-    // If the worker is not deployed / not configured, owner login FAILS
-    // CLOSED with an explanatory message (see SECURITY-SETUP.md).
+    // If the worker cannot be reached, owner login FAILS CLOSED with
+    // an explanatory message.
     // ============================================================
 
     function getWorkerBase() {
@@ -266,20 +266,37 @@
       }
 
       // Server-side verification. NEVER check credentials in the browser.
+      // LOGIN RESILIENCE (2026-11-10): a single dropped connection on
+      // mobile data used to surface as a hard "server not available"
+      // failure even though the Worker was up and healthy. Retry the
+      // login POST on transient failures only — network throw,
+      // unparseable reply, or a 502/503/404 edge status — up to 3
+      // attempts total (~700ms, then ~1500ms between attempts). Every
+      // other response flows through exactly as before.
       let result;
-      try {
-        const res = await fetch(getWorkerBase() + '/api/auth/login', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ username: user, password: pass })
-        });
-        if (res.status === 404 || res.status === 503) {
-          showError('Authentication server is not available. Please deploy the Cloudflare Worker first (see SECURITY-SETUP.md).');
-          return;
+      let reached = false;
+      const loginRetryDelays = [700, 1500];
+      for (let attempt = 0; attempt < 3 && !reached; attempt++) {
+        if (attempt > 0) {
+          await new Promise((resolve) => setTimeout(resolve, loginRetryDelays[attempt - 1]));
         }
-        result = await res.json();
-      } catch (err) {
-        showError('Authentication server is not available. Please deploy the Cloudflare Worker first (see SECURITY-SETUP.md).');
+        try {
+          const res = await fetch(getWorkerBase() + '/api/auth/login', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username: user, password: pass })
+          });
+          if (res.status === 404 || res.status === 502 || res.status === 503) {
+            continue; // transient edge status: retry, or give up below
+          }
+          result = await res.json();
+          reached = true;
+        } catch (err) {
+          // Network throw or JSON parse failure: retry, or give up below.
+        }
+      }
+      if (!reached) {
+        showError('Cannot reach the server right now. Check your internet connection and try again.');
         return;
       }
 
@@ -594,16 +611,35 @@
       // in-browser plaintext comparison against locally mirrored records
       // (which accepted the well-known default password) is removed. If the
       // Worker cannot be reached, login fails closed with a clear message.
+      // LOGIN RESILIENCE (2026-11-10): same retry as the owner login —
+      // up to 3 attempts on a network throw or a 502/503 edge status
+      // (~700ms, then ~1500ms between attempts). Any other response is
+      // handled exactly as before, with the messages below unchanged.
       let res;
       let data = null;
-      try {
-        res = await fetch(getWorkerBase() + '/api/auth/staff-login', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ role: 'teacher', identifier: user, password: pass })
-        });
+      let netFailed = false;
+      const staffLoginRetryDelays = [700, 1500];
+      for (let attempt = 0; attempt < 3; attempt++) {
+        if (attempt > 0) {
+          await new Promise((resolve) => setTimeout(resolve, staffLoginRetryDelays[attempt - 1]));
+        }
+        netFailed = false;
+        try {
+          res = await fetch(getWorkerBase() + '/api/auth/staff-login', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ role: 'teacher', identifier: user, password: pass })
+          });
+        } catch (netErr) {
+          res = null;
+          netFailed = true;
+          continue;
+        }
+        if ((res.status === 502 || res.status === 503) && attempt < 2) continue;
         try { data = await res.json(); } catch (e2) {}
-      } catch (netErr) {
+        break;
+      }
+      if (netFailed) {
         showErr('Cannot reach the server. Please try again.');
         return;
       }

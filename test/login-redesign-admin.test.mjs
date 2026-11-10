@@ -260,6 +260,7 @@ function boot({ fetchImpl } = {}) {
   vm.runInContext(`
     let CURRENT_ROLE = 'owner';
     let ACTIVE_MANAGER_ID = null;
+    function closeModal() {}
     ${extractFunction(AUTH_JS, 'getWorkerBase')}
     ${extractFunction(AUTH_JS, 'callServerLogout')}
     ${extractFunction(AUTH_JS, 'getOwnerToken')}
@@ -269,12 +270,13 @@ function boot({ fetchImpl } = {}) {
     ${extractFunction(AUTH_JS, 'showMainAppView')}
     ${extractFunction(AUTH_JS, 'toggleOwnerPassVisibility')}
     ${extractFunction(AUTH_JS, 'handleOwnerSignIn')}
+    ${extractFunction(AUTH_JS, 'handleTeacherLoginSubmit')}
     ${extractFunction(AUTH_JS, 'updateRoleHeaderBadge')}
     ${extractFunction(AUTH_JS, 'switchUserRole')}
     ${extractFunction(AUTH_JS, 'initRoleFromUrl')}
     ${extractFunction(AUTH_JS, 'logoutOwnerPortal')}
     this.__api = { showOwnerLoginView, showMainAppView, toggleOwnerPassVisibility,
-      handleOwnerSignIn, initRoleFromUrl, logoutOwnerPortal };
+      handleOwnerSignIn, handleTeacherLoginSubmit, initRoleFromUrl, logoutOwnerPortal };
   `, sandbox);
   // Run the REAL fee-style wiring script from index.html in the same
   // context, so the decorative button states are driven by the real
@@ -402,6 +404,129 @@ const appShown = (r) => {
     good.registry.get('ownerLoginUsername').value === '' &&
     good.registry.get('ownerLoginPassword').value === '' &&
     !good.sessionStore.get('alhuda_owner_token'));
+}
+
+// --- LOGIN RESILIENCE (2026-11-10): the real handlers retry transient
+// failures instead of failing on the first dropped connection. The
+// misleading setup-era "deploy the Worker" message is gone for good.
+{
+  check('the setup-era message is fully gone from js/auth.js',
+    !AUTH_JS.includes('SECURITY-SETUP') &&
+    !AUTH_JS.includes('Authentication server is not available') &&
+    !INDEX.includes('SECURITY-SETUP'));
+  check('the honest connection message replaced it',
+    AUTH_JS.includes('Cannot reach the server right now. Check your internet connection and try again.'));
+
+  const okResponse = () => ({
+    ok: true, status: 200,
+    json: async () => ({ ok: true, token: ownerToken(Math.floor(Date.now() / 1000) + 3600) }),
+  });
+
+  // (a) first fetch throws (dropped connection), second succeeds.
+  let callsA = 0;
+  const retryThrow = boot({
+    fetchImpl: async () => {
+      callsA++;
+      if (callsA === 1) throw new Error('network down');
+      return okResponse();
+    },
+  });
+  retryThrow.api.showOwnerLoginView();
+  retryThrow.registry.get('ownerLoginUsername').value = 'Faheem';
+  retryThrow.registry.get('ownerLoginPassword').value = 'correct';
+  await retryThrow.api.handleOwnerSignIn({ preventDefault() {} });
+  check('owner login: network throw then success signs in, NO error shown',
+    callsA === 2 && !!retryThrow.sessionStore.get('alhuda_owner_token') &&
+    appShown(retryThrow.registry) &&
+    retryThrow.registry.get('ownerLoginErrorMsg').classList.contains('hidden'));
+
+  // (b) first response is a 503 edge status, second succeeds.
+  let callsB = 0;
+  const retry503 = boot({
+    fetchImpl: async () => {
+      callsB++;
+      if (callsB === 1) return { ok: false, status: 503, json: async () => ({}) };
+      return okResponse();
+    },
+  });
+  retry503.api.showOwnerLoginView();
+  retry503.registry.get('ownerLoginUsername').value = 'Faheem';
+  retry503.registry.get('ownerLoginPassword').value = 'correct';
+  await retry503.api.handleOwnerSignIn({ preventDefault() {} });
+  check('owner login: 503 then success signs in, NO error shown',
+    callsB === 2 && !!retry503.sessionStore.get('alhuda_owner_token') &&
+    appShown(retry503.registry) &&
+    retry503.registry.get('ownerLoginErrorMsg').classList.contains('hidden'));
+
+  // (c) every attempt throws -> the NEW connection message, 3 attempts.
+  let callsC = 0;
+  const allDown = boot({
+    fetchImpl: async () => { callsC++; throw new Error('network down'); },
+  });
+  allDown.api.showOwnerLoginView();
+  allDown.registry.get('ownerLoginUsername').value = 'Faheem';
+  allDown.registry.get('ownerLoginPassword').value = 'correct';
+  await allDown.api.handleOwnerSignIn({ preventDefault() {} });
+  check('owner login: all attempts down shows the new connection message after 3 tries',
+    callsC === 3 &&
+    !allDown.registry.get('ownerLoginErrorMsg').classList.contains('hidden') &&
+    allDown.registry.get('ownerLoginErrorText').innerText ===
+      'Cannot reach the server right now. Check your internet connection and try again.' &&
+    loginShown(allDown.registry) && !appShown(allDown.registry));
+
+  // (d) 401 is NOT retried: invalid-credentials path is byte-identical.
+  let callsD = 0;
+  const denied = boot({
+    fetchImpl: async () => {
+      callsD++;
+      return { ok: false, status: 401, json: async () => ({ ok: false }) };
+    },
+  });
+  denied.api.showOwnerLoginView();
+  denied.registry.get('ownerLoginUsername').value = 'Faheem';
+  denied.registry.get('ownerLoginPassword').value = 'wrong';
+  await denied.api.handleOwnerSignIn({ preventDefault() {} });
+  check('owner login: 401 answers invalid credentials with exactly ONE fetch (no retry storm)',
+    callsD === 1 &&
+    denied.registry.get('ownerLoginErrorText').innerText === 'Invalid username or password.' &&
+    loginShown(denied.registry));
+
+  // (e) staff login (js/auth.js handler): throw then success.
+  let callsE = 0;
+  const staffRetry = boot({
+    fetchImpl: async () => {
+      callsE++;
+      if (callsE === 1) throw new Error('network down');
+      return {
+        ok: true, status: 200,
+        json: async () => ({ ok: true, token: 'staff-token', id: 'TCH-1' }),
+      };
+    },
+  });
+  staffRetry.registry.get('tLoginUser').value = 'teacher1';
+  staffRetry.registry.get('tLoginPass').value = 'correct';
+  await staffRetry.api.handleTeacherLoginSubmit({ preventDefault() {} });
+  check('staff login: network throw then success stores the token and navigates, NO error shown',
+    callsE === 2 && staffRetry.sessionStore.get('alhuda_teacher_token') === 'staff-token' &&
+    staffRetry.replaced.includes('teacher.html') &&
+    staffRetry.registry.get('teacherLoginError').classList.contains('hidden'));
+
+  // (e2) staff login: 503 then a deactivated 401 keeps its exact message.
+  let callsE2 = 0;
+  const staffDeactivated = boot({
+    fetchImpl: async () => {
+      callsE2++;
+      if (callsE2 === 1) return { ok: false, status: 503, json: async () => ({}) };
+      return { ok: false, status: 401, json: async () => ({ error: 'account_deactivated' }) };
+    },
+  });
+  staffDeactivated.registry.get('tLoginUser').value = 'teacher1';
+  staffDeactivated.registry.get('tLoginPass').value = 'correct';
+  await staffDeactivated.api.handleTeacherLoginSubmit({ preventDefault() {} });
+  check('staff login: 503 retried, then deactivated 401 shows its exact message',
+    callsE2 === 2 &&
+    staffDeactivated.registry.get('teacherLoginError').innerText ===
+      'This account is deactivated. Please contact the administrator.');
 }
 
 console.log('---');
