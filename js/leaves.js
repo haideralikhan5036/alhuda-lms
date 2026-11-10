@@ -1393,9 +1393,52 @@
       }
     }
 
+    // Leave KPI Cards (2026-11-10): the four summary cards are
+    // clickable, like the Families KPI cards — a click filters the
+    // roster to that card's bucket. The handler only sets the status
+    // dropdown and re-enters the dropdown's own path
+    // (filterLeavesTable); no filter logic is duplicated here.
+    function setLeaveKpiFilter(statusFilter) {
+      const sel = document.getElementById('filterLeavesStatus');
+      if (sel) sel.value = statusFilter;
+      filterLeavesTable();
+    }
+
+    // Selected-card ring, mirroring syncDirectoryKpiCardsUI: the
+    // card matching the dropdown's current value gets a ring, the
+    // others their plain border. Called from filterLeavesTable so
+    // the highlight stays correct on card clicks, manual dropdown
+    // changes and post-refresh renders alike. "All Records" matches
+    // no card, so no card is ringed then.
+    function syncLeaveKpiCardsUI() {
+      const current = document.getElementById('filterLeavesStatus')?.value || 'all';
+      const base = 'bg-white p-4 rounded-2xl border shadow-xs flex items-center gap-3 cursor-pointer transition hover:shadow-md ';
+      const styles = {
+        'leaveKpiActiveCard': base + 'border-blue-200',
+        'leaveKpiReturningCard': base + 'border-amber-200',
+        'leaveKpiOverdueCard': base + 'border-rose-200',
+        'leaveKpiReactivatedCard': base + 'border-emerald-200'
+      };
+      const selectedStyles = {
+        'leaveKpiActiveCard': base + 'border-blue-600 ring-2 ring-blue-600 shadow-sm',
+        'leaveKpiReturningCard': base + 'border-amber-500 ring-2 ring-amber-500 shadow-sm',
+        'leaveKpiOverdueCard': base + 'border-rose-600 ring-2 ring-rose-600 shadow-sm',
+        'leaveKpiReactivatedCard': base + 'border-emerald-600 ring-2 ring-emerald-600 shadow-sm'
+      };
+      const modeById = { leaveKpiActiveCard: 'active', leaveKpiReturningCard: 'returning_soon', leaveKpiOverdueCard: 'overdue', leaveKpiReactivatedCard: 'reactivated' };
+      Object.keys(styles).forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.className = modeById[id] === current ? selectedStyles[id] : styles[id];
+      });
+    }
+
     function filterLeavesTable() {
       const tbody = document.getElementById('leavesTableBody');
       if (!tbody) return;
+
+      // Leave KPI Cards (2026-11-10): keep the card highlight glued
+      // to the dropdown value on every render through this path.
+      if (typeof syncLeaveKpiCardsUI === 'function') syncLeaveKpiCardsUI();
 
       const search = (document.getElementById('searchLeavesInput')?.value || '').toLowerCase();
       const statusFilter = document.getElementById('filterLeavesStatus')?.value || 'all';

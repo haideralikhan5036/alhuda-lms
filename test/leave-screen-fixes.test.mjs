@@ -155,6 +155,7 @@ const LEAVE_FNS = [
   'loadLeaveManagementData', 'filterLeavesTable', 'openMarkLeaveModal',
   'leaveDayBeforeStr', 'endStudentScheduleForLeave', 'handleSaveStudentLeave',
   'reactivateStudentFromLeave', 'extendStudentLeave', 'handleExtendLeaveSave',
+  'setLeaveKpiFilter', 'syncLeaveKpiCardsUI',
 ];
 
 function makeWorld(role, opts = {}) {
@@ -623,6 +624,71 @@ check('classification: one shared helper exists and drives loader, filter and al
     return extractFunction(LEAVES, 'loadLeaveManagementData').includes('classifyLeaveRecord') &&
       extractFunction(LEAVES, 'checkLeaveReturnAlertsAndRequests').includes('classifyLeaveRecord');
   } catch (e) { return false; } })());
+
+// ===========================================================================
+// Part 10 — clickable KPI cards: click → dropdown → filter → highlight
+// (owner request, 2026-11-10: same behaviour as the Families KPI
+// cards — the card handler only sets #filterLeavesStatus and
+// re-enters filterLeavesTable; the ring is re-synced inside
+// filterLeavesTable so manual dropdown changes agree too.)
+// ===========================================================================
+{
+  const w = seedTabWorld('owner');
+  // The real dropdown defaults to "active" (the selected option in
+  // index.html); mirror that before the loader runs.
+  w.registry.get('filterLeavesStatus').value = 'active';
+  await vm.runInContext('loadLeaveManagementData()', w.sandbox);
+  const selVal = () => w.registry.get('filterLeavesStatus').value;
+  const tbody = () => w.registry.get('leavesTableBody').innerHTML;
+  const ringed = (id) => (w.registry.get(id).className || '').includes('ring-2');
+  const CARDS = ['leaveKpiActiveCard', 'leaveKpiReturningCard', 'leaveKpiOverdueCard', 'leaveKpiReactivatedCard'];
+  const onlyRinged = (id) => CARDS.every(c => ringed(c) === (c === id));
+
+  check('kpi cards: tab load leaves the dropdown on active and rings ONLY the Active card',
+    selVal() === 'active' && onlyRinged('leaveKpiActiveCard'));
+  check('kpi cards: initial render is the active bucket',
+    rowCount(tbody()) === 3 && tbody().includes('Inwin Child'));
+
+  await vm.runInContext("setLeaveKpiFilter('returning_soon')", w.sandbox);
+  check('kpi cards: Returning click sets the dropdown, filters to the returning bucket, moves the ring',
+    selVal() === 'returning_soon' && rowCount(tbody()) === 1 && tbody().includes('Inwin Child') && onlyRinged('leaveKpiReturningCard'));
+
+  await vm.runInContext("setLeaveKpiFilter('overdue')", w.sandbox);
+  check('kpi cards: Overdue click sets the dropdown, filters to the overdue bucket, moves the ring',
+    selVal() === 'overdue' && rowCount(tbody()) === 3 && tbody().includes('Lapsed Child') && tbody().includes('Due Today Child') && onlyRinged('leaveKpiOverdueCard'));
+
+  await vm.runInContext("setLeaveKpiFilter('reactivated')", w.sandbox);
+  check('kpi cards: Reactivated click sets the dropdown, filters to the reactivated bucket, moves the ring',
+    selVal() === 'reactivated' && rowCount(tbody()) === 1 && tbody().includes('Returned Child') && onlyRinged('leaveKpiReactivatedCard'));
+
+  // Manual dropdown changes move the highlight too (the onchange path).
+  w.registry.get('filterLeavesStatus').value = 'all';
+  await vm.runInContext('filterLeavesTable()', w.sandbox);
+  check('kpi cards: manual dropdown to All Records rings NO card and shows every record',
+    rowCount(tbody()) === 7 && CARDS.every(c => !ringed(c)));
+  w.registry.get('filterLeavesStatus').value = 'overdue';
+  await vm.runInContext('filterLeavesTable()', w.sandbox);
+  check('kpi cards: manual dropdown to Overdue rings the Overdue card',
+    onlyRinged('leaveKpiOverdueCard') && rowCount(tbody()) === 3);
+
+  // A data refresh re-renders through filterLeavesTable; the
+  // dropdown keeps its value and the ring must still agree with it.
+  await vm.runInContext('loadLeaveManagementData()', w.sandbox);
+  check('kpi cards: after a data refresh the dropdown value, rows and ring still agree (overdue)',
+    selVal() === 'overdue' && rowCount(tbody()) === 3 && onlyRinged('leaveKpiOverdueCard'));
+
+  await vm.runInContext("setLeaveKpiFilter('active')", w.sandbox);
+  check('kpi cards: Active click returns to the active bucket with the ring back on Active',
+    selVal() === 'active' && rowCount(tbody()) === 3 && onlyRinged('leaveKpiActiveCard'));
+}
+check('kpi cards: index.html wires all four cards to setLeaveKpiFilter with the dropdown values',
+  INDEX.includes('id="leaveKpiActiveCard" onclick="setLeaveKpiFilter(\'active\')"') &&
+  INDEX.includes('id="leaveKpiReturningCard" onclick="setLeaveKpiFilter(\'returning_soon\')"') &&
+  INDEX.includes('id="leaveKpiOverdueCard" onclick="setLeaveKpiFilter(\'overdue\')"') &&
+  INDEX.includes('id="leaveKpiReactivatedCard" onclick="setLeaveKpiFilter(\'reactivated\')"'));
+check('kpi cards: the handler + sync exist and filterLeavesTable re-syncs the highlight',
+  LEAVES.includes('function setLeaveKpiFilter') && LEAVES.includes('function syncLeaveKpiCardsUI') &&
+  (() => { try { return extractFunction(LEAVES, 'filterLeavesTable').includes('syncLeaveKpiCardsUI'); } catch (e) { return false; } })());
 
 const failed = results.filter(r => !r.pass);
 console.log(`\nleave-screen-fixes: ${results.length - failed.length}/${results.length} checks passed`);
