@@ -1440,9 +1440,15 @@ font-family: var(--font-num) !important;
               <p class="text-xs text-slate-500">All active students currently assigned to your profile</p>
             </div>
 
-            <div class="flex items-center gap-2 flex-wrap">
-              <span id="studentListCountBadge" class="px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-800 font-extrabold text-xs font-mono border border-emerald-200">
-                0 Active Students
+            <div class="flex items-center gap-2 flex-wrap" id="studentListSummaryCounts">
+              <span class="px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-800 font-extrabold text-xs font-mono border border-emerald-200">
+                Total Assigned: <span id="studentListSummaryTotal">0</span>
+              </span>
+              <span class="px-2.5 py-1 rounded-full bg-teal-50 text-teal-800 font-extrabold text-xs font-mono border border-teal-200">
+                Scheduled: <span id="studentListSummaryScheduled">0</span>
+              </span>
+              <span class="px-2.5 py-1 rounded-full bg-amber-50 text-amber-800 font-extrabold text-xs font-mono border border-amber-200">
+                Not Scheduled: <span id="studentListSummaryUnscheduled">0</span>
               </span>
             </div>
           </div>
@@ -1451,17 +1457,15 @@ font-family: var(--font-num) !important;
             <table class="w-full text-left text-xs border-collapse min-w-[680px]">
               <thead class="bg-[#f7faf7] text-slate-600 font-bold border-b border-[#edf2ed] uppercase tracking-wider text-[11px]">
                 <tr>
-                  <th class="p-3.5 w-14 text-center">#</th>
                   <th class="p-3.5">Student Name</th>
                   <th class="p-3.5">Course</th>
-                  <th class="p-3.5">Weekly Schedule Slots &amp; Duration</th>
-                  <th class="p-3.5">Status</th>
-                  <th class="p-3.5 text-right">Schedule &amp; Classroom Action</th>
+                  <th class="p-3.5">Class Timing</th>
+                  <th class="p-3.5 text-right">Action</th>
                 </tr>
               </thead>
               <tbody id="teacherStudentListTableBody" class="divide-y divide-slate-100">
                 <tr>
-                  <td colspan="6" class="p-8 text-center text-slate-400">Loading your assigned Student List...</td>
+                  <td colspan="4" class="p-8 text-center text-slate-400">Loading your assigned Student List...</td>
                 </tr>
               </tbody>
             </table>
@@ -2397,6 +2401,50 @@ font-family: var(--font-num) !important;
             <button type="button" onclick="closeRescheduleRequestModal()" class="w-full sm:w-auto px-4 py-2 border rounded-xl font-bold text-slate-600 hover:bg-slate-100 text-center">Cancel</button>
             <button type="submit" id="btnSubmitReschedReq" class="w-full sm:w-auto px-5 py-2.5 bg-orange-600 hover:bg-orange-700 text-white font-black rounded-xl flex items-center justify-center gap-1.5 shadow-sm transition">
               <i class="fa-solid fa-paper-plane"></i> Send Request to Admin
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= MODAL: RESET CLASS REQUEST (TEACHER PORTAL UPDATE 2026-11-10) ================= -->
+  <div id="modalResetClassRequest" class="fixed inset-0 bg-black/70 backdrop-blur-xs z-50 hidden items-center justify-center p-2 sm:p-4 overflow-y-auto">
+    <div class="bg-white rounded-2xl max-w-md w-full max-h-[94vh] flex flex-col p-4 sm:p-6 shadow-2xl border border-teal-200 my-auto">
+      <div class="flex justify-between items-center border-b pb-3 shrink-0">
+        <div class="flex items-center gap-2.5">
+          <div class="w-9 h-9 rounded-xl bg-teal-100 text-teal-700 flex items-center justify-center font-black">
+            <i class="fa-solid fa-rotate-left"></i>
+          </div>
+          <div>
+            <h3 class="font-black text-base text-slate-900">Reset class</h3>
+            <p class="text-xs text-slate-500" id="resetClassModalSubtitle">Request Admin to reset today's class</p>
+          </div>
+        </div>
+        <button onclick="closeResetClassRequestModal()" class="text-slate-400 hover:text-slate-600 text-xl font-bold" aria-label="Close">&times;</button>
+      </div>
+
+      <div class="space-y-3 text-xs overflow-y-auto touch-scroll flex-1 pr-1">
+        <div class="p-3 bg-teal-50 border border-teal-200 rounded-xl flex items-start gap-2.5 text-xs">
+          <i class="fa-solid fa-lock text-teal-600 mt-0.5"></i>
+          <div class="text-teal-900">
+            <div class="font-extrabold mb-0.5">Marked Leave / Absent</div>
+            <p class="text-teal-800/80">This class is marked for today. If it should run as a normal scheduled class instead, send a Reset class request. The class stays Leave / Absent until a Manager / Owner approves the reset.</p>
+          </div>
+        </div>
+
+        <form id="formResetClassRequestInner" onsubmit="submitResetClassRequest(event)" class="space-y-3 text-xs">
+          <input type="hidden" id="resetClassScheduleId">
+
+          <div>
+            <label class="block font-bold text-slate-700 mb-1">Note for Admin (optional):</label>
+            <textarea id="resetClassNotes" rows="3" placeholder="Why was this class marked Leave / Absent, and why should it be reset? (optional)" class="w-full p-2 border border-slate-300 rounded-xl text-xs"></textarea>
+          </div>
+
+          <div class="flex flex-col-reverse sm:flex-row justify-end gap-2 border-t pt-3 shrink-0">
+            <button type="button" onclick="closeResetClassRequestModal()" class="w-full sm:w-auto px-4 py-2 border rounded-xl font-bold text-slate-600 hover:bg-slate-100 text-center">Cancel</button>
+            <button type="submit" id="btnSubmitResetClassReq" class="w-full sm:w-auto px-5 py-2.5 bg-teal-600 hover:bg-teal-700 text-white font-black rounded-xl flex items-center justify-center gap-1.5 shadow-sm transition">
+              <i class="fa-solid fa-paper-plane"></i> Send Reset Request to Admin
             </button>
           </div>
         </form>
@@ -3894,8 +3942,6 @@ font-family: var(--font-num) !important;
       if (navStudentBadge) navStudentBadge.innerText = activeAssignedCount;
       const sbStudentBadge = document.getElementById('sbBadgeStudentCount');
       if (sbStudentBadge) sbStudentBadge.innerText = activeAssignedCount;
-      const listHeaderBadge = document.getElementById('studentListCountBadge');
-      if (listHeaderBadge) listHeaderBadge.innerText = `${activeAssignedCount} Active Student${activeAssignedCount === 1 ? '' : 's'}`;
 
       // 2. Hide any stale schedule rows in the fetched set (deactivated
       // or reassigned to another teacher) at render time only. Batch 3.3
@@ -3924,6 +3970,30 @@ font-family: var(--font-num) !important;
       }
 
       ALL_TEACHER_SCHEDULES = validSchedules;
+
+      // Teacher Portal Update (2026-11-10): Student List summary
+      // counts — Total Assigned / Scheduled / Not Scheduled, computed
+      // from the real loaded records and deduped per student (a
+      // student with several courses or weekly slots counts once).
+      // On-leave and deactivated students are excluded by construction
+      // (ACTIVE_ASSIGNED_STUDENTS): an admin-marked leave removes the
+      // student from this roster entirely until they are returned.
+      {
+        const scheduledStudentIds = new Set(
+          (ALL_TEACHER_SCHEDULES || []).map(sc => String(sc.student_id))
+        );
+        let scheduledCount = 0;
+        (ACTIVE_ASSIGNED_STUDENTS || []).forEach(st => {
+          if (scheduledStudentIds.has(String(st.id))) scheduledCount++;
+        });
+        const totalAssignedCount = (ACTIVE_ASSIGNED_STUDENTS || []).length;
+        const sumTotal = document.getElementById('studentListSummaryTotal');
+        if (sumTotal) sumTotal.innerText = totalAssignedCount;
+        const sumScheduled = document.getElementById('studentListSummaryScheduled');
+        if (sumScheduled) sumScheduled.innerText = scheduledCount;
+        const sumUnscheduled = document.getElementById('studentListSummaryUnscheduled');
+        if (sumUnscheduled) sumUnscheduled.innerText = totalAssignedCount - scheduledCount;
+      }
 
       // 3. Filter today's schedules (excluding deactivated students)
       const todayScheds = ALL_TEACHER_SCHEDULES.filter(s => Number(s.day_of_week) === currentDay);
@@ -3969,6 +4039,7 @@ font-family: var(--font-num) !important;
         let leaveMeta = null;
         let pendingLeaveReq = null;
         let pendingTimeChangeReq = null;
+        let pendingResetClassReq = null;
         if (s.students?.notes) {
           try {
             const pNotes = JSON.parse(s.students.notes);
@@ -3981,6 +4052,9 @@ font-family: var(--font-num) !important;
             }
             if (pNotes.time_change_request && pNotes.time_change_request.status === 'pending') {
               pendingTimeChangeReq = pNotes.time_change_request;
+            }
+            if (pNotes.reset_class_request && pNotes.reset_class_request.status === 'pending') {
+              pendingResetClassReq = pNotes.reset_class_request;
             }
           } catch(e) {}
         }
@@ -4053,6 +4127,7 @@ font-family: var(--font-num) !important;
           leaveMeta,
           pendingLeaveReq,
           pendingTimeChangeReq,
+          pendingResetClassReq,
           status,
           badgeClass
         };
@@ -4148,18 +4223,31 @@ font-family: var(--font-num) !important;
 
       const shortDays = ['', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
-      tbody.innerHTML = ACTIVE_ASSIGNED_STUDENTS.map((st, idx) => {
+      // Teacher Portal Update (2026-11-10): the Student List is an
+      // information list only — Student Name, Assigned Course, Class
+      // Timing and (for scheduled students) a Change Time button.
+      // Join Zoom, Mark Lesson and Lesson History no longer live here
+      // (History moved to Today's Classes); timing changes start
+      // here, never from Today's Classes. Scheduled students render
+      // first; assigned students without any schedule render at the
+      // bottom labelled "Not Scheduled" (no invented time, and no
+      // Change Time button — there is no slot to change).
+      const sortedStudents = [...ACTIVE_ASSIGNED_STUDENTS].sort((a, b) => {
+        const aSched = (ALL_TEACHER_SCHEDULES || []).some(sc => String(sc.student_id) === String(a.id)) ? 0 : 1;
+        const bSched = (ALL_TEACHER_SCHEDULES || []).some(sc => String(sc.student_id) === String(b.id)) ? 0 : 1;
+        return aSched - bSched;
+      });
+
+      tbody.innerHTML = sortedStudents.map((st) => {
         const courseTitle = getStudentCourseDisplay(st);
         const stuScheds = (ALL_TEACHER_SCHEDULES || []).filter(sc => String(sc.student_id) === String(st.id));
         stuScheds.sort((a, b) => Number(a.day_of_week) - Number(b.day_of_week));
 
-        let scheduleSummaryHtml = '';
-        let studentZoomLink = String(CURRENT_TEACHER?.zoom_link || '').trim();
+        let timingHtml = '';
         let firstScheduleId = '';
 
         if (stuScheds.length > 0) {
           firstScheduleId = stuScheds[0].id;
-          if (stuScheds[0].meeting_link) studentZoomLink = String(stuScheds[0].meeting_link).trim();
           // Group by time slot & duration
           const timeGroups = {};
           stuScheds.forEach(sc => {
@@ -4172,7 +4260,7 @@ font-family: var(--font-num) !important;
             const dName = shortDays[Number(sc.day_of_week)] || '';
             if (dName && !timeGroups[tKey].includes(dName)) timeGroups[tKey].push(dName);
           });
-          scheduleSummaryHtml = Object.entries(timeGroups).map(([timeRange, daysArr]) => `
+          timingHtml = Object.entries(timeGroups).map(([timeRange, daysArr]) => `
             <div class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-50 text-brandDark border border-emerald-200 font-bold text-[11px] mr-1 mb-1">
               <i class="fa-regular fa-clock text-brandEmerald"></i>
               <span class="font-mono">${timeRange} PKT</span>
@@ -4180,57 +4268,18 @@ font-family: var(--font-num) !important;
             </div>
           `).join('');
         } else {
-          scheduleSummaryHtml = `
+          timingHtml = `
             <span class="px-2.5 py-1 rounded-lg bg-amber-50 text-amber-900 border border-amber-200 font-bold text-[11px] inline-flex items-center gap-1">
-              <i class="fa-solid fa-calendar-xmark text-amber-600"></i> No classes scheduled.
+              <i class="fa-solid fa-calendar-xmark text-amber-600"></i> Not Scheduled
             </span>
           `;
         }
 
-        const todaySlot = TODAY_CLASSES.find(c => String(c.student_id) === String(st.id));
-        const safeStName = escapeJsAttr((st.name || 'Student'));
-        let markLessonBtn = '';
-
-        if (todaySlot) {
-          const sStat = todaySlot.log?.status || 'Scheduled';
-          if (sStat === 'Waiting') {
-            markLessonBtn = `
-              <button onclick="handleTeacherStartClass('${escapeJsAttr(todaySlot.id)}', '${escapeJsAttr(st.id)}', '${escapeJsAttr(CURRENT_TEACHER.id)}')" class="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-black shadow-xs flex items-center gap-1 transition animate-pulse">
-                <i class="fa-solid fa-play"></i> START CLASS
-              </button>
-              <button onclick="openLeaveAbsentModal('${escapeJsAttr(todaySlot.id)}', '${escapeJsAttr(st.id)}', '${escapeJsAttr(CURRENT_TEACHER.id)}', '${safeStName}')" class="px-2 py-1 bg-rose-50 hover:bg-rose-100 text-rose-800 border border-rose-300 rounded-lg text-xs font-bold transition">
-                <i class="fa-solid fa-user-xmark"></i> LEAVE / ABSENT
-              </button>
-            `;
-          } else if (sStat === 'Running') {
-            markLessonBtn = `
-              <button onclick="handleTeacherCompleteClass('${escapeJsAttr(todaySlot.id)}', '${escapeJsAttr(st.id)}', '${escapeJsAttr(CURRENT_TEACHER.id)}', '${safeStName}')" class="px-2.5 py-1 bg-brandDark hover:bg-brandDarkest text-white rounded-lg text-xs font-black shadow-xs flex items-center gap-1 transition">
-                <i class="fa-solid fa-circle-check text-brandGold"></i> COMPLETE CLASS
-              </button>
-              <button onclick="openLeaveAbsentModal('${escapeJsAttr(todaySlot.id)}', '${escapeJsAttr(st.id)}', '${escapeJsAttr(CURRENT_TEACHER.id)}', '${safeStName}')" class="px-2 py-1 bg-rose-50 hover:bg-rose-100 text-rose-800 border border-rose-300 rounded-lg text-xs font-bold transition">
-                <i class="fa-solid fa-user-xmark"></i> LEAVE / ABSENT
-              </button>
-            `;
-          } else if (sStat === 'Completed' || sStat === 'Present') {
-            markLessonBtn = `
-              <button onclick="openAttendanceModal('${escapeJsAttr(todaySlot.id)}')" class="px-2.5 py-1 bg-slate-800 hover:bg-slate-900 text-white rounded-lg text-xs font-bold shadow-2xs flex items-center gap-1 transition">
-                <i class="fa-solid fa-clipboard-check text-brandGold"></i> Record / Edit Lesson
-              </button>
-            `;
-          } else {
-            markLessonBtn = `
-              <button onclick="openAttendanceModal('${escapeJsAttr(todaySlot.id)}')" class="px-2.5 py-1 bg-brandDark hover:bg-brandDarkest text-white rounded-lg text-xs font-bold shadow-2xs flex items-center gap-1 transition">
-                <i class="fa-solid fa-clipboard-check text-brandGold"></i> Mark Lesson
-              </button>
-            `;
-          }
-        }
-
-        const zoomActionBtn = studentZoomLink
-          ? `<button onclick="launchTeacherZoomClass('${escapeJsAttr(todaySlot ? todaySlot.id : (firstScheduleId || 'stu-' + st.id))}', '${escapeJsAttr(studentZoomLink)}', '${escapeJsAttr(st.name || 'Student')}', '${escapeJsAttr(st.id)}')" class="px-2.5 py-1 bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-700 hover:to-teal-800 text-white rounded-lg text-xs font-bold shadow-2xs flex items-center gap-1 transition" title="Join Zoom Class for ${escapeHtml(st.name)}">
-               <i class="fa-solid fa-video"></i> Join Zoom
-             </button>`
-          : `<span class="px-2 py-1 rounded-lg bg-slate-100 text-slate-500 border border-slate-200 text-[10px] font-bold">Class link not set yet</span>`;
+        const changeTimeBtn = firstScheduleId ? `
+          <button onclick="openTimeChangeRequestModal('${escapeJsAttr(firstScheduleId)}')" class="px-2.5 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-900 border border-indigo-300 rounded-lg text-xs font-bold shadow-2xs flex items-center gap-1 transition" title="Request Manager / Owner to change this student's class timing">
+            <i class="fa-solid fa-clock-rotate-left text-indigo-600"></i> Change Time
+          </button>
+        ` : '';
 
         // Flagship rows: avatar initial circle (presentational only).
         const stAvatarName = String(st.name || 'Student').trim();
@@ -4240,13 +4289,11 @@ font-family: var(--font-num) !important;
 
         return `
           <tr class="hover:bg-[#f7faf7] transition">
-            <td data-label="#" class="p-3.5 text-center font-extrabold text-slate-600 font-mono">${idx + 1}</td>
             <td data-label="Student" class="p-3.5">
               <div class="flex items-start gap-2.5">
                 <span class="w-9 h-9 rounded-full shrink-0 flex items-center justify-center text-[12px] font-extrabold text-white" style="background:${stAvatarBg}">${stAvatarInitials}</span>
                 <div class="min-w-0">
                   <div class="font-extrabold text-slate-900 text-[13.5px]">${escapeHtml(st.name || 'Student')}</div>
-                  <div class="lms-num-id text-slate-600 bg-[#f0f3f1] px-2 py-0.5 rounded-full inline-block mt-1">ID: ${escapeHtml(st.id)}</div>
                 </div>
               </div>
             </td>
@@ -4255,21 +4302,12 @@ font-family: var(--font-num) !important;
                 ${courseTitle}
               </span>
             </td>
-            <td data-label="Schedule" class="p-3.5">
-              ${scheduleSummaryHtml}
-            </td>
-            <td data-label="Status" class="p-3.5">
-              <span class="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-100 text-emerald-800 border border-emerald-300">
-                Active
-              </span>
+            <td data-label="Class Timing" class="p-3.5">
+              ${timingHtml}
             </td>
             <td data-label="" class="p-3.5 text-right">
               <div class="flex items-center justify-end gap-1.5 flex-wrap">
-                ${zoomActionBtn}
-                <button onclick="openTeacherLessonHistoryForStudent('${escapeJsAttr(st.id)}')" class="px-2.5 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-800 border border-indigo-200 rounded-lg text-xs font-bold shadow-2xs flex items-center gap-1 transition" title="Full lesson history for ${escapeHtml(st.name)}">
-                  <i class="fa-solid fa-clock-rotate-left"></i> History
-                </button>
-                ${markLessonBtn}
+                ${changeTimeBtn}
               </div>
             </td>
           </tr>
@@ -4474,12 +4512,21 @@ font-family: var(--font-num) !important;
           const newLbl = c.pendingTimeChangeReq.new_start_time ? `${c.pendingTimeChangeReq.new_start_time.slice(0,5)} - ${c.pendingTimeChangeReq.new_end_time.slice(0,5)}` : 'New Slot';
           reqBadge += ` <span class="px-2 py-0.5 rounded text-[10px] font-extrabold bg-indigo-100 text-indigo-900 border border-indigo-300 animate-pulse" title="Waiting for Manager/Owner Approval">⏳ Time Change Pending (➔ ${newLbl})</span>`;
         }
+        if (c.pendingResetClassReq) {
+          reqBadge += ` <span class="px-2 py-0.5 rounded text-[10px] font-extrabold bg-teal-100 text-teal-900 border border-teal-300 animate-pulse" title="Waiting for Manager/Owner Approval">⏳ Reset Class Pending</span>`;
+        }
 
-        const changeTimeBtn = !c.isAdvanceExtra ? `
-          <button onclick="openTimeChangeRequestModal('${escapeJsAttr(c.id)}')" class="px-2.5 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-900 border border-indigo-300 rounded-lg text-xs font-bold shadow-2xs flex items-center gap-1 transition" title="Request Manager / Owner to change this student's class timing">
-            <i class="fa-solid fa-clock-rotate-left text-indigo-600"></i> Change Time
+        // Teacher Portal Update (2026-11-10): Change Time no longer
+        // lives in Today's Classes (it starts from the Student List);
+        // the "Time Change Pending" badge above stays as information.
+        // Every row instead carries a History button that opens this
+        // student's existing lesson history (the same function the
+        // Student List used before).
+        const historyBtn = `
+          <button onclick="openTeacherLessonHistoryForStudent('${escapeJsAttr(c.student_id)}')" class="px-2.5 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-800 border border-indigo-200 rounded-lg text-xs font-bold shadow-2xs flex items-center gap-1 transition" title="Full lesson history for ${escapeHtml(c.students?.name || 'Student')}">
+            <i class="fa-solid fa-clock-rotate-left"></i> History
           </button>
-        ` : '';
+        `;
 
         const effectiveZoomLink = resolveEffectiveClassZoomLink(c, CURRENT_TEACHER);
         let zoomBtn = '<span class="px-2 py-1 rounded-lg text-[10px] font-bold bg-slate-100 text-slate-500 border border-slate-200">Class link not set yet</span>';
@@ -4497,7 +4544,7 @@ font-family: var(--font-num) !important;
             <span class="px-3 py-1.5 rounded-lg text-xs font-black bg-blue-100 text-blue-900 border border-blue-300 flex items-center gap-1">
               <i class="fa-solid fa-umbrella-beach text-blue-600"></i> Slot Paused (On Leave)
             </span>
-            ${changeTimeBtn}
+            ${historyBtn}
           `;
         } else {
           const stStatus = c.log?.status || 'Scheduled';
@@ -4516,7 +4563,7 @@ font-family: var(--font-num) !important;
                   <i class="fa-solid fa-video text-emerald-600"></i> Zoom
                 </button>
               ` : ''}
-              ${changeTimeBtn}
+              ${historyBtn}
             `;
           } else if (stStatus === 'Running') {
             actionButtons = `
@@ -4531,14 +4578,14 @@ font-family: var(--font-num) !important;
                   <i class="fa-solid fa-video text-emerald-600"></i> Zoom
                 </button>
               ` : ''}
-              ${changeTimeBtn}
+              ${historyBtn}
             `;
           } else if (stStatus === 'Completed' || stStatus === 'Present' || stStatus === 'Advance Class') {
             actionButtons = `
               <button onclick="openAttendanceModal('${escapeJsAttr(c.id)}')" class="px-3 py-1 bg-slate-800 hover:bg-slate-900 text-white rounded-lg text-xs font-bold shadow-2xs flex items-center gap-1 transition" title="View or edit lesson notes for this completed class">
                 <i class="fa-solid fa-clipboard-check text-brandGold"></i> Record / Edit Lesson
               </button>
-              ${changeTimeBtn}
+              ${historyBtn}
               <button onclick="openRescheduleRequestModal('${escapeJsAttr(c.id)}')" class="px-2 py-1 bg-orange-50 hover:bg-orange-100 text-orange-900 border border-orange-300 rounded-lg text-xs font-bold shadow-2xs flex items-center gap-1 transition" title="Request Admin to approve a status change">
                 <i class="fa-solid fa-rotate text-orange-600"></i> Status Change
               </button>
@@ -4551,23 +4598,33 @@ font-family: var(--font-num) !important;
               <button onclick="openLeaveAbsentModal('${escapeJsAttr(c.id)}', '${escapeJsAttr(c.student_id)}', '${escapeJsAttr(CURRENT_TEACHER.id)}', '${safeStudentName}')" class="px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300 rounded-lg text-xs font-bold transition flex items-center gap-1" title="Adjust outcome">
                 <i class="fa-solid fa-pen-to-square"></i> Adjust
               </button>
-              ${changeTimeBtn}
+              ${c.pendingResetClassReq ? `
+              <span class="px-2 py-1 rounded-lg text-xs font-extrabold bg-teal-50 text-teal-800 border border-teal-300 flex items-center gap-1" title="A Reset class request is already pending with Admin">
+                <i class="fa-solid fa-hourglass-half"></i> Reset Class Pending
+              </span>
+              ` : `
+              <button onclick="openResetClassRequestModal('${escapeJsAttr(c.id)}')" class="px-2 py-1 bg-teal-600 hover:bg-teal-700 text-white rounded-lg text-xs font-bold shadow-2xs flex items-center gap-1 transition" title="Request Admin to reset this class back to Scheduled">
+                <i class="fa-solid fa-rotate-left"></i> Reset class
+              </button>
+              `}
+              ${historyBtn}
             `;
           } else {
-            // Scheduled / Free
+            // Scheduled / Free — Teacher Portal Update (2026-11-10):
+            // Start Zoom is the ONLY initial action. The old direct
+            // Start Class button is removed: a class reaches Running
+            // only through Start Zoom -> Waiting -> the pulsing Start
+            // Class button on the Waiting row.
             actionButtons = `
               ${effectiveZoomLink ? `
                 <button onclick="launchTeacherZoomClassById('${escapeJsAttr(c.id)}')" class="px-3 py-1 bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-700 hover:to-teal-800 text-white rounded-lg text-xs font-black shadow-xs flex items-center gap-1 transition">
                   <i class="fa-solid fa-video"></i> Start Zoom
                 </button>
               ` : ''}
-              <button onclick="handleTeacherStartClass('${escapeJsAttr(c.id)}', '${escapeJsAttr(c.student_id)}', '${escapeJsAttr(CURRENT_TEACHER.id)}')" class="px-2.5 py-1 bg-emerald-100 hover:bg-emerald-200 text-emerald-900 border border-emerald-300 rounded-lg text-xs font-black transition flex items-center gap-1">
-                <i class="fa-solid fa-play text-emerald-700"></i> START CLASS
-              </button>
               <button onclick="openLeaveAbsentModal('${escapeJsAttr(c.id)}', '${escapeJsAttr(c.student_id)}', '${escapeJsAttr(CURRENT_TEACHER.id)}', '${safeStudentName}')" class="px-2.5 py-1 bg-rose-50 hover:bg-rose-100 text-rose-800 border border-rose-300 rounded-lg text-xs font-bold transition flex items-center gap-1">
                 <i class="fa-solid fa-user-xmark"></i> LEAVE / ABSENT
               </button>
-              ${changeTimeBtn}
+              ${historyBtn}
             `;
           }
         }
@@ -4637,12 +4694,30 @@ font-family: var(--font-num) !important;
       launchTeacherZoomClass(c.id, zoomLink, c.students?.name || 'Student', c.student_id);
     }
 
+    // Teacher Portal Update (2026-11-10): in-flight click locks for
+    // the session buttons. A double-click (or an impatient re-tap
+    // while the Waiting save is still in flight) must never create
+    // duplicate session transitions for the same class.
+    const _zoomLaunchInFlight = new Set();
+    const _startClassInFlight = new Set();
+
     // Smart LMS-to-Zoom Gateway with Punch-In Timestamp Verification
     async function launchTeacherZoomClass(scheduleId, rawMeetingLink, studentName, studentId) {
       if (!rawMeetingLink) {
         lmsNotify("No Zoom Meeting Link assigned for this class yet. Please contact Academy Admin.");
         return;
       }
+      const lockKey = String(scheduleId || '');
+      if (_zoomLaunchInFlight.has(lockKey)) return;
+      _zoomLaunchInFlight.add(lockKey);
+      try {
+        await launchTeacherZoomClassLocked(scheduleId, rawMeetingLink, studentName, studentId);
+      } finally {
+        _zoomLaunchInFlight.delete(lockKey);
+      }
+    }
+
+    async function launchTeacherZoomClassLocked(scheduleId, rawMeetingLink, studentName, studentId) {
 
       // SECURITY (2026-10-14): only allow https: meeting links. Reject
       // javascript:/data:/vbscript: schemes to prevent URL-based script execution.
@@ -4660,9 +4735,15 @@ font-family: var(--font-num) !important;
       const now = new Date();
       const timeStr = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
 
-      // 1. Transition class session state to 'Waiting' in backend and broadcast
+      // 1. Transition class session state to 'Waiting' in backend and broadcast.
+      // Teacher Portal Update (2026-11-10): Zoom opens ONLY after the
+      // Waiting state is safely saved. The old flow opened Zoom even
+      // when the punch-in write failed, leaving a class that looked
+      // started in Zoom but was never Waiting in the LMS — the
+      // teacher then had no Start Class button to press.
+      let waitingRes = null;
       try {
-        await transitionClassSessionState({
+        waitingRes = await transitionClassSessionState({
           scheduleId,
           studentId,
           teacherId: CURRENT_TEACHER?.id,
@@ -4671,6 +4752,10 @@ font-family: var(--font-num) !important;
         });
       } catch(e) {
         console.warn("Could not log punch-in timestamp:", e);
+      }
+      if (!waitingRes || !waitingRes.success) {
+        lmsNotify("The class could not be set to Waiting, so Zoom was not opened. Please check your connection and try Start Zoom again.", { type: 'error' });
+        return;
       }
 
       // 2. Format Native Zoom App Deep Link (zoommtg:// protocol)
@@ -4858,17 +4943,27 @@ font-family: var(--font-num) !important;
     }
 
     async function handleTeacherStartClass(scheduleId, studentId, teacherId) {
-      const now = new Date();
-      const timeStr = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
-      const res = await transitionClassSessionState({
-        scheduleId,
-        studentId,
-        teacherId: teacherId || CURRENT_TEACHER?.id,
-        targetStatus: 'Running',
-        notes: `Class started by teacher at ${timeStr} PKT`
-      });
-      if (res && res.success) {
-        await loadTeacherPortalData();
+      // Teacher Portal Update (2026-11-10): in-flight click lock —
+      // repeated clicks on the pulsing Start Class button must not
+      // stack duplicate Running transitions for the same class.
+      const lockKey = String(scheduleId || '');
+      if (_startClassInFlight.has(lockKey)) return;
+      _startClassInFlight.add(lockKey);
+      try {
+        const now = new Date();
+        const timeStr = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
+        const res = await transitionClassSessionState({
+          scheduleId,
+          studentId,
+          teacherId: teacherId || CURRENT_TEACHER?.id,
+          targetStatus: 'Running',
+          notes: `Class started by teacher at ${timeStr} PKT`
+        });
+        if (res && res.success) {
+          await loadTeacherPortalData();
+        }
+      } finally {
+        _startClassInFlight.delete(lockKey);
       }
     }
 
@@ -4976,8 +5071,15 @@ font-family: var(--font-num) !important;
       const rem = document.getElementById('leaveAbsentRemarks');
       if (rem) rem.value = '';
 
-      const radAbsent = document.querySelector('input[name="leaveAbsentOutcomeRadio"][value="Absent"]');
-      if (radAbsent) radAbsent.checked = true;
+      // Teacher Portal Update (2026-11-10): preselect the CURRENT
+      // outcome when adjusting an already-marked class, so a direct
+      // Leave <-> Absent change starts from the truth (the modal used
+      // to default to Absent even for a class marked Leave). A fresh
+      // mark keeps the Absent default.
+      const currentOutcome = (TODAY_CLASSES || []).find(c => String(c.id) === String(scheduleId))?.log?.status;
+      const preselectOutcome = (currentOutcome === 'Leave' || currentOutcome === 'Absent') ? currentOutcome : 'Absent';
+      const radPreselect = document.querySelector(`input[name="leaveAbsentOutcomeRadio"][value="${preselectOutcome}"]`);
+      if (radPreselect) radPreselect.checked = true;
       updateLeaveAbsentModalUi();
 
       document.getElementById('modalClassLeaveAbsent')?.classList.remove('hidden');
@@ -10785,6 +10887,122 @@ font-family: var(--font-num) !important;
       } finally {
         btn.disabled = false;
         btn.innerHTML = '<i class="fa-solid fa-paper-plane"></i> Send Request to Admin';
+      }
+    }
+
+    // ==========================================
+    // TEACHER "RESET CLASS" REQUEST (Teacher Portal Update 2026-11-10)
+    // A Leave/Absent-marked class for TODAY can be asked back to
+    // Scheduled. The teacher only files the request (optional note —
+    // the class stays Leave/Absent); a Manager/Owner approves it in
+    // the Admin Requests queue, which deletes that day's attendance
+    // log so the class is Scheduled again. One pending request per
+    // student: the notes single-latest key (reset_class_request) is
+    // what the admin queue reads, and a second submit while one is
+    // pending is refused here instead of overwriting it.
+    // ==========================================
+
+    function openResetClassRequestModal(scheduleId) {
+      const c = TODAY_CLASSES.find(x => String(x.id) === String(scheduleId));
+      if (!c) { lmsNotify("Class record not found. Please refresh."); return; }
+      const st = c.log?.status;
+      if (st !== 'Leave' && st !== 'Absent') {
+        lmsNotify("Reset class is only available for a class marked Leave or Absent.");
+        return;
+      }
+      if (c.pendingResetClassReq) {
+        lmsNotify("A Reset class request for this student is already pending with Admin.");
+        return;
+      }
+
+      document.getElementById('resetClassScheduleId').value = scheduleId;
+      document.getElementById('resetClassModalSubtitle').innerText =
+        `${c.students?.name || 'Student'} • Today ${c.start_time.slice(0,5)} - ${c.end_time.slice(0,5)} • Marked ${st}`;
+      document.getElementById('resetClassNotes').value = '';
+
+      const modal = document.getElementById('modalResetClassRequest');
+      if (modal) {
+        modal.classList.remove('hidden');
+        modal.classList.add('flex');
+        pushTeacherModalHistory('modalResetClassRequest');
+      }
+    }
+
+    function closeResetClassRequestModal(popHistory = true) {
+      const modal = document.getElementById('modalResetClassRequest');
+      if (modal) {
+        modal.classList.add('hidden');
+        modal.classList.remove('flex');
+      }
+      if (popHistory) popTeacherModalHistory('modalResetClassRequest');
+    }
+
+    async function submitResetClassRequest(e) {
+      e.preventDefault();
+      const scheduleId = document.getElementById('resetClassScheduleId')?.value;
+      const notes = (document.getElementById('resetClassNotes')?.value || '').trim();
+
+      if (!scheduleId) { lmsNotify("Schedule ID missing. Please refresh."); return; }
+
+      const c = TODAY_CLASSES.find(x => String(x.id) === String(scheduleId));
+      const studentId = c?.student_id;
+      const studentName = c?.students?.name || 'Student';
+      const currentStatus = c?.log?.status || 'Unknown';
+      if (!studentId) { lmsNotify("Student not found for this class. Please refresh."); return; }
+
+      const btn = document.getElementById('btnSubmitResetClassReq');
+      btn.disabled = true;
+      btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Submitting...';
+
+      try {
+        if (!CURRENT_TEACHER?.id) throw new Error('Teacher session not found. Please log in again.');
+        const { data: st, error: fetchErr } = await db.from('students').select('*').eq('id', studentId).single();
+        if (fetchErr || !st) throw new Error("Student not found.");
+
+        let meta = {};
+        try { meta = JSON.parse(st.notes || '{}'); } catch(err) { meta = { text: st.notes || '' }; }
+
+        // Duplicate-pending guard (owner decision 2026-11-10: one
+        // pending Reset class request per student at a time).
+        if (meta.reset_class_request && meta.reset_class_request.status === 'pending') {
+          lmsNotify("A Reset class request for this student is already pending. Please wait for Admin to decide it.");
+          closeResetClassRequestModal();
+          await loadTeacherPortalData();
+          return;
+        }
+
+        const reqObj = {
+          id: 'RESET-' + Date.now(),
+          type: 'reset_class_request',
+          student_id: studentId,
+          student_name: studentName,
+          schedule_id: scheduleId,
+          teacher_id: CURRENT_TEACHER.id,
+          teacher_name: CURRENT_TEACHER?.full_name || 'Teacher',
+          class_date: getPktNowParts().date,
+          schedule_label: `${(c.start_time || '').slice(0,5)} - ${(c.end_time || '').slice(0,5)} PKT`,
+          current_status: currentStatus,
+          notes: notes,
+          status: 'pending',
+          requested_at: new Date().toISOString()
+        };
+
+        appendTeacherRequestToHistory(meta, 'reset_class_request', 'reset_class_history', reqObj);
+
+        const { error: upErr } = await db.from('students').update({
+          notes: JSON.stringify(meta)
+        }).eq('id', studentId);
+
+        if (upErr) throw upErr;
+
+        lmsNotify(`✅ Reset class request submitted for ${studentName}!\n\nStatus: Pending Admin Approval.\nThe class stays ${currentStatus} until a Manager / Owner approves the reset.`);
+        closeResetClassRequestModal();
+        await loadTeacherPortalData();
+      } catch (err) {
+        console.warn('[LMS] operation failed:', err.message); lmsNotify('Error submitting Reset class request. Please try again.', { type: 'error' });
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fa-solid fa-paper-plane"></i> Send Reset Request to Admin';
       }
     }
 

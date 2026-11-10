@@ -249,7 +249,12 @@ const leaveNotes = JSON.stringify({
   check('B-opt no meta + Active = not on leave', isStudentOnLeaveNow({ status: 'Active' }, null, T) === false);
   check('B-opt helper used at scan + tab sites', (leavesJs.match(/isStudentOnLeaveNow\(/g) || []).length >= 3);
   check('B-opt NO status: Leave write remains in leaves.js', !leavesJs.includes("status: 'Leave'") && !leavesJs.includes('status: "Leave"'));
-  check('B-opt window wording in approve + mark alerts', (leavesJs.match(/starts and ends automatically/g) || []).length >= 2);
+  // Teacher Portal Update (2026-11-10, owner decision 3): the two
+  // alerts no longer promise a purely automatic window — marking
+  // leave now removes the student from the teacher's schedule, and
+  // the return restores the roster as Not Scheduled. The window
+  // derivation itself (isStudentOnLeaveNow) is unchanged.
+  check('B-opt window wording in approve + mark alerts (revised 2026-11-10: decision-3 roster wording)', (leavesJs.match(/removed from the teacher's schedule/g) || []).length >= 2);
   check('B-opt Upcoming badge present', leavesJs.includes('Upcoming Leave'));
   // Teacher + parent use the same window rule.
   check('B-opt teacher isPortalStudentOnLeave is windowed',
