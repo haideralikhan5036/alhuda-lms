@@ -1286,17 +1286,9 @@
       setEl('kpiDashCurrent', currentSlotTotal);
       setEl('kpiDashRunning', runningMarkedTotal);
       setEl('kpiDashLive', currentSlotTotal);
-      const wBadge = document.getElementById('kpiDashWaitingBadge');
-      if (!dashD1Live) {
-        if (wBadge) wBadge.classList.add('hidden');
-      } else if (wBadge) {
-        if (waitingCount > 0) {
-          wBadge.innerText = `${waitingCount} Waiting`;
-          wBadge.classList.remove('hidden');
-        } else {
-          wBadge.classList.add('hidden');
-        }
-      }
+      // OWNER (2026-11-10): the "N Waiting" badge on the Current KPI
+      // card was removed at the owner's mark. waitingCount above is
+      // still computed by the log scan; it is simply no longer painted.
       setEl('kpiDashCompleted', completedCount);
       setEl('kpiDashRemaining', remainingCount);
       setEl('kpiDashAbsent', absentCount);
@@ -1580,13 +1572,17 @@
         const cleanPhone = (c.students?.whatsapp || '').replace(/[^0-9]/g, '');
         const waChat = (cleanPhone && CURRENT_ROLE !== 'manager') ? `<a href="https://wa.me/${cleanPhone}" target="_blank" class="text-emerald-600 hover:text-emerald-800 ml-1.5" title="WhatsApp Parent"><i class="fa-brands fa-whatsapp"></i></a>` : '';
 
-        const typeBadge = c.isTrial 
-          ? '<span class="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-purple-100 text-purple-800 border border-purple-200">Trial</span>'
-          : '<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-600">Regular</span>';
-
         let sabaqText = `<span class="text-slate-400 italic">No notes logged yet</span>`;
         if (c.log?.lesson_notes) {
-          try {
+          // OWNER (2026-11-10): the auto-logged Zoom join note shows
+          // ONLY the join time, small ("10:11 PM") instead of the full
+          // "[Auto-Logged] Teacher joined Zoom at ..." text. Display
+          // only — the Attendance button below still receives the full
+          // stored lesson_notes string.
+          const autoLogMatch = String(c.log.lesson_notes).match(/^\[Auto-Logged\] Teacher joined Zoom at (.+?) PKT/);
+          if (autoLogMatch) {
+            sabaqText = `<span class="text-[11px] text-slate-500 font-medium">${autoLogMatch[1]}</span>`;
+          } else try {
             const pMeta = JSON.parse(c.log.lesson_notes);
             if (pMeta.book_title || pMeta.page) {
               const passColor = pMeta.status === 'Pass' ? 'bg-emerald-100 text-emerald-800 border-emerald-300' : 'bg-amber-100 text-amber-800 border-amber-300';
@@ -1676,10 +1672,6 @@
                 </button>
                 ${waChat}
               </div>
-              <div class="flex items-center gap-1 mt-0.5 text-[10px] text-slate-500 font-mono">
-                <button onclick="openStudent360Profile('${c.student_id || c.students?.id || ''}')" class="hover:text-brandEmerald hover:underline">${c.students?.id || 'STU-ID'}</button>
-                ${c.students?.family_id ? `&bull; <button onclick="openFamily360Profile('${c.students.family_id}')" class="text-emerald-700 hover:underline font-bold" title="Open Family 360° Profile">${c.students.family_id}</button>` : ''}
-              </div>
             </td>
 
             <td class="p-3">
@@ -1695,11 +1687,6 @@
                   <i class="fa-solid fa-arrow-up-right-from-square text-[10px] text-slate-400 group-hover:text-brandEmerald"></i>
                 </button>
               </div>
-              <div class="text-[10px] text-slate-400 font-mono">${c.teachers?.phone || c.teachers?.email || 'Teacher ID'}</div>
-            </td>
-
-            <td class="p-3">
-              ${typeBadge}
             </td>
 
             <td class="p-3 max-w-xs truncate">
