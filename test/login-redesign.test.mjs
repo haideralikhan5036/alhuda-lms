@@ -11,7 +11,8 @@
 //     screen, centred dark card, dark pill fields with the autofill
 //     override, gold pill CTA with dots/done states, confetti layer,
 //     shake keyframes;
-//   * per-portal rules hold: teacher keeps body zoom 0.85, parent
+//   * per-portal rules hold: teacher keeps body zoom 0.85
+//     (desktop-scoped since the 2026-11-10 mobile fix), parent
 //     gains NO zoom, manager keeps the PR #128 fixed-body rule
 //     (its zoom desktop-scoped since the 2026-11-10 mobile fix);
 //   * EXECUTED proof: the REAL fee-style wiring script from each file
@@ -171,7 +172,15 @@ for (const s of SURFACES) {
 
 // Per-portal rules.
 const teacher = read('teacher.html');
-ok(/body\s*\{[^}]*zoom:\s*0\.85/.test(teacher), 'teacher: body zoom 0.85 untouched');
+// RE-PINNED 2026-11-10 (owner mobile fix): the teacher body zoom is
+// now desktop-scoped, exactly as in index.html / manager.html
+// (PR #139) — unscoped it painted the teacher portal at 85% width
+// on phones, leaving a blank strip down the right edge. Desktop
+// keeps the exact same 85% scale, and no unscoped body zoom may
+// remain in the file.
+ok(teacher.includes('@media (min-width: 1024px) { body { zoom: 0.85; } }') &&
+  !teacher.replace('@media (min-width: 1024px) { body { zoom: 0.85; } }', '').includes('body { zoom'),
+  'teacher: body zoom 0.85 desktop-scoped (2026-11-10 mobile fix)');
 // RE-PINNED 2026-11-10: the login view backdrop is now the fee
 // design's flg-screen (#06382a) instead of the tui-login-bg gradient —
 // the backdrop changed because the whole login was re-skinned on the

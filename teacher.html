@@ -841,8 +841,12 @@ font-family: var(--font-num) !important;
      exactly as browser zoom would scale them.
      OWNER (2026-11-07): 77% proved a touch too small — the scale
      steps up to 85% ("bit bigger, not too much"). This single line
-     is the tuning knob for the whole portal's scale. */
-  body { zoom: 0.85; }
+     is the tuning knob for the whole portal's scale. Scoped to
+     desktop widths on 2026-11-10 (owner mobile fix): unscoped,
+     the rule painted the body at 85% width on phones and left a
+     blank strip down the right of the screen; below 1024px the
+     portal now renders at 100% and desktop is unchanged. */
+  @media (min-width: 1024px) { body { zoom: 0.85; } }
 
   /* ---- Full-height FIXED sidebar (OWNER, 2026-11-07): the owner
      rejected the "pocket" — the old desktop sidebar was sticky with

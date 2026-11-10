@@ -182,13 +182,21 @@ check('owner marks: KPI cards wired to their drill-downs',
 check('owner marks: KPI cards carry button semantics + keyboard activation',
   (TEACHER.match(/role="button" tabindex="0" onkeydown=/g) || []).length >= 4);
 // (5) Junction: the sidebar scrollbar is not painted (scrolling itself
-// is browser-verified); (6) global scale 77% on body.
+// is browser-verified); (6) global scale on body (85%, desktop-only
+// since the 2026-11-10 mobile fix).
 check('owner marks: sidebar scrollbar hidden at the junction',
   TEACHER.includes('aside#teacherSidebar .custom-sidebar-scroll') &&
   TEACHER.includes('scrollbar-width: none') &&
   TEACHER.includes('aside#teacherSidebar .custom-sidebar-scroll::-webkit-scrollbar'));
-check('owner marks: portal scale is 85% (body zoom)',
-  TEACHER.includes('body { zoom: 0.85; }'));
+// RE-PINNED 2026-11-10 (owner mobile fix): the body zoom is now
+// scoped to desktop widths — unscoped it painted the whole portal
+// at 85% width on phones, leaving a blank strip down the right
+// edge of the screen. Desktop keeps the exact same 85% scale, and
+// no unscoped body zoom may remain. (Same fix as PR #139 for
+// index.html / manager.html.)
+check('owner marks: portal scale is 85% on desktop only (body zoom media-scoped, 2026-11-10 mobile fix)',
+  TEACHER.includes('@media (min-width: 1024px) { body { zoom: 0.85; } }') &&
+  !TEACHER.replace('@media (min-width: 1024px) { body { zoom: 0.85; } }', '').includes('body { zoom'));
 // (Was 0.77 in PR #117; owner 2026-11-07: 77% proved a touch too
 // small, stepped up to 85% — "bit bigger, not too much".)
 // Full-height fixed sidebar (owner 2026-11-07, "no pocket style"):
