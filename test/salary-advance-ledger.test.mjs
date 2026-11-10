@@ -115,7 +115,7 @@ const recoveriesOf = (teacherId) => fakeDb.q('SELECT * FROM advance_recoveries W
 {
   const h = await call('https://worker.test/api/health', { method: 'GET' });
   check('W setup: health reports the Phase 3 release + schema',
-    h.status === 200 && h.data && h.data.version === '2026-11-07-manual-cycles' && h.data.schema === '2026-11-07-v8',
+    h.status === 200 && h.data && h.data.version === '2026-11-10-teacher-self-reset' && h.data.schema === '2026-11-07-v8',
     h.text.slice(0, 200));
   const r = await dbPost(TOK.owner, { table: 'families', action: 'select' });
   check('W setup: owner /api/db boot -> 200', r.status === 200, r.text.slice(0, 200));

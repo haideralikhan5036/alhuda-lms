@@ -84,7 +84,7 @@ function corsHeadersFor(request, env) {
 // functions/api/db.js (the D1 schema marker; v2 after Part A). It is hardcoded
 // here on purpose: /api/health must never 500 because D1 is unreachable, and
 // it must never cost an unauthenticated caller a D1 read.
-const WORKER_RELEASE = '2026-11-07-manual-cycles';
+const WORKER_RELEASE = '2026-11-10-teacher-self-reset';
 const HEALTH_SCHEMA_VERSION = '2026-11-07-v8';
 
 // --- Batch 7 Part B: security headers (workers.dev responses) --------------
@@ -2003,7 +2003,13 @@ function checkTableAccess(role, table, action) {
         // Teachers manage their own slots (insert new, delete stale).
         return action === 'update' ? 'deny' : 'allow';
       case 'attendance_logs':
-        return action === 'delete' ? 'deny' : 'allow';
+        // Teacher self-reset (owner decision, 2026-11-10): delete is
+        // no longer blanket-denied here. handleScopedDbRequest
+        // adjudicates EVERY teacher delete through
+        // attendanceTeacherSelfResetDeleteDenied, which allows it
+        // only for the teacher's own rows whose stored status is
+        // Waiting or Running (see that guard for the exact rule).
+        return 'allow';
       case 'leave_requests':
         return (action === 'select' || action === 'insert' || action === 'upsert') ? 'allow' : 'deny';
       case 'trial_students':
@@ -2942,6 +2948,50 @@ async function attendanceDeliveredTransitionDenied(db, scopedBody) {
   }
 }
 
+// Teacher self-reset (owner decision, 2026-11-10): a teacher may
+// reset their OWN class back to Scheduled from the Waiting or
+// Running state WITHOUT admin approval, by deleting that day's
+// attendance rows (Scheduled is the virtual no-log state, so the
+// delete IS the reset). Admin approval remains required for
+// Leave/Absent resets (the js/leaves.js Reset class flow), and this
+// guard never lets a teacher delete touch those rows.
+// Rule — deny (return true) unless ALL of these hold:
+//   * the delete is CONSTRAINED: every filter is a plain eq on a
+//     known column, and the set includes schedule_id AND a date
+//     (class_date or date) — an unconstrained or oddly-filtered
+//     delete fails closed, exactly like the delivered guard above;
+//   * every row the (already teacher-scoped) filters match in D1
+//     has stored status 'Waiting' or 'Running' — the exact strings
+//     transitionClassSessionState writes. Any other status
+//     (Completed, Present, Leave, Absent, Advance Class, legacy or
+//     unrecognised) denies the whole delete and nothing is removed.
+// Zero matched rows is a no-op, not an error: the class is already
+// in the no-log (Scheduled) state the reset aims for. Runs ONLY for
+// the teacher role — manager/owner deletes keep their existing
+// unrestricted (for managers: portal-approval) behaviour.
+async function attendanceTeacherSelfResetDeleteDenied(db, scopedBody) {
+  if (!db) return true;
+  const RESETTABLE = new Set(['Waiting', 'Running']);
+  try {
+    const filters = Array.isArray(scopedBody && scopedBody.filters) ? scopedBody.filters : [];
+    const eqFilters = filters.filter(f => f && f.op === 'eq' && f.column && f.value != null && String(f.value) !== '');
+    const usable = eqFilters.filter(f => ['id', 'schedule_id', 'class_date', 'date', 'student_id', 'teacher_id'].includes(f.column));
+    if (usable.length !== filters.length || usable.length === 0) return true;
+    const hasSchedule = usable.some(f => f.column === 'schedule_id');
+    const hasDate = usable.some(f => f.column === 'class_date' || f.column === 'date');
+    if (!hasSchedule || !hasDate) return true;
+    const where = usable.map(f => `${f.column} = ?`).join(' AND ');
+    const params = usable.map(f => f.value);
+    const { results } = await db.prepare(`SELECT status FROM attendance_logs WHERE ${where}`).bind(...params).all();
+    for (const r of (results || [])) {
+      if (!RESETTABLE.has(String(r.status))) return true;
+    }
+    return false;
+  } catch (e) {
+    return true;
+  }
+}
+
 // Inject server-side filters so a client can never widen its own scope.
 // The db engine ANDs all filters, so injected constraints always apply.
 // Returns the scoped body, or null to deny.
@@ -3011,6 +3061,14 @@ function applyDbScope(body, role, sub, scope) {
         scoped.values = forceTeacherValues(scoped.values, sub)[0];
       } else if (action === 'insert' || action === 'upsert') {
         scoped.values = forceTeacherValues(scoped.values, sub);
+      } else if (action === 'delete') {
+        // Teacher self-reset: the delete itself is scoped to the
+        // teacher's own rows (same scoping as class_schedules
+        // deletes above), so a delete can never reach another
+        // teacher's logs. Which of those rows may actually be
+        // removed is decided by
+        // attendanceTeacherSelfResetDeleteDenied before delegation.
+        filters.push(eq('teacher_id', sub));
       }
     } else if (table === 'leave_requests') {
       if (action === 'select') {
@@ -3318,6 +3376,18 @@ async function handleScopedDbRequest(ctx, auth) {
       (action === 'insert' || action === 'upsert' || action === 'update')) {
     if (await attendanceDeliveredTransitionDenied(db, scopedBody)) {
       return json(request, env, { ok: false, error: 'A completed session cannot be changed to another status.' }, 403);
+    }
+  }
+  // Teacher self-reset (owner decision, 2026-11-10): a teacher
+  // DELETE on attendance_logs is the Waiting/Running "Reset class"
+  // button. It is adjudicated row-by-row against D1 by the guard —
+  // only the teacher's own Waiting/Running rows for one
+  // schedule+date may be removed; anything else is a 403 and
+  // nothing is deleted. Teacher-only: manager/owner deletes are
+  // unchanged (the Reset class approval path relies on them).
+  if (role === 'teacher' && table === 'attendance_logs' && action === 'delete') {
+    if (await attendanceTeacherSelfResetDeleteDenied(db, scopedBody)) {
+      return json(request, env, { ok: false, error: 'Only your own Waiting or Running class can be reset. A class in any other state cannot be removed.' }, 403);
     }
   }
 
