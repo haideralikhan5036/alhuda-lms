@@ -2372,7 +2372,7 @@ font-family: var(--font-num) !important;
               <option value="Present">✅ Present (class did happen)</option>
               <option value="Absent">❌ Absent (student did not attend)</option>
               <option value="Leave">📅 Leave (student was on leave)</option>
-              <option value="Reschedule">🔄 Reschedule to Another Day</option>
+              <option value="ResetClass">↩️ Reset class</option>
             </select>
           </div>
 
@@ -4587,6 +4587,11 @@ font-family: var(--font-num) !important;
               <button onclick="openRescheduleRequestModal('${escapeJsAttr(c.id)}')" class="px-2 py-1 bg-orange-50 hover:bg-orange-100 text-orange-900 border border-orange-300 rounded-lg text-xs font-bold shadow-2xs flex items-center gap-1 transition" title="Request Admin to approve a status change">
                 <i class="fa-solid fa-rotate text-orange-600"></i> Status Change
               </button>
+              ${c.pendingResetClassReq ? `
+              <span class="px-2 py-1 rounded-lg text-xs font-extrabold bg-teal-50 text-teal-800 border border-teal-300 flex items-center gap-1" title="A Reset class request is already pending with Admin">
+                <i class="fa-solid fa-hourglass-half"></i> Reset Class Pending
+              </span>
+              ` : ''}
             `;
           } else if (stStatus === 'Absent' || stStatus === 'Leave') {
             actionButtons = `
@@ -10924,6 +10929,45 @@ font-family: var(--font-num) !important;
       const studentId   = c?.student_id;
       const studentName = c?.students?.name || 'Student';
 
+      // "Reset class" is an ACTION, not a status: the ResetClass
+      // option is a sentinel. Selecting it files the SAME
+      // admin-approved reset_class_request as the Leave/Absent
+      // Reset class flow (fileResetClassRequest) instead of a
+      // reschedule_request — and the sentinel value itself is
+      // never written as an attendance status anywhere.
+      if (newStatus === 'ResetClass') {
+        if (c?.pendingResetClassReq) {
+          lmsNotify("A Reset class request for this student is already pending with Admin.");
+          return;
+        }
+        if (!studentId) { lmsNotify("Student not found for this class. Please refresh."); return; }
+        const currentStatus = c?.log?.status || 'Unknown';
+        const btnReset = document.getElementById('btnSubmitReschedReq');
+        btnReset.disabled = true;
+        btnReset.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Submitting...';
+        try {
+          // Carry this modal's reason into the request note, so the
+          // approver sees why the reset was asked for.
+          const resetNote = notes ? `${reason} — ${notes}` : (reason || '');
+          const filed = await fileResetClassRequest(c, scheduleId, studentId, studentName, currentStatus, resetNote);
+          if (filed === 'duplicate') {
+            lmsNotify("A Reset class request for this student is already pending. Please wait for Admin to decide it.");
+            closeRescheduleRequestModal();
+            await loadTeacherPortalData();
+            return;
+          }
+          lmsNotify(`✅ Reset class request submitted for ${studentName}!\n\nStatus: Pending Admin Approval.\nThe class stays ${currentStatus} until a Manager / Owner approves the reset.`);
+          closeRescheduleRequestModal();
+          await loadTeacherPortalData();
+        } catch (err) {
+          console.warn('[LMS] operation failed:', err.message); lmsNotify('Error submitting Reset class request. Please try again.', { type: 'error' });
+        } finally {
+          btnReset.disabled = false;
+          btnReset.innerHTML = '<i class="fa-solid fa-paper-plane"></i> Send Request to Admin';
+        }
+        return;
+      }
+
       const btn = document.getElementById('btnSubmitReschedReq');
       btn.disabled = true;
       btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Submitting...';
@@ -11017,6 +11061,54 @@ font-family: var(--font-num) !important;
       if (popHistory) popTeacherModalHistory('modalResetClassRequest');
     }
 
+    // Shared filing step for BOTH Reset class entry points — the
+    // Leave/Absent "Reset class" modal (submitResetClassRequest)
+    // and the "Reset class" option inside the Status Change modal
+    // (submitRescheduleRequest). Builds the reset_class_request
+    // exactly once and saves it into the student's notes. Returns
+    // 'saved', or 'duplicate' when a request is already pending
+    // (the caller shows the refusal); throws on session/db errors
+    // so the caller reports failure instead of success.
+    async function fileResetClassRequest(c, scheduleId, studentId, studentName, currentStatus, noteText) {
+      if (!CURRENT_TEACHER?.id) throw new Error('Teacher session not found. Please log in again.');
+      const { data: st, error: fetchErr } = await db.from('students').select('*').eq('id', studentId).single();
+      if (fetchErr || !st) throw new Error("Student not found.");
+
+      let meta = {};
+      try { meta = JSON.parse(st.notes || '{}'); } catch(err) { meta = { text: st.notes || '' }; }
+
+      // Duplicate-pending guard (owner decision 2026-11-10: one
+      // pending Reset class request per student at a time).
+      if (meta.reset_class_request && meta.reset_class_request.status === 'pending') {
+        return 'duplicate';
+      }
+
+      const reqObj = {
+        id: 'RESET-' + Date.now(),
+        type: 'reset_class_request',
+        student_id: studentId,
+        student_name: studentName,
+        schedule_id: scheduleId,
+        teacher_id: CURRENT_TEACHER.id,
+        teacher_name: CURRENT_TEACHER?.full_name || 'Teacher',
+        class_date: getPktNowParts().date,
+        schedule_label: `${(c.start_time || '').slice(0,5)} - ${(c.end_time || '').slice(0,5)} PKT`,
+        current_status: currentStatus,
+        notes: noteText,
+        status: 'pending',
+        requested_at: new Date().toISOString()
+      };
+
+      appendTeacherRequestToHistory(meta, 'reset_class_request', 'reset_class_history', reqObj);
+
+      const { error: upErr } = await db.from('students').update({
+        notes: JSON.stringify(meta)
+      }).eq('id', studentId);
+
+      if (upErr) throw upErr;
+      return 'saved';
+    }
+
     async function submitResetClassRequest(e) {
       e.preventDefault();
       const scheduleId = document.getElementById('resetClassScheduleId')?.value;
@@ -11035,45 +11127,13 @@ font-family: var(--font-num) !important;
       btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Submitting...';
 
       try {
-        if (!CURRENT_TEACHER?.id) throw new Error('Teacher session not found. Please log in again.');
-        const { data: st, error: fetchErr } = await db.from('students').select('*').eq('id', studentId).single();
-        if (fetchErr || !st) throw new Error("Student not found.");
-
-        let meta = {};
-        try { meta = JSON.parse(st.notes || '{}'); } catch(err) { meta = { text: st.notes || '' }; }
-
-        // Duplicate-pending guard (owner decision 2026-11-10: one
-        // pending Reset class request per student at a time).
-        if (meta.reset_class_request && meta.reset_class_request.status === 'pending') {
+        const filed = await fileResetClassRequest(c, scheduleId, studentId, studentName, currentStatus, notes);
+        if (filed === 'duplicate') {
           lmsNotify("A Reset class request for this student is already pending. Please wait for Admin to decide it.");
           closeResetClassRequestModal();
           await loadTeacherPortalData();
           return;
         }
-
-        const reqObj = {
-          id: 'RESET-' + Date.now(),
-          type: 'reset_class_request',
-          student_id: studentId,
-          student_name: studentName,
-          schedule_id: scheduleId,
-          teacher_id: CURRENT_TEACHER.id,
-          teacher_name: CURRENT_TEACHER?.full_name || 'Teacher',
-          class_date: getPktNowParts().date,
-          schedule_label: `${(c.start_time || '').slice(0,5)} - ${(c.end_time || '').slice(0,5)} PKT`,
-          current_status: currentStatus,
-          notes: notes,
-          status: 'pending',
-          requested_at: new Date().toISOString()
-        };
-
-        appendTeacherRequestToHistory(meta, 'reset_class_request', 'reset_class_history', reqObj);
-
-        const { error: upErr } = await db.from('students').update({
-          notes: JSON.stringify(meta)
-        }).eq('id', studentId);
-
-        if (upErr) throw upErr;
 
         lmsNotify(`✅ Reset class request submitted for ${studentName}!\n\nStatus: Pending Admin Approval.\nThe class stays ${currentStatus} until a Manager / Owner approves the reset.`);
         closeResetClassRequestModal();

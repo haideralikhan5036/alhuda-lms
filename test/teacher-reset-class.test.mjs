@@ -26,6 +26,20 @@
 //   parity, and the decision-3 leave cycle end-to-end through the
 //   REAL js/assignments.js ledger + the REAL payroll proration
 //   (payable only up to the last payable day; past months intact).
+//
+//   Follow-on (owner decision, later the same day): the Status
+//   Change modal's "Reschedule to Another Day" option is replaced
+//   by a "Reset class" sentinel that files the SAME
+//   reset_class_request from a Completed/Present class (reset by
+//   request — no self-reset, no Worker change). The filing
+//   construction moved into the shared helper fileResetClassRequest
+//   used by both teacher entry points. Part 2 pins the dropdown
+//   contract + the sentinel branch + the Completed-row pending
+//   badge; Part 3c executes the REAL Status Change submit; Part 4
+//   covers approval/decline for a Completed class (owner + manager)
+//   and the legacy Reschedule regressions (a stored 'Reschedule'
+//   row still summarises as excluded; an already-filed Reschedule
+//   request still approves verbatim through the untouched branch).
 // Run from the repo root:  node test/teacher-reset-class.test.mjs
 // Requires: node >= 22.5 (node:sqlite). All records are SYNTHETIC.
 import fs from 'node:fs';
@@ -257,19 +271,49 @@ check('reset class: modal + optional note field + submit wiring exist',
   TEACHER.includes('id="modalResetClassRequest"') && TEACHER.includes('id="resetClassNotes"') &&
   TEACHER.includes('onsubmit="submitResetClassRequest(event)"') && TEACHER.includes('(optional)'));
 const resetSubmitSrc = extractFunction(TEACHER, 'submitResetClassRequest');
-check('reset class submit: notes-JSON pattern with class date + current status recorded',
-  resetSubmitSrc.includes("appendTeacherRequestToHistory(meta, 'reset_class_request', 'reset_class_history', reqObj)") &&
-  resetSubmitSrc.includes('class_date: getPktNowParts().date') && resetSubmitSrc.includes('current_status: currentStatus'));
+const fileResetSrc = extractFunction(TEACHER, 'fileResetClassRequest');
+check('reset class submit: notes-JSON pattern with class date + current status recorded (shared filing helper)',
+  fileResetSrc.includes("appendTeacherRequestToHistory(meta, 'reset_class_request', 'reset_class_history', reqObj)") &&
+  fileResetSrc.includes('class_date: getPktNowParts().date') && fileResetSrc.includes('current_status: currentStatus'));
 check('reset class submit: duplicate pending request is refused, not overwritten',
-  resetSubmitSrc.includes("meta.reset_class_request.status === 'pending'") && resetSubmitSrc.includes('already pending'));
+  fileResetSrc.includes("meta.reset_class_request.status === 'pending'") && fileResetSrc.includes("return 'duplicate'") &&
+  resetSubmitSrc.includes('fileResetClassRequest(') && resetSubmitSrc.includes('already pending'));
+
+{
+  const selStart = TEACHER.indexOf('id="reschedNewStatus"');
+  const selBlock = TEACHER.slice(selStart, TEACHER.indexOf('</select>', selStart));
+  check('status change dropdown: ResetClass option present; the Reschedule STATUS option is gone; Present/Absent/Leave unchanged',
+    selBlock.includes('<option value="ResetClass">') && selBlock.includes('Reset class') &&
+    !selBlock.includes('value="Reschedule"') && !selBlock.includes('Reschedule to Another Day') &&
+    selBlock.includes('<option value="Present">') && selBlock.includes('<option value="Absent">') && selBlock.includes('<option value="Leave">'));
+  const reasonStart = TEACHER.indexOf('id="reschedReasonSelect"');
+  const reasonBlock = TEACHER.slice(reasonStart, TEACHER.indexOf('</select>', reasonStart));
+  check('status change dropdown: reason select unchanged (incl. the rescheduled-with-student REASON)',
+    reasonBlock.includes('Class was rescheduled with student') && reasonBlock.includes('Marked by mistake'));
+}
+const reschedSubmitSrc = extractFunction(TEACHER, 'submitRescheduleRequest');
+check('status change submit: ResetClass sentinel branches to the shared reset filing BEFORE any reschedule_request is built',
+  reschedSubmitSrc.includes("newStatus === 'ResetClass'") &&
+  reschedSubmitSrc.includes('fileResetClassRequest(') &&
+  reschedSubmitSrc.includes('c?.pendingResetClassReq') &&
+  reschedSubmitSrc.indexOf("newStatus === 'ResetClass'") < reschedSubmitSrc.indexOf("type: 'reschedule_request'"));
+check('status change submit: the sentinel value is never stored as a requested status',
+  !reschedSubmitSrc.includes("requested_status: 'ResetClass'") &&
+  reschedSubmitSrc.includes('requested_status: newStatus'));
+{
+  const iComp = todaySrc.indexOf("stStatus === 'Completed'");
+  const iAbs = todaySrc.indexOf("stStatus === 'Absent'");
+  check("today's classes: Completed branch shows the Reset Class Pending badge while a reset is pending",
+    todaySrc.slice(iComp, iAbs).includes('c.pendingResetClassReq') && todaySrc.slice(iComp, iAbs).includes('Reset Class Pending'));
+}
 
 check('admin scan: reset_class_request joins the Requests queue',
   LEAVES.includes("requestType: 'reset_class'") && LEAVES.includes('meta.reset_class_request.status === \'pending\''));
 const approveSrc = extractFunction(LEAVES, 'handleApproveTeacherRequest');
-check('admin approve (reset_class): re-validates schedule + still-Leave/Absent before deleting the day log',
+check('admin approve (reset_class): re-validates schedule + still-marked (Leave/Absent/Completed/Present) before deleting the day log',
   approveSrc.includes("rType === 'reset_class'") &&
   approveSrc.includes("db.from('class_schedules').select('*').eq('id', req.schedule_id)") &&
-  approveSrc.includes("latestDayLog.status !== 'Leave' && latestDayLog.status !== 'Absent'") &&
+  approveSrc.includes("!['Leave', 'Absent', 'Completed', 'Present'].includes(latestDayLog.status)") &&
   approveSrc.includes("db.from('attendance_logs').delete().eq('schedule_id', req.schedule_id).eq('date', req.class_date)"));
 {
   const branchStart = approveSrc.indexOf("rType === 'reset_class'");
@@ -461,6 +505,7 @@ function makeFakeDb(tables) {
     extractFunction(TEACHER, 'updateLeaveAbsentModalUi'),
     extractFunction(TEACHER, 'openResetClassRequestModal'),
     extractFunction(TEACHER, 'closeResetClassRequestModal'),
+    extractFunction(TEACHER, 'fileResetClassRequest'),
     extractFunction(TEACHER, 'submitResetClassRequest'),
   ].join('\n');
   vm.runInContext(src, sandbox);
@@ -640,6 +685,124 @@ function makeFakeDb(tables) {
 }
 
 // ===========================================================================
+// Part 3c — REAL teacher.html Status Change submit with the
+// "Reset class" sentinel (owner follow-on, 2026-11-10): selecting
+// ResetClass on a Completed class files a reset_class_request via
+// the shared helper, writes NO reschedule_request, changes NO
+// attendance row, and refuses a duplicate pending request twice
+// over (the row flag, then the notes-level guard). The normal
+// status path still files a reschedule_request exactly as before.
+// ===========================================================================
+{
+  const registry = makeRegistry();
+  const notifies = [];
+  const tables = {
+    students: [
+      { id: 'STU-C1', name: 'Completed Child', notes: '{}' },
+      { id: 'STU-C2', name: 'Second Child', notes: '{}' },
+    ],
+    attendance_logs: [
+      { id: 'LOG-C1', schedule_id: 'SCH-C1', student_id: 'STU-C1', teacher_id: 'TCH-1', date: '2026-11-10', status: 'Completed', lesson_notes: '{"sabaq":"recorded lesson"}', created_at: '2026-11-10T05:30:00Z' },
+    ],
+  };
+  const logsBefore = JSON.stringify(tables.attendance_logs);
+  const sandbox = {
+    console,
+    document: { getElementById: (id) => registry.get(id) },
+    db: makeFakeDb(tables),
+    CURRENT_TEACHER: { id: 'TCH-1', full_name: 'Teacher One' },
+    TODAY_CLASSES: [],
+    getPktNowParts: () => ({ date: '2026-11-10', day: 2, minutes: 600 }),
+    lmsNotify: (msg) => { notifies.push(String(msg)); },
+    loadTeacherPortalData: async () => {},
+    pushTeacherModalHistory: () => {},
+    popTeacherModalHistory: () => {},
+  };
+  sandbox.window = sandbox;
+  vm.createContext(sandbox);
+  const src = [
+    extractFunction(TEACHER, 'appendTeacherRequestToHistory'),
+    extractFunction(TEACHER, 'closeRescheduleRequestModal'),
+    extractFunction(TEACHER, 'fileResetClassRequest'),
+    extractFunction(TEACHER, 'submitRescheduleRequest'),
+  ].join('\n');
+  vm.runInContext(src, sandbox);
+
+  function armStatusChange(pending) {
+    sandbox.TODAY_CLASSES = [{
+      id: 'SCH-C1', student_id: 'STU-C1', start_time: '09:00:00', end_time: '09:30:00',
+      log: { status: 'Completed' }, students: { name: 'Completed Child' }, pendingResetClassReq: pending,
+    }];
+    registry.get('reschedScheduleId').value = 'SCH-C1';
+    registry.get('reschedNewStatus').value = 'ResetClass';
+    registry.get('reschedReasonSelect').value = 'Marked by mistake';
+    registry.get('reschedNotes').value = 'Class was marked complete by mistake';
+    notifies.length = 0;
+  }
+
+  armStatusChange(null);
+  await vm.runInContext("submitRescheduleRequest({ preventDefault() {} })", sandbox);
+  const metaC1 = JSON.parse(tables.students[0].notes);
+  check('status change submit (ResetClass on Completed): exactly one pending reset_class_request is filed',
+    !!metaC1.reset_class_request && metaC1.reset_class_request.status === 'pending' &&
+    metaC1.reset_class_request.type === 'reset_class_request' &&
+    Array.isArray(metaC1.reset_class_history) && metaC1.reset_class_history.length === 1,
+    JSON.stringify(metaC1.reset_class_request || {}));
+  check('status change submit (ResetClass): request carries today (PKT), the Completed status and the full context',
+    metaC1.reset_class_request.class_date === '2026-11-10' &&
+    metaC1.reset_class_request.current_status === 'Completed' &&
+    metaC1.reset_class_request.schedule_id === 'SCH-C1' &&
+    metaC1.reset_class_request.student_id === 'STU-C1' &&
+    metaC1.reset_class_request.teacher_id === 'TCH-1' &&
+    metaC1.reset_class_request.schedule_label === '09:00 - 09:30 PKT');
+  check('status change submit (ResetClass): the modal reason + note are carried into the request note',
+    metaC1.reset_class_request.notes === 'Marked by mistake — Class was marked complete by mistake',
+    String(metaC1.reset_class_request.notes));
+  check('status change submit (ResetClass): NO reschedule_request written and NO attendance row changed',
+    metaC1.reschedule_request === undefined && metaC1.reschedule_history === undefined &&
+    JSON.stringify(tables.attendance_logs) === logsBefore);
+  check('status change submit (ResetClass): same confirmation wording as the Reset class flow; modal closed',
+    notifies.some(m => m.includes('Reset class request submitted') && m.includes('stays Completed')) &&
+    registry.get('modalRescheduleRequest').classList.contains('hidden'));
+
+  // Duplicate, layer 1: the row flag (what the portal computes from
+  // the notes) refuses BEFORE any write.
+  armStatusChange(metaC1.reset_class_request);
+  const notesBeforeDup = tables.students[0].notes;
+  await vm.runInContext("submitRescheduleRequest({ preventDefault() {} })", sandbox);
+  check('status change submit (ResetClass): a second submit while pending is refused early — nothing written',
+    tables.students[0].notes === notesBeforeDup &&
+    notifies.some(m => m.includes('already pending with Admin')));
+
+  // Duplicate, layer 2: the notes-level guard inside the shared
+  // filing helper refuses even if the row flag was stale.
+  armStatusChange(null);
+  await vm.runInContext("submitRescheduleRequest({ preventDefault() {} })", sandbox);
+  const metaC1b = JSON.parse(tables.students[0].notes);
+  check('status change submit (ResetClass): the notes-level duplicate guard also refuses (history stays at one)',
+    metaC1b.reset_class_history.length === 1 &&
+    notifies.some(m => m.includes('already pending')));
+
+  // Non-sentinel path unchanged: a normal status choice for another
+  // student still files a reschedule_request exactly as before.
+  sandbox.TODAY_CLASSES = [{
+    id: 'SCH-C2', student_id: 'STU-C2', start_time: '11:00:00', end_time: '11:30:00',
+    log: { status: 'Completed' }, students: { name: 'Second Child' }, pendingResetClassReq: null,
+  }];
+  registry.get('reschedScheduleId').value = 'SCH-C2';
+  registry.get('reschedNewStatus').value = 'Absent';
+  registry.get('reschedReasonSelect').value = 'Marked by mistake';
+  registry.get('reschedNotes').value = '';
+  notifies.length = 0;
+  await vm.runInContext("submitRescheduleRequest({ preventDefault() {} })", sandbox);
+  const metaC2 = JSON.parse(tables.students[1].notes);
+  check('status change submit (normal status): still files a reschedule_request exactly as before',
+    !!metaC2.reschedule_request && metaC2.reschedule_request.requested_status === 'Absent' &&
+    metaC2.reset_class_request === undefined &&
+    notifies.some(m => m.includes('Reschedule request submitted')));
+}
+
+// ===========================================================================
 // Part 4 — REAL js/leaves.js handlers: scan, approve, refusals,
 // decline, manager parity, and the decision-3 leave cycle
 // ===========================================================================
@@ -734,9 +897,9 @@ function seedResetWorld(role) {
   w.tables.attendance_logs.push({ id: 'LOG-R', schedule_id: 'SCH-A', student_id: 'STU-A', teacher_id: 'TCH-1', date: '2026-11-10', status: 'Running', created_at: '2026-11-10T05:20:00Z' });
   await vm.runInContext("handleApproveTeacherRequest('STU-A', 'reset_class')", w.sandbox);
   const meta = JSON.parse(w.tables.students[0].notes);
-  check('admin approve refusal: class no longer Leave/Absent → nothing deleted, request stays pending',
+  check('admin approve refusal: class no longer in a marked state (Running) → nothing deleted, request stays pending',
     w.tables.attendance_logs.length === 3 && meta.reset_class_request.status === 'pending' &&
-    w.notifies.some(m => m.includes('no longer marked Leave/Absent') && m.includes('NOT approved')));
+    w.notifies.some(m => m.includes('no longer marked') && m.includes('NOT approved')));
 }
 {
   // Refusal: the original schedule is gone — never invent a slot.
@@ -758,6 +921,104 @@ function seedResetWorld(role) {
     meta.reset_class_request.status === 'declined' && meta.reset_class_request.declined_by === 'owner' &&
     meta.reset_class_request.decline_reason === 'Cannot approve this week' &&
     meta.reset_class_request.notes === 'please reset');
+}
+function seedCompletedResetWorld(role) {
+  const w = makeLeavesWorld(role);
+  w.tables.students.push({
+    id: 'STU-C', name: 'Child C', status: 'Active', assigned_teacher_id: 'TCH-1', family_id: 'FAM-1',
+    notes: JSON.stringify({
+      reset_class_request: {
+        id: 'RESET-C', type: 'reset_class_request', student_id: 'STU-C', student_name: 'Child C',
+        schedule_id: 'SCH-C', teacher_id: 'TCH-1', teacher_name: 'Teacher One',
+        class_date: '2026-11-10', schedule_label: '09:00 - 09:30 PKT', current_status: 'Completed',
+        notes: 'Marked by mistake', status: 'pending', requested_at: '2026-11-10T05:40:00.000Z',
+      },
+      reset_class_history: [],
+    }),
+  });
+  w.tables.class_schedules.push({ id: 'SCH-C', student_id: 'STU-C', teacher_id: 'TCH-1', day_of_week: 2, start_time: '09:00', end_time: '09:30' });
+  w.tables.attendance_logs.push(
+    { id: 'LOG-CW', schedule_id: 'SCH-C', student_id: 'STU-C', teacher_id: 'TCH-1', date: '2026-11-10', status: 'Waiting', created_at: '2026-11-10T05:00:00Z' },
+    { id: 'LOG-CR', schedule_id: 'SCH-C', student_id: 'STU-C', teacher_id: 'TCH-1', date: '2026-11-10', status: 'Running', created_at: '2026-11-10T05:05:00Z' },
+    { id: 'LOG-CC', schedule_id: 'SCH-C', student_id: 'STU-C', teacher_id: 'TCH-1', date: '2026-11-10', status: 'Completed', created_at: '2026-11-10T05:35:00Z', lesson_notes: '{"sabaq":"recorded lesson"}' },
+  );
+  return w;
+}
+{
+  // Filed from the Status Change modal on a Completed class and
+  // approved by the OWNER: the whole day chain (Waiting -> Running
+  // -> Completed) is deleted, so the class computes back to
+  // Scheduled — the extended approval gate accepts Completed.
+  const w = seedCompletedResetWorld('owner');
+  await vm.runInContext("handleApproveTeacherRequest('STU-C', 'reset_class')", w.sandbox);
+  const meta = JSON.parse(w.tables.students[0].notes);
+  check('admin approve (owner, Completed class): the day log chain is deleted — the class is Scheduled again',
+    w.tables.attendance_logs.filter(l => l.schedule_id === 'SCH-C').length === 0 &&
+    meta.reset_class_request.status === 'approved' && meta.reset_class_request.approved_by === 'owner' &&
+    w.notifies.some(m => m.includes('Reset class approved')));
+}
+{
+  // The same Completed-class approval decided by a MANAGER (parity
+  // with the Leave/Absent reset path).
+  const w = seedCompletedResetWorld('manager');
+  await vm.runInContext("handleApproveTeacherRequest('STU-C', 'reset_class')", w.sandbox);
+  const meta = JSON.parse(w.tables.students[0].notes);
+  check('admin approve (manager, Completed class): chain deleted and decision stamped manager',
+    w.tables.attendance_logs.length === 0 &&
+    meta.reset_class_request.status === 'approved' && meta.reset_class_request.approved_by === 'manager');
+}
+{
+  // Decline for a Completed-class reset: the Completed log — and
+  // the recorded lesson on it — stays exactly as it was.
+  const w = seedCompletedResetWorld('owner');
+  await vm.runInContext("handleDeclineTeacherRequest('STU-C', 'reset_class')", w.sandbox);
+  const meta = JSON.parse(w.tables.students[0].notes);
+  const completed = w.tables.attendance_logs.find(l => l.id === 'LOG-CC');
+  check('admin decline (Completed class): log chain untouched, lesson notes preserved, decision stamped',
+    w.tables.attendance_logs.length === 3 && !!completed && completed.lesson_notes === '{"sabaq":"recorded lesson"}' &&
+    meta.reset_class_request.status === 'declined' && meta.reset_class_request.declined_by === 'owner');
+}
+{
+  // REGRESSION: an already-filed legacy Reschedule request still
+  // approves through the UNTOUCHED reschedule branch — the day's
+  // log is stamped 'Reschedule' verbatim, exactly as before.
+  const w = makeLeavesWorld('owner');
+  const todayUtc = new Date().toISOString().slice(0, 10);
+  w.tables.students.push({
+    id: 'STU-R', name: 'Child R', status: 'Active', assigned_teacher_id: 'TCH-1', family_id: 'FAM-1',
+    notes: JSON.stringify({
+      reschedule_request: {
+        id: 'RESCHED-1', type: 'reschedule_request', student_id: 'STU-R', student_name: 'Child R',
+        schedule_id: 'SCH-R', teacher_id: 'TCH-1', teacher_name: 'Teacher One',
+        current_status: 'Completed', requested_status: 'Reschedule', reason: 'Class was rescheduled with student',
+        notes: '', status: 'pending', requested_at: '2026-11-10T05:40:00.000Z',
+      },
+      reschedule_history: [],
+    }),
+  });
+  w.tables.attendance_logs.push({ id: 'LOG-RC', schedule_id: 'SCH-R', student_id: 'STU-R', teacher_id: 'TCH-1', date: todayUtc, status: 'Completed', created_at: '2026-11-10T05:35:00Z', lesson_notes: '{"sabaq":"recorded lesson"}' });
+  await vm.runInContext("handleApproveTeacherRequest('STU-R', 'reschedule')", w.sandbox);
+  const log = w.tables.attendance_logs.find(l => l.id === 'LOG-RC');
+  const meta = JSON.parse(w.tables.students[0].notes);
+  check('regression: a legacy Reschedule request still approves verbatim (status stamped Reschedule)',
+    !!log && log.status === 'Reschedule' && String(log.lesson_notes).includes('[Admin Override]') &&
+    meta.reschedule_request.status === 'approved');
+}
+{
+  // REGRESSION: a stored 'Reschedule' attendance row is excluded
+  // from every attendance-summary count (never double-counted) —
+  // removing the dropdown option does not orphan existing rows.
+  const sandbox = { console };
+  sandbox.window = sandbox;
+  vm.createContext(sandbox);
+  vm.runInContext(read('js/attendance-summary.js'), sandbox);
+  const sum = sandbox.window.AttendanceSummary.summarize([
+    { date: '2026-11-10', status: 'Reschedule' },
+    { date: '2026-11-10', status: 'Completed' },
+    { date: '2026-11-10', status: 'Absent' },
+  ], '2026-11');
+  check("regression: a stored 'Reschedule' row counts in NO summary bucket (present/absent/leave all exclude it)",
+    sum.present === 1 && sum.absent === 1 && sum.leave === 0 && sum.eligible === 2, JSON.stringify(sum));
 }
 {
   // Decision-3 leave cycle, end to end through the real handlers and
