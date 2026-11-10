@@ -106,7 +106,7 @@ await fakeDb.exec(`CREATE TABLE advance_requests (
   check('W setup: schema marker is v6', marker && marker.value === '2026-11-07-v8', JSON.stringify(marker));
   const h = await call('https://worker.test/api/health', { method: 'GET' });
   check('W setup: health reports plan-capture release + schema v6',
-    h.status === 200 && h.data && h.data.version === '2026-11-07-manual-cycles' && h.data.schema === '2026-11-07-v8', h.text.slice(0, 200));
+    h.status === 200 && h.data && h.data.version === '2026-11-10-teacher-self-reset' && h.data.schema === '2026-11-07-v8', h.text.slice(0, 200));
 }
 fakeDb.seed("INSERT INTO teachers (id, full_name, address, status) VALUES (?, ?, ?, ?)",
   'TCH-A', 'Teacher A', JSON.stringify({ salary_slips: {} }), 'Active');
@@ -330,7 +330,7 @@ function bootTeacherVm(flagOn) {
 const runIn = (env, code) => vm.runInContext(code, env.sandbox);
 
 // Static gates: the shipped flag is ON — the v7 Worker deploy
-// (release 2026-11-07-manual-cycles) was verified live via
+// (release 2026-11-10-teacher-self-reset) was verified live via
 // /api/health on 2026-11-07 before this flip landed, so plan
 // capture is live together with the ledger. The builder is only
 // invoked behind the flag, and the plan section exists nowhere in

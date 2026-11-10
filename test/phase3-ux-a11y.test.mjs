@@ -191,7 +191,7 @@ check('HERO no dead Join link left in parent template',
 
 // ==== Guards: no release bump, no native popups in the new helper ====
 check('GUARD WORKER_RELEASE is the commission release',
-  WORKER.includes("2026-11-07-manual-cycles"));
+  WORKER.includes("2026-11-10-teacher-self-reset"));
 check('GUARD new modal helper uses no native alert/confirm/prompt',
   !MODAL_A11Y.includes('alert(') && !MODAL_A11Y.includes('confirm(') && !MODAL_A11Y.includes('prompt('));
 

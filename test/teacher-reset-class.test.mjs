@@ -4,17 +4,22 @@
 // admin leave mechanics (leave ends schedule+assignment; return
 // restores the previous teacher's roster as Not Scheduled).
 //
-//   Part 1 drives the REAL Worker against a fake D1: the teacher
-//   role is DENIED attendance_logs DELETE (this is why the Waiting
-//   row's tick/reset button is NOT built — the parent decides on a
-//   Worker change separately), while manager/owner DELETE works and
-//   is what Reset class approval uses.
+//   Part 1 drives the REAL Worker against a fake D1: manager/owner
+//   DELETE on attendance_logs works and is what Reset class
+//   approval uses; a teacher delete of a set containing a Leave row
+//   is denied. Part 1b proves the teacher SELF-RESET guard (owner
+//   decision, later the same day): a teacher may delete ONLY their
+//   own Waiting/Running rows for one schedule+date — everything
+//   else is a 403 with nothing removed.
 //   Part 2 pins the structural contract in teacher.html /
 //   js/leaves.js (counts, trimmed rows, gating, locks, request keys).
 //   Part 3 executes the REAL teacher.html functions in a vm over a
 //   fake DOM + fake db: Student List rendering (order, labels,
 //   buttons), Leave/Absent preselect, Reset class submit (with and
-//   without a note) and the duplicate-pending guard.
+//   without a note) and the duplicate-pending guard. Part 3b runs
+//   the REAL self-reset handler (Waiting/Running): happy paths,
+//   the (schedule_id, today) delete shape, stale-status refusal,
+//   confirm-decline, and the server-refusal path.
 //   Part 4 executes the REAL js/leaves.js handlers in a vm: the
 //   Requests scan, approve (log deleted -> Scheduled again),
 //   refusal paths (schedule gone / status changed), decline, manager
@@ -124,7 +129,7 @@ fakeDb.seed("INSERT INTO attendance_logs (id, schedule_id, student_id, teacher_i
 
 const delBody = { table: 'attendance_logs', action: 'delete', filters: [eqF('schedule_id', 'SCH-1'), eqF('date', '2026-11-10')] };
 const teacherDel = await dbPost(TOK.teacher, delBody);
-check('worker: teacher DELETE on attendance_logs is DENIED (Waiting-reset stop point)',
+check('worker: teacher delete of a MIXED Waiting+Leave set is DENIED (Leave is never teacher-resettable)',
   teacherDel.status === 403, 'status=' + teacherDel.status);
 check('worker: teacher delete attempt removed nothing',
   fakeDb.all("SELECT COUNT(*) AS n FROM attendance_logs WHERE schedule_id='SCH-1'")[0].n === 2);
@@ -137,6 +142,65 @@ check('worker: manager delete reports the deleted row count',
 check('worker: manager delete removed only the targeted schedule+date rows',
   fakeDb.all("SELECT COUNT(*) AS n FROM attendance_logs WHERE schedule_id='SCH-1'")[0].n === 0 &&
   fakeDb.all("SELECT COUNT(*) AS n FROM attendance_logs WHERE schedule_id='SCH-2'")[0].n === 1);
+
+// ===========================================================================
+// Part 1b — REAL Worker: the teacher SELF-RESET delete guard.
+// A teacher may delete ONLY their own rows for one schedule+date
+// whose stored statuses are all Waiting/Running. Any other status
+// in the matched set, another teacher's rows, or an unconstrained
+// delete is denied and removes nothing.
+// ===========================================================================
+const tokTeacherB = await createSessionToken({ sub: 'T-B', role: 'teacher' }, WORKER_SECRET);
+fakeDb.seed("INSERT INTO teachers (id, full_name, status) VALUES ('T-B', 'Teacher B', 'Active')");
+fakeDb.seed("INSERT INTO students (id, family_id, name, assigned_teacher_id, status) VALUES ('ST-2', 'FAM-1', 'Child Two', 'T-B', 'Active')");
+for (const [sid, stid, tid, tm] of [['SCH-B1', 'ST-2', 'T-B', '09:00'], ['SCH-3', 'ST-1', 'T-A', '12:00'], ['SCH-4', 'ST-1', 'T-A', '13:00'], ['SCH-5', 'ST-1', 'T-A', '14:00'], ['SCH-6', 'ST-1', 'T-A', '15:00']]) {
+  fakeDb.seed(`INSERT INTO class_schedules (id, student_id, teacher_id, day_of_week, start_time, end_time) VALUES ('${sid}', '${stid}', '${tid}', 2, '${tm}', '${tm}')`);
+}
+fakeDb.seed("INSERT INTO attendance_logs (id, schedule_id, student_id, teacher_id, class_date, date, status) VALUES ('LOG-WB', 'SCH-B1', 'ST-2', 'T-B', '2026-11-10', '2026-11-10', 'Waiting')");
+fakeDb.seed("INSERT INTO attendance_logs (id, schedule_id, student_id, teacher_id, class_date, date, status) VALUES ('LOG-W3', 'SCH-3', 'ST-1', 'T-A', '2026-11-10', '2026-11-10', 'Waiting')");
+fakeDb.seed("INSERT INTO attendance_logs (id, schedule_id, student_id, teacher_id, class_date, date, status) VALUES ('LOG-R3', 'SCH-3', 'ST-1', 'T-A', '2026-11-10', '2026-11-10', 'Running')");
+fakeDb.seed("INSERT INTO attendance_logs (id, schedule_id, student_id, teacher_id, class_date, date, status) VALUES ('LOG-C4', 'SCH-4', 'ST-1', 'T-A', '2026-11-10', '2026-11-10', 'Completed')");
+fakeDb.seed("INSERT INTO attendance_logs (id, schedule_id, student_id, teacher_id, class_date, date, status) VALUES ('LOG-W5a', 'SCH-5', 'ST-1', 'T-A', '2026-11-10', '2026-11-10', 'Waiting')");
+fakeDb.seed("INSERT INTO attendance_logs (id, schedule_id, student_id, teacher_id, class_date, date, status) VALUES ('LOG-W5b', 'SCH-5', 'ST-1', 'T-A', '2026-11-10', '2026-11-10', 'Waiting')");
+fakeDb.seed("INSERT INTO attendance_logs (id, schedule_id, student_id, teacher_id, class_date, date, status) VALUES ('LOG-W6', 'SCH-6', 'ST-1', 'T-A', '2026-11-10', '2026-11-10', 'Waiting')");
+const rowsFor = (sid) => fakeDb.all('SELECT COUNT(*) AS n FROM attendance_logs WHERE schedule_id=?', sid)[0].n;
+const delFor = (sid, dateCol = 'date') => ({ table: 'attendance_logs', action: 'delete', filters: [eqF('schedule_id', sid), eqF(dateCol, '2026-11-10')] });
+
+const selfWait = await dbPost(TOK.teacher, delFor('SCH-5'));
+check('self-reset worker: teacher deletes their OWN all-Waiting rows (200, count reported)',
+  selfWait.status === 200 && selfWait.json && selfWait.json.deleted === 2 && rowsFor('SCH-5') === 0,
+  'status=' + selfWait.status + ' body=' + selfWait.text.slice(0, 120));
+const selfRun = await dbPost(TOK.teacher, delFor('SCH-3'));
+check('self-reset worker: teacher deletes a Waiting+Running chain (every row resettable)',
+  selfRun.status === 200 && selfRun.json && selfRun.json.deleted === 2 && rowsFor('SCH-3') === 0,
+  'status=' + selfRun.status + ' body=' + selfRun.text.slice(0, 120));
+const selfCompleted = await dbPost(TOK.teacher, delFor('SCH-4'));
+check('self-reset worker: a Completed row in the set denies the delete (403, row intact)',
+  selfCompleted.status === 403 && rowsFor('SCH-4') === 1, 'status=' + selfCompleted.status);
+const selfLeave = await dbPost(TOK.teacher, delFor('SCH-2'));
+check('self-reset worker: a Leave row denies the delete (403, row intact — admin approval path only)',
+  selfLeave.status === 403 && rowsFor('SCH-2') === 1, 'status=' + selfLeave.status);
+const selfForeign = await dbPost(TOK.teacher, delFor('SCH-B1'));
+check("self-reset worker: another teacher's rows are outside scope (no-op, their rows intact)",
+  selfForeign.status === 200 && selfForeign.json && selfForeign.json.deleted === 0 && rowsFor('SCH-B1') === 1,
+  'status=' + selfForeign.status + ' body=' + selfForeign.text.slice(0, 120));
+const selfNoFilters = await dbPost(TOK.teacher, { table: 'attendance_logs', action: 'delete', filters: [] });
+check('self-reset worker: an UNCONSTRAINED teacher delete is denied',
+  selfNoFilters.status === 403, 'status=' + selfNoFilters.status);
+const selfNoDate = await dbPost(TOK.teacher, { table: 'attendance_logs', action: 'delete', filters: [eqF('schedule_id', 'SCH-6')] });
+check('self-reset worker: schedule_id without a date is denied (row intact)',
+  selfNoDate.status === 403 && rowsFor('SCH-6') === 1, 'status=' + selfNoDate.status);
+const selfNoSched = await dbPost(TOK.teacher, { table: 'attendance_logs', action: 'delete', filters: [eqF('date', '2026-11-10')] });
+check('self-reset worker: a date without schedule_id is denied',
+  selfNoSched.status === 403, 'status=' + selfNoSched.status);
+const selfClassDate = await dbPost(TOK.teacher, delFor('SCH-6', 'class_date'));
+check('self-reset worker: the class_date column constrains the delete just like date',
+  selfClassDate.status === 200 && selfClassDate.json && selfClassDate.json.deleted === 1 && rowsFor('SCH-6') === 0,
+  'status=' + selfClassDate.status + ' body=' + selfClassDate.text.slice(0, 120));
+const mgrCompleted = await dbPost(TOK.manager, delFor('SCH-4'));
+check('self-reset worker: manager delete is UNCHANGED (a Completed row still deletes via the portal path)',
+  mgrCompleted.status === 200 && mgrCompleted.json && mgrCompleted.json.deleted === 1 && rowsFor('SCH-4') === 0,
+  'status=' + mgrCompleted.status + ' body=' + mgrCompleted.text.slice(0, 120));
 
 // ===========================================================================
 // Part 2 — structural contract
@@ -228,8 +292,43 @@ check('off-leave: restores the previous teacher from the leave snapshot and clea
   LEAVES.includes('delete meta.assignment_end_date') && LEAVES.includes('Not Scheduled'));
 check('payroll untouched by this commission (no leave/reset wiring in js/payroll.js)',
   !PAYROLL.includes('reset_class') && !PAYROLL.includes('leave_previous_teacher_id'));
-check('worker: teacher attendance_logs delete rule is the documented deny (source of the Waiting-reset stop)',
-  /case 'attendance_logs':\s*\n\s*return action === 'delete' \? 'deny' : 'allow';/.test(WORKER));
+check('worker: teacher attendance delete is GUARDED, no longer blanket-denied (self-reset rule)',
+  WORKER.includes('attendanceTeacherSelfResetDeleteDenied') &&
+  WORKER.includes("const RESETTABLE = new Set(['Waiting', 'Running'])") &&
+  WORKER.includes("role === 'teacher' && table === 'attendance_logs' && action === 'delete'") &&
+  WORKER.includes("filters.push(eq('teacher_id', sub));") &&
+  !WORKER.includes("return action === 'delete' ? 'deny' : 'allow';"));
+check('worker: release marker bumped for the self-reset deploy',
+  WORKER.includes("const WORKER_RELEASE = '2026-11-10-teacher-self-reset';"));
+
+check("today's classes: self-reset button is wired exactly twice (Waiting + Running branches)",
+  (todaySrc.match(/handleTeacherSelfResetClass\('/g) || []).length === 2);
+{
+  const iW = todaySrc.indexOf("stStatus === 'Waiting'");
+  const iR = todaySrc.indexOf("stStatus === 'Running'");
+  const iC = todaySrc.indexOf("stStatus === 'Completed'");
+  const iA = todaySrc.indexOf("stStatus === 'Absent'");
+  const iS = todaySrc.indexOf('Scheduled / Free');
+  check('self-reset: present on Waiting and Running rows',
+    todaySrc.slice(iW, iR).includes('handleTeacherSelfResetClass') &&
+    todaySrc.slice(iR, iC).includes('handleTeacherSelfResetClass'));
+  check('self-reset: absent from Completed + Leave/Absent (request flow lives there) + Scheduled rows',
+    !todaySrc.slice(iC, iA).includes('handleTeacherSelfResetClass') &&
+    !todaySrc.slice(iA, iS).includes('handleTeacherSelfResetClass') &&
+    todaySrc.slice(iA, iS).includes('openResetClassRequestModal') &&
+    !todaySrc.slice(iS).includes('handleTeacherSelfResetClass'));
+}
+const selfResetSrc = extractFunction(TEACHER, 'handleTeacherSelfResetClass');
+check('self-reset handler: in-flight lock + persisted re-read BEFORE any delete',
+  selfResetSrc.includes('_selfResetInFlight.has(lockKey)') &&
+  selfResetSrc.includes(".select('*').eq('schedule_id', scheduleId).eq('date', todayDate)") &&
+  selfResetSrc.indexOf(".select('*')") < selfResetSrc.indexOf('.delete()'));
+check('self-reset handler: refuses when the latest status left Waiting/Running; confirms via lmsConfirm',
+  selfResetSrc.includes("latestLog.status !== 'Waiting' && latestLog.status !== 'Running'") &&
+  selfResetSrc.includes('no longer Waiting or Running') && selfResetSrc.includes('await lmsConfirm({'));
+check('self-reset handler: delete uses the approval-path shape (schedule_id + date); a server refusal is an error, never a success',
+  selfResetSrc.includes(".delete().eq('schedule_id', scheduleId).eq('date', todayDate)") &&
+  selfResetSrc.includes('The class was NOT reset'));
 
 // ===========================================================================
 // Shared vm fixtures (Parts 3-4)
@@ -450,6 +549,94 @@ function makeFakeDb(tables) {
   check('reset class submit (empty note): submission succeeds with an empty note',
     notesR2.reset_class_request.status === 'pending' && notesR2.reset_class_request.notes === '' &&
     notesR2.reset_class_request.current_status === 'Absent');
+}
+
+// ===========================================================================
+// Part 3b — REAL teacher.html self-reset handler (Waiting/Running)
+// in a vm over a fake db: happy paths, the (schedule_id, today)
+// delete shape proven by untouched control rows, stale-status
+// refusal, confirm-decline, and the server-refusal (403) path.
+// ===========================================================================
+{
+  const notifies = [];
+  let reloads = 0;
+  let confirmAnswer = true;
+  const tables = { attendance_logs: [] };
+  const sandbox = {
+    console,
+    CURRENT_TEACHER: { id: 'TCH-1', full_name: 'Teacher One' },
+    TODAY_CLASSES: [],
+    db: null,
+    getPktNowParts: () => ({ date: '2026-11-10', day: 2, minutes: 600 }),
+    lmsNotify: (msg, opts) => { notifies.push({ msg: String(msg), type: (opts && opts.type) || '' }); },
+    lmsConfirm: async () => confirmAnswer,
+    loadTeacherPortalData: async () => { reloads++; },
+    notifyClassSessionSync: () => {},
+  };
+  sandbox.window = sandbox;
+  vm.createContext(sandbox);
+  const lockDecl = TEACHER.slice(TEACHER.indexOf('const _selfResetInFlight'), TEACHER.indexOf(';', TEACHER.indexOf('const _selfResetInFlight')) + 1);
+  vm.runInContext(lockDecl + '\n' + extractFunction(TEACHER, 'handleTeacherSelfResetClass'), sandbox);
+
+  const todayRows = () => tables.attendance_logs.filter(r => r.schedule_id === 'SCH-S1' && r.date === '2026-11-10');
+  const controlRows = () => tables.attendance_logs.filter(r => !(r.schedule_id === 'SCH-S1' && r.date === '2026-11-10'));
+  function arm(status, dbOverride) {
+    tables.attendance_logs = [
+      { schedule_id: 'SCH-S1', student_id: 'ST-1', teacher_id: 'TCH-1', date: '2026-11-10', status, created_at: '2026-11-10T05:00:00Z' },
+      { schedule_id: 'SCH-S1', student_id: 'ST-1', teacher_id: 'TCH-1', date: '2026-11-09', status: 'Waiting', created_at: '2026-11-09T05:00:00Z' },
+      { schedule_id: 'SCH-OTHER', student_id: 'ST-1', teacher_id: 'TCH-1', date: '2026-11-10', status: 'Waiting', created_at: '2026-11-10T05:00:00Z' },
+    ];
+    sandbox.TODAY_CLASSES = [{ id: 'SCH-S1', student_id: 'ST-1', students: { name: 'Child One' }, log: { status } }];
+    sandbox.db = dbOverride || makeFakeDb(tables);
+    notifies.length = 0; reloads = 0; confirmAnswer = true;
+  }
+  function makeDeleteFailingDb(t) {
+    const inner = makeFakeDb(t);
+    return {
+      from(table) {
+        const b = inner.from(table);
+        let isDelete = false;
+        const origDelete = b.delete;
+        b.delete = () => { isDelete = true; return origDelete(); };
+        const origThen = b.then;
+        b.then = (res, rej) => isDelete
+          ? Promise.resolve({ data: null, error: { message: 'Forbidden' } }).then(res, rej)
+          : origThen(res, rej);
+        return b;
+      },
+    };
+  }
+
+  arm('Waiting');
+  await vm.runInContext("handleTeacherSelfResetClass('SCH-S1')", sandbox);
+  check('self-reset click (Waiting): today\'s rows deleted — class is Scheduled again',
+    todayRows().length === 0 && notifies.some(n => n.msg.includes('Scheduled again')));
+  check('self-reset click: the delete was constrained to (schedule_id, today) — control rows untouched',
+    controlRows().length === 2);
+  check('self-reset click: the portal data reloads after a successful reset', reloads >= 1);
+
+  arm('Running');
+  await vm.runInContext("handleTeacherSelfResetClass('SCH-S1')", sandbox);
+  check('self-reset click (Running): today\'s rows deleted with a success message',
+    todayRows().length === 0 && notifies.some(n => n.msg.includes('Scheduled again')));
+
+  arm('Running');
+  tables.attendance_logs[0].status = 'Completed'; // persisted state moved on after the row rendered
+  await vm.runInContext("handleTeacherSelfResetClass('SCH-S1')", sandbox);
+  check('self-reset click: a class that became Completed is REFUSED (re-read wins over the stale row)',
+    todayRows().length === 1 && notifies.some(n => n.type === 'error' && n.msg.includes('no longer Waiting or Running')));
+
+  arm('Waiting');
+  confirmAnswer = false;
+  await vm.runInContext("handleTeacherSelfResetClass('SCH-S1')", sandbox);
+  check('self-reset click: declining the confirmation deletes nothing',
+    todayRows().length === 1 && !notifies.some(n => n.msg.includes('Scheduled again')));
+
+  arm('Waiting', makeDeleteFailingDb(tables));
+  await vm.runInContext("handleTeacherSelfResetClass('SCH-S1')", sandbox);
+  check('self-reset click: a server refusal (403) shows an error and deletes nothing — never a silent success',
+    todayRows().length === 1 && notifies.some(n => n.type === 'error' && n.msg.includes('NOT reset')) &&
+    !notifies.some(n => n.msg.includes('Scheduled again')));
 }
 
 // ===========================================================================

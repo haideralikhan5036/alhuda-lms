@@ -4558,6 +4558,9 @@ font-family: var(--font-num) !important;
               <button onclick="openLeaveAbsentModal('${escapeJsAttr(c.id)}', '${escapeJsAttr(c.student_id)}', '${escapeJsAttr(CURRENT_TEACHER.id)}', '${safeStudentName}')" class="px-2.5 py-1 bg-rose-50 hover:bg-rose-100 text-rose-800 border border-rose-300 rounded-lg text-xs font-bold shadow-2xs flex items-center gap-1 transition">
                 <i class="fa-solid fa-user-xmark"></i> LEAVE / ABSENT
               </button>
+              <button onclick="handleTeacherSelfResetClass('${escapeJsAttr(c.id)}')" class="px-2 py-1 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 rounded-lg text-xs font-bold shadow-2xs flex items-center gap-1 transition" title="Reset this class back to Scheduled yourself — no Admin approval needed">
+                <i class="fa-solid fa-rotate-left"></i> Reset class
+              </button>
               ${effectiveZoomLink ? `
                 <button onclick="launchTeacherZoomClassById('${escapeJsAttr(c.id)}')" class="px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300 rounded-lg text-xs font-bold transition flex items-center gap-1" title="Re-open Zoom Meeting">
                   <i class="fa-solid fa-video text-emerald-600"></i> Zoom
@@ -4572,6 +4575,9 @@ font-family: var(--font-num) !important;
               </button>
               <button onclick="openLeaveAbsentModal('${escapeJsAttr(c.id)}', '${escapeJsAttr(c.student_id)}', '${escapeJsAttr(CURRENT_TEACHER.id)}', '${safeStudentName}')" class="px-2.5 py-1 bg-rose-50 hover:bg-rose-100 text-rose-800 border border-rose-300 rounded-lg text-xs font-bold shadow-2xs flex items-center gap-1 transition">
                 <i class="fa-solid fa-user-xmark"></i> LEAVE / ABSENT
+              </button>
+              <button onclick="handleTeacherSelfResetClass('${escapeJsAttr(c.id)}')" class="px-2 py-1 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 rounded-lg text-xs font-bold shadow-2xs flex items-center gap-1 transition" title="Reset this class back to Scheduled yourself — no Admin approval needed">
+                <i class="fa-solid fa-rotate-left"></i> Reset class
               </button>
               ${effectiveZoomLink ? `
                 <button onclick="launchTeacherZoomClassById('${escapeJsAttr(c.id)}')" class="px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300 rounded-lg text-xs font-bold transition flex items-center gap-1">
@@ -4964,6 +4970,88 @@ font-family: var(--font-num) !important;
         }
       } finally {
         _startClassInFlight.delete(lockKey);
+      }
+    }
+
+    // Teacher self-reset (owner decision, 2026-11-10): the SAME
+    // "Reset class" words as the Leave/Absent request flow, but a
+    // DIFFERENT action — a teacher resets their OWN Waiting or
+    // Running class back to Scheduled BY THEMSELVES, with no Admin
+    // approval. Admin approval stays only for Leave/Absent resets
+    // (openResetClassRequestModal). Mechanics mirror the admin
+    // approval delete in js/leaves.js: removing today's attendance
+    // rows returns the class to the virtual Scheduled (no-log)
+    // state. The Worker guards the delete server-side (only the
+    // teacher's own Waiting/Running rows may be removed), and this
+    // handler re-reads the persisted latest log before asking, so a
+    // class whose status changed under the teacher is never reset
+    // by mistake.
+    const _selfResetInFlight = new Set();
+    async function handleTeacherSelfResetClass(scheduleId) {
+      const lockKey = String(scheduleId || '');
+      if (!lockKey || _selfResetInFlight.has(lockKey)) return;
+      _selfResetInFlight.add(lockKey);
+      try {
+        const slot = (TODAY_CLASSES || []).find(c => String(c.id) === String(scheduleId));
+        if (!slot) {
+          lmsNotify("Class record not found. Please refresh the page.", { type: 'error' });
+          return;
+        }
+        const todayDate = getPktNowParts().date;
+        const studentName = slot.students?.name || 'Student';
+
+        // Re-read the persisted state — the in-memory row may be
+        // stale (another tab, or the class was completed meanwhile).
+        const { data: dayLogs, error: fetchErr } = await db.from('attendance_logs').select('*').eq('schedule_id', scheduleId).eq('date', todayDate);
+        if (fetchErr) {
+          console.error("handleTeacherSelfResetClass re-read failed:", fetchErr);
+          lmsNotify("Could not verify the current class status. Please refresh and try again.", { type: 'error' });
+          return;
+        }
+        const latestLog = (dayLogs || []).slice().sort((a, b) => String(a.created_at || '') < String(b.created_at || '') ? 1 : -1)[0];
+        if (!latestLog || (latestLog.status !== 'Waiting' && latestLog.status !== 'Running')) {
+          lmsNotify(`This class is no longer Waiting or Running (current status: ${latestLog ? latestLog.status : 'Scheduled'}), so it cannot be reset. The list has been refreshed.`, { type: 'error' });
+          await loadTeacherPortalData();
+          return;
+        }
+
+        const confirmed = await lmsConfirm({
+          title: 'Reset class?',
+          message: `${studentName}'s class is currently ${latestLog.status}. Reset it back to Scheduled? The class will return to its Start Zoom state, as if it had not been started.`,
+          confirmText: 'Reset class',
+          cancelText: 'Keep class'
+        });
+        if (!confirmed) return;
+
+        const delRes = await db.from('attendance_logs').delete().eq('schedule_id', scheduleId).eq('date', todayDate);
+        if (delRes && delRes.error) {
+          // A refusal here (e.g. the server does not allow the
+          // self-reset yet, or the rows left the resettable state)
+          // is reported plainly — never as a success.
+          console.error("handleTeacherSelfResetClass delete failed:", delRes.error);
+          lmsNotify("Reset was refused by the server. The class was NOT reset — if this keeps happening, the portal server may still need its update.", { type: 'error' });
+          return;
+        }
+        if (delRes && typeof delRes.deleted === 'number' && delRes.deleted === 0) {
+          lmsNotify("Nothing was reset — no Waiting/Running record was found for today. The list has been refreshed.", { type: 'error' });
+          await loadTeacherPortalData();
+          return;
+        }
+
+        notifyClassSessionSync({
+          scheduleId,
+          studentId: slot.student_id,
+          teacherId: CURRENT_TEACHER?.id,
+          date: todayDate,
+          status: 'Scheduled'
+        });
+        lmsNotify(`✅ Class reset for ${studentName} — it is Scheduled again.`);
+        await loadTeacherPortalData();
+      } catch (e) {
+        console.error("handleTeacherSelfResetClass exception:", e);
+        lmsNotify("Reset failed unexpectedly. The class was NOT reset.", { type: 'error' });
+      } finally {
+        _selfResetInFlight.delete(lockKey);
       }
     }
 
