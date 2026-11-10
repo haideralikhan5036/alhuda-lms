@@ -429,7 +429,7 @@
                 </div>
                 <div>
                   <span class="text-slate-500 font-bold block text-[11px]">Request Status:</span>
-                  <span class="font-bold text-teal-800">Pending — approving deletes that day's Leave/Absent record, so the class becomes Scheduled again</span>
+                  <span class="font-bold text-teal-800">Pending — approving deletes that day's marked record, so the class becomes Scheduled again</span>
                 </div>
                 ${req.notes ? `
                   <div class="sm:col-span-2 text-slate-600 italic bg-white p-2 rounded-lg border border-teal-200/60">
@@ -878,8 +878,10 @@
           // touching the day log: the request must still be pending,
           // the original schedule must still exist and still belong
           // to this student/teacher (never invent a slot), and the
-          // request day's latest attendance record must STILL be
-          // Leave/Absent. Approval then DELETES that day's log chain
+          // request day's latest attendance record must STILL be a
+          // marked record — Leave/Absent, or Completed/Present when
+          // the request was filed from the Status Change modal on an
+          // already-held class. Approval then DELETES that day's log chain
           // for the schedule — with no log row left, the class is
           // Scheduled again. lesson_notes is never overwritten here
           // (the reschedule branch's [Admin Override] overwrite is
@@ -914,8 +916,8 @@
           const { data: dayLogs, error: logFetchErr } = await db.from('attendance_logs').select('*').eq('schedule_id', req.schedule_id).eq('date', req.class_date);
           if (logFetchErr) throw logFetchErr;
           const latestDayLog = (dayLogs || []).slice().sort((a, b) => String(a.created_at || '') < String(b.created_at || '') ? 1 : -1)[0];
-          if (!latestDayLog || (latestDayLog.status !== 'Leave' && latestDayLog.status !== 'Absent')) {
-            refuseResetClass(`Cannot reset this class: it is no longer marked Leave/Absent for ${req.class_date}. The request was NOT approved — decline it to clear it from the queue.`);
+          if (!latestDayLog || !['Leave', 'Absent', 'Completed', 'Present'].includes(latestDayLog.status)) {
+            refuseResetClass(`Cannot reset this class: it is no longer marked for ${req.class_date}. The request was NOT approved — decline it to clear it from the queue.`);
             return;
           }
 
