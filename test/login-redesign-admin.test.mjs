@@ -1,10 +1,12 @@
-// Owner login redesign (2026-11-07): the approved split-card skin
-// applied to #ownerLoginView in index.html — the last of the four
-// login surfaces. This suite proves, against the REAL index.html and
-// the REAL js/auth.js functions:
+// Owner login redesign — the skin on #ownerLoginView in index.html.
+// Originally the 2026-11-07 split-card (lgn-) skin; RE-SKINNED
+// 2026-11-10 to the Fee Management portal login design (flg-) on the
+// owner's instruction, like the other three portals. This suite
+// proves, against the REAL index.html and the REAL js/auth.js
+// functions:
 //   1. only the login region changed skin: every preserved element
 //      (ids, labels, input attributes, submit handler, password
-//      toggle wiring, error box) is intact, the new lgn- landmarks
+//      toggle wiring, error box) is intact, the new flg- landmarks
 //      are present, and NO flagship aui- classes leaked into the
 //      gate (shell styles stay out, login styles stay in);
 //   2. the PR #127 guarantees survive: the view is still the fixed
@@ -49,10 +51,10 @@ for (const id of ['ownerLoginView', 'ownerLoginUsername', 'ownerLoginPassword',
 }
 check('view still starts hidden (no flash before boot decides)',
   LOGIN.startsWith('<div id="ownerLoginView" class="hidden '));
-check('view keeps the dark full-bleed gradient classes',
-  LOGIN.includes('bg-gradient-to-br from-slate-950 via-[#022c22] to-slate-900'));
+check('view carries the fee-style backdrop class (dark #06382a via .flg-screen)',
+  LOGIN.includes('flg-screen'));
 check('form keeps the real submit handler + autocomplete off',
-  LOGIN.includes('<form onsubmit="handleOwnerSignIn(event)" class="lgn-form" autocomplete="off">'));
+  LOGIN.includes('<form id="ownerLoginForm" onsubmit="handleOwnerSignIn(event)" class="flg-form" autocomplete="off">'));
 check('username input keeps its real attributes',
   LOGIN.includes('<input type="text" id="ownerLoginUsername" required placeholder="Enter username" autocomplete="username"'));
 check('password input keeps its real attributes',
@@ -70,61 +72,67 @@ check('error box keeps its ids + default text',
 check('submit keeps its real label',
   LOGIN.includes('id="btnSubmitOwnerLogin"') && LOGIN.includes('Login to Control Center'));
 check('brand block is the real one (logo, name, tagline, heading, sub, footer)',
-  LOGIN.includes('<img src="alhuda_logo.jpg" alt="Al-Huda Islamic Centre" class="lgn-logo">') &&
+  LOGIN.includes('<img class="flg-logo" src="alhuda_logo.jpg" alt="Al-Huda Islamic Centre">') &&
   LOGIN.includes('AL-HUDA ISLAMIC CENTRE') && LOGIN.includes('Owner &amp; Admin Control Center') &&
   LOGIN.includes('Owner &amp; Director Login') &&
   LOGIN.includes('Sign in with authorized credentials to access LMS Admin') &&
   LOGIN.includes('&copy; 2026 Al-Huda Islamic Centre. Authorized personnel only.'));
 
-check('new landmarks: split card + panel + form side',
-  LOGIN.includes('class="lgn-card"') && LOGIN.includes('class="lgn-panel"') &&
-  LOGIN.includes('class="lgn-formside"') && LOGIN.includes('class="lgn-form-inner"'));
-check('new landmarks: illustration scene (slice-filled) + seam + mobile swoosh',
-  LOGIN.includes('class="lgn-scene"') && LOGIN.includes('preserveAspectRatio="xMidYMid slice"') &&
-  LOGIN.includes('class="lgn-seam"') && LOGIN.includes('class="lgn-swoosh"'));
-check('new landmarks: underline input rows + pill CTA with gold chip',
-  count(LOGIN, 'class="lgn-input-row"') === 2 && LOGIN.includes('class="lgn-cta"') &&
-  LOGIN.includes('class="lgn-cta-chip"'));
-check('backdrop decorations ride along (desktop)',
-  LOGIN.includes('class="lgn-deco lgn-deco-tl"') && LOGIN.includes('class="lgn-deco lgn-deco-br"'));
+check('new landmarks: centred dark card + neumorphic deco shapes',
+  LOGIN.includes('class="flg-card"') && LOGIN.includes('class="flg-deco"') &&
+  LOGIN.includes('class="flg-nd flg-nd-halo"'));
+check('new landmarks: dark pill fields + gold pill CTA with dots/done states',
+  count(LOGIN, 'class="flg-pill"') === 2 && LOGIN.includes('class="flg-cta"') &&
+  LOGIN.includes('class="flg-dots"') && LOGIN.includes('class="flg-done"'));
+check('new landmarks: button wrap + confetti layer for the success burst',
+  LOGIN.includes('id="ownerLoginBtnWrap"') && LOGIN.includes('id="ownerLoginConfettiLayer"') &&
+  LOGIN.includes('Signed In') && LOGIN.includes('Secure Authentication System'));
 check('NO flagship aui- classes inside the login view', !LOGIN.includes('aui-'));
 check('old centred-card skin is gone',
   !LOGIN.includes('max-w-md w-full my-auto') &&
   !LOGIN.includes('bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden'));
+check('the 2026-11-07 split-card skin is fully gone', !LOGIN.includes('lgn-'));
 
 // ---------------------------------------------------------------------
-// Part B — the CSS contract (PR #127 + the lgn- stylesheet)
+// Part B — the CSS contract (PR #127 + the flg- stylesheet)
 // ---------------------------------------------------------------------
 check('PR #127: view is still the fixed inset-0 gate with safe centring',
   /#ownerLoginView \{\s*position: fixed;\s*inset: 0;\s*overflow-y: auto;\s*justify-content: safe center;\s*\}/.test(INDEX));
 check('PR #127: portal scale stays 85% (body zoom)',
   INDEX.includes('body { zoom: 0.85; }'));
-check('lgn- stylesheet: desktop split card (radius 28, panel 46%)',
-  INDEX.includes('.lgn-card {') && INDEX.includes('border-radius: 28px') &&
-  INDEX.includes('flex: 0 0 46%'));
-check('lgn- stylesheet: stacked layout below the portal breakpoint',
-  /@media \(max-width: 1023px\) \{\s*\.lgn-deco \{ display: none; \}/.test(INDEX) &&
-  INDEX.includes('.lgn-panel { flex: none; height: 248px; }') &&
-  INDEX.includes('.lgn-seam { display: none; }') &&
-  INDEX.includes('border-radius: 26px 26px 0 0'));
-check('lgn- stylesheet: no global element selectors leak out of the gate',
+check('flg- stylesheet: dark card (radius 38) on the #06382a screen',
+  INDEX.includes('.flg-card {') && INDEX.includes('border-radius: 38px') &&
+  INDEX.includes('#06382a'));
+check('flg- stylesheet: Batch 25 autofill override (fields never paint white)',
+  INDEX.includes('input:-webkit-autofill') && INDEX.includes('0 0 0 1000px #06382a inset'));
+check('flg- stylesheet: shake + confetti + dots keyframes present',
+  INDEX.includes('@keyframes flgBtnShake') && INDEX.includes('@keyframes flgConfettiFly') &&
+  INDEX.includes('@keyframes flgDotBounce'));
+check('flg- stylesheet: deco shapes hidden on small screens',
+  /@media \(max-width: 900px\) \{\s*\.flg-deco \{ display: none; \}/.test(INDEX));
+check('flg- stylesheet: no global element selectors leak out of the gate',
   !/^\s*(section|form|input|button|img|h1|h2|p)\s*\{/m.test(
-    INDEX.slice(INDEX.indexOf('.lgn-deco {'), INDEX.indexOf('/* Responsive Mobile & Desktop Layout Engine */'))));
+    INDEX.slice(INDEX.indexOf('.flg-screen {'), INDEX.indexOf('/* Responsive Mobile & Desktop Layout Engine */'))));
 
 // ---------------------------------------------------------------------
 // Part C — fake DOM from the REAL markup + REAL auth.js execution
 // ---------------------------------------------------------------------
+const mkStyle = () => { const s = {}; s.setProperty = (k, v) => { s[k] = v; }; return s; };
 class FakeEl {
   constructor(id, classAttr, attrs) {
     this.id = id;
     this._set = new Set(String(classAttr || '').split(/\s+/).filter(Boolean));
     this._attrs = attrs || {};
-    this.style = {};
+    this.style = mkStyle();
     this.value = '';
     this.type = this._attrs.type || '';
     this.innerText = '';
     this.textContent = '';
     this.innerHTML = '';
+    this.children = [];
+    this.parentElement = null;
+    this.disabled = false;
+    this._listeners = {};
     this.classList = {
       add: (...cs) => cs.forEach(c => this._set.add(c)),
       remove: (...cs) => cs.forEach(c => this._set.delete(c)),
@@ -134,6 +142,17 @@ class FakeEl {
   get className() { return [...this._set].join(' '); }
   set className(v) { this._set = new Set(String(v).split(/\s+/).filter(Boolean)); }
   getAttribute(k) { return k in this._attrs ? this._attrs[k] : null; }
+  addEventListener(t, fn) { (this._listeners[t] ||= []).push(fn); }
+  __fire(t) { (this._listeners[t] || []).forEach((fn) => fn({ preventDefault() {} })); }
+  appendChild(c) { this.children.push(c); c.parentElement = this; return c; }
+  remove() {
+    if (this.parentElement) {
+      const i = this.parentElement.children.indexOf(this);
+      if (i >= 0) this.parentElement.children.splice(i, 1);
+      this.parentElement = null;
+    }
+  }
+  getBoundingClientRect() { return { left: 0, top: 0, width: 400, height: 55 }; }
 }
 function buildRegistry() {
   const registry = new Map();
@@ -163,6 +182,16 @@ const ownerToken = (exp) => b64url({ sub: 'Faheem', role: 'owner', exp }) + '.fa
 
 function boot({ fetchImpl } = {}) {
   const registry = buildRegistry();
+  // The confetti layer's parent is the card in the real DOM.
+  const layerEl = registry.get('ownerLoginConfettiLayer');
+  const cardEl = registry.get('ownerLoginCard');
+  if (layerEl && cardEl) layerEl.parentElement = cardEl;
+  const observers = [];
+  class FakeMutationObserver {
+    constructor(cb) { this.cb = cb; observers.push(this); }
+    observe() {}
+    disconnect() {}
+  }
   const sessionStore = new Map();
   const localStore = new Map();
   const storage = (store) => ({
@@ -177,6 +206,7 @@ function boot({ fetchImpl } = {}) {
     AbortController,
     setTimeout, clearTimeout,
     URLSearchParams,
+    MutationObserver: FakeMutationObserver,
     sessionStorage: storage(sessionStore),
     localStorage: storage(localStore),
     fetch: fetchImpl || (async () => ({ ok: true, status: 200, json: async () => ({}) })),
@@ -215,7 +245,16 @@ function boot({ fetchImpl } = {}) {
     this.__api = { showOwnerLoginView, showMainAppView, toggleOwnerPassVisibility,
       handleOwnerSignIn, initRoleFromUrl, logoutOwnerPortal };
   `, sandbox);
-  return { api: sandbox.__api, registry, sessionStore, localStore, replaced };
+  // Run the REAL fee-style wiring script from index.html in the same
+  // context, so the decorative button states are driven by the real
+  // handler flow below (submit dispatch + the real error box / view
+  // mutations the handler performs).
+  const wiring = [...INDEX.matchAll(/<script(?![^>]*\bsrc=)[^>]*>([\s\S]*?)<\/script>/g)]
+    .map((m) => m[1]).find((code) => code.includes('Fee-style login states'));
+  if (!wiring) throw new Error('fee-style wiring script not found in index.html');
+  vm.runInContext(wiring, sandbox);
+  const flushObservers = () => observers.forEach((o) => o.cb([], o));
+  return { api: sandbox.__api, registry, sessionStore, localStore, replaced, flushObservers };
 }
 const loginShown = (r) => {
   const v = r.get('ownerLoginView');
@@ -288,11 +327,18 @@ const appShown = (r) => {
   failed.api.showOwnerLoginView();
   failed.registry.get('ownerLoginUsername').value = 'Faheem';
   failed.registry.get('ownerLoginPassword').value = 'wrong';
+  failed.registry.get('ownerLoginForm').__fire('submit');
+  check('fee-style wiring: form submit applies the dots loading state',
+    failed.registry.get('ownerLoginBtnWrap').classList.contains('flg-is-loading'));
   await failed.api.handleOwnerSignIn({ preventDefault() {} });
+  failed.flushObservers();
   check('failed sign-in shows the real error inside the new card + stays on the gate',
     !failed.registry.get('ownerLoginErrorMsg').classList.contains('hidden') &&
     failed.registry.get('ownerLoginErrorText').innerText === 'Invalid username or password.' &&
     loginShown(failed.registry) && !appShown(failed.registry));
+  check('fee-style wiring: the real failed login applies the shake state',
+    failed.registry.get('ownerLoginBtnWrap').classList.contains('flg-is-error') &&
+    !failed.registry.get('ownerLoginBtnWrap').classList.contains('flg-is-loading'));
 
   const good = boot({
     fetchImpl: async () => ({
@@ -303,12 +349,19 @@ const appShown = (r) => {
   good.api.showOwnerLoginView();
   good.registry.get('ownerLoginUsername').value = 'Faheem';
   good.registry.get('ownerLoginPassword').value = 'correct';
+  good.registry.get('ownerLoginForm').__fire('submit');
+  check('fee-style wiring: submit on the success path applies the dots loading state',
+    good.registry.get('ownerLoginBtnWrap').classList.contains('flg-is-loading'));
   await good.api.handleOwnerSignIn({ preventDefault() {} });
+  good.flushObservers();
   check('successful sign-in stores the token, hides the gate, opens the flagship shell',
     !!good.sessionStore.get('alhuda_owner_token') &&
     good.localStore.get('alhuda_active_portal_role') === 'owner' &&
     !loginShown(good.registry) && appShown(good.registry) &&
     good.registry.get('ownerLoginErrorMsg').classList.contains('hidden'));
+  check('fee-style wiring: real success applies the success state + bursts 30 confetti pieces',
+    good.registry.get('ownerLoginBtnWrap').classList.contains('flg-is-success') &&
+    good.registry.get('ownerLoginConfettiLayer').children.length === 30);
   check('sign-in recorded NO navigation away from index.html', good.replaced.length === 0);
 
   // --- logout returns to the NEW login view ---------------------------
