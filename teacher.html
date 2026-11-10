@@ -3512,24 +3512,40 @@ font-family: var(--font-num) !important;
     }
 
     // Returns {ok, token, id} | {unauthorized:true, error} | {unreachable:true}
+    // LOGIN RESILIENCE (2026-11-10): same retry as the other portals
+    // (PR #140) — the login POST is retried up to 3 attempts total on
+    // transient failures only: a network throw, an unparseable reply,
+    // or a 502/503 edge status (~700ms before attempt 2, ~1500ms
+    // before attempt 3). A 401 is returned immediately and is never
+    // retried; every other outcome is classified exactly as before.
     async function teacherServerLogin(identifier, password) {
-      try {
-        const res = await fetch(getTeacherWorkerBase() + '/api/auth/staff-login', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ role: 'teacher', identifier, password })
-        });
-        if (res.status === 401) {
-          const errData = await res.json().catch(() => ({}));
-          return { unauthorized: true, error: (errData && errData.error) || '' };
+      const teacherLoginRetryDelays = [700, 1500];
+      for (let attempt = 0; attempt < 3; attempt++) {
+        if (attempt > 0) {
+          await new Promise((resolve) => setTimeout(resolve, teacherLoginRetryDelays[attempt - 1]));
         }
-        if (!res.ok) return { unreachable: true };
-        const data = await res.json();
-        if (data && data.ok && data.token) return { ok: true, token: data.token, id: data.id };
-        return { unreachable: true };
-      } catch (e) {
-        return { unreachable: true };
+        try {
+          const res = await fetch(getTeacherWorkerBase() + '/api/auth/staff-login', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ role: 'teacher', identifier, password })
+          });
+          if (res.status === 401) {
+            const errData = await res.json().catch(() => ({}));
+            return { unauthorized: true, error: (errData && errData.error) || '' };
+          }
+          if (res.status === 502 || res.status === 503) continue;
+          if (!res.ok) return { unreachable: true };
+          const data = await res.json();
+          if (data && data.ok && data.token) return { ok: true, token: data.token, id: data.id };
+          return { unreachable: true };
+        } catch (e) {
+          // Network throw or JSON parse failure: retry, or give up
+          // after the loop.
+          continue;
+        }
       }
+      return { unreachable: true };
     }
 
     function restoreLoginButton(btn) {
