@@ -82,7 +82,15 @@ for (const id of SHELL_IDS) {
 // the dark flg- card — so the freeze now pins the NEW region. Every
 // login id inside it is unchanged (asserted above and in
 // login-redesign.test.mjs).
-const LOGIN_REGION_SHA256 = 'f4f1ecc9385049c20b6633535bd4f4d6d76b14aca1b274a2f60005cd93ad4f2e';
+// RE-PINNED 2026-11-10 (desktop split): the owner-approved split
+// layout (brand panel left, form column right, >=1024px only)
+// restructured the card markup inside this region — halo wrapper,
+// brand panel with its deco + in-panel copy, form column, and the
+// flg-outside-copy tag on the outside copy line — so the freeze
+// now pins the split region. Below 1024px the login renders
+// exactly as before; the split CSS lives in the head stylesheet,
+// outside this frozen region.
+const LOGIN_REGION_SHA256 = 'e0118bf28e3a5946679cba75789ad0d18fa552fceb0bb62dc518cef2d359372c';
 {
   const a = PARENT.indexOf('<!-- ================= 1. PARENT / STUDENT LOGIN SCREEN');
   const b = PARENT.indexOf('<!-- ================= 2. MAIN CONTENT WRAPPER');
