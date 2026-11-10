@@ -12,7 +12,8 @@
 //     override, gold pill CTA with dots/done states, confetti layer,
 //     shake keyframes;
 //   * per-portal rules hold: teacher keeps body zoom 0.85, parent
-//     gains NO zoom, manager keeps the PR #128 fixed-body rule;
+//     gains NO zoom, manager keeps the PR #128 fixed-body rule
+//     (its zoom desktop-scoped since the 2026-11-10 mobile fix);
 //   * EXECUTED proof: the REAL fee-style wiring script from each file
 //     runs in a vm over a fake DOM built from the REAL markup —
 //     submit applies the dots (loading) state, the real error box
@@ -175,8 +176,15 @@ const parent = read('parent.html');
 ok(!/body\s*\{[^}]*zoom/.test(parent), 'parent: NO body zoom added (parent portal stays 100%)');
 
 const manager = read('manager.html');
-ok(manager.includes('body { zoom: 0.85; position: fixed; inset: 0; overflow-y: auto; }'),
-  'manager: PR #128 body rule intact (zoom .85, fixed, full-bleed)');
+// RE-PINNED 2026-11-10 (owner mobile fix): the zoom half of the
+// PR #128 body rule is now desktop-scoped, exactly as in index.html —
+// unscoped it painted this gate at 85% width on phones. The fixed
+// full-bleed body itself is unchanged and applies at every width,
+// and no unscoped body zoom may remain in the file.
+ok(manager.includes('body { position: fixed; inset: 0; overflow-y: auto; }') &&
+  manager.includes('@media (min-width: 1024px) { body { zoom: 0.85; } }') &&
+  !manager.replace('@media (min-width: 1024px) { body { zoom: 0.85; } }', '').includes('body { zoom'),
+  'manager: PR #128 fixed body intact, zoom desktop-scoped (2026-11-10 mobile fix)');
 ok(manager.includes('for="mgrLoginUsername"') && manager.includes('for="mgrLoginPassword"'),
   'manager: username/password labels carry for= (added by the 2026-11-07 redesign; they had none)');
 

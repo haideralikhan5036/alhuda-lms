@@ -396,8 +396,12 @@
        <body> so the login view, the dashboard and every modal and
        overlay root scale uniformly, exactly as browser zoom would
        scale them. This single line is the tuning knob for the whole
-       portal's scale. */
-    body { zoom: 0.85; }
+       portal's scale. Scoped to desktop widths on 2026-11-10
+       (owner mobile fix): unscoped, the rule painted the body
+       at 85% width on phones and left a blank strip down the
+       right of the screen; below 1024px the portal now renders
+       at 100% and desktop is unchanged. */
+    @media (min-width: 1024px) { body { zoom: 0.85; } }
 
     /* Sidebar full height under the zoom above — the same fix the
        teacher portal needed (PR #118): the sidebar rules in the

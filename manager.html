@@ -51,8 +51,13 @@
      The body is fixed inset-0 so its gradient covers the full screen
      under zoom - a min-h-screen body renders short and leaves a pale
      strip at the bottom (the same defect fixed on the owner login
-     view in PR #127). Flex centring from the body classes is kept. */
-  body { zoom: 0.85; position: fixed; inset: 0; overflow-y: auto; }
+     view in PR #127). Flex centring from the body classes is kept.
+     2026-11-10 (owner mobile fix): only the zoom is scoped to
+     desktop widths, exactly as in index.html - unscoped it
+     painted this gate at 85% width on phones. The fixed
+     inset-0 body above stays in force at every width. */
+  body { position: fixed; inset: 0; overflow-y: auto; }
+  @media (min-width: 1024px) { body { zoom: 0.85; } }
 
   /* Fee-style login (2026-11-10): the owner-approved Fee Management
      portal login skin (Batch 24 design + the Batch 25 autofill fix),

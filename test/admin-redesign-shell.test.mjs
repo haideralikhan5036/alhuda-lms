@@ -204,8 +204,14 @@ check('nav scrollbar not painted (junction reads as one piece)',
 check('settings sub-pills indented, active still reaches the edge',
   INDEX.includes('#sidebarSettingsGroup .sidebar-nav-btn') &&
   INDEX.includes('width: calc(100% - 48px)') && INDEX.includes('width: calc(100% - 24px)'));
-check('portal scale stays 85% (body zoom, PR #127)',
-  INDEX.includes('body { zoom: 0.85; }'));
+// RE-PINNED 2026-11-10 (owner mobile fix): the PR #127 body zoom is
+// now scoped to desktop widths — unscoped it painted the whole
+// portal at 85% width on phones, leaving a blank strip down the
+// right edge of the screen. Desktop keeps the exact same 85% scale,
+// and no unscoped body zoom may remain.
+check('portal scale stays 85% on desktop only (body zoom media-scoped, PR #127 + 2026-11-10 mobile fix)',
+  INDEX.includes('@media (min-width: 1024px) { body { zoom: 0.85; } }') &&
+  !INDEX.replace('@media (min-width: 1024px) { body { zoom: 0.85; } }', '').includes('body { zoom'));
 check('geometry: desktop sidebar full height at 312px, content offset matches',
   INDEX.includes('width: 312px !important') && INDEX.includes('margin-left: 312px !important') &&
   /@media \(min-width: 1024px\) \{\s*#mainAppSidebar \{\s*position: fixed !important;\s*top: 0 !important;/.test(INDEX));

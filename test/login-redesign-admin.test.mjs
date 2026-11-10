@@ -10,8 +10,9 @@
 //      are present, and NO flagship aui- classes leaked into the
 //      gate (shell styles stay out, login styles stay in);
 //   2. the PR #127 guarantees survive: the view is still the fixed
-//      inset-0 gate under the 85% body zoom, and the stacked mobile
-//      layout lives below the 1024px portal breakpoint;
+//      inset-0 gate under the body zoom (desktop-scoped to >=1024px
+//      since the 2026-11-10 owner mobile fix), and the stacked
+//      mobile layout lives below the 1024px portal breakpoint;
 //   3. the REAL auth functions, executed in a vm over a fake DOM
 //      built from the REAL markup, keep the exact show/hide
 //      contract: boot with no session shows the new login, boot with
@@ -112,8 +113,13 @@ check('the 2026-11-07 split-card skin is fully gone', !LOGIN.includes('lgn-'));
 // ---------------------------------------------------------------------
 check('PR #127: view is still the fixed inset-0 gate with safe centring',
   /#ownerLoginView \{\s*position: fixed;\s*inset: 0;\s*overflow-y: auto;\s*justify-content: safe center;\s*\}/.test(INDEX));
-check('PR #127: portal scale stays 85% (body zoom)',
-  INDEX.includes('body { zoom: 0.85; }'));
+// RE-PINNED 2026-11-10 (owner mobile fix): the PR #127 body zoom is
+// now scoped to desktop widths — unscoped it painted the portal at
+// 85% width on phones (blank strip down the right edge). Desktop
+// keeps the exact same 85% scale; no unscoped body zoom may remain.
+check('PR #127: portal scale stays 85% on desktop only (body zoom media-scoped, 2026-11-10 mobile fix)',
+  INDEX.includes('@media (min-width: 1024px) { body { zoom: 0.85; } }') &&
+  !INDEX.replace('@media (min-width: 1024px) { body { zoom: 0.85; } }', '').includes('body { zoom'));
 check('flg- stylesheet: dark card (radius 38) on the #06382a screen',
   INDEX.includes('.flg-card {') && INDEX.includes('border-radius: 38px') &&
   INDEX.includes('#06382a'));
