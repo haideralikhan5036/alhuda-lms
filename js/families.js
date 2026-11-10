@@ -907,8 +907,8 @@
 
     let CURRENT_FAMILIES_VIEW = 'famTable';
     let FAM_SEARCH_QUERY = '';
-    let CURRENT_FAMILIES_STATUS_FILTER = 'ACTIVE'; // 'ALL' | 'ACTIVE' | 'DEACTIVATED'
-    let CURRENT_STUDENTS_STATUS_FILTER = 'ACTIVE'; // 'ALL' | 'ACTIVE' | 'DEACTIVATED'
+    let CURRENT_FAMILIES_STATUS_FILTER = 'ACTIVE'; // 'ALL' | 'ACTIVE' | 'DEACTIVATED' | 'LEAVE'
+    let CURRENT_STUDENTS_STATUS_FILTER = 'ACTIVE'; // 'ALL' | 'ACTIVE' | 'DEACTIVATED' | 'LEAVE'
 
     // Batch 3.6 (audit P2-36): directory pagination. Default 25 rows per
     // page; 'All' restores the old unbounded render. Page resets to 1
@@ -1058,30 +1058,37 @@
         ? getDeactivatedStudents(allStu, regularFamilies)
         : allStu.filter(s => !(typeof isActiveStudentRecord === 'function' ? isActiveStudentRecord(s, famMap) : !['inactive', 'deactivated'].includes(String(s.status || '').toLowerCase())));
 
-      const activeStus = activeStudentsOnly.filter(s => {
-        const st = (s.status || 'Active').toLowerCase();
-        return st === 'active' || st === 'regular' || st === 'leave';
-      }).length;
+      // Directory KPI partition (v3, 2026-11-10): every regular record sits
+      // in exactly one bucket — Active, Deactivated or On Leave — computed
+      // with the shared predicates in js/config.js. On-leave records are
+      // split OUT of the Active lists, so the cards sum to Total exactly.
+      const leaveFamiliesList = typeof getOnLeaveFamilies === 'function'
+        ? getOnLeaveFamilies(regularFamilies, rawStudents)
+        : [];
+      const leaveStudentsOnly = typeof getOnLeaveStudents === 'function'
+        ? getOnLeaveStudents(allStu, regularFamilies)
+        : [];
+      const displayActiveFamilies = activeFamiliesList.filter(f => !leaveFamiliesList.includes(f));
+      const activeStus = activeStudentsOnly.filter(s => !leaveStudentsOnly.includes(s)).length;
 
       const setFVal = (id, val) => { const el = document.getElementById(id); if (el) el.innerText = val; };
       setFVal('famSummaryTotalFamilies', regularFamilies.length);
-      setFVal('famSummaryActiveFamilies', activeFamiliesList.length);
+      setFVal('famSummaryActiveFamilies', displayActiveFamilies.length);
       setFVal('famSummaryTotalStudents', allStu.length);
       setFVal('famSummaryActiveStudents', activeStus);
       setFVal('badgeDeactivatedFamCount', deactivatedFamiliesList.length);
-      // Directory KPI cards (owner redesign 2026-10-29): combined
-      // families + students per state, with the breakdown line.
-      setFVal('famKpiTotalCombined', regularFamilies.length + allStu.length);
+      // Directory KPI cards v3 (2026-11-10): four cards, two separate
+      // figures each (Families / Students) — no combined number anywhere.
       setFVal('famKpiTotalFamCount', regularFamilies.length);
       setFVal('famKpiTotalStuCount', allStu.length);
-      setFVal('famKpiActiveCombined', activeFamiliesList.length + activeStus);
-      setFVal('famKpiActiveFamCount', activeFamiliesList.length);
+      setFVal('famKpiActiveFamCount', displayActiveFamilies.length);
       setFVal('famKpiActiveStuCount', activeStus);
-      setFVal('famKpiDeactivatedCombined', deactivatedFamiliesList.length + deactivatedStudentsOnly.length);
       setFVal('famKpiDeactivatedFamCount', deactivatedFamiliesList.length);
       setFVal('famKpiDeactivatedStuCount', deactivatedStudentsOnly.length);
+      setFVal('famKpiLeaveFamCount', leaveFamiliesList.length);
+      setFVal('famKpiLeaveStuCount', leaveStudentsOnly.length);
       setFVal('badgeDeactivatedFamiliesHeaderCount', `${deactivatedFamiliesList.length} Deactivated ${deactivatedFamiliesList.length === 1 ? 'Family' : 'Families'}`);
-      setFVal('sidebarActiveFamilies', activeFamiliesList.length);
+      setFVal('sidebarActiveFamilies', displayActiveFamilies.length);
       setFVal('sidebarActiveStudents', activeStus);
 
       // Update Filter Pill Counters
@@ -1097,30 +1104,33 @@
     }
     window.syncAllFamilyAndStudentCountersUI = syncAllFamilyAndStudentCountersUI;
 
-    // Directory KPI cards (owner redesign 2026-10-29): the three cards
-    // replace the old summary cards, view tabs and status filter pills.
+    // Directory KPI cards (v3, 2026-11-10): the four cards replace the old
+    // summary cards, view tabs and status filter pills.
     // Clicking a card sets BOTH status filters together and shows the
     // matching data below (master table, or the deactivated view).
     function directoryKpiSelectedMode() {
       if (CURRENT_FAMILIES_VIEW === 'deactivatedFams' || CURRENT_FAMILIES_STATUS_FILTER === 'DEACTIVATED') return 'deactivated';
+      if (CURRENT_FAMILIES_STATUS_FILTER === 'LEAVE' && CURRENT_STUDENTS_STATUS_FILTER === 'LEAVE') return 'leave';
       if (CURRENT_FAMILIES_STATUS_FILTER === 'ALL' && CURRENT_STUDENTS_STATUS_FILTER === 'ALL') return 'total';
       if (CURRENT_FAMILIES_STATUS_FILTER === 'ACTIVE' && CURRENT_STUDENTS_STATUS_FILTER === 'ACTIVE') return 'active';
       return '';
     }
     function syncDirectoryKpiCardsUI() {
       const mode = directoryKpiSelectedMode();
-      const base = 'px-3.5 py-2.5 rounded-xl flex flex-col gap-1 transition border ';
+      const base = 'px-3.5 py-2.5 rounded-xl flex flex-col gap-1 transition border cursor-pointer hover:shadow-sm ';
       const styles = {
         'famKpiTotal': base + 'bg-slate-50 border-slate-200',
         'famKpiActive': base + 'bg-emerald-50/70 border-emerald-200',
-        'famKpiDeactivated': base + 'bg-rose-50/70 border-rose-200'
+        'famKpiDeactivated': base + 'bg-rose-50/70 border-rose-200',
+        'famKpiLeave': base + 'bg-amber-50/70 border-amber-200'
       };
       const selectedStyles = {
         'famKpiTotal': base + 'bg-white border-slate-800 ring-2 ring-slate-800 shadow-sm',
         'famKpiActive': base + 'bg-emerald-50 border-emerald-600 ring-2 ring-emerald-600 shadow-sm',
-        'famKpiDeactivated': base + 'bg-rose-50 border-rose-600 ring-2 ring-rose-600 shadow-sm'
+        'famKpiDeactivated': base + 'bg-rose-50 border-rose-600 ring-2 ring-rose-600 shadow-sm',
+        'famKpiLeave': base + 'bg-amber-50 border-amber-500 ring-2 ring-amber-500 shadow-sm'
       };
-      const modeById = { famKpiTotal: 'total', famKpiActive: 'active', famKpiDeactivated: 'deactivated' };
+      const modeById = { famKpiTotal: 'total', famKpiActive: 'active', famKpiDeactivated: 'deactivated', famKpiLeave: 'leave' };
       Object.keys(styles).forEach(id => {
         const el = document.getElementById(id);
         if (el) el.className = modeById[id] === mode ? selectedStyles[id] : styles[id];
@@ -1129,7 +1139,7 @@
     window.syncDirectoryKpiCardsUI = syncDirectoryKpiCardsUI;
 
     function setDirectoryKpi(mode, target) {
-      const status = mode === 'total' ? 'ALL' : (mode === 'deactivated' ? 'DEACTIVATED' : 'ACTIVE');
+      const status = mode === 'total' ? 'ALL' : (mode === 'deactivated' ? 'DEACTIVATED' : (mode === 'leave' ? 'LEAVE' : 'ACTIVE'));
       CURRENT_FAMILIES_STATUS_FILTER = status;
       CURRENT_STUDENTS_STATUS_FILTER = status;
       FAM_TABLE_PAGE = 1;
@@ -1153,7 +1163,7 @@
     window.setDirectoryKpi = setDirectoryKpi;
 
     function setFamiliesStatusFilter(filterMode) {
-      CURRENT_FAMILIES_STATUS_FILTER = ['ALL', 'ACTIVE', 'DEACTIVATED'].includes(filterMode) ? filterMode : 'ACTIVE';
+      CURRENT_FAMILIES_STATUS_FILTER = ['ALL', 'ACTIVE', 'DEACTIVATED', 'LEAVE'].includes(filterMode) ? filterMode : 'ACTIVE';
       FAM_TABLE_PAGE = 1; // Batch 3.6 (audit P2-36): new filter, page 1.
       updateStatusFilterPillsUI();
       if (CURRENT_FAMILIES_VIEW === 'studentsList' || CURRENT_FAMILIES_VIEW === 'deactivatedFams') {
@@ -1165,7 +1175,7 @@
     }
 
     function setStudentsStatusFilter(filterMode) {
-      CURRENT_STUDENTS_STATUS_FILTER = ['ALL', 'ACTIVE', 'DEACTIVATED'].includes(filterMode) ? filterMode : 'ACTIVE';
+      CURRENT_STUDENTS_STATUS_FILTER = ['ALL', 'ACTIVE', 'DEACTIVATED', 'LEAVE'].includes(filterMode) ? filterMode : 'ACTIVE';
       STU_TABLE_PAGE = 1; // Batch 3.6 (audit P2-36): new filter, page 1.
       updateStatusFilterPillsUI();
       if (CURRENT_FAMILIES_VIEW !== 'studentsList') {
@@ -1188,9 +1198,21 @@
           ? getDeactivatedFamilies(allFams)
           : allFams.filter(f => typeof isFamilyDeactivated === 'function' ? isFamilyDeactivated(f) : ['inactive', 'deactivated'].includes(String(f.status || '').toLowerCase()));
       }
-      return typeof getActiveFamilies === 'function'
+      if (CURRENT_FAMILIES_STATUS_FILTER === 'LEAVE') {
+        return typeof getOnLeaveFamilies === 'function'
+          ? getOnLeaveFamilies(allFams, ALL_STUDENTS)
+          : allFams.filter(f => typeof isFamilyOnLeaveForDirectory === 'function' ? isFamilyOnLeaveForDirectory(f) : false);
+      }
+      // ACTIVE: the canonical active set minus the On Leave partition, so
+      // the list below the cards matches the Active card figure exactly.
+      const activeFams = typeof getActiveFamilies === 'function'
         ? getActiveFamilies(allFams)
         : allFams.filter(f => typeof isFamilyDeactivated === 'function' ? !isFamilyDeactivated(f) : !['inactive', 'deactivated'].includes(String(f.status || '').toLowerCase()));
+      if (typeof getOnLeaveFamilies === 'function') {
+        const leaveFams = getOnLeaveFamilies(allFams, ALL_STUDENTS);
+        return activeFams.filter(f => !leaveFams.includes(f));
+      }
+      return activeFams;
     }
 
     function getFilteredStudentsByCurrentStatus() {
@@ -1203,9 +1225,21 @@
           ? getDeactivatedStudents(allStus, ALL_FAMILIES)
           : allStus.filter(s => !(typeof isActiveStudentRecord === 'function' ? isActiveStudentRecord(s, ALL_FAMILIES) : !['inactive', 'deactivated'].includes(String(s.status || '').toLowerCase())));
       }
-      return typeof getActiveStudents === 'function'
+      if (CURRENT_STUDENTS_STATUS_FILTER === 'LEAVE') {
+        return typeof getOnLeaveStudents === 'function'
+          ? getOnLeaveStudents(allStus, ALL_FAMILIES)
+          : allStus.filter(s => typeof isStudentOnLeaveForDirectory === 'function' ? isStudentOnLeaveForDirectory(s) : false);
+      }
+      // ACTIVE: the canonical active set minus the On Leave partition, so
+      // the list below the cards matches the Active card figure exactly.
+      const activeStusList = typeof getActiveStudents === 'function'
         ? getActiveStudents(allStus, ALL_FAMILIES)
         : allStus.filter(s => typeof isActiveStudentRecord === 'function' ? isActiveStudentRecord(s, ALL_FAMILIES) : !['inactive', 'deactivated'].includes(String(s.status || '').toLowerCase()));
+      if (typeof getOnLeaveStudents === 'function') {
+        const leaveStus = getOnLeaveStudents(allStus, ALL_FAMILIES);
+        return activeStusList.filter(s => !leaveStus.includes(s));
+      }
+      return activeStusList;
     }
 
     function switchFamiliesViewMode(mode) {
@@ -1368,30 +1402,37 @@
         ? getDeactivatedStudents(allStu, regularFamilies)
         : allStu.filter(s => !(typeof isActiveStudentRecord === 'function' ? isActiveStudentRecord(s, famMap) : !['inactive', 'deactivated'].includes(String(s.status || '').toLowerCase())));
 
-      const activeStus = activeStudentsOnly.filter(s => {
-        const st = (s.status || 'Active').toLowerCase();
-        return st === 'active' || st === 'regular' || st === 'leave';
-      }).length;
+      // Directory KPI partition (v3, 2026-11-10): identical computation to
+      // syncAllFamilyAndStudentCountersUI — On Leave is split OUT of Active
+      // on both sides (shared predicates in js/config.js), so the four
+      // cards partition Total exactly.
+      const leaveFamiliesList = typeof getOnLeaveFamilies === 'function'
+        ? getOnLeaveFamilies(regularFamilies, allStu)
+        : [];
+      const leaveStudentsOnly = typeof getOnLeaveStudents === 'function'
+        ? getOnLeaveStudents(allStu, regularFamilies)
+        : [];
+      const displayActiveFams = activeFamiliesList.filter(f => !leaveFamiliesList.includes(f)).length;
+      const activeStus = activeStudentsOnly.filter(s => !leaveStudentsOnly.includes(s)).length;
 
       const setFVal = (id, val) => { const el = document.getElementById(id); if (el) el.innerText = val; };
       setFVal('famSummaryTotalFamilies', regularFamilies.length);
-      setFVal('famSummaryActiveFamilies', activeFams);
+      setFVal('famSummaryActiveFamilies', displayActiveFams);
       setFVal('famSummaryTotalStudents', allStu.length);
       setFVal('famSummaryActiveStudents', activeStus);
       setFVal('badgeDeactivatedFamCount', deactivatedFamiliesList.length);
-      // Directory KPI cards (owner redesign 2026-10-29): combined
-      // families + students per state, with the breakdown line.
-      setFVal('famKpiTotalCombined', regularFamilies.length + allStu.length);
+      // Directory KPI cards v3 (2026-11-10): four cards, two separate
+      // figures each (Families / Students) — no combined number anywhere.
       setFVal('famKpiTotalFamCount', regularFamilies.length);
       setFVal('famKpiTotalStuCount', allStu.length);
-      setFVal('famKpiActiveCombined', activeFamiliesList.length + activeStus);
-      setFVal('famKpiActiveFamCount', activeFamiliesList.length);
+      setFVal('famKpiActiveFamCount', displayActiveFams);
       setFVal('famKpiActiveStuCount', activeStus);
-      setFVal('famKpiDeactivatedCombined', deactivatedFamiliesList.length + deactivatedStudentsOnly.length);
       setFVal('famKpiDeactivatedFamCount', deactivatedFamiliesList.length);
       setFVal('famKpiDeactivatedStuCount', deactivatedStudentsOnly.length);
+      setFVal('famKpiLeaveFamCount', leaveFamiliesList.length);
+      setFVal('famKpiLeaveStuCount', leaveStudentsOnly.length);
       setFVal('badgeDeactivatedFamiliesHeaderCount', `${deactivatedFamiliesList.length} Deactivated ${deactivatedFamiliesList.length === 1 ? 'Family' : 'Families'}`);
-      setFVal('sidebarActiveFamilies', activeFams);
+      setFVal('sidebarActiveFamilies', displayActiveFams);
       setFVal('sidebarActiveStudents', activeStus);
 
       // Update Filter Pill Counters
@@ -1609,13 +1650,15 @@
       });
 
       const badgeCountEl = document.getElementById('badgeFamTableCount');
-      const filterTitlePrefix = CURRENT_FAMILIES_STATUS_FILTER === 'ALL' ? 'All Families' : CURRENT_FAMILIES_STATUS_FILTER === 'DEACTIVATED' ? 'Deactivated Families' : 'Active Families';
+      const filterTitlePrefix = CURRENT_FAMILIES_STATUS_FILTER === 'ALL' ? 'All Families' : CURRENT_FAMILIES_STATUS_FILTER === 'DEACTIVATED' ? 'Deactivated Families' : CURRENT_FAMILIES_STATUS_FILTER === 'LEAVE' ? 'On Leave Families' : 'Active Families';
       if (badgeCountEl) {
         badgeCountEl.textContent = `${filtered.length} ${filterTitlePrefix}`;
         badgeCountEl.className = CURRENT_FAMILIES_STATUS_FILTER === 'DEACTIVATED'
           ? 'px-2.5 py-0.5 rounded-full text-xs font-mono font-bold bg-rose-100 text-rose-800 border border-rose-200'
           : CURRENT_FAMILIES_STATUS_FILTER === 'ALL'
           ? 'px-2.5 py-0.5 rounded-full text-xs font-mono font-bold bg-slate-800 text-white border border-slate-700'
+          : CURRENT_FAMILIES_STATUS_FILTER === 'LEAVE'
+          ? 'px-2.5 py-0.5 rounded-full text-xs font-mono font-bold bg-amber-100 text-amber-800 border border-amber-200'
           : 'px-2.5 py-0.5 rounded-full text-xs font-mono font-bold bg-emerald-100 text-emerald-800 border border-emerald-200';
       }
 
@@ -1638,8 +1681,11 @@
         const activeSibCount = allSibs.filter(s => !(typeof isStudentSelfDeactivated === 'function' ? isStudentSelfDeactivated(s) : ['inactive', 'deactivated'].includes(String(s.status || '').toLowerCase()))).length;
         const deactSibCount = allSibs.length - activeSibCount;
         const isFamDeact = typeof isFamilyDeactivated === 'function' ? isFamilyDeactivated(f) : ['inactive', 'deactivated'].includes(String(f.status || '').toLowerCase());
+        const isFamOnLeave = !isFamDeact && typeof isFamilyOnLeaveForDirectory === 'function' ? isFamilyOnLeaveForDirectory(f) : false;
         const statusBadgeHtml = isFamDeact
           ? `<span class="px-2 py-0.5 rounded text-[10px] font-extrabold bg-rose-100 text-rose-800 border border-rose-300">DEACTIVATED</span>`
+          : isFamOnLeave
+          ? `<span class="px-2 py-0.5 rounded text-[10px] font-extrabold bg-amber-100 text-amber-800 border border-amber-300">ON LEAVE</span>`
           : `<span class="px-2 py-0.5 rounded text-[10px] font-extrabold bg-emerald-100 text-emerald-800 border border-emerald-300">ACTIVE</span>`;
 
         return `
@@ -1727,13 +1773,15 @@
       });
 
       const badgeCountEl = document.getElementById('badgeStudentsListCount');
-      const stuFilterLabel = CURRENT_STUDENTS_STATUS_FILTER === 'ALL' ? 'All Students' : CURRENT_STUDENTS_STATUS_FILTER === 'DEACTIVATED' ? 'Deactivated Students' : 'Active Students';
+      const stuFilterLabel = CURRENT_STUDENTS_STATUS_FILTER === 'ALL' ? 'All Students' : CURRENT_STUDENTS_STATUS_FILTER === 'DEACTIVATED' ? 'Deactivated Students' : CURRENT_STUDENTS_STATUS_FILTER === 'LEAVE' ? 'On Leave Students' : 'Active Students';
       if (badgeCountEl) {
         badgeCountEl.textContent = `${filtered.length} ${stuFilterLabel}`;
         badgeCountEl.className = CURRENT_STUDENTS_STATUS_FILTER === 'DEACTIVATED'
           ? 'px-2.5 py-0.5 rounded-full text-xs font-mono font-bold bg-rose-100 text-rose-800 border border-rose-200'
           : CURRENT_STUDENTS_STATUS_FILTER === 'ALL'
           ? 'px-2.5 py-0.5 rounded-full text-xs font-mono font-bold bg-slate-800 text-white border border-slate-700'
+          : CURRENT_STUDENTS_STATUS_FILTER === 'LEAVE'
+          ? 'px-2.5 py-0.5 rounded-full text-xs font-mono font-bold bg-amber-100 text-amber-800 border border-amber-200'
           : 'px-2.5 py-0.5 rounded-full text-xs font-mono font-bold bg-teal-100 text-teal-800 border border-teal-200';
       }
 
@@ -1764,7 +1812,7 @@
         let statusBadge = '<span class="px-2 py-0.5 rounded text-[10px] font-extrabold bg-emerald-100 text-emerald-800 border border-emerald-200">ACTIVE</span>';
         if (!isStuActive) {
           statusBadge = '<span class="px-2 py-0.5 rounded text-[10px] font-extrabold bg-rose-100 text-rose-800 border border-rose-300">DEACTIVATED</span>';
-        } else if (status.toLowerCase() === 'leave') {
+        } else if (status.toLowerCase() === 'leave' || status.toLowerCase() === 'on leave' || (typeof isStudentOnLeaveForDirectory === 'function' && isStudentOnLeaveForDirectory(s))) {
           statusBadge = '<span class="px-2 py-0.5 rounded text-[10px] font-extrabold bg-blue-100 text-blue-800 border border-blue-200">ON LEAVE</span>';
         }
 
