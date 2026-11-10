@@ -45,6 +45,7 @@ const SURFACES = [
     handlers: ['onsubmit="handleTeacherSignIn(event)"', 'onclick="togglePassVisibility()"'],
     wording: ['Teacher Portal Login', 'Teacher Operations Portal', 'Login to Teacher Portal',
       'Email / Username / Teacher ID', 'Enter your username or Teacher ID', 'Authorized personnel only.'],
+    panelCopy: 'Authorized personnel only.',
     viewId: 'loginView', formId: 'loginForm', wrapId: 'loginBtnWrap',
     errId: 'loginErrorMsg', layerId: 'loginConfettiLayer', cardId: 'loginCard',
     success: 'view',
@@ -57,6 +58,7 @@ const SURFACES = [
     handlers: ['onsubmit="handleParentSignIn(event)"', 'onclick="toggleParentPassVisibility()"'],
     wording: ['Parent &amp; Student Login', 'Parent &amp; Student Portal', 'Login to Parent Portal',
       'Username / Family ID / Email', 'Enter Parent Username or Family ID', 'Authorized access only.'],
+    panelCopy: 'Authorized access only.',
     viewId: 'parentLoginView', formId: 'parentLoginForm', wrapId: 'parentLoginBtnWrap',
     errId: 'parentLoginErrorMsg', layerId: 'parentLoginConfettiLayer', cardId: 'parentLoginCard',
     success: 'view',
@@ -70,6 +72,7 @@ const SURFACES = [
     wording: ['Manager Portal Login', 'Manager Operations Portal', 'Login to Manager Portal',
       'Username / Manager ID / Email', 'Enter Manager Username or ID (e.g. MGR-001)',
       'Authorized personnel only.'],
+    panelCopy: 'Authorized personnel only.',
     viewId: null, formId: 'mgrLoginForm', wrapId: 'mgrLoginBtnWrap',
     errId: 'mgrLoginErrorMsg', layerId: 'mgrLoginConfettiLayer', cardId: 'mgrLoginCard',
     success: 'session',
@@ -102,6 +105,41 @@ for (const s of SURFACES) {
     '@keyframes flgDotBounce', '@keyframes flgBtnGlow']) {
     ok(src.includes(kf), `${s.file}: keyframes present: ${kf}`);
   }
+
+  // Desktop split layout (2026-11-10, owner-approved mockup v2):
+  // brand panel left + form column right at >=1024px only. Below
+  // the breakpoint the stacked card must render exactly as the
+  // fee-style re-skin left it, so the split-only pieces are hidden
+  // by default and the outside copy line stays the mobile one.
+  for (const lm of ['class="flg-brand-panel"', 'class="flg-form-col"',
+    'class="flg-logo-halo"', 'class="flg-brand-deco"', 'class="flg-bd-ring"',
+    'class="flg-bd-circle"', 'class="flg-bd-dots"', 'class="flg-bd-gold"',
+    'class="flg-panel-copy"', 'flg-outside-copy']) {
+    ok(src.includes(lm), `${s.file}: split landmark present: ${lm}`);
+  }
+  ok(count(src, 'class="flg-brand-panel"') === 1 && count(src, 'class="flg-form-col"') === 1 &&
+     count(src, 'class="flg-logo-halo"') === 1,
+    `${s.file}: exactly one brand panel + form column + halo`);
+  for (const rule of ['@media (min-width: 1024px)', 'width: 1140px',
+    'grid-template-columns: 1.12fr 0.88fr',
+    'border-left: 1px solid rgba(197,168,128,.28)',
+    '.flg-panel-copy { display: none; }', '.flg-brand-deco { display: none; }',
+    '.flg-outside-copy { display: none; }']) {
+    ok(src.includes(rule), `${s.file}: split rule present: ${rule}`);
+  }
+  // The halo sizing is desktop-only: the base logo rule keeps the
+  // stacked-card 92px size (mobile presentation unchanged).
+  ok(src.includes('width: 92px; height: 92px'), `${s.file}: base logo size unchanged (mobile)`);
+  ok(src.includes('.flg-brand-panel .flg-logo { width: 168px; height: 168px; margin: 0; }'),
+    `${s.file}: desktop halo logo size pinned`);
+  // The in-panel copy carries THIS surface's own outside-copy text.
+  const panelCopyAt = src.indexOf('class="flg-panel-copy"');
+  ok(panelCopyAt > -1 && src.slice(panelCopyAt, panelCopyAt + 120).includes(s.panelCopy),
+    `${s.file}: in-panel copy carries the surface wording: ${s.panelCopy}`);
+  // Document order: brand panel, then form column, both in the card.
+  ok(src.indexOf('class="flg-brand-panel"') > src.indexOf('class="flg-card"') &&
+     src.indexOf('class="flg-form-col"') > src.indexOf('class="flg-brand-panel"'),
+    `${s.file}: brand panel then form column inside the card`);
   // New wiring ids exist exactly once.
   for (const id of [s.formId, s.wrapId, s.layerId, s.cardId]) {
     ok(count(src, `id="${id}"`) === 1, `${s.file}: wiring id #${id} present exactly once`);

@@ -88,6 +88,20 @@ check('new landmarks: button wrap + confetti layer for the success burst',
   LOGIN.includes('id="ownerLoginBtnWrap"') && LOGIN.includes('id="ownerLoginConfettiLayer"') &&
   LOGIN.includes('Signed In') && LOGIN.includes('Secure Authentication System'));
 check('NO flagship aui- classes inside the login view', !LOGIN.includes('aui-'));
+// Desktop split layout (2026-11-10, owner-approved mockup v2):
+// brand panel left + form column right at >=1024px; the stacked
+// card below the breakpoint is untouched in presentation.
+check('split landmarks: brand panel + form column + halo + deco + panel copy',
+  LOGIN.includes('class="flg-brand-panel"') && LOGIN.includes('class="flg-form-col"') &&
+  LOGIN.includes('class="flg-logo-halo"') && LOGIN.includes('class="flg-brand-deco"') &&
+  LOGIN.includes('class="flg-bd-ring"') && LOGIN.includes('class="flg-bd-circle"') &&
+  LOGIN.includes('class="flg-bd-dots"') && LOGIN.includes('class="flg-bd-gold"') &&
+  LOGIN.includes('class="flg-panel-copy"'));
+check('split: outside copy line tagged for desktop hiding (still the mobile line)',
+  LOGIN.includes('relative flg-outside-copy'));
+check('split: brand panel precedes the form column inside the card',
+  LOGIN.indexOf('class="flg-brand-panel"') > LOGIN.indexOf('class="flg-card"') &&
+  LOGIN.indexOf('class="flg-form-col"') > LOGIN.indexOf('class="flg-brand-panel"'));
 check('old centred-card skin is gone',
   !LOGIN.includes('max-w-md w-full my-auto') &&
   !LOGIN.includes('bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden'));
@@ -108,6 +122,17 @@ check('flg- stylesheet: Batch 25 autofill override (fields never paint white)',
 check('flg- stylesheet: shake + confetti + dots keyframes present',
   INDEX.includes('@keyframes flgBtnShake') && INDEX.includes('@keyframes flgConfettiFly') &&
   INDEX.includes('@keyframes flgDotBounce'));
+check('split stylesheet: wide grid card at the desktop breakpoint only',
+  INDEX.includes('@media (min-width: 1024px)') &&
+  INDEX.includes('grid-template-columns: 1.12fr 0.88fr') &&
+  INDEX.includes('width: 1140px'));
+check('split stylesheet: halo + gold hairline + split pieces hidden by default',
+  INDEX.includes('.flg-logo-halo') && INDEX.includes('width: 218px; height: 218px') &&
+  INDEX.includes('border-left: 1px solid rgba(197,168,128,.28)') &&
+  INDEX.includes('.flg-panel-copy { display: none; }') &&
+  INDEX.includes('.flg-outside-copy { display: none; }'));
+check('split stylesheet: base card keeps the stacked 400px width (mobile unchanged)',
+  /\.flg-card \{\s+position: relative; z-index: 1;\s+width: 400px;/.test(INDEX));
 check('flg- stylesheet: deco shapes hidden on small screens',
   /@media \(max-width: 900px\) \{\s*\.flg-deco \{ display: none; \}/.test(INDEX));
 check('flg- stylesheet: no global element selectors leak out of the gate',

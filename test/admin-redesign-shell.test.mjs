@@ -168,13 +168,20 @@ check('mobile rail menu button opens the drawer via toggleSidebar()',
 // re-skinned the gate with its own lgn- classes, and lifted again by
 // the fee-style login re-skin (2026-11-10, owner instruction: match
 // the Fee Management portal login), which replaced the lgn- skin
-// with flg- classes. The pins below assert the current landmarks +
+// with flg- classes; the desktop split layout (2026-11-10,
+// owner-approved mockup v2) then restructured the card into a
+// brand panel + form column at >=1024px, mobile unchanged. The
+// pins below assert the current landmarks +
 // the untouched form contract (reason: the newer commission landed).
 check('login view carries NO flagship hooks (aui- stays out of the gate)',
   !INDEX.includes('aui-login'));
 check('login view carries the fee-style flg- landmarks (dark card + pill field + gold CTA)',
   INDEX.includes('class="flg-card"') && INDEX.includes('class="flg-pill"') &&
   INDEX.includes('class="flg-cta"'));
+check('login view carries the desktop split landmarks (brand panel + form column + halo)',
+  INDEX.includes('class="flg-brand-panel"') && INDEX.includes('class="flg-form-col"') &&
+  INDEX.includes('class="flg-logo-halo"') &&
+  INDEX.includes('grid-template-columns: 1.12fr 0.88fr'));
 check('login submit keeps its id + real label inside the pill CTA',
   INDEX.includes('id="btnSubmitOwnerLogin" class="flg-cta"') &&
   INDEX.includes('Login to Control Center'));
