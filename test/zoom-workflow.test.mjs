@@ -241,12 +241,19 @@ check('validator: loaded by admin + teacher portals',
 check('labels: Scheduled-branch Zoom button says Join Zoom (not Start Class)',
   TEACHER.includes("launchTeacherZoomClassById('${escapeJsAttr(c.id)}')") &&
   TEACHER.includes('<i class="fa-solid fa-video"></i> Join Zoom'));
-// Threshold 4 -> 3 (owner marks, 2026-11-06): the removed live/next
-// banner carried one START CLASS instance; the per-row ones remain.
+// Threshold history: 4 -> 3 (owner marks, 2026-11-06, banner
+// removal) -> 1 (Teacher Portal Update, 2026-11-10): the Student
+// List's context START CLASS and the Today's Classes Scheduled
+// row's direct Start Class were both removed by the owner; the one
+// remaining START CLASS label is the Waiting row's pulsing button
+// (Start Zoom -> Waiting -> Start Class is the only start path).
 check('labels: real Start buttons still say START CLASS',
-  (TEACHER.match(/START CLASS/g) || []).length >= 3);
-check('labels: student-list Zoom title says Join Zoom Class',
-  TEACHER.includes('title="Join Zoom Class for'));
+  (TEACHER.match(/START CLASS/g) || []).length === 1);
+// Teacher Portal Update (2026-11-10): Join Zoom was removed from
+// the Student List entirely (the list is Name/Course/Timing/Change
+// Time only) — the old presence check is inverted on purpose.
+check('labels: student-list Join Zoom removed by the 2026-11-10 commission',
+  !TEACHER.includes('title="Join Zoom Class for'));
 check('launch: https-only check + zoommtg deep link kept',
   TEACHER.includes('zoommtg://zoom.us/join') && TEACHER.includes("startsWith('https://')"));
 check('launch: idempotent upsert on schedule+date',

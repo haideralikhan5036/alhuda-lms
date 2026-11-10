@@ -60,7 +60,10 @@ check('Student List table wrapper is a card table',
 for (const label of ['Time', 'Student', 'Course', 'Lesson', 'Attendance']) {
   check(`classes row carries data-label="${label}"`, TEACHER.includes(`data-label="${label}"`));
 }
-for (const label of ['#', 'Student', 'Course', 'Schedule', 'Status']) {
+// Teacher Portal Update commission (2026-11-10): the Student List
+// was trimmed to Student | Course | Class Timing (+ action cell), so
+// the row contract is the new three labelled cells.
+for (const label of ['Student', 'Course', 'Class Timing']) {
   check(`student row carries data-label="${label}"`, TEACHER.includes(`data-label="${label}"`));
 }
 check('card CSS hides thead and labels cells from data-label',
@@ -72,11 +75,15 @@ check('card cells do not clip lesson text',
 
 // ---- E) workflows intact: row actions + handlers still referenced ----
 // Owner marks (2026-11-06): the per-student Schedule action was
-// removed root-and-branch with the Schedule Student feature; the
-// lesson-history row action stays.
-check('student row actions intact (history; schedule removed by owner marks)',
+// removed root-and-branch with the Schedule Student feature.
+// Teacher Portal Update commission (2026-11-10): the lesson-history
+// action MOVED from the Student List to Today's Classes (wired with
+// the class row's student id), and the Student List instead carries
+// the Change Time action (scheduled students only, first schedule id).
+check('row actions per the 2026-11-10 commission (history in Today\'s Classes; Change Time in Student List; schedule removed)',
   !TEACHER.includes('openTeacherAddScheduleModal') &&
-  TEACHER.includes("openTeacherLessonHistoryForStudent('${escapeJsAttr(st.id)}')"));
+  TEACHER.includes("openTeacherLessonHistoryForStudent('${escapeJsAttr(c.student_id)}')") &&
+  TEACHER.includes("openTimeChangeRequestModal('${escapeJsAttr(firstScheduleId)}')"));
 check('class row actions intact (actionButtons placeholder kept)',
   TEACHER.includes('${actionButtons}'));
 check('salary advance form still wired (C1 note element kept)',

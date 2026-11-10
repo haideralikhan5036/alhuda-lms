@@ -77,6 +77,16 @@
               requestType: 'time_change'
             });
           }
+          // Teacher Portal Update (2026-11-10): "Reset class" — a
+          // teacher asks for a Leave/Absent-marked class to be reset
+          // to Scheduled. Same notes-JSON queue as the other types.
+          if (meta && meta.reset_class_request && meta.reset_class_request.status === 'pending') {
+            PENDING_TEACHER_REQUESTS.push({
+              student: st,
+              request: meta.reset_class_request,
+              requestType: 'reset_class'
+            });
+          }
         });
 
         // Salary-advance workflow (Batch B): pending advance requests
@@ -345,6 +355,8 @@
             ? '<span class="px-2 py-0.5 rounded-full text-[10px] font-mono bg-indigo-100 text-indigo-900 font-extrabold border border-indigo-300">🕒 Schedule Time Change Request</span>'
             : rType === 'reschedule'
             ? '<span class="px-2 py-0.5 rounded-full text-[10px] font-mono bg-orange-100 text-orange-800 font-bold border border-orange-300">🔄 Attendance Status Change</span>'
+            : rType === 'reset_class'
+            ? '<span class="px-2 py-0.5 rounded-full text-[10px] font-mono bg-teal-100 text-teal-900 font-extrabold border border-teal-300">↩️ Reset Class Request</span>'
             : '<span class="px-2 py-0.5 rounded-full text-[10px] font-mono bg-amber-100 text-amber-800 font-bold border border-amber-300">📅 Leave Request</span>';
 
           let detailsHtml = '';
@@ -400,6 +412,32 @@
                 ` : ''}
               </div>
             `;
+          } else if (rType === 'reset_class') {
+            detailsHtml = `
+              <div class="p-3 bg-teal-50/70 rounded-xl border border-teal-100 grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                <div>
+                  <span class="text-slate-500 font-bold block text-[11px]">Current Status:</span>
+                  <span class="font-mono font-black text-rose-700">${req.current_status || 'Leave/Absent'}</span>
+                </div>
+                <div>
+                  <span class="text-slate-500 font-bold block text-[11px]">Class Date:</span>
+                  <span class="font-mono font-black text-slate-800">${req.class_date || 'N/A'}</span>
+                </div>
+                <div>
+                  <span class="text-slate-500 font-bold block text-[11px]">Class / Schedule:</span>
+                  <span class="font-bold text-slate-800">${req.schedule_label || 'Scheduled slot'}</span>
+                </div>
+                <div>
+                  <span class="text-slate-500 font-bold block text-[11px]">Request Status:</span>
+                  <span class="font-bold text-teal-800">Pending — approving deletes that day's Leave/Absent record, so the class becomes Scheduled again</span>
+                </div>
+                ${req.notes ? `
+                  <div class="sm:col-span-2 text-slate-600 italic bg-white p-2 rounded-lg border border-teal-200/60">
+                    &ldquo;${req.notes}&rdquo;
+                  </div>
+                ` : ''}
+              </div>
+            `;
           } else {
             detailsHtml = `
               <div class="p-3 bg-amber-50/70 rounded-xl border border-amber-100 grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
@@ -424,9 +462,11 @@
             ? '<i class="fa-solid fa-check"></i> Approve &amp; Auto-Change Schedule'
             : rType === 'reschedule'
             ? '<i class="fa-solid fa-check"></i> Approve &amp; Update Status'
+            : rType === 'reset_class'
+            ? '<i class="fa-solid fa-check"></i> Approve &amp; Reset Class'
             : '<i class="fa-solid fa-check"></i> Approve &amp; Mark Leave';
 
-          const borderColor = rType === 'time_change' ? 'border-indigo-300' : rType === 'reschedule' ? 'border-orange-200' : 'border-amber-200';
+          const borderColor = rType === 'time_change' ? 'border-indigo-300' : rType === 'reschedule' ? 'border-orange-200' : rType === 'reset_class' ? 'border-teal-300' : 'border-amber-200';
           const requesterHtml = isParentRequest
             ? `<span>Parent: <strong class="text-emerald-700 font-semibold">${req.parent_name || 'Parent / Guardian'}</strong></span>`
             : `<span>Teacher: <strong class="text-emerald-700 font-semibold">${req.teacher_name || 'Teacher'}</strong> (${req.teacher_id || 'TCH'})</span>`;
@@ -832,6 +872,68 @@
           if (reschedNotesErr) throw reschedNotesErr;
 
           lmsNotify(`✅ Attendance Correction approved for ${st.name}!\nAttendance status updated to: ${newStatus}`);
+        } else if (rType === 'reset_class') {
+          // Teacher Portal Update (2026-11-10): "Reset class" approval.
+          // Re-validate EVERYTHING against the live records before
+          // touching the day log: the request must still be pending,
+          // the original schedule must still exist and still belong
+          // to this student/teacher (never invent a slot), and the
+          // request day's latest attendance record must STILL be
+          // Leave/Absent. Approval then DELETES that day's log chain
+          // for the schedule — with no log row left, the class is
+          // Scheduled again. lesson_notes is never overwritten here
+          // (the reschedule branch's [Admin Override] overwrite is
+          // deliberately NOT copied). Any refusal leaves the request
+          // pending in the student's notes and restores the queue
+          // entry, so the admin can decline it to clear it.
+          const req = meta.reset_class_request || {};
+          const refuseResetClass = (msg) => {
+            if (removedLocalRequests.length > 0 && typeof saveLocalTeacherCorrectionRequests === 'function') {
+              saveLocalTeacherCorrectionRequests([...getLocalTeacherCorrectionRequests(), ...removedLocalRequests]);
+            }
+            if (removedPendingRequests.length > 0) {
+              PENDING_TEACHER_REQUESTS = [...PENDING_TEACHER_REQUESTS, ...removedPendingRequests];
+            }
+            if (typeof syncTopCircleNotificationDots === 'function') syncTopCircleNotificationDots();
+            openAdminTeacherRequestsModal();
+            lmsNotify(msg, { type: 'error' });
+          };
+
+          if (!req || req.status !== 'pending' || !req.schedule_id || !req.class_date) {
+            refuseResetClass('This Reset class request is incomplete or was already decided. It was NOT approved.');
+            return;
+          }
+
+          const { data: schedRow, error: schedErr } = await db.from('class_schedules').select('*').eq('id', req.schedule_id).maybeSingle();
+          if (schedErr) throw schedErr;
+          if (!schedRow || String(schedRow.student_id) !== String(studentId) || (req.teacher_id && String(schedRow.teacher_id) !== String(req.teacher_id))) {
+            refuseResetClass(`Cannot reset this class: the original schedule for ${st.name} no longer exists or has been changed. The request was NOT approved — decline it to clear it from the queue.`);
+            return;
+          }
+
+          const { data: dayLogs, error: logFetchErr } = await db.from('attendance_logs').select('*').eq('schedule_id', req.schedule_id).eq('date', req.class_date);
+          if (logFetchErr) throw logFetchErr;
+          const latestDayLog = (dayLogs || []).slice().sort((a, b) => String(a.created_at || '') < String(b.created_at || '') ? 1 : -1)[0];
+          if (!latestDayLog || (latestDayLog.status !== 'Leave' && latestDayLog.status !== 'Absent')) {
+            refuseResetClass(`Cannot reset this class: it is no longer marked Leave/Absent for ${req.class_date}. The request was NOT approved — decline it to clear it from the queue.`);
+            return;
+          }
+
+          const delRes = await db.from('attendance_logs').delete().eq('schedule_id', req.schedule_id).eq('date', req.class_date);
+          if (delRes && delRes.error) throw delRes.error;
+          if (delRes && typeof delRes.deleted === 'number' && delRes.deleted === 0) {
+            refuseResetClass('Cannot reset this class: no attendance record was found to remove. The request was NOT approved.');
+            return;
+          }
+
+          meta.reset_class_request.status = 'approved';
+          meta.reset_class_request.approved_at = new Date().toISOString();
+          meta.reset_class_request.approved_by = CURRENT_ROLE;
+
+          const { error: resetNotesErr } = await db.from('students').update({ notes: JSON.stringify(meta) }).eq('id', studentId);
+          if (resetNotesErr) throw resetNotesErr;
+
+          lmsNotify(`✅ Reset class approved for ${st.name}!\nThe class on ${req.class_date} (${req.schedule_label || 'scheduled slot'}) is Scheduled again.`);
         } else {
           const req = meta.leave_request || {};
           const startDate  = req.start_date  || new Date().toISOString().slice(0, 10);
@@ -850,12 +952,18 @@
             meta.leave_request.approved_by = CURRENT_ROLE;
           }
 
+          // Owner decision 3 (2026-11-10): an approved leave ends
+          // the student's schedule + assignment and unassigns the
+          // teacher in the same write (see endStudentScheduleForLeave).
+          await endStudentScheduleForLeave(studentId, meta, st, startDate);
+
           const { error: upErr } = await db.from('students').update({
-            notes: JSON.stringify(meta)
+            notes: JSON.stringify(meta),
+            assigned_teacher_id: null
           }).eq('id', studentId);
 
           if (upErr) throw upErr;
-          lmsNotify(`✅ Leave request approved for ${st.name}!\nOn leave from ${startDate}; returns on ${returnDate}.\nThe leave starts and ends automatically on these dates.`);
+          lmsNotify(`✅ Leave request approved for ${st.name}!\nOn leave from ${startDate}; returns on ${returnDate}.\nThe student has been removed from the teacher's schedule; returning them from leave puts them back on the previous teacher's roster as Not Scheduled.`);
         }
 
         closeModal('modalAdminTeacherRequests');
@@ -911,6 +1019,15 @@
           meta.reschedule_request.decline_reason = reason;
           meta.reschedule_request.declined_at = new Date().toISOString();
           meta.reschedule_request.declined_by = CURRENT_ROLE;
+        } else if (rType === 'reset_class' && meta.reset_class_request) {
+          // Teacher Portal Update (2026-11-10): a declined Reset
+          // class request changes nothing about the class — the
+          // Leave/Absent day log stays exactly as it is; only the
+          // decision is stamped (the teacher's note is preserved).
+          meta.reset_class_request.status = 'declined';
+          meta.reset_class_request.decline_reason = reason;
+          meta.reset_class_request.declined_at = new Date().toISOString();
+          meta.reset_class_request.declined_by = CURRENT_ROLE;
         } else if (meta.leave_request) {
           meta.leave_request.status = 'declined';
           meta.leave_request.decline_reason = reason;
@@ -932,7 +1049,7 @@
     }
 
     async function reactivateStudentFromLeave(studentId) {
-      if (!(await lmsConfirm("Reactivate this student now? This will restore their active weekly class schedule slots."))) return;
+      if (!(await lmsConfirm("Return this student from leave now? They will go back to their previous teacher's roster as Not Scheduled — no timetable slots are restored."))) return;
 
       try {
         const { data: st } = await db.from('students').select('*').eq('id', studentId).single();
@@ -961,14 +1078,32 @@
         meta.reactivated_at = new Date().toISOString();
         meta.reactivated_by = CURRENT_ROLE;
 
+        // Owner decision 3 (2026-11-10): the student returns to the
+        // PREVIOUS teacher's roster (the snapshot taken when leave
+        // started) as assigned but NOT SCHEDULED — the archived
+        // slots stay archived in the notes as history and are NOT
+        // restored to the timetable. The assignment-end stamp from
+        // the leave start is cleared (mirroring
+        // Assignments.open()'s stamp clearing); the closed ledger
+        // row itself stays closed as history — a fresh assignment
+        // period opens through the normal scheduling flows when
+        // classes actually resume.
+        delete meta.assignment_end_date;
+        delete meta.assignment_end_reason;
+        const restoreTeacherId = meta.leave_previous_teacher_id || st.assigned_teacher_id || null;
+        const restoreTeacherName = meta.leave_previous_teacher_name
+          || ((window.ALL_TEACHERS || []).find(t => String(t.id) === String(restoreTeacherId)) || {}).full_name
+          || 'the previous teacher';
+
         const { error: upErr } = await db.from('students').update({
           status: 'Active',
+          assigned_teacher_id: restoreTeacherId,
           notes: JSON.stringify(meta)
         }).eq('id', studentId);
 
         if (upErr) throw upErr;
 
-        lmsNotify(`🎓 ${st.name} has been reactivated!\nWeekly class schedule slots are fully active.`);
+        lmsNotify(`🎓 ${st.name} has been returned from leave!\nBack on ${restoreTeacherName}'s roster as Not Scheduled — add timetable slots when their classes resume.`);
         await loadDashboardData();
         await checkLeaveReturnAlertsAndRequests(false);
         if (document.getElementById('tab-leaves') && !document.getElementById('tab-leaves').classList.contains('hidden')) {
@@ -1230,6 +1365,96 @@
       }
     }
 
+    function leaveDayBeforeStr(dateStr) {
+      const d = new Date(String(dateStr || '') + 'T00:00:00');
+      if (isNaN(d.getTime())) return new Date().toISOString().slice(0, 10);
+      d.setDate(d.getDate() - 1);
+      const m = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      return d.getFullYear() + '-' + m + '-' + day;
+    }
+
+    // Teacher Portal Update (2026-11-10, owner decision 3): when an
+    // admin marks a student on leave, the student leaves the
+    // teacher's schedule COMPLETELY — not just hidden behind the
+    // leave window as before. The mechanics reuse the deactivation
+    // path's close semantics (deactivateStudentScheduleAndTeacherBackend):
+    //   1. the current teacher is snapshotted into the notes
+    //      (leave_previous_teacher_id) so the return can restore the
+    //      roster without guessing;
+    //   2. the student's class_schedules rows are archived into the
+    //      notes, then deleted (schedule history is preserved in the
+    //      archive copy; attendance_logs are never touched);
+    //   3. the open student_assignments period is CLOSED via
+    //      Assignments.closeCurrent with end_date = the LAST PAYABLE
+    //      DAY (the day before the leave starts) and end_reason
+    //      'leave' — rows close, never delete (owner salary rule B:
+    //      slots pay up to the last payable day);
+    //   4. the assignment-end stamp (assignment_end_date / _reason)
+    //      is written into the SAME notes update, mirroring the
+    //      stamp Assignments.endAssignment writes, so payroll's
+    //      segment proration bounds the period identically in every
+    //      compile (no payroll code is changed);
+    //   5. the caller then clears students.assigned_teacher_id in
+    //      the same update, which removes the student from the
+    //      teacher's Student List rows AND counts.
+    // A re-mark of an already-ended leave (no teacher, no schedule
+    // rows left) is a no-op here, so the original snapshot and stamp
+    // survive a leave extension untouched.
+    async function endStudentScheduleForLeave(studentId, meta, st, leaveStartDate) {
+      try {
+        const prevTeacherId = st && st.assigned_teacher_id ? st.assigned_teacher_id : null;
+        let schedRows = [];
+        try {
+          const { data: rows } = await db.from('class_schedules').select('*').eq('student_id', studentId);
+          if (Array.isArray(rows)) schedRows = rows;
+        } catch (e) { console.warn('[leave] schedule read failed:', e); }
+
+        if (!prevTeacherId && schedRows.length === 0) return;
+
+        if (prevTeacherId) {
+          meta.leave_previous_teacher_id = prevTeacherId;
+          const prevTch = (window.ALL_TEACHERS || []).find(t => String(t.id) === String(prevTeacherId));
+          meta.leave_previous_teacher_name = prevTch ? (prevTch.full_name || null) : null;
+        }
+
+        if (schedRows.length > 0) {
+          meta.archived_schedules_before_leave = schedRows.map(r => ({
+            id: r.id,
+            teacher_id: r.teacher_id,
+            day_of_week: r.day_of_week,
+            start_time: r.start_time,
+            end_time: r.end_time,
+            duration_mins: r.duration_mins,
+            course_name: r.course_name,
+            archived_at: new Date().toISOString()
+          }));
+          meta.schedule_cleared_on_leave_at = new Date().toISOString();
+          try {
+            await db.from('class_schedules').delete().eq('student_id', studentId);
+          } catch (e) { console.warn('[leave] schedule delete failed:', e); }
+          if (Array.isArray(window.ALL_CLASS_SCHEDULES)) {
+            window.ALL_CLASS_SCHEDULES = window.ALL_CLASS_SCHEDULES.filter(row => String(row.student_id) !== String(studentId));
+          }
+        }
+
+        const lastPayableDay = (window.Assignments && typeof Assignments.dayBefore === 'function')
+          ? Assignments.dayBefore(leaveStartDate)
+          : leaveDayBeforeStr(leaveStartDate);
+        try {
+          if (window.Assignments) {
+            await Assignments.loadAll();
+            await Assignments.closeCurrent(studentId, { end_date: lastPayableDay, end_reason: 'leave' });
+          }
+        } catch (e) { console.warn('[leave] assignment close failed:', e); }
+
+        meta.assignment_end_date = lastPayableDay;
+        meta.assignment_end_reason = 'leave';
+      } catch (e) {
+        console.warn('[leave] end-of-schedule mechanics failed:', e);
+      }
+    }
+
     async function handleSaveStudentLeave(e) {
       e.preventDefault();
       const studentId = document.getElementById('leaveStudentSelect')?.value;
@@ -1263,13 +1488,21 @@
         meta.leave_marked_at = new Date().toISOString();
         meta.leave_marked_by = CURRENT_ROLE;
 
+        // Owner decision 3 (2026-11-10): marking leave ends the
+        // student's schedule + assignment (see
+        // endStudentScheduleForLeave) and unassigns the teacher in
+        // the same write, so the student leaves the teacher's roster
+        // completely until an admin returns them from leave.
+        await endStudentScheduleForLeave(studentId, meta, st, startDate);
+
         const { error: upErr } = await db.from('students').update({
-          notes: JSON.stringify(meta)
+          notes: JSON.stringify(meta),
+          assigned_teacher_id: null
         }).eq('id', studentId);
 
         if (upErr) throw upErr;
 
-        lmsNotify(`🏖️ Leave recorded for ${st.name}.\nOn leave from ${startDate}; returns on ${returnDate}.\nThe leave starts and ends automatically on these dates.`);
+        lmsNotify(`🏖️ Leave recorded for ${st.name}.\nOn leave from ${startDate}; returns on ${returnDate}.\nThe student has been removed from the teacher's schedule; returning them from leave puts them back on the previous teacher's roster as Not Scheduled.`);
         closeModal('modalMarkLeave');
         await loadDashboardData();
         await checkLeaveReturnAlertsAndRequests(false);

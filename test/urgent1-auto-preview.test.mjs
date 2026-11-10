@@ -253,7 +253,11 @@ check('manual complete handler unchanged (transition + modal call intact)', TEAC
 check('start path has NO concurrent-running block (next class can start first)',
   !/another class is (still )?(running|in progress)/i.test(extractFunction(TEACHER_HTML, 'transitionClassSessionState'))
   && !/another class is (still )?(running|in progress)/i.test(extractFunction(TEACHER_HTML, 'handleTeacherStartClass')));
-check('row START CLASS buttons render per-row from status only', (TEACHER_HTML.match(/handleTeacherStartClass\('\$\{escapeJsAttr\(c\.id\)\}'/g) || []).length >= 2);
+// Teacher Portal Update (2026-11-10): the Scheduled row's direct
+// Start Class button was removed by the owner — Start Zoom ->
+// Waiting is the only path to Running — so exactly ONE per-row
+// Start Class render remains: the Waiting branch's pulsing button.
+check('row START CLASS buttons render per-row from status only', (TEACHER_HTML.match(/handleTeacherStartClass\('\$\{escapeJsAttr\(c\.id\)\}'/g) || []).length === 1);
 
 const failed = results.filter((r) => !r.pass).length;
 console.log(`---\nurgent1-auto-preview: ${results.length - failed}/${results.length} passed`);

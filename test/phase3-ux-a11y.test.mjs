@@ -88,9 +88,11 @@ check('LABEL parent has no unlabeled static close button left',
 // (modalPageEditor, 2026-11-06) added its own labelled close button.
 // Teacher count 11 -> 10 (owner marks, 2026-11-06): the removed
 // Schedule Student modal carried one of the labelled close buttons.
-check('LABEL close-button aria-label counts (index 31, teacher 10, parent 2)',
+// Teacher count 10 -> 11 (Teacher Portal Update, 2026-11-10): the
+// new Reset class request modal carries its own labelled close button.
+check('LABEL close-button aria-label counts (index 31, teacher 11, parent 2)',
   count(INDEX, /aria-label="Close"/g) === 31 &&
-  count(TEACHER, /aria-label="Close"/g) === 10 &&
+  count(TEACHER, /aria-label="Close"/g) === 11 &&
   count(PARENT, /aria-label="Close"/g) === 2,
   `${count(INDEX, /aria-label="Close"/g)}/${count(TEACHER, /aria-label="Close"/g)}/${count(PARENT, /aria-label="Close"/g)}`);
 check('LABEL sidebar toggles labelled in teacher + index',

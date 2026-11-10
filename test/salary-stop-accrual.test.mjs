@@ -18,9 +18,14 @@
 //  D. Structural: every hooked flow carries its hook; the two
 //     deactivation paths (family cascade + 360 fee modal) already
 //     route through the canonical config.js helper that closes the
-//     assignment; plain mark-leave (js/leaves.js) contains NO
-//     endAssignment call (temporary leave stays accrual-neutral);
-//     js/payroll.js gained no writer.
+//     assignment. SUPERSEDED in part by the Teacher Portal Update
+//     commission (owner decision 3, 2026-11-10): an approved/saved
+//     student leave now ENDS the schedule+assignment at leave start
+//     — js/leaves.js closes the open assignment rows via
+//     Assignments.closeCurrent with end_reason 'leave' and the
+//     day-before-leave-start end date, and archives then deletes the
+//     schedule rows (history preserved in notes). It still never
+//     CALLS Assignments.endAssignment. js/payroll.js gained no writer.
 import fs from 'node:fs';
 import path from 'node:path';
 import vm from 'node:vm';
@@ -490,9 +495,18 @@ console.log('== D. structural: hooks wired, deactivation paths proven, leave unt
     p360.includes('await deactivateStudentScheduleAndTeacherBackend(stu.id, stuMeta)'));
 
   const leaves = read('js/leaves.js');
-  check('5 PROOF: js/leaves.js contains NO endAssignment call and NO schedule deletion (plain leave stays accrual-neutral)',
-    !leaves.includes('endAssignment') && !leaves.includes("class_schedules').delete") &&
-    !seg(leaves, 'async function handleSaveStudentLeave(e)', 'async function loadLeaveManagementData()').includes('class_schedules'));
+  // SUPERSEDED (Teacher Portal Update commission, owner decision 3,
+  // 2026-11-10): the old rule "plain leave stays accrual-neutral — no
+  // assignment close, no schedule deletion" no longer holds. An
+  // approved/saved student leave now ends the student's schedule and
+  // assignment at leave start (pay stops after the last payable day,
+  // exactly like deactivation), and off-leave restores the student to
+  // the PREVIOUS teacher's roster as Not Scheduled. The invariant
+  // that survives: leaves.js closes via Assignments.closeCurrent
+  // (end_reason 'leave') and never CALLS Assignments.endAssignment.
+  check('5 PROOF (2026-11-10 rule): js/leaves.js closes the assignment on leave via Assignments.closeCurrent with end_reason \'leave\', and never CALLS Assignments.endAssignment',
+    leaves.includes('Assignments.closeCurrent(') && leaves.includes("end_reason: 'leave'") &&
+    !leaves.includes('Assignments.endAssignment('));
 
   const payroll = read('js/payroll.js');
   check('payroll.js gained no writer: endAssignment is not called from the engine',

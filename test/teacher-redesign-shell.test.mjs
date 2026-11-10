@@ -586,10 +586,14 @@ const hhmm = (mins) => {
   return String(Math.floor(t / 60)).padStart(2, '0') + ':' + String(t % 60).padStart(2, '0') + ':00';
 };
 api.setClasses([
+  // Teacher Portal Update (2026-11-10): SCH-FIX-1 is a WAITING class
+  // — the pulsing Start Class button now renders ONLY on Waiting
+  // rows (the Scheduled row's direct Start Class was removed), so
+  // the Start Class wiring check below runs against this row.
   { id: 'SCH-FIX-1', student_id: 'STU-101', start_time: hhmm(localMin + 180), end_time: hhmm(localMin + 210),
-    startMin: localMin + 180, endMin: localMin + 210, durationMins: 30, status: 'Scheduled',
-    badgeClass: 'bg-slate-100 text-slate-700 border-slate-300', isLive: false, isUpcoming: true,
-    isLeaveStudent: false, isAdvanceExtra: false, log: null,
+    startMin: localMin + 180, endMin: localMin + 210, durationMins: 30, status: 'Waiting',
+    badgeClass: 'bg-amber-100 text-amber-900 border-amber-300', isLive: false, isUpcoming: true,
+    isLeaveStudent: false, isAdvanceExtra: false, log: { status: 'Waiting' },
     students: { id: 'STU-101', name: 'Ayesha Khan' } },
   { id: 'SCH-FIX-2', student_id: 'STU-102', start_time: hhmm(localMin - 90), end_time: hhmm(localMin - 60),
     startMin: localMin - 90, endMin: 0, durationMins: 30, status: 'Running',
@@ -614,6 +618,27 @@ const odEl = registry.get('teacherOverdueClassReminder');
 check('overdue reminder shows for the still-open class (PKT end time passed)',
   !odEl.classList.contains('hidden') && odEl.innerHTML.includes('Bilal Ahmed') &&
   odEl.innerHTML.includes("handleTeacherCompleteClass('SCH-FIX-2'"));
+
+// --- Teacher Portal Update (2026-11-10): Scheduled-row contract ---
+// A Scheduled row renders Start Zoom as its only start action (no
+// direct Start Class), no Change Time button, and the new History
+// button wired to the existing lesson-history opener.
+api.setClasses([
+  { id: 'SCH-FIX-3', student_id: 'STU-103', start_time: hhmm(localMin + 240), end_time: hhmm(localMin + 270),
+    meeting_link: 'https://zoom.us/j/1234567890',
+    startMin: localMin + 240, endMin: localMin + 270, durationMins: 30, status: 'Scheduled',
+    badgeClass: 'bg-slate-100 text-slate-700 border-slate-300', isLive: false, isUpcoming: true,
+    isLeaveStudent: false, isAdvanceExtra: false, log: null,
+    students: { id: 'STU-103', name: 'Hira Shah' } },
+]);
+api.renderTeacherClassesTable();
+const schedRowHtml = registry.get('teacherClassesTableBody').innerHTML;
+check('scheduled rows render Start Zoom and NO direct Start Class (2026-11-10)',
+  schedRowHtml.includes('Start Zoom') && !schedRowHtml.includes('START CLASS'));
+check("today's rows carry no Change Time button (moved to Student List)",
+  !schedRowHtml.includes('Change Time') && !schedRowHtml.includes('openTimeChangeRequestModal'));
+check("today's rows carry the History button wired to the lesson history opener",
+  schedRowHtml.includes("openTeacherLessonHistoryForStudent('STU-103')"));
 
 // ---------------------------------------------------------------------
 // Part D — owner marks (8): Completed counts ALL marked classes.
