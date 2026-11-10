@@ -29,7 +29,9 @@
 // retry loop: a network throw or a 502/503 first attempt no longer
 // fails the sign-in, persistent failure lands on the existing
 // unreachable message after exactly 3 attempts, and a 401 is never
-// retried.
+// retried. The teacher gate handler (teacherServerLogin inside
+// handleTeacherSignIn) got the same loop in a follow-up once
+// teacher.html was free, and is executed the same way below.
 import { readFileSync, writeFileSync, mkdtempSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
@@ -333,7 +335,8 @@ for (const s of SURFACES) {
 
 // ---------------------------------------------------------------------
 // LOGIN RESILIENCE (2026-11-10) — executed: the REAL parent + manager
-// sign-in handlers against scripted fetch sequences.
+// sign-in handlers against scripted fetch sequences, plus the REAL
+// teacher gate handler (added when teacher.html was free again).
 // ---------------------------------------------------------------------
 function extractFunction(src, name) {
   let start = src.indexOf(`function ${name}(`);
@@ -497,6 +500,135 @@ const mgrOkResponse = () => ({
   ok(calls === 1 &&
     b.registry.get('mgrLoginErrorText').innerText === 'No password set. Ask the administrator to set one.',
     'manager login: 401 is never retried and keeps its exact message (1 fetch)');
+}
+
+// --- teacher: the real gate handler, full flow ------------------------
+// The profile fetch (db.from('teachers')...) and the dashboard entry
+// (completeTeacherLogin) are stubbed; the retry loop, the session
+// write and every message exercised are the real handler's.
+function bootTeacherLogin(fetchImpl) {
+  const src = read('teacher.html');
+  const registry = new Map();
+  for (const m of src.matchAll(/<(\w+)[^>]*\bid="([^"]+)"[^>]*>/g)) {
+    const tag = m[0];
+    const cls = (tag.match(/class="([^"]*)"/) || [])[1] || '';
+    const type = (tag.match(/type="([^"]*)"/) || [])[1] || '';
+    if (!registry.has(m[2])) registry.set(m[2], new FakeEl(m[2], cls, { type }));
+  }
+  const sessionStore = new Map();
+  const localStore = new Map();
+  const storage = (store) => ({
+    getItem: (k) => (store.has(k) ? store.get(k) : null),
+    setItem: (k, v) => { store.set(k, String(v)); },
+    removeItem: (k) => { store.delete(k); },
+  });
+  const completed = [];
+  const teacherRow = { id: 'TCH-1', full_name: 'Teach', status: 'Active' };
+  const sandbox = {
+    console, setTimeout, clearTimeout, fetch: fetchImpl,
+    sessionStorage: storage(sessionStore),
+    localStorage: storage(localStore),
+    document: {
+      getElementById: (id) => registry.get(id) || null,
+      createElement: () => new FakeEl('', '', {}),
+    },
+    db: {
+      from: () => ({
+        select: () => ({
+          eq: () => ({ single: async () => ({ data: teacherRow }) }),
+        }),
+      }),
+    },
+  };
+  sandbox.window = { location: { hostname: 'alhuda-lms.vercel.app' } };
+  vm.createContext(sandbox);
+  vm.runInContext(`
+    function isEligibleTeacherAccount() { return true; }
+    async function completeTeacherLogin(row) { this.__completed.push(row); }
+    this.__completed = [];
+    ${extractFunction(src, 'getTeacherWorkerBase')}
+    ${extractFunction(src, 'clearTeacherToken')}
+    ${extractFunction(src, 'teacherServerLogin')}
+    ${extractFunction(src, 'restoreLoginButton')}
+    ${extractFunction(src, 'showTeacherLoginError')}
+    ${extractFunction(src, 'handleTeacherSignIn')}
+    this.__login = handleTeacherSignIn;
+  `, sandbox);
+  // Point the vm-global recorder at the array this boot returns, so a
+  // completed sign-in is observable from outside.
+  sandbox.__completed = completed;
+  return { login: sandbox.__login, registry, sessionStore, completed, sandbox };
+}
+const tchOkResponse = () => ({
+  ok: true, status: 200,
+  json: async () => ({ ok: true, token: 'ttok', id: 'TCH-1' }),
+});
+{
+  let calls = 0;
+  const b = bootTeacherLogin(async () => {
+    calls++;
+    if (calls === 1) throw new Error('network down');
+    return tchOkResponse();
+  });
+  b.registry.get('loginUsername').value = 'teach';
+  b.registry.get('loginPassword').value = 'correct';
+  await b.login({ preventDefault() {} });
+  ok(calls === 2 && b.sessionStore.get('alhuda_teacher_token') === 'ttok' &&
+    b.completed.length === 1 &&
+    b.registry.get('loginErrorMsg').classList.contains('hidden'),
+    'teacher login: network throw then success stores the session token and completes, NO error shown');
+}
+{
+  let calls = 0;
+  const b = bootTeacherLogin(async () => {
+    calls++;
+    if (calls === 1) return { ok: false, status: 503, json: async () => ({}) };
+    return tchOkResponse();
+  });
+  b.registry.get('loginUsername').value = 'teach';
+  b.registry.get('loginPassword').value = 'correct';
+  await b.login({ preventDefault() {} });
+  ok(calls === 2 && b.sessionStore.get('alhuda_teacher_token') === 'ttok' &&
+    b.completed.length === 1 &&
+    b.registry.get('loginErrorMsg').classList.contains('hidden'),
+    'teacher login: 503 then success stores the session token and completes, NO error shown');
+}
+{
+  let calls = 0;
+  const b = bootTeacherLogin(async () => { calls++; throw new Error('network down'); });
+  b.registry.get('loginUsername').value = 'teach';
+  b.registry.get('loginPassword').value = 'correct';
+  await b.login({ preventDefault() {} });
+  ok(calls === 3 && !b.sessionStore.get('alhuda_teacher_token') &&
+    b.registry.get('loginErrorText').innerText === 'Cannot reach the server. Please try again.' &&
+    !b.registry.get('loginErrorMsg').classList.contains('hidden'),
+    'teacher login: all attempts down shows the existing unreachable message after exactly 3 fetches');
+}
+{
+  let calls = 0;
+  const b = bootTeacherLogin(async () => {
+    calls++;
+    return { ok: false, status: 401, json: async () => ({ error: '' }) };
+  });
+  b.registry.get('loginUsername').value = 'teach';
+  b.registry.get('loginPassword').value = 'wrong';
+  await b.login({ preventDefault() {} });
+  ok(calls === 1 && !b.sessionStore.get('alhuda_teacher_token') &&
+    b.registry.get('loginErrorText').innerText === 'Invalid username or password.',
+    'teacher login: 401 is never retried and keeps its exact message (1 fetch)');
+}
+{
+  let calls = 0;
+  const b = bootTeacherLogin(async () => {
+    calls++;
+    return { ok: false, status: 401, json: async () => ({ error: 'account_deactivated' }) };
+  });
+  b.registry.get('loginUsername').value = 'teach';
+  b.registry.get('loginPassword').value = 'correct';
+  await b.login({ preventDefault() {} });
+  ok(calls === 1 &&
+    b.registry.get('loginErrorText').innerText === 'This account is deactivated. Please contact the administrator.',
+    'teacher login: 401 account_deactivated keeps its exact message (1 fetch)');
 }
 
 if (failures === 0) console.log('login-redesign: all assertions passed');
