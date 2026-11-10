@@ -838,6 +838,11 @@ function makeLeavesWorld(role) {
   vm.runInContext(ASSIGNMENTS_SRC, sandbox);
   const src = [
     extractFunction(LEAVES, 'isStudentOnLeaveNow'),
+    // Leave Screen Fixes (2026-11-10): the scan and the save handler
+    // now call these two shared helpers from the same file — they
+    // must be extracted with them or the real handlers throw.
+    extractFunction(LEAVES, 'isValidLeaveDateStr'),
+    extractFunction(LEAVES, 'classifyLeaveRecord'),
     extractFunction(LEAVES, 'checkLeaveReturnAlertsAndRequests'),
     extractFunction(LEAVES, 'openAdminTeacherRequestsModal'),
     extractFunction(LEAVES, 'handleApproveTeacherRequest'),
