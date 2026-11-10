@@ -521,6 +521,85 @@
       return getAllStudents(studentsArray, familiesArray).filter(s => !isActiveStudentRecord(s, familiesArray));
     }
 
+    // =========================================================================
+    // DIRECTORY ON-LEAVE PARTITION (Families KPI cards v3, 2026-11-10)
+    // The directory cards partition every regular record into exactly one
+    // bucket: Active, Deactivated or On Leave. Deactivated always wins over
+    // Leave. These two predicates are the ONE definition shared by the KPI
+    // counters and the directory status filters, so a card figure and its
+    // filtered list can never drift apart.
+    // =========================================================================
+    function isStudentOnLeaveForDirectory(s) {
+      if (!s) return false;
+      if (!isRegularStudentRecord(s)) return false;
+      // A self-deactivated student belongs to Deactivated, even when a stale
+      // leave window or a stored Leave status is still on the record.
+      if (isStudentSelfDeactivated(s)) return false;
+      // Stored leave status (Student 360 toggle writes 'Leave'); accepted
+      // case-insensitively, including the defensive 'On Leave' spelling the
+      // parent portal reads. The canonical predicate below only recognises
+      // the exact 'Leave' spelling, so this arm runs first.
+      const storedStatus = String(s.status || '').trim().toLowerCase();
+      if (storedStatus === 'leave' || storedStatus === 'on leave') return true;
+      let meta = null;
+      if (s.notes) {
+        try { meta = typeof s.notes === 'string' ? JSON.parse(s.notes) : s.notes; } catch (e) { meta = null; }
+      }
+      if (typeof isStudentOnLeaveNow === 'function') {
+        try { return !!isStudentOnLeaveNow(s, meta, null); } catch (e) { return false; }
+      }
+      // Fallback mirroring the canonical Batch 4 window check (js/leaves.js)
+      // for any context where leaves.js is not loaded.
+      if (!meta || meta.on_leave !== true) return false;
+      const t = new Date().toISOString().slice(0, 10);
+      if (meta.leave_start_date && t < meta.leave_start_date) return false;
+      if (meta.return_date && t >= meta.return_date) return false;
+      return true;
+    }
+
+    function isFamilyOnLeaveForDirectory(f, studentsOfFamily) {
+      if (!f) return false;
+      if (!isRegularFamilyRecord(f)) return false;
+      // A deactivated family stays Deactivated, marker or not.
+      if (isFamilyDeactivated(f)) return false;
+      // (a) The explicit Family 360 leave marker: the family's own stored
+      // status contains 'leave' (handleFamilyLevelLeave writes 'On Leave').
+      const ownStatus = String(f.status || '').trim().toLowerCase();
+      if (ownStatus.includes('leave')) return true;
+      // (b) Whole-family derivation (owner decision 2026-11-10): the family
+      // has at least one regular student, and EVERY non-deactivated regular
+      // student is on leave. A partially-on-leave family stays Active; its
+      // on-leave students still count on the student side.
+      let stuList;
+      if (Array.isArray(studentsOfFamily)) {
+        stuList = studentsOfFamily.filter(s => isRegularStudentRecord(s));
+      } else {
+        stuList = getFamilyRegularStudents(f);
+      }
+      if (!stuList || stuList.length === 0) return false;
+      const currentStudents = stuList.filter(s => !isStudentSelfDeactivated(s));
+      if (currentStudents.length === 0) return false;
+      return currentStudents.every(s => isStudentOnLeaveForDirectory(s));
+    }
+
+    function getOnLeaveStudents(studentsArray = ALL_STUDENTS, familiesArray = ALL_FAMILIES) {
+      return getAllStudents(studentsArray, familiesArray).filter(s => isStudentOnLeaveForDirectory(s));
+    }
+
+    function getOnLeaveFamilies(familiesArray = ALL_FAMILIES, studentsArray = ALL_STUDENTS) {
+      const allStus = Array.isArray(studentsArray) ? studentsArray : [];
+      return getAllFamilies(familiesArray).filter(f => {
+        const famIdUpper = String(f.id || '').trim().toUpperCase();
+        const ownStudents = allStus.filter(s => String(s.family_id || '').trim().toUpperCase() === famIdUpper);
+        return isFamilyOnLeaveForDirectory(f, ownStudents);
+      });
+    }
+
+    window.isStudentOnLeaveForDirectory = isStudentOnLeaveForDirectory;
+    window.isFamilyOnLeaveForDirectory = isFamilyOnLeaveForDirectory;
+    window.getOnLeaveStudents = getOnLeaveStudents;
+    window.getOnLeaveFamilies = getOnLeaveFamilies;
+
     async function deactivateStudentScheduleAndTeacherBackend(studentId, existingMetaObj = null) {
       if (!studentId) return { previousTeacherId: null, previousTeacherName: null, archivedSchedules: [] };
       const stuObj = (ALL_STUDENTS || []).find(s => String(s.id) === String(studentId));
