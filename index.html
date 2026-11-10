@@ -2616,7 +2616,7 @@
       <div class="flex justify-between items-center flex-wrap gap-3 bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-sm">
         <div>
           <h2 class="text-xl font-extrabold text-brandDark flex items-center gap-2">
-            <i class="fa-solid fa-plane-departure text-blue-600"></i> Student & Family Leave Management Engine
+            <i class="fa-solid fa-plane-departure text-blue-600"></i> Student Leave Management
           </h2>
           <p class="text-xs text-slate-500">Track vacations & school breaks, pause timetable slots, and manage automated return resumption alerts</p>
         </div>
@@ -5759,6 +5759,38 @@
     </div>
   </div>
 
+  <!-- MODAL: EXTEND STUDENT LEAVE (real date input — lmsPrompt is text-only) -->
+  <div id="modalExtendLeave" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-[90] hidden items-center justify-center p-2 sm:p-4 overflow-y-auto">
+    <div class="bg-white rounded-2xl max-w-lg w-full p-4 sm:p-6 shadow-2xl border border-slate-200 my-auto max-h-[94vh] overflow-y-auto touch-scroll space-y-4 animate-scaleIn">
+      <div class="flex justify-between items-center border-b pb-3 shrink-0">
+        <div class="flex items-center gap-2">
+          <div class="w-9 h-9 rounded-xl bg-blue-100 text-blue-700 flex items-center justify-center font-black shrink-0">
+            <i class="fa-solid fa-calendar-plus text-base"></i>
+          </div>
+          <div>
+            <h3 class="font-black text-sm sm:text-base text-slate-900">Extend Student Leave</h3>
+            <p class="text-[11px] sm:text-xs text-slate-500">Student: <span id="extendLeaveStudentName" class="font-bold text-slate-700"></span> &bull; Current Return Date: <span id="extendLeaveCurrentReturn" class="font-mono font-bold text-slate-700"></span></p>
+          </div>
+        </div>
+        <button onclick="closeModal('modalExtendLeave')" class="text-slate-400 hover:text-slate-600 text-2xl font-bold leading-none" aria-label="Close">&times;</button>
+      </div>
+
+      <form onsubmit="handleExtendLeaveSave(event)" class="space-y-3.5 text-xs">
+        <div>
+          <label class="block font-bold text-slate-700 mb-1">New Return Date *:</label>
+          <input type="date" id="extendLeaveNewReturnDate" required class="w-full p-2 border rounded-xl font-mono text-slate-800 border-blue-400 bg-blue-50/40">
+        </div>
+
+        <div class="flex flex-col-reverse sm:flex-row justify-end gap-2 sm:gap-2.5 border-t pt-3">
+          <button type="button" onclick="closeModal('modalExtendLeave')" class="w-full sm:w-auto px-4 py-2.5 border rounded-xl font-bold text-slate-600 hover:bg-slate-100 text-center">Cancel</button>
+          <button type="submit" id="btnSubmitExtendLeave" class="w-full sm:w-auto px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-black rounded-xl flex items-center justify-center gap-1.5 shadow-sm transition">
+            <i class="fa-solid fa-check"></i> Extend Leave
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
   <!-- MODAL: SCHEDULED RETURN OVERDUE ALERT (POP-UP) -->
   <div id="modalReturnAlerts" class="fixed inset-0 bg-black/75 backdrop-blur-sm z-[85] hidden items-center justify-center p-4">
     <div class="bg-white rounded-2xl max-w-2xl w-full p-6 shadow-2xl border-2 border-amber-400 space-y-4 animate-scaleIn">
@@ -5772,7 +5804,7 @@
               Scheduled Leave Return Due!
               <span id="modalReturnAlertsBadge" class="px-2 py-0.5 rounded-full text-xs font-mono bg-rose-600 text-white font-bold animate-pulse">0 Due</span>
             </h3>
-            <p class="text-xs text-slate-500">Students whose return date has arrived or passed. Reactivate them to restore slots or extend leave.</p>
+            <p class="text-xs text-slate-500">Students whose return date has arrived or passed. Reactivating returns a student to their previous teacher's list as Not Scheduled — timetable slots are not restored, so classes must be booked again. Or extend the leave instead.</p>
           </div>
         </div>
         <button onclick="closeModal('modalReturnAlerts')" class="text-slate-400 hover:text-slate-600 text-xl font-bold" aria-label="Close">&times;</button>
@@ -5783,7 +5815,7 @@
       </div>
 
       <div class="flex justify-between items-center border-t pt-3">
-        <span class="text-xs text-slate-500 italic">Reactivating immediately restores student's active status and weekly class schedule.</span>
+        <span class="text-xs text-slate-500 italic">Reactivating restores the student's active status and returns them to their previous teacher's list as Not Scheduled — no timetable slots are restored.</span>
         <button onclick="closeModal('modalReturnAlerts')" class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs">
           Dismiss for Now
         </button>

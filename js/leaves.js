@@ -24,6 +24,61 @@
       return true;
     }
 
+    // Strict YYYY-MM-DD validation (shape + real calendar day, via a
+    // round-trip) — used by the leave date guards below.
+    function isValidLeaveDateStr(v) {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(String(v || ''))) return false;
+      const d = new Date(String(v) + 'T00:00:00');
+      if (isNaN(d.getTime())) return false;
+      const m = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      return (d.getFullYear() + '-' + m + '-' + day) === String(v);
+    }
+
+    // Leave Screen Fixes (2026-11-10, audit F1/F3): ONE shared
+    // classification for leave-history records, used by the Leave tab
+    // loader, the status filter, the countdown badge, Return Alerts
+    // and the top-bar badge. It exists because isStudentOnLeaveNow
+    // (batch4 window semantics, pinned by suite) stops counting a
+    // windowed leave ON its return date — so "still on leave AND
+    // return date passed" could never happen, and overdue was
+    // unreachable for exactly the leaves this portal marks. Under
+    // owner decision 3 (2026-11-10) a marked leave deletes the
+    // schedule and unassigns the teacher, and ONLY a manual
+    // Reactivate restores the roster — so a lapsed, un-reactivated
+    // leave is OVERDUE (it must alert), not silently "resumed".
+    // Meta lifecycle this is pinned to (reactivateStudentFromLeave):
+    // reactivation writes on_leave=false + reactivated_at and sets
+    // status 'Active', keeping the old window dates; a fresh mark
+    // writes on_leave=true with new dates, which supersedes the old
+    // reactivation stamp (reactivated_at is also written by
+    // Student-360 reactivations, so the stamp alone proves nothing —
+    // it only counts while on_leave is not true).
+    //   REACTIVATED    reactivated_at set while on_leave is not true
+    //   OVERDUE        window exists and today >= return_date, or a
+    //                  legacy status 'Leave' whose return_date <= today
+    //   UPCOMING       window exists and leave_start_date > today
+    //   ACTIVE         inside the window (isStudentOnLeaveNow true)
+    //   LEGACY-NO-DATE legacy status 'Leave' with no return date
+    function classifyLeaveRecord(st, meta, todayStr) {
+      const t = todayStr || new Date().toISOString().slice(0, 10);
+      const m = meta || {};
+      const startDate = m.leave_start_date || '';
+      const returnDate = m.return_date || '';
+      const hasWindow = m.on_leave === true || !!startDate;
+      if (m.reactivated_at && m.on_leave !== true) return 'REACTIVATED';
+      if (hasWindow) {
+        if (startDate && t < startDate) return 'UPCOMING';
+        if (returnDate && t >= returnDate) return 'OVERDUE';
+        return 'ACTIVE';
+      }
+      if (st && st.status === 'Leave') {
+        if (returnDate && returnDate <= t) return 'OVERDUE';
+        return returnDate ? 'ACTIVE' : 'LEGACY-NO-DATE';
+      }
+      return 'ACTIVE';
+    }
+
     async function checkLeaveReturnAlertsAndRequests(autoPopup = true) {
       try {
         const { data: students, error } = await db.from('students').select('*, teachers(*), families(*)');
@@ -44,15 +99,26 @@
           const isOnLeave = isStudentOnLeaveNow(st, meta, todayStr);
           if (isOnLeave) {
             totalActiveLeaves++;
+          }
+
+          // Leave Screen Fixes (2026-11-10, audit F1): the Return
+          // Alerts population comes from the shared classification,
+          // NOT from "still on leave with a return date arrived" —
+          // that pair could never hold for a windowed leave (the
+          // window predicate flips on the return date itself), so
+          // the alerts, the auto pop-up and the top-bar badge stayed
+          // empty for every leave this portal marks. A lapsed,
+          // un-reactivated leave is OVERDUE: its return date alerts
+          // on the day it arrives and every day after, until an
+          // admin reactivates or extends.
+          if (classifyLeaveRecord(st, meta, todayStr) === 'OVERDUE') {
             const returnDate = meta?.return_date;
-            if (returnDate && returnDate <= todayStr) {
-              OVERDUE_LEAVE_STUDENTS.push({
-                ...st,
-                leaveMeta: meta,
-                isOverdue: returnDate < todayStr,
-                isDueToday: returnDate === todayStr
-              });
-            }
+            OVERDUE_LEAVE_STUDENTS.push({
+              ...st,
+              leaveMeta: meta,
+              isOverdue: returnDate < todayStr,
+              isDueToday: returnDate === todayStr
+            });
           }
 
           // Check pending teacher requests (leave requests, reschedule requests, AND schedule time change requests)
@@ -957,7 +1023,7 @@
           // Owner decision 3 (2026-11-10): an approved leave ends
           // the student's schedule + assignment and unassigns the
           // teacher in the same write (see endStudentScheduleForLeave).
-          await endStudentScheduleForLeave(studentId, meta, st, startDate);
+          const endRes = await endStudentScheduleForLeave(studentId, meta, st, startDate);
 
           const { error: upErr } = await db.from('students').update({
             notes: JSON.stringify(meta),
@@ -965,7 +1031,14 @@
           }).eq('id', studentId);
 
           if (upErr) throw upErr;
-          lmsNotify(`✅ Leave request approved for ${st.name}!\nOn leave from ${startDate}; returns on ${returnDate}.\nThe student has been removed from the teacher's schedule; returning them from leave puts them back on the previous teacher's roster as Not Scheduled.`);
+          // Audit F7: same honesty rule as the Mark Leave save — a
+          // partial clean-up is reported, not hidden behind the
+          // full success claim.
+          if (endRes && !endRes.ok) {
+            lmsNotify(`⚠️ Leave request approved for ${st.name} (on leave from ${startDate}; returns on ${returnDate}), BUT ${endRes.failures.join(' and ')}. The leave is saved — please check the student's timetable and salary assignment.`, { type: 'error' });
+          } else {
+            lmsNotify(`✅ Leave request approved for ${st.name}!\nOn leave from ${startDate}; returns on ${returnDate}.\nThe student has been removed from the teacher's schedule; returning them from leave puts them back on the previous teacher's roster as Not Scheduled.`);
+          }
         }
 
         closeModal('modalAdminTeacherRequests');
@@ -1057,6 +1130,19 @@
         const { data: st } = await db.from('students').select('*').eq('id', studentId).single();
         if (!st) return;
 
+        // Leave Screen Fixes (2026-11-10, audit F5): a leave return
+        // must never resurrect a DEACTIVATED student — the write
+        // below sets status 'Active' unconditionally. The student
+        // goes through the normal reactivation path first; only then
+        // can they be returned from leave.
+        const studentDeactivated = (typeof isStudentSelfDeactivated === 'function')
+          ? isStudentSelfDeactivated(st)
+          : ['inactive', 'deactivated'].includes(String(st.status || '').toLowerCase());
+        if (studentDeactivated) {
+          lmsNotify("This student is deactivated. Reactivate the student first, then return them from leave.");
+          return;
+        }
+
         // Batch 7 (F1.5): a leave return must never reactivate a student
         // whose family is deactivated — the family must be reactivated
         // first. (The backend guard enforces this too; check here for a
@@ -1120,6 +1206,17 @@
       }
     }
 
+    // Leave Screen Fixes (2026-11-10, audit F4): Extend used to take
+    // a free-text lmsPrompt date — lmsPrompt can only render a text
+    // input (js/ui-notify.js hard-codes type='text'), so garbage
+    // dates landed verbatim ("Returns in NaNd"), a past date silently
+    // ended the leave, and the write result was never read before
+    // the success toast. Extend now opens a dedicated modal with a
+    // real date input (modalExtendLeave in index.html, styled like
+    // modalMarkLeave); the target student is held here between the
+    // open and the save.
+    let EXTEND_LEAVE_STUDENT_ID = null;
+
     async function extendStudentLeave(studentId) {
       try {
         const { data: st } = await db.from('students').select('*').eq('id', studentId).single();
@@ -1128,23 +1225,71 @@
         let meta = {};
         try { meta = JSON.parse(st.notes || '{}'); } catch(e) { meta = { text: st.notes || '' }; }
 
-        const currentReturn = meta.return_date || new Date().toISOString().slice(0, 10);
-        const newReturnDate = await lmsPrompt(`Enter new Return Date (YYYY-MM-DD) for ${st.name}:`, currentReturn, {
-          title: 'Extend Student Leave',
-          subtitle: `Student: ${st.name} • Current Return Date: ${currentReturn}`,
-          confirmText: 'Extend Leave'
-        });
-        if (!newReturnDate || newReturnDate === currentReturn) return;
+        const currentReturn = meta.return_date || '';
+        const todayStr = new Date().toISOString().slice(0, 10);
+        EXTEND_LEAVE_STUDENT_ID = studentId;
+        const nameEl = document.getElementById('extendLeaveStudentName');
+        if (nameEl) nameEl.innerText = st.name || '';
+        const curEl = document.getElementById('extendLeaveCurrentReturn');
+        if (curEl) curEl.innerText = currentReturn || 'Not set';
+        const input = document.getElementById('extendLeaveNewReturnDate');
+        if (input) {
+          input.value = currentReturn || todayStr;
+          // Browser-level hint only; handleExtendLeaveSave enforces.
+          input.min = (currentReturn && currentReturn >= todayStr) ? currentReturn : todayStr;
+        }
+        openModal('modalExtendLeave');
+      } catch (err) {
+        console.warn('[LMS] operation failed:', err.message); lmsNotify('Error extending leave. Please try again.', { type: 'error' });
+      }
+    }
+
+    async function handleExtendLeaveSave(e) {
+      if (e && e.preventDefault) e.preventDefault();
+      const studentId = EXTEND_LEAVE_STUDENT_ID;
+      if (!studentId) return;
+      const newReturnDate = document.getElementById('extendLeaveNewReturnDate')?.value || '';
+      const todayStr = new Date().toISOString().slice(0, 10);
+
+      try {
+        const { data: st, error: fetchErr } = await db.from('students').select('*').eq('id', studentId).single();
+        if (fetchErr || !st) throw new Error("Student not found.");
+
+        let meta = {};
+        try { meta = JSON.parse(st.notes || '{}'); } catch(e) { meta = { text: st.notes || '' }; }
+
+        const currentReturn = meta.return_date || '';
+
+        // Validation (audit F4): a real calendar date, strictly
+        // AFTER the current return date, and never in the past once
+        // the current return has already passed (or was never set —
+        // a past "extension" would lapse the leave instantly).
+        if (!isValidLeaveDateStr(newReturnDate)) {
+          lmsNotify('Please choose a valid return date.', { type: 'error' });
+          return;
+        }
+        if (currentReturn && newReturnDate <= currentReturn) {
+          lmsNotify(`The new return date must be after the current return date (${currentReturn}).`, { type: 'error' });
+          return;
+        }
+        if ((!currentReturn || currentReturn < todayStr) && newReturnDate < todayStr) {
+          lmsNotify('The new return date has already passed. Choose a date in the future.', { type: 'error' });
+          return;
+        }
 
         meta.return_date = newReturnDate;
         meta.extended_at = new Date().toISOString();
         meta.extended_by = CURRENT_ROLE;
 
-        await db.from('students').update({
+        // The write result is READ (audit F4): the success toast
+        // fires only when the extension actually saved.
+        const { error: upErr } = await db.from('students').update({
           notes: JSON.stringify(meta)
         }).eq('id', studentId);
+        if (upErr) throw upErr;
 
         lmsNotify(`📅 Leave extended until ${newReturnDate} for ${st.name}!`);
+        closeModal('modalExtendLeave');
         await loadDashboardData();
         await checkLeaveReturnAlertsAndRequests(false);
         if (document.getElementById('tab-leaves') && !document.getElementById('tab-leaves').classList.contains('hidden')) {
@@ -1173,6 +1318,7 @@
         let activeOnLeaveCount = 0;
         let returningSoonCount = 0;
         let overdueCount = 0;
+        let reactivatedCount = 0;
         let totalRecordsCount = 0;
 
         const today = new Date().toISOString().slice(0, 10);
@@ -1193,24 +1339,36 @@
             const startDate = meta?.leave_start_date || '';
             const reason = meta?.leave_reason || 'Personal / Vacation';
 
+            // Leave Screen Fixes (2026-11-10, audit F1/F3): every
+            // record carries the shared classification; the Overdue
+            // KPI and the record's isOverdue flag come from it (the
+            // old rule — on leave AND return date past — was
+            // unreachable for windowed leaves). Active stays the
+            // batch4 predicate, unchanged.
+            const leaveClass = classifyLeaveRecord(st, meta, today);
             let isOverdue = false;
             let isReturningSoon = false;
 
             if (isOnLeave) {
               activeOnLeaveCount++;
-              if (returnDate && returnDate < today) {
-                isOverdue = true;
-                overdueCount++;
-              } else if (returnDate && returnDate >= today && returnDate <= nextWeek) {
+              if (leaveClass === 'ACTIVE' && returnDate && returnDate <= nextWeek) {
                 isReturningSoon = true;
                 returningSoonCount++;
               }
+            }
+            if (leaveClass === 'OVERDUE') {
+              isOverdue = true;
+              overdueCount++;
+            }
+            if (leaveClass === 'REACTIVATED') {
+              reactivatedCount++;
             }
 
             ALL_LEAVE_RECORDS.push({
               student: st,
               meta,
               isOnLeave,
+              leaveClass,
               hasLeaveWindow,
               startDate,
               returnDate,
@@ -1225,7 +1383,9 @@
         setEl('kpiLeavesActive', activeOnLeaveCount);
         setEl('kpiLeavesReturningSoon', returningSoonCount);
         setEl('kpiLeavesOverdue', overdueCount);
-        setEl('kpiLeavesTotal', totalRecordsCount);
+        // Audit F2/F8a: the card is labelled "Reactivated / Total" —
+        // render BOTH numbers ("R / T"), not just the total.
+        setEl('kpiLeavesTotal', `${reactivatedCount} / ${totalRecordsCount}`);
 
         filterLeavesTable();
       } catch (err) {
@@ -1245,14 +1405,21 @@
         const name = (item.student.name || '').toLowerCase();
         const familyId = (item.student.family_id || '').toLowerCase();
         const teacherName = (item.student.teachers?.full_name || '').toLowerCase();
+        // Audit F6: on-leave rows are unassigned by design, so the
+        // snapshotted previous-teacher name must also be searchable.
+        const prevTeacherName = (item.meta?.leave_previous_teacher_name || '').toLowerCase();
 
-        const matchesSearch = !search || name.includes(search) || familyId.includes(search) || teacherName.includes(search);
+        const matchesSearch = !search || name.includes(search) || familyId.includes(search) || teacherName.includes(search) || prevTeacherName.includes(search);
         if (!matchesSearch) return false;
 
         if (statusFilter === 'active') return item.isOnLeave;
-        if (statusFilter === 'overdue') return item.isOnLeave && item.isOverdue;
+        // Audit F1: overdue is the classification flag now (a lapsed
+        // leave is NOT isOnLeave, so the old conjunction hid it).
+        if (statusFilter === 'overdue') return item.isOverdue;
         if (statusFilter === 'returning_soon') return item.isOnLeave && item.isReturningSoon;
-        if (statusFilter === 'reactivated') return !item.isOnLeave;
+        // Audit F3: "Previously Reactivated" means exactly that —
+        // not "anything not currently on leave".
+        if (statusFilter === 'reactivated') return item.leaveClass === 'REACTIVATED';
         return true;
       });
 
@@ -1263,26 +1430,45 @@
 
       tbody.innerHTML = filtered.map(item => {
         const st = item.student;
-        const teacherName = st.teachers?.full_name || '<span class="text-slate-400 italic">Unassigned</span>';
+        // Audit F6: a Leave-tab leave unassigns the teacher by
+        // design, so the cell falls back to the snapshotted previous
+        // teacher (marked as such) instead of a bare "Unassigned".
+        const teacherName = st.teachers?.full_name
+          || (item.meta?.leave_previous_teacher_name
+            ? `${item.meta.leave_previous_teacher_name} <span class="text-[10px] text-slate-400 font-normal">(previous)</span>`
+            : '<span class="text-slate-400 italic">Unassigned</span>');
         const familyName = st.families?.father_name || st.family_id || 'FAM';
 
+        // Audit F3: the badge follows the shared classification.
+        // Day math is guarded — an unparseable date renders "—",
+        // never NaN.
+        const leaveDayDiff = (fromStr, toStr) => {
+          const a = new Date(String(fromStr || '') + 'T00:00:00');
+          const b = new Date(String(toStr || '') + 'T00:00:00');
+          if (isNaN(a.getTime()) || isNaN(b.getTime())) return null;
+          return Math.round((b - a) / (1000 * 60 * 60 * 24));
+        };
         let countdownBadge = '';
-        if (item.isOnLeave) {
+        if (item.leaveClass === 'OVERDUE') {
+          countdownBadge = item.returnDate === today
+            ? '<span class="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-amber-100 text-amber-900 border border-amber-300 animate-pulse">⚠️ Return Due Today</span>'
+            : '<span class="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-rose-100 text-rose-800 border border-rose-300 animate-pulse">🔴 Overdue — Awaiting Reactivation</span>';
+        } else if (item.leaveClass === 'UPCOMING') {
+          const diffDays = leaveDayDiff(today, item.startDate);
+          countdownBadge = `<span class="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-violet-100 text-violet-800 border border-violet-300">🗓 Upcoming Leave — Starts in ${diffDays === null ? '—' : diffDays + 'd'}</span>`;
+        } else if (item.isOnLeave) {
           if (!item.returnDate) {
             countdownBadge = '<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-700">No Return Set</span>';
-          } else if (item.returnDate < today) {
-            const diffDays = Math.ceil((new Date(today) - new Date(item.returnDate)) / (1000 * 60 * 60 * 24));
-            countdownBadge = `<span class="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-rose-100 text-rose-800 border border-rose-300 animate-pulse">⚠️ Overdue (${diffDays}d)</span>`;
           } else if (item.returnDate === today) {
             countdownBadge = '<span class="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-amber-100 text-amber-900 border border-amber-300 animate-pulse">🔔 Returns Today!</span>';
           } else {
-            const diffDays = Math.ceil((new Date(item.returnDate) - new Date(today)) / (1000 * 60 * 60 * 24));
-            countdownBadge = `<span class="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-blue-100 text-blue-800 border border-blue-200">⏳ Returns in ${diffDays}d</span>`;
+            const diffDays = leaveDayDiff(today, item.returnDate);
+            countdownBadge = `<span class="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-blue-100 text-blue-800 border border-blue-200">⏳ Returns in ${diffDays === null ? '—' : diffDays + 'd'}</span>`;
           }
-        } else if (item.hasLeaveWindow && item.startDate && item.startDate > today) {
-          countdownBadge = `<span class="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-violet-100 text-violet-800 border border-violet-300">🗓️ Upcoming Leave (from ${item.startDate})</span>`;
+        } else if (item.leaveClass === 'REACTIVATED') {
+          countdownBadge = '<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">✅ Reactivated / Resumed</span>';
         } else {
-          countdownBadge = '<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">✅ Active / Resumed</span>';
+          countdownBadge = '<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-500">—</span>';
         }
 
         return `
@@ -1347,7 +1533,14 @@
         customReasonInput.classList.add('hidden');
       }
 
-      select.innerHTML = '<option value="">-- Choose Student --</option>' + (ALL_STUDENTS || []).map(s => {
+      // Audit F8: deactivated students are excluded from the
+      // picker (ALL_STUDENTS keeps Inactive records) — a deactivated
+      // student cannot be marked on leave; handleSaveStudentLeave
+      // guards the same rule on save.
+      const isPickableStudent = (s) => (typeof isStudentSelfDeactivated === 'function')
+        ? !isStudentSelfDeactivated(s)
+        : !['inactive', 'deactivated'].includes(String(s.status || '').toLowerCase());
+      select.innerHTML = '<option value="">-- Choose Student --</option>' + (ALL_STUDENTS || []).filter(isPickableStudent).map(s => {
         const isSelected = preselectedStudentId && s.id === preselectedStudentId;
         return `<option value="${s.id}" ${isSelected ? 'selected' : ''}>${s.name} (${s.id}) - ${s.status}</option>`;
       }).join('');
@@ -1403,16 +1596,24 @@
     // A re-mark of an already-ended leave (no teacher, no schedule
     // rows left) is a no-op here, so the original snapshot and stamp
     // survive a leave extension untouched.
+    // Leave Screen Fixes (2026-11-10, audit F7): this function now
+    // RETURNS a result — { ok, failures: [human-readable part names] }
+    // — instead of swallowing its own failures in warn-only catches.
+    // Callers surface any failure honestly instead of claiming the
+    // full success. The mechanics themselves are unchanged.
     async function endStudentScheduleForLeave(studentId, meta, st, leaveStartDate) {
+      const failures = [];
       try {
         const prevTeacherId = st && st.assigned_teacher_id ? st.assigned_teacher_id : null;
         let schedRows = [];
+        let schedReadFailed = false;
         try {
-          const { data: rows } = await db.from('class_schedules').select('*').eq('student_id', studentId);
+          const { data: rows, error: readErr } = await db.from('class_schedules').select('*').eq('student_id', studentId);
+          if (readErr) throw readErr;
           if (Array.isArray(rows)) schedRows = rows;
-        } catch (e) { console.warn('[leave] schedule read failed:', e); }
+        } catch (e) { console.warn('[leave] schedule read failed:', e); schedReadFailed = true; }
 
-        if (!prevTeacherId && schedRows.length === 0) return;
+        if (!prevTeacherId && schedRows.length === 0 && !schedReadFailed) return { ok: true, failures };
 
         if (prevTeacherId) {
           meta.leave_previous_teacher_id = prevTeacherId;
@@ -1433,11 +1634,14 @@
           }));
           meta.schedule_cleared_on_leave_at = new Date().toISOString();
           try {
-            await db.from('class_schedules').delete().eq('student_id', studentId);
-          } catch (e) { console.warn('[leave] schedule delete failed:', e); }
+            const delRes = await db.from('class_schedules').delete().eq('student_id', studentId);
+            if (delRes && delRes.error) throw delRes.error;
+          } catch (e) { console.warn('[leave] schedule delete failed:', e); failures.push("the student's timetable rows could not be removed"); }
           if (Array.isArray(window.ALL_CLASS_SCHEDULES)) {
             window.ALL_CLASS_SCHEDULES = window.ALL_CLASS_SCHEDULES.filter(row => String(row.student_id) !== String(studentId));
           }
+        } else if (schedReadFailed) {
+          failures.push("the student's timetable rows could not be checked or cleared");
         }
 
         const lastPayableDay = (window.Assignments && typeof Assignments.dayBefore === 'function')
@@ -1447,14 +1651,29 @@
           if (window.Assignments) {
             await Assignments.loadAll();
             await Assignments.closeCurrent(studentId, { end_date: lastPayableDay, end_reason: 'leave' });
+            // Assignments.closeCurrent resolves even when an
+            // individual row write fails (its per-row results are
+            // internal), so verify by reading the ledger back: any
+            // row for this student still open means the close did
+            // not land.
+            const { data: openCheck, error: openCheckErr } = await db.from('student_assignments').select('id, end_date').eq('student_id', studentId);
+            if (openCheckErr) throw openCheckErr;
+            if (Array.isArray(openCheck) && openCheck.some(r => !r.end_date)) {
+              failures.push("the salary assignment could not be closed");
+            }
           }
-        } catch (e) { console.warn('[leave] assignment close failed:', e); }
+        } catch (e) {
+          console.warn('[leave] assignment close failed:', e);
+          if (!failures.includes("the salary assignment could not be closed")) failures.push("the salary assignment could not be closed");
+        }
 
         meta.assignment_end_date = lastPayableDay;
         meta.assignment_end_reason = 'leave';
       } catch (e) {
         console.warn('[leave] end-of-schedule mechanics failed:', e);
+        failures.push('the leave schedule clean-up could not be completed');
       }
+      return { ok: failures.length === 0, failures };
     }
 
     async function handleSaveStudentLeave(e) {
@@ -1472,6 +1691,26 @@
         return;
       }
 
+      // Leave Screen Fixes (2026-11-10, audit F2): validate the
+      // dates BEFORE any write. An impossible window (return not
+      // after start, or a return date already past) used to run the
+      // full destructive half anyway — schedule deleted, assignment
+      // closed, teacher unassigned — while the empty window meant
+      // the student never appeared on leave anywhere.
+      const todayStr = new Date().toISOString().slice(0, 10);
+      if (!isValidLeaveDateStr(startDate) || !isValidLeaveDateStr(returnDate)) {
+        lmsNotify("Please choose valid leave dates.", { type: 'error' });
+        return;
+      }
+      if (returnDate <= startDate) {
+        lmsNotify("The return date must be after the leave start date.", { type: 'error' });
+        return;
+      }
+      if (returnDate < todayStr) {
+        lmsNotify("The return date has already passed. Choose a return date in the future.", { type: 'error' });
+        return;
+      }
+
       const btn = document.getElementById('btnSubmitStudentLeave');
       btn.disabled = true;
       btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Saving...';
@@ -1479,6 +1718,16 @@
       try {
         const { data: st, error: fetchErr } = await db.from('students').select('*').eq('id', studentId).single();
         if (fetchErr || !st) throw new Error("Student not found.");
+
+        // Audit F8 (save-side guard; the picker already excludes
+        // them): a deactivated student cannot be marked on leave.
+        const studentDeactivated = (typeof isStudentSelfDeactivated === 'function')
+          ? isStudentSelfDeactivated(st)
+          : ['inactive', 'deactivated'].includes(String(st.status || '').toLowerCase());
+        if (studentDeactivated) {
+          lmsNotify("This student is deactivated and cannot be marked on leave. Reactivate the student first.", { type: 'error' });
+          return;
+        }
 
         let meta = {};
         try { meta = JSON.parse(st.notes || '{}'); } catch(e) { meta = { text: st.notes || '' }; }
@@ -1495,7 +1744,7 @@
         // endStudentScheduleForLeave) and unassigns the teacher in
         // the same write, so the student leaves the teacher's roster
         // completely until an admin returns them from leave.
-        await endStudentScheduleForLeave(studentId, meta, st, startDate);
+        const endRes = await endStudentScheduleForLeave(studentId, meta, st, startDate);
 
         const { error: upErr } = await db.from('students').update({
           notes: JSON.stringify(meta),
@@ -1504,7 +1753,13 @@
 
         if (upErr) throw upErr;
 
-        lmsNotify(`🏖️ Leave recorded for ${st.name}.\nOn leave from ${startDate}; returns on ${returnDate}.\nThe student has been removed from the teacher's schedule; returning them from leave puts them back on the previous teacher's roster as Not Scheduled.`);
+        // Audit F7: if any part of the schedule/assignment clean-up
+        // failed, say so honestly — never the full success claim.
+        if (endRes && !endRes.ok) {
+          lmsNotify(`⚠️ Leave recorded for ${st.name} (on leave from ${startDate}; returns on ${returnDate}), BUT ${endRes.failures.join(' and ')}. The leave dates are saved — please check the student's timetable and salary assignment.`, { type: 'error' });
+        } else {
+          lmsNotify(`🏖️ Leave recorded for ${st.name}.\nOn leave from ${startDate}; returns on ${returnDate}.\nThe student has been removed from the teacher's schedule; returning them from leave puts them back on the previous teacher's roster as Not Scheduled.`);
+        }
         closeModal('modalMarkLeave');
         await loadDashboardData();
         await checkLeaveReturnAlertsAndRequests(false);
