@@ -40,6 +40,11 @@
 //   and the legacy Reschedule regressions (a stored 'Reschedule'
 //   row still summarises as excluded; an already-filed Reschedule
 //   request still approves verbatim through the untouched branch).
+//   Part 5 executes the REAL teacher.html per-student History path
+//   in a vm: a Today's Classes History button scopes the History
+//   tab to that student even on a fresh boot (when the student
+//   dropdown is still empty), the sidebar History button returns
+//   to "All students", and the dropdown is the way back to all.
 // Run from the repo root:  node test/teacher-reset-class.test.mjs
 // Requires: node >= 22.5 (node:sqlite). All records are SYNTHETIC.
 import fs from 'node:fs';
@@ -385,8 +390,14 @@ function fixtureEl() {
       add: (...cs) => cs.forEach(c => classes.add(c)),
       remove: (...cs) => cs.forEach(c => classes.delete(c)),
       contains: (c) => classes.has(c),
+      toggle: (c, force) => {
+        if (force === undefined) { if (classes.has(c)) classes.delete(c); else classes.add(c); }
+        else if (force) classes.add(c); else classes.delete(c);
+        return classes.has(c);
+      },
     },
     style: {},
+    scrollIntoView: () => {},
   };
 }
 function makeRegistry(seedHidden = []) {
@@ -1088,6 +1099,154 @@ function seedCompletedResetWorld(role) {
   const oct = vm.runInContext(`assignmentSegmentProration(${JSON.stringify(stu)}, ${JSON.stringify(asg)}, 3100, '2026-10')`, sandbox);
   check('payroll: a month fully before the leave is priced in full (history intact)',
     oct.activeDays === 31 && oct.proratedRate === 3100, JSON.stringify(oct));
+}
+
+// ===========================================================================
+// Part 5 — REAL teacher.html per-student History (fresh-boot scoping):
+// the Today's Classes History button must show ONLY that student's
+// history even when the History tab was never visited in the session
+// (the student dropdown is empty in the markup until the first
+// render, so a direct .value set is discarded by the browser).
+// ===========================================================================
+{
+  const SECURITY = read('js/security.js');
+  const registry = makeRegistry();
+  // The browser discards a .value set on a <select> whose options do
+  // not contain that value yet — the fake select below reproduces
+  // that rule, so the fresh-boot bug is loud here instead of hidden.
+  const selEl = registry.get('lhTeacherStudentSelect');
+  let selOptions = [];
+  let selValue = '';
+  Object.defineProperty(selEl, 'innerHTML', {
+    get: () => selEl._html || '',
+    set: (html) => {
+      selEl._html = String(html);
+      selOptions = [...String(html).matchAll(/<option value="([^"]*)"/g)].map(m => m[1]);
+      if (!selOptions.includes(selValue)) selValue = '';
+    },
+  });
+  Object.defineProperty(selEl, 'value', {
+    get: () => selValue,
+    set: (v) => { selValue = selOptions.includes(String(v)) ? String(v) : ''; },
+  });
+  const tables = {
+    attendance_logs: [
+      { student_id: 'STU-A', date: '2026-11-09', status: 'Present', teacher_id: 'TCH-1', students: { name: 'Sara' } },
+      { student_id: 'STU-A', date: '2026-11-08', status: 'Present', teacher_id: 'TCH-1', students: { name: 'Sara' } },
+      { student_id: 'STU-B', date: '2026-11-09', status: 'Present', teacher_id: 'TCH-1', students: { name: 'Uma' } },
+    ],
+  };
+  const sandbox = {
+    console,
+    document: { getElementById: (id) => registry.get(id), querySelector: () => null },
+    db: makeFakeDb(tables),
+    CURRENT_TEACHER: { id: 'TCH-1', full_name: 'Teacher One' },
+    CURRENT_TEACHER_TAB: 'dashboard',
+    ACTIVE_ASSIGNED_STUDENTS: [
+      { id: 'STU-A', name: 'Sara' },
+      { id: 'STU-B', name: 'Uma' },
+    ],
+    LEAVE_ASSIGNED_STUDENTS: [],
+    ALL_TEACHER_SCHEDULES: [
+      { id: 'SCH-A', student_id: 'STU-A', students: { id: 'STU-A', name: 'Sara' } },
+      { id: 'SCH-B', student_id: 'STU-B', students: { id: 'STU-B', name: 'Uma' } },
+    ],
+    syncTeacherSidebarActiveState: () => {},
+  };
+  sandbox.window = sandbox;
+  sandbox.LessonHistory = {
+    dedupeLessonRows: (rows) => rows.map(r => ({ studentId: String(r.student_id), date: r.date, status: r.status, teacherName: 'Teacher One' })),
+    filterLessonEntries: (entries, date) => entries.filter(e => e.date === date),
+    entryTitle: () => '',
+    formatActualDuration: () => '30 min',
+  };
+  vm.createContext(sandbox);
+  // Module state as declared in teacher.html (limit / blobs / visible
+  // entries / pending per-student request) plus the tab helpers the
+  // switch function needs (tab list + hash recording, hash-guarded).
+  const lhDecls = TEACHER.slice(TEACHER.indexOf('let _LH_TEACHER_LIMIT'), TEACHER.indexOf('function _lhTeacherRevokeBlobs'));
+  const tabHelpers = TEACHER.slice(TEACHER.indexOf('const TEACHER_PORTAL_TABS'), TEACHER.indexOf('function switchTeacherPortalTab'));
+  const src = [
+    lhDecls,
+    tabHelpers,
+    extractFunction(SECURITY, 'escapeHtml'),
+    extractFunction(TEACHER, '_lhTeacherRevokeBlobs'),
+    extractFunction(TEACHER, 'switchTeacherPortalTab'),
+    extractFunction(TEACHER, 'openTeacherLessonHistoryForStudent'),
+    extractFunction(TEACHER, 'renderTeacherLessonHistory'),
+  ].join('\n');
+  vm.runInContext(src, sandbox);
+  const chipEl = registry.get('lhTeacherScopedChip');
+  const listEl = registry.get('lhTeacherHistoryList');
+  const visibleIds = () => vm.runInContext('_LH_TEACHER_VISIBLE_ENTRIES.map(e => e.studentId).join(",")', sandbox);
+  const flush = () => new Promise(r => setTimeout(r, 0));
+
+  // --- Structural pins for the fix
+  check('history fix: pending per-student id is carried in a module variable',
+    TEACHER.includes('let _LH_TEACHER_PENDING_STUDENT = null;'));
+  check('history fix: the History button handler sets the pending id (no direct .value set on an empty select)',
+    extractFunction(TEACHER, 'openTeacherLessonHistoryForStudent').includes('_LH_TEACHER_PENDING_STUDENT = String(studentId'));
+  check('history fix: stale "used by the Student List" comment is gone',
+    !TEACHER.includes('used by the Student List'));
+  check('history fix: scoped chip element exists on the History tab',
+    TEACHER.includes('id="lhTeacherScopedChip"'));
+
+  // --- (a) Fresh boot: dropdown has NO options yet (real markup)
+  check('history per-student (a): fresh boot starts with an empty student dropdown',
+    selEl.innerHTML === '' && selEl.value === '');
+  vm.runInContext("openTeacherLessonHistoryForStudent('STU-A')", sandbox);
+  await flush();
+  check('history per-student (a): fresh-boot History button scopes to that student only',
+    selEl.value === 'STU-A' && visibleIds() === 'STU-A,STU-A',
+    'sel=' + selEl.value + ' visible=' + visibleIds());
+  check('history per-student (a): rendered list shows only that student',
+    listEl.innerHTML.includes('>Sara<') && !listEl.innerHTML.includes('>Uma<'));
+  check('history per-student (a): scoped chip names the student',
+    chipEl.textContent === 'Showing history for Sara' && chipEl.style.display === 'flex',
+    JSON.stringify(chipEl.textContent));
+
+  // --- (b) Click after the History tab was already visited
+  vm.runInContext("switchTeacherPortalTab('history')", sandbox);
+  await flush();
+  check('history per-student (b): sidebar visit in between returns to all students',
+    selEl.value === 'all' && visibleIds() === 'STU-A,STU-A,STU-B');
+  vm.runInContext("openTeacherLessonHistoryForStudent('STU-B')", sandbox);
+  await flush();
+  check('history per-student (b): History button after a prior visit still scopes to that student',
+    selEl.value === 'STU-B' && visibleIds() === 'STU-B',
+    'sel=' + selEl.value + ' visible=' + visibleIds());
+  check('history per-student (b): chip follows the second student',
+    chipEl.textContent === 'Showing history for Uma' && chipEl.style.display === 'flex');
+
+  // --- Refresh preserves the scope (re-render, no new request)
+  await vm.runInContext('renderTeacherLessonHistory(true)', sandbox);
+  check('history per-student: Refresh keeps the current student scope',
+    selEl.value === 'STU-B' && visibleIds() === 'STU-B');
+
+  // --- (c) Sidebar History button returns to all
+  vm.runInContext("switchTeacherPortalTab('history')", sandbox);
+  await flush();
+  check('history per-student (c): sidebar History button shows all students',
+    selEl.value === 'all' && visibleIds() === 'STU-A,STU-A,STU-B',
+    'sel=' + selEl.value + ' visible=' + visibleIds());
+  check('history per-student (c): chip hides when showing all students',
+    chipEl.textContent === '' && chipEl.style.display === 'none');
+
+  // --- (d) Dropdown back to "All students" is the way back to all
+  vm.runInContext("openTeacherLessonHistoryForStudent('STU-A')", sandbox);
+  await flush();
+  check('history per-student (d): setup scopes to one student again', selEl.value === 'STU-A');
+  selEl.value = 'all';
+  await vm.runInContext('renderTeacherLessonHistory(false)', sandbox);
+  check('history per-student (d): picking "All students" in the dropdown shows everyone',
+    selEl.value === 'all' && visibleIds() === 'STU-A,STU-A,STU-B' && chipEl.style.display === 'none');
+
+  // --- Unknown id never lands on a stale previous selection
+  vm.runInContext("openTeacherLessonHistoryForStudent('STU-NOPE')", sandbox);
+  await flush();
+  check('history per-student: an unknown student id falls back to all students',
+    selEl.value === 'all' && visibleIds() === 'STU-A,STU-A,STU-B',
+    'sel=' + selEl.value + ' visible=' + visibleIds());
 }
 
 const failed = results.filter(r => !r.pass);

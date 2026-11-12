@@ -411,6 +411,10 @@ const code = `
   let TEACHER_TODAY_FILTER = 'all';
   let _teacherClassesDegraded = null;
   let _overdueReminderSnoozedUntil = 0;
+  // Per-student History request state (2026-11-12): the switch
+  // consults it when entering the History tab; declared here so the
+  // executed switch sees the same module state as the live portal.
+  let _LH_TEACHER_PENDING_STUDENT = null;
   const TEACHER_REMINDER_SNOOZE_MS = 120000;
   ${extractFunction(SECURITY_JS, 'escapeHtml')}
   ${extractFunction(SECURITY_JS, 'escapeJsAttr')}
