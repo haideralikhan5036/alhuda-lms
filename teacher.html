@@ -976,6 +976,16 @@ font-family: var(--font-num) !important;
     padding-left: 1.05rem !important;
     padding-right: 1.05rem !important;
   }
+
+  /* REFRESH FLASH FIX (2026-11-12): the gate views are toggled with
+     Tailwind's .hidden, which does not exist until the Tailwind Play
+     CDN script loads and generates utilities - until then the
+     full-screen login view (which carries no .hidden at all in the
+     markup) paints over the whole portal on every refresh, and the
+     real gate only runs on window.onload after every asset. Plain
+     CSS keeps .hidden effective from the first paint, so the login
+     screen can never flash before the gate decides. */
+  #loginView.hidden, #teacherMainContainer.hidden, #dashboardView.hidden { display: none !important; }
 </style>
 </head>
 <body class="bg-slate-50 text-slate-800 font-sans min-h-screen flex flex-col antialiased">
@@ -989,7 +999,7 @@ font-family: var(--font-num) !important;
        chained in the scripts and simply find nothing now). -->
 
   <!-- ================= 1. LOGIN SCREEN (WHEN NOT AUTHENTICATED) ================= -->
-    <div id="loginView" class="flg-screen relative overflow-hidden min-h-screen w-full flex flex-col justify-center items-center p-4 sm:p-6">
+    <div id="loginView" class="flg-screen relative overflow-hidden min-h-screen w-full flex flex-col justify-center items-center p-4 sm:p-6 hidden">
     <div class="flg-deco" aria-hidden="true">
       <div class="flg-nd flg-nd-halo"></div>
       <div class="flg-nd flg-nd-ring-big"></div>
@@ -1901,6 +1911,81 @@ font-family: var(--font-num) !important;
 
     </div>
   </main>
+
+  <!-- REFRESH FLASH FIX (2026-11-12): the login view carries no .hidden
+       in the markup and the real gate only runs on window.onload after
+       every font, image and CDN asset - so on every refresh the
+       full-screen login screen paints first and pauses there, and with
+       a live token it then waits for a server round-trip before the
+       dashboard shows. This tiny script runs during parsing, right
+       after the gate markup, and decides from the LOCAL token only
+       (role + expiry decode - the same UX-only check the boot below
+       applies; the Worker still re-verifies the token on every data
+       call). A live token paints the app shell at once; anything else
+       paints the login screen. The boot below still runs at
+       DOMContentLoaded, re-verifies the token against the backend
+       before the dashboard fills in, and drops to the login screen
+       if that fails. -->
+  <script>
+  /* LMS-EARLY-GATE-START */
+  (function () {
+    try {
+      var loginView = document.getElementById('loginView');
+      var mainContainer = document.getElementById('teacherMainContainer');
+      var dashboardView = document.getElementById('dashboardView');
+      if (!loginView || !mainContainer) return;
+      function decodeGateToken(token) {
+        try {
+          var parts = String(token).split('.');
+          if (parts.length !== 2 || !parts[0]) return null;
+          var b64 = parts[0].replace(/-/g, '+').replace(/_/g, '/');
+          var pad = b64.length % 4;
+          if (pad) b64 += '='.repeat(4 - pad);
+          return JSON.parse(atob(b64));
+        } catch (e) { return null; }
+      }
+      function showEl(el) { if (el) el.classList.remove('hidden'); }
+      function hideEl(el) { if (el) el.classList.add('hidden'); }
+      var token = null;
+      try { token = sessionStorage.getItem('alhuda_teacher_token'); } catch (e) {}
+      var live = false;
+      if (token) {
+        var payload = decodeGateToken(token);
+        if (payload && payload.role === 'teacher' && typeof payload.exp === 'number' && Date.now() / 1000 < payload.exp) {
+          live = true;
+        } else {
+          try { sessionStorage.removeItem('alhuda_teacher_token'); } catch (e) {}
+        }
+      }
+      if (live) {
+        // Mirror showDashboardView's visibility toggles (no data fills -
+        // the boot fills those in after its server re-check).
+        hideEl(loginView);
+        showEl(document.getElementById('teacherTopHeader'));
+        showEl(mainContainer);
+        showEl(dashboardView);
+        showEl(document.getElementById('btnToggleTeacherSidebar'));
+        var badge = document.getElementById('teacherHeaderBadge');
+        if (badge) { badge.classList.remove('hidden'); badge.classList.add('flex'); }
+        var libBtn = document.getElementById('btnTeacherDigitalLibraryHeader');
+        if (libBtn) { libBtn.classList.add('hidden'); libBtn.classList.remove('flex'); }
+      } else {
+        // Mirror showLoginView's visibility toggles.
+        hideEl(document.getElementById('teacherTopHeader'));
+        hideEl(mainContainer);
+        hideEl(dashboardView);
+        loginView.classList.remove('hidden');
+        var toggleSbBtn = document.getElementById('btnToggleTeacherSidebar');
+        if (toggleSbBtn) toggleSbBtn.classList.add('hidden');
+        var headerBadge = document.getElementById('teacherHeaderBadge');
+        if (headerBadge) { headerBadge.classList.add('hidden'); headerBadge.classList.remove('flex'); }
+        var libBtn2 = document.getElementById('btnTeacherDigitalLibraryHeader');
+        if (libBtn2) { libBtn2.classList.add('hidden'); libBtn2.classList.remove('flex'); }
+      }
+    } catch (e) {}
+  })();
+  /* LMS-EARLY-GATE-END */
+  </script>
 
   <!-- ================= MODAL: ATTENDANCE & LESSON PROGRESS ================= -->
   <div id="modalTeacherAttendance" class="fixed inset-0 bg-black/60 backdrop-blur-xs z-50 hidden items-center justify-center p-2 sm:p-4 overflow-y-auto">
@@ -3371,8 +3456,15 @@ font-family: var(--font-num) !important;
       return classifyEmployeeRole(emp, accountsMap) === 'teacher';
     }
 
-    // Initialize on page load
-    window.onload = async function() {
+    // REFRESH FLASH FIX (2026-11-12): boot used to wait for
+    // window.onload - every font, image and CDN asset - while the
+    // login screen sat visible. The gate decision + server re-check
+    // below need only the parsed DOM, so boot now starts on
+    // DOMContentLoaded like the admin portal. The early gate script
+    // after </main> already painted the right shell; this still
+    // re-verifies the token against the backend before the dashboard
+    // fills in, and drops to the login screen if that fails.
+    async function teacherBootOnReady() {
       // Live PKT clock
       setInterval(() => {
         const now = new Date();
@@ -3415,7 +3507,17 @@ font-family: var(--font-num) !important;
         }
       }
       showLoginView();
-    };
+    }
+
+    // DOMContentLoaded trigger for teacherBootOnReady (see the note
+    // above it). If this script ever runs after parsing
+    // (defer/async), run immediately instead of waiting for an event
+    // that already fired.
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', teacherBootOnReady);
+    } else {
+      teacherBootOnReady();
+    }
 
     // Normalize Teacher Profile, Zoom link, and Account Metadata
     function normalizeTeacherSession(teacherObj) {

@@ -382,6 +382,28 @@
     window.handleOwnerSignIn = handleOwnerSignIn;
     window.logoutOwnerPortal = logoutOwnerPortal;
 
+    // REFRESH FLASH FIX (2026-11-12): background session verify. The
+    // refresh gate paints the app on a locally-valid token; the
+    // Worker is still the enforcer - a 401 on any data call makes
+    // js/cloudflare-db.js drop the token and dispatch
+    // 'alhuda-session-expired' (nothing listened before, so a revoked
+    // token sat on an empty dashboard). A failed verify drops to the
+    // right login: the owner login for the owner portal, the manager
+    // gate page for a manager session. The event cannot fire
+    // pre-login: a 401 on the pre-login D1 probe never reaches a
+    // POST, so no probe failure can bounce a fresh sign-in.
+    // LMS-SESSION-EXPIRED-LISTENER-START
+    window.addEventListener('alhuda-session-expired', function () {
+      try {
+        if (localStorage.getItem('alhuda_active_portal_role') === 'manager') {
+          window.location.replace('manager.html');
+          return;
+        }
+      } catch (e) {}
+      if (typeof showOwnerLoginView === 'function') showOwnerLoginView();
+    });
+    // LMS-SESSION-EXPIRED-LISTENER-END
+
     // TEACHER & MANAGER PORTAL ROLE & SESSION MANAGEMENT
     function getAuthenticatedManagerSession() {
       // Per-tab session only (sessionStorage): a new tab must never inherit

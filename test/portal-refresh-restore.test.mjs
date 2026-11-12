@@ -387,5 +387,474 @@ check('admin: owner sign-in success path restores after load',
 check('hash writers use replaceState only (no pushState in any record*InHash helper)',
   !/function record\w*TabInHash[\s\S]{0,400}?pushState/.test(TEACHER + PARENT + NAV));
 
+
+// ---------------------------------------------------------------------
+// REFRESH LOGIN FLASH (2026-11-12): on refresh after login every
+// portal used to paint the full-screen login screen first and pause
+// there - the gate only ran on DOMContentLoaded / window.onload,
+// after every parser-blocking CDN script (and, on teacher / parent /
+// manager, after a server round-trip), while the login views carried
+// no .hidden that existed before the Tailwind Play CDN generated it.
+// The fix: plain CSS keeps .hidden effective from the first paint,
+// and a tiny dependency-free early gate script (LMS-EARLY-GATE
+// markers) decides from the LOCAL token during parsing - a live
+// token paints the app shell at once, anything else paints login -
+// while the real boot still re-verifies against the backend and
+// drops to login on failure. These checks EXECUTE the real
+// early-gate scripts and the real boot functions in vm worlds.
+// ---------------------------------------------------------------------
+const INDEX = fs.readFileSync(path.join(REPO_ROOT, 'index.html'), 'utf8');
+const MANAGER = fs.readFileSync(path.join(REPO_ROOT, 'manager.html'), 'utf8');
+
+function makeGateToken(role, sub, expOffsetSec) {
+  // Tokens are built programmatically (never literal): payload + signature.
+  const payload = { role, sub, exp: Math.floor(Date.now() / 1000) + expOffsetSec };
+  return Buffer.from(JSON.stringify(payload)).toString('base64url') + '.testsig';
+}
+function gateScript(src) {
+  const m = src.match(/\/\* LMS-EARLY-GATE-START \*\/([\s\S]*?)\/\* LMS-EARLY-GATE-END \*\//);
+  return m ? m[1] : null;
+}
+function fnSlice(src, startText, endText = null) {
+  const s = src.indexOf(startText);
+  if (s < 0) return null;
+  if (endText) {
+    const e = src.indexOf(endText, s + startText.length);
+    if (e > -1) return src.slice(s, e);
+  }
+  let e = src.indexOf('\n    function ', s + startText.length);
+  const e2 = src.indexOf('\n    async function ', s + startText.length);
+  if (e2 > -1 && (e < 0 || e2 < e)) e = e2;
+  return e < 0 ? src.slice(s) : src.slice(s, e);
+}
+function memStore(initial = {}) {
+  const map = new Map(Object.entries(initial));
+  return {
+    getItem: k => (map.has(k) ? map.get(k) : null),
+    setItem: (k, v) => { map.set(k, String(v)); },
+    removeItem: k => { map.delete(k); },
+    _map: map,
+  };
+}
+function runGate(src, ids, opts = {}) {
+  const script = gateScript(src);
+  if (!script) return null;
+  const els = {};
+  for (const [id, classes] of Object.entries(ids)) els[id] = fakeEl(id, classes);
+  const session = memStore(opts.session || {});
+  const local = memStore(opts.local || {});
+  const clearWorkerCalls = [];
+  const document = { title: 'gate', getElementById: id => els[id] || null };
+  const sandbox = {
+    console, setTimeout, clearTimeout, document,
+    sessionStorage: session, localStorage: local,
+    atob: s => Buffer.from(s, 'base64').toString('latin1'),
+    URLSearchParams,
+    window: {
+      location: { search: opts.search || '', pathname: opts.pathname || '/' },
+      clearWorkerTokens: () => clearWorkerCalls.push(1),
+      document,
+    },
+  };
+  vm.createContext(sandbox);
+  vm.runInContext(script, sandbox);
+  return { sandbox, els, session, local, clearWorkerCalls };
+}
+const gateShown = (w, id) => w.els[id] && !w.els[id].classList.contains('hidden');
+
+check('flash: early gate script present in all four portals',
+  ['index', 'teacher', 'parent', 'manager'].every((_, i) => [INDEX, TEACHER, PARENT, MANAGER].map(gateScript)[i]));
+check('flash: gate scripts are dependency-free (no fetch, no await)',
+  [INDEX, TEACHER, PARENT, MANAGER].every(s => {
+    const g = gateScript(s);
+    return g && !g.includes('fetch(') && !/\bawait\b/.test(g);
+  }));
+
+{ // INDEX (owner): valid token paints the app, no token paints login
+  const w = runGate(INDEX, { ownerLoginView: ['hidden'], mainAppWrapper: ['hidden'] },
+    { session: { alhuda_owner_token: makeGateToken('owner', 'OWN-001', 3600) } });
+  check('flash: owner refresh with a live token shows the app shell, never the login view',
+    w && gateShown(w, 'mainAppWrapper') && !gateShown(w, 'ownerLoginView')
+    && w.els.mainAppWrapper.classList.contains('flex'),
+    w ? JSON.stringify([...w.els.ownerLoginView._set, ...w.els.mainAppWrapper._set]) : 'no gate script');
+  const wOut = runGate(INDEX, { ownerLoginView: ['hidden'], mainAppWrapper: ['hidden'] }, {});
+  check('flash: owner refresh logged out shows the login view immediately, no app flash',
+    wOut && gateShown(wOut, 'ownerLoginView') && !gateShown(wOut, 'mainAppWrapper'));
+  const expired = makeGateToken('owner', 'OWN-001', -10);
+  const wExp = runGate(INDEX, { ownerLoginView: ['hidden'], mainAppWrapper: ['hidden'] },
+    { session: { alhuda_owner_token: expired } });
+  check('flash: owner refresh with an expired token shows login and drops the dead token',
+    wExp && gateShown(wExp, 'ownerLoginView') && !gateShown(wExp, 'mainAppWrapper')
+    && wExp.session.getItem('alhuda_owner_token') === null);
+  const wWrong = runGate(INDEX, { ownerLoginView: ['hidden'], mainAppWrapper: ['hidden'] },
+    { session: { alhuda_owner_token: makeGateToken('teacher', 'TCH-1', 3600) } });
+  check('flash: a wrong-role token in the owner key never paints the app',
+    wWrong && gateShown(wWrong, 'ownerLoginView') && !gateShown(wWrong, 'mainAppWrapper'));
+}
+{ // INDEX (manager): ?role=manager with a live manager session paints the app
+  const w = runGate(INDEX, { ownerLoginView: ['hidden'], mainAppWrapper: ['hidden'] },
+    { search: '?role=manager',
+      session: {
+        alhuda_manager_session: JSON.stringify({ id: 'TCH-MGR', emp_id: 'MGR-001' }),
+        alhuda_manager_token: makeGateToken('manager', 'TCH-MGR', 3600),
+      } });
+  check('flash: manager refresh with a live session shows the app shell, never the login view',
+    w && gateShown(w, 'mainAppWrapper') && !gateShown(w, 'ownerLoginView'));
+  const wBad = runGate(INDEX, { ownerLoginView: ['hidden'], mainAppWrapper: ['hidden'] },
+    { search: '?role=manager',
+      session: {
+        alhuda_manager_session: JSON.stringify({ id: 'TCH-MGR', emp_id: 'MGR-001' }),
+        alhuda_manager_token: makeGateToken('manager', 'TCH-MGR', -10),
+      } });
+  check('flash: manager refresh with an expired token leaves both views hidden (full gate redirects)',
+    wBad && !gateShown(wBad, 'mainAppWrapper') && !gateShown(wBad, 'ownerLoginView'));
+}
+{ // TEACHER: valid token paints the shell, no token paints login
+  const ids = { loginView: ['hidden'], teacherMainContainer: ['hidden'], dashboardView: ['hidden'],
+    btnToggleTeacherSidebar: ['hidden'], teacherHeaderBadge: ['hidden'] };
+  const w = runGate(TEACHER, ids, { session: { alhuda_teacher_token: makeGateToken('teacher', 'TCH-1', 3600) } });
+  check('flash: teacher refresh with a live token shows the shell + dashboard, never the login view',
+    w && gateShown(w, 'teacherMainContainer') && gateShown(w, 'dashboardView') && !gateShown(w, 'loginView')
+    && gateShown(w, 'btnToggleTeacherSidebar') && gateShown(w, 'teacherHeaderBadge'));
+  const wOut = runGate(TEACHER, ids, {});
+  check('flash: teacher refresh logged out shows the login view, shell stays hidden',
+    wOut && gateShown(wOut, 'loginView') && !gateShown(wOut, 'teacherMainContainer') && !gateShown(wOut, 'dashboardView'));
+  const wExp = runGate(TEACHER, ids, { session: { alhuda_teacher_token: makeGateToken('teacher', 'TCH-1', -10) } });
+  check('flash: teacher refresh with an expired token shows login and drops the dead token',
+    wExp && gateShown(wExp, 'loginView') && wExp.session.getItem('alhuda_teacher_token') === null);
+}
+{ // PARENT: valid token paints the shell, no token paints login
+  const ids = { parentLoginView: ['hidden'], parentTopNav: ['hidden'], parentMainPortalContent: ['hidden'],
+    parentSubNavTabs: ['hidden'], parentHeaderAuthControls: ['hidden'] };
+  const w = runGate(PARENT, ids, { session: { alhuda_parent_token: makeGateToken('parent', 'FAM-1', 3600) } });
+  check('flash: parent refresh with a live token shows the shell, never the login view',
+    w && gateShown(w, 'parentTopNav') && gateShown(w, 'parentMainPortalContent')
+    && gateShown(w, 'parentSubNavTabs') && gateShown(w, 'parentHeaderAuthControls')
+    && !gateShown(w, 'parentLoginView'));
+  const wOut = runGate(PARENT, ids, {});
+  check('flash: parent refresh logged out shows the login view, shell stays hidden',
+    wOut && gateShown(wOut, 'parentLoginView') && !gateShown(wOut, 'parentMainPortalContent'));
+  const wExp = runGate(PARENT, ids, { session: { alhuda_parent_token: makeGateToken('parent', 'FAM-1', -10) } });
+  check('flash: parent refresh with an expired token shows login and drops the dead token',
+    wExp && gateShown(wExp, 'parentLoginView') && wExp.session.getItem('alhuda_parent_token') === null);
+}
+{ // MANAGER gate page: no token shows the form at once, live token keeps it hidden
+  const wOut = runGate(MANAGER, { managerLoginContainer: ['hidden'] }, {});
+  check('flash: manager gate refresh logged out shows the login form immediately',
+    wOut && gateShown(wOut, 'managerLoginContainer'));
+  const wLive = runGate(MANAGER, { managerLoginContainer: ['hidden'] },
+    { session: { alhuda_manager_token: makeGateToken('manager', 'TCH-MGR', 3600) } });
+  check('flash: manager gate refresh with a live token keeps the form hidden (boot redirects)',
+    wLive && !gateShown(wLive, 'managerLoginContainer'));
+}
+
+// ---------------------------------------------------------------------
+// Boot re-verification: the early gate paints the shell, but the real
+// boot must still re-check the session against the backend and drop
+// to login when that fails.
+// ---------------------------------------------------------------------
+async function runVm(code, sandbox) {
+  vm.createContext(sandbox);
+  return vm.runInContext(code, sandbox);
+}
+
+{ // TEACHER BOOT (real function): valid token + live record -> dashboard; failing record -> login
+  const boot = fnSlice(TEACHER, 'async function teacherBootOnReady()', '// DOMContentLoaded trigger for teacherBootOnReady');
+  const views = fnSlice(TEACHER, 'function showDashboardView()') + '\n' + fnSlice(TEACHER, 'function showLoginView()');
+  const helpers = fnSlice(TEACHER, 'function decodeJwtPayload(token)') + '\n'
+    + fnSlice(TEACHER, 'function getTeacherToken()') + '\n' + fnSlice(TEACHER, 'function clearTeacherToken()');
+  check('flash: teacher boot function extracted for execution', !!boot && !!views && !!helpers);
+  async function teacherBootWorld({ token, dbOk }) {
+    const els = {
+      loginView: fakeEl('loginView', ['hidden']),
+      teacherMainContainer: fakeEl('teacherMainContainer', []),
+      dashboardView: fakeEl('dashboardView', []),
+      teacherTopHeader: null,
+      btnToggleTeacherSidebar: fakeEl('btnToggleTeacherSidebar', []),
+      sbTeacherNameDisplay: fakeEl('sbTeacherNameDisplay'),
+      sbTeacherShiftDisplay: fakeEl('sbTeacherShiftDisplay'),
+      teacherHeaderBadge: fakeEl('teacherHeaderBadge', []),
+      headerTeacherName: fakeEl('headerTeacherName'),
+      btnTeacherDigitalLibraryHeader: fakeEl('btnTeacherDigitalLibraryHeader', []),
+      heroInitials: fakeEl('heroInitials'), heroTeacherName: fakeEl('heroTeacherName'),
+      heroTeacherShift: fakeEl('heroTeacherShift'),
+      roleMismatchBanner: fakeEl('roleMismatchBanner'),
+      liveClock: fakeEl('liveClock'),
+    };
+    const session = memStore(token ? { alhuda_teacher_token: token } : {});
+    const calls = { dashboard: 0, tabs: 0, sidebar: 0, salaryGroup: 0 };
+    const teacherRow = { id: 'TCH-1', full_name: 'Test Teacher', working_shift: 'Morning', address: '{}' };
+    const db = {
+      from: () => ({
+        select: () => ({
+          eq: () => ({
+            single: async () => {
+              if (!dbOk) throw new Error('unreachable');
+              return { data: teacherRow };
+            },
+          }),
+        }),
+      }),
+    };
+    const document = { title: 't', getElementById: id => els[id] || null, readyState: 'complete' };
+    const sandbox = {
+      console, setTimeout: () => 0, setInterval: () => 0, clearTimeout, document,
+      sessionStorage: session, localStorage: memStore({}),
+      atob: s => Buffer.from(s, 'base64').toString('latin1'),
+      db, isEligibleTeacherAccount: () => true,
+      normalizeTeacherSession: t => ({ ...t, full_name: t.full_name, working_shift: t.working_shift }),
+      loadTeacherPortalData: () => { calls.dashboard++; },
+      restoreTeacherTabFromHash: () => { calls.tabs++; },
+      toggleDesktopSidebar: () => { calls.sidebar++; },
+      restoreTeacherSalaryGroupState: () => { calls.salaryGroup++; },
+      window: { document, location: { search: '', pathname: '/teacher' }, history: { replaceState() {} }, innerWidth: 1280, addEventListener() {} },
+    };
+    await runVm('let CURRENT_TEACHER = null;\n' + helpers + '\n' + views + '\n' + boot
+      + '\n;(async () => { await teacherBootOnReady(); })()', sandbox);
+    return { els, session, calls };
+  }
+  const wOk = await teacherBootWorld({ token: makeGateToken('teacher', 'TCH-1', 3600), dbOk: true });
+  check('flash: teacher boot re-verifies live (record found -> dashboard shown, login hidden)',
+    !wOk.els.loginView.classList.contains('hidden') === false
+    && !wOk.els.teacherMainContainer.classList.contains('hidden')
+    && !wOk.els.dashboardView.classList.contains('hidden') && wOk.calls.dashboard === 1,
+    JSON.stringify(wOk.calls));
+  const wFail = await teacherBootWorld({ token: makeGateToken('teacher', 'TCH-1', 3600), dbOk: false });
+  check('flash: teacher boot drops to login when the backend re-check fails (shell was already painted)',
+    !wFail.els.loginView.classList.contains('hidden')
+    && wFail.els.teacherMainContainer.classList.contains('hidden') && wFail.calls.dashboard === 0);
+  const wExp = await teacherBootWorld({ token: makeGateToken('teacher', 'TCH-1', -10), dbOk: true });
+  check('flash: teacher boot with an expired token shows login and clears the token',
+    !wExp.els.loginView.classList.contains('hidden')
+    && wExp.session.getItem('alhuda_teacher_token') === null);
+}
+
+{ // PARENT BOOT (real initializePortal): live family -> dashboard; failing fetch -> login
+  const boot = fnSlice(PARENT, 'async function initializePortal()');
+  const views = fnSlice(PARENT, 'function showParentLoginView()') + '\n' + fnSlice(PARENT, 'async function showParentDashboardView(');
+  const helpers = fnSlice(PARENT, 'function decodeParentJwtPayload(token)') + '\n'
+    + fnSlice(PARENT, 'function getParentToken()') + '\n' + fnSlice(PARENT, 'function clearParentToken()');
+  check('flash: parent boot function extracted for execution', !!boot && !!views && !!helpers);
+  async function parentBootWorld({ token, dbOk }) {
+    const els = {
+      parentLoginView: fakeEl('parentLoginView', ['hidden']),
+      parentTopNav: fakeEl('parentTopNav', []),
+      parentMainPortalContent: fakeEl('parentMainPortalContent', []),
+      parentSubNavTabs: fakeEl('parentSubNavTabs', []),
+      parentHeaderAuthControls: fakeEl('parentHeaderAuthControls', []),
+      parentHeaderFamilyName: fakeEl('parentHeaderFamilyName'),
+      parentRoleMismatchBanner: fakeEl('parentRoleMismatchBanner'),
+    };
+    const session = memStore(token ? { alhuda_parent_token: token } : {});
+    const fam = { id: 'FAM-1', parent_name: 'Test Family' };
+    const students = [{ id: 'STU-1' }];
+    const db = {
+      from: table => ({
+        select: () => ({
+          eq: () => ({
+            single: async () => {
+              if (!dbOk) throw new Error('unreachable');
+              return { data: fam };
+            },
+            then(resolve) { resolve(dbOk ? { data: students } : { data: null, error: { message: 'x' } }); },
+          }),
+        }),
+      }),
+    };
+    const calls = { render: 0, library: 0, tabs: 0, dropdown: 0 };
+    const document = { title: 'p', getElementById: id => els[id] || null, readyState: 'complete' };
+    const sandbox = {
+      console, setTimeout: () => 0, setInterval: () => 0, clearTimeout, document,
+      sessionStorage: session, localStorage: memStore({}),
+      atob: s => Buffer.from(s, 'base64').toString('latin1'),
+      db,
+      populateStudentDropdown: () => { calls.dropdown++; },
+      renderCurrentStudentData: async () => { calls.render++; },
+      renderPortalLibrary: () => { calls.library++; },
+      restoreParentTabFromHash: () => { calls.tabs++; },
+      window: { document, location: { search: '', pathname: '/parent' }, history: { replaceState() {} }, innerWidth: 1280, addEventListener() {} },
+    };
+    await runVm('let CURRENT_AUTH_FAMILY = null; let CURRENT_STUDENT = null; let ALL_STUDENTS = [];\n'
+      + helpers + '\n' + views + '\n' + boot + '\n;(async () => { await initializePortal(); })()', sandbox);
+    return { els, session, calls };
+  }
+  const wOk = await parentBootWorld({ token: makeGateToken('parent', 'FAM-1', 3600), dbOk: true });
+  check('flash: parent boot re-verifies live (family found -> dashboard shown, login hidden)',
+    !wOk.els.parentLoginView.classList.contains('hidden') === false
+    && !wOk.els.parentMainPortalContent.classList.contains('hidden') && wOk.calls.render === 1,
+    JSON.stringify(wOk.calls));
+  const wFail = await parentBootWorld({ token: makeGateToken('parent', 'FAM-1', 3600), dbOk: false });
+  check('flash: parent boot drops to login when the backend re-check fails',
+    !wFail.els.parentLoginView.classList.contains('hidden')
+    && wFail.els.parentMainPortalContent.classList.contains('hidden') && wFail.calls.render === 0);
+  const wOut = await parentBootWorld({ token: null, dbOk: true });
+  check('flash: parent boot with no token shows login',
+    !wOut.els.parentLoginView.classList.contains('hidden'));
+}
+
+{ // MANAGER BOOT (real function): eligible record -> redirect; ineligible/no token -> form shown
+  const boot = fnSlice(MANAGER, 'async function managerBootOnReady()', '// DOMContentLoaded trigger for managerBootOnReady');
+  const decode = fnSlice(MANAGER, 'function decodeJwtPayload(token)');
+  check('flash: manager boot function extracted for execution', !!boot && !!decode);
+  async function managerBootWorld({ token, eligible }) {
+    const els = {
+      mgrRoleMismatchBanner: fakeEl('mgrRoleMismatchBanner'),
+      managerLoginContainer: fakeEl('managerLoginContainer', ['hidden']),
+    };
+    const session = memStore(token ? { alhuda_manager_token: token } : {});
+    const local = memStore({});
+    const replaces = [];
+    const document = { title: 'm', getElementById: id => els[id] || null, readyState: 'complete' };
+    const sandbox = {
+      console, setTimeout: () => 0, setInterval: () => 0, clearTimeout, document,
+      sessionStorage: session, localStorage: local,
+      atob: s => Buffer.from(s, 'base64').toString('latin1'),
+      fetchManagersFromBackend: async () => ({
+        managers: [{ id: 'TCH-MGR', full_name: 'Test Manager' }], accountsMap: {},
+      }),
+      isEligibleManagerAccount: () => eligible,
+      resolveManagerCredentials: () => ({ emp_id: 'MGR-001', username: 'mgr', role_title: 'Manager' }),
+      window: {
+        document, location: { search: '', pathname: '/manager', replace: url => replaces.push(url) },
+        history: { replaceState() {} }, innerWidth: 1280, addEventListener() {},
+      },
+    };
+    await runVm(decode + '\n' + boot + '\n;(async () => { await managerBootOnReady(); })()', sandbox);
+    return { els, session, replaces };
+  }
+  const wOk = await managerBootWorld({ token: makeGateToken('manager', 'TCH-MGR', 3600), eligible: true });
+  check('flash: manager boot with a verified record redirects into the portal, form stays hidden',
+    wOk.replaces.length === 1 && wOk.replaces[0] === 'index.html?role=manager'
+    && wOk.els.managerLoginContainer.classList.contains('hidden'),
+    JSON.stringify(wOk.replaces));
+  const wBad = await managerBootWorld({ token: makeGateToken('manager', 'TCH-MGR', 3600), eligible: false });
+  check('flash: manager boot with an ineligible record drops the token and shows the form',
+    wBad.replaces.length === 0 && !wBad.els.managerLoginContainer.classList.contains('hidden')
+    && wBad.session.getItem('alhuda_manager_token') === null);
+  const wOut = await managerBootWorld({ token: null, eligible: true });
+  check('flash: manager boot with no token shows the form, no redirect',
+    wOut.replaces.length === 0 && !wOut.els.managerLoginContainer.classList.contains('hidden'));
+}
+
+{ // OWNER GATE (real initRoleFromUrl + view fns from js/auth.js)
+  const decode = fnSlice(AUTH, 'function decodeTokenPayload(token)');
+  const ownerToken = fnSlice(AUTH, 'function getOwnerToken()');
+  const ownerSession = fnSlice(AUTH, 'function getAuthenticatedOwnerSession()');
+  const mgrSession = fnSlice(AUTH, 'function getAuthenticatedManagerSession()');
+  const views = fnSlice(AUTH, 'function showOwnerLoginView()') + '\n' + fnSlice(AUTH, 'function showMainAppView()');
+  const gate = fnSlice(AUTH, 'function initRoleFromUrl()');
+  check('flash: owner gate functions extracted for execution', !!decode && !!ownerSession && !!views && !!gate && !!mgrSession);
+  function ownerWorld({ search = '', session = {} } = {}) {
+    const els = {
+      ownerLoginView: fakeEl('ownerLoginView', ['hidden']),
+      mainAppWrapper: fakeEl('mainAppWrapper', ['hidden']),
+      teacherSessionPill: fakeEl('teacherSessionPill'),
+    };
+    const sessionStore = memStore(session);
+    const local = memStore({});
+    const replaces = [];
+    const roleCalls = [];
+    const document = {
+      title: 'a', getElementById: id => els[id] || null,
+      querySelectorAll: () => [], querySelector: () => null,
+    };
+    const sandbox = {
+      console, setTimeout, clearTimeout, document,
+      sessionStorage: sessionStore, localStorage: local,
+      atob: s => Buffer.from(s, 'base64').toString('latin1'),
+      URLSearchParams,
+      CURRENT_ROLE: 'owner', ACTIVE_MANAGER_ID: null,
+      switchUserRole: role => { roleCalls.push(role); },
+      window: {
+        document, location: { search, pathname: '/', replace: url => replaces.push(url) },
+        history: { replaceState() {} }, innerWidth: 1280, addEventListener() {},
+      },
+    };
+    runVm(decode + '\n' + ownerToken + '\n' + ownerSession + '\n' + mgrSession + '\n' + views + '\n' + gate, sandbox);
+    return { sandbox, els, sessionStore, local, replaces, roleCalls };
+  }
+  const wOk = ownerWorld({ session: { alhuda_owner_token: makeGateToken('owner', 'OWN-001', 3600) } });
+  vm.runInContext('initRoleFromUrl()', wOk.sandbox);
+  check('flash: owner gate with a live token shows the app shell, never the login view',
+    !wOk.els.mainAppWrapper.classList.contains('hidden')
+    && wOk.els.ownerLoginView.classList.contains('hidden') && wOk.roleCalls.includes('owner'));
+  const wOut = ownerWorld({});
+  vm.runInContext('initRoleFromUrl()', wOut.sandbox);
+  check('flash: owner gate logged out shows the login view, app stays hidden',
+    !wOut.els.ownerLoginView.classList.contains('hidden')
+    && wOut.els.mainAppWrapper.classList.contains('hidden'));
+  const wMgr = ownerWorld({
+    search: '?role=manager',
+    session: {
+      alhuda_manager_session: JSON.stringify({ id: 'TCH-MGR', emp_id: 'MGR-001' }),
+      alhuda_manager_token: makeGateToken('manager', 'TCH-MGR', 3600),
+    },
+  });
+  vm.runInContext('initRoleFromUrl()', wMgr.sandbox);
+  check('flash: manager gate with a live session shows the app shell under the manager role',
+    !wMgr.els.mainAppWrapper.classList.contains('hidden') && wMgr.roleCalls.includes('manager'));
+  const wMgrBad = ownerWorld({ search: '?role=manager', session: {} });
+  vm.runInContext('initRoleFromUrl()', wMgrBad.sandbox);
+  check('flash: manager gate with no session redirects to the manager gate page',
+    wMgrBad.replaces.length === 1 && wMgrBad.replaces[0] === 'manager.html');
+}
+
+{ // OWNER BACKGROUND VERIFY: the alhuda-session-expired listener drops to the right login
+  const m = AUTH.match(/\/\/ LMS-SESSION-EXPIRED-LISTENER-START([\s\S]*?)\/\/ LMS-SESSION-EXPIRED-LISTENER-END/);
+  check('flash: session-expired listener present in js/auth.js', !!m);
+  function listenerWorld(role) {
+    const handlers = [];
+    let loginCalls = 0;
+    const replaces = [];
+    const sandbox = {
+      console, setTimeout, clearTimeout,
+      localStorage: memStore(role ? { alhuda_active_portal_role: role } : {}),
+      showOwnerLoginView: () => { loginCalls++; },
+      window: {
+        addEventListener: (type, fn) => { handlers.push({ type, fn }); },
+        location: { replace: url => replaces.push(url) },
+      },
+    };
+    vm.createContext(sandbox);
+    vm.runInContext(m[1], sandbox);
+    return { handlers, get loginCalls() { return loginCalls; }, replaces };
+  }
+  const wOwn = listenerWorld('owner');
+  check('flash: expired listener registered exactly once', wOwn.handlers.length === 1
+    && wOwn.handlers[0].type === 'alhuda-session-expired');
+  wOwn.handlers[0].fn();
+  check('flash: a failed owner verify drops to the owner login view',
+    wOwn.loginCalls === 1 && wOwn.replaces.length === 0);
+  const wMgr = listenerWorld('manager');
+  wMgr.handlers[0].fn();
+  check('flash: a failed manager verify redirects to the manager gate page, not the owner login',
+    wMgr.replaces.length === 1 && wMgr.replaces[0] === 'manager.html' && wMgr.loginCalls === 0);
+}
+
+// ---------------------------------------------------------------------
+// Structural pins: the flash fix itself
+// ---------------------------------------------------------------------
+check('flash: plain-CSS gate rule keeps .hidden effective before Tailwind (owner)',
+  INDEX.includes('#ownerLoginView.hidden, #mainAppWrapper.hidden { display: none !important; }'));
+check('flash: plain-CSS gate rule keeps .hidden effective before Tailwind (teacher)',
+  TEACHER.includes('#loginView.hidden, #teacherMainContainer.hidden, #dashboardView.hidden { display: none !important; }'));
+check('flash: plain-CSS gate rule keeps .hidden effective before Tailwind (parent)',
+  PARENT.includes('#parentLoginView.hidden, #parentTopNav.hidden, #parentMainPortalContent.hidden, #parentSubNavTabs.hidden, #parentHeaderAuthControls.hidden { display: none !important; }'));
+check('flash: plain-CSS gate rule keeps .hidden effective before Tailwind (manager)',
+  MANAGER.includes('#managerLoginContainer.hidden { display: none !important; }'));
+check('flash: login views start hidden in the markup (teacher / parent / manager)',
+  /id="loginView" class="[^"]*hidden/.test(TEACHER)
+  && /id="parentLoginView" class="[^"]*hidden/.test(PARENT)
+  && /id="managerLoginContainer" class="[^"]*hidden/.test(MANAGER));
+check('flash: teacher + manager boots no longer wait for window.onload',
+  !TEACHER.includes('window.onload = async function')
+  && !MANAGER.includes('window.onload = async function')
+  && TEACHER.includes("document.addEventListener('DOMContentLoaded', teacherBootOnReady)")
+  && MANAGER.includes("document.addEventListener('DOMContentLoaded', managerBootOnReady)"));
+check('flash: hash restore still runs in the boot paths (unchanged)',
+  /loadTeacherPortalData\(\);\s*\n\s*restoreTeacherTabFromHash\(\);/.test(TEACHER)
+  && /renderPortalLibrary\(\);\s*\n\s*restoreParentTabFromHash\(\);/.test(PARENT)
+  && CONFIG.includes('window.restoreAdminTabFromHash()'));
+
 console.log(`\nPORTAL REFRESH RESTORE SUITE: ${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);
