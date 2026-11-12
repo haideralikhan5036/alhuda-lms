@@ -90,7 +90,14 @@ for (const id of SHELL_IDS) {
 // now pins the split region. Below 1024px the login renders
 // exactly as before; the split CSS lives in the head stylesheet,
 // outside this frozen region.
-const LOGIN_REGION_SHA256 = 'e0118bf28e3a5946679cba75789ad0d18fa552fceb0bb62dc518cef2d359372c';
+// RE-PINNED 2026-11-12 (refresh login flash): the owner's refresh
+// report — the login screen flashed first on every refresh — traced
+// to this view carrying no .hidden that existed before the Tailwind
+// Play CDN generated it. The ONLY change inside this region is the
+// added `hidden` class on #parentLoginView itself; the plain-CSS
+// gate rule lives in the head stylesheet and the early gate script
+// after </main>, both outside this frozen region.
+const LOGIN_REGION_SHA256 = '0a9d604d4a79c11094eea06831a698b974dd6d3838a75bfc1a7e547059a4bd1b';
 {
   const a = PARENT.indexOf('<!-- ================= 1. PARENT / STUDENT LOGIN SCREEN');
   const b = PARENT.indexOf('<!-- ================= 2. MAIN CONTENT WRAPPER');

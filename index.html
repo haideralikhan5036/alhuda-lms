@@ -1144,6 +1144,14 @@
   .tab-content .bg-white.rounded-2xl {
     border-radius: 24px;
   }
+
+  /* REFRESH FLASH FIX (2026-11-12): the gate views are toggled with
+     Tailwind's .hidden, which does not exist until the Tailwind Play
+     CDN script loads and generates utilities - until then the fixed
+     full-screen login view paints over the whole portal on every
+     refresh. Plain CSS keeps .hidden effective from the first paint,
+     so the login screen can never flash before the gate decides. */
+  #ownerLoginView.hidden, #mainAppWrapper.hidden { display: none !important; }
 </style>
 </head>
 <body class="text-slate-800 flex flex-col min-h-screen w-full max-w-full overflow-x-hidden bg-slate-50">
@@ -6981,6 +6989,82 @@
   <!-- JAVASCRIPT APPLICATION LOGIC (MODULAR ARCHITECTURE — 16 FEATURE FILES)     -->
   <!-- See js/ folder for clean, isolated feature modules                         -->
   <!-- ========================================================================== -->
+  <!-- REFRESH FLASH FIX (2026-11-12): the login view is hidden only by
+       Tailwind's .hidden, which does not exist until the Tailwind Play
+       CDN script loads - until then the fixed full-screen login view
+       paints over the whole portal, and the real gate only runs on
+       DOMContentLoaded after every parser-blocking head script. This
+       tiny script runs during parsing, right after the gate markup,
+       and decides from the LOCAL token only (role + expiry decode -
+       the same UX-only check js/auth.js applies; the Worker still
+       re-verifies the token on every data call). A live token paints
+       the app shell at once; anything else paints the login screen.
+       The full gate in js/config.js + js/auth.js still runs at
+       DOMContentLoaded and can correct this decision. -->
+  <script>
+  /* LMS-EARLY-GATE-START */
+  (function () {
+    try {
+      var loginView = document.getElementById('ownerLoginView');
+      var mainApp = document.getElementById('mainAppWrapper');
+      if (!loginView || !mainApp) return;
+      function decodeGateToken(token) {
+        try {
+          var parts = String(token).split('.');
+          if (parts.length !== 2 || !parts[0]) return null;
+          var b64 = parts[0].replace(/-/g, '+').replace(/_/g, '/');
+          var pad = b64.length % 4;
+          if (pad) b64 += '='.repeat(4 - pad);
+          return JSON.parse(atob(b64));
+        } catch (e) { return null; }
+      }
+      function liveToken(key, role) {
+        var token = null;
+        try { token = sessionStorage.getItem(key); } catch (e) {}
+        if (!token) return null;
+        var payload = decodeGateToken(token);
+        if (!payload || payload.role !== role) return null;
+        if (typeof payload.exp !== 'number' || Date.now() / 1000 >= payload.exp) {
+          try { sessionStorage.removeItem(key); } catch (e) {}
+          return null;
+        }
+        return token;
+      }
+      function showApp() {
+        loginView.classList.add('hidden');
+        loginView.classList.remove('flex');
+        mainApp.classList.remove('hidden');
+        mainApp.classList.add('flex');
+      }
+      function showLogin() {
+        loginView.classList.remove('hidden');
+        loginView.classList.add('flex');
+        mainApp.classList.add('hidden');
+        mainApp.classList.remove('flex');
+      }
+      var params = new URLSearchParams(window.location.search || '');
+      var urlRole = (params.get('role') || '').toLowerCase();
+      var mgrParam = params.get('m') || params.get('mgr') || params.get('id');
+      if (urlRole === 'manager' || mgrParam) {
+        // Manager branch (mirrors initRoleFromUrl): the session object
+        // AND the manager token must both be live. Anything else is
+        // left undecided here - the full gate redirects to manager.html.
+        var mgrRaw = null;
+        try { mgrRaw = sessionStorage.getItem('alhuda_manager_session'); } catch (e) {}
+        var mgrSession = null;
+        try { mgrSession = mgrRaw ? JSON.parse(mgrRaw) : null; } catch (e) { mgrSession = null; }
+        if (mgrSession && mgrSession.id && mgrSession.emp_id && liveToken('alhuda_manager_token', 'manager')) {
+          showApp();
+        }
+        return;
+      }
+      if (urlRole === 'teacher' || urlRole === 'student' || urlRole === 'parent') return;
+      if (liveToken('alhuda_owner_token', 'owner')) showApp();
+      else showLogin();
+    } catch (e) {}
+  })();
+  /* LMS-EARLY-GATE-END */
+  </script>
   <!-- 1. Core Config, Globals & Boot Sequence -->
   <script src="js/config.js"></script>
   <!-- 2. Shared Modal Helpers, Cache Guard & Realtime Sync -->

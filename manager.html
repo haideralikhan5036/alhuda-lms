@@ -369,6 +369,15 @@
     .flg-outside-copy { display: none; }
   }
 
+  /* REFRESH FLASH FIX (2026-11-12): the login form is toggled with
+     Tailwind's .hidden, which does not exist until the Tailwind Play
+     CDN script loads and generates utilities - until then the form
+     paints on every refresh even while a live session is about to
+     redirect into the portal. Plain CSS keeps .hidden effective
+     from the first paint, so the form stays hidden until the gate
+     decides to show it. */
+  #managerLoginContainer.hidden { display: none !important; }
+
   </style>
 </head>
 <body class="flg-screen text-slate-800 font-sans min-h-screen flex flex-col justify-center items-center p-4 sm:p-6 antialiased">
@@ -385,7 +394,7 @@
     <div class="flg-nd flg-nd-dots"></div>
   </div>
   <main class="w-full flex flex-col justify-center items-center relative z-10">
-    <div id="managerLoginContainer" class="w-full flex flex-col items-center my-auto">
+    <div id="managerLoginContainer" class="w-full flex flex-col items-center my-auto hidden">
       <div class="flg-card" id="mgrLoginCard">
         <div class="flg-brand-panel">
           <div class="flg-brand-deco" aria-hidden="true">
@@ -454,6 +463,47 @@
       </p>
     </div>
   </main>
+
+  <!-- REFRESH FLASH FIX (2026-11-12): this page has no app shell of
+       its own - it only gates into index.html - but the login form
+       used to paint on every refresh while a live session was about
+       to redirect, and the real gate only ran on window.onload after
+       every asset. This tiny script runs during parsing, right after
+       the gate markup: with NO live local token it shows the form at
+       once (a genuinely logged-out boot still sees login
+       immediately); with a live token it leaves the form hidden
+       while the boot below re-verifies the manager record against
+       the backend and redirects - or shows the form if that fails. -->
+  <script>
+  /* LMS-EARLY-GATE-START */
+  (function () {
+    try {
+      var form = document.getElementById('managerLoginContainer');
+      if (!form) return;
+      function decodeGateToken(token) {
+        try {
+          var parts = String(token).split('.');
+          if (parts.length !== 2 || !parts[0]) return null;
+          var b64 = parts[0].replace(/-/g, '+').replace(/_/g, '/');
+          var pad = b64.length % 4;
+          if (pad) b64 += '='.repeat(4 - pad);
+          return JSON.parse(atob(b64));
+        } catch (e) { return null; }
+      }
+      var token = null;
+      try { token = sessionStorage.getItem('alhuda_manager_token'); } catch (e) {}
+      var live = false;
+      if (token) {
+        var payload = decodeGateToken(token);
+        if (payload && payload.role === 'manager' && typeof payload.exp === 'number' && Date.now() / 1000 < payload.exp) {
+          live = true;
+        }
+      }
+      if (!live) form.classList.remove('hidden');
+    } catch (e) {}
+  })();
+  /* LMS-EARLY-GATE-END */
+  </script>
 
   <script>
   /* Fee-style login states (2026-11-10): drives ONLY the decorative
@@ -724,7 +774,16 @@
       } catch (e) { return null; }
     }
 
-    window.onload = async function() {
+    // REFRESH FLASH FIX (2026-11-12): boot used to wait for
+    // window.onload - every font, image and CDN asset - while the
+    // login form sat visible even for a live session about to
+    // redirect. The gate decision + server re-check below need only
+    // the parsed DOM, so boot now starts on DOMContentLoaded. The
+    // early gate script after </main> already hid the form for a
+    // live token; this still re-verifies the manager record against
+    // the backend before redirecting, and shows the form again if
+    // that fails.
+    async function managerBootOnReady() {
       setInterval(() => {
         const now = new Date();
         const el = document.getElementById('liveClock');
@@ -777,7 +836,21 @@
           sessionStorage.removeItem('alhuda_manager_session');
         } catch (e) {}
       }
-    };
+      // Refresh flash fix: the form starts hidden (see the early gate
+      // script after </main>) - show it now that we are staying on
+      // the login page instead of redirecting.
+      document.getElementById('managerLoginContainer')?.classList.remove('hidden');
+    }
+
+    // DOMContentLoaded trigger for managerBootOnReady (see the note
+    // above it). If this script ever runs after parsing
+    // (defer/async), run immediately instead of waiting for an event
+    // that already fired.
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', managerBootOnReady);
+    } else {
+      managerBootOnReady();
+    }
 
     async function handleManagerSignIn(e) {
       e.preventDefault();
