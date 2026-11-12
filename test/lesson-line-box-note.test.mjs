@@ -309,7 +309,7 @@ function makeDocumentStub() {
   sandbox.LessonHistory = LH;
   vm.createContext(sandbox);
   vm.runInContext(SECURITY, sandbox);
-  vm.runInContext('let _LH_TEACHER_LIMIT = 100; let _LH_TEACHER_BLOB_URLS = []; let _LH_TEACHER_VISIBLE_ENTRIES = [];' + NL
+  vm.runInContext('let _LH_TEACHER_LIMIT = 100; let _LH_TEACHER_BLOB_URLS = []; let _LH_TEACHER_VISIBLE_ENTRIES = []; let _LH_TEACHER_PENDING_STUDENT = null;' + NL
     + extractFunction(TEACHER, '_lhTeacherRevokeBlobs') + NL
     + extractFunction(TEACHER, 'renderTeacherLessonHistory') + NL
     + 'this.__render = renderTeacherLessonHistory;', sandbox);

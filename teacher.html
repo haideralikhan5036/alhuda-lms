@@ -1621,6 +1621,7 @@ font-family: var(--font-num) !important;
                 <button onclick="document.getElementById('lhTeacherDateInput').value=''; renderTeacherLessonHistory(false);" class="w-full sm:w-auto px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300 rounded-xl font-bold text-xs transition">Show full history</button>
               </div>
             </div>
+            <div id="lhTeacherScopedChip" style="display:none" class="items-center gap-2 px-3 py-2 bg-indigo-50 border border-indigo-200 text-indigo-800 rounded-xl text-xs font-bold"></div>
             <div id="lhTeacherHistoryList" class="space-y-3">
               <p class="text-xs text-slate-400 text-center py-6">Loading lesson history...</p>
             </div>
@@ -9139,6 +9140,14 @@ font-family: var(--font-num) !important;
         }
         if (secTrials) secTrials.classList.add('hidden');
         if (secSalaries) secSalaries.classList.add('hidden');
+        // Entering the tab from the sidebar/rail/hash starts at "All
+        // students" — unless a per-student History request is in
+        // flight (the Today's Classes button sets the pending id
+        // before this switch runs; the render below applies it).
+        if (!_LH_TEACHER_PENDING_STUDENT) {
+          const _lhSel = document.getElementById('lhTeacherStudentSelect');
+          if (_lhSel) _lhSel.value = 'all';
+        }
         renderTeacherLessonHistory(false);
       } else if (tab === 'trials') {
         if (secKpi) secKpi.classList.add('hidden');
@@ -9222,6 +9231,11 @@ font-family: var(--font-num) !important;
     // teacher history tab, so their Read buttons can resolve the exact
     // normalized entry by index. Rebuilt on every render.
     let _LH_TEACHER_VISIBLE_ENTRIES = [];
+    // Per-student History request (Today's Classes button): carried
+    // past the async history render, because at fresh boot the
+    // student dropdown has no options yet and a direct .value set
+    // is discarded by the browser. Consumed by the next render.
+    let _LH_TEACHER_PENDING_STUDENT = null;
     function _lhTeacherRevokeBlobs() {
       _LH_TEACHER_BLOB_URLS.forEach(u => { try { URL.revokeObjectURL(u); } catch (e) {} });
       _LH_TEACHER_BLOB_URLS = [];
@@ -9230,10 +9244,10 @@ font-family: var(--font-num) !important;
       _LH_TEACHER_LIMIT = _LH_TEACHER_LIMIT >= 1000 ? 1000 : (_LH_TEACHER_LIMIT === 100 ? 300 : 1000);
       renderTeacherLessonHistory(false);
     }
-    // Open history pre-filtered to one student (used by the Student List).
+    // Open history pre-filtered to one student (used by the Today's
+    // Classes History button).
     function openTeacherLessonHistoryForStudent(studentId) {
-      const sel = document.getElementById('lhTeacherStudentSelect');
-      if (sel) sel.value = String(studentId || 'all');
+      _LH_TEACHER_PENDING_STUDENT = String(studentId || 'all');
       switchTeacherPortalTab('history');
     }
     async function renderTeacherLessonHistory(forceRefresh) {
@@ -9242,6 +9256,11 @@ font-family: var(--font-num) !important;
       const dateEl = document.getElementById('lhTeacherDateInput');
       const moreBtn = document.getElementById('lhTeacherLoadMoreBtn');
       if (!listEl || !window.LessonHistory) return;
+      // A per-student History request made before this render (the
+      // dropdown had no options yet at fresh boot). Consumed here so
+      // a later manual visit is never re-scoped.
+      const pendingStudent = _LH_TEACHER_PENDING_STUDENT;
+      _LH_TEACHER_PENDING_STUDENT = null;
       if (forceRefresh) _LH_TEACHER_LIMIT = 100;
 
       // Student options: assigned students first, then any other student
@@ -9277,9 +9296,25 @@ font-family: var(--font-num) !important;
           Object.keys(nameById).sort((a, b) => String(nameById[a]).localeCompare(String(nameById[b]))).map(id =>
             `<option value="${escapeHtml(id)}">${escapeHtml(nameById[id])}</option>`).join('');
         selEl.innerHTML = opts;
-        selEl.value = (prevSel && (prevSel === 'all' || nameById[prevSel])) ? prevSel : 'all';
+        // A pending per-student request wins when it names a known
+        // student; an unknown id falls back to 'all' (never a stale
+        // previous selection). Otherwise the current selection is
+        // preserved across refreshes and re-renders.
+        selEl.value = (pendingStudent && pendingStudent !== 'all')
+          ? (nameById[pendingStudent] ? pendingStudent : 'all')
+          : ((prevSel && (prevSel === 'all' || nameById[prevSel])) ? prevSel : 'all');
       }
       const studentFilter = selEl ? selEl.value : 'all';
+      const chipEl = document.getElementById('lhTeacherScopedChip');
+      if (chipEl) {
+        if (studentFilter && studentFilter !== 'all') {
+          chipEl.textContent = 'Showing history for ' + (nameById[studentFilter] || studentFilter);
+          chipEl.style.display = 'flex';
+        } else {
+          chipEl.textContent = '';
+          chipEl.style.display = 'none';
+        }
+      }
       const dateFilter = dateEl ? dateEl.value : '';
       let visible = entries;
       if (studentFilter && studentFilter !== 'all') visible = visible.filter(e => String(e.studentId) === String(studentFilter));

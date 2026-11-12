@@ -134,7 +134,10 @@ function makeTeacherWorld(hash = '') {
   };
   sandbox.window = { document, history: browser.history, location: browser.loc, innerWidth: 1280, addEventListener() {} };
   vm.createContext(sandbox);
-  vm.runInContext("let CURRENT_TEACHER_TAB = 'dashboard';\n" + TEACHER_CHUNK, sandbox);
+  // Per-student History request state (2026-11-12): the switch
+  // consults it when entering the History tab; declared here so the
+  // executed switch sees the same module state as the live portal.
+  vm.runInContext("let CURRENT_TEACHER_TAB = 'dashboard';\nlet _LH_TEACHER_PENDING_STUDENT = null;\n" + TEACHER_CHUNK, sandbox);
   return { sandbox, els, browser, loaderCalls };
 }
 const tVisible = w => T_SECTIONS.filter(id => !w.els[id].classList.contains('hidden'));
