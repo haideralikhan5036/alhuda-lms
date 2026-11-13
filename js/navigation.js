@@ -456,3 +456,42 @@
       }
     }
 
+    // OFFLINE-COPY SELF-HEAL (2026-11-13): reload the CURRENTLY
+    // ACTIVE admin tab's data — the same loader switchTab runs for
+    // that tab, without any navigation side effects (no hash, no
+    // sidebar moves, no tab switch). Used by the dashboard heartbeat
+    // and the online/visibility/d1-live recovery in dashboard.js,
+    // which used to refetch the dashboard tab only — a stale banner
+    // on e.g. the Families tab healed only on the next tab switch
+    // or manual refresh. Returns true when a loader ran, false
+    // otherwise. The session guard lives at the call sites (same
+    // hasSession check as the heartbeat); this helper never loads
+    // on its own authority.
+    function reloadActiveAdminTab() {
+      try {
+        let tabId = null;
+        const activeBtn = document.querySelector('.sidebar-nav-btn.active');
+        if (activeBtn && activeBtn.getAttribute('data-tab')) tabId = activeBtn.getAttribute('data-tab');
+        if (!tabId) {
+          const visible = document.querySelector('.tab-content:not(.hidden)');
+          if (visible && visible.id) tabId = visible.id;
+        }
+        if (!tabId) return false;
+        if (tabId === 'tab-dashboard') {
+          if (typeof loadDashboardData === 'function') { loadDashboardData(); return true; }
+          return false;
+        }
+        if (tabId === 'tab-attendance' && typeof loadAttendanceList === 'function') { loadAttendanceList(); return true; }
+        if (tabId === 'tab-families' && typeof loadFamiliesAndStudents === 'function') { loadFamiliesAndStudents(); return true; }
+        if (tabId === 'tab-teachers' && typeof loadTeachers === 'function') { loadTeachers(); return true; }
+        if (tabId === 'tab-salaries' && typeof calculateMonthlySalaries === 'function') { calculateMonthlySalaries(); return true; }
+        if (tabId === 'tab-invoices' && typeof loadFeeBillingLedger === 'function') { loadFeeBillingLedger(); return true; }
+        if (tabId === 'tab-trials' && typeof loadTrialClassesData === 'function') { loadTrialClassesData(); return true; }
+        if (tabId === 'tab-leaves' && typeof loadLeaveManagementData === 'function') { loadLeaveManagementData(); return true; }
+        if (tabId === 'tab-curriculum' && typeof loadCurriculumLibrary === 'function') { loadCurriculumLibrary(); return true; }
+        if (tabId === 'tab-schedule-search' && typeof initScheduleSearch === 'function') { initScheduleSearch(); return true; }
+        return false;
+      } catch (e) { return false; }
+    }
+    if (typeof window !== 'undefined') window.reloadActiveAdminTab = reloadActiveAdminTab;
+
