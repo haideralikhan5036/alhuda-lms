@@ -3995,7 +3995,12 @@ font-family: var(--font-num) !important;
     // right away (fresh ladder) instead of waiting for the next
     // scheduled ladder step.
     function recoverTeacherClassesIfDegraded() {
-      if (!_teacherClassesDegraded || _teacherLoadInFlight || !CURRENT_TEACHER) return;
+      // OFFLINE-COPY SELF-HEAL (2026-11-13): also recover when the
+      // global offline banner is showing even though the class list
+      // itself is not flagged degraded (a mirror read from a
+      // non-critical branch sets the banner, not this flag).
+      const _bannerShowing = (typeof window !== 'undefined' && window.__lmsMirrorStale);
+      if ((!_teacherClassesDegraded && !_bannerShowing) || _teacherLoadInFlight || !CURRENT_TEACHER) return;
       resetTeacherClassesRetry();
       loadTeacherPortalData();
     }
@@ -5481,10 +5486,30 @@ font-family: var(--font-num) !important;
     // back after a degraded load, re-fetch once — no manual refresh
     // needed. Guarded to degraded episodes only, so a healthy page
     // never re-renders on this event.
+    // OFFLINE-COPY SELF-HEAL (2026-11-13): refetch also when the
+    // global offline banner is showing even though the class list
+    // itself is not flagged degraded — a mirror read from a
+    // non-critical branch sets the banner, not this flag, and the
+    // banner's background re-probe fires this event when D1 answers
+    // again. Skipped while a load is already in flight.
     window.addEventListener('alhuda-d1-live', () => {
-      if (_teacherClassesDegraded && CURRENT_TEACHER && typeof loadTeacherPortalData === 'function') {
+      const _bannerShowing = (typeof window !== 'undefined' && window.__lmsMirrorStale);
+      if ((_teacherClassesDegraded || _bannerShowing) && CURRENT_TEACHER && !_teacherLoadInFlight && typeof loadTeacherPortalData === 'function') {
         loadTeacherPortalData();
       }
+    });
+
+    // OFFLINE-COPY SELF-HEAL (2026-11-13): the db layer dispatches
+    // 'alhuda-session-expired' when a data call 401s with a token
+    // (dead session — expired/revoked). Admin has listened since
+    // 2026-11-12 (js/auth.js); teacher never did, so an expired
+    // token showed the offline banner instead of the login prompt.
+    // Tokens are already cleared by the db layer; show the login
+    // view. Guarded to a logged-in teacher, so it can never fire
+    // pre-login (a probe 401 without a token dispatches nothing).
+    window.addEventListener('alhuda-session-expired', () => {
+      if (!CURRENT_TEACHER) return;
+      try { showLoginView(); } catch (e) { window.location.reload(); }
     });
 
     // ============================================================

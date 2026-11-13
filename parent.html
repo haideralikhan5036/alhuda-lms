@@ -4663,6 +4663,24 @@
       document.addEventListener('visibilitychange', () => {
         if (document.visibilityState === 'visible') scheduleParentPortalLiveSync();
       });
+
+      // OFFLINE-COPY SELF-HEAL (2026-11-13): when D1 answers again
+      // after a degraded (mirror) episode, refetch the current
+      // student view — the banner's background re-probe fires this
+      // event, so the banner heals without a manual refresh.
+      window.addEventListener('alhuda-d1-live', () => scheduleParentPortalLiveSync());
+
+      // OFFLINE-COPY SELF-HEAL: the db layer dispatches
+      // 'alhuda-session-expired' when a data call 401s with a token
+      // (dead session — expired/revoked). Parent never listened, so
+      // an expired token showed the offline banner instead of the
+      // login prompt. Guarded to a logged-in family, so it can never
+      // fire pre-login (a probe 401 without a token dispatches
+      // nothing).
+      window.addEventListener('alhuda-session-expired', () => {
+        if (!CURRENT_AUTH_FAMILY) return;
+        try { showParentLoginView(); } catch (e) { window.location.reload(); }
+      });
     } catch (e) {
       console.warn('[Parent Realtime Sync] Notice:', e);
     }

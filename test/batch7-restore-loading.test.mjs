@@ -214,7 +214,10 @@ async function runEditScenario(teacherValue) {
     const method = options.method || 'GET';
     if (method === 'GET') {
       probeAttempts++;
-      if (probeAttempts === 1) throw new TypeError('network down');
+      // OFFLINE-COPY SELF-HEAL: a single transient probe failure is
+      // re-probed once before the mirror, so a PERSISTENT failure must
+      // fail BOTH the initial probe and the quick re-probe.
+      if (probeAttempts <= 2) throw new TypeError('network down');
       return { ok: true, status: 200, json: async () => ({ ok: true, d1_bound: true }) };
     }
     const body = JSON.parse(options.body || '{}');
@@ -247,10 +250,10 @@ async function runEditScenario(teacherValue) {
   check('C: failed probe -> mirror result (empty), no throw', Array.isArray(r1.data) && r1.data.length === 0, JSON.stringify(r1).slice(0, 120));
   check('C: client reports DEGRADED after failed probe', windowObj.isCloudflareD1Degraded() === true && windowObj.isCloudflareD1Live() === false);
   const r2 = await windowObj.db.from('teachers').select('*');
-  check('C: inside the cooldown the probe is NOT retried (still mirror)', probeAttempts === 1 && Array.isArray(r2.data) && r2.data.length === 0, 'probeAttempts=' + probeAttempts);
+  check('C: inside the cooldown the probe is NOT retried (still mirror)', probeAttempts === 2 && Array.isArray(r2.data) && r2.data.length === 0, 'probeAttempts=' + probeAttempts);
   fakeNow += 6000; // past the 5 s cooldown
   const r3 = await windowObj.db.from('teachers').select('*');
-  check('C: after the cooldown the probe IS retried and live data loads', probeAttempts === 2 && Array.isArray(r3.data) && r3.data.length === 1, 'probeAttempts=' + probeAttempts + ' ' + JSON.stringify(r3).slice(0, 120));
+  check('C: after the cooldown the probe IS retried and live data loads', probeAttempts === 3 && Array.isArray(r3.data) && r3.data.length === 1, 'probeAttempts=' + probeAttempts + ' ' + JSON.stringify(r3).slice(0, 120));
   check('C: client reports LIVE after recovery', windowObj.isCloudflareD1Live() === true);
   check("C: recovery fired the 'alhuda-d1-live' repaint event", dispatched.includes('alhuda-d1-live'), JSON.stringify(dispatched));
 }

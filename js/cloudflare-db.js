@@ -42,6 +42,10 @@
   let _d1StatusFailedAt = 0;
   let _d1LiveNoticePending = true;
 
+  // OFFLINE-COPY SELF-HEAL (2026-11-13): one fast re-check before a
+  // read falls back to the local mirror.
+  const D1_QUICK_REPROBE_TIMEOUT_MS = 2000;
+
   function fetchWithTimeout(url, options, timeoutMs) {
     const ms = timeoutMs || D1_FETCH_TIMEOUT_MS;
     if (typeof AbortController === 'undefined') return fetch(url, options);
@@ -405,7 +409,7 @@
     return { data: null, error: { message: `Unsupported action: ${action}` } };
   }
 
-  async function checkCloudflareD1Available() {
+  async function checkCloudflareD1Available(timeoutMs) {
     if (_d1Status !== null) {
       // Batch 7 (F3.1): a failed probe is NOT cached for the page
       // lifetime — once the cooldown has passed, the next data load
@@ -421,21 +425,43 @@
     if (_d1CheckPromise) return _d1CheckPromise;
 
     _d1CheckPromise = (async () => {
+      // OFFLINE-COPY SELF-HEAL: remember the token this probe ran
+      // with, so a 401 is only treated as session-expired when the
+      // session that sent it is still the current one — a newer login
+      // supersedes a stale in-flight probe.
+      const tokenAtProbe = getWorkerToken();
       try {
         const res = await fetchWithTimeout(`${getApiBase()}/api/db`, {
           method: 'GET',
           headers: Object.assign({ 'Accept': 'application/json' }, authHeaders())
-        });
+        }, timeoutMs);
         if (!res.ok) {
-          // 401 = probe ran before login (no token yet). Do NOT cache this:
-          // after login the next probe retries WITH the token. Caching it
-          // (pre-fix behaviour) trapped the portal in local-mirror mode
-          // with 0 rows even after a successful login (caught 2026-10-14).
-          if (res.status !== 401) {
-            _d1Status = false;
-            _d1StatusFailedAt = Date.now();
-            _d1LiveNoticePending = true;
+          if (res.status === 401) {
+            // 401 = probe ran before login (no token yet). Do NOT cache this:
+            // after login the next probe retries WITH the token. Caching it
+            // (pre-fix behaviour) trapped the portal in local-mirror mode
+            // with 0 rows even after a successful login (caught 2026-10-14).
+            //
+            // OFFLINE-COPY SELF-HEAL: a 401 WITH a token is a dead
+            // session (expired/revoked), not an offline network — drop
+            // the dead token and surface session-expired instead of
+            // the offline banner. A 401 with NO token is the pre-login
+            // probe: keep the old behaviour (no dispatch, no clear).
+            if (tokenAtProbe && getWorkerToken() === tokenAtProbe) {
+              clearWorkerTokens();
+              try {
+                const lastEv = window.__lmsSessionExpiredEventAt || 0;
+                if (Date.now() - lastEv > 10000) {
+                  window.__lmsSessionExpiredEventAt = Date.now();
+                  window.dispatchEvent(new CustomEvent('alhuda-session-expired'));
+                }
+              } catch (e) {}
+            }
+            return false;
           }
+          _d1Status = false;
+          _d1StatusFailedAt = Date.now();
+          _d1LiveNoticePending = true;
           return false;
         }
         const json = await res.json();
@@ -493,6 +519,56 @@
         if (!document.hidden) window.resetCloudflareD1Availability();
       });
     }
+  }
+
+  // OFFLINE-COPY SELF-HEAL (2026-11-13): one fast re-check (~2 s)
+  // before a read falls back to the local mirror. A single transient
+  // failure (phone network blip, Worker slower than the 12 s probe)
+  // must not paint the offline banner. Returns true when D1 answers
+  // live, false otherwise. Never throws. (A probe 401 with a token
+  // is a dead session: the probe itself clears the token and
+  // dispatches session-expired — callers detect that by the token
+  // disappearing, see executeCloudflareOrLocal.)
+  async function quickReprobeD1() {
+    try {
+      window.resetCloudflareD1Availability();
+      return await checkCloudflareD1Available(D1_QUICK_REPROBE_TIMEOUT_MS);
+    } catch (e) {
+      return false;
+    }
+  }
+
+  // OFFLINE-COPY SELF-HEAL: while the offline banner is on screen,
+  // re-check D1 in the background so the banner heals itself without
+  // a manual refresh — the owner-confirmed case is a tab that stays
+  // OPEN on screen, where no visibility/online event ever fires.
+  // Auth-gated (no token = nothing to heal), stops when the tab is
+  // hidden, and stops the moment the banner hides. A probe success
+  // fires notifyD1Live(); portal listeners refetch, and the next
+  // live read hides the banner (which stops this timer).
+  const MIRROR_HEAL_INTERVAL_MS = 30000;
+  let _mirrorHealTimer = null;
+  function stopMirrorHealTimer() {
+    if (_mirrorHealTimer !== null) {
+      try { clearInterval(_mirrorHealTimer); } catch (e) {}
+      _mirrorHealTimer = null;
+    }
+  }
+  function startMirrorHealTimer() {
+    if (_mirrorHealTimer !== null) return;
+    if (typeof setInterval === 'undefined') return;
+    _mirrorHealTimer = setInterval(async () => {
+      try {
+        if (typeof document !== 'undefined' && document.hidden) return;
+        if (!getWorkerToken()) { stopMirrorHealTimer(); return; }
+        if (!window.__lmsMirrorStale) { stopMirrorHealTimer(); return; }
+        // An explicit "try again now": reset first so the 5 s probe
+        // cooldown cannot make this tick a no-op right after the
+        // failure that raised the banner.
+        window.resetCloudflareD1Availability();
+        await checkCloudflareD1Available();
+      } catch (e) { /* the heal timer must never break the page */ }
+    }, MIRROR_HEAL_INTERVAL_MS);
   }
 
   // Batch 7 (F1.3): read the ids that already exist in D1 for a table.
@@ -685,6 +761,13 @@
   function setMirrorStaleBanner(show) {
     try {
       if (typeof window !== 'undefined') window.__lmsMirrorStale = !!show;
+      // OFFLINE-COPY SELF-HEAL: the banner now starts (and stops) the
+      // background re-probe, so it can clear itself without a refresh.
+      // The text says what is true — the system is reconnecting on
+      // its own. A dead session never reaches this banner: a 401 is
+      // routed to the session-expired prompt instead (see the probe).
+      if (show) startMirrorHealTimer();
+      else stopMirrorHealTimer();
       if (typeof document === 'undefined' || !document.body) return;
       let el = document.getElementById('lms-mirror-stale-banner');
       if (show && !el) {
@@ -692,7 +775,7 @@
         el.id = 'lms-mirror-stale-banner';
         el.setAttribute('role', 'status');
         el.setAttribute('aria-live', 'polite');
-        el.textContent = 'Offline copy shown — live data could not be reached. Reconnect to see the latest records.';
+        el.textContent = 'Offline copy shown — live data could not be reached. Reconnecting automatically — no refresh needed.';
         el.style.cssText = 'position:fixed;left:0;right:0;top:0;z-index:99999;background:#92400e;color:#fff;font-size:14px;line-height:1.4;padding:10px 16px;text-align:center;box-shadow:0 2px 8px rgba(0,0,0,.3);';
         document.body.prepend(el);
       } else if (!show && el) {
@@ -702,7 +785,6 @@
   }
 
   async function executeCloudflareOrLocal(payload) {
-    const isD1Live = await checkCloudflareD1Available();
     // SLOW-CLASSES FIX: remember a mid-flight 401 separately from a
     // generic failure. A 401 on a READ used to fall through to the local
     // mirror silently (the write path already surfaced it) — that
@@ -711,7 +793,13 @@
     // probe succeeded, so it is never the pre-login probe 401 (which
     // returns false above and never reaches a POST).
     let saw401 = false;
-    if (isD1Live) {
+    // OFFLINE-COPY SELF-HEAL: one live POST attempt, extracted so a
+    // single transient failure can retry it once after a fast
+    // re-probe (below) instead of falling straight to the mirror.
+    // Returns the live result, or null when no live answer was
+    // obtained (network throw, non-ok status, or 401 — the last sets
+    // saw401 and is never retried).
+    async function tryLivePost() {
       try {
         const res = await fetchWithTimeout(`${getApiBase()}/api/db`, {
           method: 'POST',
@@ -723,6 +811,7 @@
           // then surface the expiry below instead of the mirror.
           saw401 = true;
           clearWorkerTokens();
+          return null;
         }
         if (res.ok) {
           const result = await res.json();
@@ -763,8 +852,67 @@
           setMirrorStaleBanner(false);
           return result;
         }
+        return null;
       } catch (err) {
         console.warn('[Cloudflare D1] Falling back to local mirror:', err);
+        return null;
+      }
+    }
+    // OFFLINE-COPY SELF-HEAL: remember whether a token existed when
+    // this call started. A probe 401 clears a dead token (see the
+    // probe above); if the token is gone after a re-probe, the
+    // session died — surface SESSION_EXPIRED below, never mirror
+    // rows. (Catches the case where the FIRST probe 401s and clears
+    // the token, so the re-probe 401s with no token at all.)
+    const hadTokenAtEntry = !!getWorkerToken();
+    // OFFLINE-COPY SELF-HEAL: note whether the probe below actually
+    // fetched, or answered from the 5 s cooldown cache. The quick
+    // re-probe must run only for a FRESH failure observed by this
+    // call — a cached "down" answer means an earlier read already
+    // re-probed this failure, so re-probing again would fire one
+    // probe per read for the whole outage and defeat the cooldown.
+    const d1StatusBefore = _d1Status;
+    const d1FailedAtBefore = _d1StatusFailedAt;
+    const isD1Live = await checkCloudflareD1Available();
+    const probeRanFresh = (_d1Status !== d1StatusBefore) || (_d1StatusFailedAt !== d1FailedAtBefore);
+    if (isD1Live) {
+      const live = await tryLivePost();
+      if (live) return live;
+      // OFFLINE-COPY SELF-HEAL: the POST failed after a good probe
+      // (network blip, slow Worker) — one fast re-probe and one POST
+      // retry before the mirror. A 401 is never retried (saw401).
+      if (!saw401) {
+        const healed = await quickReprobeD1();
+        if (healed) {
+          const retry = await tryLivePost();
+          if (retry) return retry;
+        } else if (hadTokenAtEntry && !getWorkerToken()) {
+          saw401 = true;
+        }
+      }
+    } else {
+      // OFFLINE-COPY SELF-HEAL: the probe failed — one fast re-probe
+      // before falling back to the mirror, so a single transient
+      // failure never paints the offline banner. Only when this call
+      // observed the failure fresh: a cached "down" answer (inside
+      // the 5 s cooldown) means an earlier read already re-probed
+      // this failure, so this read goes straight to the mirror and
+      // the cooldown still limits probe frequency.
+      if (probeRanFresh) {
+        const healed = await quickReprobeD1();
+        if (healed) {
+          const retry = await tryLivePost();
+          if (retry) return retry;
+        }
+      }
+      // A probe 401 clears a dead token but leaves _d1Status
+      // untouched (401s are deliberately never cached), so the
+      // token disappearing during this call is itself the signal —
+      // checked whether or not a re-probe ran above. Without this,
+      // a fresh 401-probe would fall through to mirror rows with a
+      // dead token instead of SESSION_EXPIRED.
+      if (hadTokenAtEntry && !getWorkerToken()) {
+        saw401 = true;
       }
     }
 
@@ -1064,6 +1212,9 @@
     _d1CheckPromise = null;
     _d1StatusFailedAt = 0;
     _d1LiveNoticePending = true;
+    // OFFLINE-COPY SELF-HEAL: logout also stops the background
+    // re-probe — a signed-out tab has nothing to heal.
+    try { stopMirrorHealTimer(); } catch (e) {}
     const exactKeys = [
       'alhuda_owner_token', 'alhuda_manager_token', 'alhuda_teacher_token', 'alhuda_parent_token',
       'alhuda_logged_in_owner', 'alhuda_logged_in_manager', 'alhuda_logged_in_teacher', 'alhuda_logged_in_parent',

@@ -3357,24 +3357,42 @@
       });
 
       // 15-second active heartbeat poll on Dashboard tab.
+      // OFFLINE-COPY SELF-HEAL (2026-11-13): one shared auth gate
+      // for the recovery paths below (the same check the heartbeat
+      // already used) — no recovery load on a logged-out screen.
+      function hasAdminSession() {
+        return (typeof getAuthenticatedOwnerSession === 'function' && !!getAuthenticatedOwnerSession())
+          || (typeof getAuthenticatedManagerSession === 'function' && !!getAuthenticatedManagerSession());
+      }
+
       // Batch 7 (F3.5): this is now the ONLY periodic dashboard timer
       // (the 60 s one in config.js was removed), and it is auth-gated
       // like that one was — no dashboard loads on a logged-out screen.
+      // OFFLINE-COPY SELF-HEAL: the timer used to reload the
+      // dashboard tab only — a stale banner on any OTHER tab healed
+      // only on the next tab switch or manual refresh. It now reloads
+      // whichever admin tab is active (same loaders switchTab runs),
+      // so every tab heals itself while it stays open.
       setInterval(() => {
+        if (!hasAdminSession()) return;
         const dashTab = document.getElementById('tab-dashboard');
         const isDashActive = dashTab && !dashTab.classList.contains('hidden');
-        if (!isDashActive || typeof loadDashboardData !== 'function') return;
-        const hasSession = (typeof getAuthenticatedOwnerSession === 'function' && getAuthenticatedOwnerSession())
-          || (typeof getAuthenticatedManagerSession === 'function' && getAuthenticatedManagerSession());
-        if (hasSession) loadDashboardData();
+        if (isDashActive) {
+          if (typeof loadDashboardData === 'function') loadDashboardData();
+        } else if (typeof reloadActiveAdminTab === 'function') {
+          reloadActiveAdminTab();
+        }
       }, 15000);
 
       // Batch 7 (F3.2): when D1 comes back after a degraded (mirror)
       // start, repaint the dashboard once with the live numbers.
+      // OFFLINE-COPY SELF-HEAL: repaint the ACTIVE tab, not always
+      // the dashboard — a Families/Teachers tab showing the offline
+      // banner must heal too.
       window.addEventListener('alhuda-d1-live', () => {
-        if (typeof loadDashboardData === 'function') {
-          loadDashboardData();
-        }
+        if (!hasAdminSession()) return;
+        if (typeof reloadActiveAdminTab === 'function') reloadActiveAdminTab();
+        else if (typeof loadDashboardData === 'function') loadDashboardData();
       });
 
       // SLOW-CLASSES FIX: recovery used to depend on the 15 s timer
@@ -3387,7 +3405,11 @@
       // duplicated here.) loadDashboardData collapses overlapping
       // calls (inflight lock + owed rerun), so these listeners cannot
       // stampede.
+      // OFFLINE-COPY SELF-HEAL: refetch the ACTIVE tab (not only the
+      // dashboard) — same reason as the heartbeat above.
       const _dashRefetchIfVisible = () => {
+        if (!hasAdminSession()) return;
+        if (typeof reloadActiveAdminTab === 'function') { reloadActiveAdminTab(); return; }
         const dashTab = document.getElementById('tab-dashboard');
         if (dashTab && !dashTab.classList.contains('hidden') && typeof loadDashboardData === 'function') loadDashboardData();
       };
