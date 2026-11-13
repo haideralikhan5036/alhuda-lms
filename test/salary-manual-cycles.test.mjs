@@ -135,8 +135,8 @@ async function makePlanAdvance(teacherId, amount, plan) {
 // ---- Setup ---------------------------------------------------------------
 {
   const h = await call('https://worker.test/api/health', { method: 'GET' });
-  check('W setup: health reports the Phase 4 release + schema v8',
-    h.status === 200 && h.data && h.data.version === '2026-11-10-teacher-self-reset' && h.data.schema === '2026-11-07-v8',
+  check('W setup: health reports the Phase 4 release + schema v9',
+    h.status === 200 && h.data && h.data.version === '2026-11-13-teacher-cover' && h.data.schema === '2026-11-13-v9',
     h.text.slice(0, 200));
   const r = await dbPost(TOK.owner, { table: 'families', action: 'select' });
   check('W setup: owner /api/db boot -> 200', r.status === 200, r.text.slice(0, 200));
@@ -146,7 +146,7 @@ async function makePlanAdvance(teacherId, amount, plan) {
   check('W setup: ONE-ACTIVE partial UNIQUE index exists (status set + recovery_id IS NULL)',
     !!idx && /UNIQUE/i.test(idx.sql) && idx.sql.includes('recovery_id IS NULL') && idx.sql.includes("'pending'"), idx && idx.sql);
   const marker = fakeDb.q1("SELECT value FROM system_settings WHERE key = 'schema_version'");
-  check('W setup: schema marker is 2026-11-07-v8', !!marker && marker.value === '2026-11-07-v8', JSON.stringify(marker));
+  check('W setup: schema marker is 2026-11-13-v9', !!marker && marker.value === '2026-11-13-v9', JSON.stringify(marker));
 }
 for (const id of ['TCH-M1', 'TCH-M2', 'TCH-M3', 'TCH-M4', 'TCH-M5', 'TCH-M6', 'TCH-M7', 'TCH-M8', 'TCH-M9']) seedTeacher(id, 'Teacher ' + id.slice(4));
 seedTeacher('TCH-MGR-1', 'Manager One', { employee_type: 'manager' });

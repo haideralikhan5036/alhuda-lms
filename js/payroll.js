@@ -222,6 +222,230 @@
       };
     }
 
+    // ==========================================================================
+    // TEACHER COVER / SUBSTITUTE (2026-11-13)
+    // A covered day moves money ONLY as the admin chose in the leave form
+    // (two steps on the leave record): (1) deduction hogi ya nahi;
+    // (2) agar hogi to kati hui amount substitute ko milegi ya nahi;
+    // agar nahi hogi to substitute ko upar se pay milegi ya nahi.
+    // The value of one covered day is the engine's own daily value for
+    // that student's compiled line: final_rate spread over the line's
+    // own active days (a full-month line gives final_rate / daysInMonth
+    // exactly, the same dailyRate the proration itself uses). Cover
+    // amounts are month-end slip items like bonus/deduction — they are
+    // NOT baked into the gross earned-so-far accrual. A teacher's own
+    // leave never stops accrual (owner rule, 5 Nov 2026 Part 2A); the
+    // cover flow changes pay ONLY for covered days, ONLY as chosen.
+    // ==========================================================================
+
+    // Normalise one leave record's salary choice. Defaults = today's
+    // manual practice: deduct, and the deducted amount goes to the
+    // cover teacher. (Leaves recorded before this feature carry no
+    // salary fields, so they resolve to the same defaults.)
+    function coverLeaveChoiceFromRecord(leave) {
+      const rec = (leave && typeof leave === 'object') ? leave : {};
+      const deduction = String(rec.salary_deduction || 'yes').toLowerCase() === 'no' ? 'no' : 'yes';
+      const goesToCover = String(rec.deduction_goes_to_cover || 'yes').toLowerCase() === 'no' ? 'no' : 'yes';
+      const extraPay = String(rec.no_deduction_cover_paid_extra || 'no').toLowerCase() === 'yes' ? 'yes' : 'no';
+      return { deduction, goesToCover, extraPay };
+    }
+
+    // { leaveId: choice } for every leave record on every teacher row.
+    function buildCoverLeaveChoiceMap(teachers) {
+      const map = {};
+      (teachers || []).forEach(t => {
+        let meta = null;
+        try {
+          if (t && t.address && String(t.address).trim().startsWith('{')) meta = JSON.parse(t.address);
+        } catch (e) {}
+        const leaves = meta && Array.isArray(meta.leave_records) ? meta.leave_records : [];
+        leaves.forEach(lv => {
+          if (lv && lv.id) map[String(lv.id)] = coverLeaveChoiceFromRecord(lv);
+        });
+      });
+      return map;
+    }
+
+    // The money value of ONE covered day on one compiled student line.
+    // 0 when the cover date falls outside the line's payable segment
+    // (or the line has no payable amount). Old snapshots may lack
+    // seg_end/active_days — they fall back to the month window.
+    function payrollCoverDayValue(line, coverDate, monthBounds) {
+      if (!line || !coverDate) return 0;
+      const finalRate = parseFloat(line.final_rate) || 0;
+      if (finalRate <= 0) return 0;
+      const activeDays = parseFloat(line.active_days) || parseFloat(line.days_in_month) || (monthBounds ? monthBounds.daysInMonth : 0);
+      if (activeDays <= 0) return 0;
+      const segStart = String(line.joining_date || line.seg_start || (monthBounds ? monthBounds.firstDayStr : '')).slice(0, 10);
+      const segEnd = String(line.seg_end || line.deactivation_date || (monthBounds ? monthBounds.lastDayStr : '')).slice(0, 10);
+      const date = String(coverDate).slice(0, 10);
+      if (segStart && date < segStart) return 0;
+      if (segEnd && date > segEnd) return 0;
+      return Math.round(finalRate / activeDays);
+    }
+
+    // Dedupe active cover rows by (student, date): only the latest
+    // created row counts — two admins assigning the same student+date
+    // must never pay twice. The kept row absorbs the loser's slots
+    // (as duration_mins), so a student with two slots on one day still
+    // logs both slots in the cover log; the money stays one day-value
+    // either way. (The input rows are annotated, never written back.)
+    function dedupeCoverRows(coverRows) {
+      const byKey = {};
+      const duplicates = [];
+      const slotsOf = (r) => Math.max(1, Math.round((parseFloat(r && r.duration_mins) || 30) / 30));
+      (coverRows || []).forEach(r => {
+        if (!r || r.kind !== 'assign') return;
+        const key = String(r.student_id || '') + '|' + String(r.cover_date || '').slice(0, 10);
+        const prev = byKey[key];
+        if (!prev) { byKey[key] = r; return; }
+        const kept = String(r.created_at || '') >= String(prev.created_at || '') ? r : prev;
+        const lost = kept === r ? prev : r;
+        kept.duration_mins = (slotsOf(kept) + slotsOf(lost)) * 30;
+        duplicates.push(lost);
+        byKey[key] = kept;
+      });
+      return { rows: Object.values(byKey), duplicates };
+    }
+
+    // Compute one teacher's cover money for the month from the COMPILED
+    // slips (every teacher's lines must already be compiled — call
+    // AFTER the compile map). The value of a row is always priced on
+    // the ABSENT teacher's line for that student. Returns
+    // { cover_out, cover_in, cover_lines, warnings }; each cover line
+    // carries both sides so either slip can render its own side.
+    function computeCoverAmountsForTeacher(teacherId, slipsByTeacherId, coverRows, leaveChoicesById, monthBounds) {
+      const warnings = [];
+      const lines = [];
+      let out = 0;
+      let inn = 0;
+      const me = String(teacherId);
+      const linesFor = (tid) => {
+        const slip = slipsByTeacherId && slipsByTeacherId[tid];
+        return (slip && Array.isArray(slip.assigned_students)) ? slip.assigned_students : [];
+      };
+      const nameFor = (tid) => {
+        const slip = slipsByTeacherId && slipsByTeacherId[tid];
+        return (slip && slip.teacher_name) || String(tid || '');
+      };
+      (coverRows || []).forEach(row => {
+        const studentId = String(row.student_id || '');
+        const coverDate = String(row.cover_date || '').slice(0, 10);
+        const absentId = String(row.absent_teacher_id || '');
+        const coverId = String(row.cover_teacher_id || '');
+        const isAbsentSide = absentId === me;
+        const isCoverSide = coverId === me;
+        if (!isAbsentSide && !isCoverSide) return;
+        // A row naming the same teacher on both sides cannot come from
+        // the assign flow (the leaving teacher is excluded from the
+        // dropdown) — ignore it rather than paying both sides.
+        if (absentId && absentId === coverId) return;
+        const studentLines = linesFor(absentId).filter(it => String(it.student_id) === studentId);
+        let dayValue = 0;
+        let matchedLine = null;
+        studentLines.forEach(it => {
+          const v = payrollCoverDayValue(it, coverDate, monthBounds);
+          if (v > 0) { dayValue = v; matchedLine = it; }
+        });
+        if (studentLines.length === 0) {
+          warnings.push({ teacher_name: nameFor(absentId), student_name: row.student_name || studentId, reason: 'covered student has no payable salary line this month — cover pays 0' });
+        } else if (!matchedLine) {
+          warnings.push({ teacher_name: nameFor(absentId), student_name: row.student_name || studentId, reason: 'cover date is outside the student\'s payable salary segment — cover pays 0' });
+        }
+        const choice = (row.leave_id && leaveChoicesById[String(row.leave_id)])
+          || { deduction: 'yes', goesToCover: 'yes', extraPay: 'no' };
+        let mode = 'transfer';
+        let outAmount = 0;
+        let inAmount = 0;
+        if (choice.deduction === 'yes') {
+          outAmount = dayValue;
+          if (choice.goesToCover === 'yes') { inAmount = dayValue; mode = 'transfer'; }
+          else mode = 'deduct-only';
+        } else if (choice.extraPay === 'yes') {
+          inAmount = dayValue;
+          mode = 'extra';
+        } else {
+          mode = 'none';
+        }
+        if (isAbsentSide) out += outAmount;
+        if (isCoverSide) inn += inAmount;
+        const slots = Math.max(1, Math.round((parseFloat(row.duration_mins) || 30) / 30));
+        lines.push({
+          cover_row_id: row.id || null,
+          leave_id: row.leave_id || null,
+          cover_date: coverDate,
+          student_id: studentId,
+          student_name: row.student_name || studentId,
+          absent_teacher_id: absentId,
+          absent_teacher_name: row.absent_teacher_name || nameFor(absentId),
+          cover_teacher_id: coverId,
+          cover_teacher_name: row.cover_teacher_name || nameFor(coverId),
+          day_value: dayValue,
+          slots,
+          mode,
+          out_amount: outAmount,
+          in_amount: inAmount
+        });
+      });
+      return { cover_out: out, cover_in: inn, cover_lines: lines, warnings };
+    }
+
+    // Apply cover money to the compiled slips (call AFTER the compile
+    // map, BEFORE rendering rows). Live slips take the live amounts and
+    // their net is recomputed; frozen slips keep their saved amounts
+    // and only gain cover_stale when the live amounts differ — the
+    // Recalculate flow is the only way the money moves on a frozen
+    // slip. Returns the total net delta (for totalGrossPayroll).
+    function applyCoverToCompiledSlips(slipsByTeacherId, coverRows, leaveChoicesById, monthBounds, payrollWarnings) {
+      const deduped = dedupeCoverRows(coverRows);
+      deduped.duplicates.forEach(d => {
+        if (payrollWarnings) payrollWarnings.push({ teacher_name: d.absent_teacher_name || '', student_name: d.student_name || '', reason: 'duplicate cover for the same student and date ignored (latest assignment kept)' });
+      });
+      let totalDelta = 0;
+      Object.keys(slipsByTeacherId || {}).forEach(tid => {
+        const slip = slipsByTeacherId[tid];
+        if (!slip) return;
+        const res = computeCoverAmountsForTeacher(tid, slipsByTeacherId, deduped.rows, leaveChoicesById, monthBounds);
+        (res.warnings || []).forEach(w => { if (payrollWarnings) payrollWarnings.push(w); });
+        if (slip.frozen) {
+          slip.cover_out = parseFloat(slip.cover_out) || 0;
+          slip.cover_in = parseFloat(slip.cover_in) || 0;
+          if (!Array.isArray(slip.cover_lines)) slip.cover_lines = [];
+          slip.cover_stale = (res.cover_out !== slip.cover_out) || (res.cover_in !== slip.cover_in);
+        } else {
+          const oldNet = parseFloat(slip.net_payable) || 0;
+          slip.cover_out = res.cover_out;
+          slip.cover_in = res.cover_in;
+          slip.cover_lines = res.cover_lines;
+          slip.cover_stale = false;
+          slip.net_payable = Math.max(0,
+            (parseFloat(slip.base_subtotal) || 0) + (parseFloat(slip.bonus) || 0)
+            - (parseFloat(slip.deduction) || 0) - (parseFloat(slip.advance_deducted) || 0)
+            - res.cover_out + res.cover_in);
+          totalDelta += slip.net_payable - oldNet;
+        }
+      });
+      return totalDelta;
+    }
+
+    // Load this month's ACTIVE cover rows for the compile. Best-effort
+    // (a failed read means no covers this compile, never a blocked
+    // payroll table) and stub-safe: plain select('*') + client-side
+    // filter, so older db stubs without .eq chaining still work.
+    async function loadCoverRowsForCompile(monthBounds) {
+      try {
+        if (typeof db === 'undefined' || !db) return [];
+        const covRes = await db.from('cover_assignments').select('*');
+        const rows = Array.isArray(covRes && covRes.data) ? covRes.data : [];
+        return rows.filter(r => r && r.kind === 'assign'
+          && String(r.status || 'active') === 'active'
+          && String(r.cover_date || '') >= monthBounds.firstDayStr
+          && String(r.cover_date || '') <= monthBounds.lastDayStr);
+      } catch (e) {
+        return [];
+      }
+    }
+
     // Basic Salary Protection (owner policy, 2026-11-03): the guaranteed
     // monthly minimum from Course Payment Settings, PRORATED by the
     // teacher's own eligible days in the month (owner's decision: the
@@ -1106,6 +1330,12 @@
       const advanceLedgerByTeacher = await loadAdvanceLedgerForCompile();
       const payrollWarnings = [];
 
+      // Teacher Cover / Substitute (2026-11-13): this month's active
+      // cover rows + the salary choice of every leave record (the
+      // choice lives on the leave record in the teacher's meta).
+      const coverRowsForMonth = await loadCoverRowsForCompile(monthBounds);
+      const coverLeaveChoices = buildCoverLeaveChoiceMap(teachers);
+
       // Commission #2 Phase 1: the D5 pricing gate for this month and
       // the daily-accrual as-of date (today, never past the month end;
       // for a past month this is the month end, so accrual == potential).
@@ -1126,7 +1356,12 @@
       let paidCount = 0;
       let activeTeachersCount = 0;
 
-      const teacherCardsData = teachers.map(t => {
+      // Teacher Cover / Substitute (2026-11-13): compile and render are
+      // two passes now. Cover money needs EVERY teacher's compiled lines
+      // (a cover teacher's IN is priced on the ABSENT teacher's line),
+      // so the compile runs first for all teachers, Phase 2 applies the
+      // cover amounts, and only then do the rows render.
+      teachers.forEach(t => {
         const acc = accounts[t.id] || {};
         const teacherIncrement = getTeacherSeniorityIncrement(t, acc);
 
@@ -1152,7 +1387,12 @@
           // Legacy slips carry no advance_deducted, so this is identical
           // to the old formula for them.
           const advanceDeducted = parseFloat(savedSlip.advance_deducted) || 0;
-          const netPayable = Math.max(0, baseSubtotal + bonus - deduction - advanceDeducted);
+          // Teacher Cover / Substitute (2026-11-13): a frozen slip keeps
+          // the cover amounts it was saved with (legacy slips: 0).
+          const coverOut = parseFloat(savedSlip.cover_out) || 0;
+          const coverIn = parseFloat(savedSlip.cover_in) || 0;
+          const coverLines = Array.isArray(savedSlip.cover_lines) ? savedSlip.cover_lines : [];
+          const netPayable = Math.max(0, baseSubtotal + bonus - deduction - advanceDeducted - coverOut + coverIn);
           const frozenStatus = savedSlip.status || 'Pending';
           const frozenProtection = parseFloat(savedSlip.basic_protection) || 0;
 
@@ -1180,6 +1420,10 @@
             net_payable: netPayable,
             status: frozenStatus,
             advance_deducted: advanceDeducted,
+            cover_out: coverOut,
+            cover_in: coverIn,
+            cover_lines: coverLines,
+            cover_stale: false,
             slip_key: slipKey,
             pricing_version: pricingVersion,
             accrual: frozenSlipAccrual(savedSlip, studentRateItems, baseSubtotal, frozenProtection, monthBounds)
@@ -1447,6 +1691,13 @@
             status,
             advance_deducted: advanceDeducted,
             advance_recovery: advanceRecoveryPlan,
+            // Teacher Cover / Substitute (2026-11-13): filled by Phase 2
+            // (applyCoverToCompiledSlips) after this map — the amounts
+            // need every teacher's compiled lines first.
+            cover_out: 0,
+            cover_in: 0,
+            cover_lines: [],
+            cover_stale: false,
             slip_key: slipKey,
             pricing_version: pricingVersion,
             accrual,
@@ -1455,7 +1706,15 @@
 
           ALL_TEACHER_SALARIES[t.id] = compiledSlip;
         }
+      });
 
+      // Teacher Cover / Substitute (2026-11-13) — Phase 2, see the note
+      // above the compile pass: live slips take the live cover amounts
+      // (their net is recomputed here); frozen slips only gain the
+      // cover_stale flag. The delta keeps the Total KPI honest.
+      totalGrossPayroll += applyCoverToCompiledSlips(ALL_TEACHER_SALARIES, coverRowsForMonth, coverLeaveChoices, monthBounds, payrollWarnings);
+
+      const teacherCardsData = teachers.map(t => {
         const compiledSlip = ALL_TEACHER_SALARIES[t.id];
         const studentRateItems = compiledSlip.assigned_students || [];
         const baseSubtotal = compiledSlip.base_subtotal;
@@ -1464,6 +1723,10 @@
         const bonus = compiledSlip.bonus;
         const deduction = compiledSlip.deduction;
         const advanceDeducted = compiledSlip.advance_deducted || 0;
+        // Teacher Cover / Substitute (2026-11-13): Phase 2 already
+        // applied these to netPayable above.
+        const coverOut = parseFloat(compiledSlip.cover_out) || 0;
+        const coverIn = parseFloat(compiledSlip.cover_in) || 0;
         const netPayable = compiledSlip.net_payable;
         const status = compiledSlip.status;
 
@@ -1498,13 +1761,16 @@
 
         // Adjustments summary
         let adjSummary = '<span class="text-slate-400 text-[11px]">No adjustments</span>';
-        if (bonus > 0 || deduction > 0 || advanceDeducted > 0 || basicProtection > 0) {
+        if (bonus > 0 || deduction > 0 || advanceDeducted > 0 || basicProtection > 0 || coverOut > 0 || coverIn > 0 || compiledSlip.cover_stale) {
           adjSummary = `
             <div class="text-[11px] font-mono">
               ${basicProtection > 0 ? `<span class="text-sky-700 font-bold block">+${basicProtection.toLocaleString()} PKR (Basic Salary Protection)</span>` : ''}
               ${bonus > 0 ? `<span class="text-emerald-700 font-bold block">+${bonus.toLocaleString()} PKR (Bonus)</span>` : ''}
               ${deduction > 0 ? `<span class="text-rose-700 font-bold block">-${deduction.toLocaleString()} PKR (Deduction)</span>` : ''}
               ${advanceDeducted > 0 ? `<span class="text-amber-700 font-bold block">-${advanceDeducted.toLocaleString()} PKR (${compiledSlip.advance_recovery ? 'Advance Recovery' : 'Approved Advances'})</span>` : ''}
+              ${coverOut > 0 ? `<span class="text-violet-700 font-bold block">-${coverOut.toLocaleString()} PKR (Cover — out)</span>` : ''}
+              ${coverIn > 0 ? `<span class="text-violet-700 font-bold block">+${coverIn.toLocaleString()} PKR (Cover — in)</span>` : ''}
+              ${compiledSlip.cover_stale ? `<span class="text-amber-700 font-bold block">⚠ Cover changed after this slip was saved — Recalculate to apply</span>` : ''}
             </div>
           `;
         }
@@ -1615,6 +1881,88 @@
           kpiEarnedEl.classList.add('hidden');
         }
       }
+
+      // Teacher Cover / Substitute (2026-11-13): the admin cover log
+      // under the payroll table (best-effort, never blocks the KPIs).
+      try {
+        const p = renderTeacherCoverLog(selectedMonth, monthBounds, coverRowsForMonth, coverLeaveChoices);
+        if (p && typeof p.catch === 'function') p.catch(function () {});
+      } catch (e) {}
+    }
+
+    // Teacher Cover / Substitute (2026-11-13): the admin cover log
+    // under the payroll table — one row per covered day (priced from
+    // the compiled slips' lines, so the money always matches the slips
+    // above), plus banner-only rows. Priced from the LIVE cover rows,
+    // not from saved cover_lines, so a cover assigned after a slip was
+    // saved still shows — flagged "Recalculate to apply" when either
+    // side's slip is frozen and stale.
+    async function renderTeacherCoverLog(selectedMonth, monthBounds, coverRowsForMonth, coverLeaveChoices) {
+      const tbody = document.getElementById('coverLogTableBody');
+      if (!tbody) return;
+      const slips = (typeof ALL_TEACHER_SALARIES !== 'undefined' && ALL_TEACHER_SALARIES) ? ALL_TEACHER_SALARIES : {};
+      const deduped = dedupeCoverRows(coverRowsForMonth || []);
+      const byAbsent = {};
+      deduped.rows.forEach(r => {
+        const k = String(r.absent_teacher_id || '');
+        (byAbsent[k] = byAbsent[k] || []).push(r);
+      });
+      const modeLabel = (m) => m === 'transfer' ? 'Transfer' : m === 'deduct-only' ? 'Deduct only' : m === 'extra' ? 'Extra pay' : 'No money moved';
+      const logRows = [];
+      Object.keys(byAbsent).forEach(absentId => {
+        // Phase 2 already warned for these rows — the log drops the
+        // warnings and only renders the priced lines.
+        const res = computeCoverAmountsForTeacher(absentId, slips, byAbsent[absentId], coverLeaveChoices || {}, monthBounds);
+        res.cover_lines.forEach(l => {
+          const absentSlip = slips[String(l.absent_teacher_id)];
+          const coverSlip = slips[String(l.cover_teacher_id)];
+          const stale = !!(absentSlip && absentSlip.cover_stale) || !!(coverSlip && coverSlip.cover_stale);
+          logRows.push({ ...l, stale });
+        });
+      });
+      logRows.sort((a, b) => String(a.cover_date || '').localeCompare(String(b.cover_date || '')));
+      // Banner rows for the month (range overlapping the month).
+      let bannerRows = [];
+      try {
+        if (typeof db !== 'undefined' && db) {
+          const res = await db.from('cover_assignments').select('*');
+          const rows = Array.isArray(res && res.data) ? res.data : [];
+          bannerRows = rows.filter(r => r && r.kind === 'banner'
+            && String(r.status || 'active') === 'active'
+            && String(r.start_date || '') <= monthBounds.lastDayStr
+            && String(r.end_date || '') >= monthBounds.firstDayStr);
+        }
+      } catch (e) { bannerRows = []; }
+      const esc = (typeof _slipEsc === 'function') ? _slipEsc : (s => String(s == null ? '' : s));
+      if (!logRows.length && !bannerRows.length) {
+        tbody.innerHTML = `<tr><td colspan="8" class="p-6 text-center text-slate-400">No covers or leave banners this month.</td></tr>`;
+        return;
+      }
+      const coverHtml = logRows.map(l => `
+        <tr class="hover:bg-slate-50/80 transition">
+          <td class="p-3.5 font-mono font-bold text-slate-800">${esc(String(l.cover_date || '').slice(0, 10))}</td>
+          <td class="p-3.5 font-extrabold text-slate-900">${esc(l.absent_teacher_name || '—')}</td>
+          <td class="p-3.5 font-bold text-violet-800">${esc(l.cover_teacher_name || '—')}</td>
+          <td class="p-3.5 font-bold text-slate-900">${esc(l.student_name || '—')}</td>
+          <td class="p-3.5 font-mono text-slate-700">${l.slots || 1} slot${(l.slots || 1) === 1 ? '' : 's'}</td>
+          <td class="p-3.5 font-mono font-bold text-slate-900">${(parseFloat(l.day_value) || 0).toLocaleString()} PKR</td>
+          <td class="p-3.5"><span class="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-violet-100 text-violet-900 border border-violet-300">${modeLabel(l.mode)}</span></td>
+          <td class="p-3.5">${l.stale ? '<span class="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-amber-100 text-amber-800 border border-amber-300">⚠ Recalculate slip</span>' : '<span class="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-100 text-emerald-800 border border-emerald-300">Applied</span>'}</td>
+        </tr>
+      `).join('');
+      const bannerHtml = bannerRows.map(r => `
+        <tr class="hover:bg-slate-50/80 transition">
+          <td class="p-3.5 font-mono font-bold text-slate-800">${esc(String(r.start_date || '').slice(0, 10))}${r.end_date && r.end_date !== r.start_date ? ' → ' + esc(String(r.end_date).slice(0, 10)) : ''}</td>
+          <td class="p-3.5 font-extrabold text-slate-900">${esc(r.absent_teacher_name || '—')}</td>
+          <td class="p-3.5 text-slate-400">—</td>
+          <td class="p-3.5 text-slate-400">—</td>
+          <td class="p-3.5 text-slate-400">—</td>
+          <td class="p-3.5 text-slate-400">—</td>
+          <td class="p-3.5"><span class="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-amber-100 text-amber-900 border border-amber-300">Banner only</span></td>
+          <td class="p-3.5 text-slate-500 text-[11px]">${esc(r.reason || '')}</td>
+        </tr>
+      `).join('');
+      tbody.innerHTML = coverHtml + bannerHtml;
     }
 
     // OPEN ITEMIZED & EDITABLE SALARY SLIP MODAL
@@ -1702,6 +2050,7 @@
       document.getElementById('slipRemarks').value = slipData.remarks || '';
 
       recalculateSlipNetTotal();
+      renderSlipCoverSection(slipData);
 
       // Salary Restructuring Phase 3: for a finalized slip, replace
       // the remaining-advance line with the figure from the recorded
@@ -1754,6 +2103,51 @@
       openSalarySlipModal(tid);
     }
 
+    // Teacher Cover / Substitute (2026-11-13): the slip's own cover
+    // section — one line per covered day, SEPARATE from the student
+    // rates above. Cover amounts are compile-computed and read-only
+    // here (like advance_deducted): editing a student rate does not
+    // re-price them — Recalculate (saved slips) or a fresh Salaries
+    // compile does.
+    function renderSlipCoverSection(slipData) {
+      const sec = document.getElementById('slipCoverSection');
+      if (!sec) return;
+      const me = String((slipData && slipData.teacher_id) || '');
+      const lines = (slipData && Array.isArray(slipData.cover_lines) ? slipData.cover_lines : [])
+        .filter(l => String(l.absent_teacher_id) === me || String(l.cover_teacher_id) === me);
+      const out = parseFloat(slipData && slipData.cover_out) || 0;
+      const inn = parseFloat(slipData && slipData.cover_in) || 0;
+      if (!lines.length && out === 0 && inn === 0 && !slipData.cover_stale) {
+        sec.classList.add('hidden');
+        sec.innerHTML = '';
+        return;
+      }
+      const modeLabel = (m) => m === 'transfer' ? 'Transfer' : m === 'deduct-only' ? 'Deduct only' : m === 'extra' ? 'Extra pay' : 'No money moved';
+      const lineRows = lines.map(l => {
+        const isAbsentSide = String(l.absent_teacher_id) === me;
+        const amount = isAbsentSide ? (parseFloat(l.out_amount) || 0) : (parseFloat(l.in_amount) || 0);
+        const sign = isAbsentSide ? '−' : '+';
+        const other = isAbsentSide ? (l.cover_teacher_name || 'Cover teacher') : (l.absent_teacher_name || 'Absent teacher');
+        const verb = isAbsentSide ? `covered by ${other}` : `covering for ${other}`;
+        return `<div class="flex justify-between items-center gap-2 text-[11px] text-violet-900">
+          <span><strong>${_slipEsc(String(l.cover_date || '').slice(0, 10))}</strong> — ${_slipEsc(l.student_name || 'Student')} (${verb}, ${l.slots || 1} slot${(l.slots || 1) === 1 ? '' : 's'} • ${modeLabel(l.mode)})</span>
+          <span class="font-black font-mono whitespace-nowrap">${amount > 0 ? sign + amount.toLocaleString() + ' PKR' : '0 PKR'}</span>
+        </div>`;
+      }).join('');
+      sec.classList.remove('hidden');
+      sec.innerHTML = `
+        <div class="bg-violet-50 p-3 rounded-xl border border-violet-200 space-y-1.5">
+          <div class="flex justify-between items-center">
+            <span class="text-[11px] font-bold text-violet-800 uppercase">Teacher Cover (Substitute)</span>
+            <span class="font-black text-violet-900 font-mono text-sm">${out > 0 ? '−' + out.toLocaleString() + ' PKR' : ''}${out > 0 && inn > 0 ? ' • ' : ''}${inn > 0 ? '+' + inn.toLocaleString() + ' PKR' : ''}</span>
+          </div>
+          ${lineRows}
+          ${slipData.cover_stale ? `<div class="text-[11px] text-amber-700 font-bold">⚠ A cover changed after this slip was saved — press Recalculate to apply the latest covers.</div>` : ''}
+          <div class="text-[11px] text-violet-700">Cover amounts come from the Salaries compile. Change a student rate and re-run the compile (refresh the Salaries tab, or Recalculate on a saved slip) to refresh them.</div>
+        </div>
+      `;
+    }
+
     function recalculateSlipNetTotal() {
       const rateInputs = document.querySelectorAll('.slip-student-rate');
       let studentsSubtotal = 0;
@@ -1788,7 +2182,16 @@
         : 0;
       const basicProtection = Math.max(0, floorAmount - studentsSubtotal);
       const baseSubtotal = studentsSubtotal + basicProtection;
-      const netPayable = Math.max(0, baseSubtotal + bonus - deduction - advanceDeducted);
+      // Teacher Cover / Substitute (2026-11-13): cover amounts are
+      // compile-computed and read-only in this editor (see
+      // renderSlipCoverSection) — they ride the net, never edited.
+      const coverOut = (typeof CURRENT_SLIP_DATA !== 'undefined' && CURRENT_SLIP_DATA)
+        ? (parseFloat(CURRENT_SLIP_DATA.cover_out) || 0)
+        : 0;
+      const coverIn = (typeof CURRENT_SLIP_DATA !== 'undefined' && CURRENT_SLIP_DATA)
+        ? (parseFloat(CURRENT_SLIP_DATA.cover_in) || 0)
+        : 0;
+      const netPayable = Math.max(0, baseSubtotal + bonus - deduction - advanceDeducted - coverOut + coverIn);
 
       const baseInp = document.getElementById('slipBaseSubtotal');
       if (baseInp) baseInp.value = studentsSubtotal;
@@ -1822,8 +2225,8 @@
       }
 
       const countEl = document.getElementById('slipTotalStudentsCount');
-      if (countEl) countEl.innerText = `${isFixedSlip ? 'Fixed Salary' : `For ${rateInputs.length} Assigned Students`} (${studentsSubtotal.toLocaleString()} Base ${basicProtection > 0 ? '+ ' + basicProtection.toLocaleString() + ' Basic Protection' : ''} ${bonus > 0 ? '+ ' + bonus + ' Bonus' : ''} ${deduction > 0 ? '- ' + deduction + ' Deduction' : ''} ${advanceDeducted > 0 ? '- ' + advanceDeducted + ' Approved Advances' : ''})`;
-      return { baseSubtotal, studentsSubtotal, basicProtection, floorAmount, bonus, deduction, advanceDeducted, netPayable };
+      if (countEl) countEl.innerText = `${isFixedSlip ? 'Fixed Salary' : `For ${rateInputs.length} Assigned Students`} (${studentsSubtotal.toLocaleString()} Base ${basicProtection > 0 ? '+ ' + basicProtection.toLocaleString() + ' Basic Protection' : ''} ${bonus > 0 ? '+ ' + bonus + ' Bonus' : ''} ${deduction > 0 ? '- ' + deduction + ' Deduction' : ''} ${advanceDeducted > 0 ? '- ' + advanceDeducted + ' Approved Advances' : ''} ${coverOut > 0 ? '- ' + coverOut.toLocaleString() + ' Cover out' : ''} ${coverIn > 0 ? '+ ' + coverIn.toLocaleString() + ' Cover in' : ''})`;
+      return { baseSubtotal, studentsSubtotal, basicProtection, floorAmount, bonus, deduction, advanceDeducted, coverOut, coverIn, netPayable };
     }
 
     function saveSalarySlipRecord() {
@@ -1831,7 +2234,7 @@
       // Batch 2 (B7): defense in depth — never save a Manager slip in a manager session.
       if (_payrollBlockManagerRecord(CURRENT_SLIP_TEACHER_ID)) return;
 
-      const { baseSubtotal, studentsSubtotal, basicProtection, floorAmount, bonus, deduction, advanceDeducted, netPayable } = recalculateSlipNetTotal();
+      const { baseSubtotal, studentsSubtotal, basicProtection, floorAmount, bonus, deduction, advanceDeducted, coverOut, coverIn, netPayable } = recalculateSlipNetTotal();
       const remarks = (document.getElementById('slipRemarks')?.value || '').trim();
 
       // Collect edited rates PER LINE (Phase 2: one student can have two
@@ -1878,6 +2281,13 @@
         // (the old object literal had no advance_deducted key, so the
         // next dual-write would have zeroed the table column too).
         advance_deducted: advanceDeducted || 0,
+        // Teacher Cover / Substitute (2026-11-13): compile-computed,
+        // never edited here — the save persists the slip's own cover
+        // lines so the frozen slip keeps them (the next compile reads
+        // them back instead of recomputing).
+        cover_out: coverOut || 0,
+        cover_in: coverIn || 0,
+        cover_lines: (typeof CURRENT_SLIP_DATA !== 'undefined' && CURRENT_SLIP_DATA && Array.isArray(CURRENT_SLIP_DATA.cover_lines)) ? CURRENT_SLIP_DATA.cover_lines : [],
         remarks,
         net_payable: netPayable,
         status: CURRENT_SLIP_DATA.status || 'Pending',

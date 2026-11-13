@@ -84,8 +84,8 @@ function corsHeadersFor(request, env) {
 // functions/api/db.js (the D1 schema marker; v2 after Part A). It is hardcoded
 // here on purpose: /api/health must never 500 because D1 is unreachable, and
 // it must never cost an unauthenticated caller a D1 read.
-const WORKER_RELEASE = '2026-11-10-teacher-self-reset';
-const HEALTH_SCHEMA_VERSION = '2026-11-07-v8';
+const WORKER_RELEASE = '2026-11-13-teacher-cover';
+const HEALTH_SCHEMA_VERSION = '2026-11-13-v9';
 
 // --- Batch 7 Part B: security headers (workers.dev responses) --------------
 // Every response the Worker serves carries this set. The Content-Security-
@@ -1954,7 +1954,7 @@ function checkTableAccess(role, table, action) {
   // them with a reason instead. Salary-advance requests are
   // financial-adjacent records with the same rule: a decided request is
   // terminal history, never erased. This runs before the owner allow-all.
-  if (action === 'delete' && ['payments', 'salary_slips', 'salary_adjustments', 'advance_requests', 'advance_recoveries', 'advance_manual_requests', 'student_assignments'].includes(table)) return 'deny';
+  if (action === 'delete' && ['payments', 'salary_slips', 'salary_adjustments', 'advance_requests', 'advance_recoveries', 'advance_manual_requests', 'student_assignments', 'cover_assignments'].includes(table)) return 'deny';
   // Assignment-based salary (Phase 2, 2026-11-03): the assignment ledger
   // is admin-side payroll infrastructure. Teachers and parents have no
   // access to it at all (their portals keep reading saved slips only).
@@ -2012,6 +2012,13 @@ function checkTableAccess(role, table, action) {
         return 'allow';
       case 'leave_requests':
         return (action === 'select' || action === 'insert' || action === 'upsert') ? 'allow' : 'deny';
+      case 'cover_assignments':
+        // Teacher Cover / Substitute (2026-11-13): teachers READ their
+        // own covers and absences only (scope injected in applyDbScope:
+        // cover_teacher_id = sub OR absent_teacher_id = sub). Every
+        // teacher write is denied — covers are created/cancelled by
+        // admin and manager only.
+        return action === 'select' ? 'allow' : 'deny';
       case 'trial_students':
         return action === 'select' ? 'allow' : 'deny';
       case 'system_settings':
@@ -2058,6 +2065,7 @@ function checkTableAccess(role, table, action) {
       case 'attendance_logs':
       case 'payments':
       case 'leave_requests':
+      case 'cover_assignments':
       case 'trial_students':
         return action === 'select' ? 'allow' : 'deny';
       case 'system_settings':
@@ -3076,6 +3084,12 @@ function applyDbScope(body, role, sub, scope) {
       } else if (action === 'insert' || action === 'upsert') {
         scoped.values = forceTeacherValues(scoped.values, sub);
       }
+    } else if (table === 'cover_assignments' && action === 'select') {
+      // Teacher Cover / Substitute (2026-11-13): a teacher reads the
+      // rows where they are the cover teacher (their Today list) OR the
+      // absent teacher (their exclusion list). Writes are already denied
+      // in checkTableAccess, so no value forcing is needed here.
+      filters.push({ op: 'or', value: [eq('cover_teacher_id', sub), eq('absent_teacher_id', sub)] });
     } else if (table === 'trial_students' && action === 'select') {
       filters.push(eq('teacher_id', sub));
     }
@@ -3097,6 +3111,17 @@ function applyDbScope(body, role, sub, scope) {
       filters.push(eq('family_id', sub));
     } else if (table === 'attendance_logs' || table === 'leave_requests' || table === 'class_schedules') {
       filters.push(scope.studentIds.length ? inList('student_id', scope.studentIds) : none());
+    } else if (table === 'cover_assignments') {
+      // Teacher Cover / Substitute (2026-11-13): a parent reads the
+      // cover rows of their own children (student arm) AND the banner
+      // rows of their children's teachers (teacher arm — banner rows
+      // have student_id NULL, so the student arm alone would hide
+      // them). An empty list on either arm is skipped by the engine
+      // (empty IN renders nothing); both empty means no rows.
+      const arms = [];
+      if (scope.studentIds.length) arms.push(inList('student_id', scope.studentIds));
+      if (scope.teacherIds.length) arms.push(inList('absent_teacher_id', scope.teacherIds));
+      filters.push(arms.length ? (arms.length > 1 ? { op: 'or', value: arms } : arms[0]) : none());
     }
     // teachers: no row filter â post-processing reduces to the safe subset.
     scoped.filters = filters;
@@ -3119,6 +3144,11 @@ function rowInScope(role, sub, scope, table, row) {
       case 'attendance_logs':
       case 'leave_requests':
       case 'class_schedules': return scope.studentIds.includes(String(row.student_id));
+      case 'cover_assignments':
+        // Teacher Cover / Substitute (2026-11-13): own children's cover
+        // rows (student arm) or banner rows of their children's teachers
+        // (teacher arm; banner rows have student_id NULL).
+        return scope.studentIds.includes(String(row.student_id)) || scope.teacherIds.includes(String(row.absent_teacher_id));
       case 'teachers': return scope.teacherIds.includes(String(row.id)); // own children's teachers only (P3-a); still reduced to the safe subset during scrub
       case 'system_settings':
         // Lesson History page links: catalog keys + finance read-switch
@@ -3144,6 +3174,11 @@ function rowInScope(role, sub, scope, table, row) {
       case 'advance_recoveries':
       case 'advance_manual_requests':
       case 'advance_requests': return String(row.teacher_id) === sub;
+      case 'cover_assignments':
+        // Teacher Cover / Substitute (2026-11-13): the cover teacher
+        // or the absent teacher — the row's teacher ids live in
+        // cover_teacher_id / absent_teacher_id, not teacher_id.
+        return String(row.cover_teacher_id) === sub || String(row.absent_teacher_id) === sub;
       case 'attendance_logs':
         // UNION scope (mirror of the SQL filter above): own recordings OR
         // rows of currently assigned students.
@@ -3166,6 +3201,14 @@ function rowInScope(role, sub, scope, table, row) {
   if (role === 'manager' && (table === 'salary_slips' || table === 'salary_adjustments' || table === 'advance_requests' || table === 'advance_recoveries' || table === 'advance_manual_requests')) {
     const managerIds = (scope && Array.isArray(scope.managerIds)) ? scope.managerIds : [];
     return !managerIds.includes(String(row.teacher_id));
+  }
+  // Teacher Cover / Substitute (2026-11-13): same manager-payroll rule
+  // as above, keyed on the cover row's two teacher columns instead of
+  // teacher_id — a manager never sees a cover that involves a manager
+  // account (as absent or as cover teacher).
+  if (role === 'manager' && table === 'cover_assignments') {
+    const managerIds = (scope && Array.isArray(scope.managerIds)) ? scope.managerIds : [];
+    return !managerIds.includes(String(row.absent_teacher_id)) && !managerIds.includes(String(row.cover_teacher_id));
   }
   // Batch 6B: payments rows ARE in scope for managers — their content is
   // controlled by scrubRow (legacy_json blanking) below.

@@ -17,7 +17,7 @@ const REPO_ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 // Secret assembled at runtime (never a single secret-looking literal).
 const WORKER_SECRET = 'slow-classes' + '-test-secret-01';
 const ORIGIN = 'https://alhuda-lms.vercel.app';
-const SCHEMA_VERSION = '2026-11-07-v8';
+const SCHEMA_VERSION = '2026-11-13-v9';
 
 const results = [];
 function check(name, cond, detail = '') {

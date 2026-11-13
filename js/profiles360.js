@@ -5268,6 +5268,11 @@ function _compileTeacher360AggregatedState(teacher, tchSchedules = [], attLogs =
     }
   });
 
+  // Teacher Cover / Substitute (2026-11-13): this teacher's cover
+  // rows as the ABSENT teacher (Phase 3 refresh stores them in the
+  // mem cache; the instant render reads whatever the cache holds).
+  const coverRows = (_TEACHER_360_MEM_CACHE[String(teacher.id).toUpperCase()] || {}).coverRows || [];
+
   // 4. Attendance Rate Calculation from real attendance_logs
   let attendanceRatePercent = 96;
   if (Array.isArray(attLogs) && attLogs.length > 0) {
@@ -5317,6 +5322,7 @@ function _compileTeacher360AggregatedState(teacher, tchSchedules = [], attLogs =
     salaryRows,
     displayDeductionRows,
     leaveRows,
+    coverRows,
     attendanceRatePercent,
     documentsList,
     notesList
@@ -5452,19 +5458,32 @@ async function openTeacher360Profile(teacherId, initialTab = 'students', skipHis
       .filter(s => String(s.assigned_teacher_id) === String(teacher.id))
       .map(s => s.id);
 
-    const [schedRes, attRes] = await Promise.all([
+    const [schedRes, attRes, coverRes] = await Promise.all([
       db.from('class_schedules').select('*, students(*)').eq('teacher_id', teacher.id),
       stuIds.length > 0
         ? db.from('attendance_logs').select('student_id, date, status, lesson_notes').in('student_id', stuIds).limit(200)
-        : Promise.resolve({ data: [] })
+        : Promise.resolve({ data: [] }),
+      // Teacher Cover / Substitute (2026-11-13): this teacher's cover
+      // rows as the absent teacher (best-effort — a failed read leaves
+      // the Cover panel empty, never blocks the profile).
+      (async () => {
+        try {
+          const { data } = await db.from('cover_assignments').select('*').eq('absent_teacher_id', teacher.id);
+          return { data: data || [] };
+        } catch (e) {
+          return { data: [] };
+        }
+      })()
     ]);
 
     const freshScheds = schedRes?.data || initialTchSchedules;
     const freshAtt = attRes?.data || initialAttLogs;
+    const freshCovers = coverRes?.data || [];
 
     _TEACHER_360_MEM_CACHE[tchKey] = {
       tchSchedules: freshScheds,
       attLogs: freshAtt,
+      coverRows: freshCovers,
       ts: Date.now()
     };
 
@@ -6651,6 +6670,7 @@ function _buildTeacherLeavesTabHtml(state) {
           </table>
         </div>
       `}
+      ${_buildTeacherCoverPanelHtml(state)}
     </div>
   `;
 }
@@ -7607,6 +7627,35 @@ function openTeacherRecordLeaveModal(teacherId) {
           <label class="font-extrabold text-slate-700 block mb-1">Reason / Remarks *</label>
           <input type="text" id="t360LvReason" placeholder="Enter leave reason..." required class="w-full p-2.5 rounded-xl border border-slate-300 font-bold text-slate-900">
         </div>
+        <div class="rounded-xl border border-violet-200 bg-violet-50/60 p-3 space-y-3">
+          <div class="font-extrabold text-violet-900 flex items-center gap-1.5"><i class="fa-solid fa-people-arrows"></i> Salary — Cover Days (substitute teacher)</div>
+          <div>
+            <label class="font-extrabold text-slate-700 block mb-1">Salary deduction hogi? *</label>
+            <select id="t360LvDeduct" onchange="_coverLeaveSalaryStepChanged()" class="w-full p-2.5 rounded-xl border border-slate-300 font-bold text-slate-800 bg-white">
+              <option value="yes" selected>Yes — chhutti wale din ki pay katay gi</option>
+              <option value="no">No — poori pay mile gi</option>
+            </select>
+          </div>
+          <div id="t360LvDeductToCoverWrap">
+            <label class="font-extrabold text-slate-700 block mb-1">Kati hui amount substitute teacher ko milegi?</label>
+            <select id="t360LvDeductToCover" class="w-full p-2.5 rounded-xl border border-slate-300 font-bold text-slate-800 bg-white">
+              <option value="yes" selected>Yes — kati hui amount substitute ko transfer hogi</option>
+              <option value="no">No — sirf katay gi, substitute ko nahi milegi</option>
+            </select>
+          </div>
+          <div id="t360LvExtraPayWrap" class="hidden">
+            <label class="font-extrabold text-slate-700 block mb-1">Substitute teacher ko upar se pay milegi?</label>
+            <select id="t360LvExtraPay" class="w-full p-2.5 rounded-xl border border-slate-300 font-bold text-slate-800 bg-white">
+              <option value="no" selected>No — substitute ko extra kuch nahi milega</option>
+              <option value="yes">Yes — substitute ko upar se pay milegi</option>
+            </select>
+          </div>
+          <p class="text-[11px] text-slate-500">Leave se teacher ki apni salary nahi rukti — sirf woh din jin mein koi substitute parhaye, unhi par yeh choice laagu hoti hai.</p>
+        </div>
+        <div class="flex items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 p-3">
+          <input type="checkbox" id="t360LvBanner" checked class="w-4 h-4 accent-amber-600">
+          <label for="t360LvBanner" class="font-bold text-slate-800">Student / Parent banner dikhayen — "Aaj aap ke teacher chhutti par hain" + wajah</label>
+        </div>
         <div class="flex justify-end gap-2 pt-3 border-t border-slate-100">
           <button type="button" onclick="_closeWorkspaceModal()" class="px-4 py-2 rounded-xl bg-slate-100 text-slate-700 font-bold cursor-pointer">Cancel</button>
           <button type="submit" class="px-5 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-slate-950 font-black cursor-pointer">Save Leave Record</button>
@@ -7623,17 +7672,57 @@ async function submitTeacherRecordLeave360(e, teacherId) {
   const meta = _resolveTeacherCustomMeta(teacher);
   const leaves = Array.isArray(meta.leave_records) ? meta.leave_records : [];
 
+  // Teacher Cover / Substitute (2026-11-13): the two-step salary
+  // choice + the banner choice ride on the leave record itself.
+  const leaveId = `LV-${Date.now()}`;
+  const startDate = document.getElementById('t360LvStart').value;
+  const endDate = document.getElementById('t360LvEnd').value;
+  const reason = document.getElementById('t360LvReason').value.trim();
+  const deduct = document.getElementById('t360LvDeduct')?.value || 'yes';
+  const goesToCover = document.getElementById('t360LvDeductToCover')?.value || 'yes';
+  const extraPay = document.getElementById('t360LvExtraPay')?.value || 'no';
+  const showBanner = document.getElementById('t360LvBanner') ? (document.getElementById('t360LvBanner').checked ? 'yes' : 'no') : 'yes';
+
   leaves.unshift({
-    id: `LV-${Date.now()}`,
-    startDate: document.getElementById('t360LvStart').value,
-    endDate: document.getElementById('t360LvEnd').value,
+    id: leaveId,
+    startDate,
+    endDate,
     leaveType: document.getElementById('t360LvType').value,
     duration: document.getElementById('t360LvDuration').value.trim(),
-    reason: document.getElementById('t360LvReason').value.trim(),
-    status: 'APPROVED'
+    reason,
+    status: 'APPROVED',
+    salary_deduction: deduct,
+    deduction_goes_to_cover: goesToCover,
+    no_deduction_cover_paid_extra: extraPay,
+    show_banner: showBanner
   });
 
   await _persistTeacher360Updates(teacher.id, {}, { leave_records: leaves });
+
+  // The banner row (kind='banner') is what the student/parent portals
+  // read. A failed insert (e.g. Worker not deployed yet) only loses
+  // the banner — the leave itself is saved; the toggle in the Cover
+  // panel can recreate it later.
+  if (showBanner === 'yes') {
+    try {
+      await db.from('cover_assignments').insert([{
+        id: _coverNewId(),
+        kind: 'banner',
+        leave_id: leaveId,
+        absent_teacher_id: teacher.id,
+        absent_teacher_name: teacher.full_name,
+        start_date: startDate,
+        end_date: endDate,
+        reason,
+        status: 'active',
+        created_by: _coverActorLabel()
+      }]);
+    } catch (err) {
+      console.warn('[Teacher Cover] banner row not saved:', err);
+    }
+  }
+
+  try { delete _TEACHER_360_MEM_CACHE[String(teacher.id).toUpperCase()]; } catch (err) {}
   _closeWorkspaceModal();
   _notify360('Teacher leave recorded.');
   await openTeacher360Profile(teacherId, 'leaves', true, { forceRefresh: true });
@@ -7646,8 +7735,593 @@ async function deleteTeacherLeaveRecord360(teacherId, leaveId) {
   const meta = _resolveTeacherCustomMeta(teacher);
   const updated = (meta.leave_records || []).filter(l => l.id !== leaveId);
   await _persistTeacher360Updates(teacher.id, {}, { leave_records: updated });
+  // Teacher Cover / Substitute (2026-11-13): cancelling the leave
+  // cancels its covers + banner too (status, never hard-deleted).
+  try {
+    await db.from('cover_assignments').update({ status: 'cancelled' }).eq('leave_id', leaveId);
+  } catch (err) { /* pre-deploy or offline: the rows stay until the next save */ }
+  try { delete _TEACHER_360_MEM_CACHE[String(teacher.id).toUpperCase()]; } catch (err) {}
   _notify360('Leave record deleted.');
   await openTeacher360Profile(teacherId, 'leaves', true, { forceRefresh: true });
+}
+
+// ============================================================================
+// TEACHER COVER / SUBSTITUTE (2026-11-13)
+// When a teacher is on leave, another teacher takes that day's classes.
+// Leave is recorded above; as soon as it is saved it turns ON here:
+// (a) a banner on the student/parent portals, (b) Assign Students —
+// each of the leaving teacher's students moves into the cover
+// teacher's portal FOR THAT DATE ONLY (next day everything reverts;
+// no permanent schedule/assignment change, unlike Shift).
+// Salary follows the leave record's two-step choice (see
+// _coverLeaveChoiceFromRecord); the money itself is computed by
+// js/payroll.js from the compiled slips, never here.
+// ============================================================================
+
+function _coverNewId() {
+  return 'COV-' + Date.now().toString(36).toUpperCase() + '-' + Math.random().toString(36).slice(2, 6).toUpperCase();
+}
+
+// Local (browser-timezone) YYYY-MM-DD — the admin portal runs in the
+// owner's timezone (PKT); never the UTC date, which is a day behind
+// before 05:00 PKT.
+function _coverTodayStr() {
+  const n = new Date();
+  return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, '0')}-${String(n.getDate()).padStart(2, '0')}`;
+}
+
+// Inclusive date list for a leave range (guarded: a leave longer than
+// 31 days lists only the first 31 — the assign flow is per-day).
+function _coverDatesInRange(startDate, endDate) {
+  const out = [];
+  const s = String(startDate || '').slice(0, 10);
+  const e = String(endDate || s).slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(s) || !/^\d{4}-\d{2}-\d{2}$/.test(e) || e < s) return out;
+  let cur = s;
+  while (cur <= e && out.length < 31) {
+    out.push(cur);
+    const d = new Date(Number(cur.slice(0, 4)), Number(cur.slice(5, 7)) - 1, Number(cur.slice(8, 10)));
+    d.setDate(d.getDate() + 1);
+    cur = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  }
+  return out;
+}
+
+// 1 = Monday … 7 = Sunday (the class_schedules day_of_week convention).
+function _coverDayOfWeek(dateStr) {
+  const d = new Date(Number(String(dateStr).slice(0, 4)), Number(String(dateStr).slice(5, 7)) - 1, Number(String(dateStr).slice(8, 10)));
+  const js = d.getDay();
+  return js === 0 ? 7 : js;
+}
+
+function _coverTimeToMinutes(t) {
+  const parts = String(t || '00:00').split(':');
+  const h = parseInt(parts[0], 10);
+  const m = parseInt(parts[1] || '0', 10);
+  return (isNaN(h) ? 0 : h) * 60 + (isNaN(m) ? 0 : m);
+}
+
+function _coverTimesOverlap(aStart, aEnd, bStart, bEnd) {
+  return aStart < bEnd && bStart < aEnd;
+}
+
+// Is this teacher on an APPROVED leave on this date? (meta.leave_records)
+function _coverIsTeacherOnLeaveOn(teacher, dateStr) {
+  try {
+    const meta = _resolveTeacherCustomMeta(teacher);
+    const leaves = Array.isArray(meta.leave_records) ? meta.leave_records : [];
+    return leaves.some(lv => {
+      if (!lv || !lv.startDate) return false;
+      const st = String(lv.status || 'APPROVED').toUpperCase();
+      if (st === 'CANCELLED' || st === 'DELETED') return false;
+      return String(lv.startDate).slice(0, 10) <= dateStr && dateStr <= String(lv.endDate || lv.startDate).slice(0, 10);
+    });
+  } catch (e) {
+    return false;
+  }
+}
+
+// The leave record's salary choice, normalised (defaults = today's
+// manual practice: deduct, and the deducted amount goes to the cover
+// teacher). Mirrors coverLeaveChoiceFromRecord in js/payroll.js.
+function _coverLeaveChoiceFromRecord(leave) {
+  const rec = (leave && typeof leave === 'object') ? leave : {};
+  const deduction = String(rec.salary_deduction || 'yes').toLowerCase() === 'no' ? 'no' : 'yes';
+  const goesToCover = String(rec.deduction_goes_to_cover || 'yes').toLowerCase() === 'no' ? 'no' : 'yes';
+  const extraPay = String(rec.no_deduction_cover_paid_extra || 'no').toLowerCase() === 'yes' ? 'yes' : 'no';
+  return { deduction, goesToCover, extraPay };
+}
+
+function _coverChoiceSummaryText(leave) {
+  const c = _coverLeaveChoiceFromRecord(leave);
+  if (c.deduction === 'yes') {
+    return c.goesToCover === 'yes'
+      ? 'Deduction: Yes → kati hui amount substitute ko milegi (transfer)'
+      : 'Deduction: Yes → sirf katay gi, substitute ko nahi milegi';
+  }
+  return c.extraPay === 'yes'
+    ? 'Deduction: No → substitute ko upar se pay milegi (extra)'
+    : 'Deduction: No → substitute ko extra kuch nahi milega';
+}
+
+// Who recorded this cover (for the cover_assignments.created_by audit
+// column): the signed-in owner username, or the manager's name.
+function _coverActorLabel() {
+  try {
+    if (typeof CURRENT_ROLE !== 'undefined' && CURRENT_ROLE === 'manager') {
+      if (typeof window !== 'undefined' && window.ACTIVE_MANAGER_NAME) return String(window.ACTIVE_MANAGER_NAME);
+      if (typeof getAuthenticatedManagerSession === 'function') {
+        const m = getAuthenticatedManagerSession();
+        if (m && (m.full_name || m.username)) return String(m.full_name || m.username);
+      }
+      return 'manager';
+    }
+    if (typeof getAuthenticatedOwnerSession === 'function') {
+      const s = getAuthenticatedOwnerSession();
+      if (s && s.username) return String(s.username);
+    }
+  } catch (e) {}
+  return 'admin';
+}
+
+// Leave-modal salary step toggle: the second question depends on the
+// first answer (deduction Yes → goes-to-cover; No → extra pay).
+function _coverLeaveSalaryStepChanged() {
+  const deduct = document.getElementById('t360LvDeduct')?.value || 'yes';
+  const toCover = document.getElementById('t360LvDeductToCoverWrap');
+  const extra = document.getElementById('t360LvExtraPayWrap');
+  if (toCover) toCover.classList.toggle('hidden', deduct !== 'yes');
+  if (extra) extra.classList.toggle('hidden', deduct !== 'no');
+}
+
+// --- Banner on/off -------------------------------------------------------
+// The banner row is the live truth; the leave record's show_banner is
+// the admin's choice. Toggling syncs both.
+async function toggleTeacherCoverBanner(teacherId, leaveId) {
+  const teacher = (window.ALL_TEACHERS || []).find(t => String(t.id) === String(teacherId));
+  if (!teacher) return;
+  const meta = _resolveTeacherCustomMeta(teacher);
+  const leaves = Array.isArray(meta.leave_records) ? meta.leave_records : [];
+  const leave = leaves.find(l => String(l.id) === String(leaveId));
+  if (!leave) return;
+  let bannerRows = [];
+  try {
+    const { data } = await db.from('cover_assignments').select('*').eq('leave_id', leaveId).eq('kind', 'banner').eq('status', 'active');
+    bannerRows = data || [];
+  } catch (e) {}
+  if (bannerRows.length) {
+    try {
+      await db.from('cover_assignments').update({ status: 'cancelled' }).eq('leave_id', leaveId).eq('kind', 'banner');
+    } catch (e) {}
+    leave.show_banner = 'no';
+    await _persistTeacher360Updates(teacher.id, {}, { leave_records: leaves });
+    _notify360('Banner band kar diya.');
+  } else {
+    try {
+      await db.from('cover_assignments').insert([{
+        id: _coverNewId(),
+        kind: 'banner',
+        leave_id: leaveId,
+        absent_teacher_id: teacher.id,
+        absent_teacher_name: teacher.full_name,
+        start_date: leave.startDate,
+        end_date: leave.endDate,
+        reason: leave.reason || '',
+        status: 'active',
+        created_by: _coverActorLabel()
+      }]);
+    } catch (e) {
+      _notify360('Banner save nahi ho saka — Worker deploy check karein.', 'error');
+      return;
+    }
+    leave.show_banner = 'yes';
+    await _persistTeacher360Updates(teacher.id, {}, { leave_records: leaves });
+    _notify360('Banner on kar diya.');
+  }
+  try { delete _TEACHER_360_MEM_CACHE[String(teacher.id).toUpperCase()]; } catch (e) {}
+  await openTeacher360Profile(teacherId, 'leaves', true, { forceRefresh: true });
+}
+
+// --- Salary choice edit (on the Cover panel) ------------------------------
+function _coverToggleChoiceEdit(leaveId) {
+  const el = document.getElementById('coverChoiceEdit-' + leaveId);
+  if (el) el.classList.toggle('hidden');
+}
+
+async function saveTeacherCoverLeaveChoice(teacherId, leaveId) {
+  const teacher = (window.ALL_TEACHERS || []).find(t => String(t.id) === String(teacherId));
+  if (!teacher) return;
+  const meta = _resolveTeacherCustomMeta(teacher);
+  const leaves = Array.isArray(meta.leave_records) ? meta.leave_records : [];
+  const leave = leaves.find(l => String(l.id) === String(leaveId));
+  if (!leave) return;
+  leave.salary_deduction = document.getElementById('coverChoiceDeduct-' + leaveId)?.value || 'yes';
+  leave.deduction_goes_to_cover = document.getElementById('coverChoiceToCover-' + leaveId)?.value || 'yes';
+  leave.no_deduction_cover_paid_extra = document.getElementById('coverChoiceExtra-' + leaveId)?.value || 'no';
+  await _persistTeacher360Updates(teacher.id, {}, { leave_records: leaves });
+  _notify360('Cover salary choice save ho gayi.');
+  try { delete _TEACHER_360_MEM_CACHE[String(teacher.id).toUpperCase()]; } catch (e) {}
+  await openTeacher360Profile(teacherId, 'leaves', true, { forceRefresh: true });
+}
+
+// --- Assign modal ----------------------------------------------------------
+let _COVER_ASSIGN_MODAL = { teacherId: null, leaveId: null, dateStr: null, coversForDate: [], leaveCovers: [] };
+
+async function openTeacherCoverAssignModal(teacherId, leaveId, dateStr) {
+  const teacher = (window.ALL_TEACHERS || []).find(t => String(t.id) === String(teacherId));
+  if (!teacher) return;
+  const meta = _resolveTeacherCustomMeta(teacher);
+  const leave = (meta.leave_records || []).find(l => String(l.id) === String(leaveId));
+  if (!leave) {
+    _notify360('Leave record not found.');
+    return;
+  }
+  const dates = _coverDatesInRange(leave.startDate, leave.endDate);
+  if (!dates.length) {
+    _notify360('Leave has no dates.');
+    return;
+  }
+  const today = _coverTodayStr();
+  const selected = (dateStr && dates.includes(dateStr)) ? dateStr : (dates.find(d => d >= today) || dates[0]);
+  _COVER_ASSIGN_MODAL = { teacherId, leaveId, dateStr: selected, coversForDate: [], leaveCovers: [] };
+  _openWorkspaceModal(
+    'Assign Cover Teacher',
+    `${teacher.full_name} — ${leave.startDate}${leave.endDate && leave.endDate !== leave.startDate ? ' → ' + leave.endDate : ''}`,
+    '<div class="p-6 text-center text-slate-500 text-xs"><i class="fa-solid fa-circle-notch fa-spin mr-1"></i> Loading students…</div>'
+  );
+  let leaveCovers = [];
+  let coversForDate = [];
+  try {
+    const [a, b] = await Promise.all([
+      db.from('cover_assignments').select('*').eq('leave_id', leaveId),
+      db.from('cover_assignments').select('*').eq('cover_date', selected).eq('status', 'active')
+    ]);
+    leaveCovers = (a && a.data) || [];
+    coversForDate = (b && b.data) || [];
+  } catch (e) { /* best-effort: render with empty lists */ }
+  _COVER_ASSIGN_MODAL.leaveCovers = leaveCovers;
+  _COVER_ASSIGN_MODAL.coversForDate = coversForDate;
+  _openWorkspaceModal(
+    'Assign Cover Teacher',
+    `${teacher.full_name} — ${leave.startDate}${leave.endDate && leave.endDate !== leave.startDate ? ' → ' + leave.endDate : ''}`,
+    _buildCoverAssignModalHtml(teacher, leave, dates, selected, leaveCovers, coversForDate)
+  );
+}
+
+function _buildCoverAssignModalHtml(teacher, leave, dates, selected, leaveCovers, coversForDate) {
+  const dow = _coverDayOfWeek(selected);
+  const cached = _TEACHER_360_MEM_CACHE[String(teacher.id).toUpperCase()];
+  const schedSource = (cached && Array.isArray(cached.tchSchedules) && cached.tchSchedules.length)
+    ? cached.tchSchedules
+    : (window.ALL_CLASS_SCHEDULES || []);
+  const dayScheds = schedSource.filter(s => String(s.teacher_id) === String(teacher.id) && Number(s.day_of_week) === dow);
+  const eligible = (typeof getEligibleTeachers === 'function'
+    ? getEligibleTeachers(window.ALL_TEACHERS || [])
+    : (window.ALL_TEACHERS || []).filter(t => String(t.status || 'Active').toLowerCase() === 'active')
+  ).filter(t => String(t.id) !== String(teacher.id));
+
+  const rows = [];
+  dayScheds.forEach(s => {
+    const student = (s.students && typeof s.students === 'object')
+      ? s.students
+      : (window.ALL_STUDENTS || []).find(x => String(x.id) === String(s.student_id));
+    if (!student || !student.id) return;
+    if (typeof isStudentSelfDeactivated === 'function' && isStudentSelfDeactivated(student)) return;
+    const existing = (leaveCovers || []).find(r =>
+      r.kind === 'assign' && String(r.status || 'active') === 'active'
+      && String(r.cover_date || '').slice(0, 10) === selected
+      && String(r.schedule_id || '') === String(s.id));
+    const courseName = s.course_name || student.course || '';
+    const timeLabel = `${String(s.start_time || '').slice(0, 5)} – ${String(s.end_time || '').slice(0, 5)}`;
+    rows.push(`
+      <div class="flex flex-col sm:flex-row sm:items-center gap-2 p-3 rounded-xl border border-slate-200 bg-white">
+        <div class="flex-1 min-w-0">
+          <div class="font-extrabold text-slate-900 text-xs">${_esc360(student.name || 'Student')}</div>
+          <div class="text-[11px] text-slate-500">${_esc360(courseName || 'Course')} • ${timeLabel} • ${s.duration_mins || 30}m</div>
+        </div>
+        ${existing ? `
+          <span class="px-2.5 py-1 rounded-full text-[11px] font-extrabold bg-violet-100 text-violet-900 border border-violet-300">Cover: ${_esc360(existing.cover_teacher_name || '—')}</span>
+          <button onclick="cancelTeacherCoverAssign('${_esc360(existing.id)}', '${_esc360(teacher.id)}', '${_esc360(leave.id)}', '${selected}')" class="px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-rose-100 text-slate-700 hover:text-rose-700 border border-slate-300 text-xs font-bold cursor-pointer">Unassign</button>
+        ` : `
+          <select id="coverSelect-${_esc360(student.id)}-${_esc360(s.id)}" class="p-2 rounded-lg border border-slate-300 font-bold text-slate-800 text-xs bg-white min-w-[180px]">
+            <option value="">— Cover teacher chunein —</option>
+            ${eligible.map(t => `<option value="${_esc360(t.id)}">${_esc360(t.full_name)} (${_esc360(t.id)})</option>`).join('')}
+          </select>
+          <button id="coverAssignBtn-${_esc360(student.id)}-${_esc360(s.id)}" onclick="submitTeacherCoverAssign('${_esc360(teacher.id)}', '${_esc360(leave.id)}', '${selected}', '${_esc360(student.id)}', '${_esc360(s.id)}')" class="px-3.5 py-2 rounded-lg bg-violet-600 hover:bg-violet-700 text-white text-xs font-black cursor-pointer">Assign</button>
+        `}
+      </div>
+    `);
+  });
+
+  return `
+    <div class="space-y-4 text-xs">
+      <div class="rounded-xl border border-violet-200 bg-violet-50/60 p-3">
+        <div class="font-extrabold text-violet-900">Salary choice is din ke liye:</div>
+        <div class="text-slate-700 mt-0.5">${_esc360(_coverChoiceSummaryText(leave))}</div>
+        <div class="text-[11px] text-slate-500 mt-1">Yeh choice Leave panel se change ho sakti hai. Student us din ke liye cover teacher ke portal mein chala jayega — agle din wapas apne teacher ke paas.</div>
+      </div>
+      <div>
+        <div class="font-extrabold text-slate-700 mb-1.5">Date chunein:</div>
+        <div class="flex flex-wrap gap-1.5">
+          ${dates.map(d => `
+            <button onclick="openTeacherCoverAssignModal('${_esc360(teacher.id)}', '${_esc360(leave.id)}', '${d}')" class="px-3 py-1.5 rounded-full text-xs font-bold border cursor-pointer ${d === selected ? 'bg-violet-600 text-white border-violet-600' : 'bg-white text-slate-700 border-slate-300 hover:border-violet-400'}">${d}</button>
+          `).join('')}
+        </div>
+      </div>
+      ${rows.length === 0 ? `
+        <div class="p-6 text-center bg-slate-50 rounded-2xl border border-slate-200 text-slate-500">
+          Is din (${selected}) ${ _esc360(teacher.full_name)} ki koi class nahi hai.
+        </div>
+      ` : `
+        <div class="space-y-2">${rows.join('')}</div>
+      `}
+      <div class="flex justify-end pt-2 border-t border-slate-100">
+        <button onclick="_closeWorkspaceModal()" class="px-4 py-2 rounded-xl bg-slate-100 text-slate-700 font-bold cursor-pointer">Close</button>
+      </div>
+    </div>
+  `;
+}
+
+// Conflict check (BLOCK, like Shift): the cover teacher is blocked
+// when they are busy at that time, already covering someone else at
+// an overlapping time that day, on leave themselves, or ineligible.
+async function _coverCheckAssignConflict(coverTeacherId, dateStr, scheduleRow) {
+  const coverTeacher = (window.ALL_TEACHERS || []).find(t => String(t.id) === String(coverTeacherId));
+  if (!coverTeacher) return { ok: false, reason: 'Cover teacher not found.' };
+  const eligible = (typeof getEligibleTeachers === 'function'
+    ? getEligibleTeachers(window.ALL_TEACHERS || [])
+    : (window.ALL_TEACHERS || []).filter(t => String(t.status || 'Active').toLowerCase() === 'active'));
+  if (!eligible.some(t => String(t.id) === String(coverTeacherId))) {
+    return { ok: false, reason: `${coverTeacher.full_name} is not an active eligible teacher.` };
+  }
+  if (_coverIsTeacherOnLeaveOn(coverTeacher, dateStr)) {
+    return { ok: false, reason: `${coverTeacher.full_name} is on leave on ${dateStr}.` };
+  }
+  const dow = _coverDayOfWeek(dateStr);
+  const sStart = _coverTimeToMinutes(scheduleRow.start_time);
+  const sEnd = _coverTimeToMinutes(scheduleRow.end_time);
+  let ownScheds = [];
+  try {
+    const { data } = await db.from('class_schedules').select('*').eq('teacher_id', coverTeacherId);
+    ownScheds = (data || []).filter(s => Number(s.day_of_week) === dow);
+  } catch (e) {
+    ownScheds = (window.ALL_CLASS_SCHEDULES || []).filter(s => String(s.teacher_id) === String(coverTeacherId) && Number(s.day_of_week) === dow);
+  }
+  for (const s of ownScheds) {
+    if (String(s.student_id) === String(scheduleRow.student_id)) continue;
+    if (_coverTimesOverlap(sStart, sEnd, _coverTimeToMinutes(s.start_time), _coverTimeToMinutes(s.end_time))) {
+      const stuName = (window.ALL_STUDENTS || []).find(x => String(x.id) === String(s.student_id))?.name || 'another student';
+      return { ok: false, reason: `${coverTeacher.full_name} already has a class with ${stuName} at ${String(s.start_time || '').slice(0, 5)} on ${dateStr}.` };
+    }
+  }
+  let coversForDate = [];
+  try {
+    const { data } = await db.from('cover_assignments').select('*').eq('cover_teacher_id', coverTeacherId).eq('cover_date', dateStr).eq('status', 'active');
+    coversForDate = data || [];
+  } catch (e) {
+    coversForDate = (_COVER_ASSIGN_MODAL.coversForDate || []);
+  }
+  for (const c of coversForDate) {
+    if (String(c.student_id) === String(scheduleRow.student_id)) continue;
+    if (_coverTimesOverlap(sStart, sEnd, _coverTimeToMinutes(c.start_time), _coverTimeToMinutes(c.end_time))) {
+      return { ok: false, reason: `${coverTeacher.full_name} is already covering ${c.student_name || 'another student'} at ${String(c.start_time || '').slice(0, 5)} on ${dateStr}.` };
+    }
+  }
+  return { ok: true };
+}
+
+async function submitTeacherCoverAssign(teacherId, leaveId, dateStr, studentId, scheduleId) {
+  const teacher = (window.ALL_TEACHERS || []).find(t => String(t.id) === String(teacherId));
+  if (!teacher) return;
+  const selectEl = document.getElementById(`coverSelect-${studentId}-${scheduleId}`);
+  const coverTeacherId = selectEl ? selectEl.value : '';
+  if (!coverTeacherId) {
+    if (typeof lmsNotify === 'function') lmsNotify('Please pick a cover teacher first.', { type: 'warning' });
+    return;
+  }
+  const btn = document.getElementById(`coverAssignBtn-${studentId}-${scheduleId}`);
+  if (btn) btn.disabled = true;
+  try {
+    const cached = _TEACHER_360_MEM_CACHE[String(teacherId).toUpperCase()];
+    const schedSource = (cached && Array.isArray(cached.tchSchedules) && cached.tchSchedules.length)
+      ? cached.tchSchedules
+      : (window.ALL_CLASS_SCHEDULES || []);
+    const scheduleRow = schedSource.find(s => String(s.id) === String(scheduleId))
+      || (window.ALL_CLASS_SCHEDULES || []).find(s => String(s.id) === String(scheduleId));
+    if (!scheduleRow) {
+      if (typeof lmsNotify === 'function') lmsNotify('Class schedule not found — please refresh and try again.', { type: 'error' });
+      return;
+    }
+    const student = (scheduleRow.students && typeof scheduleRow.students === 'object')
+      ? scheduleRow.students
+      : (window.ALL_STUDENTS || []).find(x => String(x.id) === String(studentId));
+    if (!student) {
+      if (typeof lmsNotify === 'function') lmsNotify('Student not found.', { type: 'error' });
+      return;
+    }
+    // Duplicate: one active cover per class-slot per date.
+    try {
+      const { data: existing } = await db.from('cover_assignments').select('*').eq('schedule_id', scheduleId).eq('cover_date', dateStr).eq('status', 'active');
+      if (existing && existing.length) {
+        if (typeof lmsNotify === 'function') lmsNotify('This class already has a cover teacher for this date.', { type: 'warning' });
+        await openTeacherCoverAssignModal(teacherId, leaveId, dateStr);
+        return;
+      }
+    } catch (e) {}
+    // Eligibility (server-checked too by the dropdown list, but the
+    // record may have changed since the modal opened).
+    if (typeof validateEligibleTeacherBackend === 'function') {
+      const v = await validateEligibleTeacherBackend(coverTeacherId);
+      if (!v.valid) {
+        if (typeof lmsNotify === 'function') lmsNotify(v.error || 'Selected teacher is not eligible.', { type: 'error' });
+        if (btn) btn.disabled = false;
+        return;
+      }
+    }
+    const conflict = await _coverCheckAssignConflict(coverTeacherId, dateStr, scheduleRow);
+    if (!conflict.ok) {
+      if (typeof lmsNotify === 'function') lmsNotify(conflict.reason, { type: 'error', title: 'Cover blocked' });
+      if (btn) btn.disabled = false;
+      return;
+    }
+    const coverTeacher = (window.ALL_TEACHERS || []).find(t => String(t.id) === String(coverTeacherId));
+    await db.from('cover_assignments').insert([{
+      id: _coverNewId(),
+      kind: 'assign',
+      leave_id: leaveId,
+      absent_teacher_id: teacher.id,
+      absent_teacher_name: teacher.full_name,
+      cover_teacher_id: coverTeacherId,
+      cover_teacher_name: coverTeacher ? coverTeacher.full_name : coverTeacherId,
+      student_id: student.id,
+      student_name: student.name || 'Student',
+      student_status: student.status || 'Active',
+      course_name: scheduleRow.course_name || student.course || '',
+      cover_date: dateStr,
+      schedule_id: scheduleRow.id,
+      start_time: scheduleRow.start_time || '',
+      end_time: scheduleRow.end_time || '',
+      duration_mins: scheduleRow.duration_mins || 30,
+      meeting_link: scheduleRow.meeting_link || '',
+      status: 'active',
+      created_by: _coverActorLabel()
+    }]);
+    _notify360('Cover assigned.');
+  } catch (e) {
+    console.warn('[Teacher Cover] assign failed:', e);
+    if (typeof lmsNotify === 'function') lmsNotify('Cover assign nahi ho saka — please try again.', { type: 'error' });
+    if (btn) btn.disabled = false;
+    return;
+  }
+  try { delete _TEACHER_360_MEM_CACHE[String(teacherId).toUpperCase()]; } catch (e) {}
+  // Re-open the modal on the same date (fresh lists); the 360 behind
+  // it refreshes too — the workspace modal is preserved across 360
+  // re-renders by design.
+  await openTeacherCoverAssignModal(teacherId, leaveId, dateStr);
+  await openTeacher360Profile(teacherId, 'leaves', true, { forceRefresh: true });
+}
+
+async function cancelTeacherCoverAssign(coverRowId, teacherId, leaveId, dateStr) {
+  if (!(await lmsConfirm('Is cover assignment ko cancel karein? Student us din wapas apne teacher ke paas chala jayega.'))) return;
+  try {
+    await db.from('cover_assignments').update({ status: 'cancelled' }).eq('id', coverRowId);
+  } catch (e) {
+    _notify360('Cancel nahi ho saka.', 'error');
+    return;
+  }
+  _notify360('Cover cancelled.');
+  try { delete _TEACHER_360_MEM_CACHE[String(teacherId).toUpperCase()]; } catch (e) {}
+  if (_COVER_ASSIGN_MODAL.leaveId === leaveId) {
+    await openTeacherCoverAssignModal(teacherId, leaveId, dateStr);
+  }
+  await openTeacher360Profile(teacherId, 'leaves', true, { forceRefresh: true });
+}
+
+// --- Cover panel inside the Leaves tab -------------------------------------
+// state.coverRows = this teacher's cover rows as the ABSENT teacher
+// (loaded by openTeacher360Profile's Phase 3 refresh).
+function _buildTeacherCoverPanelHtml(state) {
+  const { teacher, leaveRows, coverRows } = state;
+  const today = _coverTodayStr();
+  const customLeaves = (leaveRows || []).filter(lv => !String(lv.id || '').startsWith('REQ-LV-'));
+  const rows = Array.isArray(coverRows) ? coverRows : [];
+  const cards = [];
+  customLeaves.forEach(lv => {
+    const leaveRowsForLeave = rows.filter(r => String(r.leave_id || '') === String(lv.id));
+    const bannerOn = leaveRowsForLeave.some(r => r.kind === 'banner' && String(r.status || 'active') === 'active');
+    const assigns = leaveRowsForLeave.filter(r => r.kind === 'assign' && String(r.status || 'active') === 'active');
+    const isPast = String(lv.endDate || '').slice(0, 10) < today;
+    if (isPast && assigns.length === 0 && !bannerOn) return;
+    const range = `${lv.startDate || ''}${lv.endDate && lv.endDate !== lv.startDate ? ' → ' + lv.endDate : ''}`;
+    const choice = _coverLeaveChoiceFromRecord(lv);
+    cards.push(`
+      <div class="mt-3 rounded-2xl border ${isPast ? 'border-slate-200 bg-slate-50' : 'border-violet-200 bg-violet-50/50'} p-4 space-y-3">
+        <div class="flex flex-wrap items-center justify-between gap-2">
+          <h4 class="text-sm font-black ${isPast ? 'text-slate-700' : 'text-violet-900'} flex items-center gap-2">
+            <i class="fa-solid fa-people-arrows"></i> Teacher Cover — ${_esc360(range)}
+          </h4>
+          ${isPast
+            ? '<span class="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-slate-200 text-slate-600">Past leave</span>'
+            : '<span class="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-100 text-emerald-800 border border-emerald-300">Leave ON</span>'}
+        </div>
+        <div class="text-xs text-slate-700">
+          <span class="font-bold">Salary:</span> ${_esc360(_coverChoiceSummaryText(lv))}
+          ${!isPast ? `<button onclick="_coverToggleChoiceEdit('${_esc360(lv.id)}')" class="ml-2 text-violet-700 hover:underline font-bold cursor-pointer">Change</button>` : ''}
+        </div>
+        ${!isPast ? `
+          <div id="coverChoiceEdit-${_esc360(lv.id)}" class="hidden rounded-xl border border-violet-200 bg-white p-3 space-y-2">
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
+              <div>
+                <label class="font-extrabold text-slate-700 block mb-1 text-[11px]">Deduction hogi?</label>
+                <select id="coverChoiceDeduct-${_esc360(lv.id)}" class="w-full p-2 rounded-lg border border-slate-300 font-bold text-slate-800 text-xs bg-white">
+                  <option value="yes" ${choice.deduction === 'yes' ? 'selected' : ''}>Yes</option>
+                  <option value="no" ${choice.deduction === 'no' ? 'selected' : ''}>No</option>
+                </select>
+              </div>
+              <div>
+                <label class="font-extrabold text-slate-700 block mb-1 text-[11px]">Kati hui amount cover ko?</label>
+                <select id="coverChoiceToCover-${_esc360(lv.id)}" class="w-full p-2 rounded-lg border border-slate-300 font-bold text-slate-800 text-xs bg-white">
+                  <option value="yes" ${choice.goesToCover === 'yes' ? 'selected' : ''}>Yes</option>
+                  <option value="no" ${choice.goesToCover === 'no' ? 'selected' : ''}>No</option>
+                </select>
+              </div>
+              <div>
+                <label class="font-extrabold text-slate-700 block mb-1 text-[11px]">No deduction → extra pay?</label>
+                <select id="coverChoiceExtra-${_esc360(lv.id)}" class="w-full p-2 rounded-lg border border-slate-300 font-bold text-slate-800 text-xs bg-white">
+                  <option value="yes" ${choice.extraPay === 'yes' ? 'selected' : ''}>Yes</option>
+                  <option value="no" ${choice.extraPay === 'no' ? 'selected' : ''}>No</option>
+                </select>
+              </div>
+            </div>
+            <button onclick="saveTeacherCoverLeaveChoice('${_esc360(teacher.id)}', '${_esc360(lv.id)}')" class="px-3.5 py-2 rounded-lg bg-violet-600 hover:bg-violet-700 text-white text-xs font-black cursor-pointer">Save choice</button>
+          </div>
+        ` : ''}
+        <div class="flex flex-wrap items-center gap-2 text-xs">
+          <span class="font-bold text-slate-700">Banner:</span>
+          ${bannerOn
+            ? '<span class="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-amber-100 text-amber-900 border border-amber-300">ON — students/parents see it</span>'
+            : '<span class="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-slate-100 text-slate-600 border border-slate-300">OFF</span>'}
+          ${!isPast ? `
+            <button onclick="toggleTeacherCoverBanner('${_esc360(teacher.id)}', '${_esc360(lv.id)}')" class="px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-600 text-slate-950 text-xs font-black cursor-pointer">${bannerOn ? 'Banner band karein' : 'Banner on karein'}</button>
+            <span class="text-[11px] text-slate-500">Preview: "Aaj aap ke teacher ${_esc360(teacher.full_name)} chhutti par hain"${lv.reason ? ` — ${_esc360(lv.reason)}` : ''}</span>
+          ` : ''}
+        </div>
+        <div class="text-xs">
+          <div class="font-bold text-slate-700 mb-1">Assigned covers:</div>
+          ${assigns.length === 0 ? `
+            <div class="text-slate-500">Abhi kisi student ke liye cover assign nahi hua.</div>
+          ` : `
+            <div class="space-y-1">
+              ${assigns.map(a => `
+                <div class="flex flex-wrap items-center gap-2 bg-white rounded-lg border border-slate-200 px-3 py-2">
+                  <span class="font-mono font-bold text-slate-800">${_esc360(String(a.cover_date || '').slice(0, 10))}</span>
+                  <span class="font-extrabold text-slate-900">${_esc360(a.student_name || 'Student')}</span>
+                  <span class="text-slate-500">→</span>
+                  <span class="font-bold text-violet-800">${_esc360(a.cover_teacher_name || '—')}</span>
+                  ${!isPast ? `<button onclick="cancelTeacherCoverAssign('${_esc360(a.id)}', '${_esc360(teacher.id)}', '${_esc360(lv.id)}', '${_esc360(String(a.cover_date || '').slice(0, 10))}')" class="ml-auto text-rose-600 hover:underline font-bold cursor-pointer">Unassign</button>` : ''}
+                </div>
+              `).join('')}
+            </div>
+          `}
+        </div>
+        ${!isPast ? `
+          <button onclick="openTeacherCoverAssignModal('${_esc360(teacher.id)}', '${_esc360(lv.id)}')" class="px-4 py-2 rounded-xl bg-violet-600 hover:bg-violet-700 text-white text-xs font-black inline-flex items-center gap-1.5 cursor-pointer shadow-2xs">
+            <i class="fa-solid fa-user-plus"></i> Assign Students
+          </button>
+        ` : ''}
+      </div>
+    `);
+  });
+  if (!cards.length) return '';
+  return `
+    <div class="mt-4">
+      <h4 class="text-sm font-black text-slate-900 flex items-center gap-2">
+        <i class="fa-solid fa-people-arrows text-violet-600"></i> Teacher Cover / Substitute
+      </h4>
+      <p class="text-[11px] text-slate-500 mt-0.5">Leave ON hotay hi banner aur Assign Students yahan aatay hain. Cover sirf us date ke liye hota hai — agle din sab kuch wapas original teacher ke paas.</p>
+      ${cards.join('')}
+    </div>
+  `;
 }
 
 function openTeacherUploadDocsModal(teacherId) {

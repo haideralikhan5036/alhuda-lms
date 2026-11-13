@@ -1177,6 +1177,12 @@
         </div>
       </div>
 
+      <!-- TEACHER COVER / SUBSTITUTE LEAVE BANNER (2026-11-13): shown
+           when the student's teacher is on leave today (admin's reason)
+           and/or a cover teacher is taking today's class. Filled by
+           renderCurrentStudentData; hidden when neither applies. -->
+      <div id="teacherCoverBanner" class="hidden mb-5 rounded-2xl border border-amber-300 bg-amber-50 p-4 sm:p-5 shadow-sm"></div>
+
       <!-- LIVE CLASS JOIN CARD & 4 QUICK STAT CARDS -->
       <div class="grid grid-cols-1 lg:grid-cols-3 gap-5">
         
@@ -2361,6 +2367,38 @@
           const parsedNotes = typeof s.notes === 'string' ? JSON.parse(s.notes) : s.notes;
           if (parsedNotes && parsedNotes.meeting_link) teacherZoomLink = parsedNotes.meeting_link;
         } catch(e) {}
+      }
+
+      // Teacher Cover / Substitute (2026-11-13): leave banner for the
+      // current student's teacher, plus today's cover teacher (if this
+      // student is covered). Best-effort: a failed read hides the
+      // banner and never blocks the portal; before the Worker deploy
+      // the table does not exist yet and the read fails closed.
+      let coverBannerRow = null;
+      let coverTodayRow = null;
+      if (db && s.assigned_teacher_id) {
+        try {
+          const todayStr = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Karachi', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
+          const { data: coverRows } = await db.from('cover_assignments').select('*').eq('absent_teacher_id', s.assigned_teacher_id).eq('status', 'active');
+          const rows = coverRows || [];
+          coverBannerRow = rows.find(r => r.kind === 'banner' && r.start_date && r.end_date && r.start_date <= todayStr && todayStr <= r.end_date) || null;
+          coverTodayRow = rows.find(r => r.kind === 'assign' && r.cover_date === todayStr && String(r.student_id) === String(s.id)) || null;
+        } catch (e) { /* banner stays hidden */ }
+      }
+      const coverBannerEl = document.getElementById('teacherCoverBanner');
+      if (coverBannerEl) {
+        if (coverBannerRow || coverTodayRow) {
+          const reason = coverBannerRow && coverBannerRow.reason ? escapeHtml(coverBannerRow.reason) : '';
+          const coverLine = coverTodayRow
+            ? `<p class="text-sm text-amber-900 mt-1">Aaj ki class <strong>${escapeHtml(coverTodayRow.cover_teacher_name || 'substitute teacher')}</strong> parhayenge.</p>`
+            : '';
+          const leaveLine = `<p class="text-sm sm:text-base font-bold text-amber-900">📢 Aaj aap ke teacher ${escapeHtml(teacherName)} chhutti par hain.${reason ? ` — ${reason}` : ''}</p>`;
+          coverBannerEl.innerHTML = leaveLine + coverLine;
+          coverBannerEl.classList.remove('hidden');
+        } else {
+          coverBannerEl.classList.add('hidden');
+          coverBannerEl.innerHTML = '';
+        }
       }
 
       // 2. Fetch Schedules

@@ -2525,6 +2525,38 @@
           </table>
         </div>
       </div>
+
+      <!-- TEACHER COVER LOG (2026-11-13) — one row per covered day, plus
+           banner-only rows. Filled by js/payroll.js renderTeacherCoverLog
+           from the compiled slips, so the money always matches the slips
+           above. -->
+      <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden mt-5">
+        <div class="p-4 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
+          <div class="font-extrabold text-xs text-slate-800 flex items-center gap-1.5 uppercase tracking-wide">
+            <i class="fa-solid fa-people-arrows text-violet-600"></i> Teacher Cover Log
+          </div>
+          <span class="text-[11px] text-slate-500 italic">One row per covered day — the money always matches the slips above</span>
+        </div>
+        <div class="overflow-x-auto touch-scroll">
+          <table class="w-full text-left text-xs border-collapse min-w-[760px]">
+            <thead class="bg-slate-100 text-slate-700 font-bold border-b border-slate-200 uppercase tracking-wide text-[11px]">
+              <tr>
+                <th class="p-3.5">Date</th>
+                <th class="p-3.5">On Leave</th>
+                <th class="p-3.5">Cover Teacher</th>
+                <th class="p-3.5">Student</th>
+                <th class="p-3.5">Slots</th>
+                <th class="p-3.5">Amount</th>
+                <th class="p-3.5">Mode</th>
+                <th class="p-3.5">Status</th>
+              </tr>
+            </thead>
+            <tbody id="coverLogTableBody" class="divide-y divide-slate-100 font-medium">
+              <tr><td colspan="8" class="p-8 text-center text-slate-400">Cover log loads with the salaries above.</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
     </section>
 
     <!-- 6.5 COURSE PAYMENT SETTINGS -->
@@ -5081,6 +5113,11 @@
             </div>
             <span class="font-black text-amber-900 font-mono text-sm" id="slipAdvanceRecoveryVal">-0 PKR</span>
           </div>
+
+          <!-- Teacher Cover / Substitute (2026-11-13): the slip's own
+               cover section, filled by js/payroll.js
+               renderSlipCoverSection — one line per covered day. -->
+          <div id="slipCoverSection" class="hidden"></div>
 
           <!-- Salary Restructuring Phase 4: manual advance repayment
                submissions for this teacher + period (Confirm / Adjust /
