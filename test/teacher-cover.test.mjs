@@ -26,6 +26,10 @@
 //   Leave ON card, banner pill + preview, salary summary + Change,
 //   assigned covers list, Assign Students button, past-leave and
 //   REQ-LV- skipping.
+//   Part 6 executes the REAL leave modal + assign modal + summary texts
+//   and asserts professional English throughout (2026-11-13 fix): every
+//   Roman Urdu label from the shipped modal/panel/banner is gone, and the
+//   option values (yes/no) and all behaviour are unchanged.
 //   Part 5 pins the structural contract in the portals (leave modal
 //   salary fields, banner container, Cover badge, slip cover section,
 //   cover log) and the Worker/db version strings.
@@ -482,9 +486,9 @@ async function conflict(coverTeacherId, scheds = [], covers = []) {
   check('panel: renders the Teacher Cover section with Leave ON',
     html.includes('Teacher Cover') && html.includes('Leave ON'), html.slice(0, 200));
   check('panel: banner shows ON with the admin reason in the preview',
-    html.includes('ON — students/parents see it') && html.includes('chhutti par hain') && html.includes('Family function'), html.slice(0, 400));
+    html.includes('ON — students/parents see it') && html.includes('is on leave today') && html.includes('Family function'), html.slice(0, 400));
   check('panel: salary summary shows the transfer choice + Change button',
-    html.includes('Deduction: Yes') && html.includes('substitute ko milegi') && html.includes('Change'), html.slice(0, 400));
+    html.includes('Deduction: Yes') && html.includes('goes to the substitute') && html.includes('Change'), html.slice(0, 400));
   check('panel: assigned cover lists the student and the cover teacher',
     html.includes('Child One') && html.includes('Teacher B') && html.includes('Unassign'), html.slice(0, 400));
   check('panel: Assign Students button is present for a current leave',
@@ -500,13 +504,13 @@ async function conflict(coverTeacherId, scheds = [], covers = []) {
   check('panel: no custom leaves means no panel at all', emptyHtml === '');
   const bannerOff = p3(`_buildTeacherCoverPanelHtml(${JSON.stringify({ teacher: { id: 'T-A', full_name: 'Teacher A' }, leaveRows: [{ id: 'LV-1', startDate: D_PLUS1, endDate: D_PLUS1, reason: 'x' }], coverRows: [] })})`);
   check('panel: a leave with no banner row shows Banner OFF + the on-button',
-    bannerOff.includes('OFF') && bannerOff.includes('Banner on karein'));
+    bannerOff.includes('OFF') && bannerOff.includes('Turn banner on'));
   const deductOnly = p3(`_buildTeacherCoverPanelHtml(${JSON.stringify({ teacher: { id: 'T-A', full_name: 'Teacher A' }, leaveRows: [{ id: 'LV-1', startDate: D_PLUS1, endDate: D_PLUS1, salary_deduction: 'yes', deduction_goes_to_cover: 'no' }], coverRows: [] })})`);
-  check('panel: deduct-only choice summarises as "sirf katay gi, substitute ko nahi milegi"',
-    deductOnly.includes('sirf katay gi'));
+  check('panel: deduct-only choice summarises in English',
+    deductOnly.includes('deducted only'));
   const extraPay = p3(`_buildTeacherCoverPanelHtml(${JSON.stringify({ teacher: { id: 'T-A', full_name: 'Teacher A' }, leaveRows: [{ id: 'LV-1', startDate: D_PLUS1, endDate: D_PLUS1, salary_deduction: 'no', no_deduction_cover_paid_extra: 'yes' }], coverRows: [] })})`);
-  check('panel: extra-pay choice summarises as "upar se pay milegi (extra)"',
-    extraPay.includes('upar se pay milegi'));
+  check('panel: extra-pay choice summarises in English',
+    extraPay.includes('paid extra on top'));
 }
 
 // ===========================================================================
@@ -544,15 +548,115 @@ check('struct: covered classes leave the absent teacher\'s Today list',
 check('struct: cover entries are synthesised with a Cover badge + violet row',
   TEACHER_HTML.includes('isCoverClass') && TEACHER_HTML.includes("Cover —") && TEACHER_HTML.includes('border-violet-500'));
 check('struct: parent portal has the leave banner container above the live-class card',
-  PARENT_HTML.includes('id="teacherCoverBanner"') && PARENT_HTML.includes('chhutti par hain'));
+  PARENT_HTML.includes('id="teacherCoverBanner"') && PARENT_HTML.includes('is on leave today'));
 check('struct: parent portal fetches cover rows for the student\'s teacher and renders the cover-teacher line',
-  PARENT_HTML.includes("db.from('cover_assignments').select('*').eq('absent_teacher_id', s.assigned_teacher_id)") && PARENT_HTML.includes('parhayenge'));
+  PARENT_HTML.includes("db.from('cover_assignments').select('*').eq('absent_teacher_id', s.assigned_teacher_id)") && PARENT_HTML.includes('will be taught by'));
 check('struct: salary slip has a separate cover section; payroll computes cover lines',
   INDEX_HTML.includes('id="slipCoverSection"') && PAYROLL.includes('renderSlipCoverSection') && PAYROLL.includes('computeCoverAmountsForTeacher') && PAYROLL.includes('applyCoverToCompiledSlips'));
 check('struct: cover log card exists on the salaries screen',
   INDEX_HTML.includes('id="coverLogTableBody"') && PAYROLL.includes('renderTeacherCoverLog'));
 check('struct: payroll net includes cover amounts; frozen slips keep saved cover + stale flag',
   PAYROLL.includes('- res.cover_out + res.cover_in') && PAYROLL.includes('cover_stale'));
+
+
+// ===========================================================================
+// Part 6 — Professional English strings (2026-11-13 fix): the leave modal,
+// the assign modal, the salary summary and the rendered panel must read in
+// English, with every Roman Urdu label from the shipped feature ABSENT.
+// Option values (yes/no) and all behaviour are unchanged.
+// ===========================================================================
+{
+  const ROMAN_URDU = ['chhutti', 'hogi', 'milegi', 'dikhayen', 'wajah', 'katay',
+    'parhaye', 'laagu', 'hotay', 'aatay', 'chunein', 'jayega', 'ho saka',
+    'ho gayi', 'kar diya', 'band karein', 'on karein', 'poori pay'];
+  const hasRomanUrdu = (s) => ROMAN_URDU.some(w => String(s).toLowerCase().includes(w));
+
+  // Load the two real renderers into the vm (same extraction as Part 3).
+  vm.runInContext(extractFunction(p360Src, 'openTeacherRecordLeaveModal'), p360Ctx, { filename: 'js/profiles360.js:openTeacherRecordLeaveModal' });
+  vm.runInContext(extractFunction(p360Src, '_buildCoverAssignModalHtml'), p360Ctx, { filename: 'js/profiles360.js:_buildCoverAssignModalHtml' });
+  p360Ctx._TEACHER_360_MEM_CACHE = {};
+  p360Ctx._openWorkspaceModal = (title, sub, html) => { p360Ctx.__capturedLeaveModal = { title, sub, html }; };
+  p360Ctx.ALL_TEACHERS = [
+    { id: 'T-A', full_name: 'Teacher A', status: 'Active' },
+    { id: 'T-B', full_name: 'Teacher B', status: 'Active' },
+  ];
+
+  // 6a — the REAL leave modal renders in English (the screenshot's modal).
+  p3(`openTeacherRecordLeaveModal('T-A')`);
+  const modal = p360Ctx.__capturedLeaveModal;
+  check('english: leave modal opens with the English title', modal && modal.title === 'Record Teacher Leave', JSON.stringify(modal && modal.title));
+  const modalHtml = (modal && modal.html) || '';
+  for (const s of ['Will salary be deducted?', 'Yes — pay for the leave day(s) will be deducted',
+    'No — full pay will be paid', 'Will the deducted amount go to the substitute teacher?',
+    'Yes — the deducted amount will be transferred to the substitute',
+    'No — it will only be deducted; the substitute will not receive it',
+    'Will the substitute teacher be paid extra on top?',
+    'No — the substitute will receive nothing extra',
+    'Yes — the substitute will be paid extra on top',
+    'The teacher\'s own salary does not stop because of leave',
+    'Show the student / parent banner', 'Your teacher is on leave today']) {
+    check('english: leave modal shows "' + s + '"', modalHtml.includes(s), modalHtml.slice(0, 300));
+  }
+  check('english: leave modal keeps the yes/no option values (logic unchanged)',
+    modalHtml.includes('value="yes"') && modalHtml.includes('value="no"') && modalHtml.includes('id="t360LvDeduct"'));
+  check('english: leave modal contains NO Roman Urdu from the screenshot', !hasRomanUrdu(modalHtml), modalHtml.slice(0, 300));
+
+  // 6b — the REAL salary summary in all four branches.
+  const summaryCases = [
+    [{ salary_deduction: 'yes', deduction_goes_to_cover: 'yes' }, 'Deduction: Yes → deducted amount goes to the substitute (transfer)'],
+    [{ salary_deduction: 'yes', deduction_goes_to_cover: 'no' }, 'Deduction: Yes → deducted only, the substitute receives nothing'],
+    [{ salary_deduction: 'no', no_deduction_cover_paid_extra: 'yes' }, 'Deduction: No → substitute is paid extra on top'],
+    [{ salary_deduction: 'no' }, 'Deduction: No → substitute receives nothing extra'],
+  ];
+  for (const [rec, expected] of summaryCases) {
+    const got = p3(`_coverChoiceSummaryText(${JSON.stringify(rec)})`);
+    check('english: salary summary reads "' + expected + '"', got === expected, String(got));
+    check('english: salary summary has no Roman Urdu', !hasRomanUrdu(got), String(got));
+  }
+
+  // 6c — the REAL assign modal renders in English.
+  const teacherA = { id: 'T-A', full_name: 'Teacher A' };
+  const leave1 = { id: 'LV-1', startDate: D_PLUS1, endDate: D_PLUS1, salary_deduction: 'yes', deduction_goes_to_cover: 'yes' };
+  p360Ctx.ALL_CLASS_SCHEDULES = [{ id: 'SCH-1', teacher_id: 'T-A', student_id: 'ST-1', day_of_week: DOW, start_time: '10:00', end_time: '10:30', duration_mins: 30, course_name: 'Quran Reading' }];
+  p360Ctx.ALL_STUDENTS = [{ id: 'ST-1', name: 'Child One', course: 'Quran Reading' }];
+  const assignHtml = p3(`_buildCoverAssignModalHtml(${JSON.stringify(teacherA)}, ${JSON.stringify(leave1)}, ${JSON.stringify([D_PLUS1])}, ${JSON.stringify(D_PLUS1)}, [], [])`);
+  for (const s of ['Choose a cover teacher', 'Choose a date:', 'Salary choice for that day:',
+    'deducted amount goes to the substitute (transfer)', 'This choice can be changed from the Leave panel',
+    'returns to their own teacher the next day', 'Child One']) {
+    check('english: assign modal shows "' + s + '"', assignHtml.includes(s), assignHtml.slice(0, 300));
+  }
+  check('english: assign modal contains NO Roman Urdu', !hasRomanUrdu(assignHtml), assignHtml.slice(0, 300));
+  p360Ctx.ALL_CLASS_SCHEDULES = [];
+  const emptyAssignHtml = p3(`_buildCoverAssignModalHtml(${JSON.stringify(teacherA)}, ${JSON.stringify(leave1)}, ${JSON.stringify([D_PLUS1])}, ${JSON.stringify(D_PLUS1)}, [], [])`);
+  check('english: assign modal with no classes that day says so in English',
+    emptyAssignHtml.includes('No classes for Teacher A on this day (' + D_PLUS1 + ')'), emptyAssignHtml.slice(0, 300));
+
+  // 6d — the rendered Cover panel has no Roman Urdu anywhere.
+  const panelHtml = p3(`_buildTeacherCoverPanelHtml(${JSON.stringify({ teacher: { id: 'T-A', full_name: 'Teacher A' }, leaveRows: [{ id: 'LV-1', startDate: D_PLUS1, endDate: D_PLUS2, reason: 'Family function', salary_deduction: 'yes', deduction_goes_to_cover: 'yes' }], coverRows: [{ id: 'COV-1', kind: 'banner', leave_id: 'LV-1', status: 'active' }] })})`);
+  check('english: cover panel banner toggle reads "Turn banner off" when ON', panelHtml.includes('Turn banner off'), panelHtml.slice(0, 400));
+  check('english: cover panel explains the one-day cover in English',
+    panelHtml.includes('When leave is ON, the banner and Assign Students appear here'), panelHtml.slice(0, 400));
+  check('english: cover panel contains NO Roman Urdu', !hasRomanUrdu(panelHtml), panelHtml.slice(0, 400));
+
+  // 6e — the parent banner template (source: it is inline in parent.html).
+  check('english: parent banner template is English ("Your teacher … is on leave today")',
+    PARENT_HTML.includes('Your teacher ${escapeHtml(teacherName)} is on leave today') && PARENT_HTML.includes("Today's class will be taught by"));
+  check('english: parent banner has no Roman Urdu template left',
+    !PARENT_HTML.includes('chhutti par hain') && !PARENT_HTML.includes('parhayenge'));
+
+  // 6f — the exact shipped Roman Urdu strings are gone from the 360 source.
+  for (const s of ['Salary deduction hogi?', 'chhutti wale din ki pay katay gi', 'poori pay mile gi',
+    'Kati hui amount substitute teacher ko milegi?', 'kati hui amount substitute ko transfer hogi',
+    'sirf katay gi, substitute ko nahi milegi', 'Substitute teacher ko upar se pay milegi?',
+    'substitute ko extra kuch nahi milega', 'substitute ko upar se pay milegi',
+    'Leave se teacher ki apni salary nahi rukti', 'banner dikhayen', 'Banner band kar diya',
+    'Banner on kar diya', 'Cover salary choice save ho gayi', 'Cover teacher chunein',
+    'Salary choice is din ke liye', 'Leave ON hotay hi banner', 'Abhi kisi student ke liye cover assign nahi hua',
+    'Is cover assignment ko cancel karein', 'Cancel nahi ho saka', 'Cover assign nahi ho saka',
+    'Deduction hogi?', 'Kati hui amount cover ko?']) {
+    check('english: old string gone from profiles360.js — "' + s + '"', !P360.includes(s));
+  }
+}
 
 // ===========================================================================
 // Summary
