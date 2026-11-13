@@ -7630,31 +7630,31 @@ function openTeacherRecordLeaveModal(teacherId) {
         <div class="rounded-xl border border-violet-200 bg-violet-50/60 p-3 space-y-3">
           <div class="font-extrabold text-violet-900 flex items-center gap-1.5"><i class="fa-solid fa-people-arrows"></i> Salary — Cover Days (substitute teacher)</div>
           <div>
-            <label class="font-extrabold text-slate-700 block mb-1">Salary deduction hogi? *</label>
+            <label class="font-extrabold text-slate-700 block mb-1">Will salary be deducted? *</label>
             <select id="t360LvDeduct" onchange="_coverLeaveSalaryStepChanged()" class="w-full p-2.5 rounded-xl border border-slate-300 font-bold text-slate-800 bg-white">
-              <option value="yes" selected>Yes — chhutti wale din ki pay katay gi</option>
-              <option value="no">No — poori pay mile gi</option>
+              <option value="yes" selected>Yes — pay for the leave day(s) will be deducted</option>
+              <option value="no">No — full pay will be paid</option>
             </select>
           </div>
           <div id="t360LvDeductToCoverWrap">
-            <label class="font-extrabold text-slate-700 block mb-1">Kati hui amount substitute teacher ko milegi?</label>
+            <label class="font-extrabold text-slate-700 block mb-1">Will the deducted amount go to the substitute teacher?</label>
             <select id="t360LvDeductToCover" class="w-full p-2.5 rounded-xl border border-slate-300 font-bold text-slate-800 bg-white">
-              <option value="yes" selected>Yes — kati hui amount substitute ko transfer hogi</option>
-              <option value="no">No — sirf katay gi, substitute ko nahi milegi</option>
+              <option value="yes" selected>Yes — the deducted amount will be transferred to the substitute</option>
+              <option value="no">No — it will only be deducted; the substitute will not receive it</option>
             </select>
           </div>
           <div id="t360LvExtraPayWrap" class="hidden">
-            <label class="font-extrabold text-slate-700 block mb-1">Substitute teacher ko upar se pay milegi?</label>
+            <label class="font-extrabold text-slate-700 block mb-1">Will the substitute teacher be paid extra on top?</label>
             <select id="t360LvExtraPay" class="w-full p-2.5 rounded-xl border border-slate-300 font-bold text-slate-800 bg-white">
-              <option value="no" selected>No — substitute ko extra kuch nahi milega</option>
-              <option value="yes">Yes — substitute ko upar se pay milegi</option>
+              <option value="no" selected>No — the substitute will receive nothing extra</option>
+              <option value="yes">Yes — the substitute will be paid extra on top</option>
             </select>
           </div>
-          <p class="text-[11px] text-slate-500">Leave se teacher ki apni salary nahi rukti — sirf woh din jin mein koi substitute parhaye, unhi par yeh choice laagu hoti hai.</p>
+          <p class="text-[11px] text-slate-500">The teacher's own salary does not stop because of leave — this choice applies only to days when a substitute teaches.</p>
         </div>
         <div class="flex items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 p-3">
           <input type="checkbox" id="t360LvBanner" checked class="w-4 h-4 accent-amber-600">
-          <label for="t360LvBanner" class="font-bold text-slate-800">Student / Parent banner dikhayen — "Aaj aap ke teacher chhutti par hain" + wajah</label>
+          <label for="t360LvBanner" class="font-bold text-slate-800">Show the student / parent banner — "Your teacher is on leave today" + reason</label>
         </div>
         <div class="flex justify-end gap-2 pt-3 border-t border-slate-100">
           <button type="button" onclick="_closeWorkspaceModal()" class="px-4 py-2 rounded-xl bg-slate-100 text-slate-700 font-bold cursor-pointer">Cancel</button>
@@ -7836,12 +7836,12 @@ function _coverChoiceSummaryText(leave) {
   const c = _coverLeaveChoiceFromRecord(leave);
   if (c.deduction === 'yes') {
     return c.goesToCover === 'yes'
-      ? 'Deduction: Yes → kati hui amount substitute ko milegi (transfer)'
-      : 'Deduction: Yes → sirf katay gi, substitute ko nahi milegi';
+      ? 'Deduction: Yes → deducted amount goes to the substitute (transfer)'
+      : 'Deduction: Yes → deducted only, the substitute receives nothing';
   }
   return c.extraPay === 'yes'
-    ? 'Deduction: No → substitute ko upar se pay milegi (extra)'
-    : 'Deduction: No → substitute ko extra kuch nahi milega';
+    ? 'Deduction: No → substitute is paid extra on top'
+    : 'Deduction: No → substitute receives nothing extra';
 }
 
 // Who recorded this cover (for the cover_assignments.created_by audit
@@ -7895,7 +7895,7 @@ async function toggleTeacherCoverBanner(teacherId, leaveId) {
     } catch (e) {}
     leave.show_banner = 'no';
     await _persistTeacher360Updates(teacher.id, {}, { leave_records: leaves });
-    _notify360('Banner band kar diya.');
+    _notify360('Banner turned off.');
   } else {
     try {
       await db.from('cover_assignments').insert([{
@@ -7911,12 +7911,12 @@ async function toggleTeacherCoverBanner(teacherId, leaveId) {
         created_by: _coverActorLabel()
       }]);
     } catch (e) {
-      _notify360('Banner save nahi ho saka — Worker deploy check karein.', 'error');
+      _notify360('Banner could not be saved — please check the Worker deploy.', 'error');
       return;
     }
     leave.show_banner = 'yes';
     await _persistTeacher360Updates(teacher.id, {}, { leave_records: leaves });
-    _notify360('Banner on kar diya.');
+    _notify360('Banner turned on.');
   }
   try { delete _TEACHER_360_MEM_CACHE[String(teacher.id).toUpperCase()]; } catch (e) {}
   await openTeacher360Profile(teacherId, 'leaves', true, { forceRefresh: true });
@@ -7939,7 +7939,7 @@ async function saveTeacherCoverLeaveChoice(teacherId, leaveId) {
   leave.deduction_goes_to_cover = document.getElementById('coverChoiceToCover-' + leaveId)?.value || 'yes';
   leave.no_deduction_cover_paid_extra = document.getElementById('coverChoiceExtra-' + leaveId)?.value || 'no';
   await _persistTeacher360Updates(teacher.id, {}, { leave_records: leaves });
-  _notify360('Cover salary choice save ho gayi.');
+  _notify360('Cover salary choice saved.');
   try { delete _TEACHER_360_MEM_CACHE[String(teacher.id).toUpperCase()]; } catch (e) {}
   await openTeacher360Profile(teacherId, 'leaves', true, { forceRefresh: true });
 }
@@ -8024,7 +8024,7 @@ function _buildCoverAssignModalHtml(teacher, leave, dates, selected, leaveCovers
           <button onclick="cancelTeacherCoverAssign('${_esc360(existing.id)}', '${_esc360(teacher.id)}', '${_esc360(leave.id)}', '${selected}')" class="px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-rose-100 text-slate-700 hover:text-rose-700 border border-slate-300 text-xs font-bold cursor-pointer">Unassign</button>
         ` : `
           <select id="coverSelect-${_esc360(student.id)}-${_esc360(s.id)}" class="p-2 rounded-lg border border-slate-300 font-bold text-slate-800 text-xs bg-white min-w-[180px]">
-            <option value="">— Cover teacher chunein —</option>
+            <option value="">— Choose a cover teacher —</option>
             ${eligible.map(t => `<option value="${_esc360(t.id)}">${_esc360(t.full_name)} (${_esc360(t.id)})</option>`).join('')}
           </select>
           <button id="coverAssignBtn-${_esc360(student.id)}-${_esc360(s.id)}" onclick="submitTeacherCoverAssign('${_esc360(teacher.id)}', '${_esc360(leave.id)}', '${selected}', '${_esc360(student.id)}', '${_esc360(s.id)}')" class="px-3.5 py-2 rounded-lg bg-violet-600 hover:bg-violet-700 text-white text-xs font-black cursor-pointer">Assign</button>
@@ -8036,12 +8036,12 @@ function _buildCoverAssignModalHtml(teacher, leave, dates, selected, leaveCovers
   return `
     <div class="space-y-4 text-xs">
       <div class="rounded-xl border border-violet-200 bg-violet-50/60 p-3">
-        <div class="font-extrabold text-violet-900">Salary choice is din ke liye:</div>
+        <div class="font-extrabold text-violet-900">Salary choice for that day:</div>
         <div class="text-slate-700 mt-0.5">${_esc360(_coverChoiceSummaryText(leave))}</div>
-        <div class="text-[11px] text-slate-500 mt-1">Yeh choice Leave panel se change ho sakti hai. Student us din ke liye cover teacher ke portal mein chala jayega — agle din wapas apne teacher ke paas.</div>
+        <div class="text-[11px] text-slate-500 mt-1">This choice can be changed from the Leave panel. The student moves to the cover teacher's portal for that day — and returns to their own teacher the next day.</div>
       </div>
       <div>
-        <div class="font-extrabold text-slate-700 mb-1.5">Date chunein:</div>
+        <div class="font-extrabold text-slate-700 mb-1.5">Choose a date:</div>
         <div class="flex flex-wrap gap-1.5">
           ${dates.map(d => `
             <button onclick="openTeacherCoverAssignModal('${_esc360(teacher.id)}', '${_esc360(leave.id)}', '${d}')" class="px-3 py-1.5 rounded-full text-xs font-bold border cursor-pointer ${d === selected ? 'bg-violet-600 text-white border-violet-600' : 'bg-white text-slate-700 border-slate-300 hover:border-violet-400'}">${d}</button>
@@ -8050,7 +8050,7 @@ function _buildCoverAssignModalHtml(teacher, leave, dates, selected, leaveCovers
       </div>
       ${rows.length === 0 ? `
         <div class="p-6 text-center bg-slate-50 rounded-2xl border border-slate-200 text-slate-500">
-          Is din (${selected}) ${ _esc360(teacher.full_name)} ki koi class nahi hai.
+          No classes for ${ _esc360(teacher.full_name)} on this day (${selected}).
         </div>
       ` : `
         <div class="space-y-2">${rows.join('')}</div>
@@ -8189,7 +8189,7 @@ async function submitTeacherCoverAssign(teacherId, leaveId, dateStr, studentId, 
     _notify360('Cover assigned.');
   } catch (e) {
     console.warn('[Teacher Cover] assign failed:', e);
-    if (typeof lmsNotify === 'function') lmsNotify('Cover assign nahi ho saka — please try again.', { type: 'error' });
+    if (typeof lmsNotify === 'function') lmsNotify('Cover could not be assigned — please try again.', { type: 'error' });
     if (btn) btn.disabled = false;
     return;
   }
@@ -8202,11 +8202,11 @@ async function submitTeacherCoverAssign(teacherId, leaveId, dateStr, studentId, 
 }
 
 async function cancelTeacherCoverAssign(coverRowId, teacherId, leaveId, dateStr) {
-  if (!(await lmsConfirm('Is cover assignment ko cancel karein? Student us din wapas apne teacher ke paas chala jayega.'))) return;
+  if (!(await lmsConfirm('Cancel this cover assignment? The student will return to their own teacher that day.'))) return;
   try {
     await db.from('cover_assignments').update({ status: 'cancelled' }).eq('id', coverRowId);
   } catch (e) {
-    _notify360('Cancel nahi ho saka.', 'error');
+    _notify360('Could not be cancelled.', 'error');
     return;
   }
   _notify360('Cover cancelled.');
@@ -8252,14 +8252,14 @@ function _buildTeacherCoverPanelHtml(state) {
           <div id="coverChoiceEdit-${_esc360(lv.id)}" class="hidden rounded-xl border border-violet-200 bg-white p-3 space-y-2">
             <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
               <div>
-                <label class="font-extrabold text-slate-700 block mb-1 text-[11px]">Deduction hogi?</label>
+                <label class="font-extrabold text-slate-700 block mb-1 text-[11px]">Will salary be deducted?</label>
                 <select id="coverChoiceDeduct-${_esc360(lv.id)}" class="w-full p-2 rounded-lg border border-slate-300 font-bold text-slate-800 text-xs bg-white">
                   <option value="yes" ${choice.deduction === 'yes' ? 'selected' : ''}>Yes</option>
                   <option value="no" ${choice.deduction === 'no' ? 'selected' : ''}>No</option>
                 </select>
               </div>
               <div>
-                <label class="font-extrabold text-slate-700 block mb-1 text-[11px]">Kati hui amount cover ko?</label>
+                <label class="font-extrabold text-slate-700 block mb-1 text-[11px]">Deducted amount to the cover teacher?</label>
                 <select id="coverChoiceToCover-${_esc360(lv.id)}" class="w-full p-2 rounded-lg border border-slate-300 font-bold text-slate-800 text-xs bg-white">
                   <option value="yes" ${choice.goesToCover === 'yes' ? 'selected' : ''}>Yes</option>
                   <option value="no" ${choice.goesToCover === 'no' ? 'selected' : ''}>No</option>
@@ -8282,14 +8282,14 @@ function _buildTeacherCoverPanelHtml(state) {
             ? '<span class="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-amber-100 text-amber-900 border border-amber-300">ON — students/parents see it</span>'
             : '<span class="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-slate-100 text-slate-600 border border-slate-300">OFF</span>'}
           ${!isPast ? `
-            <button onclick="toggleTeacherCoverBanner('${_esc360(teacher.id)}', '${_esc360(lv.id)}')" class="px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-600 text-slate-950 text-xs font-black cursor-pointer">${bannerOn ? 'Banner band karein' : 'Banner on karein'}</button>
-            <span class="text-[11px] text-slate-500">Preview: "Aaj aap ke teacher ${_esc360(teacher.full_name)} chhutti par hain"${lv.reason ? ` — ${_esc360(lv.reason)}` : ''}</span>
+            <button onclick="toggleTeacherCoverBanner('${_esc360(teacher.id)}', '${_esc360(lv.id)}')" class="px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-600 text-slate-950 text-xs font-black cursor-pointer">${bannerOn ? 'Turn banner off' : 'Turn banner on'}</button>
+            <span class="text-[11px] text-slate-500">Preview: "Your teacher ${_esc360(teacher.full_name)} is on leave today"${lv.reason ? ` — ${_esc360(lv.reason)}` : ''}</span>
           ` : ''}
         </div>
         <div class="text-xs">
           <div class="font-bold text-slate-700 mb-1">Assigned covers:</div>
           ${assigns.length === 0 ? `
-            <div class="text-slate-500">Abhi kisi student ke liye cover assign nahi hua.</div>
+            <div class="text-slate-500">No cover has been assigned for any student yet.</div>
           ` : `
             <div class="space-y-1">
               ${assigns.map(a => `
@@ -8318,7 +8318,7 @@ function _buildTeacherCoverPanelHtml(state) {
       <h4 class="text-sm font-black text-slate-900 flex items-center gap-2">
         <i class="fa-solid fa-people-arrows text-violet-600"></i> Teacher Cover / Substitute
       </h4>
-      <p class="text-[11px] text-slate-500 mt-0.5">Leave ON hotay hi banner aur Assign Students yahan aatay hain. Cover sirf us date ke liye hota hai — agle din sab kuch wapas original teacher ke paas.</p>
+      <p class="text-[11px] text-slate-500 mt-0.5">When leave is ON, the banner and Assign Students appear here. A cover applies only for that date — the next day everything returns to the original teacher.</p>
       ${cards.join('')}
     </div>
   `;

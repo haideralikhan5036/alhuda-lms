@@ -2390,9 +2390,9 @@
         if (coverBannerRow || coverTodayRow) {
           const reason = coverBannerRow && coverBannerRow.reason ? escapeHtml(coverBannerRow.reason) : '';
           const coverLine = coverTodayRow
-            ? `<p class="text-sm text-amber-900 mt-1">Aaj ki class <strong>${escapeHtml(coverTodayRow.cover_teacher_name || 'substitute teacher')}</strong> parhayenge.</p>`
+            ? `<p class="text-sm text-amber-900 mt-1">Today's class will be taught by <strong>${escapeHtml(coverTodayRow.cover_teacher_name || 'substitute teacher')}</strong>.</p>`
             : '';
-          const leaveLine = `<p class="text-sm sm:text-base font-bold text-amber-900">📢 Aaj aap ke teacher ${escapeHtml(teacherName)} chhutti par hain.${reason ? ` — ${reason}` : ''}</p>`;
+          const leaveLine = `<p class="text-sm sm:text-base font-bold text-amber-900">📢 Your teacher ${escapeHtml(teacherName)} is on leave today.${reason ? ` — ${reason}` : ''}</p>`;
           coverBannerEl.innerHTML = leaveLine + coverLine;
           coverBannerEl.classList.remove('hidden');
         } else {
