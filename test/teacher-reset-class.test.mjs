@@ -348,7 +348,7 @@ check('worker: teacher attendance delete is GUARDED, no longer blanket-denied (s
   WORKER.includes("filters.push(eq('teacher_id', sub));") &&
   !WORKER.includes("return action === 'delete' ? 'deny' : 'allow';"));
 check('worker: release marker bumped for the self-reset deploy',
-  WORKER.includes("const WORKER_RELEASE = '2026-11-10-teacher-self-reset';"));
+  WORKER.includes("const WORKER_RELEASE = '2026-11-13-teacher-cover';"));
 
 check("today's classes: self-reset button is wired exactly twice (Waiting + Running branches)",
   (todaySrc.match(/handleTeacherSelfResetClass\('/g) || []).length === 2);

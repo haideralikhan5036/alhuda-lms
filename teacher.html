@@ -4098,15 +4098,39 @@ font-family: var(--font-num) !important;
         } catch (e) { return []; }
       })();
 
+      // Teacher Cover / Substitute (2026-11-13): today's cover rows —
+      // asCover (classes this teacher covers) and asAbsent (classes
+      // covered for this teacher, which leave this teacher's list).
+      // NON-critical like advanceLogs: a failed read means no covers
+      // this load (no cover rows can exist before the Worker deploy
+      // anyway — the table is created by it), never a degraded list.
+      const coversPromise = (async () => {
+        try {
+          const [asCover, asAbsent] = await Promise.all([
+            db.from('cover_assignments').select('*').eq('cover_teacher_id', CURRENT_TEACHER.id).eq('cover_date', todayDate).eq('status', 'active'),
+            db.from('cover_assignments').select('*').eq('absent_teacher_id', CURRENT_TEACHER.id).eq('cover_date', todayDate).eq('status', 'active')
+          ]);
+          const err = (asCover && asCover.error) || (asAbsent && asAbsent.error);
+          if (err) return { data: null, error: err, _lmsSource: (asCover && asCover._lmsSource) || (asAbsent && asAbsent._lmsSource) || null };
+          return { data: { asCover: (asCover && asCover.data) || [], asAbsent: (asAbsent && asAbsent.data) || [] }, error: null, _lmsSource: (asCover && asCover._lmsSource) || (asAbsent && asAbsent._lmsSource) || null };
+        } catch (e) {
+          return { data: null, error: { message: 'covers_failed' } };
+        }
+      })();
+
       // SLOW-CLASSES FIX: settle the three class-critical branches
       // independently (advance logs are secondary — they only pre-cover
       // statuses — so their failure never degrades the class list).
-      const [studentsRes, schedFetchRes, todayLogsRes, advanceLogs] = await Promise.all([
-        settleTeacherBranch(studentsPromise), settleTeacherBranch(schedulesPromise), settleTeacherBranch(todayLogsPromise), advanceLogsPromise
+      const [studentsRes, schedFetchRes, todayLogsRes, advanceLogs, coversRes] = await Promise.all([
+        settleTeacherBranch(studentsPromise), settleTeacherBranch(schedulesPromise), settleTeacherBranch(todayLogsPromise), advanceLogsPromise, settleTeacherBranch(coversPromise)
       ]);
       const assignedStudentsRaw = (studentsRes && studentsRes.rows) || [];
       const allScheds = schedFetchRes ? schedFetchRes.data : null;
       const logs = todayLogsRes ? todayLogsRes.data : null;
+      // Teacher Cover / Substitute (2026-11-13): a failed cover read
+      // is an empty cover list (see the note above), never an error.
+      const coversData = (coversRes && coversRes.data) || { asCover: [], asAbsent: [] };
+      if (coversRes && coversRes.error) console.warn('[Teacher Cover] cover rows could not be loaded:', coversRes.error);
 
       // SLOW-CLASSES FIX: honest failure state. A failed or
       // mirror-served critical branch must never render as "no
@@ -4205,7 +4229,14 @@ font-family: var(--font-num) !important;
       }
 
       // 3. Filter today's schedules (excluding deactivated students)
-      const todayScheds = ALL_TEACHER_SCHEDULES.filter(s => Number(s.day_of_week) === currentDay);
+      // Teacher Cover / Substitute (2026-11-13): a class covered today
+      // leaves this teacher's Today list — the student moves into the
+      // cover teacher's portal for this date only. (Per schedule: a
+      // student with two slots today keeps the uncovered one.)
+      const coveredScheduleIds = new Set((coversData.asAbsent || []).filter(r => r.schedule_id).map(r => String(r.schedule_id)));
+      const coveredStudentIdsNoSched = new Set((coversData.asAbsent || []).filter(r => !r.schedule_id).map(r => String(r.student_id)));
+      const todayScheds = ALL_TEACHER_SCHEDULES.filter(s => Number(s.day_of_week) === currentDay)
+        .filter(s => !coveredScheduleIds.has(String(s.id)) && !coveredStudentIdsNoSched.has(String(s.student_id)));
 
       // 4. Attendance logs for today (fetched in parallel above)
       const logsMap = {};
@@ -4366,6 +4397,78 @@ font-family: var(--font-num) !important;
             badgeClass: 'bg-purple-100 text-purple-900 border-purple-300 font-extrabold shadow-2xs'
           });
         }
+      });
+
+      // Teacher Cover / Substitute (2026-11-13): classes this teacher
+      // covers today, synthesised from the cover rows' snapshot (the
+      // cover teacher cannot read the leaving teacher's schedules).
+      // They flow through the SAME status/action machinery as own
+      // classes: the cover teacher's own log for the schedule decides
+      // Waiting / Running / Completed, and transitions append rows with
+      // teacher_id = this teacher (the leaving teacher's Leave row is
+      // untouched — writes are append-only).
+      (coversData.asCover || []).forEach(r => {
+        const [csH, csM] = (r.start_time || '00:00').split(':').map(Number);
+        const [ceH, ceM] = (r.end_time || '00:00').split(':').map(Number);
+        const cStartMin = csH * 60 + csM;
+        const cEndMin = (ceH === 0 && ceM === 0 && cStartMin > 0) ? 1440 : (ceH * 60 + ceM);
+        const cDurationMins = cEndMin > cStartMin ? (cEndMin - cStartMin) : (r.duration_mins || 30);
+        const cLog = logsMap[r.schedule_id];
+        let cStatus = 'SCHEDULED';
+        let cBadgeClass = 'bg-slate-100 text-slate-700 border-slate-200';
+        if (cLog) {
+          if (cLog.status === 'Running') {
+            cStatus = 'RUNNING';
+            cBadgeClass = 'bg-emerald-600 text-white border-emerald-700 font-extrabold shadow-sm animate-pulse';
+          } else if (cLog.status === 'Waiting') {
+            cStatus = 'WAITING';
+            cBadgeClass = 'bg-amber-100 text-amber-900 border-amber-300 font-extrabold animate-pulse';
+          } else if (cLog.status === 'Completed' || cLog.status === 'Present') {
+            cStatus = 'COMPLETED';
+            cBadgeClass = 'bg-emerald-100 text-emerald-800 border-emerald-300 font-extrabold';
+          } else if (cLog.status === 'Advance Class') {
+            cStatus = '🌟 Advance Class';
+            cBadgeClass = 'bg-purple-100 text-purple-900 border-purple-300 font-extrabold shadow-2xs';
+          } else if (cLog.status === 'Absent') {
+            cStatus = 'ABSENT';
+            cBadgeClass = 'bg-rose-100 text-rose-800 border-rose-300 font-bold';
+          } else if (cLog.status === 'Leave') {
+            cStatus = 'LEAVE';
+            cBadgeClass = 'bg-blue-100 text-blue-800 border-blue-300 font-bold';
+          }
+        }
+        const cIsMarked = cLog ? ['Completed', 'Present', 'Advance Class', 'Absent', 'Leave'].includes(cLog.status) : false;
+        if (cIsMarked) completedCount++; else remainingCount++;
+        TODAY_CLASSES.push({
+          id: r.schedule_id,
+          student_id: r.student_id,
+          teacher_id: r.absent_teacher_id,
+          day_of_week: currentDay,
+          start_time: r.start_time || '00:00',
+          end_time: r.end_time || '00:00',
+          duration_mins: r.duration_mins || cDurationMins,
+          course_name: r.course_name || '',
+          meeting_link: String(r.meeting_link || CURRENT_TEACHER?.zoom_link || '').trim(),
+          students: { id: r.student_id, name: r.student_name || 'Student', status: r.student_status || 'Active', course: r.course_name || '' },
+          log: cLog,
+          advanceCover: null,
+          isMarked: cIsMarked,
+          startMin: cStartMin,
+          endMin: cEndMin,
+          durationMins: cDurationMins,
+          isLive: currentMinutes >= cStartMin && currentMinutes < cEndMin,
+          isUpcoming: currentMinutes < cStartMin,
+          isLeaveStudent: false,
+          leaveMeta: null,
+          pendingLeaveReq: null,
+          pendingTimeChangeReq: null,
+          pendingResetClassReq: null,
+          status: cStatus,
+          badgeClass: cBadgeClass,
+          isCoverClass: true,
+          coverRowId: r.id,
+          absentTeacherName: r.absent_teacher_name || ''
+        });
       });
 
       // Sort by start_time
@@ -4709,6 +4812,8 @@ font-family: var(--font-num) !important;
         let rowClass = 'hover:bg-slate-50 transition';
         if (c.isLeaveStudent) {
           rowClass = 'border-l-4 border-blue-500 bg-blue-50/70 hover:bg-blue-100/60 transition font-medium text-blue-950';
+        } else if (c.isCoverClass) {
+          rowClass = 'border-l-4 border-violet-500 bg-violet-50/60 hover:bg-violet-100/60 transition';
         } else if (c.isLive) {
           rowClass = 'bg-emerald-50/50 font-medium hover:bg-emerald-100/60 transition';
         }
@@ -4875,6 +4980,7 @@ font-family: var(--font-num) !important;
                       ? '<span class="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-purple-100 text-purple-800">✨ Trial Class</span>'
                       : '<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800">🎓 Regular</span>'}
                     ${reqBadge}
+                    ${c.isCoverClass ? `<span class="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-violet-100 text-violet-900 border border-violet-300">🔁 Cover — ${escapeHtml(c.absentTeacherName || 'another teacher')}'s class</span>` : ''}
                   </div>
                   <div class="lms-num-id text-slate-600 bg-[#f0f3f1] px-2 py-0.5 rounded-full inline-block mt-1">ID: ${c.students?.id || 'STU'}</div>
                 </div>
@@ -9297,6 +9403,15 @@ font-family: var(--font-num) !important;
       (LEAVE_ASSIGNED_STUDENTS || []).forEach(s => { nameById[String(s.id)] = s.name || String(s.id); });
       (ALL_TEACHER_SCHEDULES || []).forEach(sc => {
         if (sc.students && sc.students.id) nameById[String(sc.students.id)] = sc.students.name || String(sc.students.id);
+      });
+
+      // Teacher Cover / Substitute (2026-11-13): covered students are
+      // not assigned to this teacher, so their names come from today's
+      // cover entries (the snapshot) instead of the roster. (typeof
+      // guard: vm test sandboxes eval this function without
+      // TODAY_CLASSES declared.)
+      (typeof TODAY_CLASSES !== 'undefined' ? TODAY_CLASSES : []).forEach(c => {
+        if (c && c.isCoverClass && c.students && c.students.id) nameById[String(c.students.id)] = c.students.name || String(c.students.id);
       });
 
       let rows = [];

@@ -25,6 +25,11 @@ const ALLOWED_TABLES = new Set([
   'attendance_logs',
   'payments',
   'leave_requests',
+  // Teacher Cover / Substitute (2026-11-13): per-day cover assignments +
+  // per-leave banner rows. Scoped per role in worker.js (teacher: own
+  // covers/absences; parent: own children's covers + their teachers'
+  // banners; manager: full operational access except delete).
+  'cover_assignments',
   'trial_students',
   'system_settings',
   // Batch 2.1: readable by the OWNER through this engine; the Worker
@@ -267,6 +272,41 @@ const SCHEMA_STATEMENTS = [
     notes TEXT,
     created_at TEXT DEFAULT (datetime('now'))
   )`,
+  // Teacher Cover / Substitute (2026-11-13, schema v9): one row per
+  // covered student-day (kind='assign') and one row per leave banner
+  // (kind='banner'). The cover teacher's portal renders covered classes
+  // purely from the snapshot columns below, so no widening of the
+  // students/class_schedules scope is needed (the cover teacher cannot
+  // read those rows for a student assigned to someone else). Rows are
+  // CANCELLED (status='cancelled'), never hard-deleted — the Worker
+  // denies deletes for every role, like the other financial-adjacent
+  // tables. The leave's salary choices live on the leave record itself
+  // (teachers meta.leave_records), not here.
+  `CREATE TABLE IF NOT EXISTS cover_assignments (
+    id TEXT PRIMARY KEY,
+    kind TEXT NOT NULL,
+    leave_id TEXT NOT NULL,
+    absent_teacher_id TEXT NOT NULL,
+    absent_teacher_name TEXT,
+    cover_teacher_id TEXT,
+    cover_teacher_name TEXT,
+    student_id TEXT,
+    student_name TEXT,
+    student_status TEXT,
+    course_name TEXT,
+    cover_date TEXT,
+    start_date TEXT,
+    end_date TEXT,
+    reason TEXT,
+    schedule_id TEXT,
+    start_time TEXT,
+    end_time TEXT,
+    duration_mins INTEGER,
+    meeting_link TEXT,
+    status TEXT DEFAULT 'active',
+    created_by TEXT,
+    created_at TEXT DEFAULT (datetime('now'))
+  )`,
   `CREATE TABLE IF NOT EXISTS trial_students (
     id TEXT PRIMARY KEY,
     student_id TEXT,
@@ -505,7 +545,7 @@ let _schemaInitialized = false;
 // not exist yet) falls back to the full DDL path; a marker-write
 // failure only costs the next cold isolate a DDL replay. Neither
 // failure ever fails the request.
-const SCHEMA_VERSION = '2026-11-07-v8';
+const SCHEMA_VERSION = '2026-11-13-v9';
 const SCHEMA_VERSION_KEY = 'schema_version';
 
 async function ensureSchema(db) {
@@ -586,6 +626,12 @@ async function ensureSchema(db) {
   try { await db.prepare('CREATE INDEX IF NOT EXISTS idx_salary_adjustments_teacher_period ON salary_adjustments (teacher_id, period)').run(); } catch (e) {}
   try { await db.prepare('CREATE INDEX IF NOT EXISTS idx_assignments_student ON student_assignments (student_id)').run(); } catch (e) {}
   try { await db.prepare('CREATE INDEX IF NOT EXISTS idx_assignments_teacher ON student_assignments (teacher_id)').run(); } catch (e) {}
+  // Teacher Cover / Substitute (schema v9): the three lookups the
+  // portals run every day (cover teacher's Today list, leaving
+  // teacher's exclusion list, leave's cover list).
+  try { await db.prepare('CREATE INDEX IF NOT EXISTS idx_cover_teacher_date ON cover_assignments (cover_teacher_id, cover_date)').run(); } catch (e) {}
+  try { await db.prepare('CREATE INDEX IF NOT EXISTS idx_cover_absent_date ON cover_assignments (absent_teacher_id, cover_date)').run(); } catch (e) {}
+  try { await db.prepare('CREATE INDEX IF NOT EXISTS idx_cover_leave ON cover_assignments (leave_id)').run(); } catch (e) {}
   // Commission #2 Phase 1 (schema v5): the segment's slot count for
   // slot-based salary pricing. Fresh installs carry it from the CREATE
   // TABLE above; on pre-existing tables ADD COLUMN applies it, and on
@@ -613,6 +659,7 @@ function generateId(table) {
     attendance_logs: 'ATT-',
     payments: 'PAY-',
     leave_requests: 'LVR-',
+    cover_assignments: 'COV-',
     trial_students: 'TRL-',
     system_settings: 'SYS-',
     salary_slips: 'SAL-',

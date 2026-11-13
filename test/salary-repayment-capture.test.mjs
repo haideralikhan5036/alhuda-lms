@@ -103,10 +103,10 @@ await fakeDb.exec(`CREATE TABLE advance_requests (
   check('W setup: ALTER migration adds repayment_method + installment_amount to a v5 table',
     cols.includes('repayment_method') && cols.includes('installment_amount'), cols.join(','));
   const marker = fakeDb.q1("SELECT value FROM system_settings WHERE key = 'schema_version'");
-  check('W setup: schema marker is v6', marker && marker.value === '2026-11-07-v8', JSON.stringify(marker));
+  check('W setup: schema marker is 2026-11-13-v9', marker && marker.value === '2026-11-13-v9', JSON.stringify(marker));
   const h = await call('https://worker.test/api/health', { method: 'GET' });
-  check('W setup: health reports plan-capture release + schema v6',
-    h.status === 200 && h.data && h.data.version === '2026-11-10-teacher-self-reset' && h.data.schema === '2026-11-07-v8', h.text.slice(0, 200));
+  check('W setup: health reports plan-capture release + schema v9',
+    h.status === 200 && h.data && h.data.version === '2026-11-13-teacher-cover' && h.data.schema === '2026-11-13-v9', h.text.slice(0, 200));
 }
 fakeDb.seed("INSERT INTO teachers (id, full_name, address, status) VALUES (?, ?, ?, ?)",
   'TCH-A', 'Teacher A', JSON.stringify({ salary_slips: {} }), 'Active');

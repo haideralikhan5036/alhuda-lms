@@ -103,7 +103,7 @@ const TOK = {
   const boot = await dbPost(TOK.owner, { table: 'families', action: 'select' });
   check('setup: owner /api/db boot -> 200', boot.status === 200, 'got ' + boot.status);
   const h = await health();
-  check('health reports the annotated-pages release', h.status === 200 && h.data && h.data.version === '2026-11-10-teacher-self-reset', 'got ' + (h.data && h.data.version));
+  check('health reports the annotated-pages release', h.status === 200 && h.data && h.data.version === '2026-11-13-teacher-cover', 'got ' + (h.data && h.data.version));
 }
 fakeDb.seed("INSERT INTO teachers (id, full_name) VALUES ('T-NEW', 'New Teacher')");
 fakeDb.seed("INSERT INTO teachers (id, full_name) VALUES ('T-OLD', 'Old Teacher')");
