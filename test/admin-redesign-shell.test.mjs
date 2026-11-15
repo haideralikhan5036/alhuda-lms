@@ -170,20 +170,23 @@ check('mobile rail menu button opens the drawer via toggleSidebar()',
 // the Fee Management portal login), which replaced the lgn- skin
 // with flg- classes; the desktop split layout (2026-11-10,
 // owner-approved mockup v2) then restructured the card into a
-// brand panel + form column at >=1024px, mobile unchanged. The
-// pins below assert the current landmarks +
-// the untouched form contract (reason: the newer commission landed).
+// brand panel + form column at >=1024px, mobile unchanged; the
+// circle login (2026-11-15, owner-approved mockup B) then replaced
+// the form column with the dark green circle — the brand panel is
+// byte-identical, only the right login bar changed. The pins below
+// assert the current landmarks + the untouched form contract
+// (reason: the newer commission landed).
 check('login view carries NO flagship hooks (aui- stays out of the gate)',
   !INDEX.includes('aui-login'));
-check('login view carries the fee-style flg- landmarks (dark card + pill field + gold CTA)',
-  INDEX.includes('class="flg-card"') && INDEX.includes('class="flg-pill"') &&
-  INDEX.includes('class="flg-cta"'));
+check('login view carries the circle landmarks (dark card + green circle + inset pills + gold submit)',
+  INDEX.includes('class="flg-card"') && INDEX.includes('class="login-circle"') &&
+  INDEX.includes('class="neu-input"') && INDEX.includes('class="login-submit-btn"'));
 check('login view carries the desktop split landmarks (brand panel + form column + halo)',
-  INDEX.includes('class="flg-brand-panel"') && INDEX.includes('class="flg-form-col"') &&
+  INDEX.includes('class="flg-brand-panel"') && INDEX.includes('class="flg-form-col circle-col"') &&
   INDEX.includes('class="flg-logo-halo"') &&
   INDEX.includes('grid-template-columns: 1.12fr 0.88fr'));
-check('login submit keeps its id + real label inside the pill CTA',
-  INDEX.includes('id="btnSubmitOwnerLogin" class="flg-cta"') &&
+check('login submit keeps its id + real label inside the gold circle submit',
+  INDEX.includes('id="btnSubmitOwnerLogin" class="login-submit-btn"') &&
   INDEX.includes('Login to Control Center'));
 check('login form keeps the real submit handler + password toggle wiring',
   INDEX.includes('onsubmit="handleOwnerSignIn(event)"') &&

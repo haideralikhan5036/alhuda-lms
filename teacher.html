@@ -602,6 +602,185 @@ font-family: var(--font-num) !important;
     .flg-card { padding: 32px 22px 26px; border-radius: 32px; }
     .flg-brand { font-size: 1.12rem; }
   }
+    /* CIRCLE LOGIN (2026-11-15, owner-approved mockup B):
+       the Fee Management portal's circle login (Batch 27, dark
+       green circle) on the LMS split card. The LEFT brand panel is
+       untouched — this block only styles the RIGHT login bar (the
+       circle) and the mobile stacked circle. The button rules use
+       the .login-submit-btn class because each surface keeps its
+       own submit-button id. The error box has NO display:none here:
+       the real sign-in handlers toggle it with the Tailwind
+       `hidden` class, exactly as before. */
+/* ============ FEE CIRCLE (Batch 27 Index.html:422-476, 540-651 — verbatim, variant B dark) ============ */
+  .login-circle {
+    position: relative; flex: 0 0 auto;
+    width: min(476px, 94vw); aspect-ratio: 1 / 1; border-radius: 50%;
+    background: #06382a;
+    box-shadow: 18px 18px 36px rgba(0,0,0,.55), -14px -14px 30px rgba(255,255,255,.09);
+    display: flex; align-items: center; justify-content: center;
+    overflow: hidden;
+    perspective: 900px;
+    animation: loginFadeIn .45s ease both;
+  }
+  /* in the LMS split column the circle renders at 440px (see sizing note above) */
+  .flg-form-col .login-circle { width: min(440px, 100%); }
+  .login-form-content { width: 74%; max-width: 330px; text-align: center; transform-origin: center top; will-change: transform, opacity; }
+  .login-form-content h2 { font-weight: 800; font-size: 1.45rem; letter-spacing: 0.08em; color: #eef7f1; margin-bottom: 22px; }
+  .login-circle .form-group { text-align: left; }
+  .login-circle .sr-only { position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; border:0; }
+  .login-error {
+    background: #fdf3f3; border: 1px solid #f0b4b4; color: #991b1b;
+    padding: 11px 15px; border-radius: 16px; font-size: 0.8rem; font-weight: 700;
+    text-align: center; margin-bottom: 12px;
+    box-shadow: inset 4px 4px 8px rgba(153,27,27,.06), inset -4px -4px 8px rgba(255,255,255,.7);
+  }
+  .login-error i { margin-right: 6px; }
+  .neu-input {
+    display: flex; align-items: center; gap: 11px; height: 54px; border-radius: 999px;
+    padding: 0 9px 0 19px; background: #06382a;
+    box-shadow: inset 6px 6px 12px rgba(0,0,0,.48), inset -6px -6px 12px rgba(255,255,255,.09);
+    transition: box-shadow .2s;
+  }
+  .neu-input:focus-within {
+    box-shadow: inset 6px 6px 12px rgba(0,0,0,.48), inset -6px -6px 12px rgba(255,255,255,.09), 0 0 0 2px rgba(52,211,153,.5);
+  }
+  .neu-input > i { color: #7fc8a9; font-size: 0.95rem; flex: 0 0 auto; }
+  .login-circle .neu-input input[type="text"],
+  .login-circle .neu-input input[type="password"] {
+    flex: 1; border: none; outline: none; background: transparent; box-shadow: none;
+    min-width: 0; width: 100%; padding: 0; font-size: 0.92rem; font-weight: 500; color: #eef7f1;
+    -webkit-text-fill-color: #eef7f1; caret-color: #eef7f1; font-family: inherit;
+  }
+  .login-circle .neu-input input::placeholder { color: #6f9a86; font-weight: 400; }
+  .login-circle .neu-input input:-webkit-autofill,
+  .login-circle .neu-input input:-webkit-autofill:hover,
+  .login-circle .neu-input input:-webkit-autofill:focus {
+    -webkit-text-fill-color: #eef7f1;
+    -webkit-box-shadow: 0 0 0 1000px #06382a inset;
+    box-shadow: 0 0 0 1000px #06382a inset;
+    transition: background-color 9999s ease-in-out 0s;
+  }
+  .neu-input .password-toggle-btn {
+    position: static; width: 36px; height: 36px; border-radius: 50%; flex: 0 0 auto;
+    background: #06382a; color: #a7d7c0; border: none;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 0.9rem; padding: 0; cursor: pointer;
+    box-shadow: 4px 4px 8px rgba(0,0,0,.45), -4px -4px 8px rgba(255,255,255,.09);
+  }
+  .neu-input .password-toggle-btn:hover { color: #34d399; }
+
+  /* gold submit button with the Batch 24 animation states (Batch 27 verbatim) */
+  .login-btn-wrap { position: relative; }
+  .login-submit-btn {
+    width: 100%; height: 54px; border: none; border-radius: 999px;
+    background: linear-gradient(90deg, #b98a4a, #d9b77f); color: #23180a;
+    font-size: 0.95rem; font-weight: 800; letter-spacing: 0.02em; cursor: pointer;
+    box-shadow: 9px 9px 18px rgba(0,0,0,.5), -6px -6px 14px rgba(255,255,255,.09);
+    display: flex; align-items: center; justify-content: center; gap: 9px;
+    transition: background .35s, color .25s, box-shadow .15s, transform .15s;
+    animation: loginBtnGlow 3s ease-in-out infinite; font-family: inherit;
+  }
+  @keyframes loginBtnGlow {
+    0%, 100% { box-shadow: 9px 9px 18px rgba(0,0,0,.5), -6px -6px 14px rgba(255,255,255,.09), 0 0 0 0 rgba(217,183,127,0); }
+    50% { box-shadow: 9px 9px 18px rgba(0,0,0,.5), -6px -6px 14px rgba(255,255,255,.09), 0 0 0 6px rgba(217,183,127,.12); }
+  }
+  .login-submit-btn:active { animation: none; box-shadow: inset 5px 5px 10px rgba(0,0,0,.35), inset -4px -4px 8px rgba(255,255,255,.12); transform: scale(.99); }
+  .login-submit-btn:disabled { opacity: .85; cursor: wait; transform: none; }
+
+  /* loading: three bouncing dots over the button (Batch 27 verbatim) */
+  .cta-dots { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; gap: 7px; opacity: 0; pointer-events: none; transition: opacity .25s; }
+  .cta-dots i { width: 8px; height: 8px; border-radius: 50%; background: #23180a; display: block; animation: loginDotBounce 1s ease-in-out infinite paused; }
+  .cta-dots i:nth-child(2) { animation-delay: .15s; }
+  .cta-dots i:nth-child(3) { animation-delay: .3s; }
+  @keyframes loginDotBounce { 0%, 60%, 100% { transform: translateY(0); opacity: .5; } 30% { transform: translateY(-6px); opacity: 1; } }
+  .login-btn-wrap.is-loading .login-submit-btn { color: transparent; animation: none; }
+  .login-btn-wrap.is-loading .login-submit-btn .spinner { display: none; }
+  .login-btn-wrap.is-loading .cta-dots { opacity: 1; }
+  .login-btn-wrap.is-loading .cta-dots i { animation-play-state: running; }
+
+  /* success: emerald button, tick + Signed In, confetti burst (Batch 27 verbatim) */
+  .cta-done {
+    position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; gap: 8px;
+    color: #ffffff; font-weight: 800; font-size: 0.95rem;
+    opacity: 0; transform: translateY(10px); pointer-events: none;
+    transition: opacity .35s ease, transform .35s ease;
+  }
+  .login-btn-wrap.is-success .login-submit-btn { background: linear-gradient(90deg, #065f46, #059669); color: transparent; animation: none; }
+  .login-btn-wrap.is-success .cta-done { opacity: 1; transform: translateY(0); }
+  .login-confetti { position: absolute; inset: 0; pointer-events: none; z-index: 6; }
+  .login-confetti i { position: absolute; display: block; opacity: 0; animation: loginConfettiFly 1.3s cubic-bezier(.15,.61,.36,1) forwards; }
+  @keyframes loginConfettiFly {
+    0% { transform: translate(-50%,-50%) rotate(0deg); opacity: 1; }
+    35% { transform: translate(calc(-50% + var(--dx)), calc(-50% + var(--dy))) rotate(var(--r1)); opacity: 1; }
+    100% { transform: translate(calc(-50% + var(--dx) * 1.12), calc(-50% + var(--dy) + 195px)) rotate(var(--r2)); opacity: 0; }
+  }
+
+  /* failure: one quick shake (button wrap) (Batch 27 verbatim) */
+  .login-btn-wrap.is-error { animation: loginBtnShake .4s ease; }
+  @keyframes loginBtnShake { 0%, 100% { transform: translateX(0); } 20% { transform: translateX(-7px); } 40% { transform: translateX(6px); } 60% { transform: translateX(-4px); } 80% { transform: translateX(3px); } }
+
+  /* success message — circle ke beech mein, pehle chhupa (Batch 27 verbatim) */
+  .login-success {
+    position: absolute; inset: 0; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; text-align: center;
+    opacity: 0; transform: scale(.82); pointer-events: none;
+  }
+  .login-success .check-ring {
+    width: 92px; height: 92px; border-radius: 50%;
+    background: rgba(52,211,153,.14);
+    box-shadow: 8px 8px 16px rgba(0,0,0,.5), -6px -6px 12px rgba(255,255,255,.09), inset 0 0 0 1px rgba(52,211,153,.25);
+    display: flex; align-items: center; justify-content: center; margin-bottom: 18px;
+  }
+  .login-success .check-ring svg { width: 52px; height: 52px; }
+  .login-success .check-ring svg path { stroke: #34d399; stroke-width: 5; fill: none; stroke-linecap: round; stroke-linejoin: round; stroke-dasharray: 44; stroke-dashoffset: 44; }
+  .login-success h3 { font-size: 1.3rem; color: #eef7f1; letter-spacing: .02em; margin: 0 0 6px; }
+  .login-success p { font-size: .9rem; color: #8fd0b2; margin: 0; }
+  /* SUCCESS — Batch 27 circular spin (NOT the fold): fields gol ghoom kar ghayab,
+     phir heading + button fade, tick pop ho kar aaye */
+  .login-circle.is-success .login-fields { animation: circleSpinOut .55s cubic-bezier(.5,0,.75,.4) forwards; transform-origin: 50% 135%; }
+  @keyframes circleSpinOut {
+    0% { transform: rotate(0deg); opacity: 1; }
+    100% { transform: rotate(78deg); opacity: 0; }
+  }
+  .login-circle.is-success .login-form-content h2,
+  .login-circle.is-success .login-btn-wrap { animation: circleFadeOut .35s ease .4s forwards; }
+  @keyframes circleFadeOut { to { opacity: 0; } }
+  .login-circle.is-success .login-form-content { pointer-events: none; }
+  .login-circle.is-success .login-success { animation: circleSuccessIn .5s cubic-bezier(.2,1.4,.4,1) .42s forwards; }
+  @keyframes circleSuccessIn {
+    0% { opacity: 0; transform: scale(.82); }
+    100% { opacity: 1; transform: scale(1); }
+  }
+  .login-circle.is-success .login-success .check-ring svg path { animation: circleCheckDraw .45s ease-out .55s forwards; }
+  @keyframes circleCheckDraw { to { stroke-dashoffset: 0; } }
+  /* ERROR: poora circle halka sa hilay (Batch 27 verbatim) */
+  .login-circle.is-error { animation: circleShake .4s ease; }
+  @keyframes circleShake { 0%, 100% { transform: translateX(0); } 20% { transform: translateX(-7px); } 40% { transform: translateX(6px); } 60% { transform: translateX(-4px); } 80% { transform: translateX(3px); } }
+  @keyframes loginFadeIn { from { opacity: 0; transform: translateY(15px); } to { opacity: 1; transform: translateY(0); } }
+
+
+    /* LMS sizing: the circle renders at 440px inside the split
+       column (fee page: 476px); the form column padding shrinks so
+       the circle fits — the 1140px split card itself is unchanged. */
+    @media (min-width: 1024px) {
+      .flg-form-col.circle-col { padding: 36px 28px; align-items: center; }
+      .flg-form-col .login-circle { width: min(440px, 100%); }
+    }
+    /* Mobile stacked circle (fee Batch 27 mobile): logo/title above,
+       circle below. The circle caps at 374px and scales down with
+       the 400px card on narrow phones. */
+    @media (max-width: 1023px) {
+      .flg-card { padding: 26px 12px 24px; }
+      .flg-logo { width: 84px; height: 84px; }
+      .login-circle { width: min(374px, 100%); }
+      .login-form-content { width: 72%; }
+      .login-form-content h2 { font-size: 1.2rem; margin-bottom: 16px; }
+      .login-circle .neu-input { height: 50px; }
+      .login-circle .login-submit-btn { height: 50px; }
+      .login-success .check-ring { width: 76px; height: 76px; }
+      .login-success h3 { font-size: 1.1rem; }
+    }
+
   @keyframes flgFadeIn {
     from { opacity: 0; transform: translateY(15px); }
     to { opacity: 1; transform: translateY(0); }
@@ -1026,11 +1205,8 @@ font-family: var(--font-num) !important;
         <div class="flg-divider"></div>
         <p class="flg-panel-copy">&copy; 2026 Al-Huda Islamic Centre.<br>Authorized personnel only.</p>
       </div>
-      <div class="flg-form-col">
-        <h2 class="flg-title">Teacher Portal Login</h2>
-        <p class="flg-sub">Sign in to access your authorized classes, roster &amp; lesson logs</p>
-      <div class="flg-body">
-        <div id="roleMismatchBanner" class="hidden mt-5 text-left p-3.5 rounded-2xl bg-amber-50 border border-amber-300 text-amber-900 text-xs font-semibold shadow-xs">
+      <div class="flg-form-col circle-col">
+        <div id="roleMismatchBanner" class="hidden self-stretch mt-5 text-left p-3.5 rounded-2xl bg-amber-50 border border-amber-300 text-amber-900 text-xs font-semibold shadow-xs">
                     <div class="flex items-start gap-2.5">
                       <i class="fa-solid fa-shield-halved text-amber-600 text-base mt-0.5"></i>
                       <div>
@@ -1039,39 +1215,41 @@ font-family: var(--font-num) !important;
                       </div>
                     </div>
                   </div>
-                  <div id="loginErrorMsg" class="hidden mt-5 text-left p-3 bg-rose-50 border border-rose-200 text-rose-700 rounded-xl text-xs font-bold flex items-center gap-2">
-                    <i class="fa-solid fa-circle-exclamation"></i>
-                    <span id="loginErrorText">Invalid username or password.</span>
-                  </div>
-
-        <form id="loginForm" onsubmit="handleTeacherSignIn(event)" class="flg-form" autocomplete="off">
-          <div class="flg-field">
-            <label for="loginUsername">Email / Username / Teacher ID <span class="req">*</span></label>
-            <div class="flg-pill">
-              <i class="fa-solid fa-user"></i>
-              <input type="text" id="loginUsername" required placeholder="Enter your username or Teacher ID" autocomplete="username">
+        <div class="login-circle" id="loginCircle">
+          <div class="login-success" id="loginSuccessMsg" aria-hidden="true">
+            <div class="check-ring"><svg viewBox="0 0 52 52" aria-hidden="true"><path d="M12 27 L22 37 L41 15"/></svg></div>
+            <h3>Welcome Back!</h3><p>Login Successful</p>
+          </div>
+          <div class="login-form-content" id="loginFormContent">
+            <h2>SIGN IN</h2>
+            <div id="loginErrorMsg" class="hidden login-error">
+              <i class="fa-solid fa-circle-exclamation"></i>
+              <span id="loginErrorText">Invalid username or password.</span>
             </div>
+            <form id="loginForm" onsubmit="handleTeacherSignIn(event)" autocomplete="off">
+              <div class="login-fields">
+                <div class="form-group" style="margin-bottom: 14px;"><label class="sr-only" for="loginUsername">Username or Teacher ID</label><div class="neu-input">
+                  <i class="fa-solid fa-user"></i>
+                  <input type="text" id="loginUsername" required placeholder="Enter your username or Teacher ID" autocomplete="username" aria-label="Email, username or Teacher ID">
+                </div></div>
+                <div class="form-group" style="margin-bottom: 18px;"><label class="sr-only" for="loginPassword">Password</label><div class="neu-input">
+                  <i class="fa-solid fa-lock"></i>
+                  <input type="password" id="loginPassword" required placeholder="Enter your password" autocomplete="current-password" aria-label="Password">
+                  <button type="button" onclick="togglePassVisibility()" aria-label="Show or hide password" class="password-toggle-btn" title="Show / Hide Password">
+                    <i id="passToggleIcon" class="fa-regular fa-eye"></i>
+                  </button>
+                </div></div>
+              </div>
+              <div class="login-btn-wrap" id="loginBtnWrap">
+                <button type="submit" id="btnSubmitLogin" class="login-submit-btn"><i class="fa-solid fa-right-to-bracket"></i> Login to Teacher Portal</button>
+                <span class="cta-dots" aria-hidden="true"><i></i><i></i><i></i></span>
+                <span class="cta-done" aria-hidden="true"><i class="fa-solid fa-check"></i> Signed In</span>
+              </div>
+            </form>
           </div>
-          <div class="flg-field">
-            <label for="loginPassword">Password <span class="req">*</span></label>
-            <div class="flg-pill">
-              <i class="fa-solid fa-lock"></i>
-              <input type="password" id="loginPassword" required placeholder="Enter your password" autocomplete="current-password">
-              <button type="button" onclick="togglePassVisibility()" aria-label="Show or hide password" class="flg-eye" title="Show / Hide Password">
-                  <i id="passToggleIcon" class="fa-regular fa-eye"></i>
-                </button>
-            </div>
-          </div>
-          <div class="flg-btn-wrap" id="loginBtnWrap">
-            <button type="submit" id="btnSubmitLogin" class="flg-cta"><i class="fa-solid fa-right-to-bracket"></i> Login to Teacher Portal</button>
-            <span class="flg-dots" aria-hidden="true"><i></i><i></i><i></i></span>
-            <span class="flg-done" aria-hidden="true"><i class="fa-solid fa-check"></i> Signed In</span>
-          </div>
-        </form>
-        <div class="flg-secure"><i class="fa-solid fa-shield-halved"></i> Secure Authentication System &bull; Al-Huda Academy</div>
+        </div>
       </div>
-      </div>
-      <div class="flg-confetti" id="loginConfettiLayer"></div>
+      <div class="login-confetti" id="loginConfettiLayer"></div>
     </div>
     <p class="text-center text-xs text-white/50 mt-6 relative flg-outside-copy">
       &copy; 2026 Al-Huda Islamic Centre. Authorized personnel only.
@@ -1092,8 +1270,10 @@ font-family: var(--font-num) !important;
     var form = document.getElementById('loginForm');
     var errBox = document.getElementById('loginErrorMsg');
     var view = document.getElementById('loginView');
+    var circle = document.getElementById('loginCircle');
     if (!wrap || !form) return;
     var inFlight = false;
+    var successShown = false;
     function flgConfettiBurst() {
       var layer = document.getElementById('loginConfettiLayer');
       var btn = document.getElementById('btnSubmitLogin');
@@ -1123,17 +1303,42 @@ font-family: var(--font-num) !important;
       }
     }
     function setState(state) {
-      wrap.classList.remove('flg-is-loading', 'flg-is-success', 'flg-is-error');
+      wrap.classList.remove('is-loading', 'is-success', 'is-error');
+      if (circle) circle.classList.remove('is-success', 'is-error');
       if (state === 'loading') {
-        wrap.classList.add('flg-is-loading');
+        wrap.classList.add('is-loading');
       } else if (state === 'success') {
-        wrap.classList.add('flg-is-success');
+        if (successShown) return;
+        successShown = true;
+        wrap.classList.add('is-success');
+        if (circle) circle.classList.add('is-success');
+        if (errBox) errBox.classList.add('hidden');
         flgConfettiBurst();
       } else if (state === 'error') {
-        wrap.classList.add('flg-is-error');
-        setTimeout(function () { wrap.classList.remove('flg-is-error'); }, 450);
+        wrap.classList.add('is-error');
+        if (circle) circle.classList.add('is-error');
+        setTimeout(function () {
+          wrap.classList.remove('is-error');
+          if (circle) circle.classList.remove('is-error');
+        }, 450);
+      } else if (state === 'reset') {
+        successShown = false;
       }
     }
+    /* Circle login success hook (2026-11-15): the real sign-in
+       handler calls this the moment the server accepts the
+       credentials, so the approved spin + tick play BEFORE the
+       portal opens (the handler waits 1700ms, as in the fee
+       portal). Returns true only when a real form submit started
+       the animation — every other caller keeps the immediate
+       transition, so refresh-restore and programmatic sign-ins
+       never wait. */
+    window.lmsCircleLoginSuccess = function () {
+      if (!inFlight) return false;
+      inFlight = false;
+      setState('success');
+      return true;
+    };
     form.addEventListener('submit', function () {
       inFlight = true;
       setState('loading');
@@ -3743,7 +3948,21 @@ font-family: var(--font-num) !important;
       } catch (err) {}
       const roleMismatchBanner = document.getElementById('roleMismatchBanner');
       if (roleMismatchBanner) roleMismatchBanner.classList.add('hidden');
-      showDashboardView();
+      // CIRCLE LOGIN (2026-11-15): the approved spin + tick play
+      // before the dashboard replaces the login screen (1700ms, as
+      // in the fee portal). The hook returns true only after a real
+      // form submit started the animation.
+      var circleShown = false;
+      try {
+        if (typeof window.lmsCircleLoginSuccess === 'function') {
+          circleShown = window.lmsCircleLoginSuccess() === true;
+        }
+      } catch (err) {}
+      if (circleShown) {
+        setTimeout(showDashboardView, 1700);
+      } else {
+        showDashboardView();
+      }
     }
 
     function showDashboardView() {
