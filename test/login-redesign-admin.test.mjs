@@ -1,7 +1,11 @@
 // Owner login redesign — the skin on #ownerLoginView in index.html.
 // Originally the 2026-11-07 split-card (lgn-) skin; RE-SKINNED
 // 2026-11-10 to the Fee Management portal login design (flg-) on the
-// owner's instruction, like the other three portals. This suite
+// owner's instruction, like the other three portals; RE-SKINNED
+// 2026-11-15 to the circle login (dark green circle, Batch 27) on
+// the owner's explicit instruction after the approved mockup B —
+// the LEFT brand panel is byte-identical, only the RIGHT form
+// column became the circle. This suite
 // proves, against the REAL index.html and the REAL js/auth.js
 // functions:
 //   1. only the login region changed skin: every preserved element
@@ -55,14 +59,24 @@ check('view still starts hidden (no flash before boot decides)',
 check('view carries the fee-style backdrop class (dark #06382a via .flg-screen)',
   LOGIN.includes('flg-screen'));
 check('form keeps the real submit handler + autocomplete off',
-  LOGIN.includes('<form id="ownerLoginForm" onsubmit="handleOwnerSignIn(event)" class="flg-form" autocomplete="off">'));
+  LOGIN.includes('<form id="ownerLoginForm" onsubmit="handleOwnerSignIn(event)" autocomplete="off">'));
 check('username input keeps its real attributes',
   LOGIN.includes('<input type="text" id="ownerLoginUsername" required placeholder="Enter username" autocomplete="username"'));
 check('password input keeps its real attributes',
   LOGIN.includes('<input type="password" id="ownerLoginPassword" required placeholder="Enter password" autocomplete="current-password"'));
-check('labels keep their for= wiring + real text',
-  LOGIN.includes('<label for="ownerLoginUsername"') && LOGIN.includes('Username / Admin ID') &&
-  LOGIN.includes('<label for="ownerLoginPassword"') && LOGIN.includes('Password'));
+// CIRCLE LOGIN (2026-11-15): the fee-style visible labels are gone
+// with the form column — the circle carries placeholders + aria
+// labels (owner-approved mockup B). The inputs keep their ids,
+// placeholders and required/autocomplete attributes. The fields
+// stay labelled for assistive tech via visually-hidden (sr-only)
+// <label> elements — the a11y suite (phase3-ux-a11y) requires the
+// for= association; the circle shows no visible label text.
+check('circle fields carry accessible names (sr-only labels + aria-label, no visible label)',
+  LOGIN.includes('aria-label="Username / Admin ID"') &&
+  LOGIN.includes('aria-label="Password"') &&
+  LOGIN.includes('<label class="sr-only" for="ownerLoginUsername">Username</label>') &&
+  LOGIN.includes('<label class="sr-only" for="ownerLoginPassword">Password</label>') &&
+  count(LOGIN, '<label') === 2);
 check('password toggle keeps its real wiring + aria-label',
   LOGIN.includes('onclick="toggleOwnerPassVisibility()"') &&
   LOGIN.includes('aria-label="Show or hide password"') &&
@@ -72,28 +86,38 @@ check('error box keeps its ids + default text',
   LOGIN.includes('Invalid username or password.'));
 check('submit keeps its real label',
   LOGIN.includes('id="btnSubmitOwnerLogin"') && LOGIN.includes('Login to Control Center'));
-check('brand block is the real one (logo, name, tagline, heading, sub, footer)',
+check('brand block is the real one (logo, name, tagline, footer) — panel byte-identical',
   LOGIN.includes('<img class="flg-logo" src="alhuda_logo.jpg" alt="Al-Huda Islamic Centre">') &&
   LOGIN.includes('AL-HUDA ISLAMIC CENTRE') && LOGIN.includes('Owner &amp; Admin Control Center') &&
-  LOGIN.includes('Owner &amp; Director Login') &&
-  LOGIN.includes('Sign in with authorized credentials to access LMS Admin') &&
   LOGIN.includes('&copy; 2026 Al-Huda Islamic Centre. Authorized personnel only.'));
+check('the old right-column title/sub are gone — the circle shows SIGN IN only',
+  !LOGIN.includes('Owner &amp; Director Login') &&
+  !LOGIN.includes('Sign in with authorized credentials to access LMS Admin'));
 
 check('new landmarks: centred dark card + neumorphic deco shapes',
   LOGIN.includes('class="flg-card"') && LOGIN.includes('class="flg-deco"') &&
   LOGIN.includes('class="flg-nd flg-nd-halo"'));
-check('new landmarks: dark pill fields + gold pill CTA with dots/done states',
-  count(LOGIN, 'class="flg-pill"') === 2 && LOGIN.includes('class="flg-cta"') &&
-  LOGIN.includes('class="flg-dots"') && LOGIN.includes('class="flg-done"'));
+// CIRCLE LOGIN (2026-11-15): the form column is the circle —
+// dark green circle, inset pill fields, gold submit button, dots
+// + done states, and the success pane (tick + Welcome Back!)
+// hidden until a real sign-in succeeds.
+check('circle landmarks: green circle + inset pills + gold submit with dots/done states',
+  LOGIN.includes('class="login-circle"') && LOGIN.includes('id="loginCircle"') &&
+  count(LOGIN, 'class="neu-input"') === 2 && LOGIN.includes('class="login-submit-btn"') &&
+  LOGIN.includes('class="cta-dots"') && LOGIN.includes('class="cta-done"') &&
+  LOGIN.includes('id="loginFormContent"') && LOGIN.includes('id="loginSuccessMsg"') &&
+  LOGIN.includes('SIGN IN') && LOGIN.includes('Welcome Back!') && LOGIN.includes('Login Successful'));
 check('new landmarks: button wrap + confetti layer for the success burst',
   LOGIN.includes('id="ownerLoginBtnWrap"') && LOGIN.includes('id="ownerLoginConfettiLayer"') &&
-  LOGIN.includes('Signed In') && LOGIN.includes('Secure Authentication System'));
+  LOGIN.includes('Signed In'));
+check('the fee-style secure line under the form is gone with the form column',
+  !LOGIN.includes('Secure Authentication System'));
 check('NO flagship aui- classes inside the login view', !LOGIN.includes('aui-'));
 // Desktop split layout (2026-11-10, owner-approved mockup v2):
 // brand panel left + form column right at >=1024px; the stacked
 // card below the breakpoint is untouched in presentation.
 check('split landmarks: brand panel + form column + halo + deco + panel copy',
-  LOGIN.includes('class="flg-brand-panel"') && LOGIN.includes('class="flg-form-col"') &&
+  LOGIN.includes('class="flg-brand-panel"') && LOGIN.includes('class="flg-form-col circle-col"') &&
   LOGIN.includes('class="flg-logo-halo"') && LOGIN.includes('class="flg-brand-deco"') &&
   LOGIN.includes('class="flg-bd-ring"') && LOGIN.includes('class="flg-bd-circle"') &&
   LOGIN.includes('class="flg-bd-dots"') && LOGIN.includes('class="flg-bd-gold"') &&
@@ -102,7 +126,7 @@ check('split: outside copy line tagged for desktop hiding (still the mobile line
   LOGIN.includes('relative flg-outside-copy'));
 check('split: brand panel precedes the form column inside the card',
   LOGIN.indexOf('class="flg-brand-panel"') > LOGIN.indexOf('class="flg-card"') &&
-  LOGIN.indexOf('class="flg-form-col"') > LOGIN.indexOf('class="flg-brand-panel"'));
+  LOGIN.indexOf('class="flg-form-col circle-col"') > LOGIN.indexOf('class="flg-brand-panel"'));
 check('old centred-card skin is gone',
   !LOGIN.includes('max-w-md w-full my-auto') &&
   !LOGIN.includes('bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden'));
@@ -128,6 +152,22 @@ check('flg- stylesheet: Batch 25 autofill override (fields never paint white)',
 check('flg- stylesheet: shake + confetti + dots keyframes present',
   INDEX.includes('@keyframes flgBtnShake') && INDEX.includes('@keyframes flgConfettiFly') &&
   INDEX.includes('@keyframes flgDotBounce'));
+// CIRCLE LOGIN (2026-11-15): the circle stylesheet — Batch 27 spin
+// (fields rotateZ 78 degrees, NOT the fold), tick draw, whole-
+// circle shake, dots, confetti, gold glow; the circle renders
+// 440px in the split column and caps at 374px on phones.
+check('circle stylesheet: spin + tick + shake + dots + confetti keyframes present',
+  INDEX.includes('@keyframes circleSpinOut') && INDEX.includes('rotate(78deg)') &&
+  INDEX.includes('@keyframes circleCheckDraw') && INDEX.includes('@keyframes circleShake') &&
+  INDEX.includes('@keyframes loginBtnGlow') && INDEX.includes('@keyframes loginDotBounce') &&
+  INDEX.includes('@keyframes loginConfettiFly') && INDEX.includes('@keyframes loginFadeIn'));
+check('circle stylesheet: 440px circle in the split column, 374px cap on phones',
+  INDEX.includes('.flg-form-col.circle-col { padding: 36px 28px; align-items: center; }') &&
+  INDEX.includes('.flg-form-col .login-circle { width: min(440px, 100%); }') &&
+  INDEX.includes('.login-circle { width: min(374px, 100%); }'));
+check('circle stylesheet: autofill override scoped to the circle fields (never white)',
+  INDEX.includes('.login-circle .neu-input input:-webkit-autofill') &&
+  INDEX.includes('0 0 0 1000px #06382a inset'));
 check('split stylesheet: wide grid card at the desktop breakpoint only',
   INDEX.includes('@media (min-width: 1024px)') &&
   INDEX.includes('grid-template-columns: 1.12fr 0.88fr') &&
@@ -361,17 +401,18 @@ const appShown = (r) => {
   failed.registry.get('ownerLoginUsername').value = 'Faheem';
   failed.registry.get('ownerLoginPassword').value = 'wrong';
   failed.registry.get('ownerLoginForm').__fire('submit');
-  check('fee-style wiring: form submit applies the dots loading state',
-    failed.registry.get('ownerLoginBtnWrap').classList.contains('flg-is-loading'));
+  check('circle wiring: form submit applies the dots loading state',
+    failed.registry.get('ownerLoginBtnWrap').classList.contains('is-loading'));
   await failed.api.handleOwnerSignIn({ preventDefault() {} });
   failed.flushObservers();
   check('failed sign-in shows the real error inside the new card + stays on the gate',
     !failed.registry.get('ownerLoginErrorMsg').classList.contains('hidden') &&
     failed.registry.get('ownerLoginErrorText').innerText === 'Invalid username or password.' &&
     loginShown(failed.registry) && !appShown(failed.registry));
-  check('fee-style wiring: the real failed login applies the shake state',
-    failed.registry.get('ownerLoginBtnWrap').classList.contains('flg-is-error') &&
-    !failed.registry.get('ownerLoginBtnWrap').classList.contains('flg-is-loading'));
+  check('circle wiring: the real failed login shakes the whole circle + clears loading',
+    failed.registry.get('ownerLoginBtnWrap').classList.contains('is-error') &&
+    failed.registry.get('loginCircle').classList.contains('is-error') &&
+    !failed.registry.get('ownerLoginBtnWrap').classList.contains('is-loading'));
 
   const good = boot({
     fetchImpl: async () => ({
@@ -383,18 +424,25 @@ const appShown = (r) => {
   good.registry.get('ownerLoginUsername').value = 'Faheem';
   good.registry.get('ownerLoginPassword').value = 'correct';
   good.registry.get('ownerLoginForm').__fire('submit');
-  check('fee-style wiring: submit on the success path applies the dots loading state',
-    good.registry.get('ownerLoginBtnWrap').classList.contains('flg-is-loading'));
+  check('circle wiring: submit on the success path applies the dots loading state',
+    good.registry.get('ownerLoginBtnWrap').classList.contains('is-loading'));
   await good.api.handleOwnerSignIn({ preventDefault() {} });
-  good.flushObservers();
-  check('successful sign-in stores the token, hides the gate, opens the flagship shell',
+  // CIRCLE LOGIN (2026-11-15): the handler plays the approved spin
+  // + tick for 1700ms BEFORE the shell opens — the token is stored
+  // at once, but the gate is still showing and the circle is
+  // mid-success. Only after the pause does the shell open.
+  check('circle wiring: real success spins the circle + bursts 30 confetti, gate still showing',
     !!good.sessionStore.get('alhuda_owner_token') &&
     good.localStore.get('alhuda_active_portal_role') === 'owner' &&
-    !loginShown(good.registry) && appShown(good.registry) &&
-    good.registry.get('ownerLoginErrorMsg').classList.contains('hidden'));
-  check('fee-style wiring: real success applies the success state + bursts 30 confetti pieces',
-    good.registry.get('ownerLoginBtnWrap').classList.contains('flg-is-success') &&
+    loginShown(good.registry) && !appShown(good.registry) &&
+    good.registry.get('ownerLoginErrorMsg').classList.contains('hidden') &&
+    good.registry.get('ownerLoginBtnWrap').classList.contains('is-success') &&
+    good.registry.get('loginCircle').classList.contains('is-success') &&
     good.registry.get('ownerLoginConfettiLayer').children.length === 30);
+  await new Promise((resolve) => setTimeout(resolve, 1800));
+  good.flushObservers();
+  check('successful sign-in hides the gate and opens the flagship shell after the circle pause',
+    !loginShown(good.registry) && appShown(good.registry));
   check('sign-in recorded NO navigation away from index.html', good.replaced.length === 0);
 
   // --- logout returns to the NEW login view ---------------------------
@@ -404,6 +452,10 @@ const appShown = (r) => {
     good.registry.get('ownerLoginUsername').value === '' &&
     good.registry.get('ownerLoginPassword').value === '' &&
     !good.sessionStore.get('alhuda_owner_token'));
+  good.flushObservers();
+  check('circle wiring: logout resets the circle (no leftover success state)',
+    !good.registry.get('ownerLoginBtnWrap').classList.contains('is-success') &&
+    !good.registry.get('loginCircle').classList.contains('is-success'));
 }
 
 // --- LOGIN RESILIENCE (2026-11-10): the real handlers retry transient

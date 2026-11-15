@@ -90,6 +90,14 @@ for (const id of SHELL_IDS) {
 // now pins the split region. Below 1024px the login renders
 // exactly as before; the split CSS lives in the head stylesheet,
 // outside this frozen region.
+// RE-PINNED 2026-11-15 (circle login, sr-only labels): the
+// a11y suite requires for= labels on login fields, so the circle
+// fields carry visually-hidden (sr-only) labels — no visible
+// change.
+// RE-PINNED 2026-11-15 (circle login): the owner-approved
+// mockup B replaced the fee-style form column with the dark green
+// circle — the brand panel is byte-identical, only the right login
+// bar changed (circle markup + wiring script inside this region).
 // RE-PINNED 2026-11-12 (refresh login flash): the owner's refresh
 // report — the login screen flashed first on every refresh — traced
 // to this view carrying no .hidden that existed before the Tailwind
@@ -97,7 +105,7 @@ for (const id of SHELL_IDS) {
 // added `hidden` class on #parentLoginView itself; the plain-CSS
 // gate rule lives in the head stylesheet and the early gate script
 // after </main>, both outside this frozen region.
-const LOGIN_REGION_SHA256 = '0a9d604d4a79c11094eea06831a698b974dd6d3838a75bfc1a7e547059a4bd1b';
+const LOGIN_REGION_SHA256 = 'cf7051fcbb2c18251396468ce87698ccac8c7b5ec2d5d174630e3bbba840dfdb';
 {
   const a = PARENT.indexOf('<!-- ================= 1. PARENT / STUDENT LOGIN SCREEN');
   const b = PARENT.indexOf('<!-- ================= 2. MAIN CONTENT WRAPPER');

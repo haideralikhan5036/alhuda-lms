@@ -2,8 +2,12 @@
 // login design (Batch 24 + Batch 25 autofill fix) applied to
 // teacher.html, parent.html and manager.html on the owner's explicit
 // instruction ("make the LMS logins like the fee management login").
-// This REPLACES the 2026-11-07 split-card (lgn-) skin. These pins lock
-// the deal:
+// This REPLACES the 2026-11-07 split-card (lgn-) skin.
+// CIRCLE LOGIN (2026-11-15, owner-approved mockup B): the circle
+// login (Batch 27, dark green circle) replaces the fee-style form
+// column on all three surfaces — the LEFT brand panel is
+// byte-identical, only the RIGHT login bar became the circle. These
+// pins lock the deal:
 //   * every PRE-EXISTING login id, handler and label survives exactly
 //     once — the re-skin is a skin change, never a rewrite of login
 //     logic (the sign-in handlers are byte-untouched);
@@ -54,8 +58,11 @@ const SURFACES = [
       'loginErrorMsg', 'loginErrorText', 'roleMismatchBanner', 'roleMismatchTitle',
       'roleMismatchDesc', 'btnSubmitLogin'],
     handlers: ['onsubmit="handleTeacherSignIn(event)"', 'onclick="togglePassVisibility()"'],
-    wording: ['Teacher Portal Login', 'Teacher Operations Portal', 'Login to Teacher Portal',
-      'Email / Username / Teacher ID', 'Enter your username or Teacher ID', 'Authorized personnel only.'],
+    wording: ['Teacher Operations Portal', 'Login to Teacher Portal',
+      'Enter your username or Teacher ID', 'Authorized personnel only.'],
+    gone: ['<h2 class="flg-title">Teacher Portal Login</h2>', 'Email / Username / Teacher ID', 'Secure Authentication System'],
+    aria: ['aria-label="Email, username or Teacher ID"', 'aria-label="Password"'],
+    labelFors: ['for="loginUsername"', 'for="loginPassword"'],
     panelCopy: 'Authorized personnel only.',
     viewId: 'loginView', formId: 'loginForm', wrapId: 'loginBtnWrap',
     errId: 'loginErrorMsg', layerId: 'loginConfettiLayer', cardId: 'loginCard',
@@ -67,8 +74,11 @@ const SURFACES = [
       'parentLoginErrorMsg', 'parentLoginErrorText', 'parentRoleMismatchBanner',
       'parentRoleMismatchTitle', 'parentRoleMismatchDesc', 'btnSubmitParentLogin'],
     handlers: ['onsubmit="handleParentSignIn(event)"', 'onclick="toggleParentPassVisibility()"'],
-    wording: ['Parent &amp; Student Login', 'Parent &amp; Student Portal', 'Login to Parent Portal',
-      'Username / Family ID / Email', 'Enter Parent Username or Family ID', 'Authorized access only.'],
+    wording: ['Parent &amp; Student Portal', 'Login to Parent Portal',
+      'Enter Parent Username or Family ID', 'Authorized access only.'],
+    gone: ['<h2 class="flg-title">Parent &amp; Student Login</h2>', 'Username / Family ID / Email', 'Secure Authentication System'],
+    aria: ['aria-label="Username, Family ID or Email"', 'aria-label="Password"'],
+    labelFors: ['for="parentLoginUsername"', 'for="parentLoginPassword"'],
     panelCopy: 'Authorized access only.',
     viewId: 'parentLoginView', formId: 'parentLoginForm', wrapId: 'parentLoginBtnWrap',
     errId: 'parentLoginErrorMsg', layerId: 'parentLoginConfettiLayer', cardId: 'parentLoginCard',
@@ -80,9 +90,12 @@ const SURFACES = [
       'mgrLoginErrorMsg', 'mgrLoginErrorText', 'mgrRoleMismatchBanner', 'mgrRoleMismatchTitle',
       'mgrRoleMismatchDesc', 'btnSubmitMgrLogin'],
     handlers: ['onsubmit="handleManagerSignIn(event)"', 'onclick="toggleMgrPassVisibility()"'],
-    wording: ['Manager Portal Login', 'Manager Operations Portal', 'Login to Manager Portal',
-      'Username / Manager ID / Email', 'Enter Manager Username or ID (e.g. MGR-001)',
+    wording: ['Manager Operations Portal', 'Login to Manager Portal',
+      'Enter Manager Username or ID (e.g. MGR-001)',
       'Authorized personnel only.'],
+    gone: ['<h2 class="flg-title">Manager Portal Login</h2>', 'Username / Manager ID / Email', 'Secure Authentication System'],
+    aria: ['aria-label="Username, Manager ID or Email"', 'aria-label="Password"'],
+    labelFors: ['for="mgrLoginUsername"', 'for="mgrLoginPassword"'],
     panelCopy: 'Authorized personnel only.',
     viewId: null, formId: 'mgrLoginForm', wrapId: 'mgrLoginBtnWrap',
     errId: 'mgrLoginErrorMsg', layerId: 'mgrLoginConfettiLayer', cardId: 'mgrLoginCard',
@@ -101,34 +114,62 @@ for (const s of SURFACES) {
   for (const w of s.wording) {
     ok(src.includes(w), `${s.file}: real wording preserved: "${w}"`);
   }
-  // Fee-design landmarks.
-  for (const lm of ['class="flg-card"', 'class="flg-pill"', 'class="flg-cta"',
-    'flg-screen', 'flg-dots', 'flg-done', 'flg-confetti',
-    'src="alhuda_logo.jpg"', 'AL-HUDA ISLAMIC CENTRE', 'Signed In',
-    'Secure Authentication System']) {
-    ok(src.includes(lm), `${s.file}: fee-design landmark present: ${lm}`);
+  // CIRCLE LOGIN (2026-11-15): the old form-column title, the
+  // visible field labels and the secure line below the form are
+  // gone with the fee-style form column; the circle carries the
+  // placeholders + aria labels only (owner-approved mockup B).
+  for (const g of (s.gone || [])) {
+    ok(!src.includes(g), `${s.file}: old form-column wording is gone: "${g}"`);
+  }
+  for (const a of (s.aria || [])) {
+    ok(src.includes(a), `${s.file}: circle field accessible name present: ${a}`);
+  }
+  // Screen-reader labels (sr-only): the a11y suite requires the
+  // for= association on login fields; the circle shows no visible
+  // label text.
+  for (const lf of (s.labelFors || [])) {
+    ok(src.includes(`<label class="sr-only" ${lf}>`), `${s.file}: sr-only label present: ${lf}`);
+  }
+  // Circle landmarks (the fee-design card + screen + brand panel
+  // are unchanged; only the form column became the circle).
+  for (const lm of ['class="flg-card"', 'class="login-circle"', 'id="loginCircle"',
+    'id="loginFormContent"', 'id="loginSuccessMsg"', 'class="neu-input"',
+    'class="login-submit-btn"', 'flg-screen', 'cta-dots', 'cta-done', 'login-confetti',
+    'src="alhuda_logo.jpg"', 'AL-HUDA ISLAMIC CENTRE', 'SIGN IN', 'Signed In',
+    'Welcome Back!', 'Login Successful']) {
+    ok(src.includes(lm), `${s.file}: circle landmark present: ${lm}`);
   }
   // The Batch 25 autofill fix, scoped to the login pill fields.
   ok(src.includes('input:-webkit-autofill') && src.includes('0 0 0 1000px #06382a inset'),
     `${s.file}: autofill override present (fields stay dark when Chrome autofills)`);
-  // The animation mechanics: shake + confetti + dots keyframes.
+  // The animation mechanics: shake + confetti + dots keyframes
+  // (the fee-style ones stay, unused, in the head stylesheet).
   for (const kf of ['@keyframes flgBtnShake', '@keyframes flgConfettiFly',
     '@keyframes flgDotBounce', '@keyframes flgBtnGlow']) {
     ok(src.includes(kf), `${s.file}: keyframes present: ${kf}`);
   }
+  // Circle mechanics: Batch 27 spin (fields rotateZ 78 degrees,
+  // NOT the fold), tick draw, whole-circle shake, dots, confetti.
+  for (const kf of ['@keyframes circleSpinOut', '@keyframes circleCheckDraw',
+    '@keyframes circleShake', '@keyframes loginBtnGlow',
+    '@keyframes loginDotBounce', '@keyframes loginConfettiFly',
+    '@keyframes loginFadeIn']) {
+    ok(src.includes(kf), `${s.file}: circle keyframes present: ${kf}`);
+  }
+  ok(src.includes('rotate(78deg)'), `${s.file}: success spin is the circular 78-degree spin`);
 
   // Desktop split layout (2026-11-10, owner-approved mockup v2):
   // brand panel left + form column right at >=1024px only. Below
   // the breakpoint the stacked card must render exactly as the
   // fee-style re-skin left it, so the split-only pieces are hidden
   // by default and the outside copy line stays the mobile one.
-  for (const lm of ['class="flg-brand-panel"', 'class="flg-form-col"',
+  for (const lm of ['class="flg-brand-panel"', 'class="flg-form-col circle-col"',
     'class="flg-logo-halo"', 'class="flg-brand-deco"', 'class="flg-bd-ring"',
     'class="flg-bd-circle"', 'class="flg-bd-dots"', 'class="flg-bd-gold"',
     'class="flg-panel-copy"', 'flg-outside-copy']) {
     ok(src.includes(lm), `${s.file}: split landmark present: ${lm}`);
   }
-  ok(count(src, 'class="flg-brand-panel"') === 1 && count(src, 'class="flg-form-col"') === 1 &&
+  ok(count(src, 'class="flg-brand-panel"') === 1 && count(src, 'class="flg-form-col circle-col"') === 1 &&
      count(src, 'class="flg-logo-halo"') === 1,
     `${s.file}: exactly one brand panel + form column + halo`);
   for (const rule of ['@media (min-width: 1024px)', 'width: 1140px',
@@ -149,7 +190,7 @@ for (const s of SURFACES) {
     `${s.file}: in-panel copy carries the surface wording: ${s.panelCopy}`);
   // Document order: brand panel, then form column, both in the card.
   ok(src.indexOf('class="flg-brand-panel"') > src.indexOf('class="flg-card"') &&
-     src.indexOf('class="flg-form-col"') > src.indexOf('class="flg-brand-panel"'),
+     src.indexOf('class="flg-form-col circle-col"') > src.indexOf('class="flg-brand-panel"'),
     `${s.file}: brand panel then form column inside the card`);
   // New wiring ids exist exactly once.
   for (const id of [s.formId, s.wrapId, s.layerId, s.cardId]) {
@@ -203,8 +244,12 @@ ok(manager.includes('body { position: fixed; inset: 0; overflow-y: auto; }') &&
   manager.includes('@media (min-width: 1024px) { body { zoom: 0.85; } }') &&
   !manager.replace('@media (min-width: 1024px) { body { zoom: 0.85; } }', '').includes('body { zoom'),
   'manager: PR #128 fixed body intact, zoom desktop-scoped (2026-11-10 mobile fix)');
-ok(manager.includes('for="mgrLoginUsername"') && manager.includes('for="mgrLoginPassword"'),
-  'manager: username/password labels carry for= (added by the 2026-11-07 redesign; they had none)');
+// CIRCLE LOGIN (2026-11-15): the visible labels are gone with the
+// fee-style form column — the circle carries placeholders + aria
+// labels only (owner-approved mockup B).
+ok(manager.includes('aria-label="Username, Manager ID or Email"') &&
+  manager.includes('aria-label="Password"'),
+  'manager: circle fields carry aria-labels (visible labels removed with the form column)');
 
 // ---------------------------------------------------------------------
 // Executed proof: the REAL wiring script per surface, in a vm over a
@@ -292,26 +337,30 @@ for (const s of SURFACES) {
   const wrap = registry.get(s.wrapId);
   const err = registry.get(s.errId);
   const layer = registry.get(s.layerId);
+  const circle = registry.get('loginCircle');
   layer.parentElement = registry.get(s.cardId);
-  ok(form && wrap && err && layer, `${s.file}: wiring boot found form/wrap/error/layer`);
-  ok(!wrap.classList.contains('flg-is-loading') && !wrap.classList.contains('flg-is-error')
-    && !wrap.classList.contains('flg-is-success'), `${s.file}: button wrap starts in the resting state`);
+  ok(form && wrap && err && layer && circle, `${s.file}: wiring boot found form/wrap/error/layer/circle`);
+  ok(!wrap.classList.contains('is-loading') && !wrap.classList.contains('is-error')
+    && !wrap.classList.contains('is-success') && !circle.classList.contains('is-success')
+    && !circle.classList.contains('is-error'), `${s.file}: button wrap + circle start in the resting state`);
 
   // Submit -> dots (loading) state.
   form.__fire('submit');
-  ok(wrap.classList.contains('flg-is-loading'), `${s.file}: submit applies the dots loading state`);
+  ok(wrap.classList.contains('is-loading'), `${s.file}: submit applies the dots loading state`);
 
   // The REAL failure signal: the handler un-hides the error box.
   err.classList.remove('hidden');
   flush();
-  ok(wrap.classList.contains('flg-is-error') && !wrap.classList.contains('flg-is-loading'),
-    `${s.file}: real error path applies the shake state and clears loading`);
+  ok(wrap.classList.contains('is-error') && circle.classList.contains('is-error')
+    && !wrap.classList.contains('is-loading'),
+    `${s.file}: real error path shakes the whole circle and clears loading`);
 
   // Retry -> loading again; then the REAL success signal.
   err.classList.add('hidden');
-  wrap.classList.remove('flg-is-error');
+  wrap.classList.remove('is-error');
+  circle.classList.remove('is-error');
   form.__fire('submit');
-  ok(wrap.classList.contains('flg-is-loading'), `${s.file}: retry applies the loading state again`);
+  ok(wrap.classList.contains('is-loading'), `${s.file}: retry applies the loading state again`);
   if (s.success === 'view') {
     registry.get(s.viewId).classList.add('hidden');
     flush();
@@ -323,13 +372,14 @@ for (const s of SURFACES) {
     // so the burst is created but the gate is gone in the same beat;
     // that instant navigation is the handler's own design.)
     session.setItem('alhuda_manager_session', '{}');
-    ok(wrap.classList.contains('flg-is-success'),
+    ok(wrap.classList.contains('is-success'),
       `${s.file}: success state applied synchronously with the real session write`);
     ok(layer.children.length === 30,
       `${s.file}: confetti burst created synchronously with the real session write`);
     await sleep(200);
   }
-  ok(wrap.classList.contains('flg-is-success'), `${s.file}: real success applies the success state`);
+  ok(wrap.classList.contains('is-success') && circle.classList.contains('is-success'),
+    `${s.file}: real success spins the circle (success state on wrap + circle)`);
   ok(layer.children.length === 30, `${s.file}: success bursts exactly 30 confetti pieces (got ${layer.children.length})`);
 }
 

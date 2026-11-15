@@ -321,8 +321,29 @@
           localStorage.setItem('alhuda_active_portal_role', 'owner');
         } catch (err) {}
 
-        showMainAppView();
-        switchUserRole('owner');
+        // CIRCLE LOGIN (2026-11-15, owner-approved mockup B): let the
+        // approved spin + tick play before the app shell replaces the
+        // login screen, exactly as in the fee portal (1700ms). The
+        // hook returns true only after a real form submit started
+        // the animation; every other path (refresh-restore,
+        // programmatic sign-in) keeps the immediate transition.
+        // Data loading below starts at once either way, so the shell
+        // opens onto loaded data.
+        var circleShown = false;
+        try {
+          if (typeof window.lmsCircleLoginSuccess === 'function') {
+            circleShown = window.lmsCircleLoginSuccess() === true;
+          }
+        } catch (err) {}
+        if (circleShown) {
+          setTimeout(function () {
+            showMainAppView();
+            switchUserRole('owner');
+          }, 1700);
+        } else {
+          showMainAppView();
+          switchUserRole('owner');
+        }
 
         if (typeof ensureCoreLmsDataLoaded === 'function') {
           ensureCoreLmsDataLoaded().then(() => {
