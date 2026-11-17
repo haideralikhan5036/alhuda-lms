@@ -145,7 +145,10 @@
       var mIdx = ((total % 12) + 12) % 12;
       var yr = anchorYear + Math.floor(total / 12);
       var key = monthKey(mIdx, yr);
-      var fee = num(typeof a.applicableFee === 'function' ? a.applicableFee(mIdx, yr) : 0);
+      // No family picked yet: the fee is UNKNOWN, not zero — the month
+      // stays selectable and shows a dash until a family is picked.
+      var rawFee = (typeof a.applicableFee === 'function') ? a.applicableFee(mIdx, yr) : 0;
+      var fee = (rawFee === null || rawFee === undefined) ? null : num(rawFee);
       var paidSoFar = paidSoFarForMonth(records, fam.id, mIdx, yr);
       var settledByStatus = isMonthSettledByStatus(records, fam.id, mIdx, yr);
       var overrideKey = famUpper + '_' + MONTHS[mIdx].toLowerCase() + '_' + yr;
@@ -155,7 +158,7 @@
       var opt = {
         monthIdx: mIdx, year: yr, key: key, label: monthLabel(mIdx, yr),
         fee: fee, paidSoFar: paidSoFar,
-        outstanding: Math.max(0, fee - paidSoFar),
+        outstanding: fee === null ? null : Math.max(0, fee - paidSoFar),
         state: 'available', reason: ''
       };
       if (enrollScore !== null && score < enrollScore) {
@@ -167,6 +170,8 @@
       } else if (manualStatus === 'leave' || (typeof a.isLeaveMonth === 'function' && a.isLeaveMonth(mIdx, yr))) {
         opt.state = 'leave';
         opt.reason = 'On leave — fee waived';
+      } else if (fee === null) {
+        // Fee unknown (no family yet) — stays available, shown as a dash.
       } else if (fee <= 0) {
         opt.state = 'no_fee';
         opt.reason = 'No fee due';
@@ -192,7 +197,7 @@
       var charge = s.state === 'paid' ? num(s.fee) : Math.max(0, num(s.fee) - num(s.paidSoFar));
       rows.push({
         key: s.key, monthIdx: s.monthIdx, year: s.year, label: s.label,
-        fee: num(s.fee), paidSoFar: num(s.paidSoFar), charge: charge, state: s.state
+        fee: (s.fee === null || s.fee === undefined) ? null : num(s.fee), paidSoFar: num(s.paidSoFar), charge: charge, state: s.state
       });
       total += charge;
     });
