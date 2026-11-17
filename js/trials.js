@@ -53,10 +53,12 @@
     // fewer than 3 sessions. A Completed (3/3) trial is therefore not
     // Active — the loader flips its status to 'Completed' at 3 sessions,
     // which is what makes the two branches agree in practice.
+    // Trials Audit Batch 2 (F7): a "Pending Confirmation" trial is also
+    // not Active — its 3-day window passed without 3 sessions.
     function trialIsActive(t) {
       if (!t) return false;
       return t.status === 'Active' ||
-        (t.status !== 'Converted' && t.status !== 'Discontinued' && (t.conducted_sessions || 0) < 3);
+        (t.status !== 'Converted' && t.status !== 'Discontinued' && t.status !== 'Pending Confirmation' && (t.conducted_sessions || 0) < 3);
     }
 
     // F10: conversion rate over decided trials only. Returns null when
@@ -207,6 +209,90 @@
       return ok;
     }
 
+    // ==========================================
+    // TRIALS AUDIT BATCH 2 — F7 Pending Confirmation, F9 starter password
+    // Each fix below is covered by test/trials-audit-batch2.test.mjs.
+    // ==========================================
+
+    // F7: the 3rd (last) day of a trial's 3-day window, as an ISO date.
+    // Null when the trial has no usable start date — the trial is then
+    // never treated as expired (fail-safe: a missing date stays Active).
+    function trialThirdDayIso(trial) {
+      const raw = String((trial && trial.start_date) || '').slice(0, 10);
+      if (!raw) return null;
+      const d = new Date(raw + 'T00:00:00Z');
+      if (isNaN(d.getTime())) return null;
+      d.setUTCDate(d.getUTCDate() + 2);
+      return d.toISOString().slice(0, 10);
+    }
+
+    // F7: true once today is past the trial's 3rd day (start + 2 days).
+    // On the 3rd day itself the trial is still inside its window.
+    function trialWindowPassed(trial, todayIso) {
+      const third = trialThirdDayIso(trial);
+      if (!third) return false;
+      const today = String(todayIso || new Date().toISOString().slice(0, 10)).slice(0, 10);
+      return today > third;
+    }
+
+    // F7: the ONE derivation of a trial's display status — the loader,
+    // the session toggle and the KPI/pill/banner views all go through it,
+    // so they can never disagree. A trial whose 3-day window passed
+    // without 3 sessions is "Pending Confirmation": no longer Active,
+    // but a late 3rd session still completes it (sessions >= 3 wins over
+    // the window). Converted / Discontinued are terminal and untouched.
+    function deriveTrialStatus(trial, todayIso) {
+      if (!trial) return 'Active';
+      if (trial.status === 'Converted' || trial.status === 'Discontinued') return trial.status;
+      if ((trial.conducted_sessions || 0) >= 3) return 'Completed';
+      return trialWindowPassed(trial, todayIso) ? 'Pending Confirmation' : 'Active';
+    }
+
+    // F7: the filter-pill predicate, extracted so it is unit-testable.
+    // 'pending' lists trials whose 3-day window passed without 3 sessions.
+    function trialPassesFilter(t, filter) {
+      if (!t) return false;
+      if (filter === 'active') return trialIsActive(t);
+      if (filter === 'completed') return t.status === 'Completed' || (t.status !== 'Converted' && t.status !== 'Discontinued' && (t.conducted_sessions || 0) >= 3);
+      if (filter === 'converted') return t.status === 'Converted';
+      if (filter === 'discontinued') return t.status === 'Discontinued';
+      if (filter === 'pending') return t.status === 'Pending Confirmation' && (t.conducted_sessions || 0) < 3;
+      return true;
+    }
+
+    // F9: deterministic starter password from the parent's name.
+    // The name's letters plus a 4-digit code derived from the name;
+    // the name is repeated when it is too short, so the result is
+    // ALWAYS at least 10 characters (the Worker minimum).
+    // "Ayesha Khan" -> "ayeshakhan2085"; "Ali Raza" -> "aliraza1772";
+    // "Ali" -> "aliali1310". Same name -> same password, every time.
+    // A starter password: change it later via Edit Family or the family
+    // profile (the existing set-password flow).
+    function generateTrialParentPassword(parentName) {
+      const letters = String(parentName || '').toLowerCase().replace(/[^a-z]/g, '') || 'parent';
+      let base = letters;
+      while (base.length + 4 < 10) base += letters;
+      let hash = 0;
+      const raw = String(parentName || '').toLowerCase();
+      for (let i = 0; i < raw.length; i++) hash = (hash + raw.charCodeAt(i)) % 9000;
+      return base + String(1000 + hash);
+    }
+
+    // F9: set the converted parent's starter password for real, via the
+    // Worker endpoint (server-side hash). Returns { password, ok } — ok
+    // is false when the helper is missing or the set fails, so the caller
+    // can say so honestly instead of showing a password that was never
+    // set. The plaintext password is NEVER written to notes, the local
+    // account map, or localStorage.
+    async function setConvertedParentPassword(username, parentName) {
+      const password = generateTrialParentPassword(parentName);
+      try {
+        if (typeof window === 'undefined' || typeof window.setAccountPasswordViaWorker !== 'function') return { password, ok: false };
+        await window.setAccountPasswordViaWorker('parent', username, password);
+        return { password, ok: true };
+      } catch (e) { return { password, ok: false }; }
+    }
+
     function saveStoredTrials(trials) {
       try {
         localStorage.setItem('alhuda_trial_classes', JSON.stringify(trials));
@@ -347,6 +433,13 @@
         } catch(err) {
           console.warn("Could not query trial attendance logs:", err);
         }
+
+        // Trials Audit Batch 2 (F7): derive every trial's display status
+        // from its start date + session count — a trial whose 3-day window
+        // passed without 3 sessions is "Pending Confirmation", not Active.
+        // This is the single source of truth: it runs on every load, after
+        // the session sync, so no view can disagree about it.
+        storedTrials.forEach(t => { t.status = deriveTrialStatus(t); });
 
         ALL_TRIALS = storedTrials;
         saveStoredTrials(ALL_TRIALS);
@@ -562,24 +655,10 @@
 
       const query = (searchQuery || document.getElementById('trialSearchInput')?.value || '').trim().toLowerCase();
 
-      let filtered = ALL_TRIALS.filter(t => {
-        if (filter === 'active') {
-          // Trials Audit Batch 1 (F1): the pill uses the same Active
-          // predicate as the KPI — a trial with all 3 sessions done is
-          // Completed, not Active.
-          return trialIsActive(t);
-        }
-        if (filter === 'completed') {
-          return t.status === 'Completed' || (t.status !== 'Converted' && t.status !== 'Discontinued' && (t.conducted_sessions || 0) >= 3);
-        }
-        if (filter === 'converted') {
-          return t.status === 'Converted';
-        }
-        if (filter === 'discontinued') {
-          return t.status === 'Discontinued';
-        }
-        return true;
-      });
+      // Trials Audit Batch 2 (F7): the pill predicate lives in
+      // trialPassesFilter (pure, unit-tested) — 'pending' lists trials
+      // whose 3-day window passed without 3 sessions.
+      let filtered = ALL_TRIALS.filter(t => trialPassesFilter(t, filter));
 
       // Filter by Teacher
       if (CURRENT_TRIAL_TEACHER_FILTER && CURRENT_TRIAL_TEACHER_FILTER !== 'all') {
@@ -618,6 +697,10 @@
         } else if (isDiscontinued) {
           statusBadge = `<span class="px-2.5 py-1 rounded-full text-[10px] font-black bg-rose-100 text-rose-800 border border-rose-300 flex items-center gap-1">
             <i class="fa-solid fa-circle-xmark"></i> Discontinued
+          </span>`;
+        } else if (t.status === 'Pending Confirmation') {
+          statusBadge = `<span class="px-2.5 py-1 rounded-full text-[10px] font-black bg-orange-100 text-orange-800 border border-orange-300 flex items-center gap-1">
+            <i class="fa-solid fa-hourglass-half"></i> Pending Confirmation
           </span>`;
         } else if (isReadyToConvert) {
           statusBadge = `<span class="px-2.5 py-1 rounded-full text-[10px] font-black bg-amber-100 text-amber-800 border border-amber-300 flex items-center gap-1 animate-pulse">
@@ -1129,13 +1212,11 @@
 
       trial.conducted_sessions = newCount;
 
-      if (trial.conducted_sessions >= 3) {
-        if (trial.status === 'Active' || !trial.status) {
-          trial.status = 'Completed';
-        }
-      } else if (trial.status === 'Completed') {
-        trial.status = 'Active';
-      }
+      // Trials Audit Batch 2 (F7): re-derive the status from the new
+      // count — a late 3rd session completes a Pending Confirmation
+      // trial, and toggling back down returns it to Pending Confirmation
+      // (window passed) instead of Active.
+      trial.status = deriveTrialStatus(trial);
 
       saveStoredTrials(ALL_TRIALS);
       updateTrialKpis();
@@ -1293,18 +1374,30 @@
       // 2. Parent Account credentials
       const rawParent = (trial.parent_name || 'parent').toLowerCase().replace(/[^a-z0-9]/g, '');
       const username = rawParent.length > 2 ? rawParent : `parent_${canonicalFamId.toLowerCase()}`;
-      // Batch 1B: NO password is generated here. Batch 1 removed this
-      // fabrication everywhere else; the generated value was never
-      // stored anywhere real (saveParentAccount strips passwords), so
-      // the password shown after conversion could never log anyone in.
-      // A portal password is set only via /api/auth/set-password
-      // (owner/manager), exactly like Add Family.
+      // Trials Audit Batch 2 (F9): the starter password IS generated here
+      // (generateTrialParentPassword, name-derived) and set for real via
+      // /api/auth/set-password after the records save — unlike the old
+      // Batch 1B fabrication, which was never stored anywhere real and
+      // could never log anyone in. The plaintext is never written to
+      // notes or the local account map; it is shown once in the success
+      // message below.
 
       const familyNotesPayload = JSON.stringify({
         is_trial: false,
         converted_to_regular: true,
         converted_from_trial: trial.id,
         parent_user: username,
+        // Trials Audit Batch 2 (F9): the parent login resolves its username
+        // from notes.portal_credentials.username (or the derived
+        // "parent_<name>"); without this block the username shown below
+        // could never log anyone in, and set-password could not find the
+        // account either — the exact Batch 1B trap. Mirrors Add Family.
+        portal_credentials: {
+          username,
+          parent_name: trial.parent_name,
+          whatsapp: trial.whatsapp,
+          email: student_email || trial.email || ''
+        },
         trial_history: {
           was_trial: true,
           previous_status: 'Trial',
@@ -1517,6 +1610,20 @@
 
       saveStoredTrials(ALL_TRIALS);
 
+      // Trials Audit Batch 2 (F9): auto-set the parent's starter password.
+      // The password is derived from the parent's name and set for real
+      // via the Worker, so the username + password in the message below
+      // can log the parent in. It is NEVER written to notes or the local
+      // account map — only shown once in the success message, for the
+      // operator to share in person or by phone.
+      let parentPassword = null;
+      let parentPasswordSet = false;
+      try {
+        const pwResult = await setConvertedParentPassword(username, trial.parent_name);
+        parentPassword = pwResult.password;
+        parentPasswordSet = pwResult.ok;
+      } catch (e) { parentPasswordSet = false; }
+
       if (btn) {
         btn.disabled = false;
         btn.innerHTML = '<i class="fa-solid fa-circle-check text-brandGold"></i> Confirm & Enroll as Regular Student';
@@ -1547,8 +1654,9 @@
         `📅 Billing Due Day: ${billing_day}th of every month\n\n` +
         `🔑 Parent Portal Access:\n` +
         `Username: ${username}\n` +
-        `Password: NOT set. The parent will see "No password set. Ask the administrator to set one." if they try to log in.\n` +
-        `Set one via Edit Family or the Set Portal Passwords tool, and give it to the parent in person or by phone.\n\n` +
+        (parentPasswordSet
+          ? `Password: ${parentPassword}\nShare this password with the parent in person or by phone. They can log in with the username and password above; change it later from Edit Family or the family profile.\n\n`
+          : `Password: NOT set — the automatic password could not be saved. The parent will see "No password set. Ask the administrator to set one." if they try to log in.\nSet one via Edit Family or the Set Portal Passwords tool, and give it to the parent in person or by phone.\n\n`) +
         `The trial timetable has been permanently activated as regular classes in the teacher's schedule!`
       );
 
