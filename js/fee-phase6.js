@@ -122,6 +122,8 @@
   //   leave        — approved leave for that month (fee waived); cannot
   //                  be picked.
   //   no_fee       — the applicable fee for the month is zero; cannot
+  //                  be picked (a zero-amount record would be noise).
+  //
   // The selector shows ONE year at a time (12 months) with a year
   // dropdown: build three full years around the form year so every
   // year in the dropdown has all 12 months. Each month is charged its
