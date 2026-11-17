@@ -1,15 +1,27 @@
-// Batch 1B — trial conversion must never fabricate a parent password.
+// Batch 1B — trial conversion must never show a password that was never set.
 //
-// Static/extraction checks over the real sources:
-//  1. js/trials.js no longer generates a password ('alhuda_' + random),
-//     does not pass one to saveParentAccount, does not show one in the
-//     success alert, and does not hand one to the welcome-email preview.
-//  2. The conversion alert carries the Batch 1 not-set guidance with the
-//     exact parent-facing message.
-//  3. Repo-wide: no JS/HTML file fabricates or derives a password.
-//     (Zoom MEETING passcode fallbacks '123456' are allow-listed — they
-//     are not portal credentials — and the set-passwords page's explicit
-//     REJECTION of the '12345678' default is required to stay.)
+// Static/extraction checks over the real sources. Batch 1 (2026-10-21)
+// banned password fabrication outright because the generated value was
+// never stored anywhere real. Trials Audit Batch 2 (owner decision
+// 2026-11-17) supersedes that ban for ONE path: conversion auto-sets a
+// real starter password via /api/auth/set-password
+// (generateTrialParentPassword -> setConvertedParentPassword ->
+// setAccountPasswordViaWorker). What stays banned: a password shown or
+// stored without ever being set server-side, a password passed to
+// saveParentAccount, and a password in the welcome email.
+//  1. js/trials.js no longer generates an 'alhuda_' + random password,
+//     does not pass one to saveParentAccount, does not hand one to the
+//     welcome-email preview, and shows one in the success alert ONLY
+//     from the set-password result.
+//  2. The conversion alert still carries the Batch 1 not-set guidance
+//     with the exact parent-facing message — now on the failure branch,
+//     when the automatic set did not go through.
+//  3. Repo-wide: no JS/HTML file fabricates or derives a password that
+//     is never set (the Batch 2 name-derived scheme is allow-listed:
+//     it is always set via the Worker helper — see the positive check
+//     below). Zoom MEETING passcode fallbacks '123456' are allow-listed —
+//     they are not portal credentials — and the set-passwords page's
+//     explicit REJECTION of the '12345678' default is required to stay.
 //  4. families.js saveParentAccount still strips any password key
 //     (the Batch 1 storage guard is unchanged).
 import { readFileSync, readdirSync } from 'node:fs';
@@ -29,16 +41,19 @@ const trials = read('js/trials.js');
 
 // --- 1. The fabrication is gone from the conversion flow -------------------
 check("no 'alhuda_' + random password in trials.js", !trials.includes("'alhuda_' +") && !trials.includes('"alhuda_" +'));
-check('no password shown in the success alert', !trials.includes('Password: ${password}'));
+check('success alert shows the password only from the set-password result', trials.includes('Password: ${parentPassword}') && trials.includes('parentPasswordSet'));
+check('convert calls the password setter, never the generator directly', trials.includes('setConvertedParentPassword(username, trial.parent_name)'));
 const saveCall = trials.slice(trials.indexOf('saveParentAccount(canonicalFamId'), trials.indexOf('saveParentAccount(canonicalFamId') + 400);
 check('conversion saveParentAccount call exists', saveCall.length > 50);
 check('conversion saveParentAccount call has NO password key', !/[{,]\s*password\s*[,}]/.test(saveCall) && !saveCall.includes('password:'));
 const credBlock = trials.slice(trials.indexOf('credentials: {', trials.indexOf('openEmailPreviewModal')), trials.indexOf('credentials: {', trials.indexOf('openEmailPreviewModal')) + 120);
 check('welcome-email credentials carry username only', credBlock.includes('username') && !credBlock.includes('password'));
 
-// --- 2. Batch 1 not-set guidance is what the operator now sees -------------
+// --- 2. Batch 1 not-set guidance survives — on the failure branch ---------
+// (Batch 2: the success branch shows the password that WAS set; only a
+// failed automatic set still says NOT set, and never shows the password.)
 check('alert carries the exact Batch 1 message', trials.includes('No password set. Ask the administrator to set one.'));
-check('alert says password is NOT set', trials.includes('Password: NOT set.'));
+check('alert says NOT set only when the automatic set failed', trials.includes('Password: NOT set — the automatic password could not be saved.'));
 
 // --- 3. Repo-wide fabrication sweep ---------------------------------------
 const fabricationPatterns = [
@@ -61,6 +76,7 @@ for (const f of files) {
 }
 check('no password fabrication/derivation anywhere in js/ or root HTML', fabricationHits.length === 0);
 if (fabricationHits.length) console.log('       hits: ' + fabricationHits.join(' | '));
+check('the generated password is always set via the Worker helper', trials.includes("await window.setAccountPasswordViaWorker('parent', username, password)"));
 
 // Zoom passcode fallbacks are meeting passcodes, not portal passwords:
 // every bare '123456' occurrence must be a zoom/passcode context.

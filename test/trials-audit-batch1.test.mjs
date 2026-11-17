@@ -151,6 +151,10 @@ const TRIAL_FNS = [
   'getStoredTrials', 'saveStoredTrials',
   'trialIsActive', 'trialConversionRate', 'trialConvertDaysToSchedule',
   'trialStatusFromD1Notes', 'applyTrialAttendanceLogs', 'trialMatchesSearch',
+  // Trials Audit Batch 2: renderTrialCards now filters through
+  // trialPassesFilter and toggleTrialSession re-derives via
+  // deriveTrialStatus — the Batch 1 world must extract them too.
+  'trialThirdDayIso', 'trialWindowPassed', 'deriveTrialStatus', 'trialPassesFilter',
   'formatTrialDayShort', 'calculateTrial3Days', 'handleTrialTeacherSelection',
   'autoSendTrialEmail', 'markTrialDiscontinuedInD1',
   'updateTrialKpis', 'renderTrialCards', 'renderTeacherPerformanceBanner',
