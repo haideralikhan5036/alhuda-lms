@@ -550,6 +550,9 @@
       if (subTabId === 'fee-subtab-defaulters') loadThreePlusDefaultersList();
       if (subTabId === 'fee-subtab-matrix') loadMasterAnnualMatrix();
       if (subTabId === 'fee-subtab-receipts') loadFeeReceiptsHistory();
+      // Fee Upgrade Phase 3: the Collect Fee status switcher follows
+      // the family + year already chosen in the fee form.
+      if (subTabId === 'fee-subtab-collect') renderFeeStatusSwitcher();
     }
 
     function refreshCurrentFeeView() {
@@ -849,6 +852,14 @@
         const isExplicitNotEnrolled = overrides[`${fUpper}_${mLower}_${selectedYear}`]?.status === 'not_enrolled';
         if (isPreAdm || isExplicitNotEnrolled) return;
 
+        // Fee Upgrade Phase 3: a month settled by an ADJ status row is
+        // NOT billed — its Expected is 0, so Pending (Expected minus
+        // Received) is not overstated. The fee portal counts status-paid
+        // months in Expected; the LMS cannot, because its Pending is
+        // derived as Expected minus Received.
+        const monthIdx3 = FEE_CONFIG.MONTHS.findIndex(m => m.toLowerCase() === selectedMonth.toLowerCase());
+        if (isFamilyMonthStatusPaid(f.id, monthIdx3, selectedYear, records)) return;
+
         currencyRevenue[cur].expected += feeFormApplicableFeeDetails(f, FEE_CONFIG.MONTHS.findIndex(m => m.toLowerCase() === selectedMonth.toLowerCase()), selectedYear).fee;
       });
 
@@ -859,6 +870,15 @@
       records.forEach(r => {
         if (String(r.month).toLowerCase() === selectedMonth.toLowerCase() && parseInt(r.year, 10) === selectedYear) {
           const famIdUpper = String(r.familyId).toUpperCase();
+          // Fee Upgrade Phase 3: an ADJ status row is not money — it
+          // never adds to Received. It only marks the month paid.
+          if (isFeeStatusRowRecord(r)) {
+            const monthIdx3 = FEE_CONFIG.MONTHS.findIndex(m => m.toLowerCase() === selectedMonth.toLowerCase());
+            if (isFamilyMonthStatusPaid(r.familyId, monthIdx3, selectedYear, records)) {
+              paidMap[famIdUpper] = true;
+            }
+            return;
+          }
           const rPaid = parseFloat(r.amountPaid || 0);
           const rRem = parseFloat(r.remainingBalance || 0);
           const rCur = (r.currency || 'USD').toUpperCase();
@@ -1173,6 +1193,43 @@
       return Math.max(0, netCredit);
     }
 
+    // Fee Upgrade Phase 3 — is this single record an ADJ status row
+    // (record_kind 'month_status', ref ADJ-YYYYMM-...)? Delegates to
+    // FeePhase3 when loaded; falls back to the same predicate inline so
+    // the fee tab keeps working either way.
+    function isFeeStatusRowRecord(r) {
+      if (window.FeePhase3 && typeof window.FeePhase3.isMonthStatusRow === 'function') {
+        return window.FeePhase3.isMonthStatusRow(r);
+      }
+      if (!r) return false;
+      if (String(r.recordKind || '') === 'month_status') return true;
+      return /^ADJ-\d{6}-/i.test(String(r.receiptNo || ''));
+    }
+
+    // Fee Upgrade Phase 3 — is this family+month settled by an ADJ
+    // status row with NO real payment (money always wins over a stale
+    // status row)? Used by Expected, Defaulters, the fee-form arrears
+    // list and the matrix — every place that must treat a status-paid
+    // month as settled without counting money.
+    function isFamilyMonthStatusPaid(familyId, monthIdx, year, records) {
+      if (window.FeePhase3 && typeof window.FeePhase3.isMonthStatusPaid === 'function') {
+        return window.FeePhase3.isMonthStatusPaid(records || getStoredFeeRecords(), familyId, monthIdx, year);
+      }
+      const list = records || getStoredFeeRecords();
+      const fam = String(familyId || '').toUpperCase();
+      let hasStatus = false;
+      let hasReal = false;
+      (list || []).forEach(r => {
+        if (!r || String(r.familyId || '').toUpperCase() !== fam) return;
+        if (FEE_CONFIG.MONTHS.findIndex(m => m.toLowerCase() === String(r.month || '').toLowerCase()) !== monthIdx) return;
+        if (parseInt(r.year, 10) !== parseInt(year, 10)) return;
+        const st = String(r.status || '').toLowerCase();
+        if (st.indexOf('cancel') !== -1) return;
+        if (isFeeStatusRowRecord(r)) hasStatus = true; else hasReal = true;
+      });
+      return hasStatus && !hasReal;
+    }
+
     // Fee Upgrade Phase 1: the fee in force for one family + month.
     // Returns the FeePhase1 details object ({ fee, source, nextRevision,
     // timelineMismatch }); falls back to the master fee when the Phase 1
@@ -1215,6 +1272,11 @@
 
       records.forEach(r => {
         if (parseInt(r.year, 10) === targetYear) {
+          // Fee Upgrade Phase 3: an ADJ status row is not money — it
+          // never feeds the paid-by-month totals or the last remaining
+          // balance (its remainingBalance is 0, which would hide a real
+          // outstanding balance if it came after the real record).
+          if (isFeeStatusRowRecord(r)) return;
           const k = String(r.month).toLowerCase();
           paidByMonth[k] = (paidByMonth[k] || 0) + parseFloat(r.amountPaid || 0);
           latestRemainingBalance = parseFloat(r.remainingBalance || 0);
@@ -1238,6 +1300,12 @@
         const isPreAdm = isFamilyPreAdmission(fam, m, targetYear);
         const isExplicitNotEnrolled = manualOverride && manualOverride.status === 'not_enrolled';
         if (isPreAdm || isExplicitNotEnrolled) {
+          continue;
+        }
+
+        // Fee Upgrade Phase 3: a month settled by an ADJ status row
+        // carries no arrears — it was marked Paid without a payment.
+        if (isFamilyMonthStatusPaid(famId, m, targetYear, records)) {
           continue;
         }
 
@@ -1329,6 +1397,10 @@
           alertBox.classList.add('hidden');
         }
       }
+
+      // Fee Upgrade Phase 3: the status switcher follows the family +
+      // year chosen in the fee form (staged toggles clear on change).
+      renderFeeStatusSwitcher();
     }
 
     function recalcFeeTotalLive() {
@@ -1413,6 +1485,9 @@
         amtInput.value = '';
         delete amtInput.dataset.manualEdited;
       }
+      // Fee Upgrade Phase 3: the form was cleared, so the status
+      // switcher has no family — hide it (and drop staged toggles).
+      renderFeeStatusSwitcher();
     }
 
     // Proration Toggle & Calculator
@@ -2738,6 +2813,350 @@ Official Email: ${offEmail}`;
       return { ok: true, receiptNo: record.receiptNo };
     }
 
+    // ============================================================
+    // Fee Upgrade Phase 3 — ONE-TAP PAID / UNPAID (#33, #36, #45)
+    // + ENROLLMENT CASCADE (#32, #46, #47)
+    //
+    // Mechanism (fee-portal reference: updateFamilyMonthStatuses /
+    // setMatrixMonthStatus): Paid appends one ADJ status row — amount
+    // ZERO, ref ADJ-YYYYMM-<FAMILYID>, record_kind 'month_status'. It
+    // marks the month paid; it is NOT money and is filtered out of
+    // every money reader (same pattern as the Phase 1 due-invoice rows).
+    // Unpaid removes that ADJ row only — it never touches, cancels or
+    // hides a real payment. A month with a real payment cannot be
+    // Mark-Unpaid at all (validateMarkUnpaid refuses it); the real
+    // payment must be undone/cancelled first.
+    //
+    // Role scope: owner + manager — the same scope as Collect Fee and
+    // the matrix overrides. A status marker is not money and the
+    // payments-table row is cancelled-with-reason, never deleted, so
+    // there is nothing owner-only to protect here. Teachers and
+    // parents never reach these surfaces.
+    // ============================================================
+
+    // Shared write path for all three one-tap surfaces (Collect Fee
+    // switcher, Ledger, Matrix modal). Returns { ok, record, error,
+    // code, cloudPending }.
+    async function markMonthPaid(familyId, monthIdx, year) {
+      const fam = (CACHED_FEE_FAMILIES || []).find(f => String(f.id).toUpperCase() === String(familyId || '').toUpperCase());
+      if (!fam) return { ok: false, code: 'no_family', error: 'Family not found.' };
+      if (!window.FeePhase3 || typeof window.FeePhase3.validateMarkPaid !== 'function') {
+        return { ok: false, code: 'module_missing', error: 'The fee module did not load. Please refresh and try again.' };
+      }
+      const now = new Date();
+      const overrides = getStoredMatrixOverrides();
+      const mLower = FEE_CONFIG.MONTHS[monthIdx] ? FEE_CONFIG.MONTHS[monthIdx].toLowerCase() : '';
+      const manualOverride = overrides[`${String(familyId).toUpperCase()}_${mLower}_${parseInt(year, 10)}`];
+      const check = window.FeePhase3.validateMarkPaid({
+        family: fam,
+        monthIdx: monthIdx,
+        year: parseInt(year, 10),
+        records: getStoredFeeRecords(),
+        isPreAdmission: isFamilyPreAdmission(fam, monthIdx, parseInt(year, 10)),
+        isNotEnrolled: !!(manualOverride && manualOverride.status === 'not_enrolled'),
+        isLeave: !!(checkFamilyLeaveInMonth(familyId, FEE_CONFIG.MONTHS[monthIdx], parseInt(year, 10)).isLeave || (manualOverride && manualOverride.status === 'leave')),
+        isFuture: (parseInt(year, 10) > now.getFullYear()) || (parseInt(year, 10) === now.getFullYear() && monthIdx > now.getMonth())
+      });
+      if (!check.ok) return check;
+
+      const fee = feeFormApplicableFeeDetails(fam, monthIdx, parseInt(year, 10)).fee;
+      const role = (typeof CURRENT_ROLE !== 'undefined' && CURRENT_ROLE) ? CURRENT_ROLE : 'owner';
+      const rec = window.FeePhase3.buildMonthStatusRecord(fam, monthIdx, parseInt(year, 10), fee, role);
+      const records = getStoredFeeRecords();
+      records.unshift(rec);
+      saveStoredFeeRecords(records);
+      const syncResult = await syncPaymentRecordsBatchToCloud(familyId, [rec]);
+      if (!syncResult || !syncResult.ok) {
+        rec.cloudSyncPending = true;
+        saveStoredFeeRecords(records);
+        return { ok: true, cloudPending: true, record: rec };
+      }
+      return { ok: true, record: rec };
+    }
+
+    async function markMonthUnpaid(familyId, monthIdx, year) {
+      const fam = (CACHED_FEE_FAMILIES || []).find(f => String(f.id).toUpperCase() === String(familyId || '').toUpperCase());
+      if (!fam) return { ok: false, code: 'no_family', error: 'Family not found.' };
+      if (!window.FeePhase3 || typeof window.FeePhase3.validateMarkUnpaid !== 'function') {
+        return { ok: false, code: 'module_missing', error: 'The fee module did not load. Please refresh and try again.' };
+      }
+      const check = window.FeePhase3.validateMarkUnpaid({
+        family: fam,
+        monthIdx: monthIdx,
+        year: parseInt(year, 10),
+        records: getStoredFeeRecords()
+      });
+      if (!check.ok) return check;
+      const row = check.row;
+      const fIdUpper = String(familyId).toUpperCase();
+
+      // 1. Remove locally (fail-closed: restored if the cloud step
+      // fails, so the next ingest from family notes fee_history cannot
+      // resurrect the row).
+      const remaining = getStoredFeeRecords().filter(r => !(r && String(r.familyId || '').toUpperCase() === fIdUpper && String(r.receiptNo || '') === String(row.receiptNo || '')));
+      saveStoredFeeRecords(remaining);
+
+      // 2. Remove from the cloud source of truth (family notes
+      // fee_history) and cancel the payments-table row.
+      const notesRemoved = await removeFeeHistoryRecords(familyId, [row.receiptNo]);
+      if (!notesRemoved) {
+        const back = getStoredFeeRecords();
+        back.unshift(row);
+        saveStoredFeeRecords(back);
+        return { ok: false, code: 'cloud_failed', error: 'Could not remove the status from the cloud — nothing was changed. Please try again.' };
+      }
+      try {
+        if (window.FeeTables && typeof window.FeeTables.dualWritePaymentCancelled === 'function') {
+          await window.FeeTables.dualWritePaymentCancelled(
+            { receiptNo: row.receiptNo, familyId: familyId, month: FEE_CONFIG.MONTHS[monthIdx], year: parseInt(year, 10) },
+            (typeof CURRENT_ROLE !== 'undefined' && CURRENT_ROLE) ? CURRENT_ROLE : 'owner',
+            'status removed by one-tap Unpaid'
+          );
+        }
+      } catch (e) { /* best effort — the notes removal above is the gate */ }
+      return { ok: true, record: row };
+    }
+
+    // Remove fee_history records (by receiptNo) from one family's
+    // notes. Returns true when the cloud copy no longer holds them
+    // (or never did); false only on a real write/read failure.
+    async function removeFeeHistoryRecords(familyId, receiptNos) {
+      try {
+        const fId = String(familyId || '').trim();
+        if (!fId) return false;
+        const { data: fam, error } = await db.from('families').select('id, notes').eq('id', fId).maybeSingle();
+        if (error) return false;
+        const notesObj = parseFamilyNotesData(fam ? fam.notes : null);
+        if (!Array.isArray(notesObj.fee_history)) return true;
+        const before = notesObj.fee_history.length;
+        const set = {};
+        (receiptNos || []).forEach(n => { set[String(n)] = true; });
+        notesObj.fee_history = notesObj.fee_history.filter(r => !(r && set[String(r.receiptNo || '')]));
+        if (notesObj.fee_history.length === before) return true;
+        const { error: upErr } = await db.from('families').update({ notes: JSON.stringify(notesObj) }).eq('id', fId);
+        return !upErr;
+      } catch (e) {
+        return false;
+      }
+    }
+
+    // Re-render every fee surface a status change can affect.
+    function refreshFeeViewsAfterStatusChange() {
+      try { loadFeeDashboardStats(); } catch (e) {}
+      try { loadMasterAnnualMatrix(); } catch (e) {}
+      try { renderFeeStatusSwitcher(); } catch (e) {}
+      try { if (CURRENT_LEDGER_FAMILY_ID) reloadFamilyLedgerData(); } catch (e) {}
+    }
+
+    // ---- Collect Fee staged switcher (#33) ----
+    // Staged toggles belong to one family + year; the _key pins them.
+    let FEE_STATUS_STAGED = {};
+
+    function feeStatusSwitcherFamilyYear() {
+      const famId = document.getElementById('feeFormFamilyId') ? document.getElementById('feeFormFamilyId').value : '';
+      const ySel = document.getElementById('feeFormYear');
+      const year = ySel ? parseInt(ySel.value, 10) : new Date().getFullYear();
+      return { famId: famId || '', year: year };
+    }
+
+    function renderFeeStatusSwitcher() {
+      const card = document.getElementById('feeStatusSwitcherCard');
+      if (!card) return;
+      const { famId, year } = feeStatusSwitcherFamilyYear();
+      const fam = (CACHED_FEE_FAMILIES || []).find(f => String(f.id).toUpperCase() === String(famId || '').toUpperCase());
+      if (!fam) {
+        card.classList.add('hidden');
+        return;
+      }
+      card.classList.remove('hidden');
+      const key = String(famId).toUpperCase() + '_' + year;
+      if (FEE_STATUS_STAGED._key !== key) {
+        FEE_STATUS_STAGED = { _key: key };
+      }
+      const rows = buildAnnualMatrixData(year);
+      const row = rows.find(r => String(r.familyId).toUpperCase() === String(famId).toUpperCase());
+      const months = row ? row.months : FEE_CONFIG.MONTHS.map(m => ({ month: m, isFuture: true }));
+      const grid = document.getElementById('feeStatusSwitcherGrid');
+      if (grid && window.FeePhase3) {
+        grid.innerHTML = window.FeePhase3.switcherGridHtml(months, FEE_STATUS_STAGED);
+      }
+      const enr = document.getElementById('feeStatusEnrollmentRow');
+      if (enr && window.FeePhase3) {
+        enr.innerHTML = window.FeePhase3.enrollmentRowHtml(getFamilyEnrollmentInfo(fam), year);
+      }
+      syncFeeStatusSwitcherBar();
+    }
+
+    function syncFeeStatusSwitcherBar() {
+      const stagedCount = Object.keys(FEE_STATUS_STAGED).filter(k => k !== '_key').length;
+      const line = document.getElementById('feeStatusStagedLine');
+      if (line) {
+        line.innerText = stagedCount === 0
+          ? 'Click a Due month to stage Mark Paid, or a status-paid month to stage Mark Unpaid. Save applies all staged changes at once.'
+          : stagedCount + ' change(s) staged — Save to apply, Cancel to discard.';
+      }
+      const saveBtn = document.getElementById('btnFeeStatusSaveStaged');
+      if (saveBtn) saveBtn.disabled = stagedCount === 0;
+      const cancelBtn = document.getElementById('btnFeeStatusCancelStaged');
+      if (cancelBtn) cancelBtn.disabled = stagedCount === 0;
+    }
+
+    function toggleStagedMonthStatus(monthIdx) {
+      const { famId, year } = feeStatusSwitcherFamilyYear();
+      if (!famId || !window.FeePhase3) return;
+      const rows = buildAnnualMatrixData(year);
+      const row = rows.find(r => String(r.familyId).toUpperCase() === String(famId).toUpperCase());
+      const m = row ? row.months[monthIdx] : null;
+      if (!m) return;
+      const next = window.FeePhase3.stagedToggleNext(window.FeePhase3.uiStateForMonth(m));
+      if (!next) return;
+      if (FEE_STATUS_STAGED[monthIdx] === next) delete FEE_STATUS_STAGED[monthIdx];
+      else FEE_STATUS_STAGED[monthIdx] = next;
+      renderFeeStatusSwitcher();
+    }
+
+    async function saveStagedMonthStatuses() {
+      const { famId, year } = feeStatusSwitcherFamilyYear();
+      const staged = Object.keys(FEE_STATUS_STAGED).filter(k => k !== '_key');
+      if (staged.length === 0 || !famId) return;
+      const btn = document.getElementById('btnFeeStatusSaveStaged');
+      if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Saving...';
+      }
+      let applied = 0;
+      let skipped = 0;
+      let failed = 0;
+      const failures = [];
+      for (const k of staged) {
+        const mIdx = parseInt(k, 10);
+        const target = FEE_STATUS_STAGED[k];
+        const res = target === 'paid'
+          ? await markMonthPaid(famId, mIdx, year)
+          : await markMonthUnpaid(famId, mIdx, year);
+        if (res && res.ok) {
+          applied++;
+          if (res.cloudPending) failures.push(FEE_CONFIG.MONTHS[mIdx] + ': saved on this device only — use Sync to retry the cloud copy.');
+        } else if (res && (res.code === 'already_paid' || res.code === 'not_marked')) {
+          skipped++;
+        } else {
+          failed++;
+          failures.push(FEE_CONFIG.MONTHS[mIdx] + ': ' + ((res && res.error) ? res.error : 'could not save'));
+        }
+      }
+      FEE_STATUS_STAGED = { _key: String(famId).toUpperCase() + '_' + year };
+      renderFeeStatusSwitcher();
+      refreshFeeViewsAfterStatusChange();
+      if (btn) btn.innerHTML = 'Save Changes';
+      if (failed === 0 && failures.length === 0) {
+        lmsNotify(applied + ' month status change(s) saved.' + (skipped > 0 ? ' ' + skipped + ' already in that state.' : ''));
+      } else {
+        lmsNotify(applied + ' saved, ' + (failed + failures.length) + ' with notes: ' + failures.join('; '), { type: 'error' });
+      }
+    }
+
+    function cancelStagedMonthStatuses() {
+      const { famId, year } = feeStatusSwitcherFamilyYear();
+      FEE_STATUS_STAGED = { _key: String(famId).toUpperCase() + '_' + year };
+      renderFeeStatusSwitcher();
+    }
+
+    // ---- Enrollment marker (#32, #46, #47) ----
+    // The marker IS the existing ADMISSION_<FAMILYID> entry in the
+    // cloud-synced matrix overrides — the same admission date the
+    // Matrix modal's set_admission_date / not_enrolled actions already
+    // write. Months before it are Not Enrolled via the existing
+    // isFamilyPreAdmission (no double-count, no new storage).
+    function setFamilyAdmissionDate(familyId, monthIdx, year) {
+      const fIdUpper = String(familyId || '').toUpperCase();
+      const yInt = parseInt(year, 10);
+      const overrides = getStoredMatrixOverrides();
+      const admKey = `ADMISSION_${fIdUpper}`;
+      overrides[admKey] = {
+        year: yInt,
+        monthIndex: monthIdx,
+        monthName: FEE_CONFIG.MONTHS[monthIdx],
+        updatedAt: new Date().toISOString()
+      };
+      // Clean up individual month overrides before this month in the
+      // same year, so the enrollment engine auto-manages them as N/A.
+      FEE_CONFIG.MONTHS.forEach((nm, idx) => {
+        if (idx < monthIdx) {
+          delete overrides[`${fIdUpper}_${nm.toLowerCase()}_${yInt}`];
+        }
+      });
+      saveStoredMatrixOverrides(overrides);
+      syncMatrixOverridesToCloud(familyId, overrides);
+      return true;
+    }
+
+    function clearFamilyAdmissionDate(familyId) {
+      const fIdUpper = String(familyId || '').toUpperCase();
+      const overrides = getStoredMatrixOverrides();
+      const had = !!overrides[`ADMISSION_${fIdUpper}`];
+      delete overrides[`ADMISSION_${fIdUpper}`];
+      saveStoredMatrixOverrides(overrides);
+      syncMatrixOverridesToCloud(familyId, overrides);
+      return had;
+    }
+
+    function applyFeeEnrollmentUntil() {
+      const { famId, year } = feeStatusSwitcherFamilyYear();
+      if (!famId) return;
+      const mSel = document.getElementById('feeStatusEnrollMonth');
+      const yIn = document.getElementById('feeStatusEnrollYear');
+      const mIdx = mSel ? parseInt(mSel.value, 10) : -1;
+      const yInt = yIn ? parseInt(yIn.value, 10) : year;
+      if (mIdx < 0 || mIdx > 11 || isNaN(yInt)) {
+        lmsNotify('Choose a valid month.', { type: 'error' });
+        return;
+      }
+      setFamilyAdmissionDate(famId, mIdx, yInt);
+      renderFeeStatusSwitcher();
+      refreshFeeViewsAfterStatusChange();
+      lmsNotify(`Enrolled from ${FEE_CONFIG.MONTHS[mIdx]} ${yInt} — all prior months are Not Enrolled.`);
+    }
+
+    function clearFeeEnrollmentDate() {
+      const { famId } = feeStatusSwitcherFamilyYear();
+      if (!famId) return;
+      clearFamilyAdmissionDate(famId);
+      renderFeeStatusSwitcher();
+      refreshFeeViewsAfterStatusChange();
+      lmsNotify('Enrollment date cleared — back to the joining date.');
+    }
+
+    // ---- Ledger one-tap (#36) ----
+    async function ledgerMarkMonthPaid(monthName) {
+      if (!CURRENT_LEDGER_FAMILY_ID) return;
+      const mIdx = FEE_CONFIG.MONTHS.findIndex(m => m.toLowerCase() === String(monthName || '').toLowerCase());
+      if (mIdx < 0) return;
+      const ySel = document.getElementById('ledgerYearSelect');
+      const year = ySel ? parseInt(ySel.value, 10) : new Date().getFullYear();
+      const res = await markMonthPaid(CURRENT_LEDGER_FAMILY_ID, mIdx, year);
+      if (res && res.ok) {
+        refreshFeeViewsAfterStatusChange();
+        lmsNotify(`${monthName} ${year} marked Paid (status — no payment recorded).`);
+      } else {
+        lmsNotify((res && res.error) || 'Could not update the month status.', { type: 'error' });
+      }
+    }
+
+    async function ledgerMarkMonthUnpaid(monthName) {
+      if (!CURRENT_LEDGER_FAMILY_ID) return;
+      const mIdx = FEE_CONFIG.MONTHS.findIndex(m => m.toLowerCase() === String(monthName || '').toLowerCase());
+      if (mIdx < 0) return;
+      const ySel = document.getElementById('ledgerYearSelect');
+      const year = ySel ? parseInt(ySel.value, 10) : new Date().getFullYear();
+      const res = await markMonthUnpaid(CURRENT_LEDGER_FAMILY_ID, mIdx, year);
+      if (res && res.ok) {
+        refreshFeeViewsAfterStatusChange();
+        lmsNotify(`${monthName} ${year} marked Unpaid — the month is due again.`);
+      } else {
+        lmsNotify((res && res.error) || 'Could not update the month status.', { type: 'error' });
+      }
+    }
+
     // Already paid for this family + month (non-cancelled records), so
     // the bulk record's remaining balance is honest for partial months.
     function bulkCollectPriorPaidForRow(row, records) {
@@ -2985,6 +3404,10 @@ Official Email: ${offEmail}`;
             const leaveCheck = checkFamilyLeaveInMonth(fam.id, mName, yr);
             if (leaveCheck.isLeave || (manualOverride && manualOverride.status === 'leave')) continue;
             if (manualOverride && manualOverride.status === 'paid') continue;
+
+            // Fee Upgrade Phase 3: a month settled by an ADJ status row
+            // is not a defaulter month (no money is due for it).
+            if (isFamilyMonthStatusPaid(famUpper, mIdx, yr, records)) continue;
 
             const pKey = `${famUpper}_${mLower}_${yr}`;
             const paidSoFar = paidAmountMap[pKey] || 0;
@@ -3345,12 +3768,11 @@ Official Email: ${offEmail}`;
     // ============================================================
     // 5. MASTER ANNUAL FEE MATRIX (12-MONTH VIEW)
     // ============================================================
-    function loadMasterAnnualMatrix() {
-      const ySel = document.getElementById('feeMatrixYearSelect');
-      const targetYear = ySel ? parseInt(ySel.value, 10) : new Date().getFullYear();
-      const tbody = document.getElementById('feeMatrixTableBody');
-      if (!tbody) return;
-
+    // Fee Upgrade Phase 3: the matrix DATA builder, split out of
+    // loadMasterAnnualMatrix so the Collect Fee status switcher can
+    // reuse the exact same month states for any year without touching
+    // the rendered matrix or its cache.
+    function buildAnnualMatrixData(targetYear) {
       const families = CACHED_FEE_FAMILIES || [];
       const records = getStoredFeeRecords();
       const overrides = getStoredMatrixOverrides();
@@ -3365,6 +3787,20 @@ Official Email: ${offEmail}`;
         if (parseInt(r.year, 10) === targetYear) {
           const fIdUpper = String(r.familyId).toUpperCase();
           const mLower = String(r.month).toLowerCase();
+
+          // Fee Upgrade Phase 3: an ADJ status row is not money — it
+          // never feeds paid/remaining. It only sets the statusPaid
+          // flag, consulted in the month mapping below.
+          if (isFeeStatusRowRecord(r)) {
+            if (!famMonthMap[fIdUpper]) famMonthMap[fIdUpper] = {};
+            if (!famMonthMap[fIdUpper][mLower]) {
+              famMonthMap[fIdUpper][mLower] = { paid: 0, remaining: null, date: '', isAdvance: false, statusPaid: true };
+            } else {
+              famMonthMap[fIdUpper][mLower].statusPaid = true;
+            }
+            return;
+          }
+
           const isAdv = String(r.status).toLowerCase().includes('advance');
 
           if (!famMonthMap[fIdUpper]) famMonthMap[fIdUpper] = {};
@@ -3373,11 +3809,13 @@ Official Email: ${offEmail}`;
               paid: parseFloat(r.amountPaid || 0),
               remaining: parseFloat(r.remainingBalance || 0),
               date: r.date || '',
-              isAdvance: isAdv
+              isAdvance: isAdv,
+              hasReal: true
             };
           } else {
             famMonthMap[fIdUpper][mLower].paid += parseFloat(r.amountPaid || 0);
             famMonthMap[fIdUpper][mLower].remaining = parseFloat(r.remainingBalance || 0);
+            famMonthMap[fIdUpper][mLower].hasReal = true;
             if (isAdv) famMonthMap[fIdUpper][mLower].isAdvance = true;
           }
         }
@@ -3397,7 +3835,9 @@ Official Email: ${offEmail}`;
           const feeRec = famMonthMap[fIdUpper] ? famMonthMap[fIdUpper][mLower] : null;
 
           // 1. Payment recorded (always takes priority if money was paid)
-          if (feeRec) {
+          // Fee Upgrade Phase 3: an ADJ-only entry has no real payment,
+          // so it does NOT take this branch — see step 5 below.
+          if (feeRec && feeRec.hasReal) {
             const isFull = (feeRec.remaining <= 0);
             return {
               month: mName,
@@ -3434,7 +3874,19 @@ Official Email: ${offEmail}`;
             return { month: mName, isLeave: true, note: leaveCheck.reason };
           }
 
-          // 5. Future vs Due
+          // 5. Fee Upgrade Phase 3 — marked Paid by one-tap status
+          // (ADJ row, no money) or by a legacy 'paid' override, which
+          // the Pending list and the 360 view already honour but the
+          // matrix never displayed. Placed AFTER leave on purpose: a
+          // leave month stays a leave month, never a status-paid one.
+          // Money always wins — step 1 above took the real-payment
+          // branch when a real record exists, so a stale ADJ row can
+          // never hide a real payment here.
+          if ((feeRec && feeRec.statusPaid) || (manualOverride && manualOverride.status === 'paid')) {
+            return { month: mName, isPaid: true, isStatusPaid: true, amountPaid: 0 };
+          }
+
+          // 6. Future vs Due
           const isFuture = (targetYear > currentRealYear || (targetYear === currentRealYear && mIdx > currentRealMonthIdx));
           return { month: mName, isFuture, isDue: !isFuture };
         });
@@ -3449,6 +3901,16 @@ Official Email: ${offEmail}`;
         };
       });
 
+      return matrixRows;
+    }
+
+    function loadMasterAnnualMatrix() {
+      const ySel = document.getElementById('feeMatrixYearSelect');
+      const targetYear = ySel ? parseInt(ySel.value, 10) : new Date().getFullYear();
+      const tbody = document.getElementById('feeMatrixTableBody');
+      if (!tbody) return;
+
+      const matrixRows = buildAnnualMatrixData(targetYear);
       CACHED_ANNUAL_FEE_MATRIX = matrixRows;
       renderAnnualFeeMatrix(matrixRows);
     }
@@ -3475,7 +3937,12 @@ Official Email: ${offEmail}`;
 
           if (m.isPaid) {
             cellBg = 'bg-emerald-50';
-            cellContent = `
+            // Fee Upgrade Phase 3: a status-paid month carries no money
+            // — show "Status" instead of a zero amount.
+            cellContent = m.isStatusPaid ? `
+              <span class="text-emerald-800 font-extrabold text-[10px] block"><i class="fa-solid fa-check mr-0.5"></i>Paid</span>
+              <span class="text-emerald-700 font-bold text-[9px] block">Status</span>
+            ` : `
               <span class="text-emerald-800 font-extrabold text-[10px] block"><i class="fa-solid fa-check mr-0.5"></i>Paid</span>
               <span class="text-emerald-700 font-bold font-mono text-[9px] block">${r.currency} ${m.amountPaid.toFixed(0)}</span>
               ${m.isAdvance ? '<span class="text-[8px] font-black text-teal-700 block uppercase">ADV</span>' : ''}
@@ -3569,7 +4036,11 @@ Official Email: ${offEmail}`;
       const enrollInfo = getFamilyEnrollmentInfo(fam);
 
       let statusHtml = '<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-rose-100 text-rose-800">Due / Unpaid</span>';
-      if (m.isPaid) {
+      // Fee Upgrade Phase 3: a status-paid month carries no money — the
+      // badge says so instead of showing a zero amount.
+      if (m.isPaid && m.isStatusPaid) {
+        statusHtml = `<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-800">Paid (Status — no payment recorded)</span>`;
+      } else if (m.isPaid) {
         statusHtml = `<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-800">Paid (${row.currency} ${m.amountPaid || 0})</span>`;
       } else if (m.isLeave) {
         statusHtml = `<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-blue-100 text-blue-800">Approved Leave</span>`;
@@ -3596,10 +4067,24 @@ Official Email: ${offEmail}`;
       }
       document.getElementById('matrixActionStatusBadge').innerHTML = statusHtml;
 
+      // Fee Upgrade Phase 3: one-tap Paid / Unpaid buttons for this
+      // month. A real payment always wins — when one exists, the buttons
+      // point at Undo Payment instead of offering a status toggle.
+      const statusBtnsEl = document.getElementById('matrixActionStatusButtons');
+      if (statusBtnsEl && window.FeePhase3) {
+        let realReceiptNo = '';
+        try {
+          const mIdx = FEE_CONFIG.MONTHS.findIndex(mm => mm.toLowerCase() === month.toLowerCase());
+          const realRec = window.FeePhase3.findRealPaymentForMonth(getStoredFeeRecords(), row.familyId, mIdx, year);
+          realReceiptNo = realRec ? (realRec.receiptNo || '') : '';
+        } catch (e) { realReceiptNo = ''; }
+        statusBtnsEl.innerHTML = window.FeePhase3.matrixStatusButtonsHtml(window.FeePhase3.uiStateForMonth(m), realReceiptNo);
+      }
+
       openModal('modalMatrixAction');
     }
 
-    function applyMatrixAction(actionType) {
+    async function applyMatrixAction(actionType) {
       if (!CURRENT_MATRIX_ACTION_DATA) return;
       const { familyId, month, year } = CURRENT_MATRIX_ACTION_DATA;
       const fIdUpper = String(familyId).toUpperCase();
@@ -3611,24 +4096,27 @@ Official Email: ${offEmail}`;
       const overrideKey = `${fIdUpper}_${mLower}_${year}`;
       const admKey = `ADMISSION_${fIdUpper}`;
 
+      // Fee Upgrade Phase 3: one-tap Paid / Unpaid for this month.
+      if (actionType === 'mark_paid' || actionType === 'mark_unpaid') {
+        const res = actionType === 'mark_paid'
+          ? await markMonthPaid(familyId, mIdx, targetYearInt)
+          : await markMonthUnpaid(familyId, mIdx, targetYearInt);
+        closeModal('modalMatrixAction');
+        if (res && res.ok) {
+          refreshFeeViewsAfterStatusChange();
+          lmsNotify(actionType === 'mark_paid'
+            ? `${month} ${year} marked Paid (status — no payment recorded).`
+            : `${month} ${year} marked Unpaid — the month is due again.`);
+        } else {
+          lmsNotify((res && res.error) || 'Could not update the month status.', { type: 'error' });
+        }
+        return;
+      }
+
       if (actionType === 'set_admission_date') {
-        // Sets this family's admission month & year to this selected month
-        overrides[admKey] = {
-          year: targetYearInt,
-          monthIndex: mIdx,
-          monthName: month,
-          updatedAt: new Date().toISOString()
-        };
-
-        // Clean up individual month overrides before this month so enrollment engine auto-manages them as N/A
-        FEE_CONFIG.MONTHS.forEach((nm, idx) => {
-          if (idx < mIdx) {
-            delete overrides[`${fIdUpper}_${nm.toLowerCase()}_${targetYearInt}`];
-          }
-        });
-
-        saveStoredMatrixOverrides(overrides);
-        syncMatrixOverridesToCloud(familyId, overrides);
+        // Sets this family's admission month & year to this selected
+        // month (shared helper — the Collect Fee switcher uses it too).
+        setFamilyAdmissionDate(familyId, mIdx, targetYearInt);
         closeModal('modalMatrixAction');
         loadMasterAnnualMatrix();
         loadFeeDashboardStats();
@@ -3755,7 +4243,10 @@ Official Email: ${offEmail}`;
           card.className = 'p-3 bg-white border border-slate-200 rounded-xl space-y-1 shadow-2xs';
 
           let statusBadge = '<span class="text-rose-700 font-bold text-[10px]"><i class="fa-solid fa-xmark mr-0.5"></i>Due</span>';
-          if (m.isPaid) statusBadge = '<span class="text-emerald-700 font-bold text-[10px]"><i class="fa-solid fa-check mr-0.5"></i>Paid</span>';
+          // Fee Upgrade Phase 3: a status-paid month carries no money —
+          // the badge and the line say so instead of showing zero.
+          if (m.isPaid && m.isStatusPaid) statusBadge = '<span class="text-emerald-700 font-bold text-[10px]"><i class="fa-solid fa-check mr-0.5"></i>Paid (Status)</span>';
+          else if (m.isPaid) statusBadge = '<span class="text-emerald-700 font-bold text-[10px]"><i class="fa-solid fa-check mr-0.5"></i>Paid</span>';
           else if (m.isLeave) statusBadge = '<span class="text-blue-700 font-bold text-[10px]"><i class="fa-solid fa-plane-departure mr-0.5"></i>Leave</span>';
           else if (m.isNotEnrolled) statusBadge = '<span class="text-slate-400 font-bold text-[10px]">N/A</span>';
           else if (m.isPartial) statusBadge = '<span class="text-amber-700 font-bold text-[10px]">Partial</span>';
@@ -3767,15 +4258,18 @@ Official Email: ${offEmail}`;
               ${statusBadge}
             </div>
             <div class="text-[10px] text-slate-500 pt-0.5">
-              ${m.isPaid ? `Paid: <strong class="text-emerald-700">${fam.currency} ${m.amountPaid || 0}</strong>` : (m.isLeave ? 'Approved Leave' : (m.isNotEnrolled ? 'Not Enrolled' : 'Tuition Due'))}
+              ${m.isStatusPaid ? 'Marked Paid (status — no payment)' : (m.isPaid ? `Paid: <strong class="text-emerald-700">${fam.currency} ${m.amountPaid || 0}</strong>` : (m.isLeave ? 'Approved Leave' : (m.isNotEnrolled ? 'Not Enrolled' : 'Tuition Due')))}
             </div>
+            ${window.FeePhase3 ? window.FeePhase3.ledgerStatusButtonHtml(window.FeePhase3.uiStateForMonth(m), m.month) : ''}
           `;
           grid.appendChild(card);
         });
       }
 
       // Render Transaction History
-      const records = getStoredFeeRecords().filter(r => String(r.familyId).toUpperCase() === String(famId).toUpperCase());
+      // Fee Upgrade Phase 3: ADJ status rows are not receipts — they
+      // never appear in the transaction list.
+      const records = getStoredFeeRecords().filter(r => String(r.familyId).toUpperCase() === String(famId).toUpperCase() && !isFeeStatusRowRecord(r));
       const tbody = document.getElementById('ledgerTransactionsTableBody');
       if (tbody) {
         if (records.length === 0) {
@@ -3850,12 +4344,17 @@ Official Email: ${offEmail}`;
       const tbody = document.getElementById('feeReceiptsTableBody');
       if (!tbody) return;
 
-      if (!records || records.length === 0) {
+      // Fee Upgrade Phase 3: ADJ status rows are not receipts — they
+      // never appear in the Receipts list (same as the Phase 1
+      // due-invoice rows, filtered one step earlier).
+      const visible = (records || []).filter(r => !isFeeStatusRowRecord(r));
+
+      if (!visible || visible.length === 0) {
         tbody.innerHTML = `<tr><td colspan="11" class="p-8 text-center text-slate-400">No payment receipts recorded yet.</td></tr>`;
         return;
       }
 
-      tbody.innerHTML = records.map(r => `
+      tbody.innerHTML = visible.map(r => `
         <tr class="hover:bg-slate-50 transition">
           <td class="p-3 font-mono font-bold text-slate-800">${r.receiptNo}</td>
           <td class="p-3 text-slate-500 font-mono">${r.date}</td>

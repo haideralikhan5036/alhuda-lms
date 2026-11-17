@@ -552,12 +552,29 @@ function _getFamilyPaymentsList(family) {
   // Build unified payment rows from actual receipts + monthly billing schedule
   const rows = [];
   const coveredMonths = new Set();
+  // Fee Upgrade Phase 3: whether the current month is settled by an
+  // ADJ status row (no money). Tracked while skipping those rows.
+  let _adjCurrentMonthPaid = false;
 
   // 1. Add all explicit receipts/invoices first (including manual invoices & paid records)
   allReceipts.forEach(r => {
     const mName = r.month || 'September';
     const yr = r.year || 2026;
     const isManual = Boolean(r.isManualInvoice);
+
+    // Fee Upgrade Phase 3: an ADJ status row is not a receipt — it
+    // never renders as a payment row, but its month IS covered (paid),
+    // so no AUTO unpaid row is generated for it below. The month also
+    // counts toward currentMonthPaid.
+    const _isStatusRow = (r.recordKind === 'month_status') || /^ADJ-\d{6}-/i.test(String(r.receiptNo || ''));
+    if (_isStatusRow) {
+      coveredMonths.add(`${mName.toLowerCase()}_${yr}`);
+      const _now35a = new Date();
+      const _curMonth35a = ['january','february','march','april','may','june','july','august','september','october','november','december'][_now35a.getMonth()] || '';
+      if (String(mName).toLowerCase() === _curMonth35a && Number(yr) === _now35a.getFullYear()) _adjCurrentMonthPaid = true;
+      return;
+    }
+
     if (!isManual) coveredMonths.add(`${mName.toLowerCase()}_${yr}`);
 
     const status = String(r.status || (parseFloat(r.amountPaid || 0) > 0 ? 'PAID' : 'UNPAID')).toUpperCase();
@@ -641,7 +658,9 @@ function _getFamilyPaymentsList(family) {
   // with no currentMonthPaid and no AUTO row.
   const _now35b = new Date();
   const _curMonth35 = ['january','february','march','april','may','june','july','august','september','october','november','december'][_now35b.getMonth()] || '';
-  const currentMonthPaid = rows.some(r => String(r.month).toLowerCase() === _curMonth35 && Number(r.year) === _now35b.getFullYear() && r.status === 'PAID');
+  // Fee Upgrade Phase 3: a month settled by an ADJ status row counts
+  // as paid here too (the ADJ rows never reach `rows` above).
+  const currentMonthPaid = _adjCurrentMonthPaid || rows.some(r => String(r.month).toLowerCase() === _curMonth35 && Number(r.year) === _now35b.getFullYear() && r.status === 'PAID');
 
   return {
     currency,
@@ -4361,6 +4380,14 @@ async function deleteFamilyPaymentRecord(familyId, recordId, month, year, opts) 
   const undoMode = !!opts.undo;
   if (window.CURRENT_ROLE === 'teacher' || window.CURRENT_ROLE === 'student') {
     lmsNotify('Access Denied: Only Admin/Management can delete payment entries.');
+    return false;
+  }
+
+  // Fee Upgrade Phase 3: an ADJ status row is never a payment — it
+  // cannot be deleted or cancelled as one. Use Mark Unpaid (one-tap)
+  // to remove it instead.
+  if (/^ADJ-\d{6}-/i.test(String(recordId || ''))) {
+    lmsNotify('That is a one-tap status mark, not a payment. Use Mark Unpaid to remove it.');
     return false;
   }
 

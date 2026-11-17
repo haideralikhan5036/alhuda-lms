@@ -11,6 +11,7 @@ import { fileURLToPath } from 'node:url';
 const REPO_ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const FEES_SRC = fs.readFileSync(path.join(REPO_ROOT, 'js/fees.js'), 'utf8');
 const PHASE1_SRC = fs.readFileSync(path.join(REPO_ROOT, 'js/fee-phase1.js'), 'utf8');
+const PHASE3_SRC = fs.readFileSync(path.join(REPO_ROOT, 'js/fee-phase3.js'), 'utf8');
 
 const results = [];
 function check(name, cond, detail = '') {
@@ -143,14 +144,20 @@ function makeFormHarness(families, records) {
   // Load the real FeePhase1 module into the same window object, WITH the
   // fake document attached — renderFeeSourceNote needs document and
   // returns early without it.
+  // Fee Upgrade Phase 3: FeePhase3 is loaded too — triggerFeeBalanceRecalc
+  // now ends by rendering the one-tap status switcher, which calls the
+  // Phase 3 helpers and the switcher HTML builders.
   const phaseSandbox = { window: windowStub, document: documentStub, console, setTimeout, clearTimeout };
   phaseSandbox.globalThis = phaseSandbox;
   vm.runInNewContext(PHASE1_SRC, phaseSandbox);
+  vm.runInNewContext(PHASE3_SRC, phaseSandbox);
 
   const factory = new Function('window', 'document', 'localStorage', 'console', 'families', `
     ${extractConst(FEES_SRC, 'FEE_CONFIG')}
     let CLOUD_FEE_RECORDS_CACHE = null;
     let CLOUD_MATRIX_OVERRIDES_CACHE = null;
+    // Fee Upgrade Phase 3: staged one-tap toggles for the switcher.
+    let FEE_STATUS_STAGED = {};
     const CACHED_FEE_FAMILIES = families;
     const ALL_LEAVE_RECORDS = [];
     const lmsNotify = window.lmsNotify || (() => {});
@@ -166,6 +173,14 @@ function makeFormHarness(families, records) {
     ${extractFunction(FEES_SRC, 'calcProratedFeeFromDays')}
     ${extractFunction(FEES_SRC, 'calcAdvancePaymentFee')}
     ${extractFunction(FEES_SRC, 'triggerFeeBalanceRecalc')}
+    // Fee Upgrade Phase 3: triggerFeeBalanceRecalc now calls these
+    // (ADJ-row exclusion in the arrears loop + the status switcher).
+    ${extractFunction(FEES_SRC, 'isFeeStatusRowRecord')}
+    ${extractFunction(FEES_SRC, 'isFamilyMonthStatusPaid')}
+    ${extractFunction(FEES_SRC, 'buildAnnualMatrixData')}
+    ${extractFunction(FEES_SRC, 'feeStatusSwitcherFamilyYear')}
+    ${extractFunction(FEES_SRC, 'renderFeeStatusSwitcher')}
+    ${extractFunction(FEES_SRC, 'syncFeeStatusSwitcherBar')}
     return { triggerFeeBalanceRecalc };
   `);
   const api = factory(windowStub, documentStub, localStorageStub, console, families);
