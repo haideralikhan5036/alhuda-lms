@@ -842,7 +842,7 @@
         const isExplicitNotEnrolled = overrides[`${fUpper}_${mLower}_${selectedYear}`]?.status === 'not_enrolled';
         if (isPreAdm || isExplicitNotEnrolled) return;
 
-        currencyRevenue[cur].expected += parseFloat(f.monthly_fee || 0);
+        currencyRevenue[cur].expected += feeFormApplicableFeeDetails(f, FEE_CONFIG.MONTHS.findIndex(m => m.toLowerCase() === selectedMonth.toLowerCase()), selectedYear).fee;
       });
 
       // Track paid vs pending for selected month & year
@@ -896,7 +896,7 @@
 
         if (!paidMap[famUpper]) {
           const hasPartial = partialMap[famUpper] !== undefined;
-          const dueAmt = hasPartial ? partialMap[famUpper] : parseFloat(fam.monthly_fee || 0);
+          const dueAmt = hasPartial ? partialMap[famUpper] : feeFormApplicableFeeDetails(fam, FEE_CONFIG.MONTHS.findIndex(m => m.toLowerCase() === selectedMonth.toLowerCase()), selectedYear).fee;
           
           const regStus = (fam.students || []).filter(s => (s.status || '').toLowerCase() !== 'trial');
           const stuNames = regStus.map(s => s.name).join(', ') || 'Enrolled Student';
@@ -1166,6 +1166,26 @@
       return Math.max(0, netCredit);
     }
 
+    // Fee Upgrade Phase 1: the fee in force for one family + month.
+    // Returns the FeePhase1 details object ({ fee, source, nextRevision,
+    // timelineMismatch }); falls back to the master fee when the Phase 1
+    // module is unavailable, so the fee tab keeps working either way.
+    function feeFormApplicableFeeDetails(fam, monthIdx, year) {
+      const master = parseFloat((fam && fam.monthly_fee) || 0);
+      const fallback = { fee: master, source: 'master', nextRevision: null, timelineMismatch: false };
+      if (!fam || !window.FeePhase1 || typeof window.FeePhase1.getApplicableFeeForMonth !== 'function') return fallback;
+      try {
+        let famRecs = [];
+        if (typeof getStoredFeeRecords === 'function') {
+          const fu = String(fam.id || '').toUpperCase();
+          famRecs = (getStoredFeeRecords() || []).filter(r => r && String(r.familyId || '').toUpperCase() === fu);
+        }
+        return window.FeePhase1.getApplicableFeeForMonth(fam, monthIdx, year, { records: famRecs });
+      } catch (e) {
+        return fallback;
+      }
+    }
+
     function triggerFeeBalanceRecalc() {
       const famId = document.getElementById('feeFormFamilyId').value;
       const targetMonth = document.getElementById('feeFormMonth').value;
@@ -1179,7 +1199,6 @@
       const fam = (CACHED_FEE_FAMILIES || []).find(f => String(f.id).toUpperCase() === String(famId).toUpperCase());
       if (!fam) return;
 
-      const monthlyFee = parseFloat(fam.monthly_fee || 0);
       const records = getStoredFeeRecords().filter(r => String(r.familyId).toUpperCase() === String(famId).toUpperCase());
 
       // Target month index
@@ -1222,9 +1241,10 @@
           continue;
         }
 
+        const applicableForMonth = feeFormApplicableFeeDetails(fam, m, targetYear).fee;
         const amtPaid = paidByMonth[mKey] || 0;
-        if (amtPaid < monthlyFee) {
-          const shortfall = monthlyFee - amtPaid;
+        if (amtPaid < applicableForMonth) {
+          const shortfall = applicableForMonth - amtPaid;
           totalPreviousArrears += shortfall;
           unpaidDetails.push({ month: mName, isLeave: false, shortfall });
         }
@@ -1233,13 +1253,18 @@
       const finalPreviousBalance = totalPreviousArrears;
       document.getElementById('feeFormPreviousBalance').value = finalPreviousBalance.toFixed(2);
 
+      // Fee Upgrade Phase 1: the fee in force for the selected month
+      // (timeline-aware) drives the form, the arrears above, and the
+      // fee-source note below — not the master fee.
+      const targetFeeDetails = feeFormApplicableFeeDetails(fam, targetMonthIdx, targetYear);
+      const targetFee = targetFeeDetails.fee;
+      document.getElementById('feeFormMonthlyFee').value = targetFee.toFixed(2);
+
       // Re-evaluate proration if active
       if (document.getElementById('feeToggleProrated')?.checked) {
         calcProratedFeeFromDays();
       } else if (document.getElementById('feeToggleAdvance')?.checked) {
         calcAdvancePaymentFee();
-      } else {
-        document.getElementById('feeFormMonthlyFee').value = monthlyFee.toFixed(2);
       }
 
       // Check for available advance credit (extra paid in past months)
@@ -1256,7 +1281,7 @@
         if (creditAmtEl) creditAmtEl.innerText = `${fam.currency || 'USD'} ${availableCredit.toFixed(2)}`;
         
         if (applyCreditToggle && applyCreditToggle.checked) {
-          creditToApply = Math.min(availableCredit, monthlyFee + finalPreviousBalance);
+          creditToApply = Math.min(availableCredit, targetFee + finalPreviousBalance);
           if (creditDeductedCol) creditDeductedCol.classList.remove('hidden');
           if (creditDeductedInput) creditDeductedInput.value = creditToApply.toFixed(2);
         } else {
@@ -1270,6 +1295,11 @@
       }
 
       recalcFeeTotalLive();
+
+      // Fee-source note (timeline mismatch / scheduled change / none).
+      if (window.FeePhase1 && typeof window.FeePhase1.renderFeeSourceNote === 'function') {
+        window.FeePhase1.renderFeeSourceNote(fam, targetMonthIdx, targetYear, targetFeeDetails);
+      }
 
       // Show/hide arrears alert banner
       if (finalPreviousBalance > 0) {
@@ -1432,7 +1462,9 @@
 
       const famId = document.getElementById('feeFormFamilyId').value;
       const fam = (CACHED_FEE_FAMILIES || []).find(f => String(f.id).toUpperCase() === String(famId).toUpperCase());
-      const standardFee = parseFloat(fam?.monthly_fee || 0);
+      const prMonthIdx = FEE_CONFIG.MONTHS.findIndex(m => m.toLowerCase() === String(document.getElementById('feeFormMonth')?.value || '').toLowerCase());
+      const prYear = parseInt(document.getElementById('feeFormYear')?.value || new Date().getFullYear(), 10);
+      const standardFee = feeFormApplicableFeeDetails(fam, prMonthIdx < 0 ? new Date().getMonth() : prMonthIdx, prYear).fee;
 
       const prorated = totalDays > 0 ? Math.round((standardFee / totalDays) * activeDays) : standardFee;
       const calcField = document.getElementById('feeProrateCalcAmount');
@@ -1475,7 +1507,8 @@
 
       const famId = document.getElementById('feeFormFamilyId').value;
       const fam = (CACHED_FEE_FAMILIES || []).find(f => String(f.id).toUpperCase() === String(famId).toUpperCase());
-      const standardFee = parseFloat(fam?.monthly_fee || 0);
+      const advMonthIdx = FEE_CONFIG.MONTHS.findIndex(m => m.toLowerCase() === String(startMonth).toLowerCase());
+      const standardFee = feeFormApplicableFeeDetails(fam, advMonthIdx < 0 ? new Date().getMonth() : advMonthIdx, startYear).fee;
 
       const totalAdvance = standardFee * count;
       const calcField = document.getElementById('feeAdvanceCalcAmount');
@@ -2766,7 +2799,7 @@ Official Email: ${offEmail}`;
 
             const pKey = `${famUpper}_${mLower}_${yr}`;
             const paidSoFar = paidAmountMap[pKey] || 0;
-            const remainingForMonth = monthlyFee - paidSoFar;
+            const remainingForMonth = feeFormApplicableFeeDetails(fam, mIdx, yr).fee - paidSoFar;
 
             if (remainingForMonth > 0.01) {
               unpaidMonths.push({
@@ -3603,6 +3636,25 @@ Official Email: ${offEmail}`;
     function loadFeeReceiptsHistory() {
       const records = getStoredFeeRecords();
       renderFeeReceiptsHistoryRows(records);
+      if (window.FeePhase1 && typeof window.FeePhase1.loadFeeDueInvoicesList === 'function') {
+        window.FeePhase1.loadFeeDueInvoicesList();
+      }
+    }
+
+    // Fee Upgrade Phase 1 — Undo button for the newest payment row only.
+    // Reads the FULL stored records (not the filtered view), so a search
+    // filter can never make an older row look newest. Cancelled rows get
+    // neither a button nor a hint.
+    function feeReceiptUndoCellHtml(r) {
+      if (!r || !r.receiptNo) return '';
+      if (String(r.status || '').toLowerCase().indexOf('cancel') !== -1) return '';
+      if (!window.FeePhase1 || typeof window.FeePhase1.isNewestPaymentRow !== 'function') return '';
+      const all = (typeof getStoredFeeRecords === 'function') ? (getStoredFeeRecords() || []) : [];
+      const chk = window.FeePhase1.isNewestPaymentRow(all, r.receiptNo);
+      if (chk.ok) {
+        return `<button onclick="window.FeePhase1.requestUndoFeePayment('${String(r.receiptNo).replace(/'/g, "\\'")}')" class="px-3 py-1 bg-amber-100 hover:bg-amber-200 text-amber-800 border border-amber-300 rounded-xl text-xs font-bold transition inline-flex items-center gap-1" title="Undo this payment"><i class="fa-solid fa-rotate-left"></i> Undo</button>`;
+      }
+      return `<span class="block text-[10px] text-slate-400 mt-1">Only the newest payment can be undone</span>`;
     }
 
     function renderFeeReceiptsHistoryRows(records) {
@@ -3630,6 +3682,7 @@ Official Email: ${offEmail}`;
             <button onclick="openFeeInvoiceModal(${JSON.stringify(r).replace(/"/g, '&quot;')})" class="px-3 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition flex items-center gap-1 inline-flex">
               <i class="fa-solid fa-receipt text-slate-500"></i> Voucher
             </button>
+            ${feeReceiptUndoCellHtml(r)}
           </td>
         </tr>
       `).join('');
