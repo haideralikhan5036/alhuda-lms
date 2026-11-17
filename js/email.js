@@ -549,6 +549,9 @@ Official Email: ${ACADEMY_OFFICIAL_EMAIL}`;
 
       openEmailPreviewModal({
         type: 'trial',
+        // Trials Audit Batch 1 (F11): the manager dispatch path refuses
+        // a payload without familyId, so the trial email now carries it.
+        familyId: trial.family_id,
         studentName: trial.student_name,
         parentName: trial.parent_name,
         toEmail: trial.email || '',
