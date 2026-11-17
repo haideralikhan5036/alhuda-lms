@@ -154,7 +154,7 @@ const LEAVE_FNS = [
   'checkLeaveReturnAlertsAndRequests', 'openReturnAlertsModal',
   'loadLeaveManagementData', 'filterLeavesTable', 'openMarkLeaveModal',
   'leaveDayBeforeStr', 'endStudentScheduleForLeave', 'handleSaveStudentLeave',
-  'reactivateStudentFromLeave', 'extendStudentLeave', 'handleExtendLeaveSave',
+  'applyStudentLeave', 'reactivateStudentFromLeave', 'extendStudentLeave', 'handleExtendLeaveSave',
   'setLeaveKpiFilter', 'syncLeaveKpiCardsUI',
 ];
 

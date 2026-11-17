@@ -1719,6 +1719,73 @@
       return { ok: failures.length === 0, failures };
     }
 
+    // Fee Upgrade Phase 2 — the single-student leave core, extracted
+    // from handleSaveStudentLeave so Bulk Leave can call the SAME flow
+    // once per student (same validation, same schedule/assignment
+    // clean-up, same notes write). Returns { ok, studentName, failures }
+    // or { ok: false, error }. It never touches the DOM.
+    async function applyStudentLeave(studentId, input) {
+      const inData = input || {};
+      const startDate = inData.startDate;
+      const returnDate = inData.returnDate;
+      const reason = inData.reason || 'Leave';
+      const todayStr = new Date().toISOString().slice(0, 10);
+
+      if (!studentId) return { ok: false, error: 'Please choose a student.' };
+
+      // Leave Screen Fixes (2026-11-10, audit F2): validate the dates
+      // BEFORE any write. An impossible window used to run the full
+      // destructive half anyway while the student never appeared on
+      // leave anywhere.
+      if (!isValidLeaveDateStr(startDate) || !isValidLeaveDateStr(returnDate)) {
+        return { ok: false, error: 'Please choose valid leave dates.' };
+      }
+      if (returnDate <= startDate) {
+        return { ok: false, error: 'The return date must be after the leave start date.' };
+      }
+      if (returnDate < todayStr) {
+        return { ok: false, error: 'The return date has already passed. Choose a return date in the future.' };
+      }
+
+      const { data: st, error: fetchErr } = await db.from('students').select('*').eq('id', studentId).single();
+      if (fetchErr || !st) return { ok: false, error: 'Student not found.' };
+
+      // Audit F8 (save-side guard; the picker already excludes them):
+      // a deactivated student cannot be marked on leave.
+      const studentDeactivated = (typeof isStudentSelfDeactivated === 'function')
+        ? isStudentSelfDeactivated(st)
+        : ['inactive', 'deactivated'].includes(String(st.status || '').toLowerCase());
+      if (studentDeactivated) {
+        return { ok: false, error: 'This student is deactivated and cannot be marked on leave. Reactivate the student first.' };
+      }
+
+      let meta = {};
+      try { meta = JSON.parse(st.notes || '{}'); } catch(e) { meta = { text: st.notes || '' }; }
+
+      meta.on_leave = true;
+      meta.leave_start_date = startDate;
+      meta.return_date = returnDate;
+      meta.leave_reason = reason;
+      meta.leave_marked_at = new Date().toISOString();
+      meta.leave_marked_by = CURRENT_ROLE;
+
+      // Owner decision 3 (2026-11-10): marking leave ends the
+      // student's schedule + assignment (see
+      // endStudentScheduleForLeave) and unassigns the teacher in the
+      // same write, so the student leaves the teacher's roster
+      // completely until an admin returns them from leave.
+      const endRes = await endStudentScheduleForLeave(studentId, meta, st, startDate);
+
+      const { error: upErr } = await db.from('students').update({
+        notes: JSON.stringify(meta),
+        assigned_teacher_id: null
+      }).eq('id', studentId);
+
+      if (upErr) return { ok: false, error: 'Could not save the leave. Please try again.' };
+      return { ok: true, studentName: st.name, failures: (endRes && endRes.failures) || [] };
+    }
+    window.applyStudentLeave = applyStudentLeave;
+
     async function handleSaveStudentLeave(e) {
       e.preventDefault();
       const studentId = document.getElementById('leaveStudentSelect')?.value;
@@ -1734,74 +1801,23 @@
         return;
       }
 
-      // Leave Screen Fixes (2026-11-10, audit F2): validate the
-      // dates BEFORE any write. An impossible window (return not
-      // after start, or a return date already past) used to run the
-      // full destructive half anyway — schedule deleted, assignment
-      // closed, teacher unassigned — while the empty window meant
-      // the student never appeared on leave anywhere.
-      const todayStr = new Date().toISOString().slice(0, 10);
-      if (!isValidLeaveDateStr(startDate) || !isValidLeaveDateStr(returnDate)) {
-        lmsNotify("Please choose valid leave dates.", { type: 'error' });
-        return;
-      }
-      if (returnDate <= startDate) {
-        lmsNotify("The return date must be after the leave start date.", { type: 'error' });
-        return;
-      }
-      if (returnDate < todayStr) {
-        lmsNotify("The return date has already passed. Choose a return date in the future.", { type: 'error' });
-        return;
-      }
-
       const btn = document.getElementById('btnSubmitStudentLeave');
       btn.disabled = true;
       btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Saving...';
 
       try {
-        const { data: st, error: fetchErr } = await db.from('students').select('*').eq('id', studentId).single();
-        if (fetchErr || !st) throw new Error("Student not found.");
-
-        // Audit F8 (save-side guard; the picker already excludes
-        // them): a deactivated student cannot be marked on leave.
-        const studentDeactivated = (typeof isStudentSelfDeactivated === 'function')
-          ? isStudentSelfDeactivated(st)
-          : ['inactive', 'deactivated'].includes(String(st.status || '').toLowerCase());
-        if (studentDeactivated) {
-          lmsNotify("This student is deactivated and cannot be marked on leave. Reactivate the student first.", { type: 'error' });
+        const res = await applyStudentLeave(studentId, { startDate: startDate, returnDate: returnDate, reason: reason });
+        if (!res.ok) {
+          lmsNotify(res.error || 'Error marking leave. Please try again.', { type: 'error' });
           return;
         }
 
-        let meta = {};
-        try { meta = JSON.parse(st.notes || '{}'); } catch(e) { meta = { text: st.notes || '' }; }
-
-        meta.on_leave = true;
-        meta.leave_start_date = startDate;
-        meta.return_date = returnDate;
-        meta.leave_reason = reason;
-        meta.leave_marked_at = new Date().toISOString();
-        meta.leave_marked_by = CURRENT_ROLE;
-
-        // Owner decision 3 (2026-11-10): marking leave ends the
-        // student's schedule + assignment (see
-        // endStudentScheduleForLeave) and unassigns the teacher in
-        // the same write, so the student leaves the teacher's roster
-        // completely until an admin returns them from leave.
-        const endRes = await endStudentScheduleForLeave(studentId, meta, st, startDate);
-
-        const { error: upErr } = await db.from('students').update({
-          notes: JSON.stringify(meta),
-          assigned_teacher_id: null
-        }).eq('id', studentId);
-
-        if (upErr) throw upErr;
-
         // Audit F7: if any part of the schedule/assignment clean-up
         // failed, say so honestly — never the full success claim.
-        if (endRes && !endRes.ok) {
-          lmsNotify(`⚠️ Leave recorded for ${st.name} (on leave from ${startDate}; returns on ${returnDate}), BUT ${endRes.failures.join(' and ')}. The leave dates are saved — please check the student's timetable and salary assignment.`, { type: 'error' });
+        if (res.failures && res.failures.length > 0) {
+          lmsNotify(`⚠️ Leave recorded for ${res.studentName} (on leave from ${startDate}; returns on ${returnDate}), BUT ${res.failures.join(' and ')}. The leave dates are saved — please check the student's timetable and salary assignment.`, { type: 'error' });
         } else {
-          lmsNotify(`🏖️ Leave recorded for ${st.name}.\nOn leave from ${startDate}; returns on ${returnDate}.\nThe student has been removed from the teacher's schedule; returning them from leave puts them back on the previous teacher's roster as Not Scheduled.`);
+          lmsNotify(`🏖️ Leave recorded for ${res.studentName}.\nOn leave from ${startDate}; returns on ${returnDate}.\nThe student has been removed from the teacher's schedule; returning them from leave puts them back on the previous teacher's roster as Not Scheduled.`);
         }
         closeModal('modalMarkLeave');
         await loadDashboardData();
@@ -1814,6 +1830,168 @@
       } finally {
         btn.disabled = false;
         btn.innerHTML = '<i class="fa-solid fa-check"></i> Confirm Leave & Set Return';
+      }
+    }
+
+    // ============================================================================
+    // Fee Upgrade Phase 2 — BULK LEAVE (#55)
+    // Same leave, many families at once. The modal lists Active families
+    // (with their students), the months to put them on leave, and a
+    // reason; the run calls applyStudentLeave once per student, so the
+    // schedule/assignment clean-up is identical to the single flow.
+    // ============================================================================
+    var BULK_LEAVE_FAMILIES_CACHE = [];
+    var BULK_LEAVE_MONTHS_CACHE = [];
+
+    function openBulkLeaveModal() {
+      if (!window.FeePhase2) {
+        lmsNotify('Bulk Leave is not available right now. Please reload the page.', { type: 'error' });
+        return;
+      }
+      const todayStr = new Date().toISOString().slice(0, 10);
+      const fams = (typeof ALL_FAMILIES !== 'undefined' && Array.isArray(ALL_FAMILIES)) ? ALL_FAMILIES : [];
+      BULK_LEAVE_FAMILIES_CACHE = window.FeePhase2.bulkLeaveFamilies(fams, todayStr);
+      BULK_LEAVE_MONTHS_CACHE = window.FeePhase2.bulkLeaveMonthOptions(todayStr, 6);
+      const body = document.getElementById('bulkLeaveModalBody');
+      if (!body) return;
+      body.innerHTML = window.FeePhase2.bulkLeaveModalHtml(BULK_LEAVE_FAMILIES_CACHE, BULK_LEAVE_MONTHS_CACHE);
+      openModal('modalBulkLeave');
+      syncBulkLeaveModalUi();
+    }
+
+    function bulkLeaveSelectedFamilies() {
+      const ids = {};
+      Array.prototype.slice.call(document.querySelectorAll('.bulk-leave-family-check:checked')).forEach(function (c) {
+        ids[String(c.value)] = true;
+      });
+      return BULK_LEAVE_FAMILIES_CACHE.filter(function (f) { return ids[String(f.id)]; });
+    }
+
+    function bulkLeaveSelectedMonths() {
+      return Array.prototype.slice.call(document.querySelectorAll('.bulk-leave-month-check:checked')).map(function (c) {
+        const parts = String(c.value).split('-');
+        return { year: parseInt(parts[0], 10), monthIdx: parseInt(parts[1], 10) };
+      }).filter(function (m) { return !isNaN(m.year) && m.monthIdx >= 0 && m.monthIdx <= 11; });
+    }
+
+    function bulkLeaveSelectedReason() {
+      const sel = document.getElementById('bulkLeaveReasonSelect');
+      let reason = sel ? sel.value : '';
+      if (reason === 'Custom') {
+        reason = (document.getElementById('bulkLeaveCustomReason')?.value || '').trim() || 'Custom Leave';
+      }
+      return reason;
+    }
+
+    function filterBulkLeaveFamilies(q) {
+      const query = String(q || '').trim().toLowerCase();
+      Array.prototype.slice.call(document.querySelectorAll('[data-bulk-leave-family]')).forEach(function (row) {
+        const hay = String(row.getAttribute('data-bulk-leave-search') || '').toLowerCase();
+        row.style.display = (!query || hay.indexOf(query) !== -1) ? '' : 'none';
+      });
+    }
+
+    function syncBulkLeaveModalUi() {
+      if (!window.FeePhase2) return;
+      const fams = bulkLeaveSelectedFamilies();
+      const months = bulkLeaveSelectedMonths();
+      const summary = window.FeePhase2.bulkLeaveSummary(fams, months);
+      const line = document.getElementById('bulkLeaveSummaryLine');
+      if (line) {
+        line.textContent = summary.families === 0
+          ? 'Select at least one family and one month.'
+          : summary.families + ' famil' + (summary.families === 1 ? 'y' : 'ies') + ' × ' + summary.months + ' month' + (summary.months === 1 ? '' : 's') + ' — ' + summary.students + ' student' + (summary.students === 1 ? '' : 's') + ' will go on leave.';
+      }
+      const reviewBtn = document.getElementById('btnBulkLeaveReview');
+      if (reviewBtn) reviewBtn.disabled = !(summary.families > 0 && summary.months > 0 && summary.students > 0);
+    }
+
+    function bulkLeaveReasonChange(val) {
+      const input = document.getElementById('bulkLeaveCustomReason');
+      if (!input) return;
+      if (val === 'Custom') {
+        input.classList.remove('hidden');
+        input.focus();
+      } else {
+        input.classList.add('hidden');
+      }
+    }
+
+    function reviewBulkLeave() {
+      if (!window.FeePhase2) return;
+      const todayStr = new Date().toISOString().slice(0, 10);
+      const fams = bulkLeaveSelectedFamilies();
+      const months = bulkLeaveSelectedMonths();
+      const reason = bulkLeaveSelectedReason();
+      const check = window.FeePhase2.validateBulkLeave({ families: fams, months: months, reason: reason }, todayStr);
+      if (!check.ok) {
+        lmsNotify(check.errors[0] || 'Please check the bulk leave details.', { type: 'error' });
+        return;
+      }
+      const confirmArea = document.getElementById('bulkLeaveConfirmArea');
+      const pickArea = document.getElementById('bulkLeavePickArea');
+      if (confirmArea) {
+        confirmArea.innerHTML = window.FeePhase2.bulkLeaveConfirmHtml(check.summary, check.window, reason);
+        confirmArea.style.display = '';
+      }
+      if (pickArea) pickArea.style.display = 'none';
+      const reviewBtn = document.getElementById('btnBulkLeaveReview');
+      if (reviewBtn) reviewBtn.style.display = 'none';
+      const applyBtn = document.getElementById('btnBulkLeaveApply');
+      if (applyBtn) applyBtn.style.display = '';
+      const backBtn = document.getElementById('btnBulkLeaveBack');
+      if (backBtn) backBtn.style.display = '';
+    }
+
+    function backToBulkLeavePick() {
+      const confirmArea = document.getElementById('bulkLeaveConfirmArea');
+      if (confirmArea) confirmArea.style.display = 'none';
+      const pickArea = document.getElementById('bulkLeavePickArea');
+      if (pickArea) pickArea.style.display = '';
+      const reviewBtn = document.getElementById('btnBulkLeaveReview');
+      if (reviewBtn) reviewBtn.style.display = '';
+      const applyBtn = document.getElementById('btnBulkLeaveApply');
+      if (applyBtn) applyBtn.style.display = 'none';
+      const backBtn = document.getElementById('btnBulkLeaveBack');
+      if (backBtn) backBtn.style.display = 'none';
+    }
+
+    async function startBulkLeaveFromModal() {
+      if (!window.FeePhase2) return;
+      const todayStr = new Date().toISOString().slice(0, 10);
+      const fams = bulkLeaveSelectedFamilies();
+      const months = bulkLeaveSelectedMonths();
+      const reason = bulkLeaveSelectedReason();
+      const check = window.FeePhase2.validateBulkLeave({ families: fams, months: months, reason: reason }, todayStr);
+      if (!check.ok) {
+        lmsNotify(check.errors[0] || 'Please check the bulk leave details.', { type: 'error' });
+        return;
+      }
+      const applyBtn = document.getElementById('btnBulkLeaveApply');
+      if (applyBtn) {
+        applyBtn.disabled = true;
+        applyBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Applying...';
+      }
+      const backBtn = document.getElementById('btnBulkLeaveBack');
+      if (backBtn) backBtn.style.display = 'none';
+      const progArea = document.getElementById('bulkLeaveProgressArea');
+      if (progArea) {
+        progArea.style.display = '';
+        progArea.innerHTML = '<p class="text-[11px] font-bold text-slate-500">Applying leave to ' + fams.length + ' famil' + (fams.length === 1 ? 'y' : 'ies') + '...</p><div id="bulkLeaveProgressRows" class="space-y-1.5 mt-2"></div>';
+      }
+      const summary = await window.FeePhase2.runBulkLeave(fams, check.window, reason, {
+        applyLeave: window.applyStudentLeave,
+        onFamily: function (i, total, famResult) {
+          const box = document.getElementById('bulkLeaveProgressRows');
+          if (box) box.insertAdjacentHTML('beforeend', window.FeePhase2.bulkLeaveFamilyResultHtml(famResult));
+        }
+      });
+      if (progArea) progArea.insertAdjacentHTML('beforeend', window.FeePhase2.bulkLeaveSummaryHtml(summary));
+      if (applyBtn) applyBtn.style.display = 'none';
+      await loadDashboardData();
+      await checkLeaveReturnAlertsAndRequests(false);
+      if (document.getElementById('tab-leaves') && !document.getElementById('tab-leaves').classList.contains('hidden')) {
+        await loadLeaveManagementData();
       }
     }
 

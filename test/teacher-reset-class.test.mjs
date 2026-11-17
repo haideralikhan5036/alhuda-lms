@@ -861,6 +861,7 @@ function makeLeavesWorld(role) {
     extractFunction(LEAVES, 'leaveDayBeforeStr'),
     extractFunction(LEAVES, 'endStudentScheduleForLeave'),
     extractFunction(LEAVES, 'handleSaveStudentLeave'),
+    extractFunction(LEAVES, 'applyStudentLeave'),
     extractFunction(LEAVES, 'reactivateStudentFromLeave'),
   ].join('\n');
   vm.runInContext(src, sandbox);
