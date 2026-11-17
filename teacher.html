@@ -3698,15 +3698,60 @@ font-family: var(--font-num) !important;
       if (existingToken) {
         const _tp = decodeJwtPayload(existingToken);
         if (_tp && _tp.role === 'teacher' && typeof _tp.exp === 'number' && Date.now() / 1000 < _tp.exp) {
-          try {
-            const _tRes = await db.from('teachers').select('*').eq('id', _tp.sub).single();
-            if (_tRes && _tRes.data && isEligibleTeacherAccount(_tRes.data, {})) {
-              CURRENT_TEACHER = normalizeTeacherSession(_tRes.data);
-              showDashboardView();
-              return;
+          // REFRESH REGRESSION FIX (2026-11-17): the re-check below
+          // used to run ONCE — any transient failure (network blip,
+          // Worker cold start, slow probe, mirror miss) dropped a
+          // valid-token user to the login screen. Retry transient
+          // failures with the same [700, 1500]ms backoff as the login
+          // POST (PR #142). Only an AUTHORITATIVE failure ends the
+          // session: a SESSION_EXPIRED error, or a live 'd1' answer
+          // with no eligible record. After exhausted transient
+          // failures, restore the session snapshot the login flow
+          // stored in sessionStorage (tab-close still ends it) and
+          // let the data layer re-verify live — a 401 still routes
+          // to login.
+          const _bootRetryDelays = [700, 1500];
+          let _authoritative = false;
+          for (let _attempt = 0; _attempt < 3 && !_authoritative; _attempt++) {
+            if (_attempt > 0) {
+              await new Promise((resolve) => setTimeout(resolve, _bootRetryDelays[_attempt - 1]));
             }
-          } catch (err) {
-            console.warn('[Teacher Session] Token session check failed:', err);
+            try {
+              const _tRes = await db.from('teachers').select('*').eq('id', _tp.sub).single();
+              if (_tRes && _tRes.error && _tRes.error.code === 'SESSION_EXPIRED') {
+                _authoritative = true;
+                break;
+              }
+              if (_tRes && _tRes.data && isEligibleTeacherAccount(_tRes.data, {})) {
+                CURRENT_TEACHER = normalizeTeacherSession(_tRes.data);
+                showDashboardView();
+                return;
+              }
+              // A live answer with no eligible record means the record
+              // genuinely is not there — authoritative, no retry.
+              if (_tRes && _tRes._lmsSource === 'd1') {
+                _authoritative = true;
+                break;
+              }
+              // Anything else (mirror miss, empty error) is transient:
+              // loop and retry.
+            } catch (err) {
+              console.warn('[Teacher Session] Token session check failed:', err);
+              // Transient throw: loop and retry.
+            }
+          }
+          if (!_authoritative) {
+            // Exhausted transient failures: restore from the login-time
+            // session snapshot when it names this token's teacher.
+            try {
+              const _snapRaw = sessionStorage.getItem('alhuda_teacher_session');
+              const _snap = _snapRaw ? JSON.parse(_snapRaw) : null;
+              if (_snap && String(_snap.id || '') === String(_tp.sub)) {
+                CURRENT_TEACHER = normalizeTeacherSession(_snap);
+                showDashboardView();
+                return;
+              }
+            } catch (e) {}
           }
         } else {
           clearTeacherToken();
@@ -6315,7 +6360,20 @@ font-family: var(--font-num) !important;
       if (studentCtx !== undefined) _attCourseStudentCtx = studentCtx;
       const ctx = _attCourseStudentCtx;
 
+      // REGRESSION FIX (2026-11-17): when a student context WAS
+      // supplied (the modal is open) but the student could not be
+      // resolved, fail CLOSED — never offer the global library for an
+      // unknown student. A covering teacher on a covered student's
+      // class (PR #149) hit this when the student was not in the
+      // covering teacher's own lists. The teacher can still record
+      // via Additional Course.
       if (!ctx || !ctx.student) {
+        if (ctx) {
+          bSelect.innerHTML = `<option value="" disabled>No course assigned to this student — ask the admin to assign a course</option>` + `<option value="${ADDITIONAL_COURSE_ID}">Additional Course</option>`;
+          bSelect.value = ADDITIONAL_COURSE_ID;
+          onTeacherCourseBookChanged(bSelect.value);
+          return;
+        }
         const allBooks = getTeacherAllBooks();
 
         bSelect.innerHTML = allBooks.map(b => `
@@ -12012,12 +12070,53 @@ font-family: var(--font-num) !important;
     // ============================================================
     let ADVANCE_SELECTED_STUDENT = null;
 
+    // REGRESSION FIX (2026-11-17): the ADVANCE form used to list the
+    // FULL global library for every student and only *suggested* a
+    // book by a name heuristic — which could suggest book id
+    // 'quran-16-line', which does not exist, and let a teacher save
+    // an unrelated course. This is the advance form's twin of
+    // populateTeacherCourseBooks: ONLY this student's assigned books
+    // (same _resolveStudentCourseBooks), preselecting the student's
+    // own suggested book, and failing closed to the placeholder +
+    // Additional Course when no course resolves. Additional Lesson /
+    // Duas / Namaz inputs are untouched.
+    function populateAdvanceCourseBooks(student) {
+      const bSelect = document.getElementById('advCourseBookSelect');
+      if (!bSelect) return;
+      if (!student) {
+        bSelect.innerHTML = `<option value="" disabled>No course assigned to this student — ask the admin to assign a course</option>` + `<option value="${ADDITIONAL_COURSE_ID}">Additional Course</option>`;
+        bSelect.value = ADDITIONAL_COURSE_ID;
+        onAdvanceCourseBookChanged(ADDITIONAL_COURSE_ID);
+        return;
+      }
+      const resolved = _resolveStudentCourseBooks(student, null);
+      const books = resolved.books;
+      if (!books.length) {
+        bSelect.innerHTML = `<option value="" disabled>No course assigned to this student — ask the admin to assign a course</option>` + `<option value="${ADDITIONAL_COURSE_ID}">Additional Course</option>`;
+        bSelect.value = ADDITIONAL_COURSE_ID;
+        onAdvanceCourseBookChanged(ADDITIONAL_COURSE_ID);
+        return;
+      }
+      bSelect.innerHTML = books.map(b => `
+        <option value="${b.id}">${b.title} (${b.category_label || 'Course'})</option>
+      `).join('') + `<option value="${ADDITIONAL_COURSE_ID}">Additional Course</option>`;
+      let selected = books[0].id;
+      if (resolved.suggestedBookId && books.some(b => b.id === resolved.suggestedBookId)) {
+        selected = resolved.suggestedBookId;
+      }
+      bSelect.value = selected;
+      onAdvanceCourseBookChanged(selected);
+    }
+
     function openAdvanceClassModal(preselectStudentId = null) {
       if (!CURRENT_TEACHER) {
         lmsNotify("Please login to your teacher portal first.");
         return;
       }
 
+      // Fresh open = fresh selection (a stale ADVANCE_SELECTED_STUDENT
+      // from a previous open must not survive when the list is empty).
+      ADVANCE_SELECTED_STUDENT = null;
       populateAdvanceClassStudents(preselectStudentId);
 
       // Lesson History: fresh image state on every open (no stale carry).
@@ -12036,15 +12135,11 @@ font-family: var(--font-num) !important;
         targetDateInp.value = tomorrow.toISOString().slice(0, 10);
       }
 
-      // Populate Books dropdown
-      const bSelect = document.getElementById('advCourseBookSelect');
-      if (bSelect) {
-        const allBooks = getTeacherAllBooks();
-        bSelect.innerHTML = allBooks.map(b => `
-          <option value="${b.id}">${b.title} (${b.category_label || 'Course'})</option>
-        `).join('') + `<option value="${ADDITIONAL_COURSE_ID}">Additional Course</option>`;
-        onAdvanceCourseBookChanged(allBooks[0]?.id || 'noorani-qaida-classic');
-      }
+      // Course dropdown from THIS student's assigned courses
+      // (populateAdvanceClassStudents above already scoped it for the
+      // selected student); re-apply here so a direct open with no
+      // student fails closed instead of showing the global library.
+      populateAdvanceCourseBooks(ADVANCE_SELECTED_STUDENT);
       // Lesson-form simplify: mark the chip matching any carried remark.
       syncRemarkChips('adv');
 
@@ -12103,6 +12198,8 @@ font-family: var(--font-num) !important;
       if (!studentId) {
         if (noticeBox) noticeBox.classList.add('hidden');
         ADVANCE_SELECTED_STUDENT = null;
+        // No student: fail closed, do not keep the previous student's books.
+        populateAdvanceCourseBooks(null);
         return;
       }
 
@@ -12112,24 +12209,22 @@ font-family: var(--font-num) !important;
       ADVANCE_SELECTED_STUDENT = st;
 
       if (st && noticeBox && noticeText) {
-        const course = st.course_id || 'Quran & Tajweed Studies';
+        let course = '';
+        try {
+          if (typeof Assignments !== 'undefined' && Assignments && typeof Assignments.studentCourseName === 'function') {
+            course = Assignments.studentCourseName(st) || '';
+          }
+        } catch (e) {}
+        if (!course) course = st.course_id || 'Quran & Tajweed Studies';
         const phone = st.whatsapp || st.phone || 'No phone recorded';
         noticeText.innerHTML = `Student: <strong>${escapeHtml(st.name)}</strong> • Course: <strong>${escapeHtml(course)}</strong> • Parent Contact: <strong>${escapeHtml(phone)}</strong>`;
         noticeBox.classList.remove('hidden');
-
-        // Auto-select course book
-        const bSelect = document.getElementById('advCourseBookSelect');
-        if (bSelect) {
-          const sName = (course + ' ' + (st.name || '')).toLowerCase();
-          let suggestedBook = 'noorani-qaida-classic';
-          if (sName.includes('english')) suggestedBook = 'noorani-qaida-english';
-          else if (sName.includes('kid') || sName.includes('child')) suggestedBook = 'kids-cartoon-qaida';
-          else if (sName.includes('quran') || sName.includes('tajweed') || sName.includes('nazra') || sName.includes('hifz')) suggestedBook = 'quran-16-line';
-          else if (sName.includes('tafseer')) suggestedBook = 'tafseer-taqi-usmani';
-          bSelect.value = suggestedBook;
-          onAdvanceCourseBookChanged(suggestedBook);
-        }
       }
+
+      // Re-scope the Course dropdown to THIS student's assigned
+      // courses (the stale name heuristic used to suggest book id
+      // 'quran-16-line', which does not exist).
+      populateAdvanceCourseBooks(st || null);
     }
 
     function onAdvanceTafseerLanguageChanged(lang) {

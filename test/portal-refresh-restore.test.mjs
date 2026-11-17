@@ -601,7 +601,7 @@ async function runVm(code, sandbox) {
     };
     const document = { title: 't', getElementById: id => els[id] || null, readyState: 'complete' };
     const sandbox = {
-      console, setTimeout: () => 0, setInterval: () => 0, clearTimeout, document,
+      console, setTimeout, setInterval: () => 0, clearTimeout, document,
       sessionStorage: session, localStorage: memStore({}),
       atob: s => Buffer.from(s, 'base64').toString('latin1'),
       db, isEligibleTeacherAccount: () => true,
@@ -667,7 +667,7 @@ async function runVm(code, sandbox) {
     const calls = { render: 0, library: 0, tabs: 0, dropdown: 0 };
     const document = { title: 'p', getElementById: id => els[id] || null, readyState: 'complete' };
     const sandbox = {
-      console, setTimeout: () => 0, setInterval: () => 0, clearTimeout, document,
+      console, setTimeout, setInterval: () => 0, clearTimeout, document,
       sessionStorage: session, localStorage: memStore({}),
       atob: s => Buffer.from(s, 'base64').toString('latin1'),
       db,
@@ -709,7 +709,7 @@ async function runVm(code, sandbox) {
     const replaces = [];
     const document = { title: 'm', getElementById: id => els[id] || null, readyState: 'complete' };
     const sandbox = {
-      console, setTimeout: () => 0, setInterval: () => 0, clearTimeout, document,
+      console, setTimeout, setInterval: () => 0, clearTimeout, document,
       sessionStorage: session, localStorage: local,
       atob: s => Buffer.from(s, 'base64').toString('latin1'),
       fetchManagersFromBackend: async () => ({

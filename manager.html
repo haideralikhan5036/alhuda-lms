@@ -949,7 +949,12 @@
         return { managers, accountsMap: mergedAccs };
       } catch (err) {
         console.warn('Could not load managers from Supabase:', err);
-        return { managers: [], accountsMap: localAccs };
+        // REFRESH REGRESSION FIX (2026-11-17): flag the failure so the
+        // boot can tell a transient error (retry, keep the token) from
+        // a clean load with no managers (authoritative, drop the
+        // token). The login caller only reads .managers, so this extra
+        // field is backward-compatible.
+        return { managers: [], accountsMap: localAccs, error: true };
       }
     }
 
@@ -1014,23 +1019,48 @@
       if (mgrToken) {
         const payload = decodeJwtPayload(mgrToken);
         if (payload && payload.role === 'manager' && typeof payload.exp === 'number' && Date.now() / 1000 < payload.exp) {
-          const { managers, accountsMap } = await fetchManagersFromBackend();
-          const verifiedMgr = managers.find(m => String(m.id) === String(payload.sub));
-          if (verifiedMgr && isEligibleManagerAccount(verifiedMgr, accountsMap)) {
-            const creds = resolveManagerCredentials(verifiedMgr, accountsMap);
-            const sessionPayload = {
-              id: verifiedMgr.id,
-              emp_id: creds.emp_id,
-              full_name: verifiedMgr.full_name,
-              username: creds.username,
-              role_title: creds.role_title,
-              authenticated_at: new Date().toISOString()
-            };
-            try {
-              sessionStorage.setItem('alhuda_manager_session', JSON.stringify(sessionPayload));
-              localStorage.setItem('alhuda_active_portal_role', 'manager');
-            } catch (e) {}
-            window.location.replace('index.html?role=manager');
+          // REFRESH REGRESSION FIX (2026-11-17): the verify below used
+          // to run ONCE, and fetchManagersFromBackend swallowed every
+          // error as "no managers", so a transient failure (network
+          // blip, Worker cold start) DELETED a valid token and left
+          // the user on the login form. Retry transient failures with
+          // the same [700, 1500]ms backoff as the login POST (PR
+          // #142). Only a clean load that genuinely lacks this manager
+          // deletes the token; an exhausted transient failure keeps
+          // the token AND the session so a refresh re-verifies.
+          const _bootRetryDelays = [700, 1500];
+          let _fetched = null;
+          for (let _attempt = 0; _attempt < 3; _attempt++) {
+            if (_attempt > 0) {
+              await new Promise((resolve) => setTimeout(resolve, _bootRetryDelays[_attempt - 1]));
+            }
+            const _res = await fetchManagersFromBackend();
+            if (_res && !_res.error) { _fetched = _res; break; }
+          }
+          if (_fetched) {
+            const { managers, accountsMap } = _fetched;
+            const verifiedMgr = managers.find(m => String(m.id) === String(payload.sub));
+            if (verifiedMgr && isEligibleManagerAccount(verifiedMgr, accountsMap)) {
+              const creds = resolveManagerCredentials(verifiedMgr, accountsMap);
+              const sessionPayload = {
+                id: verifiedMgr.id,
+                emp_id: creds.emp_id,
+                full_name: verifiedMgr.full_name,
+                username: creds.username,
+                role_title: creds.role_title,
+                authenticated_at: new Date().toISOString()
+              };
+              try {
+                sessionStorage.setItem('alhuda_manager_session', JSON.stringify(sessionPayload));
+                localStorage.setItem('alhuda_active_portal_role', 'manager');
+              } catch (e) {}
+              window.location.replace('index.html?role=manager');
+              return;
+            }
+          } else {
+            // All attempts failed transiently: keep the token and the
+            // session, show the form without deleting anything.
+            document.getElementById('managerLoginContainer')?.classList.remove('hidden');
             return;
           }
         }
