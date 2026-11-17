@@ -169,8 +169,12 @@ check('fees.js setFamilyAdmissionDate writes the ADMISSION_ override', FEES_SRC.
 check('fees.js setFamilyAdmissionDate cleans prior-month overrides in the same year', FEES_SRC.includes('if (idx < monthIdx) {') && FEES_SRC.includes('delete overrides[`${fIdUpper}_${nm.toLowerCase()}_${yInt}`]'));
 check('fees.js setFamilyAdmissionDate persists + cloud-syncs the overrides', FEES_SRC.includes('saveStoredMatrixOverrides(overrides)') && FEES_SRC.includes('syncMatrixOverridesToCloud(familyId, overrides)'));
 check('fees.js has the matching clearFamilyAdmissionDate helper', FEES_SRC.includes('function clearFamilyAdmissionDate(familyId)') && FEES_SRC.includes('delete overrides[`ADMISSION_${fIdUpper}`]'));
-check('fees.js switcher Apply calls the shared helper', FEES_SRC.includes('function applyFeeEnrollmentUntil()') && FEES_SRC.includes('setFamilyAdmissionDate(famId, mIdx, yInt)'));
-check('fees.js switcher Clear calls the shared clear helper', FEES_SRC.includes('function clearFeeEnrollmentDate()') && FEES_SRC.includes('clearFamilyAdmissionDate(famId)'));
+// Fee Dashboard + Form Improvements: the switcher card (and its
+// enrollment row) is gone, so its Apply/Clear handlers go with it.
+// Enrollment stays reachable via the Matrix modal set_admission_date
+// action (asserted below); the shared helpers stay.
+check('fees.js switcher enrollment Apply/Clear are gone with the card', !FEES_SRC.includes('function applyFeeEnrollmentUntil()') && !FEES_SRC.includes('function clearFeeEnrollmentDate()'));
+check('fees.js shared enrollment helpers stay (Matrix modal path)', FEES_SRC.includes('function setFamilyAdmissionDate(familyId, monthIdx, year)') && FEES_SRC.includes('function clearFamilyAdmissionDate(familyId)'));
 check('fees.js matrix set_admission_date writes through the shared helper only', (() => {
   const start = FEES_SRC.indexOf("if (actionType === 'set_admission_date') {");
   const end = FEES_SRC.indexOf("if (actionType === 'not_enrolled') {", start);

@@ -12,6 +12,7 @@ const REPO_ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const FEES_SRC = fs.readFileSync(path.join(REPO_ROOT, 'js/fees.js'), 'utf8');
 const PHASE1_SRC = fs.readFileSync(path.join(REPO_ROOT, 'js/fee-phase1.js'), 'utf8');
 const PHASE3_SRC = fs.readFileSync(path.join(REPO_ROOT, 'js/fee-phase3.js'), 'utf8');
+const PHASE6_SRC = fs.readFileSync(path.join(REPO_ROOT, 'js/fee-phase6.js'), 'utf8');
 
 const results = [];
 function check(name, cond, detail = '') {
@@ -140,27 +141,31 @@ function makeFormHarness(families, records) {
     getItem: (k) => (k in store ? store[k] : null),
     setItem: (k, v) => { store[k] = v; }
   };
-  const windowStub = { lmsNotify: () => {} };
+  const windowStub = { lmsNotify: () => {}, lmsConfirm: async () => true };
   // Load the real FeePhase1 module into the same window object, WITH the
   // fake document attached — renderFeeSourceNote needs document and
   // returns early without it.
-  // Fee Upgrade Phase 3: FeePhase3 is loaded too — triggerFeeBalanceRecalc
-  // now ends by rendering the one-tap status switcher, which calls the
-  // Phase 3 helpers and the switcher HTML builders.
+  // Fee Upgrade Phase 3: FeePhase3 is loaded too (triggerFeeBalanceRecalc
+  // used to end by rendering the one-tap status switcher — removed by
+  // the dashboard + form improvements, which instead render the Multi
+  // Month selector through FeePhase6, loaded here as well).
   const phaseSandbox = { window: windowStub, document: documentStub, console, setTimeout, clearTimeout };
   phaseSandbox.globalThis = phaseSandbox;
   vm.runInNewContext(PHASE1_SRC, phaseSandbox);
   vm.runInNewContext(PHASE3_SRC, phaseSandbox);
+  vm.runInNewContext(PHASE6_SRC, phaseSandbox);
 
   const factory = new Function('window', 'document', 'localStorage', 'console', 'families', `
     ${extractConst(FEES_SRC, 'FEE_CONFIG')}
     let CLOUD_FEE_RECORDS_CACHE = null;
     let CLOUD_MATRIX_OVERRIDES_CACHE = null;
-    // Fee Upgrade Phase 3: staged one-tap toggles for the switcher.
-    let FEE_STATUS_STAGED = {};
+    // Fee Dashboard + Form Improvements: Multi Month Payments selection
+    // (replaces the Phase 3 staged one-tap toggles for the switcher).
+    let FEE_MULTI_MONTH_SELECTED = [];
     const CACHED_FEE_FAMILIES = families;
     const ALL_LEAVE_RECORDS = [];
     const lmsNotify = window.lmsNotify || (() => {});
+    const lmsConfirm = window.lmsConfirm || (async () => false);
     ${extractFunction(FEES_SRC, 'getStoredFeeRecords')}
     ${extractFunction(FEES_SRC, 'getStoredMatrixOverrides')}
     ${extractFunction(FEES_SRC, 'checkFamilyLeaveInMonth')}
@@ -171,17 +176,26 @@ function makeFormHarness(families, records) {
     ${extractFunction(FEES_SRC, 'calculateFeeRemainingLive')}
     ${extractFunction(FEES_SRC, 'recalcFeeTotalLive')}
     ${extractFunction(FEES_SRC, 'calcProratedFeeFromDays')}
-    ${extractFunction(FEES_SRC, 'calcAdvancePaymentFee')}
     ${extractFunction(FEES_SRC, 'triggerFeeBalanceRecalc')}
-    // Fee Upgrade Phase 3: triggerFeeBalanceRecalc now calls these
-    // (ADJ-row exclusion in the arrears loop + the status switcher).
+    // Fee Upgrade Phase 3: triggerFeeBalanceRecalc still calls these
+    // (ADJ-row exclusion in the arrears loop).
     ${extractFunction(FEES_SRC, 'isFeeStatusRowRecord')}
     ${extractFunction(FEES_SRC, 'isFamilyMonthStatusPaid')}
     ${extractFunction(FEES_SRC, 'buildAnnualMatrixData')}
-    ${extractFunction(FEES_SRC, 'feeStatusSwitcherFamilyYear')}
-    ${extractFunction(FEES_SRC, 'renderFeeStatusSwitcher')}
-    ${extractFunction(FEES_SRC, 'syncFeeStatusSwitcherBar')}
-    return { triggerFeeBalanceRecalc };
+    // Fee Dashboard + Form Improvements: Multi Month Payments replaces
+    // the old advance calculator (calcAdvancePaymentFee) and the
+    // Phase 3 status switcher (renderFeeStatusSwitcher + friends).
+    ${extractFunction(FEES_SRC, 'isMultiMonthMode')}
+    ${extractFunction(FEES_SRC, 'multiMonthFormAnchor')}
+    ${extractFunction(FEES_SRC, 'getMultiMonthSelection')}
+    ${extractFunction(FEES_SRC, 'clearMultiMonthSelection')}
+    ${extractFunction(FEES_SRC, 'buildMultiMonthOptionsForForm')}
+    ${extractFunction(FEES_SRC, 'renderMultiMonthSelector')}
+    ${extractFunction(FEES_SRC, 'syncMultiMonthReview')}
+    ${extractFunction(FEES_SRC, 'calcMultiMonthFee')}
+    ${extractFunction(FEES_SRC, 'toggleMultiMonthSelection')}
+    ${extractFunction(FEES_SRC, 'handleAdvanceFeeToggle')}
+    return { triggerFeeBalanceRecalc, handleAdvanceFeeToggle, toggleMultiMonthSelection, calcMultiMonthFee, getMultiMonthSelection };
   `);
   const api = factory(windowStub, documentStub, localStorageStub, console, families);
   return {
@@ -286,12 +300,19 @@ const paidRecords = [
   h.api.triggerFeeBalanceRecalc();
   check('prorate uses the timeline fee: 7500/30*15 = 3750', h.el('feeProrateCalcAmount').value === '3750.00', h.el('feeProrateCalcAmount').value);
 
+  // Multi Month Payments: per-month ACTUAL fees (Nov 7500 + Dec 7500),
+  // never one fee times a dropdown count. December is a future month
+  // and unpaid, so it is selectable at its timeline fee.
   const h2 = makeFormHarness([mismatchFamily], paidRecords);
   h2.setForm('FAM-021', 'November', 2026);
   h2.el('feeToggleAdvance').checked = true;
-  h2.el('feeSelectAdvanceMonths').value = '2';
-  h2.api.triggerFeeBalanceRecalc();
-  check('advance uses the timeline fee: 7500 x 2 = 15000', h2.el('feeAdvanceCalcAmount').value === '15000.00', h2.el('feeAdvanceCalcAmount').value);
+  h2.api.handleAdvanceFeeToggle();
+  h2.api.toggleMultiMonthSelection(10, 2026);
+  h2.api.toggleMultiMonthSelection(11, 2026);
+  check('multi-month uses per-month actual fees: Nov 7500 + Dec 7500 = 15000', h2.el('feeFormMonthlyFee').value === '15000.00', h2.el('feeFormMonthlyFee').value);
+  check('multi-month review lists both selected months', /November 2026/.test(h2.el('feeMultiMonthReview').innerText) && /December 2026/.test(h2.el('feeMultiMonthReview').innerText), h2.el('feeMultiMonthReview').innerText);
+  check('multi-month total line shows 15000.00', /15000\.00/.test(h2.el('feeMultiMonthTotal').innerText), h2.el('feeMultiMonthTotal').innerText);
+  check('multi-month selection holds exactly the two picked months', JSON.stringify(h2.api.getMultiMonthSelection()) === JSON.stringify([{ monthIdx: 10, year: 2026 }, { monthIdx: 11, year: 2026 }]));
 }
 
 const failed = results.filter(r => !r.pass);

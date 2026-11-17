@@ -24,6 +24,14 @@
     // Phase 4 (audit P3-rr-e): null until the first successful load,
     // so an empty table can say "not loaded" instead of "all cleared".
     let CACHED_PENDING_FEE_LIST = null;
+    // Fee Dashboard + Form Improvements (Phase 6) — shared UI state.
+    let FEE_CURRENT_SUBTAB = 'fee-subtab-overview';
+    let FEE_KPI_SELECTED = null;
+    let FEE_KPI_COUNTS = { active: 0, paid: 0, pendings: 0, defaulters: 0, onLeave: 0 };
+    let FEE_RECEIPTS_MONTH_FILTER = null; // { monthIdx, year } | null
+    let FEE_MULTI_MONTH_SELECTED = []; // [{ monthIdx, year }] chronological
+    let FEE_PENDING_REMIND_RUNNING = false;
+    let FEE_DEFAULTER_REMIND_RUNNING = false;
     let CACHED_ANNUAL_FEE_MATRIX = [];
     let CURRENT_FEE_MODAL_RECEIPT = null;
     let CURRENT_MATRIX_ACTION_DATA = null;
@@ -530,6 +538,13 @@
         recordNavigation('tab-invoices', subTabId);
       }
 
+      // Fee Dashboard + Form Improvements: the active sub-view is
+      // tracked for Refresh (Pending / Defaulters have no top-bar
+      // button any more), and any KPI-card selection ring is cleared —
+      // a KPI click re-sets it after this call returns.
+      FEE_CURRENT_SUBTAB = subTabId;
+      clearFeeKpiSelection();
+
       document.querySelectorAll('.fee-subtab-btn').forEach(btn => {
         btn.classList.remove('bg-emerald-800', 'text-white', 'shadow-xs', 'active');
         btn.classList.add('text-slate-600', 'hover:bg-slate-100');
@@ -550,14 +565,13 @@
       if (subTabId === 'fee-subtab-defaulters') loadThreePlusDefaultersList();
       if (subTabId === 'fee-subtab-matrix') loadMasterAnnualMatrix();
       if (subTabId === 'fee-subtab-receipts') loadFeeReceiptsHistory();
-      // Fee Upgrade Phase 3: the Collect Fee status switcher follows
-      // the family + year already chosen in the fee form.
-      if (subTabId === 'fee-subtab-collect') renderFeeStatusSwitcher();
     }
 
     function refreshCurrentFeeView() {
-      const activeBtn = document.querySelector('.fee-subtab-btn.active');
-      const id = activeBtn ? activeBtn.id.replace('btnFeeSubTab-', 'fee-subtab-') : 'fee-subtab-overview';
+      // Fee Dashboard + Form Improvements: Pending / Defaulters have no
+      // top-bar button any more (they open from the KPI cards), so the
+      // active-button lookup cannot find them — the tracked sub-tab can.
+      const id = (typeof FEE_CURRENT_SUBTAB === 'string' && FEE_CURRENT_SUBTAB) ? FEE_CURRENT_SUBTAB : 'fee-subtab-overview';
       switchFeeSubTab(id);
     }
 
@@ -812,6 +826,10 @@
     // 1. DASHBOARD ANALYTICS & MULTI-CURRENCY STATS
     // ============================================================
     async function loadFeeDashboardStats() {
+      // Fee Dashboard + Form Improvements: a new dashboard period makes
+      // any KPI-card selection and any Receipts month filter stale.
+      clearFeeKpiSelection();
+      clearFeeReceiptsMonthFilter();
       const mSel = document.getElementById('feeDashMonthSelect');
       const ySel = document.getElementById('feeDashYearSelect');
       const selectedMonth = mSel ? mSel.value : (FEE_CONFIG.MONTHS[new Date().getMonth()] || 'September');
@@ -870,6 +888,9 @@
       records.forEach(r => {
         if (String(r.month).toLowerCase() === selectedMonth.toLowerCase() && parseInt(r.year, 10) === selectedYear) {
           const famIdUpper = String(r.familyId).toUpperCase();
+          // Fee Dashboard + Form Improvements: a cancelled record is
+          // never a payment — it must not mark the family Paid.
+          if (isFeeRecordCancelled(r)) return;
           // Fee Upgrade Phase 3: an ADJ status row is not money — it
           // never adds to Received. It only marks the month paid.
           if (isFeeStatusRowRecord(r)) {
@@ -904,6 +925,11 @@
         const mLower = selectedMonth.toLowerCase();
         const overrideKey = `${famUpper}_${mLower}_${selectedYear}`;
         const manualOverride = overrides[overrideKey];
+
+        // Fee Dashboard + Form Improvements: a deactivated family is
+        // never Active, never Pending and never On Leave — it belongs
+        // to no KPI list.
+        if (typeof isFamilyDeactivated === 'function' && isFamilyDeactivated(fam)) return;
 
         // 1. Skip pre-admission or explicitly not-enrolled families
         const isPreAdm = isFamilyPreAdmission(fam, selectedMonth, selectedYear);
@@ -959,20 +985,31 @@
       const totalActive = activeEnrolledThisMonth > 0 ? activeEnrolledThisMonth : families.length;
       const paidCount = Object.keys(paidMap).length;
       const pendingCount = pendingFamiliesList.length;
+      // Fee Dashboard + Form Improvements: Active and On Leave are the
+      // Families-tab v3 partition (current status, not month-scoped),
+      // so the card figures match the lists their clicks open exactly.
+      // Paid / Pendings stay month-scoped; Defaulters is the 3+ list.
+      const v3ActiveFams = (typeof getActiveFamilies === 'function') ? getActiveFamilies(families) : [];
+      const v3LeaveFams = (typeof getOnLeaveFamilies === 'function') ? getOnLeaveFamilies(families, (typeof ALL_STUDENTS !== 'undefined' ? ALL_STUDENTS : [])) : [];
+      const v3ActiveCount = v3ActiveFams.filter(f => !v3LeaveFams.includes(f)).length;
+      const v3LeaveCount = v3LeaveFams.length;
+      FEE_KPI_COUNTS = { active: v3ActiveCount, paid: paidCount, pendings: pendingCount, defaulters: (CACHED_THREE_MONTH_DEFAULTERS || []).length, onLeave: v3LeaveCount };
       const effectiveTotal = Math.max(1, totalActive - onLeaveCount);
       const pctPaid = Math.min(100, Math.round((paidCount / effectiveTotal) * 100));
 
       // Update KPI Counter DOM Elements
       const kpiFamilies = document.getElementById('kpiFeeTotalFamilies');
-      if (kpiFamilies) kpiFamilies.innerText = totalActive;
+      if (kpiFamilies) kpiFamilies.innerText = v3ActiveCount;
       const kpiStudents = document.getElementById('kpiFeeTotalStudents');
       if (kpiStudents) kpiStudents.innerText = totalStudentsCount;
       const kpiPaid = document.getElementById('kpiFeePaidCount');
       if (kpiPaid) kpiPaid.innerText = paidCount;
       const kpiPending = document.getElementById('kpiFeePendingCount');
       if (kpiPending) kpiPending.innerText = pendingCount;
+      const kpiDefaulters = document.getElementById('kpiFeeDefaultersCount');
+      if (kpiDefaulters) kpiDefaulters.innerText = FEE_KPI_COUNTS.defaulters;
       const kpiLeave = document.getElementById('kpiFeeLeaveCount');
-      if (kpiLeave) kpiLeave.innerText = onLeaveCount;
+      if (kpiLeave) kpiLeave.innerText = v3LeaveCount;
 
       const kpiPaidPct = document.getElementById('kpiFeePaidPercent');
       if (kpiPaidPct) kpiPaidPct.innerText = `${pctPaid}%`;
@@ -1002,14 +1039,126 @@
       renderFeeCurrencyGrid(currencyRevenue);
 
       // Compute 3+ Months Defaulters list and update its badge automatically
+      // (and the Defaulters KPI card — the list above was the previous
+      // run's, so the card is corrected here in the same tick).
+      let defaulterListNow = CACHED_THREE_MONTH_DEFAULTERS || [];
       if (typeof calculateThreePlusMonthDefaulters === 'function') {
-        calculateThreePlusMonthDefaulters(selectedMonth, selectedYear);
+        defaulterListNow = calculateThreePlusMonthDefaulters(selectedMonth, selectedYear) || [];
       }
+      FEE_KPI_COUNTS.defaulters = defaulterListNow.length;
+      const kpiDefNow = document.getElementById('kpiFeeDefaultersCount');
+      if (kpiDefNow) kpiDefNow.innerText = defaulterListNow.length;
 
       // Check and run 4th of Every Month Auto-Reminder if due
       if (typeof initAndCheckMonthly4thAutoReminder === 'function') {
         initAndCheckMonthly4thAutoReminder();
       }
+    }
+
+    // ============================================================
+    // FEE DASHBOARD + FORM IMPROVEMENTS — CLICKABLE KPI CARDS (#1)
+    //
+    // Five cards, each opening the EXISTING view for its figure:
+    //   Active     -> Families tab, v3 Active filter
+    //   Paid       -> Receipts sub-view, filtered to the selected month
+    //   Pendings   -> existing Pending sub-view (selected month)
+    //   Defaulters -> existing 3+ Defaulters sub-view
+    //   On Leave   -> Families tab, v3 On Leave filter
+    // The counts come from the same lists the views render, so a card
+    // figure and the list it opens can never drift apart.
+    // ============================================================
+    function syncFeeKpiCardsUI() {
+      ['active', 'paid', 'pendings', 'defaulters', 'leave'].forEach(function (key) {
+        const card = document.getElementById('feeKpiCard-' + key);
+        if (!card) return;
+        const selected = FEE_KPI_SELECTED === key;
+        card.setAttribute('aria-pressed', selected ? 'true' : 'false');
+        card.classList.toggle('fee-kpi-selected', selected);
+      });
+    }
+
+    function clearFeeKpiSelection() {
+      FEE_KPI_SELECTED = null;
+      try { syncFeeKpiCardsUI(); } catch (e) {}
+    }
+
+    function feeKpiMonthYear() {
+      const mSel = document.getElementById('feeDashMonthSelect');
+      const ySel = document.getElementById('feeDashYearSelect');
+      const monthName = mSel ? mSel.value : (FEE_CONFIG.MONTHS[new Date().getMonth()] || 'September');
+      const year = ySel ? parseInt(ySel.value, 10) : new Date().getFullYear();
+      return { monthName, monthIdx: FEE_CONFIG.MONTHS.findIndex(m => m.toLowerCase() === String(monthName).toLowerCase()), year };
+    }
+
+    function handleFeeKpiClick(key) {
+      if (key === 'active' || key === 'leave') {
+        if (typeof switchTab === 'function') switchTab('tab-families');
+        if (typeof setDirectoryKpi === 'function') setDirectoryKpi(key === 'leave' ? 'leave' : 'active');
+      } else if (key === 'paid') {
+        const period = feeKpiMonthYear();
+        setFeeReceiptsMonthFilter(period.monthIdx, period.year);
+        switchFeeSubTab('fee-subtab-receipts');
+      } else if (key === 'pendings') {
+        switchFeeSubTab('fee-subtab-pending');
+      } else if (key === 'defaulters') {
+        switchFeeSubTab('fee-subtab-defaulters');
+      } else {
+        return;
+      }
+      FEE_KPI_SELECTED = key;
+      syncFeeKpiCardsUI();
+    }
+
+    // ---- Receipts month filter (the Paid KPI target) ----
+    // The filter is state, not a search: it is set by the Paid KPI
+    // click, cleared by a dashboard month change or by typing in the
+    // receipts search box, and cleared by its own chip button.
+    function setFeeReceiptsMonthFilter(monthIdx, year) {
+      FEE_RECEIPTS_MONTH_FILTER = { monthIdx: parseInt(monthIdx, 10), year: parseInt(year, 10) };
+      syncFeeReceiptsMonthChip();
+    }
+
+    function clearFeeReceiptsMonthFilter() {
+      FEE_RECEIPTS_MONTH_FILTER = null;
+      try { syncFeeReceiptsMonthChip(); } catch (e) {}
+    }
+
+    function syncFeeReceiptsMonthChip() {
+      const chip = document.getElementById('feeReceiptsMonthChip');
+      if (!chip) return;
+      if (!FEE_RECEIPTS_MONTH_FILTER) { chip.classList.add('hidden'); return; }
+      const label = (window.FeePhase6 && typeof window.FeePhase6.receiptsMonthFilterLabel === 'function')
+        ? window.FeePhase6.receiptsMonthFilterLabel(FEE_RECEIPTS_MONTH_FILTER.monthIdx, FEE_RECEIPTS_MONTH_FILTER.year)
+        : (FEE_CONFIG.MONTHS[FEE_RECEIPTS_MONTH_FILTER.monthIdx] + ' ' + FEE_RECEIPTS_MONTH_FILTER.year);
+      const records = (typeof getStoredFeeRecords === 'function') ? (getStoredFeeRecords() || []) : [];
+      const inMonth = records.filter(r => {
+        if (window.FeePhase6 && typeof window.FeePhase6.isReceiptInMonth === 'function') {
+          return window.FeePhase6.isReceiptInMonth(r, FEE_RECEIPTS_MONTH_FILTER.monthIdx, FEE_RECEIPTS_MONTH_FILTER.year);
+        }
+        return String(r.month).toLowerCase() === (FEE_CONFIG.MONTHS[FEE_RECEIPTS_MONTH_FILTER.monthIdx] || '').toLowerCase()
+          && parseInt(r.year, 10) === FEE_RECEIPTS_MONTH_FILTER.year
+          && String(r.status || '').toLowerCase().indexOf('cancel') === -1;
+      });
+      const fams = {};
+      inMonth.forEach(r => {
+        const key = String(r.familyId || '').toUpperCase();
+        if (!fams[key]) fams[key] = { paid: 0, due: 0 };
+        fams[key].paid += Math.max(0, parseFloat(r.amountPaid) || 0);
+      });
+      // "Paid families" here means the same as the Paid KPI card: the month
+      // is settled in full (paid >= due). A partial payer has receipts in
+      // the month but is NOT a paid family.
+      let famCount = 0;
+      Object.keys(fams).forEach((key) => {
+        const fam = (typeof CACHED_FEE_FAMILIES !== 'undefined' ? CACHED_FEE_FAMILIES : []).find((f) => String(f.id || '').toUpperCase() === key);
+        if (!fam) return;
+        const det = feeFormApplicableFeeDetails(fam, FEE_RECEIPTS_MONTH_FILTER.monthIdx, FEE_RECEIPTS_MONTH_FILTER.year);
+        fams[key].due += (det.fee || 0);
+        if (fams[key].due > 0 && fams[key].paid >= fams[key].due - 0.01) famCount++;
+      });
+      const text = document.getElementById('feeReceiptsMonthChipText');
+      if (text) text.innerText = 'Showing receipts for ' + label + ' — ' + famCount + ' paid famil' + (famCount === 1 ? 'y' : 'ies') + ' (' + inMonth.length + ' receipt' + (inMonth.length === 1 ? '' : 's') + ')';
+      chip.classList.remove('hidden');
     }
 
     function renderFeeCurrencyGrid(currencyRevenue) {
@@ -1160,6 +1309,7 @@
       if (advToggle) advToggle.checked = false;
       const aBox = document.getElementById('feeAdvanceBox');
       if (aBox) aBox.classList.add('hidden');
+      clearMultiMonthSelection();
 
       // Trigger Smart Arrears check
       triggerFeeBalanceRecalc();
@@ -1209,6 +1359,17 @@
     // (record_kind 'month_status', ref ADJ-YYYYMM-...)? Delegates to
     // FeePhase3 when loaded; falls back to the same predicate inline so
     // the fee tab keeps working either way.
+    // Fee Dashboard + Form Improvements: cancelled means cancelled.
+    // Delegates to FeePhase6 when loaded; falls back to the same
+    // predicate inline so the fee tab keeps working either way.
+    function isFeeRecordCancelled(r) {
+      if (window.FeePhase6 && typeof window.FeePhase6.isCancelledFeeRecord === 'function') {
+        return window.FeePhase6.isCancelledFeeRecord(r);
+      }
+      if (!r) return false;
+      return String(r.status || '').toLowerCase().indexOf('cancel') !== -1;
+    }
+
     function isFeeStatusRowRecord(r) {
       if (window.FeePhase3 && typeof window.FeePhase3.isMonthStatusRow === 'function') {
         return window.FeePhase3.isMonthStatusRow(r);
@@ -1308,6 +1469,13 @@
         const overrideKey = `${fIdUpper}_${mKey}_${targetYear}`;
         const manualOverride = overrides[overrideKey];
 
+        // Fee Dashboard + Form Improvements: a month the family picked
+        // in Multi Month Payments is charged through the selector, not
+        // through the arrears total — never count it twice.
+        if (isMultiMonthMode() && (FEE_MULTI_MONTH_SELECTED || []).some(s => s.monthIdx === m && s.year === targetYear)) {
+          continue;
+        }
+
         // 1. Skip Pre-Admission Months (Joined in later month: ZERO expected fee & ZERO arrears)
         const isPreAdm = isFamilyPreAdmission(fam, m, targetYear);
         const isExplicitNotEnrolled = manualOverride && manualOverride.status === 'not_enrolled';
@@ -1351,7 +1519,8 @@
       if (document.getElementById('feeToggleProrated')?.checked) {
         calcProratedFeeFromDays();
       } else if (document.getElementById('feeToggleAdvance')?.checked) {
-        calcAdvancePaymentFee();
+        renderMultiMonthSelector();
+        calcMultiMonthFee();
       }
 
       // Check for available advance credit (extra paid in past months)
@@ -1410,9 +1579,10 @@
         }
       }
 
-      // Fee Upgrade Phase 3: the status switcher follows the family +
-      // year chosen in the fee form (staged toggles clear on change).
-      renderFeeStatusSwitcher();
+      // Fee Dashboard + Form Improvements: the Multi Month selector
+      // follows the family + month chosen in the fee form (its window
+      // is anchored on the form month).
+      if (isMultiMonthMode()) renderMultiMonthSelector();
     }
 
     function recalcFeeTotalLive() {
@@ -1497,14 +1667,9 @@
         amtInput.value = '';
         delete amtInput.dataset.manualEdited;
       }
-      // Fee Upgrade Phase 3: the form was cleared, so the status
-      // switcher has no family — hide it (and drop staged toggles).
-      renderFeeStatusSwitcher();
-
-      // Fee Upgrade Phase 4 (#31): leave mode off again after a reset.
-      const leaveChk = document.getElementById('chkFeeFormLeave');
-      if (leaveChk) leaveChk.checked = false;
-      document.getElementById('feeFormLeaveBox')?.classList.add('hidden');
+      // Fee Dashboard + Form Improvements: the Multi Month selection
+      // belongs to the cleared family — drop it with the form.
+      clearMultiMonthSelection();
       if (amtInput) amtInput.required = true;
       const leaveSubmitBtn = document.getElementById('btnSubmitFeePayment');
       if (leaveSubmitBtn) leaveSubmitBtn.innerHTML = '<i class="fa-solid fa-file-invoice"></i> Save Payment &amp; Generate Official Invoice';
@@ -1524,6 +1689,7 @@
           advToggle.checked = false;
           document.getElementById('feeAdvanceBox')?.classList.add('hidden');
         }
+        clearMultiMonthSelection();
 
         const m = document.getElementById('feeFormMonth').value;
         const y = parseInt(document.getElementById('feeFormYear').value, 10);
@@ -1582,6 +1748,158 @@
     }
 
     // Advance Payment Toggle & Calculator
+    // ---- Multi Month Payments (Fee Dashboard + Form Improvements) ----
+    // Replaces the old fixed 2/3/4/5/6/12-month "Multi-Month Advance
+    // Payment" dropdown. The family picks individual months (previous,
+    // current or future, non-consecutive) and each month is charged its
+    // ACTUAL applicable fee — never fee x N. The save reuses the
+    // existing per-month record creation + receipt shape.
+    function isMultiMonthMode() {
+      const t = document.getElementById('feeToggleAdvance');
+      return !!(t && t.checked);
+    }
+
+    function multiMonthFormAnchor() {
+      const mSel = document.getElementById('feeFormMonth');
+      const ySel = document.getElementById('feeFormYear');
+      const mName = mSel ? mSel.value : '';
+      const mIdx = FEE_CONFIG.MONTHS.findIndex(m => m.toLowerCase() === String(mName).toLowerCase());
+      return { monthIdx: mIdx >= 0 ? mIdx : new Date().getMonth(), year: ySel ? parseInt(ySel.value, 10) : new Date().getFullYear() };
+    }
+
+    function getMultiMonthSelection() {
+      return (FEE_MULTI_MONTH_SELECTED || []).slice().sort((a, b) => (a.year * 100 + a.monthIdx) - (b.year * 100 + b.monthIdx));
+    }
+
+    function clearMultiMonthSelection() {
+      FEE_MULTI_MONTH_SELECTED = [];
+      const grid = document.getElementById('feeMultiMonthGrid');
+      if (grid) grid.innerHTML = '';
+      const rev = document.getElementById('feeMultiMonthReview');
+      if (rev) rev.innerText = 'No months selected yet — pick months above.';
+      const tot = document.getElementById('feeMultiMonthTotal');
+      if (tot) tot.innerText = '';
+    }
+
+    function buildMultiMonthOptionsForForm() {
+      const famId = document.getElementById('feeFormFamilyId') ? document.getElementById('feeFormFamilyId').value : '';
+      const fam = (CACHED_FEE_FAMILIES || []).find(f => String(f.id).toUpperCase() === String(famId || '').toUpperCase());
+      if (!fam || !window.FeePhase6) return [];
+      const anchor = multiMonthFormAnchor();
+      const records = (typeof getStoredFeeRecords === 'function') ? getStoredFeeRecords() : [];
+      const overrides = (typeof getStoredMatrixOverrides === 'function') ? getStoredMatrixOverrides() : {};
+      return window.FeePhase6.buildMultiMonthOptions({
+        fam: fam,
+        records: records,
+        overrides: overrides,
+        anchorMonthIdx: anchor.monthIdx,
+        anchorYear: anchor.year,
+        enrollment: (typeof getFamilyEnrollmentInfo === 'function') ? getFamilyEnrollmentInfo(fam) : null,
+        isLeaveMonth: function (mIdx, yr) {
+          try { return !!(typeof checkFamilyLeaveInMonth === 'function' && checkFamilyLeaveInMonth(fam.id, FEE_CONFIG.MONTHS[mIdx], yr).isLeave); } catch (e) { return false; }
+        },
+        applicableFee: function (mIdx, yr) {
+          try { return feeFormApplicableFeeDetails(fam, mIdx, yr).fee; } catch (e) { return parseFloat(fam.monthly_fee || 0); }
+        }
+      });
+    }
+
+    function renderMultiMonthSelector() {
+      const box = document.getElementById('feeAdvanceBox');
+      if (!box || box.classList.contains('hidden')) return;
+      const grid = document.getElementById('feeMultiMonthGrid');
+      if (!grid) return;
+      const options = buildMultiMonthOptionsForForm();
+      const selectedKeys = {};
+      getMultiMonthSelection().forEach(function (s) { selectedKeys[s.monthIdx + '-' + s.year] = true; });
+      const cur = document.getElementById('feeFormCurrency') ? document.getElementById('feeFormCurrency').value : 'USD';
+      grid.innerHTML = options.map(function (o) {
+        const sel = !!selectedKeys[o.monthIdx + '-' + o.year];
+        const disabled = o.state === 'not_enrolled' || o.state === 'leave' || o.state === 'no_fee';
+        let badge = '';
+        if (o.state === 'paid') badge = '<span class="px-1.5 py-0.5 rounded-full text-[9px] font-black bg-emerald-600 text-white">Paid</span>';
+        else if (o.state === 'leave') badge = '<span class="px-1.5 py-0.5 rounded-full text-[9px] font-black bg-blue-100 text-blue-800 border border-blue-200">Leave</span>';
+        else if (o.state === 'not_enrolled') badge = '<span class="px-1.5 py-0.5 rounded-full text-[9px] font-black bg-slate-100 text-slate-500 border border-slate-200">Not enrolled</span>';
+        else if (o.state === 'no_fee') badge = '<span class="px-1.5 py-0.5 rounded-full text-[9px] font-black bg-slate-100 text-slate-500 border border-slate-200">No fee</span>';
+        const stateCls = sel
+          ? 'border-emerald-600 bg-emerald-50 ring-2 ring-emerald-500'
+          : (disabled ? 'border-slate-200 bg-slate-50 opacity-60 cursor-not-allowed' : 'border-blue-200 bg-white hover:border-blue-400 hover:shadow-sm');
+        const title = disabled ? o.reason : (o.state === 'paid' ? 'Already paid — click to include as a second payment (you will be asked first)' : 'Click to ' + (sel ? 'remove ' : 'add ') + o.label);
+        return '<button type="button" ' + (disabled ? 'disabled ' : '') + 'onclick="toggleMultiMonthSelection(' + o.monthIdx + ', ' + o.year + ')" title="' + title + '" class="fee-mm-box p-2 rounded-xl border text-left transition focus:outline-none focus:ring-2 focus:ring-emerald-500 ' + stateCls + '">' +
+          '<span class="block text-[11px] font-extrabold text-slate-800">' + o.label + '</span>' +
+          '<span class="block text-[11px] font-bold text-slate-600 font-num mt-0.5">' + cur + ' ' + o.fee.toFixed(2) + (o.paidSoFar > 0 ? ' <span class="text-emerald-700">(paid ' + o.paidSoFar.toFixed(2) + ')</span>' : '') + '</span>' +
+          '<span class="block mt-1">' + (sel ? '<span class="px-1.5 py-0.5 rounded-full text-[9px] font-black bg-emerald-600 text-white">Selected</span> ' : '') + badge + '</span>' +
+          '</button>';
+      }).join('');
+      syncMultiMonthReview();
+    }
+
+    function syncMultiMonthReview() {
+      const rev = document.getElementById('feeMultiMonthReview');
+      const tot = document.getElementById('feeMultiMonthTotal');
+      if (!rev && !tot) return;
+      const options = buildMultiMonthOptionsForForm();
+      const byKey = {};
+      options.forEach(function (o) { byKey[o.monthIdx + '-' + o.year] = o; });
+      const sel = getMultiMonthSelection().map(function (s) { return byKey[s.monthIdx + '-' + s.year]; }).filter(Boolean);
+      if (!window.FeePhase6 || sel.length === 0) {
+        if (rev) rev.innerText = 'No months selected yet — pick months above.';
+        if (tot) tot.innerText = '';
+        return;
+      }
+      const calc = window.FeePhase6.multiMonthSelectionTotal(sel);
+      const cur = document.getElementById('feeFormCurrency') ? document.getElementById('feeFormCurrency').value : 'USD';
+      if (rev) {
+        rev.innerText = calc.rows.map(function (r) {
+          return r.label + ' (' + cur + ' ' + r.charge.toFixed(2) + (r.state === 'paid' ? ' — second payment' : '') + ')';
+        }).join(', ');
+      }
+      if (tot) tot.innerText = 'Total for selected months: ' + cur + ' ' + calc.total.toFixed(2);
+    }
+
+    async function toggleMultiMonthSelection(monthIdx, year) {
+      const options = buildMultiMonthOptionsForForm();
+      const opt = options.find(function (o) { return o.monthIdx === monthIdx && o.year === year; });
+      if (!opt) return;
+      if (opt.state === 'not_enrolled' || opt.state === 'leave' || opt.state === 'no_fee') return;
+      const key = monthIdx + '-' + year;
+      const existing = (FEE_MULTI_MONTH_SELECTED || []).findIndex(function (s) { return (s.monthIdx + '-' + s.year) === key; });
+      if (existing >= 0) {
+        FEE_MULTI_MONTH_SELECTED.splice(existing, 1);
+      } else {
+        if (opt.state === 'paid') {
+          // Batch 3A warn-and-ask, at selection time: an already-paid
+          // month is only included as a deliberate second payment.
+          const cur = document.getElementById('feeFormCurrency') ? document.getElementById('feeFormCurrency').value : '';
+          const proceed = await lmsConfirm({
+            title: 'Month Already Paid',
+            message: opt.label + ' is already settled for this family' + (opt.paidSoFar > 0 ? ' (' + cur + ' ' + opt.paidSoFar.toFixed(2) + ' paid)' : '') + '.\n\nIncluding it will record a SECOND payment for the same month. The original record is never overwritten.\n\nInclude ' + opt.label + ' anyway?',
+            confirmText: 'Include Anyway',
+            cancelText: 'Keep Unselected',
+            variant: 'warning'
+          });
+          if (!proceed) return;
+        }
+        FEE_MULTI_MONTH_SELECTED.push({ monthIdx: monthIdx, year: year });
+      }
+      // Recompute arrears (a newly selected past month leaves the
+      // previous-balance total) and the multi-month total.
+      triggerFeeBalanceRecalc();
+    }
+
+    function calcMultiMonthFee() {
+      const options = buildMultiMonthOptionsForForm();
+      const byKey = {};
+      options.forEach(function (o) { byKey[o.monthIdx + '-' + o.year] = o; });
+      const sel = getMultiMonthSelection().map(function (s) { return byKey[s.monthIdx + '-' + s.year]; }).filter(Boolean);
+      const total = (window.FeePhase6 && sel.length)
+        ? window.FeePhase6.multiMonthSelectionTotal(sel).total
+        : 0;
+      const feeField = document.getElementById('feeFormMonthlyFee');
+      if (feeField) feeField.value = total.toFixed(2);
+      recalcFeeTotalLive();
+    }
+
     function handleAdvanceFeeToggle() {
       const isChecked = document.getElementById('feeToggleAdvance').checked;
       const box = document.getElementById('feeAdvanceBox');
@@ -1595,48 +1913,13 @@
           progToggle.checked = false;
           document.getElementById('feeProrateBox')?.classList.add('hidden');
         }
-        calcAdvancePaymentFee();
+        renderMultiMonthSelector();
+        triggerFeeBalanceRecalc();
       } else {
         box.classList.add('hidden');
+        clearMultiMonthSelection();
         triggerFeeBalanceRecalc();
       }
-    }
-
-    function calcAdvancePaymentFee() {
-      const count = parseInt(document.getElementById('feeSelectAdvanceMonths')?.value, 10) || 1;
-      const startMonth = document.getElementById('feeFormMonth').value;
-      const startYear = parseInt(document.getElementById('feeFormYear').value, 10);
-
-      const famId = document.getElementById('feeFormFamilyId').value;
-      const fam = (CACHED_FEE_FAMILIES || []).find(f => String(f.id).toUpperCase() === String(famId).toUpperCase());
-      const advMonthIdx = FEE_CONFIG.MONTHS.findIndex(m => m.toLowerCase() === String(startMonth).toLowerCase());
-      const standardFee = feeFormApplicableFeeDetails(fam, advMonthIdx < 0 ? new Date().getMonth() : advMonthIdx, startYear).fee;
-
-      const totalAdvance = standardFee * count;
-      const calcField = document.getElementById('feeAdvanceCalcAmount');
-      if (calcField) calcField.value = totalAdvance.toFixed(2);
-
-      const mIdx = FEE_CONFIG.MONTHS.findIndex(m => m.toLowerCase() === startMonth.toLowerCase());
-      const badgesContainer = document.getElementById('feeAdvanceMonthsBadges');
-      if (badgesContainer) {
-        badgesContainer.innerHTML = '';
-        for (let i = 0; i < count; i++) {
-          const curIdx = (mIdx + i) % 12;
-          const curY = startYear + Math.floor((mIdx + i) / 12);
-          const badge = document.createElement('span');
-          badge.className = 'px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-100 text-blue-800 border border-blue-200';
-          badge.innerHTML = `<i class="fa-solid fa-check mr-1"></i>${FEE_CONFIG.MONTHS[curIdx]} ${curY}`;
-          badgesContainer.appendChild(badge);
-        }
-      }
-    }
-
-    function applyAdvancePaymentFeeToForm() {
-      const advanceAmt = parseFloat(document.getElementById('feeAdvanceCalcAmount')?.value || 0);
-      if (advanceAmt <= 0) return;
-      document.getElementById('feeFormMonthlyFee').value = advanceAmt.toFixed(2);
-      recalcFeeTotalLive();
-      lmsNotify(`Advance payment fee of ${advanceAmt.toFixed(2)} applied!`);
     }
 
     // Submit Payment & Save Record
@@ -1645,15 +1928,6 @@
       const famId = document.getElementById('feeFormFamilyId').value;
       if (!famId) {
         lmsNotify("Please search and select a family account first.");
-        return;
-      }
-
-      // Fee Upgrade Phase 4 (#31): leave from the fee form — record a
-      // leave for this family instead of collecting a fee. The shared
-      // leave core (applyStudentLeave) runs once per student, same
-      // validation and schedule clean-up as the Leave tab.
-      if (document.getElementById('chkFeeFormLeave')?.checked) {
-        await submitFeeFormLeave(famId);
         return;
       }
 
@@ -1667,14 +1941,17 @@
         const formMonth = document.getElementById('feeFormMonth').value;
         const formYear = parseInt(document.getElementById('feeFormYear').value, 10);
         const advOn = document.getElementById('feeToggleAdvance')?.checked || false;
-        const advCount = advOn ? (parseInt(document.getElementById('feeSelectAdvanceMonths').value, 10) || 1) : 1;
-        const startIdx = FEE_CONFIG.MONTHS.findIndex(m => m.toLowerCase() === String(formMonth).toLowerCase());
+        // Fee Dashboard + Form Improvements: in Multi Month mode the
+        // check covers the SELECTED months (not N consecutive months
+        // from the form month). A paid month was already confirmed at
+        // selection time; this is the backstop for anything recorded
+        // since (for example in another tab).
+        const dupMonths = advOn
+          ? getMultiMonthSelection().map(s => ({ month: FEE_CONFIG.MONTHS[s.monthIdx], year: s.year }))
+          : [{ month: formMonth, year: formYear }];
         let dupHit = null;
-        for (let i = 0; i < advCount && !dupHit; i++) {
-          const idx = startIdx >= 0 ? (startIdx + i) % 12 : -1;
-          const mName = idx >= 0 ? FEE_CONFIG.MONTHS[idx] : formMonth;
-          const yVal = startIdx >= 0 ? formYear + Math.floor((startIdx + i) / 12) : formYear;
-          dupHit = findFeeMonthDuplicate(existingRecords, famId, mName, yVal);
+        for (let i = 0; i < dupMonths.length && !dupHit; i++) {
+          dupHit = findFeeMonthDuplicate(existingRecords, famId, dupMonths[i].month, dupMonths[i].year);
         }
         if (dupHit) {
           const proceed = await lmsConfirm({
@@ -1686,6 +1963,13 @@
               })
           if (!proceed) return;
         }
+      }
+
+      // Fee Dashboard + Form Improvements: Multi Month Payments with
+      // no month picked has a 0.00 fee — never save an empty payment.
+      if (document.getElementById('feeToggleAdvance')?.checked && getMultiMonthSelection().length === 0) {
+        lmsNotify('Select at least one month in Multi Month Payments first.');
+        return;
       }
 
       const btn = document.getElementById('btnSubmitFeePayment');
@@ -1712,7 +1996,8 @@
 
       const isProrated = document.getElementById('feeToggleProrated')?.checked || false;
       const isAdvance = document.getElementById('feeToggleAdvance')?.checked || false;
-      const advanceCount = isAdvance ? parseInt(document.getElementById('feeSelectAdvanceMonths').value, 10) : 1;
+      const multiMonths = isAdvance ? getMultiMonthSelection() : [];
+      const advanceCount = isAdvance ? multiMonths.length : 1;
 
       const paymentRecord = {
         receiptNo,
@@ -1745,31 +2030,30 @@
         advanceMonthsCount: advanceCount
       };
 
-      // Handle multi-month advance sequence records in storage
+      // Handle Multi Month Payments sequence records in storage
+      // (Fee Dashboard + Form Improvements): each selected month gets
+      // its own record at its ACTUAL applicable fee, with the amount
+      // paid spread chronologically (earliest month first). The first
+      // record carries the previous balance / credit / discount /
+      // form totals, exactly like the old advance sequence did. A
+      // single selected month saves as one plain record for that
+      // month. Same record shape + receipt numbering as before.
       const addedBatch = [];
-      if (isAdvance && advanceCount > 1) {
-        const mIdx = FEE_CONFIG.MONTHS.findIndex(m => m.toLowerCase() === paymentRecord.month.toLowerCase());
-        const singleFee = paymentRecord.monthlyFee / advanceCount;
-
-        for (let i = 0; i < advanceCount; i++) {
-          const curIdx = (mIdx + i) % 12;
-          const curY = paymentRecord.year + Math.floor((mIdx + i) / 12);
-          const advRec = {
-            ...paymentRecord,
-            receiptNo: `${receiptNo}-${i + 1}`,
-            month: FEE_CONFIG.MONTHS[curIdx],
-            year: curY,
-            monthlyFee: singleFee,
-            previousBalance: i === 0 ? paymentRecord.previousBalance : 0,
-            creditDeducted: i === 0 ? paymentRecord.creditDeducted : 0,
-            totalPayable: i === 0 ? paymentRecord.totalPayable : singleFee,
-            amountPaid: i === 0 ? paymentRecord.amountPaid : singleFee,
-            remainingBalance: i === 0 ? paymentRecord.remainingBalance : 0,
-            excessPaid: i === 0 ? paymentRecord.excessPaid : 0,
-            status: i === 0 ? paymentRecord.status : 'Paid in Advance'
-          };
-          records.unshift(advRec);
-          addedBatch.push(advRec);
+      if (isAdvance && multiMonths.length > 0) {
+        const mmOptions = buildMultiMonthOptionsForForm();
+        const mmByKey = {};
+        mmOptions.forEach(o => { mmByKey[o.monthIdx + '-' + o.year] = o; });
+        const mmSelected = multiMonths.map(s => mmByKey[s.monthIdx + '-' + s.year]).filter(Boolean);
+        const mmAllocation = (window.FeePhase6 && typeof window.FeePhase6.allocateMultiMonthPayment === 'function')
+          ? window.FeePhase6.allocateMultiMonthPayment(mmSelected, amountPaid)
+          : [];
+        const mmSequence = (window.FeePhase6 && typeof window.FeePhase6.buildMultiMonthSequence === 'function')
+          ? window.FeePhase6.buildMultiMonthSequence(paymentRecord, mmSelected, mmAllocation)
+          : [];
+        mmSequence.forEach(rec => { records.unshift(rec); addedBatch.push(rec); });
+        if (addedBatch.length === 0) {
+          records.unshift(paymentRecord);
+          addedBatch.push(paymentRecord);
         }
       } else {
         records.unshift(paymentRecord);
@@ -1804,8 +2088,10 @@
       // method on this device for the next fee form.
       rememberPaymentMethodForFamily(famId, paymentRecord.paymentMethod);
 
-      // Open Official Printable Receipt Modal
-      openFeeInvoiceModal(paymentRecord);
+      // Open Official Printable Receipt Modal — for Multi Month
+      // Payments the first sequence record (earliest selected month),
+      // which carries the form totals.
+      openFeeInvoiceModal((isAdvance && addedBatch.length > 0) ? addedBatch[0] : paymentRecord);
 
       // Auto-send official invoice email to parent & academy if toggle is checked
       const autoSendEmail = document.getElementById('feeToggleAutoSendEmail')?.checked;
@@ -1842,7 +2128,9 @@
       document.getElementById('feeInvCurrentDue').innerText = `${cur} ${parseFloat(r.monthlyFee || 0).toFixed(2)}`;
 
       const descEl = document.getElementById('feeInvDescription');
-      if (r.isAdvancePayment && r.advanceMonthsCount > 1) {
+      if (r.isMultiMonthPayment && r.advanceMonthsCount > 1) {
+        descEl.innerHTML = `Multi-Month Tuition Fee (${r.advanceMonthsCount} Months)`;
+      } else if (r.isAdvancePayment && r.advanceMonthsCount > 1) {
         descEl.innerHTML = `Advance Tuition Fee (${r.advanceMonthsCount} Months Pre-Paid)`;
       } else if (r.isProrated) {
         descEl.innerHTML = `Tuition Fee (Mid-Month Admission: ${r.activeDays} Days Active)`;
@@ -2689,7 +2977,20 @@ Official Email: ${offEmail}`;
       }
     }
 
+    // Fee Dashboard + Form Improvements (#7): a bulk send that is
+    // already running cannot be started again — a double-click (or a
+    // manual click racing the 4th-of-month auto trigger) sends once.
     async function sendBulkPendingFeeReminders(isAuto4thTrigger = false) {
+      if (FEE_PENDING_REMIND_RUNNING) return;
+      FEE_PENDING_REMIND_RUNNING = true;
+      try {
+        await sendBulkPendingFeeRemindersInner(isAuto4thTrigger);
+      } finally {
+        FEE_PENDING_REMIND_RUNNING = false;
+      }
+    }
+
+    async function sendBulkPendingFeeRemindersInner(isAuto4thTrigger = false) {
       const list = CACHED_PENDING_FEE_LIST || [];
       const mSel = document.getElementById('feePendingMonthFilter');
       const ySel = document.getElementById('feePendingYearFilter');
@@ -2710,8 +3011,13 @@ Official Email: ${offEmail}`;
       // success/failure per family.
       if (CURRENT_ROLE === 'manager') {
         if (!isAuto4thTrigger) {
-          const confirmMsgMgr = `Remind All Parents — ${periodStr}\n\nTotal Pending Families: ${list.length}\n\nThe official ${periodStr} Pending Fee email will be sent securely to each family's saved email address. Addresses are never shown to managers.\n\nContinue?`;
-          if (!(await lmsConfirm(confirmMsgMgr))) return;
+          // Fee Dashboard + Form Improvements (#7): two-step confirm
+          // with the brief's exact question + explicit button labels.
+          // Managers never see addresses — the Worker resolves them.
+          const cfgMgr = (window.FeePhase6 && typeof window.FeePhase6.remindAllConfirmConfig === 'function')
+            ? window.FeePhase6.remindAllConfirmConfig({ kind: 'pending', period: periodStr, total: list.length, withEmail: null, quotaNote: 'Sent securely to each family saved email address. Addresses are never shown to managers.' })
+            : { title: 'Send Fee Reminders?', message: 'Are you sure you want to send fee reminders to all eligible families?', confirmText: 'Confirm & Send Reminders', cancelText: 'Cancel', variant: 'warning' };
+          if (!(await lmsConfirm(cfgMgr))) return;
         }
         const btnM = document.getElementById('btnRemindAllPendingMonth');
         const origHtmlM = btnM ? btnM.innerHTML : '';
@@ -2765,12 +3071,16 @@ Official Email: ${offEmail}`;
       });
 
       if (!isAuto4thTrigger) {
-        let confirmMsg = `Remind All Parents — ${periodStr}\n\nTotal Pending Families: ${list.length}\nFamilies with Valid Email: ${recipientsWithEmail.length}\n\n`;
-        if (recipientsWithEmail.length > 85) {
-          confirmMsg += `⚠️ Safe Quota Notice: Free Gmail has a daily limit of 100 emails/day.\nTo keep your official account 100% safe, dispatching will process up to 85 emails in this batch.\n\n`;
-        }
-        confirmMsg += `Do you want to automatically dispatch the official ${periodStr} Pending Fee & Receipt Request email?`;
-        if (!(await lmsConfirm(confirmMsg))) return;
+        // Fee Dashboard + Form Improvements (#7): two-step confirm
+        // with the brief's exact question + explicit button labels.
+        // The quota notice is preserved inside the dialog.
+        const quotaNote = recipientsWithEmail.length > 85
+          ? 'Safe Quota Notice: Free Gmail has a daily limit of 100 emails/day. To keep your official account safe, dispatching will process up to 85 emails in this batch.'
+          : null;
+        const cfg = (window.FeePhase6 && typeof window.FeePhase6.remindAllConfirmConfig === 'function')
+          ? window.FeePhase6.remindAllConfirmConfig({ kind: 'pending', period: periodStr, total: list.length, withEmail: recipientsWithEmail.length, quotaNote: quotaNote })
+          : { title: 'Send Fee Reminders?', message: 'Are you sure you want to send fee reminders to all eligible families?', confirmText: 'Confirm & Send Reminders', cancelText: 'Cancel', variant: 'warning' };
+        if (!(await lmsConfirm(cfg))) return;
       }
 
       const btn = document.getElementById('btnRemindAllPendingMonth');
@@ -3017,121 +3327,7 @@ Official Email: ${offEmail}`;
     function refreshFeeViewsAfterStatusChange() {
       try { loadFeeDashboardStats(); } catch (e) {}
       try { loadMasterAnnualMatrix(); } catch (e) {}
-      try { renderFeeStatusSwitcher(); } catch (e) {}
       try { if (CURRENT_LEDGER_FAMILY_ID) reloadFamilyLedgerData(); } catch (e) {}
-    }
-
-    // ---- Collect Fee staged switcher (#33) ----
-    // Staged toggles belong to one family + year; the _key pins them.
-    let FEE_STATUS_STAGED = {};
-
-    function feeStatusSwitcherFamilyYear() {
-      const famId = document.getElementById('feeFormFamilyId') ? document.getElementById('feeFormFamilyId').value : '';
-      const ySel = document.getElementById('feeFormYear');
-      const year = ySel ? parseInt(ySel.value, 10) : new Date().getFullYear();
-      return { famId: famId || '', year: year };
-    }
-
-    function renderFeeStatusSwitcher() {
-      const card = document.getElementById('feeStatusSwitcherCard');
-      if (!card) return;
-      const { famId, year } = feeStatusSwitcherFamilyYear();
-      const fam = (CACHED_FEE_FAMILIES || []).find(f => String(f.id).toUpperCase() === String(famId || '').toUpperCase());
-      if (!fam) {
-        card.classList.add('hidden');
-        return;
-      }
-      card.classList.remove('hidden');
-      const key = String(famId).toUpperCase() + '_' + year;
-      if (FEE_STATUS_STAGED._key !== key) {
-        FEE_STATUS_STAGED = { _key: key };
-      }
-      const rows = buildAnnualMatrixData(year);
-      const row = rows.find(r => String(r.familyId).toUpperCase() === String(famId).toUpperCase());
-      const months = row ? row.months : FEE_CONFIG.MONTHS.map(m => ({ month: m, isFuture: true }));
-      const grid = document.getElementById('feeStatusSwitcherGrid');
-      if (grid && window.FeePhase3) {
-        grid.innerHTML = window.FeePhase3.switcherGridHtml(months, FEE_STATUS_STAGED);
-      }
-      const enr = document.getElementById('feeStatusEnrollmentRow');
-      if (enr && window.FeePhase3) {
-        enr.innerHTML = window.FeePhase3.enrollmentRowHtml(getFamilyEnrollmentInfo(fam), year);
-      }
-      syncFeeStatusSwitcherBar();
-    }
-
-    function syncFeeStatusSwitcherBar() {
-      const stagedCount = Object.keys(FEE_STATUS_STAGED).filter(k => k !== '_key').length;
-      const line = document.getElementById('feeStatusStagedLine');
-      if (line) {
-        line.innerText = stagedCount === 0
-          ? 'Click a Due month to stage Mark Paid, or a status-paid month to stage Mark Unpaid. Save applies all staged changes at once.'
-          : stagedCount + ' change(s) staged — Save to apply, Cancel to discard.';
-      }
-      const saveBtn = document.getElementById('btnFeeStatusSaveStaged');
-      if (saveBtn) saveBtn.disabled = stagedCount === 0;
-      const cancelBtn = document.getElementById('btnFeeStatusCancelStaged');
-      if (cancelBtn) cancelBtn.disabled = stagedCount === 0;
-    }
-
-    function toggleStagedMonthStatus(monthIdx) {
-      const { famId, year } = feeStatusSwitcherFamilyYear();
-      if (!famId || !window.FeePhase3) return;
-      const rows = buildAnnualMatrixData(year);
-      const row = rows.find(r => String(r.familyId).toUpperCase() === String(famId).toUpperCase());
-      const m = row ? row.months[monthIdx] : null;
-      if (!m) return;
-      const next = window.FeePhase3.stagedToggleNext(window.FeePhase3.uiStateForMonth(m));
-      if (!next) return;
-      if (FEE_STATUS_STAGED[monthIdx] === next) delete FEE_STATUS_STAGED[monthIdx];
-      else FEE_STATUS_STAGED[monthIdx] = next;
-      renderFeeStatusSwitcher();
-    }
-
-    async function saveStagedMonthStatuses() {
-      const { famId, year } = feeStatusSwitcherFamilyYear();
-      const staged = Object.keys(FEE_STATUS_STAGED).filter(k => k !== '_key');
-      if (staged.length === 0 || !famId) return;
-      const btn = document.getElementById('btnFeeStatusSaveStaged');
-      if (btn) {
-        btn.disabled = true;
-        btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Saving...';
-      }
-      let applied = 0;
-      let skipped = 0;
-      let failed = 0;
-      const failures = [];
-      for (const k of staged) {
-        const mIdx = parseInt(k, 10);
-        const target = FEE_STATUS_STAGED[k];
-        const res = target === 'paid'
-          ? await markMonthPaid(famId, mIdx, year)
-          : await markMonthUnpaid(famId, mIdx, year);
-        if (res && res.ok) {
-          applied++;
-          if (res.cloudPending) failures.push(FEE_CONFIG.MONTHS[mIdx] + ': saved on this device only — use Sync to retry the cloud copy.');
-        } else if (res && (res.code === 'already_paid' || res.code === 'not_marked')) {
-          skipped++;
-        } else {
-          failed++;
-          failures.push(FEE_CONFIG.MONTHS[mIdx] + ': ' + ((res && res.error) ? res.error : 'could not save'));
-        }
-      }
-      FEE_STATUS_STAGED = { _key: String(famId).toUpperCase() + '_' + year };
-      renderFeeStatusSwitcher();
-      refreshFeeViewsAfterStatusChange();
-      if (btn) btn.innerHTML = 'Save Changes';
-      if (failed === 0 && failures.length === 0) {
-        lmsNotify(applied + ' month status change(s) saved.' + (skipped > 0 ? ' ' + skipped + ' already in that state.' : ''));
-      } else {
-        lmsNotify(applied + ' saved, ' + (failed + failures.length) + ' with notes: ' + failures.join('; '), { type: 'error' });
-      }
-    }
-
-    function cancelStagedMonthStatuses() {
-      const { famId, year } = feeStatusSwitcherFamilyYear();
-      FEE_STATUS_STAGED = { _key: String(famId).toUpperCase() + '_' + year };
-      renderFeeStatusSwitcher();
     }
 
     // ---- Enrollment marker (#32, #46, #47) ----
@@ -3171,32 +3367,6 @@ Official Email: ${offEmail}`;
       saveStoredMatrixOverrides(overrides);
       syncMatrixOverridesToCloud(familyId, overrides);
       return had;
-    }
-
-    function applyFeeEnrollmentUntil() {
-      const { famId, year } = feeStatusSwitcherFamilyYear();
-      if (!famId) return;
-      const mSel = document.getElementById('feeStatusEnrollMonth');
-      const yIn = document.getElementById('feeStatusEnrollYear');
-      const mIdx = mSel ? parseInt(mSel.value, 10) : -1;
-      const yInt = yIn ? parseInt(yIn.value, 10) : year;
-      if (mIdx < 0 || mIdx > 11 || isNaN(yInt)) {
-        lmsNotify('Choose a valid month.', { type: 'error' });
-        return;
-      }
-      setFamilyAdmissionDate(famId, mIdx, yInt);
-      renderFeeStatusSwitcher();
-      refreshFeeViewsAfterStatusChange();
-      lmsNotify(`Enrolled from ${FEE_CONFIG.MONTHS[mIdx]} ${yInt} — all prior months are Not Enrolled.`);
-    }
-
-    function clearFeeEnrollmentDate() {
-      const { famId } = feeStatusSwitcherFamilyYear();
-      if (!famId) return;
-      clearFamilyAdmissionDate(famId);
-      renderFeeStatusSwitcher();
-      refreshFeeViewsAfterStatusChange();
-      lmsNotify('Enrollment date cleared — back to the joining date.');
     }
 
     // ---- Ledger one-tap (#36) ----
@@ -3445,6 +3615,9 @@ Official Email: ${offEmail}`;
       // Build lookup map of payments per family_month_year
       const paidAmountMap = {};
       records.forEach(r => {
+        // Fee Dashboard + Form Improvements: a cancelled record paid
+        // nothing — it must not shrink a defaulter's arrears.
+        if (isFeeRecordCancelled(r)) return;
         const fKey = `${String(r.familyId).toUpperCase()}_${String(r.month).toLowerCase()}_${parseInt(r.year, 10)}`;
         paidAmountMap[fKey] = (paidAmountMap[fKey] || 0) + parseFloat(r.amountPaid || 0) + parseFloat(r.discount || 0);
       });
@@ -3453,6 +3626,9 @@ Official Email: ${offEmail}`;
 
       families.forEach(fam => {
         const famUpper = String(fam.id).toUpperCase();
+        // Fee Dashboard + Form Improvements: a deactivated family is
+        // never a defaulter.
+        if (typeof isFamilyDeactivated === 'function' && isFamilyDeactivated(fam)) return;
         const monthlyFee = parseFloat(fam.monthly_fee || 0);
         if (monthlyFee <= 0) return;
 
@@ -3719,7 +3895,20 @@ Official Email: ${offEmail}`;
       }
     }
 
+    // Fee Dashboard + Form Improvements (#7): same single-flight
+    // guard as Remind All — a second click while a send is running
+    // sends nothing.
     async function sendBulkDefaulterReminders3Plus() {
+      if (FEE_DEFAULTER_REMIND_RUNNING) return;
+      FEE_DEFAULTER_REMIND_RUNNING = true;
+      try {
+        await sendBulkDefaulterReminders3PlusInner();
+      } finally {
+        FEE_DEFAULTER_REMIND_RUNNING = false;
+      }
+    }
+
+    async function sendBulkDefaulterReminders3PlusInner() {
       const list = CACHED_THREE_MONTH_DEFAULTERS || [];
       if (list.length === 0) {
         lmsNotify('All clear! There are currently zero families in the 3+ Months Defaulters list.');
@@ -3730,8 +3919,13 @@ Official Email: ${offEmail}`;
       // Worker resolves each address server-side; the manager only sees
       // aggregate counts, never an address or who has one on file.
       if (CURRENT_ROLE === 'manager') {
-        if (!(await lmsConfirm(`Remind All 3+ Month Defaulters\n\nTotal 3+ Month Defaulter Families: ${list.length}\n\nThe urgent 3+ Months Overdue Fee Reminder will be sent securely to each family's saved email address. Addresses are never shown to managers.\n\nContinue?`))) {
-          return;
+        {
+          // Fee Dashboard + Form Improvements (#7): same two-step
+          // confirm as Remind All, with the brief's exact question.
+          const cfgM3 = (window.FeePhase6 && typeof window.FeePhase6.remindAllConfirmConfig === 'function')
+            ? window.FeePhase6.remindAllConfirmConfig({ kind: 'defaulters', total: list.length, withEmail: null, quotaNote: 'Sent securely to each family saved email address. Addresses are never shown to managers.' })
+            : { title: 'Send Defaulter Reminders?', message: 'Are you sure you want to send fee reminders to all eligible families?', confirmText: 'Confirm & Send Reminders', cancelText: 'Cancel', variant: 'warning' };
+          if (!(await lmsConfirm(cfgM3))) return;
         }
         const btnM3 = document.getElementById('btnRemindAll3PlusDefaulters');
         const origHtmlM3 = btnM3 ? btnM3.innerHTML : '';
@@ -3773,8 +3967,13 @@ Official Email: ${offEmail}`;
       }
 
       const withEmail = list.filter(i => i.email && i.email.includes('@'));
-      if (!(await lmsConfirm(`Remind All 3+ Month Defaulters\n\nTotal 3+ Month Defaulter Families: ${list.length}\nFamilies with Valid Email: ${withEmail.length}\n\nDo you want to automatically send the urgent 3+ Months Overdue Fee Reminder email to all defaulters?`))) {
-        return;
+      {
+        // Fee Dashboard + Form Improvements (#7): same two-step
+        // confirm as Remind All, with the brief's exact question.
+        const cfg3 = (window.FeePhase6 && typeof window.FeePhase6.remindAllConfirmConfig === 'function')
+          ? window.FeePhase6.remindAllConfirmConfig({ kind: 'defaulters', total: list.length, withEmail: withEmail.length })
+          : { title: 'Send Defaulter Reminders?', message: 'Are you sure you want to send fee reminders to all eligible families?', confirmText: 'Confirm & Send Reminders', cancelText: 'Cancel', variant: 'warning' };
+        if (!(await lmsConfirm(cfg3))) return;
       }
 
       const btn = document.getElementById('btnRemindAll3PlusDefaulters');
@@ -4394,6 +4593,7 @@ Official Email: ${offEmail}`;
     function loadFeeReceiptsHistory() {
       const records = getStoredFeeRecords();
       renderFeeReceiptsHistoryRows(records);
+      syncFeeReceiptsMonthChip();
       if (window.FeePhase1 && typeof window.FeePhase1.loadFeeDueInvoicesList === 'function') {
         window.FeePhase1.loadFeeDueInvoicesList();
       }
@@ -4422,7 +4622,18 @@ Official Email: ${offEmail}`;
       // Fee Upgrade Phase 3: ADJ status rows are not receipts — they
       // never appear in the Receipts list (same as the Phase 1
       // due-invoice rows, filtered one step earlier).
-      const visible = (records || []).filter(r => !isFeeStatusRowRecord(r));
+      const visible = (records || []).filter(r => {
+        if (isFeeStatusRowRecord(r)) return false;
+        if (FEE_RECEIPTS_MONTH_FILTER) {
+          if (window.FeePhase6 && typeof window.FeePhase6.isReceiptInMonth === 'function') {
+            return window.FeePhase6.isReceiptInMonth(r, FEE_RECEIPTS_MONTH_FILTER.monthIdx, FEE_RECEIPTS_MONTH_FILTER.year);
+          }
+          return String(r.month).toLowerCase() === (FEE_CONFIG.MONTHS[FEE_RECEIPTS_MONTH_FILTER.monthIdx] || '').toLowerCase()
+            && parseInt(r.year, 10) === FEE_RECEIPTS_MONTH_FILTER.year
+            && String(r.status || '').toLowerCase().indexOf('cancel') === -1;
+        }
+        return true;
+      });
 
       if (!visible || visible.length === 0) {
         tbody.innerHTML = `<tr><td colspan="11" class="p-8 text-center text-slate-400">No payment receipts recorded yet.</td></tr>`;
@@ -4454,6 +4665,9 @@ Official Email: ${offEmail}`;
 
     function filterFeeReceiptsHistoryLive() {
       const q = (document.getElementById('feeReceiptsSearchInput')?.value || '').trim().toLowerCase();
+      // Fee Dashboard + Form Improvements: a text search replaces the
+      // Paid-KPI month filter instead of stacking on top of it.
+      if (q) clearFeeReceiptsMonthFilter();
       const records = getStoredFeeRecords();
 
       if (!q) {
@@ -4636,85 +4850,6 @@ Official Email: ${offEmail}`;
     }
 
     // ---- #31 — Leave from inside the Collect Fee form ----
-    function toggleFeeFormLeaveMode() {
-      const chk = document.getElementById('chkFeeFormLeave');
-      const box = document.getElementById('feeFormLeaveBox');
-      const btn = document.getElementById('btnSubmitFeePayment');
-      const amt = document.getElementById('feeFormAmountPaid');
-      const on = !!(chk && chk.checked);
-      if (box) box.classList.toggle('hidden', !on);
-      // In leave mode no amount is collected, so the required amount
-      // field must not block the submit.
-      if (amt) amt.required = !on;
-      if (btn) btn.innerHTML = on
-        ? '<i class="fa-solid fa-plane-departure"></i> Record Leave for This Month'
-        : '<i class="fa-solid fa-file-invoice"></i> Save Payment &amp; Generate Official Invoice';
-      if (on) updateFeeFormLeaveSummary();
-    }
-
-    function feeFormLeaveStateOf() {
-      return (window.FeePhase2 && typeof window.FeePhase2.studentLeaveState === 'function')
-        ? (s) => window.FeePhase2.studentLeaveState(s)
-        : null;
-    }
-
-    function updateFeeFormLeaveSummary() {
-      const el = document.getElementById('feeFormLeaveSummary');
-      if (!el || !window.FeePhase4) return;
-      const famId = document.getElementById('feeFormFamilyId')?.value || '';
-      const fam = (CACHED_FEE_FAMILIES || []).find(f => String(f.id).toUpperCase() === String(famId).toUpperCase());
-      const monthName = document.getElementById('feeFormMonth')?.value || '';
-      const year = parseInt(document.getElementById('feeFormYear')?.value, 10) || new Date().getFullYear();
-      const monthIdx = FEE_CONFIG.MONTHS.findIndex(m => m.toLowerCase() === String(monthName).toLowerCase());
-      if (!fam) { el.innerText = 'Select a family first.'; return; }
-      if (monthIdx < 0) { el.innerText = 'Choose a fee month first.'; return; }
-      const students = (fam.students || []).filter(s => (s.status || '').toLowerCase() !== 'trial');
-      const plan = window.FeePhase4.planFeeFormLeave(students, monthIdx, year, '', feeFormLeaveStateOf());
-      const win = plan.window;
-      let line = FEE_CONFIG.MONTHS[monthIdx] + ' ' + year + ' (' + win.startDate + ' to ' + win.returnDate + '): ' + plan.todo.length + ' student(s) will go on leave.';
-      if (plan.skipped.length) line += ' ' + plan.skipped.map(s => s.name + ' — ' + s.reason).join('; ');
-      el.innerText = line;
-    }
-
-    async function submitFeeFormLeave(famId) {
-      const fam = (CACHED_FEE_FAMILIES || []).find(f => String(f.id).toUpperCase() === String(famId).toUpperCase());
-      if (!fam) { lmsNotify('Please search and select a family account first.'); return; }
-      const monthName = document.getElementById('feeFormMonth')?.value || '';
-      const year = parseInt(document.getElementById('feeFormYear')?.value, 10) || new Date().getFullYear();
-      const monthIdx = FEE_CONFIG.MONTHS.findIndex(m => m.toLowerCase() === String(monthName).toLowerCase());
-      if (monthIdx < 0) { lmsNotify('Please choose a valid fee month first.'); return; }
-      const reason = (document.getElementById('txtFeeFormLeaveReason')?.value || '').trim();
-      const students = (fam.students || []).filter(s => (s.status || '').toLowerCase() !== 'trial');
-      const plan = window.FeePhase4.planFeeFormLeave(students, monthIdx, year, reason, feeFormLeaveStateOf());
-      if (plan.todo.length === 0) {
-        lmsNotify('No student of this family can go on leave for this month.' + (plan.skipped.length ? ' ' + plan.skipped.map(s => s.name + ' — ' + s.reason).join('; ') : ''));
-        return;
-      }
-      const proceed = await lmsConfirm({
-        title: 'Record Leave for ' + monthName + ' ' + year + '?',
-        message: 'This records a leave for ' + plan.todo.length + ' student(s) of ' + (fam.parent_name || fam.id) + ' from ' + plan.window.startDate + ' to ' + plan.window.returnDate + '. Schedules and assignments are paused for that month, exactly as on the Leave tab.' + (plan.skipped.length ? '\n\nSkipped: ' + plan.skipped.map(s => s.name + ' — ' + s.reason).join('; ') : ''),
-        confirmText: 'Record Leave',
-        cancelText: 'Cancel',
-        variant: 'warning'
-      });
-      if (!proceed) return;
-      const btn = document.getElementById('btnSubmitFeePayment');
-      if (btn) { btn.disabled = true; btn.innerHTML = 'Recording leave...'; }
-      let result;
-      try {
-        result = await window.FeePhase4.runFeeFormLeave(plan, { applyLeave: window.applyStudentLeave });
-      } finally {
-        if (btn) btn.disabled = false;
-      }
-      if (result.ok) {
-        lmsNotify('Leave recorded for ' + result.applied.length + ' student(s) for ' + monthName + ' ' + year + '.');
-      } else {
-        lmsNotify('Leave recorded for ' + result.applied.length + ' student(s); ' + result.failed.length + ' could not be saved: ' + result.failed.map(f => f.name + ' — ' + f.error).join('; '), { type: 'error' });
-      }
-      resetFeeForm();
-      await loadFeeDashboardStats();
-    }
-
     // ---- #66 — Families CSV export (manager contacts masked) ----
     function exportFamiliesCsv() {
       if (!window.FeePhase4) { lmsNotify('CSV export is unavailable right now. Please reload the page.'); return; }

@@ -1331,6 +1331,10 @@
      refresh. Plain CSS keeps .hidden effective from the first paint,
      so the login screen can never flash before the gate decides. */
   #ownerLoginView.hidden, #mainAppWrapper.hidden { display: none !important; }
+
+  /* FEE DASHBOARD + FORM IMPROVEMENTS (2026-11-17): the selected KPI
+     card — a card that was clicked to open its view. */
+  .fee-kpi-selected { box-shadow: 0 0 0 2px #047857, 0 12px 28px rgba(15, 23, 42, .14) !important; transform: translateY(-2px); }
 </style>
 </head>
 <body class="text-slate-800 flex flex-col min-h-screen w-full max-w-full overflow-x-hidden bg-slate-50">
@@ -2977,7 +2981,7 @@
               </span>
             </h2>
             <p class="text-xs text-slate-500 mt-0.5">
-              Multi-Currency Billing, Smart Arrears, Mid-Month Proration, Advance Payments, Leaves Sync &amp; 1-Click WhatsApp Receipts.
+              Multi-Currency Billing, Smart Arrears, Mid-Month Proration, Multi Month Payments, Leaves Sync &amp; 1-Click WhatsApp Receipts.
             </p>
           </div>
         </div>
@@ -2987,9 +2991,6 @@
             <i id="feeCloudSyncIcon" class="fa-solid fa-cloud-check text-emerald-600"></i>
             <span id="feeCloudSyncText">Cloud Synced</span>
           </div>
-          <button onclick="switchFeeSubTab('fee-subtab-collect')" class="px-4 py-2 bg-emerald-700 hover:bg-emerald-800 text-white rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-sm">
-            <i class="fa-solid fa-cash-register"></i> Collect Fee (1-Click)
-          </button>
           <button onclick="refreshCurrentFeeView()" class="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-xs">
             <i class="fa-solid fa-arrows-rotate"></i> Refresh
           </button>
@@ -3008,16 +3009,6 @@
         <button id="btnFeeSubTab-collect" onclick="switchFeeSubTab('fee-subtab-collect')" class="fee-subtab-btn px-3 sm:px-3.5 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 text-slate-600 hover:bg-slate-100 shrink-0 whitespace-nowrap">
           <i class="fa-solid fa-cash-register"></i>
           <span>Collect Fee</span>
-        </button>
-        <button id="btnFeeSubTab-pending" onclick="switchFeeSubTab('fee-subtab-pending')" class="fee-subtab-btn px-3 sm:px-3.5 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 text-slate-600 hover:bg-slate-100 shrink-0 whitespace-nowrap">
-          <i class="fa-solid fa-clock-rotate-left text-amber-600"></i>
-          <span>Pending Payments</span>
-          <span id="feeSubBadgePending" class="px-1.5 py-0.2 rounded-full text-[10px] font-mono bg-amber-100 text-amber-800 font-bold border border-amber-300">0</span>
-        </button>
-        <button id="btnFeeSubTab-defaulters" onclick="switchFeeSubTab('fee-subtab-defaulters')" class="fee-subtab-btn px-3 sm:px-3.5 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 text-slate-600 hover:bg-slate-100 shrink-0 whitespace-nowrap">
-          <i class="fa-solid fa-triangle-exclamation text-rose-600"></i>
-          <span>Defaulters (3+ Months)</span>
-          <span id="feeSubBadgeDefaulters" class="px-1.5 py-0.2 rounded-full text-[10px] font-mono bg-rose-100 text-rose-800 font-bold border border-rose-300">0</span>
         </button>
         <button id="btnFeeSubTab-matrix" onclick="switchFeeSubTab('fee-subtab-matrix')" class="fee-subtab-btn px-3 sm:px-3.5 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 text-slate-600 hover:bg-slate-100 shrink-0 whitespace-nowrap">
           <i class="fa-solid fa-table-cells text-cyan-600"></i>
@@ -3069,8 +3060,8 @@
         </div>
 
         <!-- KPI METRICS GRID -->
-        <div class="grid grid-cols-2 md:grid-cols-4 gap-3.5">
-          <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs flex items-center gap-3.5">
+        <div class="grid grid-cols-2 lg:grid-cols-5 gap-3.5">
+          <button type="button" id="feeKpiCard-active" onclick="handleFeeKpiClick('active')" aria-pressed="false" title="Show active families" class="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs flex items-center gap-3.5 text-left cursor-pointer transition hover:shadow-md hover:-translate-y-0.5 focus:outline-none focus:ring-2 focus:ring-slate-500">
             <div class="w-11 h-11 rounded-xl bg-slate-100 text-slate-700 flex items-center justify-center font-bold text-lg">
               <i class="fa-solid fa-house-user"></i>
             </div>
@@ -3079,9 +3070,9 @@
               <span id="kpiFeeTotalFamilies" class="text-2xl font-bold font-num text-slate-900 tracking-tight">0</span>
               <span class="text-[10px] text-slate-500 block"><strong id="kpiFeeTotalStudents">0</strong> Enrolled Students</span>
             </div>
-          </div>
+          </button>
 
-          <div class="bg-white p-4 rounded-2xl border border-emerald-200 shadow-xs flex items-center gap-3.5">
+          <button type="button" id="feeKpiCard-paid" onclick="handleFeeKpiClick('paid')" aria-pressed="false" title="Show receipts for the selected month" class="bg-white p-4 rounded-2xl border border-emerald-200 shadow-xs flex items-center gap-3.5 text-left cursor-pointer transition hover:shadow-md hover:-translate-y-0.5 focus:outline-none focus:ring-2 focus:ring-emerald-500">
             <div class="w-11 h-11 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold text-lg">
               <i class="fa-solid fa-circle-check"></i>
             </div>
@@ -3090,20 +3081,31 @@
               <span id="kpiFeePaidCount" class="text-2xl font-bold font-num text-emerald-700 tracking-tight">0</span>
               <span class="text-[10px] text-emerald-700 font-bold block"><span id="kpiFeePaidPercent">0%</span> of active (<span id="kpiFeePaidRatio">0/0</span>)</span>
             </div>
-          </div>
+          </button>
 
-          <div class="bg-white p-4 rounded-2xl border border-rose-200 shadow-xs flex items-center gap-3.5">
-            <div class="w-11 h-11 rounded-xl bg-rose-100 text-rose-700 flex items-center justify-center font-bold text-lg">
+          <button type="button" id="feeKpiCard-pendings" onclick="handleFeeKpiClick('pendings')" aria-pressed="false" title="Show families with a pending fee for the selected month" class="bg-white p-4 rounded-2xl border border-amber-200 shadow-xs flex items-center gap-3.5 text-left cursor-pointer transition hover:shadow-md hover:-translate-y-0.5 focus:outline-none focus:ring-2 focus:ring-amber-500">
+            <div class="w-11 h-11 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center font-bold text-lg">
               <i class="fa-solid fa-circle-exclamation"></i>
             </div>
             <div>
-              <span class="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">Pending Defaulters</span>
-              <span id="kpiFeePendingCount" class="text-2xl font-bold font-num text-rose-700 tracking-tight">0</span>
-              <span class="text-[10px] text-rose-700 font-bold block"><span id="kpiFeePendingPercent">0%</span> require fee</span>
+              <span class="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">Pendings</span>
+              <span id="kpiFeePendingCount" class="text-2xl font-bold font-num text-amber-700 tracking-tight">0</span>
+              <span class="text-[10px] text-amber-700 font-bold block"><span id="kpiFeePendingPercent">0%</span> require fee</span>
             </div>
-          </div>
+          </button>
 
-          <div class="bg-white p-4 rounded-2xl border border-blue-200 shadow-xs flex items-center gap-3.5">
+          <button type="button" id="feeKpiCard-defaulters" onclick="handleFeeKpiClick('defaulters')" aria-pressed="false" title="Show families with 3 or more months of unpaid fees" class="bg-white p-4 rounded-2xl border border-rose-200 shadow-xs flex items-center gap-3.5 text-left cursor-pointer transition hover:shadow-md hover:-translate-y-0.5 focus:outline-none focus:ring-2 focus:ring-rose-500">
+            <div class="w-11 h-11 rounded-xl bg-rose-100 text-rose-700 flex items-center justify-center font-bold text-lg">
+              <i class="fa-solid fa-triangle-exclamation"></i>
+            </div>
+            <div>
+              <span class="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">Defaulters</span>
+              <span id="kpiFeeDefaultersCount" class="text-2xl font-bold font-num text-rose-700 tracking-tight">0</span>
+              <span class="text-[10px] text-rose-700 font-bold block">3+ months outstanding</span>
+            </div>
+          </button>
+
+          <button type="button" id="feeKpiCard-leave" onclick="handleFeeKpiClick('leave')" aria-pressed="false" title="Show families on leave" class="bg-white p-4 rounded-2xl border border-blue-200 shadow-xs flex items-center gap-3.5 text-left cursor-pointer transition hover:shadow-md hover:-translate-y-0.5 focus:outline-none focus:ring-2 focus:ring-blue-500">
             <div class="w-11 h-11 rounded-xl bg-blue-100 text-blue-700 flex items-center justify-center font-bold text-lg">
               <i class="fa-solid fa-umbrella-beach"></i>
             </div>
@@ -3112,7 +3114,7 @@
               <span id="kpiFeeLeaveCount" class="text-2xl font-bold font-num text-blue-700 tracking-tight">0</span>
               <span class="text-[10px] text-blue-600 font-semibold block">Fee waived by Leave Engine</span>
             </div>
-          </div>
+          </button>
         </div>
 
         <!-- COLLECTION PROGRESS BAR CARD -->
@@ -3279,37 +3281,20 @@
               </div>
             </div>
 
-            <!-- MULTI-MONTH ADVANCE PAYMENT TOGGLE -->
+            <!-- MULTI MONTH PAYMENTS — pick months manually -->
             <div class="p-3.5 bg-blue-50/70 border border-blue-200 rounded-2xl space-y-2">
               <label class="flex items-center gap-2 text-xs font-extrabold text-blue-950 cursor-pointer">
                 <input type="checkbox" id="feeToggleAdvance" onchange="handleAdvanceFeeToggle()" class="w-4 h-4 rounded text-blue-600">
-                <span><i class="fa-solid fa-calendar-plus text-blue-700"></i> Multi-Month Advance Payment (e.g. Quarterly, 3 Months, Half-Yearly)</span>
+                <span><i class="fa-solid fa-calendar-plus text-blue-700"></i> Multi Month Payments — pick months manually (previous, current or future)</span>
               </label>
 
               <div id="feeAdvanceBox" class="hidden pt-3 border-t border-blue-200 space-y-3">
-                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 items-end">
-                  <div>
-                    <label for="feeSelectAdvanceMonths" class="block text-[11px] font-bold text-blue-900 mb-1">Advance Period (Months to Pre-Pay):</label>
-                    <select id="feeSelectAdvanceMonths" onchange="calcAdvancePaymentFee()" class="w-full p-2 bg-white border border-blue-300 rounded-xl text-xs font-bold text-slate-800">
-                      <option value="2">2 Months (Bi-Monthly)</option>
-                      <option value="3" selected>3 Months (Quarterly)</option>
-                      <option value="4">4 Months</option>
-                      <option value="5">5 Months</option>
-                      <option value="6">6 Months (Half-Yearly)</option>
-                      <option value="12">12 Months (Full Annual Year)</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label for="feeAdvanceCalcAmount" class="block text-[11px] font-bold text-blue-900 mb-1">Total Advance Fee:</label>
-                    <div class="flex gap-2">
-                      <input type="text" id="feeAdvanceCalcAmount" readonly value="0.00" class="w-full p-2 bg-blue-100 border border-blue-300 rounded-xl text-xs font-extrabold text-blue-950 font-num">
-                      <button type="button" onclick="applyAdvancePaymentFeeToForm()" class="px-3 py-2 bg-blue-700 hover:bg-blue-800 text-white rounded-xl text-xs font-bold transition shrink-0">
-                        Apply
-                      </button>
-                    </div>
-                  </div>
+                <p class="text-[11px] font-bold text-blue-900">Click months to add them. Click again to remove. Each month is charged its actual fee for that month — never one fee times the number of months.</p>
+                <div id="feeMultiMonthGrid" class="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-5 gap-2"></div>
+                <div class="pt-2 border-t border-blue-200">
+                  <p id="feeMultiMonthReview" class="text-[11px] font-bold text-slate-600">No months selected yet — pick months above.</p>
+                  <p id="feeMultiMonthTotal" class="text-xs font-extrabold text-blue-950 mt-1"></p>
                 </div>
-                <div id="feeAdvanceMonthsBadges" class="flex gap-1.5 flex-wrap"></div>
               </div>
             </div>
 
@@ -3423,22 +3408,6 @@
               </div>
             </div>
 
-            <!-- FEE UPGRADE PHASE 4: LEAVE FROM FEE FORM -->
-            <div class="pt-3 border-t border-slate-100">
-              <label class="flex items-start gap-2.5 cursor-pointer">
-                <input type="checkbox" id="chkFeeFormLeave" onchange="toggleFeeFormLeaveMode()" class="mt-0.5 w-4 h-4 accent-emerald-700">
-                <span>
-                  <span class="block text-xs font-extrabold text-slate-800">Mark this family on leave for this month instead of collecting a fee</span>
-                  <span class="block text-[11px] text-slate-500 mt-0.5">Records a leave for every enrolled student of this family, from the 1st to the last day of the selected month. Uses the same leave process as the Leave tab -- schedules and assignments are paused for that month.</span>
-                </span>
-              </label>
-              <div id="feeFormLeaveBox" class="hidden mt-3">
-                <label for="txtFeeFormLeaveReason" class="block text-[11px] font-bold text-slate-600 mb-1">Leave reason:</label>
-                <input type="text" id="txtFeeFormLeaveReason" placeholder="e.g. Family travelling abroad" class="w-full p-2.5 border border-slate-300 rounded-xl font-bold text-sm text-slate-800">
-                <p id="feeFormLeaveSummary" class="text-[11px] font-bold text-slate-500 mt-2"></p>
-              </div>
-            </div>
-
             <!-- SUBMIT BUTTONS -->
             <div class="flex justify-end items-center gap-3 pt-4 border-t border-slate-100 flex-wrap">
               <button type="button" onclick="resetFeeForm()" class="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition flex items-center gap-1.5">
@@ -3454,26 +3423,6 @@
           </form>
         </div>
 
-        <!-- FEE UPGRADE PHASE 3: STAGED MONTH STATUSES -- one-tap Paid / Unpaid -->
-        <div id="feeStatusSwitcherCard" class="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs space-y-4 hidden">
-          <div class="flex justify-between items-center flex-wrap gap-2">
-            <div>
-              <h3 class="text-base font-extrabold text-slate-900 flex items-center gap-2">
-                <i class="fa-solid fa-toggle-on text-emerald-700"></i> Month Statuses -- One-Tap Paid / Unpaid
-              </h3>
-              <p class="text-xs text-slate-500 mt-0.5">Mark months Paid without a payment, or Unpaid again. Changes are staged -- Save applies them all at once. A month with a real payment cannot be marked Unpaid here; undo that payment first.</p>
-            </div>
-          </div>
-          <div id="feeStatusSwitcherGrid" class="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-6 gap-2"></div>
-          <div id="feeStatusEnrollmentRow" class="pt-3 border-t border-slate-100"></div>
-          <div class="flex justify-between items-center flex-wrap gap-2 pt-1">
-            <p id="feeStatusStagedLine" class="text-[11px] font-bold text-slate-500">Click a Due month to stage Mark Paid, or a status-paid month to stage Mark Unpaid.</p>
-            <div class="flex gap-2">
-              <button type="button" id="btnFeeStatusCancelStaged" onclick="cancelStagedMonthStatuses()" disabled class="px-4 py-2 bg-white border border-slate-300 hover:bg-slate-100 disabled:opacity-50 text-slate-700 rounded-xl text-xs font-bold transition">Cancel</button>
-              <button type="button" id="btnFeeStatusSaveStaged" onclick="saveStagedMonthStatuses()" disabled class="px-4 py-2 bg-emerald-700 hover:bg-emerald-800 disabled:bg-slate-300 disabled:text-slate-500 text-white rounded-xl text-xs font-bold transition">Save Changes</button>
-            </div>
-          </div>
-        </div>
       </div>
 
       <!-- ============================================================ -->
@@ -3811,6 +3760,10 @@
 
           <div>
             <input type="text" id="feeReceiptsSearchInput" oninput="filterFeeReceiptsHistoryLive()" placeholder="Search by Receipt No, Family ID, or Parent Name..." class="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800">
+            <div id="feeReceiptsMonthChip" class="hidden mt-2 flex items-center justify-between gap-2 p-2.5 bg-emerald-50 border border-emerald-200 rounded-xl">
+              <span id="feeReceiptsMonthChipText" class="text-[11px] font-bold text-emerald-900"></span>
+              <button type="button" onclick="clearFeeReceiptsMonthFilter(); loadFeeReceiptsHistory();" aria-label="Clear month filter" class="px-2.5 py-1 bg-white border border-emerald-300 hover:bg-emerald-100 text-emerald-900 rounded-lg text-[11px] font-extrabold transition shrink-0">Show All ×</button>
+            </div>
           </div>
 
           <div class="overflow-x-auto touch-scroll rounded-xl border border-slate-200">
@@ -7658,6 +7611,7 @@
   <script src="js/fee-phase3.js"></script>
   <script src="js/fee-phase4.js"></script>
   <script src="js/fee-phase5.js"></script>
+  <script src="js/fee-phase6.js"></script>
   <script src="js/course-catalogue.js"></script>
   <script src="js/academy-profile.js"></script>
   <script src="js/assignments.js"></script>
