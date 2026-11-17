@@ -52,6 +52,13 @@
     let FEE_DEFAULTERS_PAGE_SIZE = 25;
     let FEE_MATRIX_PAGE = 1;
     let FEE_MATRIX_PAGE_SIZE = 25;
+    // Fee Upgrade Phase 2 — Bulk Collect: selected pending families,
+    // keyed by family id, and the rows of the last rendered pending
+    // page (so Select All only touches what the user can see).
+    // Amounts are month-specific, so the selection is cleared whenever
+    // the pending list reloads (month change).
+    let PENDING_BULK_SELECTED = {};
+    let PENDING_BULK_LAST_RENDERED = [];
     function setFeePendingPage(p) { FEE_PENDING_PAGE = p; filterPendingDefaultersSearchLive(); }
     function setFeePendingPageSize(v) { FEE_PENDING_PAGE_SIZE = (v === 'all') ? Infinity : (parseInt(v, 10) || 25); FEE_PENDING_PAGE = 1; filterPendingDefaultersSearchLive(); }
     function setFeeDefaultersPage(p) { FEE_DEFAULTERS_PAGE = p; filterThreePlusDefaultersLive(); }
@@ -2302,6 +2309,10 @@
       const tbody = document.getElementById('feePendingTableBody');
       if (!tbody) return;
 
+      // Fee Upgrade Phase 2: the pending list just reloaded (new month),
+      // so any month-specific selection is stale — clear it.
+      PENDING_BULK_SELECTED = {};
+
       const list = CACHED_PENDING_FEE_LIST || [];
       const badge = document.getElementById('feePendingTotalBadge');
       if (badge) badge.innerText = `${list.length} Families Pending (${targetMonth} ${targetYear})`;
@@ -2313,6 +2324,9 @@
     function renderPendingDefaultersRows(list) {
       const tbody = document.getElementById('feePendingTableBody');
       if (!tbody) return;
+
+      // Fee Upgrade Phase 2: nothing rendered (yet) on this page.
+      PENDING_BULK_LAST_RENDERED = [];
 
       const mSel = document.getElementById('feePendingMonthFilter');
       const ySel = document.getElementById('feePendingYearFilter');
@@ -2326,7 +2340,7 @@
         if (CACHED_PENDING_FEE_LIST === null) {
           tbody.innerHTML = `
           <tr>
-            <td colspan="7" class="p-8 text-center text-slate-500 font-bold">
+            <td colspan="8" class="p-8 text-center text-slate-500 font-bold">
               <i class="fa-solid fa-triangle-exclamation text-2xl text-amber-500 block mb-1"></i>
               The pending list has not loaded yet. Please reload the page to see the current pending fees.
             </td>
@@ -2337,7 +2351,7 @@
         }
         tbody.innerHTML = `
           <tr>
-            <td colspan="7" class="p-8 text-center text-emerald-800 font-bold">
+            <td colspan="8" class="p-8 text-center text-emerald-800 font-bold">
               <i class="fa-solid fa-circle-check text-2xl text-emerald-600 block mb-1"></i>
               SubhanAllah! Zero pending fees found for ${targetMonth} ${targetYear}. All family dues are cleared!
             </td>
@@ -2350,6 +2364,9 @@
       // Batch 3.6 (audit P2-36): page the pending list (default 25).
       const pendPage = paginateList(list, FEE_PENDING_PAGE, FEE_PENDING_PAGE_SIZE);
       FEE_PENDING_PAGE = pendPage.safePage;
+      // Fee Upgrade Phase 2: the rows actually on this page — Select
+      // All only touches these.
+      PENDING_BULK_LAST_RENDERED = pendPage.pageRows;
 
       tbody.innerHTML = pendPage.pageRows.map(item => {
         const cleanPhone = (item.whatsapp || '').replace(/[^0-9]/g, '');
@@ -2364,6 +2381,7 @@
 
         return `
           <tr class="hover:bg-slate-50 transition">
+            <td class="p-3 w-8"><input type="checkbox" class="pending-bulk-check w-4 h-4 rounded text-emerald-700 focus:ring-emerald-600" value="${item.familyId}" ${PENDING_BULK_SELECTED[item.familyId] ? 'checked' : ''} onchange="updatePendingBulkSelection(this)" title="Select for Bulk Collect"></td>
             <td class="p-3 font-mono font-bold text-slate-700">${item.familyId}</td>
             <td class="p-3">
               <div class="font-bold text-slate-900">${item.parentName}</div>
@@ -2409,6 +2427,9 @@
           onPage: 'setFeePendingPage', onSize: 'setFeePendingPageSize'
         });
       }
+      // Fee Upgrade Phase 2: keep the Bulk Collect bar in sync with the
+      // rows just rendered (count, totals, duplicate warning).
+      syncPendingBulkUi();
     }
 
     function filterPendingDefaultersSearchLive() {
@@ -2685,6 +2706,174 @@ Official Email: ${offEmail}`;
           lmsNotify(`✅ Processed ${list.length} pending fee reminders for ${periodStr}!`);
           lmsNotify(`✅ ${periodStr} Fee Reminder Processed for ${list.length} Pending Families!`);
         }
+      }
+    }
+
+    // ============================================================
+    // Fee Upgrade Phase 2 — BULK COLLECT (#52)
+    // Collects the Pending view's due amount for many families in one
+    // run. Each family goes through the EXISTING single-payment save
+    // path below (saveBulkFeePaymentRecord): same receipt numbering,
+    // same record shape, same cloud sync + dual-write as
+    // handleFeePaymentSubmit. The FeePhase2 module only builds the
+    // record and drives the loop; it never writes.
+    // ============================================================
+
+    // One family's save, taken from handleFeePaymentSubmit's save
+    // sequence (local unshift + save, then awaited cloud sync).
+    // Returns { ok, receiptNo, error }. A failed cloud sync still
+    // leaves the local receipt (marked unsynced, retried by the Sync
+    // button), but the row reports as failed so the run summary stays
+    // honest.
+    async function saveBulkFeePaymentRecord(record) {
+      const records = getStoredFeeRecords();
+      records.unshift(record);
+      saveStoredFeeRecords(records);
+      const syncResult = await syncPaymentRecordsBatchToCloud(record.familyId, [record]);
+      if (!syncResult || !syncResult.ok) {
+        record.cloudSyncPending = true;
+        saveStoredFeeRecords(records);
+        return { ok: false, receiptNo: record.receiptNo, error: 'Cloud sync failed — receipt saved on this device only (marked unsynced). Use Sync to retry.' };
+      }
+      return { ok: true, receiptNo: record.receiptNo };
+    }
+
+    // Already paid for this family + month (non-cancelled records), so
+    // the bulk record's remaining balance is honest for partial months.
+    function bulkCollectPriorPaidForRow(row, records) {
+      let sum = 0;
+      (records || []).forEach(function (r) {
+        if (r &&
+          String(r.familyId || '').toUpperCase() === String(row.familyId).toUpperCase() &&
+          String(r.month || '').trim().toLowerCase() === String(row.month).toLowerCase() &&
+          parseInt(r.year, 10) === parseInt(row.year, 10) &&
+          String(r.status || '').toLowerCase() !== 'cancelled') {
+          sum += parseFloat(r.amountPaid || 0);
+        }
+      });
+      return sum;
+    }
+
+    function togglePendingBulkSelectAll(checked) {
+      const pageRows = PENDING_BULK_LAST_RENDERED || [];
+      pageRows.forEach(function (r) {
+        if (checked) PENDING_BULK_SELECTED[r.familyId] = true;
+        else delete PENDING_BULK_SELECTED[r.familyId];
+      });
+      renderPendingDefaultersRows(CACHED_PENDING_FEE_LIST || []);
+    }
+
+    function updatePendingBulkSelection(checkbox) {
+      if (!checkbox) return;
+      if (checkbox.checked) PENDING_BULK_SELECTED[checkbox.value] = true;
+      else delete PENDING_BULK_SELECTED[checkbox.value];
+      syncPendingBulkUi();
+    }
+
+    function syncPendingBulkUi() {
+      const bar = document.getElementById('feeBulkCollectBar');
+      if (!bar) return;
+      const countEl = document.getElementById('feeBulkCollectCount');
+      const totalEl = document.getElementById('feeBulkCollectTotal');
+      const runBtn = document.getElementById('btnBulkCollectRun');
+      const warnEl = document.getElementById('feeBulkCollectDupWarn');
+      const selectAllEl = document.getElementById('feeBulkSelectAll');
+      if (!window.FeePhase2) {
+        if (runBtn) runBtn.disabled = true;
+        return;
+      }
+      const rows = window.FeePhase2.bulkCollectRows(CACHED_PENDING_FEE_LIST || []);
+      const selectedIds = Object.keys(PENDING_BULK_SELECTED).filter(function (id) { return PENDING_BULK_SELECTED[id]; });
+      const sel = window.FeePhase2.bulkCollectSelection(rows, selectedIds);
+      if (countEl) countEl.innerText = sel.count === 0 ? '0 selected' : sel.count + ' selected';
+      if (totalEl) {
+        const parts = Object.keys(sel.totals).sort().map(function (cur) { return cur + ' ' + sel.totals[cur].toFixed(2); });
+        totalEl.innerText = sel.count === 0 ? 'Total due: —' : 'Total due: ' + parts.join(' + ');
+      }
+      if (runBtn) runBtn.disabled = sel.count === 0;
+      if (selectAllEl) {
+        const pageRows = PENDING_BULK_LAST_RENDERED || [];
+        selectAllEl.checked = pageRows.length > 0 && pageRows.every(function (r) { return PENDING_BULK_SELECTED[r.familyId]; });
+      }
+      if (warnEl) {
+        const dups = window.FeePhase2.findBulkCollectDuplicates(getStoredFeeRecords(), sel.selected);
+        if (dups.length > 0) {
+          warnEl.classList.remove('hidden');
+          warnEl.innerText = '⚠ ' + dups.length + ' selected famil' + (dups.length === 1 ? 'y' : 'ies') + ' already ha' + (dups.length === 1 ? 's' : 've') + ' a payment for this month — skipped by default (uncheck "Skip families that already paid" to charge them again).';
+        } else {
+          warnEl.classList.add('hidden');
+          warnEl.innerText = '';
+        }
+      }
+    }
+
+    async function startBulkCollect() {
+      if (!window.FeePhase2) {
+        lmsNotify('Bulk Collect is not available right now. Please reload the page.', { type: 'error' });
+        return;
+      }
+      const rows = window.FeePhase2.bulkCollectRows(CACHED_PENDING_FEE_LIST || []);
+      const selectedIds = Object.keys(PENDING_BULK_SELECTED).filter(function (id) { return PENDING_BULK_SELECTED[id]; });
+      const sel = window.FeePhase2.bulkCollectSelection(rows, selectedIds);
+      if (sel.selected.length === 0) {
+        lmsNotify('Select at least one pending family first.', { type: 'error' });
+        return;
+      }
+      const method = document.getElementById('feeBulkCollectMethod')?.value || 'Online / Bank Transfer';
+      const emailReceipts = !!document.getElementById('feeBulkCollectEmail')?.checked;
+      const skipDup = document.getElementById('feeBulkCollectSkipDup')?.checked !== false;
+      const records = getStoredFeeRecords();
+      const dups = window.FeePhase2.findBulkCollectDuplicates(records, sel.selected);
+      let runRows = sel.selected;
+      let skippedCount = 0;
+      if (skipDup && dups.length > 0) {
+        const dupIds = {};
+        dups.forEach(function (d) { dupIds[d.row.familyId] = true; });
+        skippedCount = sel.selected.filter(function (r) { return dupIds[r.familyId]; }).length;
+        runRows = sel.selected.filter(function (r) { return !dupIds[r.familyId]; });
+      }
+      if (runRows.length === 0) {
+        lmsNotify('Every selected family already has a payment for this month — nothing to collect. Uncheck "Skip families that already paid" to charge them again.', { type: 'error' });
+        return;
+      }
+      const btn = document.getElementById('btnBulkCollectRun');
+      if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Collecting...';
+      }
+      const progEl = document.getElementById('feeBulkCollectProgress');
+      if (progEl) {
+        progEl.classList.remove('hidden');
+        progEl.innerHTML = '<p class="text-[11px] font-bold text-slate-500">Collecting ' + runRows.length + ' payment(s)...</p><div id="feeBulkCollectRows" class="mt-1"></div>';
+      }
+      const summary = await window.FeePhase2.runBulkCollect(runRows, {
+        paymentMethod: method,
+        emailReceipts: emailReceipts,
+        generateReceiptNo: window.generateReceiptNo,
+        saveRecord: saveBulkFeePaymentRecord,
+        sendEmail: function (rec) { return sendFeeInvoiceEmailModal(rec, true); },
+        monthlyFeeForRow: function (row) {
+          try {
+            if (!row.family) return row.dueAmount;
+            const idx = FEE_CONFIG.MONTHS.findIndex(function (m) { return m.toLowerCase() === String(row.month).toLowerCase(); });
+            return feeFormApplicableFeeDetails(row.family, idx, row.year).fee;
+          } catch (e) { return row.dueAmount; }
+        },
+        priorPaidForRow: function (row) { return bulkCollectPriorPaidForRow(row, records); },
+        onRow: function (i, total, outcome) {
+          const box = document.getElementById('feeBulkCollectRows');
+          if (box) box.insertAdjacentHTML('beforeend', window.FeePhase2.bulkCollectRowResultHtml(outcome));
+        }
+      });
+      if (progEl) progEl.insertAdjacentHTML('beforeend', window.FeePhase2.bulkCollectSummaryHtml(summary, skippedCount));
+      // Refresh the dashboard + pending list (the collected families
+      // leave the pending list); the reload clears the selection.
+      await loadFeeDashboardStats();
+      loadPendingDefaultersList();
+      syncPendingBulkUi();
+      if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fa-solid fa-layer-group"></i> Collect Selected';
       }
     }
 
