@@ -124,6 +124,14 @@
   //   no_fee       — the applicable fee for the month is zero; cannot
   //                  be picked (a zero-amount record would be noise).
   //
+  // The selector shows ONE year at a time (12 months) with a year
+  // dropdown: build three full years around the form year so every
+  // year in the dropdown has all 12 months. Each month is charged its
+  // ACTUAL applicable fee for that month — never fee x N — and a
+  // month that is already settled can still be picked (a deliberate
+  // second payment), while leave / not-enrolled / no-fee months are
+  // shown disabled, never charged.
+  //
   // args: { fam, records, overrides, anchorMonthIdx, anchorYear,
   //         enrollment: { year, monthIndex },
   //         isLeaveMonth: function (monthIdx, year) -> bool,
@@ -133,17 +141,13 @@
     var fam = a.fam || {};
     var records = a.records || [];
     var overrides = a.overrides || {};
-    var anchorMonthIdx = parseInt(a.anchorMonthIdx, 10);
-    if (isNaN(anchorMonthIdx) || anchorMonthIdx < 0 || anchorMonthIdx > 11) anchorMonthIdx = new Date().getMonth();
     var anchorYear = parseInt(a.anchorYear, 10) || new Date().getFullYear();
     var enrollment = a.enrollment || null;
     var enrollScore = enrollment ? monthScore(enrollment.monthIndex, enrollment.year) : null;
     var famUpper = String(fam.id || '').toUpperCase();
     var options = [];
-    for (var off = -12; off <= 12; off++) {
-      var total = anchorMonthIdx + off;
-      var mIdx = ((total % 12) + 12) % 12;
-      var yr = anchorYear + Math.floor(total / 12);
+    for (var yr = anchorYear - 1; yr <= anchorYear + 1; yr++) {
+      for (var mIdx = 0; mIdx < 12; mIdx++) {
       var key = monthKey(mIdx, yr);
       // No family picked yet: the fee is UNKNOWN, not zero — the month
       // stays selectable and shows a dash until a family is picked.
@@ -182,6 +186,7 @@
           : 'Paid — Receipt on file';
       }
       options.push(opt);
+      }
     }
     return options;
   }

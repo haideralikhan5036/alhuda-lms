@@ -162,6 +162,7 @@ function makeFormHarness(families, records) {
     // Fee Dashboard + Form Improvements: Multi Month Payments selection
     // (replaces the Phase 3 staged one-tap toggles for the switcher).
     let FEE_MULTI_MONTH_SELECTED = [];
+    let FEE_MULTI_MONTH_YEAR = null;
     const CACHED_FEE_FAMILIES = families;
     const ALL_LEAVE_RECORDS = [];
     const lmsNotify = window.lmsNotify || (() => {});
@@ -188,6 +189,7 @@ function makeFormHarness(families, records) {
     ${extractFunction(FEES_SRC, 'isMultiMonthMode')}
     ${extractFunction(FEES_SRC, 'multiMonthFormAnchor')}
     ${extractFunction(FEES_SRC, 'getMultiMonthSelection')}
+    ${extractFunction(FEES_SRC, 'getMultiMonthYear')}
     ${extractFunction(FEES_SRC, 'clearMultiMonthSelection')}
     ${extractFunction(FEES_SRC, 'buildMultiMonthOptionsForForm')}
     ${extractFunction(FEES_SRC, 'renderMultiMonthSelector')}
