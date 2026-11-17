@@ -1028,6 +1028,23 @@
       window.location.reload();
     }
 
+    // Trials Audit Batch 1 (F8): a dashboard class is a trial class
+    // only on structured flags. The old notes-substring test matched
+    // every converted student forever, because conversion writes
+    // converted_from_trial / trial_history into the same notes field.
+    function isDashboardTrialClass(s) {
+      if (!s) return false;
+      if (s.status === 'Trial' || s.is_trial === true) return true;
+      if (s.students?.status === 'Trial') return true;
+      let stuNotes = null;
+      const raw = s.students?.notes;
+      if (raw) {
+        try { stuNotes = typeof raw === 'string' ? JSON.parse(raw) : raw; } catch (e) { stuNotes = null; }
+      }
+      if (!stuNotes) return false;
+      return stuNotes.is_trial === true && !stuNotes.converted_from_trial && !stuNotes.converted_to_regular;
+    }
+
     async function loadDashboardData() {
       const myRun = ++_dashRunSeq;
       if (_dashLoadInflight) {
@@ -1166,7 +1183,11 @@
         const isPast = currentMinutes >= endMin;
         const isUpcoming = currentMinutes < startMin;
 
-        let isTrial = s.status === 'Trial' || s.is_trial === true || s.students?.status === 'Trial' || (s.students?.notes && s.students.notes.toLowerCase().includes('trial'));
+        // Trials Audit Batch 1 (F8): structured flags only — the old
+        // notes-substring test matched every converted student forever,
+        // because conversion writes converted_from_trial / trial_history
+        // into the same notes field.
+        let isTrial = isDashboardTrialClass(s);
         if (isTrial) trialCount++;
 
         let isLeaveStudent = s.students?.status === 'Leave';

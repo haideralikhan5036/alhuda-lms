@@ -1332,6 +1332,18 @@
       renderDeactivatedFamiliesView();
     }
 
+    // Trials Audit Batch 1 (F4): a family whose trial was discontinued
+    // does not count as an active trial family.
+    function countActiveTrialFamilies(families) {
+      return (families || []).filter(f => {
+        if ((f.status || '').toLowerCase() !== 'trial') return false;
+        try {
+          const n = typeof f.notes === 'string' ? JSON.parse(f.notes || '{}') : (f.notes || {});
+          return (n.trial_history?.trial_status || n.trial_status || 'Active') !== 'Discontinued';
+        } catch (e) { return true; }
+      }).length;
+    }
+
     async function loadFamiliesAndStudents(forceRefresh = false) {
       let families = [];
       let regularFamilies = [];
@@ -1387,9 +1399,7 @@
       }
 
       // Count ONLY currently active Trial families (for info badge in tab)
-      const trialFamCount = (families || []).filter(f =>
-        (f.status || '').toLowerCase() === 'trial'
-      ).length;
+      const trialFamCount = countActiveTrialFamilies(families);
       const trialInfoEl = document.getElementById('trialFamiliesInfoNote');
       if (trialInfoEl) {
         if (trialFamCount > 0) {

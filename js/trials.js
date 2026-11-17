@@ -40,6 +40,173 @@
       }
     }
 
+    // ==========================================
+    // TRIALS AUDIT BATCH 1 — shared pure helpers
+    // Each fix below is covered by test/trials-audit-batch1.test.mjs.
+    // ==========================================
+
+    // F1/F10: the ONE definition of "Active" for trials — shared by the
+    // Active KPI, the "Active Trials" pill and the teacher banner, so
+    // the three views can never disagree. This is the KPI's own
+    // predicate, verbatim: status 'Active' counts as Active, and so
+    // does any trial that is neither Converted nor Discontinued with
+    // fewer than 3 sessions. A Completed (3/3) trial is therefore not
+    // Active — the loader flips its status to 'Completed' at 3 sessions,
+    // which is what makes the two branches agree in practice.
+    function trialIsActive(t) {
+      if (!t) return false;
+      return t.status === 'Active' ||
+        (t.status !== 'Converted' && t.status !== 'Discontinued' && (t.conducted_sessions || 0) < 3);
+    }
+
+    // F10: conversion rate over decided trials only. Returns null when
+    // nothing has been decided — a "0%" with zero decisions is not a
+    // measured rate, so the banner shows "No Decisions Yet" instead.
+    function trialConversionRate(trials) {
+      const list = Array.isArray(trials) ? trials : [];
+      const conv = list.filter(t => t.status === 'Converted').length;
+      const disc = list.filter(t => t.status === 'Discontinued').length;
+      const decided = conv + disc;
+      return decided > 0 ? Math.round((conv / decided) * 100) : null;
+    }
+
+    // F2: the days-per-week label → weekday numbers (1 = Mon .. 7 = Sun).
+    // Pure, so the mapping is unit-testable; the convert flow calls it.
+    function trialConvertDaysToSchedule(daysPerWeek) {
+      const dStr = String(daysPerWeek || '').toLowerCase();
+      if (dStr.includes('3 day') || dStr.includes('mon / wed / fri') || dStr.includes('mon, wed, fri')) return [1, 3, 5];
+      if (dStr.includes('2 day') || dStr.includes('weekend') || dStr.includes('sat - sun') || dStr.includes('sat, sun')) return [6, 7];
+      if (dStr.includes('6 day')) return [1, 2, 3, 4, 5, 6];
+      if (dStr.includes('7 day') || dStr.includes('everyday')) return [1, 2, 3, 4, 5, 6, 7];
+      if (dStr.includes('4 day')) return [1, 2, 3, 4];
+      if (dStr.includes('5 day')) return [1, 2, 3, 4, 5];
+      return [1, 2, 3, 4, 5];
+    }
+
+    // F4: derive a trial's status from the D1 notes. A persisted
+    // Discontinued always wins (it was set on some device); otherwise
+    // the local mirror status is kept, so a pre-fix local
+    // Discontinued is not silently undone by an older D1 note.
+    function trialStatusFromD1Notes({ isConvertedNow, trialStatus, mirrorStatus }) {
+      if (isConvertedNow) return 'Converted';
+      if (trialStatus === 'Discontinued') return 'Discontinued';
+      return mirrorStatus || trialStatus || 'Active';
+    }
+
+    // F3: raise-only recompute of conducted sessions from the attendance
+    // logs. It only ever raises the count, so after a toggle-down
+    // deletes the log (see toggleTrialSession) the lowered count
+    // survives the next load.
+    function applyTrialAttendanceLogs(trials, attLogs) {
+      (trials || []).forEach(trial => {
+        const stuLogs = (attLogs || []).filter(l => l.student_id === trial.student_id && (l.status === 'Present' || l.status === 'Completed'));
+        if (stuLogs.length > (trial.conducted_sessions || 0)) {
+          trial.conducted_sessions = Math.min(3, stuLogs.length);
+          if (trial.conducted_sessions >= 3 && trial.status === 'Active') {
+            trial.status = 'Completed';
+          }
+        }
+      });
+    }
+
+    // F12: a digits-only search query must match a number stored with
+    // spaces or dashes — compare digits to digits.
+    function trialMatchesSearch(t, query) {
+      const q = String(query || '').trim().toLowerCase();
+      if (!q) return true;
+      const qDigits = q.replace(/[^0-9]/g, '');
+      const phone = String((t && t.whatsapp) || '');
+      const phoneHit = qDigits ? phone.replace(/[^0-9]/g, '').includes(qDigits) : phone.toLowerCase().includes(q);
+      return (t.student_name || '').toLowerCase().includes(q) ||
+        (t.parent_name || '').toLowerCase().includes(q) ||
+        phoneHit ||
+        (t.course || '').toLowerCase().includes(q) ||
+        (t.country || '').toLowerCase().includes(q) ||
+        (t.teacher_name || '').toLowerCase().includes(q);
+    }
+
+    // F6: fill the Day 1/2/3 banner with the 3 consecutive dates from
+    // the chosen start date (same math as the save path). Dates are
+    // rendered in UTC so the banner always matches the saved ISO dates.
+    function formatTrialDayShort(isoDate) {
+      const d = new Date(String(isoDate).slice(0, 10) + 'T00:00:00Z');
+      const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+      const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      return `${DAYS[d.getUTCDay()]}, ${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]}`;
+    }
+
+    function calculateTrial3Days(startDateValue) {
+      const b1 = document.getElementById('trialDay1Badge');
+      const b2 = document.getElementById('trialDay2Badge');
+      const b3 = document.getElementById('trialDay3Badge');
+      const reset = () => {
+        if (b1) b1.innerText = 'Select Date';
+        if (b2) b2.innerText = '--';
+        if (b3) b3.innerText = '--';
+      };
+      const raw = String(startDateValue || '').trim().slice(0, 10);
+      if (!raw) { reset(); return; }
+      const start = new Date(raw + 'T00:00:00Z');
+      if (isNaN(start.getTime())) { reset(); return; }
+      const day = (i) => {
+        const d = new Date(start);
+        d.setUTCDate(start.getUTCDate() + i);
+        return formatTrialDayShort(d.toISOString().slice(0, 10));
+      };
+      if (b1) b1.innerText = day(0);
+      if (b2) b2.innerText = day(1);
+      if (b3) b3.innerText = day(2);
+    }
+
+    // F6: the meeting link follows the selected teacher — fill it from
+    // the teacher's Zoom link when the field is still empty, and never
+    // overwrite a link the operator typed by hand.
+    function handleTrialTeacherSelection(teacherId) {
+      if (!teacherId) return;
+      const teacher = (ALL_TEACHERS || []).find(t => t.id === teacherId);
+      if (!teacher || !teacher.zoom_link) return;
+      const linkInput = document.getElementById('trialMeetingLink');
+      if (linkInput && !String(linkInput.value || '').trim()) {
+        linkInput.value = teacher.zoom_link;
+      }
+    }
+
+    // F5: an "Auto-Send" checkbox must actually send. The preview modal
+    // is opened (so the operator sees what goes out) and the existing
+    // dispatch runs right after it; dispatchEmailNow reports success or
+    // failure itself, so a failed send is never silent.
+    function autoSendTrialEmail(openPreview) {
+      try { openPreview(); } catch (e) {}
+      setTimeout(() => {
+        if (typeof dispatchEmailNow === 'function') dispatchEmailNow();
+      }, 400);
+    }
+
+    // F4: write trial_status = 'Discontinued' into the D1 notes of the
+    // trial's student AND family (read-modify-write; other note keys
+    // are kept). The status column stays 'Trial' — the loader keys off
+    // notes.trial_history.trial_status, and flipping the column would
+    // make the loader drop the row entirely. Returns false when either
+    // write failed, so the caller can say so honestly.
+    async function markTrialDiscontinuedInD1(trial) {
+      const setNotesStatus = async (table, id) => {
+        try {
+          const { data } = await db.from(table).select('id, notes').eq('id', id);
+          const row = Array.isArray(data) ? data[0] : data;
+          if (!row) return false;
+          let notes = {};
+          try { notes = typeof row.notes === 'string' ? JSON.parse(row.notes || '{}') : (row.notes || {}); } catch (e) {}
+          notes.trial_history = { ...(notes.trial_history || {}), trial_status: 'Discontinued' };
+          const { error } = await db.from(table).update({ notes: JSON.stringify(notes) }).eq('id', id);
+          return !error;
+        } catch (e) { return false; }
+      };
+      let ok = true;
+      if (trial.student_id) ok = (await setNotesStatus('students', trial.student_id)) && ok;
+      if (trial.family_id) ok = (await setNotesStatus('families', trial.family_id)) && ok;
+      return ok;
+    }
+
     function saveStoredTrials(trials) {
       try {
         localStorage.setItem('alhuda_trial_classes', JSON.stringify(trials));
@@ -93,8 +260,12 @@
               );
 
               const isConvertedNow = !isActiveTrial && (st.status === 'Active' || st.status === 'Regular' || st.status === 'Converted' || wasConvertedFromTrial);
-              const effectiveStatus = isConvertedNow ? 'Converted' : (parsedNotes.trial_status || 'Active');
+              // Trials Audit Batch 1 (F4): the trial_history in D1 notes
+              // is read BEFORE the status is derived, and a persisted
+              // Discontinued wins over the mirror — otherwise a fresh
+              // browser rebuilds a discontinued trial as Active.
               const tHist = parsedNotes.trial_history || famNotes.trial_history || {};
+              const effectiveStatus = trialStatusFromD1Notes({ isConvertedNow, trialStatus: tHist.trial_status || parsedNotes.trial_status, mirrorStatus: null });
 
               if (!exists) {
                 storedTrials.unshift({
@@ -132,6 +303,11 @@
                   exists.converted_family_id = st.family_id;
                   exists.conducted_sessions = 3;
                   if (tHist.converted_at || parsedNotes.converted_at) exists.converted_at = tHist.converted_at || parsedNotes.converted_at;
+                } else {
+                  // Trials Audit Batch 1 (F4): a trial discontinued on
+                  // another device stays Discontinued here; the D1 note
+                  // is the source of truth, not this browser's mirror.
+                  exists.status = trialStatusFromD1Notes({ isConvertedNow, trialStatus: tHist.trial_status || parsedNotes.trial_status, mirrorStatus: exists.status });
                 }
               }
             });
@@ -163,15 +339,10 @@
             ? await db.from('attendance_logs').select('student_id, status, lesson_notes').in('student_id', trialStudentIds)
             : { data: [] };
           if (attLogs && attLogs.length > 0) {
-            storedTrials.forEach(trial => {
-              const stuLogs = attLogs.filter(l => l.student_id === trial.student_id && (l.status === 'Present' || l.status === 'Completed'));
-              if (stuLogs.length > (trial.conducted_sessions || 0)) {
-                trial.conducted_sessions = Math.min(3, stuLogs.length);
-                if (trial.conducted_sessions >= 3 && trial.status === 'Active') {
-                  trial.status = 'Completed';
-                }
-              }
-            });
+            // Trials Audit Batch 1 (F3): raise-only sync, extracted so it
+            // is unit-testable — a toggle-down deletes the log, and this
+            // must not raise the count back up on the next load.
+            applyTrialAttendanceLogs(storedTrials, attLogs);
           }
         } catch(err) {
           console.warn("Could not query trial attendance logs:", err);
@@ -257,13 +428,18 @@
       const totalTr = teacherTrials.length;
       const convTr = teacherTrials.filter(t => t.status === 'Converted').length;
       const discTr = teacherTrials.filter(t => t.status === 'Discontinued').length;
-      const activeTr = teacherTrials.filter(t => t.status !== 'Converted' && t.status !== 'Discontinued').length;
+      const activeTr = teacherTrials.filter(t => trialIsActive(t)).length;
       const decidedTr = convTr + discTr;
-      const convRate = decidedTr > 0 ? Math.round((convTr / decidedTr) * 100) : (totalTr > 0 ? 0 : 0);
+      // Trials Audit Batch 1 (F10): with zero decided trials there is no
+      // measured rate — trialConversionRate returns null instead of 0%.
+      const convRate = trialConversionRate(teacherTrials);
 
       let ratingBadge = '';
       let barColor = 'bg-emerald-500';
-      if (convRate >= 70) {
+      if (convRate === null) {
+        ratingBadge = `<span class="px-3 py-1 rounded-full text-xs font-black bg-slate-100 text-slate-700 border border-slate-300 flex items-center gap-1.5 shadow-xs"><i class="fa-solid fa-circle-question text-slate-500"></i> No Decisions Yet</span>`;
+        barColor = 'bg-slate-400';
+      } else if (convRate >= 70) {
         ratingBadge = `<span class="px-3 py-1 rounded-full text-xs font-black bg-emerald-100 text-emerald-800 border border-emerald-300 flex items-center gap-1.5 shadow-xs"><i class="fa-solid fa-crown text-amber-500"></i> Top Performer (${convRate}%)</span>`;
         barColor = 'bg-emerald-500';
       } else if (convRate >= 50) {
@@ -327,10 +503,10 @@
           <div class="space-y-1">
             <div class="flex justify-between items-center text-xs font-bold">
               <span class="text-purple-200 text-[11px]">Trial-to-Regular Conversion Success Ratio</span>
-              <span class="text-white font-extrabold text-sm">${convRate}% Conversion (${convTr} of ${decidedTr || totalTr} decided)</span>
+              <span class="text-white font-extrabold text-sm">${convRate === null ? 'No trials decided yet' : `${convRate}% Conversion (${convTr} of ${decidedTr} decided)`}</span>
             </div>
             <div class="w-full bg-white/20 rounded-full h-3 overflow-hidden p-0.5">
-              <div class="${barColor} h-full rounded-full transition-all duration-700" style="width: ${Math.max(5, convRate)}%"></div>
+              <div class="${barColor} h-full rounded-full transition-all duration-700" style="width: ${convRate === null ? 5 : Math.max(5, convRate)}%"></div>
             </div>
           </div>
         </div>
@@ -343,7 +519,9 @@
         pool = ALL_TRIALS.filter(t => t.teacher_id === CURRENT_TRIAL_TEACHER_FILTER);
       }
 
-      const activeCount = pool.filter(t => t.status === 'Active' || (t.status !== 'Converted' && t.status !== 'Discontinued' && (t.conducted_sessions || 0) < 3)).length;
+      // Trials Audit Batch 1 (F1): the Active KPI uses the shared
+      // trialIsActive predicate — the same one the pill and banner use.
+      const activeCount = pool.filter(t => trialIsActive(t)).length;
       const completedCount = pool.filter(t => t.status === 'Completed' || (t.status !== 'Converted' && t.status !== 'Discontinued' && (t.conducted_sessions || 0) >= 3)).length;
       const convertedCount = pool.filter(t => t.status === 'Converted').length;
       const totalCount = pool.length;
@@ -386,7 +564,10 @@
 
       let filtered = ALL_TRIALS.filter(t => {
         if (filter === 'active') {
-          return t.status !== 'Converted' && t.status !== 'Discontinued';
+          // Trials Audit Batch 1 (F1): the pill uses the same Active
+          // predicate as the KPI — a trial with all 3 sessions done is
+          // Completed, not Active.
+          return trialIsActive(t);
         }
         if (filter === 'completed') {
           return t.status === 'Completed' || (t.status !== 'Converted' && t.status !== 'Discontinued' && (t.conducted_sessions || 0) >= 3);
@@ -406,14 +587,9 @@
       }
 
       if (query) {
-        filtered = filtered.filter(t => 
-          (t.student_name || '').toLowerCase().includes(query) ||
-          (t.parent_name || '').toLowerCase().includes(query) ||
-          (t.whatsapp || '').includes(query) ||
-          (t.course || '').toLowerCase().includes(query) ||
-          (t.country || '').toLowerCase().includes(query) ||
-          (t.teacher_name || '').toLowerCase().includes(query)
-        );
+        // Trials Audit Batch 1 (F12): digits-only queries match numbers
+        // stored with spaces/dashes (see trialMatchesSearch).
+        filtered = filtered.filter(t => trialMatchesSearch(t, query));
       }
 
       if (filtered.length === 0) {
@@ -616,6 +792,10 @@
       const today = new Date().toISOString().slice(0, 10);
       document.getElementById('trialStartDate').value = today;
 
+      // Trials Audit Batch 1 (F6): show the 3 trial days for the
+      // default start date instead of leaving the banner blank.
+      calculateTrial3Days(today);
+
       // Populate teacher dropdown (only eligible teaching staff, exclude Managers)
       const tSelect = document.getElementById('trialTeacherSelect');
       if (tSelect) {
@@ -674,6 +854,26 @@
 
       if (!parent_name || !whatsapp || !student_name || !teacher_id || !start_date || !pkt_slot) {
         lmsNotify("Please fill in all required fields.");
+        if (btn) {
+          btn.disabled = false;
+          btn.innerHTML = '<i class="fa-solid fa-check"></i> Book 3-Day Free Trial';
+        }
+        return;
+      }
+
+      // Trials Audit Batch 1 (F12): cheap validations before any write.
+      const todayIso = new Date().toISOString().slice(0, 10);
+      if (start_date < todayIso) {
+        lmsNotify('The trial start date cannot be in the past. Please pick today or a future date.');
+        if (btn) {
+          btn.disabled = false;
+          btn.innerHTML = '<i class="fa-solid fa-check"></i> Book 3-Day Free Trial';
+        }
+        return;
+      }
+      const phoneDigits = String(whatsapp).replace(/[^0-9]/g, '');
+      if (phoneDigits.length < 10 || phoneDigits.length > 15) {
+        lmsNotify('Please enter a valid WhatsApp number (10-15 digits, including the country code).');
         if (btn) {
           btn.disabled = false;
           btn.innerHTML = '<i class="fa-solid fa-check"></i> Book 3-Day Free Trial';
@@ -877,9 +1077,12 @@
       );
 
       // Auto-trigger Official Welcome & Zoom Link Email
+      // Trials Audit Batch 1 (F5): the checkbox actually sends — the
+      // preview opens and the existing dispatch runs right after it,
+      // so a failed send is reported instead of silently never going out.
       if (auto_send_email && parent_email) {
         setTimeout(() => {
-          openTrialEmailModal(newTrial.id);
+          autoSendTrialEmail(() => openTrialEmailModal(newTrial.id));
         }, 300);
       }
     }
@@ -889,11 +1092,42 @@
       if (!trial) return;
 
       const current = trial.conducted_sessions || 0;
-      if (current >= sessionNum) {
-        trial.conducted_sessions = sessionNum - 1;
-      } else {
-        trial.conducted_sessions = sessionNum;
-      }
+      const togglingDown = current >= sessionNum;
+      const newCount = togglingDown ? sessionNum - 1 : sessionNum;
+
+      try {
+        if (togglingDown) {
+          // Trials Audit Batch 1 (F3): the loader recomputes sessions
+          // from the attendance logs and only ever raises the count, so
+          // un-marking a day must remove its log — otherwise the next
+          // load counts the log and the day comes back. Delete the
+          // newest trial-session logs down to the new count (normally
+          // exactly one; more only for pre-fix inflated data). Owner
+          // and manager may delete attendance_logs rows; the teacher
+          // self-reset guard is teacher-only, so this path is unaffected.
+          const { data: trialLogs } = await db.from('attendance_logs')
+            .select('id, student_id, status, lesson_notes')
+            .eq('student_id', trial.student_id);
+          const sessionLogs = (trialLogs || [])
+            .filter(l => (l.status === 'Present' || l.status === 'Completed') && String(l.lesson_notes || '').includes('3-Day Trial Session'))
+            .sort((a, b) => String(b.id).localeCompare(String(a.id)));
+          const excess = sessionLogs.length - newCount;
+          for (let i = 0; i < excess; i++) {
+            await db.from('attendance_logs').delete().eq('id', sessionLogs[i].id);
+          }
+        } else {
+          const todayIso = new Date().toISOString().slice(0, 10);
+          await db.from('attendance_logs').insert([{
+            student_id: trial.student_id,
+            teacher_id: trial.teacher_id,
+            date: todayIso,
+            status: 'Present',
+            lesson_notes: `3-Day Trial Session ${newCount}/3 Logged`
+          }]);
+        }
+      } catch(e) {}
+
+      trial.conducted_sessions = newCount;
 
       if (trial.conducted_sessions >= 3) {
         if (trial.status === 'Active' || !trial.status) {
@@ -902,17 +1136,6 @@
       } else if (trial.status === 'Completed') {
         trial.status = 'Active';
       }
-
-      try {
-        const todayIso = new Date().toISOString().slice(0, 10);
-        await db.from('attendance_logs').insert([{
-          student_id: trial.student_id,
-          teacher_id: trial.teacher_id,
-          date: todayIso,
-          status: 'Present',
-          lesson_notes: `3-Day Trial Session ${trial.conducted_sessions}/3 Logged`
-        }]);
-      } catch(e) {}
 
       saveStoredTrials(ALL_TRIALS);
       updateTrialKpis();
@@ -1225,19 +1448,11 @@
 
       // 5. Expand & Promote Class Schedules from Trial to Active Regular across requested days
       try {
-        let daysToSchedule = [1, 2, 3, 4, 5]; // default: 5 Days (Mon - Fri)
-        const dStr = (days_per_week || '').toLowerCase();
-        if (dStr.includes('3 day') || dStr.includes('mon / wed / fri') || dStr.includes('mon, wed, fri')) {
-          daysToSchedule = [1, 3, 5]; // Mon, Wed, Fri
-        } else if (dStr.includes('2 day') || dStr.includes('weekend') || dStr.includes('sat - sun') || dStr.includes('sat, sun')) {
-          daysToSchedule = [6, 7]; // Sat, Sun
-        } else if (dStr.includes('6 day')) {
-          daysToSchedule = [1, 2, 3, 4, 5, 6]; // Mon - Sat
-        } else if (dStr.includes('7 day') || dStr.includes('everyday')) {
-          daysToSchedule = [1, 2, 3, 4, 5, 6, 7];
-        } else if (dStr.includes('5 day')) {
-          daysToSchedule = [1, 2, 3, 4, 5]; // Mon - Fri
-        }
+        // Trials Audit Batch 1 (F2): the label → weekday mapping lives
+        // in trialConvertDaysToSchedule (pure, unit-tested). "4 Days
+        // (Mon - Thu)" books Mon-Thu only — the old inline chain had no
+        // 4-day branch and fell through to the 5-day default.
+        const daysToSchedule = trialConvertDaysToSchedule(days_per_week);
 
         let startTime = '16:00:00';
         let endTime = '16:30:00';
@@ -1342,8 +1557,12 @@
         const teacher = ALL_TEACHERS.find(t => t.id === trial.teacher_id);
         const teacherName = teacher ? teacher.full_name : (trial.teacher_name || 'Assigned Quran Instructor');
         setTimeout(() => {
-          openEmailPreviewModal({
+          // Trials Audit Batch 1 (F5/F11): the preview opens and the
+          // existing dispatch runs right after it; familyId is included
+          // so the manager dispatch path can send it too.
+          autoSendTrialEmail(() => openEmailPreviewModal({
             type: 'regular',
+            familyId: canonicalFamId,
             studentName: trial.student_name,
             parentName: trial.parent_name,
             toEmail: student_email || trial.email,
@@ -1357,7 +1576,7 @@
             credentials: {
               username
             }
-          });
+          }));
         }, 300);
       }
     }
@@ -1377,11 +1596,19 @@
           }
         } catch(e) {}
 
+        // Trials Audit Batch 1 (F4): persist the Discontinued state in
+        // D1 (student + family notes) so a fresh browser or device does
+        // not resurrect the trial as Active.
+        const persisted = await markTrialDiscontinuedInD1(trial);
+
         trial.status = 'Discontinued';
         saveStoredTrials(ALL_TRIALS);
         updateTrialKpis();
         renderTrialCards(CURRENT_TRIAL_FILTER);
         loadDashboardData();
+        if (!persisted) {
+          lmsNotify('The trial was discontinued on this device, but the change could not be saved to the server — it may reappear on another device. Please try discontinuing it again.');
+        }
       }
     }
 
