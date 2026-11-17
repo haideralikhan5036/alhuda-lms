@@ -146,6 +146,16 @@ const OPTS_ARGS = {
 }
 
 {
+  // No family yet: the window still builds (fees unknown, not "no fee").
+  const opts = F.buildMultiMonthOptions({ fam: null, records: [], overrides: {}, anchorMonthIdx: 10, anchorYear: 2026, enrollment: null, isLeaveMonth: () => false, applicableFee: () => null });
+  check('no family: the selector window still builds 25 months', opts.length === 25, String(opts.length));
+  check('no family: every month is available (not disabled as no-fee)', opts.every((o) => o.state === 'available'), opts.filter((o) => o.state !== 'available').map((o) => o.label + ':' + o.state).join(','));
+  check('no family: fees are unknown, not zero', opts.every((o) => o.fee === null), JSON.stringify(opts.slice(0, 3).map((o) => o.fee)));
+  const tot = F.multiMonthSelectionTotal([opts[12], opts[13]]);
+  check('no family: the total keeps fees unknown', tot.rows.every((r) => r.fee === null) && tot.total === 0, JSON.stringify(tot));
+}
+
+{
   // Enrollment: family joined August 2026 — earlier months are not enrolled.
   const opts = F.buildMultiMonthOptions({ ...OPTS_ARGS, enrollment: { year: 2026, monthIndex: 7 } });
   const byKey = {};
@@ -433,6 +443,35 @@ function makeSubmitHarness(records, confirmResult) {
   check('deselect setup: two months total 15000', h.el('feeFormMonthlyFee').value === '15000.00', h.el('feeFormMonthlyFee').value);
   h.api.toggleMultiMonthSelection(11, 2026);
   check('deselect: clicking again removes the month (7500 left)', h.el('feeFormMonthlyFee').value === '7500.00' && h.api.getMultiMonthSelection().length === 1, h.el('feeFormMonthlyFee').value);
+}
+
+{
+  // No family selected yet: the month boxes must still render and be
+  // selectable — the toggle must never show an empty box. Fees are
+  // unknown until a family is picked, then they fill in.
+  const h = makeSubmitHarness([rec('August', 2026, 7500, 0)], true);
+  h.el('feeFormMonth').value = 'November';
+  h.el('feeFormYear').value = '2026';
+  h.el('feeFormCurrency').value = 'PKR';
+  // NOTE: no setForm() — feeFormFamilyId stays empty, as in the live
+  // screenshot where the toggle was on before any family was picked.
+  h.el('feeToggleAdvance').checked = true;
+  h.api.handleAdvanceFeeToggle();
+  const boxes = (h.el('feeMultiMonthGrid').innerHTML.match(/fee-mm-box/g) || []).length;
+  check('no family: the month grid still renders 25 boxes', boxes === 25, 'boxes=' + boxes);
+  check('no family: boxes show no fee yet (— instead of 0.00)', h.el('feeMultiMonthGrid').innerHTML.indexOf('—') !== -1 && h.el('feeMultiMonthGrid').innerHTML.indexOf('0.00') === -1);
+  h.api.toggleMultiMonthSelection(10, 2026); // November
+  h.api.toggleMultiMonthSelection(11, 2026); // December
+  check('no family: months are selectable before a family is picked', h.api.getMultiMonthSelection().length === 2, String(h.api.getMultiMonthSelection().length));
+  check('no family: the review names the months without amounts', h.el('feeMultiMonthReview').innerText.indexOf('November 2026') !== -1 && h.el('feeMultiMonthReview').innerText.indexOf('December 2026') !== -1 && h.el('feeMultiMonthReview').innerText.indexOf('0.00') === -1);
+  // Now pick the family: the same selection stays, fees fill in.
+  h.setForm();
+  h.api.triggerFeeBalanceRecalc();
+  const boxesAfter = (h.el('feeMultiMonthGrid').innerHTML.match(/fee-mm-box/g) || []).length;
+  check('family picked later: the grid still shows 25 boxes', boxesAfter === 25, 'boxes=' + boxesAfter);
+  check('family picked later: the earlier selection survives', h.api.getMultiMonthSelection().length === 2, String(h.api.getMultiMonthSelection().length));
+  check('family picked later: fees fill in (7500 + 7500)', h.el('feeFormMonthlyFee').value === '15000.00', h.el('feeFormMonthlyFee').value);
+  check('family picked later: boxes now show the real fee', h.el('feeMultiMonthGrid').innerHTML.indexOf('7500.00') !== -1);
 }
 
 const failed = results.filter((r) => !r.pass);

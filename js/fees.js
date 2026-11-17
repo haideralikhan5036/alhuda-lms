@@ -1795,8 +1795,11 @@
 
     function buildMultiMonthOptionsForForm() {
       const famId = document.getElementById('feeFormFamilyId') ? document.getElementById('feeFormFamilyId').value : '';
-      const fam = (CACHED_FEE_FAMILIES || []).find(f => String(f.id).toUpperCase() === String(famId || '').toUpperCase());
-      if (!fam || !window.FeePhase6) return [];
+      const fam = (CACHED_FEE_FAMILIES || []).find(f => String(f.id).toUpperCase() === String(famId || '').toUpperCase()) || null;
+      if (!window.FeePhase6) return [];
+      // No family picked yet: the months still build (fees unknown,
+      // shown as a dash) so the toggle never shows an empty box. The
+      // family-dependent lookups below all guard on fam.
       const anchor = multiMonthFormAnchor();
       const records = (typeof getStoredFeeRecords === 'function') ? getStoredFeeRecords() : [];
       const overrides = (typeof getStoredMatrixOverrides === 'function') ? getStoredMatrixOverrides() : {};
@@ -1806,11 +1809,13 @@
         overrides: overrides,
         anchorMonthIdx: anchor.monthIdx,
         anchorYear: anchor.year,
-        enrollment: (typeof getFamilyEnrollmentInfo === 'function') ? getFamilyEnrollmentInfo(fam) : null,
+        enrollment: (fam && typeof getFamilyEnrollmentInfo === 'function') ? getFamilyEnrollmentInfo(fam) : null,
         isLeaveMonth: function (mIdx, yr) {
+          if (!fam) return false;
           try { return !!(typeof checkFamilyLeaveInMonth === 'function' && checkFamilyLeaveInMonth(fam.id, FEE_CONFIG.MONTHS[mIdx], yr).isLeave); } catch (e) { return false; }
         },
         applicableFee: function (mIdx, yr) {
+          if (!fam) return null;
           try { return feeFormApplicableFeeDetails(fam, mIdx, yr).fee; } catch (e) { return parseFloat(fam.monthly_fee || 0); }
         }
       });
@@ -1839,7 +1844,7 @@
         const title = disabled ? o.reason : (o.state === 'paid' ? 'Already paid — click to include as a second payment (you will be asked first)' : 'Click to ' + (sel ? 'remove ' : 'add ') + o.label);
         return '<button type="button" ' + (disabled ? 'disabled ' : '') + 'onclick="toggleMultiMonthSelection(' + o.monthIdx + ', ' + o.year + ')" title="' + title + '" class="fee-mm-box p-2 rounded-xl border text-left transition focus:outline-none focus:ring-2 focus:ring-emerald-500 ' + stateCls + '">' +
           '<span class="block text-[11px] font-extrabold text-slate-800">' + o.label + '</span>' +
-          '<span class="block text-[11px] font-bold text-slate-600 font-num mt-0.5">' + cur + ' ' + o.fee.toFixed(2) + (o.paidSoFar > 0 ? ' <span class="text-emerald-700">(paid ' + o.paidSoFar.toFixed(2) + ')</span>' : '') + '</span>' +
+          '<span class="block text-[11px] font-bold text-slate-600 font-num mt-0.5">' + (o.fee === null || o.fee === undefined ? '—' : cur + ' ' + o.fee.toFixed(2) + (o.paidSoFar > 0 ? ' <span class="text-emerald-700">(paid ' + o.paidSoFar.toFixed(2) + ')</span>' : '')) + '</span>' +
           '<span class="block mt-1">' + (sel ? '<span class="px-1.5 py-0.5 rounded-full text-[9px] font-black bg-emerald-600 text-white">Selected</span> ' : '') + badge + '</span>' +
           '</button>';
       }).join('');
@@ -1861,12 +1866,15 @@
       }
       const calc = window.FeePhase6.multiMonthSelectionTotal(sel);
       const cur = document.getElementById('feeFormCurrency') ? document.getElementById('feeFormCurrency').value : 'USD';
+      const feesUnknown = calc.rows.some(function (r) { return r.fee === null || r.fee === undefined; });
       if (rev) {
-        rev.innerText = calc.rows.map(function (r) {
-          return r.label + ' (' + cur + ' ' + r.charge.toFixed(2) + (r.state === 'paid' ? ' — second payment' : '') + ')';
-        }).join(', ');
+        rev.innerText = feesUnknown
+          ? calc.rows.map(function (r) { return r.label; }).join(', ') + ' — select a family above to see each month\u2019s fee.'
+          : calc.rows.map(function (r) {
+              return r.label + ' (' + cur + ' ' + r.charge.toFixed(2) + (r.state === 'paid' ? ' — second payment' : '') + ')';
+            }).join(', ');
       }
-      if (tot) tot.innerText = 'Total for selected months: ' + cur + ' ' + calc.total.toFixed(2);
+      if (tot) tot.innerText = feesUnknown ? 'Select a family above to see the total.' : 'Total for selected months: ' + cur + ' ' + calc.total.toFixed(2);
     }
 
     async function toggleMultiMonthSelection(monthIdx, year) {
@@ -1896,6 +1904,10 @@
       }
       // Recompute arrears (a newly selected past month leaves the
       // previous-balance total) and the multi-month total.
+      // Re-render directly too: without a family picked yet,
+      // triggerFeeBalanceRecalc returns early and would leave the
+      // clicked box + review unchanged.
+      renderMultiMonthSelector();
       triggerFeeBalanceRecalc();
     }
 
