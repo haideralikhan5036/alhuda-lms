@@ -106,7 +106,7 @@ await fakeDb.exec(`CREATE TABLE advance_requests (
   check('W setup: schema marker is 2026-11-13-v9', marker && marker.value === '2026-11-13-v9', JSON.stringify(marker));
   const h = await call('https://worker.test/api/health', { method: 'GET' });
   check('W setup: health reports plan-capture release + schema v9',
-    h.status === 200 && h.data && h.data.version === '2026-11-13-teacher-cover' && h.data.schema === '2026-11-13-v9', h.text.slice(0, 200));
+    h.status === 200 && h.data && h.data.version === '2026-11-17-fee-pdf-r2' && h.data.schema === '2026-11-13-v9', h.text.slice(0, 200));
 }
 fakeDb.seed("INSERT INTO teachers (id, full_name, address, status) VALUES (?, ?, ?, ?)",
   'TCH-A', 'Teacher A', JSON.stringify({ salary_slips: {} }), 'Active');

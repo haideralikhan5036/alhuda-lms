@@ -138,7 +138,7 @@ const coverIds = (res) => ((res.json && res.json.data) || []).map(r => r.id).sor
   check('worker: schema marker is v9 (cover bump)', marker && marker.value === '2026-11-13-v9', JSON.stringify(marker));
   const h = await call('/api/health', { method: 'GET' });
   check('worker: health reports the cover release + schema v9',
-    h.status === 200 && h.json && h.json.version === '2026-11-13-teacher-cover' && h.json.schema === '2026-11-13-v9',
+    h.status === 200 && h.json && h.json.version === '2026-11-17-fee-pdf-r2' && h.json.schema === '2026-11-13-v9',
     'got ' + (h.json && h.json.version) + '/' + (h.json && h.json.schema));
 }
 fakeDb.seed("INSERT INTO teachers (id, full_name, status) VALUES ('T-A', 'Teacher A', 'Active')");
@@ -524,7 +524,7 @@ const TEACHER_HTML = read('teacher.html');
 const PARENT_HTML = read('parent.html');
 const INDEX_HTML = read('index.html');
 
-check('struct: WORKER_RELEASE is the cover release', WORKER_SRC.includes("const WORKER_RELEASE = '2026-11-13-teacher-cover'"));
+check('struct: WORKER_RELEASE is the cover release', WORKER_SRC.includes("const WORKER_RELEASE = '2026-11-17-fee-pdf-r2'"));
 check('struct: HEALTH_SCHEMA_VERSION is v9', WORKER_SRC.includes("const HEALTH_SCHEMA_VERSION = '2026-11-13-v9'"));
 check('struct: SCHEMA_VERSION is v9 in db.js', DBJS.includes("const SCHEMA_VERSION = '2026-11-13-v9'"));
 check('struct: cover_assignments is allowlisted + created in db.js',

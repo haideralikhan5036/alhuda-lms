@@ -45,7 +45,7 @@
  */
 
 import { onRequest as handleDbRequest, AUTH_TABLE_STATEMENTS } from '../functions/api/db.js';
-import { onRequest as handleStorageRequest } from '../functions/api/storage.js';
+import { onRequest as handleStorageRequest, onFeeDocumentRequest as handleFeeDocumentRequest } from '../functions/api/storage.js';
 import {
   createSessionToken,
   verifySessionToken,
@@ -84,7 +84,7 @@ function corsHeadersFor(request, env) {
 // functions/api/db.js (the D1 schema marker; v2 after Part A). It is hardcoded
 // here on purpose: /api/health must never 500 because D1 is unreachable, and
 // it must never cost an unauthenticated caller a D1 read.
-const WORKER_RELEASE = '2026-11-13-teacher-cover';
+const WORKER_RELEASE = '2026-11-17-fee-pdf-r2';
 const HEALTH_SCHEMA_VERSION = '2026-11-13-v9';
 
 // --- Batch 7 Part B: security headers (workers.dev responses) --------------
@@ -5109,6 +5109,20 @@ export default {
       const auth = await requireApiAuth(request, env);
       if (!auth) return unauthorized(request, env);
       return withSecurityHeaders(await handleScopedStorageRequest({ request, env, ctx }, auth));
+    }
+
+    // 2f. Fee PDF documents (/api/fee-documents) -> R2 fee-documents/ prefix
+    // (Fee Upgrade Phase 5, 2026-11-17). OWNER + MANAGER ONLY — teachers
+    // and parents get 403 from the handler; anonymous callers get 401
+    // here. Download reuses GET /api/storage?key= (branch 2 above);
+    // this endpoint only stores (POST) and removes (DELETE) fee PDFs.
+    if (url.pathname === '/api/fee-documents') {
+      if (request.method === 'OPTIONS') {
+        return withSecurityHeaders(await handleFeeDocumentRequest({ request, env, ctx }));
+      }
+      const auth = await requireApiAuth(request, env);
+      if (!auth) return unauthorized(request, env);
+      return withSecurityHeaders(await handleFeeDocumentRequest({ request, env, ctx, __lmsInternal: true }, auth));
     }
 
     // 2b. Email relay (/api/email/send) -> official Apps Script relay.

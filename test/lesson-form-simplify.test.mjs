@@ -262,10 +262,10 @@ check('adv save: only the course name is required for Additional Course',
   extractFunction(TEACHER_HTML, 'handleAdvanceClassSubmit').includes('Please enter the additional course name.'));
 
 // ---- G) release pin (moved by the commission release bump) ----
-check('WORKER_RELEASE is the commission release (2026-11-13-teacher-cover)',
-  WORKER_SRC.includes("const WORKER_RELEASE = '2026-11-13-teacher-cover'"));
+check('WORKER_RELEASE is the commission release (2026-11-17-fee-pdf-r2)',
+  WORKER_SRC.includes("const WORKER_RELEASE = '2026-11-17-fee-pdf-r2'"));
 check('batch7b guard constant still pins the same release',
-  GUARD_SRC.includes("const WORKER_RELEASE = '2026-11-13-teacher-cover'"));
+  GUARD_SRC.includes("const WORKER_RELEASE = '2026-11-17-fee-pdf-r2'"));
 
 const failed = results.filter(r => !r.pass);
 console.log(`---\nlesson-form-simplify: ${results.length - failed.length}/${results.length} passed`);

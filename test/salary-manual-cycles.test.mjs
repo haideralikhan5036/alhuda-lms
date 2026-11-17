@@ -136,7 +136,7 @@ async function makePlanAdvance(teacherId, amount, plan) {
 {
   const h = await call('https://worker.test/api/health', { method: 'GET' });
   check('W setup: health reports the Phase 4 release + schema v9',
-    h.status === 200 && h.data && h.data.version === '2026-11-13-teacher-cover' && h.data.schema === '2026-11-13-v9',
+    h.status === 200 && h.data && h.data.version === '2026-11-17-fee-pdf-r2' && h.data.schema === '2026-11-13-v9',
     h.text.slice(0, 200));
   const r = await dbPost(TOK.owner, { table: 'families', action: 'select' });
   check('W setup: owner /api/db boot -> 200', r.status === 200, r.text.slice(0, 200));
