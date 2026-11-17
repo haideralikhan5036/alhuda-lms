@@ -380,31 +380,33 @@ function daysAgoIso(n) {
 {
   const w = makeTrialsWorld();
   const g = w.api.generateTrialParentPassword;
-  check('F9 "Ayesha Khan" -> ayeshakhan2085', g('Ayesha Khan') === 'ayeshakhan2085', g('Ayesha Khan'));
-  check('F9 "Ali Raza" -> aliraza1772', g('Ali Raza') === 'aliraza1772', g('Ali Raza'));
-  check('F9 "Ali" -> aliali1310 (name repeated to reach 10)', g('Ali') === 'aliali1310', g('Ali'));
-  check('F9 empty name -> parent1000 (fallback, still 10)', g('') === 'parent1000', g(''));
-  check('F9 one-letter name still reaches 10 chars', g('A').length >= 10 && g('A') === 'aaaaaa1097', g('A'));
-  check('F9 scheme is deterministic (same name, same password)', g('Ayesha Khan') === g('Ayesha Khan') && g('Ali') === g('Ali'));
-  check('F9 scheme is name-derived (starts with the name letters)', g('Ayesha Khan').startsWith('ayeshakhan') && g('Ali Raza').startsWith('aliraza'));
-  check('F9 scheme is always >= 10 chars', ['Ayesha Khan', 'Ali Raza', 'Ali', '', 'A', 'Muhammad Bilal Ahmed', 'Noor'].every(n => g(n).length >= 10));
-  check('F9 scheme has only lowercase letters + digits (no spaces)', /^[a-z0-9]+$/.test(g('Ayesha Khan')) && /^[a-z0-9]+$/.test(g('Ali Raza')));
-  check('F9 different names give different passwords', g('Ayesha Khan') !== g('Ali Raza') && g('Ali') !== g('Ayesha Khan'));
+  check('F9 "Ayesha Khan" + FAM-001 -> ayeshakhan2317', g('Ayesha Khan', 'FAM-001') === 'ayeshakhan2317', g('Ayesha Khan', 'FAM-001'));
+  check('F9 "Ali Raza" + FAM-002 -> aliraza2485', g('Ali Raza', 'FAM-002') === 'aliraza2485', g('Ali Raza', 'FAM-002'));
+  check('F9 "Ali" + FAM-003 -> aliali5114 (name repeated to reach 10)', g('Ali', 'FAM-003') === 'aliali5114', g('Ali', 'FAM-003'));
+  check('F9 empty name + FAM-004 -> parent7115 (fallback, still 10)', g('', 'FAM-004') === 'parent7115', g('', 'FAM-004'));
+  check('F9 one-letter name still reaches 10 chars', g('A', 'FAM-005').length >= 10 && g('A', 'FAM-005') === 'aaaaaa2623', g('A', 'FAM-005'));
+  check('F9 scheme is deterministic (same name + same family id, same password)', g('Ayesha Khan', 'FAM-001') === g('Ayesha Khan', 'FAM-001') && g('Ali', 'FAM-003') === g('Ali', 'FAM-003'));
+  check('F9 same name in different families gives DIFFERENT passwords', g('Ayesha Khan', 'FAM-001') !== g('Ayesha Khan', 'FAM-002') && g('Ayesha Khan', 'FAM-001') !== g('Ayesha Khan', 'FAM-003') && g('Ayesha Khan', 'FAM-002') !== g('Ayesha Khan', 'FAM-003'));
+  check('F9 neighbouring family ids give clearly different codes (not off by one)', Math.abs(parseInt(g('Ayesha Khan', 'FAM-001').slice(-4), 10) - parseInt(g('Ayesha Khan', 'FAM-002').slice(-4), 10)) > 100);
+  check('F9 scheme is name-derived (starts with the name letters)', g('Ayesha Khan', 'FAM-001').startsWith('ayeshakhan') && g('Ali Raza', 'FAM-002').startsWith('aliraza'));
+  check('F9 scheme is always >= 10 chars', [['Ayesha Khan', 'FAM-001'], ['Ali Raza', 'FAM-002'], ['Ali', 'FAM-003'], ['', 'FAM-004'], ['A', 'FAM-005'], ['Muhammad Bilal Ahmed', 'FAM-006'], ['Noor', 'FAM-007']].every(([n, f]) => g(n, f).length >= 10));
+  check('F9 scheme has only lowercase letters + digits (no spaces)', /^[a-z0-9]+$/.test(g('Ayesha Khan', 'FAM-001')) && /^[a-z0-9]+$/.test(g('Ali Raza', 'FAM-002')));
+  check('F9 different names give different passwords', g('Ayesha Khan', 'FAM-001') !== g('Ali Raza', 'FAM-002') && g('Ali', 'FAM-003') !== g('Ayesha Khan', 'FAM-001'));
 }
 
 // ---- F9: the set-password step ----------------------------------------------------------
 {
   const w = makeTrialsWorld();
-  const r = await w.api.setConvertedParentPassword('ayeshakhan', 'Ayesha Khan');
+  const r = await w.api.setConvertedParentPassword('ayeshakhan', 'Ayesha Khan', 'FAM-1');
   check('F9 set step calls the Worker helper with role parent + username + generated password',
-    w.setPwCalls.length === 1 && w.setPwCalls[0].role === 'parent' && w.setPwCalls[0].identifier === 'ayeshakhan' && w.setPwCalls[0].password === 'ayeshakhan2085',
+    w.setPwCalls.length === 1 && w.setPwCalls[0].role === 'parent' && w.setPwCalls[0].identifier === 'ayeshakhan' && w.setPwCalls[0].password === 'ayeshakhan4261',
     JSON.stringify(w.setPwCalls));
-  check('F9 set step reports ok:true on success', r.ok === true && r.password === 'ayeshakhan2085');
+  check('F9 set step reports ok:true on success', r.ok === true && r.password === 'ayeshakhan4261');
 }
 {
   const w = makeTrialsWorld({ setPwThrows: true });
-  const r = await w.api.setConvertedParentPassword('ayeshakhan', 'Ayesha Khan');
-  check('F9 set step reports ok:false when the endpoint fails (never throws)', r.ok === false && r.password === 'ayeshakhan2085');
+  const r = await w.api.setConvertedParentPassword('ayeshakhan', 'Ayesha Khan', 'FAM-1');
+  check('F9 set step reports ok:false when the endpoint fails (never throws)', r.ok === false && r.password === 'ayeshakhan4261');
   check('F9 set step still attempted the call before failing', w.setPwCalls.length === 1);
 }
 {
@@ -439,19 +441,19 @@ const fakeSubmitEvent = { preventDefault: () => {} };
   fillConvertForm(w, {});
   await w.api.handleConvertTrialSubmit(fakeSubmitEvent);
   check('F9 convert sets the password via the Worker helper (parent, username, generated password)',
-    w.setPwCalls.length === 1 && w.setPwCalls[0].role === 'parent' && w.setPwCalls[0].identifier === 'ayeshakhan' && w.setPwCalls[0].password === 'ayeshakhan2085',
+    w.setPwCalls.length === 1 && w.setPwCalls[0].role === 'parent' && w.setPwCalls[0].identifier === 'ayeshakhan' && w.setPwCalls[0].password === 'ayeshakhan4261',
     JSON.stringify(w.setPwCalls));
   const famNotes = w.tables.families[0].notes;
   const stuNotes = w.tables.students[0].notes;
   check('F9 convert writes portal_credentials.username into the family notes (so the login can find it)',
     JSON.parse(famNotes).portal_credentials && JSON.parse(famNotes).portal_credentials.username === 'ayeshakhan', famNotes);
   check('F9 convert keeps parent_user in the family notes too', JSON.parse(famNotes).parent_user === 'ayeshakhan');
-  check('F9 the plaintext password is NOT in the family notes', !famNotes.includes('ayeshakhan2085') && !famNotes.includes('"password"'), famNotes);
-  check('F9 the plaintext password is NOT in the student notes', !stuNotes.includes('ayeshakhan2085') && !stuNotes.includes('"password"'), stuNotes);
+  check('F9 the plaintext password is NOT in the family notes', !famNotes.includes('ayeshakhan4261') && !famNotes.includes('"password"'), famNotes);
+  check('F9 the plaintext password is NOT in the student notes', !stuNotes.includes('ayeshakhan4261') && !stuNotes.includes('"password"'), stuNotes);
   check('F9 saveParentAccount receives NO password key', w.parentAccountCalls.length === 1 && !('password' in (w.parentAccountCalls[0].creds || {})), JSON.stringify(w.parentAccountCalls));
-  check('F9 the plaintext password is NOT in any localStorage value', Object.values(w.store).every(v => !String(v).includes('ayeshakhan2085')), JSON.stringify(Object.keys(w.store)));
+  check('F9 the plaintext password is NOT in any localStorage value', Object.values(w.store).every(v => !String(v).includes('ayeshakhan4261')), JSON.stringify(Object.keys(w.store)));
   const successMsg = w.notifies.find(m => m.includes('Conversion Completed Successfully'));
-  check('F9 success message shows the generated password once', !!successMsg && successMsg.includes('Password: ayeshakhan2085'), successMsg || w.notifies.join(' | '));
+  check('F9 success message shows the generated password once', !!successMsg && successMsg.includes('Password: ayeshakhan4261'), successMsg || w.notifies.join(' | '));
   check('F9 success message shows the username', !!successMsg && successMsg.includes('Username: ayeshakhan'));
   check('F9 convert still marks the trial Converted', w.api.ALL_TRIALS[0].status === 'Converted');
   check('F9 convert activates the family + student', w.tables.families[0].status === 'Active' && w.tables.students[0].status === 'Active');
@@ -471,7 +473,7 @@ const fakeSubmitEvent = { preventDefault: () => {} };
   await new Promise(r => setTimeout(r, 1200));
   check('F9 welcome email still opens (auto-send)', w.emailPayloads.length === 1, String(w.emailPayloads.length));
   check('F9 welcome email carries the username, NOT the password',
-    w.emailPayloads[0] && w.emailPayloads[0].credentials && w.emailPayloads[0].credentials.username === 'ayeshakhan' && !JSON.stringify(w.emailPayloads[0]).includes('ayeshakhan2085'),
+    w.emailPayloads[0] && w.emailPayloads[0].credentials && w.emailPayloads[0].credentials.username === 'ayeshakhan' && !JSON.stringify(w.emailPayloads[0]).includes('ayeshakhan4261'),
     JSON.stringify(w.emailPayloads[0]));
   check('F9 welcome email still dispatches', w.dispatchCalls.length === 1, String(w.dispatchCalls.length));
 }
@@ -490,7 +492,7 @@ const fakeSubmitEvent = { preventDefault: () => {} };
   await w.api.handleConvertTrialSubmit(fakeSubmitEvent);
   const successMsg = w.notifies.find(m => m.includes('Conversion Completed Successfully'));
   check('F9 failed password set: message says NOT set (honest)', !!successMsg && successMsg.includes('NOT set'), successMsg || w.notifies.join(' | '));
-  check('F9 failed password set: message does NOT show the password that was never set', !w.notifies.some(m => m.includes('ayeshakhan2085')), w.notifies.join(' | '));
+  check('F9 failed password set: message does NOT show the password that was never set', !w.notifies.some(m => m.includes('ayeshakhan4261')), w.notifies.join(' | '));
   check('F9 failed password set: conversion still completes', w.api.ALL_TRIALS[0].status === 'Converted' && w.tables.families[0].status === 'Active');
 }
 
@@ -504,7 +506,7 @@ const fakeSubmitEvent = { preventDefault: () => {} };
   check('WIRING card list filters through trialPassesFilter (F7)', renderSrc.includes('trialPassesFilter('));
   check('WIRING card has a Pending Confirmation badge (F7)', renderSrc.includes('Pending Confirmation'));
   const convertSrc = extractFunction(TRIALS_SRC, 'handleConvertTrialSubmit');
-  check('WIRING convert sets the starter password after the records save (F9)', convertSrc.includes('setConvertedParentPassword(username, trial.parent_name)'));
+  check('WIRING convert sets the starter password after the records save (F9)', convertSrc.includes('setConvertedParentPassword(username, trial.parent_name, canonicalFamId)'));
   check('WIRING convert writes portal_credentials.username into the family notes (F9)', convertSrc.includes('portal_credentials: {'));
   check('WIRING convert success message shows the set password (F9)', convertSrc.includes('Password: ${parentPassword}'));
   check('WIRING convert email payload has no password field (F9)', !/credentials:\s*\{[^}]*password/i.test(convertSrc));

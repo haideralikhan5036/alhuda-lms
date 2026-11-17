@@ -42,7 +42,7 @@ const trials = read('js/trials.js');
 // --- 1. The fabrication is gone from the conversion flow -------------------
 check("no 'alhuda_' + random password in trials.js", !trials.includes("'alhuda_' +") && !trials.includes('"alhuda_" +'));
 check('success alert shows the password only from the set-password result', trials.includes('Password: ${parentPassword}') && trials.includes('parentPasswordSet'));
-check('convert calls the password setter, never the generator directly', trials.includes('setConvertedParentPassword(username, trial.parent_name)'));
+check('convert calls the password setter, never the generator directly', trials.includes('setConvertedParentPassword(username, trial.parent_name, canonicalFamId)'));
 const saveCall = trials.slice(trials.indexOf('saveParentAccount(canonicalFamId'), trials.indexOf('saveParentAccount(canonicalFamId') + 400);
 check('conversion saveParentAccount call exists', saveCall.length > 50);
 check('conversion saveParentAccount call has NO password key', !/[{,]\s*password\s*[,}]/.test(saveCall) && !saveCall.includes('password:'));

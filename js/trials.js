@@ -260,21 +260,28 @@
       return true;
     }
 
-    // F9: deterministic starter password from the parent's name.
-    // The name's letters plus a 4-digit code derived from the name;
-    // the name is repeated when it is too short, so the result is
-    // ALWAYS at least 10 characters (the Worker minimum).
-    // "Ayesha Khan" -> "ayeshakhan2085"; "Ali Raza" -> "aliraza1772";
-    // "Ali" -> "aliali1310". Same name -> same password, every time.
+    // F9: deterministic starter password from the parent's name + family id.
+    // The name's letters plus a 4-digit code derived from the name AND the
+    // family id, so two parents with the same name in different families
+    // get DIFFERENT passwords; the name is repeated when it is too short,
+    // so the result is ALWAYS at least 10 characters (the Worker minimum).
+    // "Ayesha Khan" + FAM-001 -> "ayeshakhan" + code; "Ali Raza" + FAM-002,
+    // "Ali" + FAM-003, empty name + FAM-004 — exact values pinned in
+    // test/trials-audit-batch2.test.mjs. Same name + same family id ->
+    // same password, every time (a retry yields the same password).
     // A starter password: change it later via Edit Family or the family
     // profile (the existing set-password flow).
-    function generateTrialParentPassword(parentName) {
+    function generateTrialParentPassword(parentName, familyId) {
       const letters = String(parentName || '').toLowerCase().replace(/[^a-z]/g, '') || 'parent';
       let base = letters;
       while (base.length + 4 < 10) base += letters;
       let hash = 0;
-      const raw = String(parentName || '').toLowerCase();
-      for (let i = 0; i < raw.length; i++) hash = (hash + raw.charCodeAt(i)) % 9000;
+      // Family id FIRST in the seed: a positional hash spreads early
+      // differences widely, so neighbouring family ids (FAM-001 vs
+      // FAM-002) yield clearly different codes instead of codes that
+      // differ by 1.
+      const seed = (familyId ? String(familyId).toLowerCase() + '|' : '') + String(parentName || '').toLowerCase();
+      for (let i = 0; i < seed.length; i++) hash = (hash * 31 + seed.charCodeAt(i)) % 9000;
       return base + String(1000 + hash);
     }
 
@@ -284,8 +291,8 @@
     // can say so honestly instead of showing a password that was never
     // set. The plaintext password is NEVER written to notes, the local
     // account map, or localStorage.
-    async function setConvertedParentPassword(username, parentName) {
-      const password = generateTrialParentPassword(parentName);
+    async function setConvertedParentPassword(username, parentName, familyId) {
+      const password = generateTrialParentPassword(parentName, familyId);
       try {
         if (typeof window === 'undefined' || typeof window.setAccountPasswordViaWorker !== 'function') return { password, ok: false };
         await window.setAccountPasswordViaWorker('parent', username, password);
@@ -1611,15 +1618,15 @@
       saveStoredTrials(ALL_TRIALS);
 
       // Trials Audit Batch 2 (F9): auto-set the parent's starter password.
-      // The password is derived from the parent's name and set for real
-      // via the Worker, so the username + password in the message below
-      // can log the parent in. It is NEVER written to notes or the local
-      // account map — only shown once in the success message, for the
+      // The password is derived from the parent's name + family id and set
+      // for real via the Worker, so the username + password in the message
+      // below can log the parent in. It is NEVER written to notes or the
+      // local account map — only shown once in the success message, for the
       // operator to share in person or by phone.
       let parentPassword = null;
       let parentPasswordSet = false;
       try {
-        const pwResult = await setConvertedParentPassword(username, trial.parent_name);
+        const pwResult = await setConvertedParentPassword(username, trial.parent_name, canonicalFamId);
         parentPassword = pwResult.password;
         parentPasswordSet = pwResult.ok;
       } catch (e) { parentPasswordSet = false; }
