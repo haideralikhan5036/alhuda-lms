@@ -290,6 +290,10 @@
       active_days: rec.activeDays != null ? rec.activeDays : 0,
       joining_date: rec.joiningDate || null,
       students_names: rec.studentsNames || null,
+      // Fee Upgrade Phase 5: the stored-PDF URL rides the existing
+      // receipt_url column (no schema change). The full record —
+      // including pdfKey — is also preserved in legacy_json below.
+      receipt_url: rec.pdfKey ? ('/api/storage?key=' + encodeURIComponent(String(rec.pdfKey))) : null,
       notes: rec.notes != null ? rec.notes : (rec.remarks != null ? rec.remarks : null),
       created_by: currentActor(),
       legacy_json: JSON.stringify(rec),
@@ -556,6 +560,80 @@
     }).eq('id', rows[0].id);
     if (upd && upd.error) throw new Error(_errText(upd.error, 'payments cancel failed'));
     return true;
+  }
+
+  // Fee Upgrade Phase 5: record a stored-PDF key on an EXISTING
+  // payments row (called after a receipt PDF is uploaded — the row was
+  // dual-written at payment time, before any PDF existed). Merges the
+  // key into legacy_json AND sets the receipt_url column, so both the
+  // legacy readers (legacy_json) and the table readers (receipt_url)
+  // see it. pdfKey null = clear the key (keeps any pdfPending flag
+  // the caller passes in `extra`). No-op (not an error) when the flag
+  // is off or the row predates the flag.
+  async function updatePaymentPdfKey(receiptNo, pdfKey, extra) {
+    try {
+      if (!(await isEnabled())) return { skipped: true };
+      if (!receiptNo) return { ok: false, error: 'missing_receipt_no' };
+      var client = _requireDb();
+      var sel = await client.from('payments').select('id, legacy_json').eq('receipt_no', String(receiptNo)).limit(1);
+      if (sel && sel.error) throw new Error(_errText(sel.error, 'payments lookup failed'));
+      var rows = (sel && sel.data) || [];
+      if (!rows.length) return { ok: false, error: 'not_found' };
+      var legacy = _parseLegacyJson(rows[0]);
+      if (pdfKey) {
+        legacy.pdfKey = String(pdfKey);
+        delete legacy.pdfPending;
+      } else {
+        delete legacy.pdfKey;
+      }
+      if (extra && typeof extra === 'object') {
+        if (extra.pdfPending) legacy.pdfPending = true;
+        else delete legacy.pdfPending;
+      }
+      var upd = await client.from('payments').update({
+        receipt_url: pdfKey ? ('/api/storage?key=' + encodeURIComponent(String(pdfKey))) : null,
+        legacy_json: JSON.stringify(legacy)
+      }).eq('id', rows[0].id);
+      if (upd && upd.error) throw new Error(_errText(upd.error, 'payments update failed'));
+      return { ok: true };
+    } catch (err) {
+      warnOnce();
+      return { ok: false, error: err };
+    }
+  }
+
+  // Fee Upgrade Phase 5: same as updatePaymentPdfKey, for due-invoice
+  // rows (record_kind 'due_invoice', keyed by the DUE ref). The list
+  // reader (dueInvoiceFromRow) rebuilds from legacy_json, so the key
+  // and the pending flag flow straight into the Due Invoices list.
+  async function updateDueInvoicePdfKey(invoiceRef, pdfKey, pdfPending) {
+    try {
+      if (!(await isEnabled())) return { skipped: true };
+      if (!invoiceRef) return { ok: false, error: 'missing_invoice_ref' };
+      var client = _requireDb();
+      var sel = await client.from('payments').select('id, legacy_json').eq('receipt_no', String(invoiceRef)).limit(1);
+      if (sel && sel.error) throw new Error(_errText(sel.error, 'due invoice lookup failed'));
+      var rows = (sel && sel.data) || [];
+      if (!rows.length) return { ok: false, error: 'not_found' };
+      var legacy = _parseLegacyJson(rows[0]);
+      if (pdfKey) {
+        legacy.pdfKey = String(pdfKey);
+        delete legacy.pdfPending;
+      } else {
+        delete legacy.pdfKey;
+        if (pdfPending) legacy.pdfPending = true;
+        else delete legacy.pdfPending;
+      }
+      var upd = await client.from('payments').update({
+        receipt_url: pdfKey ? ('/api/storage?key=' + encodeURIComponent(String(pdfKey))) : null,
+        legacy_json: JSON.stringify(legacy)
+      }).eq('id', rows[0].id);
+      if (upd && upd.error) throw new Error(_errText(upd.error, 'due invoice update failed'));
+      return { ok: true };
+    } catch (err) {
+      warnOnce();
+      return { ok: false, error: err };
+    }
   }
 
   async function upsertSlipRow(teacherId, slip) {
@@ -1105,6 +1183,8 @@
     cancelAdjustmentRow: cancelAdjustmentRow,
     dualWritePayment: dualWritePayment,
     dualWritePaymentCancelled: dualWritePaymentCancelled,
+    updatePaymentPdfKey: updatePaymentPdfKey,
+    updateDueInvoicePdfKey: updateDueInvoicePdfKey,
     dualWriteSlip: dualWriteSlip,
     dualWriteSlipCancelled: dualWriteSlipCancelled,
     dualWriteAdjustment: dualWriteAdjustment,

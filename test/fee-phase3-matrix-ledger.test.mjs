@@ -15,6 +15,7 @@ const FEES_SRC = fs.readFileSync(path.join(REPO_ROOT, 'js/fees.js'), 'utf8');
 const TABLES_SRC = fs.readFileSync(path.join(REPO_ROOT, 'js/fee-tables.js'), 'utf8');
 const PHASE1_SRC = fs.readFileSync(path.join(REPO_ROOT, 'js/fee-phase1.js'), 'utf8');
 const PHASE3_SRC = fs.readFileSync(path.join(REPO_ROOT, 'js/fee-phase3.js'), 'utf8');
+const PHASE5_SRC = fs.readFileSync(path.join(REPO_ROOT, 'js/fee-phase5.js'), 'utf8');
 const INDEX_SRC = fs.readFileSync(path.join(REPO_ROOT, 'index.html'), 'utf8');
 const P360_SRC = fs.readFileSync(path.join(REPO_ROOT, 'js/profiles360.js'), 'utf8');
 
@@ -148,6 +149,10 @@ function makeMatrixHarness(records, overrides) {
   phaseSandbox.globalThis = phaseSandbox;
   vm.runInNewContext(PHASE1_SRC, phaseSandbox);
   vm.runInNewContext(PHASE3_SRC, phaseSandbox);
+  // Fee Upgrade Phase 5: renderFeeReceiptsHistoryRows now calls the
+  // feeReceiptPdfCellHtml helper — load the real module so the real
+  // stored/pending predicate is exercised, not the fallback.
+  vm.runInNewContext(PHASE5_SRC, phaseSandbox);
 
   const factory = new Function('window', 'document', 'localStorage', 'console', 'families', `
     ${extractConst(FEES_SRC, 'FEE_CONFIG')}
@@ -165,6 +170,7 @@ function makeMatrixHarness(records, overrides) {
     ${extractFunction(FEES_SRC, 'isFamilyMonthStatusPaid')}
     ${extractFunction(FEES_SRC, 'buildAnnualMatrixData')}
     ${extractFunction(FEES_SRC, 'feeReceiptUndoCellHtml')}
+    ${extractFunction(FEES_SRC, 'feeReceiptPdfCellHtml')}
     ${extractFunction(FEES_SRC, 'renderFeeReceiptsHistoryRows')}
     return { buildAnnualMatrixData, isFamilyMonthStatusPaid, isFeeStatusRowRecord, renderFeeReceiptsHistoryRows, getStoredFeeRecords };
   `);

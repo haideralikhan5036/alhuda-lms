@@ -284,3 +284,147 @@ export async function onRequest(context) {
 
   return new Response('Method Not Allowed', { status: 405, headers: corsHeaders });
 }
+
+// ============================================================================
+// FEE PDF DOCUMENTS (2026-11-17, Fee Upgrade Phase 5) — POST /api/fee-documents
+// (routed + role-gated in cloudflare/worker.js; this engine only ever runs
+// behind that gate, see the __lmsInternal check below, exactly like
+// onRequest above).
+//
+// Every generated Official Receipt PDF and Fee Due Invoice PDF is ALSO
+// stored in R2 under a DETERMINISTIC key so a re-upload of the same
+// receipt overwrites the same object (idempotent — no duplicates, no
+// timestamped copies):
+//   fee-documents/receipts/<receiptNo>.pdf
+//   fee-documents/due-invoices/<DUE-ref>.pdf
+//
+// Guards: owner/manager only (enforced in the Worker route AND here);
+// PDF magic bytes only (client Content-Type is never trusted);
+// 5 MB cap; the ref may only carry [A-Za-z0-9._-] (no slashes, so a key
+// can never escape the fee-documents/ prefix). Download reuses the
+// EXISTING GET /api/storage?key= read path — there is no second read
+// endpoint. DELETE removes one fee-documents/ object (used by Undo
+// Payment so an undone receipt leaves no stored PDF behind); R2 deletes
+// are idempotent.
+// ============================================================================
+const FEE_DOC_MAX_BYTES = 5 * 1024 * 1024; // 5 MB
+const FEE_DOC_PREFIX = 'fee-documents/';
+const FEE_DOC_FOLDERS = { receipt: 'receipts', 'due-invoice': 'due-invoices' };
+const FEE_DOC_REF_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,120}$/;
+
+function feeDocKeyFor(kind, ref) {
+  const folder = FEE_DOC_FOLDERS[String(kind || '')];
+  if (!folder) return null;
+  if (!FEE_DOC_REF_RE.test(String(ref || ''))) return null;
+  return FEE_DOC_PREFIX + folder + '/' + String(ref) + '.pdf';
+}
+
+export async function onFeeDocumentRequest(context, auth) {
+  const { request, env } = context;
+  const corsHeaders = buildCorsHeaders(request, env);
+
+  if (request.method === 'OPTIONS') {
+    return new Response(null, { status: 204, headers: corsHeaders });
+  }
+
+  // Same internal-invocation guard as onRequest above: this engine has
+  // no auth of its own and is safe ONLY behind the Worker.
+  if (!context.__lmsInternal) {
+    return jsonResponse({ ok: false, error: 'Forbidden' }, 403, corsHeaders);
+  }
+
+  // Owner + manager only. Teachers/parents (and any other role) get a
+  // flat 403 here; anonymous callers never reach this handler (the
+  // Worker route answers 401 first).
+  const role = auth && auth.role;
+  if (role !== 'owner' && role !== 'manager') {
+    return jsonResponse({ ok: false, error: 'Access denied.' }, 403, corsHeaders);
+  }
+
+  const bucket = env.STORAGE || env.ALHUDA_STORAGE;
+  const url = new URL(request.url);
+
+  // POST /api/fee-documents { kind, ref, base64 } -> store one PDF.
+  if (request.method === 'POST') {
+    if (!bucket) {
+      return jsonResponse(
+        { ok: false, r2_bound: false, error: 'Cloudflare R2 bucket (STORAGE) not bound yet' },
+        503,
+        corsHeaders
+      );
+    }
+    let body = {};
+    try {
+      body = await request.json();
+    } catch (e) {
+      return jsonResponse({ ok: false, error: 'bad_json' }, 400, corsHeaders);
+    }
+    const key = feeDocKeyFor(body.kind, body.ref);
+    if (!key) {
+      const badKind = !Object.prototype.hasOwnProperty.call(FEE_DOC_FOLDERS, String((body && body.kind) || ''));
+      return jsonResponse({ ok: false, error: badKind ? 'bad_kind' : 'bad_ref' }, 400, corsHeaders);
+    }
+    const raw = String(body.base64 || '').replace(/^data:[^;]+;base64,/, '');
+    if (!raw) {
+      return jsonResponse({ ok: false, error: 'empty_file' }, 400, corsHeaders);
+    }
+    let bytes = null;
+    try {
+      const binaryStr = atob(raw);
+      bytes = new Uint8Array(binaryStr.length);
+      for (let i = 0; i < binaryStr.length; i++) {
+        bytes[i] = binaryStr.charCodeAt(i);
+      }
+    } catch (e) {
+      return jsonResponse({ ok: false, error: 'bad_base64' }, 400, corsHeaders);
+    }
+    if (bytes.byteLength > FEE_DOC_MAX_BYTES) {
+      return jsonResponse({ ok: false, error: 'file_too_large' }, 400, corsHeaders);
+    }
+    // Magic-byte check: only a real PDF is stored, whatever the client claimed.
+    if (sniffMimeType(bytes) !== 'application/pdf') {
+      return jsonResponse({ ok: false, error: 'unsupported_file_type' }, 400, corsHeaders);
+    }
+    try {
+      // Same ref re-uploaded = same key overwritten (idempotent).
+      await bucket.put(key, bytes.buffer, {
+        httpMetadata: { contentType: 'application/pdf' }
+      });
+    } catch (err) {
+      console.error('[fee-documents] upload failed:', err);
+      return jsonResponse({ ok: false, error: 'internal_error' }, 500, corsHeaders);
+    }
+    return jsonResponse(
+      { ok: true, key, url: '/api/storage?key=' + encodeURIComponent(key) },
+      200,
+      corsHeaders
+    );
+  }
+
+  // DELETE /api/fee-documents?key=fee-documents/... -> remove one stored PDF.
+  if (request.method === 'DELETE') {
+    const key = url.searchParams.get('key');
+    if (!key) {
+      return jsonResponse({ ok: false, error: 'key_required' }, 400, corsHeaders);
+    }
+    if (!key.startsWith(FEE_DOC_PREFIX) || !key.endsWith('.pdf')) {
+      return jsonResponse({ ok: false, error: 'key_out_of_scope' }, 403, corsHeaders);
+    }
+    if (!bucket) {
+      return jsonResponse(
+        { ok: false, r2_bound: false, error: 'Cloudflare R2 bucket (STORAGE) not bound yet' },
+        503,
+        corsHeaders
+      );
+    }
+    try {
+      await bucket.delete(key);
+      return jsonResponse({ ok: true, key, deleted: true }, 200, corsHeaders);
+    } catch (err) {
+      console.error('[fee-documents] delete failed:', err);
+      return jsonResponse({ ok: false, error: 'internal_error' }, 500, corsHeaders);
+    }
+  }
+
+  return new Response('Method Not Allowed', { status: 405, headers: corsHeaders });
+}
