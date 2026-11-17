@@ -2190,6 +2190,9 @@
           <button onclick="prepareAddStudentModal()" class="px-3.5 py-2 bg-brandEmerald text-white rounded-lg text-xs font-bold hover:bg-emerald-700 flex items-center gap-1.5 shadow">
             <i class="fa-solid fa-graduation-cap"></i> + Enroll Sibling Student
           </button>
+          <button onclick="exportFamiliesCsv()" class="px-3.5 py-2 bg-white border border-slate-300 text-slate-700 rounded-lg text-xs font-bold hover:bg-slate-100 flex items-center gap-1.5 shadow">
+            <i class="fa-solid fa-file-csv"></i> Export CSV
+          </button>
         </div>
       </div>
 
@@ -2990,6 +2993,9 @@
           <button onclick="refreshCurrentFeeView()" class="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-xs">
             <i class="fa-solid fa-arrows-rotate"></i> Refresh
           </button>
+          <button onclick="openUniversalSearchModal()" class="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-xs">
+            <i class="fa-solid fa-magnifying-glass"></i> Search
+          </button>
         </div>
       </div>
 
@@ -3414,6 +3420,22 @@
                   <span>Sender / CC: <strong id="feeOfficialEmailDisplay" class="font-mono font-bold text-emerald-950">ceoislamiccentre@gmail.com</strong></span>
                   <button type="button" id="btnChangeOfficialEmail" onclick="promptChangeOfficialEmail()" class="px-2 py-0.5 bg-white border border-emerald-300 hover:bg-emerald-100 text-emerald-900 rounded-md text-[10px] font-extrabold transition">Change Email</button>
                 </div>
+              </div>
+            </div>
+
+            <!-- FEE UPGRADE PHASE 4: LEAVE FROM FEE FORM -->
+            <div class="pt-3 border-t border-slate-100">
+              <label class="flex items-start gap-2.5 cursor-pointer">
+                <input type="checkbox" id="chkFeeFormLeave" onchange="toggleFeeFormLeaveMode()" class="mt-0.5 w-4 h-4 accent-emerald-700">
+                <span>
+                  <span class="block text-xs font-extrabold text-slate-800">Mark this family on leave for this month instead of collecting a fee</span>
+                  <span class="block text-[11px] text-slate-500 mt-0.5">Records a leave for every enrolled student of this family, from the 1st to the last day of the selected month. Uses the same leave process as the Leave tab -- schedules and assignments are paused for that month.</span>
+                </span>
+              </label>
+              <div id="feeFormLeaveBox" class="hidden mt-3">
+                <label for="txtFeeFormLeaveReason" class="block text-[11px] font-bold text-slate-600 mb-1">Leave reason:</label>
+                <input type="text" id="txtFeeFormLeaveReason" placeholder="e.g. Family travelling abroad" class="w-full p-2.5 border border-slate-300 rounded-xl font-bold text-sm text-slate-800">
+                <p id="feeFormLeaveSummary" class="text-[11px] font-bold text-slate-500 mt-2"></p>
               </div>
             </div>
 
@@ -4751,6 +4773,20 @@
                 <input type="text" id="famCustomCurrencyInput" placeholder="e.g. CHF, NZD, KWD" class="w-full p-2 border border-emerald-400 rounded-lg font-mono font-bold uppercase">
                 <button type="button" onclick="saveNewCustomCurrency()" class="px-3 py-1.5 bg-brandEmerald text-white font-bold rounded-lg text-[11px] whitespace-nowrap hover:bg-emerald-700">Save</button>
               </div>
+            </div>
+            <!-- Fee Due Day + Fee Timing (Phase 4): blank = billing day / Advance -->
+            <div>
+              <label for="famDueDayInput" class="block font-bold mb-1 text-brandDark">Fee Due Day (optional):</label>
+              <input type="number" id="famDueDayInput" min="1" max="31" placeholder="Billing day" class="w-full p-2.5 border border-slate-300 rounded-lg font-bold text-slate-800">
+              <p class="text-[10px] text-slate-500 mt-1">Blank = same as Billing Day. The fee is due on this day of the month.</p>
+            </div>
+            <div>
+              <label for="famFeeTimingSelect" class="block font-bold mb-1 text-brandDark">Fee Timing (optional):</label>
+              <select id="famFeeTimingSelect" class="w-full p-2.5 border border-slate-300 rounded-lg font-bold text-slate-800">
+                <option value="">Advance (default)</option>
+                <option value="Advance">Advance -- due in the billing month</option>
+                <option value="Arrears">Arrears -- due in the next month</option>
+              </select>
             </div>
           </div>
         </div>
@@ -6801,6 +6837,38 @@
       </div>
     </div>
   </div>
+  <!-- FEE UPGRADE PHASE 4: UNIVERSAL SEARCH MODAL -->
+  <div id="modalUniversalSearch" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 hidden items-center justify-center p-2 sm:p-4 overflow-y-auto">
+    <div class="bg-white rounded-2xl max-w-xl w-full border border-slate-200 shadow-2xl overflow-hidden my-auto">
+      <div class="p-4 bg-slate-50 border-b border-slate-200 flex justify-between items-center">
+        <h3 class="font-extrabold text-slate-900 text-sm flex items-center gap-2">
+          <i class="fa-solid fa-magnifying-glass text-emerald-700"></i> Search Families, Fees &amp; Receipts
+        </h3>
+        <button onclick="closeModal('modalUniversalSearch')" class="text-slate-400 hover:text-slate-700 text-2xl font-bold leading-none" aria-label="Close">&times;</button>
+      </div>
+      <div class="p-4 space-y-3">
+        <input type="text" id="txtUniversalSearch" oninput="runUniversalSearch()" placeholder="Search by name, Family ID, receipt number or amount..." class="w-full p-3 border border-emerald-400 rounded-xl font-bold text-sm text-slate-800" autocomplete="off">
+        <div id="universalSearchResults" class="space-y-3 max-h-[55vh] overflow-y-auto touch-scroll">
+          <p class="text-xs text-slate-500 font-semibold">Type at least 2 characters to search across loaded families, fee records and receipts.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+  <!-- FEE UPGRADE PHASE 4: CURRENCY DRILL-DOWN MODAL -->
+  <div id="modalCurrencyDetail" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 hidden items-center justify-center p-2 sm:p-4 overflow-y-auto">
+    <div class="bg-white rounded-2xl max-w-3xl w-full border border-slate-200 shadow-2xl overflow-hidden my-auto max-h-[94vh] flex flex-col">
+      <div class="p-4 bg-slate-50 border-b border-slate-200 flex justify-between items-center shrink-0">
+        <h3 id="currencyDetailTitle" class="font-extrabold text-slate-900 text-sm flex items-center gap-2">
+          <i class="fa-solid fa-coins text-amber-600"></i> Currency Detail
+        </h3>
+        <button onclick="closeModal('modalCurrencyDetail')" class="text-slate-400 hover:text-slate-700 text-2xl font-bold leading-none" aria-label="Close">&times;</button>
+      </div>
+      <div class="p-4 space-y-4 flex-1 overflow-y-auto touch-scroll">
+        <div id="currencyDetailBody"></div>
+        <div id="currencyDetailPrev"></div>
+      </div>
+    </div>
+  </div>
   <!-- FEE UPGRADE PHASE 1: FEE DUE INVOICE MODAL (a payment request, NOT a receipt) -->
   <div id="modalFeeDueInvoice" class="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 hidden items-center justify-center p-2 sm:p-4 overflow-y-auto">
     <div class="bg-white rounded-2xl max-w-2xl w-full border border-slate-200 shadow-2xl overflow-hidden my-auto max-h-[94vh] flex flex-col">
@@ -7588,6 +7656,7 @@
   <script src="js/fee-phase1.js"></script>
   <script src="js/fee-phase2.js"></script>
   <script src="js/fee-phase3.js"></script>
+  <script src="js/fee-phase4.js"></script>
   <script src="js/course-catalogue.js"></script>
   <script src="js/academy-profile.js"></script>
   <script src="js/assignments.js"></script>

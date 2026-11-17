@@ -3928,6 +3928,18 @@ function openEditFamilyProfileModal(familyId) {
   const mobileFieldVal360 = _isMgrEdit360 ? '' : _esc360(bio.mobile || '');
   const contactHint360 = _isMgrEdit360 ? ' placeholder="Hidden — leave blank to keep unchanged"' : '';
 
+  // Fee Upgrade Phase 4 (#9/#13): prefill Due Day + Fee Timing from
+  // family.notes (blank = defaults: billing day / Advance).
+  let _dueDayVal360 = '';
+  let _timingVal360 = '';
+  try {
+    if (window.FeePhase1 && typeof window.FeePhase1.readFeeDueSettings === 'function') {
+      const _ds = window.FeePhase1.readFeeDueSettings(family);
+      _dueDayVal360 = _ds.dueDay != null ? String(_ds.dueDay) : '';
+      _timingVal360 = _ds.timing || '';
+    }
+  } catch (e) { /* defaults stand */ }
+
   _openWorkspaceModal(
     `Edit Family Profile Information`,
     `Family ID: ${family.id} — Updates Family Header & Bio Data`,
@@ -3977,7 +3989,9 @@ function openEditFamilyProfileModal(familyId) {
           </div>
           <div>
             <label class="font-extrabold text-slate-700 block mb-1">Currency</label>
-            <input type="text" id="fwEditFamCurr" value="${_esc360(family.currency || 'GBP')}" class="w-full p-2.5 rounded-xl border border-slate-300 font-bold text-slate-800">
+            <select id="fwEditFamCurr" onchange="handleEditFamilyCurrencyChange(this.value)" class="w-full p-2.5 rounded-xl border border-slate-300 font-bold text-slate-800">
+              ${window.FeePhase4 ? window.FeePhase4.currencySelectOptionsHtml(window.FeePhase4.allFeeCurrencies(window.FeePhase4.BUILT_IN_CURRENCIES, window.FeePhase4.getCustomCurrencies(localStorage)), family.currency || 'GBP') : '<option value="' + _esc360(family.currency || 'GBP') + '">' + _esc360(family.currency || 'GBP') + '</option>'}
+            </select>
           </div>
           <div>
             <label class="font-extrabold text-slate-700 block mb-1">Meeting Platform</label>
@@ -3987,6 +4001,30 @@ function openEditFamilyProfileModal(familyId) {
               <option value="Google Meet" ${bio.meeting_platform === 'Google Meet' ? 'selected' : ''}>Google Meet</option>
               <option value="Microsoft Teams" ${bio.meeting_platform === 'Microsoft Teams' ? 'selected' : ''}>Microsoft Teams</option>
             </select>
+          </div>
+        </div>
+
+        <!-- FEE UPGRADE PHASE 4 (#9/#13, #70): Due Day + Fee Timing. Blank
+             Due Day = same as Billing Day; blank Timing = Advance. -->
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div>
+            <label class="font-extrabold text-slate-700 block mb-1">Fee Due Day (optional)</label>
+            <input type="number" min="1" max="31" id="fwEditFamDueDay" value="${_dueDayVal360}" placeholder="Billing day" class="w-full p-2.5 rounded-xl border border-slate-300 font-bold text-slate-800">
+          </div>
+          <div>
+            <label class="font-extrabold text-slate-700 block mb-1">Fee Timing (optional)</label>
+            <select id="fwEditFamTiming" class="w-full p-2.5 rounded-xl border border-slate-300 font-bold text-slate-800">
+              <option value="" ${_timingVal360 === '' ? 'selected' : ''}>Advance (default)</option>
+              <option value="Advance" ${_timingVal360 === 'Advance' ? 'selected' : ''}>Advance -- due in the billing month</option>
+              <option value="Arrears" ${_timingVal360 === 'Arrears' ? 'selected' : ''}>Arrears -- due in the next month</option>
+            </select>
+          </div>
+          <div id="fwEditCustomCurrBox" class="hidden">
+            <label class="font-extrabold text-emerald-700 block mb-1">+ Type New Currency Code</label>
+            <div class="flex gap-1.5">
+              <input type="text" id="fwEditCustomCurrInput" placeholder="e.g. CHF" class="w-full p-2 rounded-xl border border-emerald-400 font-mono font-bold uppercase">
+              <button type="button" onclick="saveEditFamilyCustomCurrency()" class="px-3 py-1.5 bg-emerald-700 text-white font-bold rounded-lg text-[11px] whitespace-nowrap">Save</button>
+            </div>
           </div>
         </div>
 
@@ -4092,7 +4130,28 @@ async function submitEditFamilyProfileForm(e, familyId) {
   const feeFieldRaw = (document.getElementById('fwEditFamFee').value || '').trim();
   const oldFee = parseFloat(family.monthly_fee || 0);
   const monthly_fee = feeFieldRaw === '' ? oldFee : (parseFloat(feeFieldRaw) || 0);
-  const currency = document.getElementById('fwEditFamCurr').value.trim() || 'USD';
+  // Fee Upgrade Phase 4 (#70): the currency field is a select now; a
+  // custom code typed in the add-new box is saved to localStorage.
+  let currency = (document.getElementById('fwEditFamCurr').value || '').trim();
+  if (currency === '__NEW_CURR__') {
+    currency = (document.getElementById('fwEditCustomCurrInput').value || '').trim().toUpperCase() || (family.currency || 'USD');
+    if (window.FeePhase4) {
+      const _cc = window.FeePhase4.addCustomCurrency(window.FeePhase4.getCustomCurrencies(localStorage), currency);
+      if (_cc.added) window.FeePhase4.saveCustomCurrencies(localStorage, _cc.list);
+      currency = _cc.code || currency;
+    }
+  }
+  currency = currency || 'USD';
+  // Fee Upgrade Phase 4 (#9/#13): Due Day + Fee Timing into
+  // family.notes (no D1 column, no Worker change). Blank = unset.
+  let editDueDay = null;
+  let editTiming = null;
+  try {
+    if (window.FeePhase4) {
+      editDueDay = window.FeePhase4.parseDueDayInput(document.getElementById('fwEditFamDueDay')?.value);
+      editTiming = window.FeePhase4.parseFeeTimingInput(document.getElementById('fwEditFamTiming')?.value);
+    }
+  } catch (e) { /* defaults stand */ }
   const meeting_platform = document.getElementById('fwEditFamPlatform').value;
   const username = document.getElementById('fwEditFamUser').value.trim();
   const password = document.getElementById('fwEditFamPass').value.trim();
@@ -4107,6 +4166,8 @@ async function submitEditFamilyProfileForm(e, familyId) {
   }
 
   const fNotes = _parseFamilyStructuredNotes(family);
+  fNotes.fee_due_day = editDueDay;
+  fNotes.fee_timing = editTiming;
   if (Math.abs(monthly_fee - oldFee) > 0.01) {
     if (window.FeePhase1 && typeof window.FeePhase1.buildFeeRevisionForEdit === 'function') {
       const presetEl = document.getElementById('fwFeeEffectivePreset');
@@ -4179,6 +4240,32 @@ async function submitEditFamilyProfileForm(e, familyId) {
   _closeWorkspaceModal();
   _notify360(`Family Profile for "${parent_name}" updated across the LMS!${pwNote}`);
   _renderFamilyWorkspaceDOM();
+}
+
+// Fee Upgrade Phase 4 (#70): Edit Family custom-currency box.
+function handleEditFamilyCurrencyChange(value) {
+  const box = document.getElementById('fwEditCustomCurrBox');
+  if (box) box.classList.toggle('hidden', value !== '__NEW_CURR__');
+  if (value === '__NEW_CURR__') {
+    const input = document.getElementById('fwEditCustomCurrInput');
+    if (input) input.focus();
+  }
+}
+
+function saveEditFamilyCustomCurrency() {
+  if (!window.FeePhase4) { lmsNotify('Custom currencies are unavailable right now. Please reload the page.'); return; }
+  const input = document.getElementById('fwEditCustomCurrInput');
+  const code = (input ? input.value : '').trim().toUpperCase();
+  const res = window.FeePhase4.addCustomCurrency(window.FeePhase4.getCustomCurrencies(localStorage), code);
+  if (res.error) { lmsNotify(res.error, { type: 'error' }); return; }
+  if (res.added) window.FeePhase4.saveCustomCurrencies(localStorage, res.list);
+  const sel = document.getElementById('fwEditFamCurr');
+  if (sel) {
+    sel.innerHTML = window.FeePhase4.currencySelectOptionsHtml(window.FeePhase4.allFeeCurrencies(window.FeePhase4.BUILT_IN_CURRENCIES, window.FeePhase4.getCustomCurrencies(localStorage)), res.code);
+  }
+  const box = document.getElementById('fwEditCustomCurrBox');
+  if (box) box.classList.add('hidden');
+  lmsNotify(res.added ? ('Currency ' + res.code + ' added.') : ('Currency ' + res.code + ' is already available.'));
 }
 
 // ============================================================================

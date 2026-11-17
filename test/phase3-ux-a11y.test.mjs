@@ -99,8 +99,8 @@ check('LABEL parent has no unlabeled static close button left',
 // Index count 33 -> 34 (Fee Upgrade Phase 2, 2026-11-17): the new Bulk
 // Leave modal (modalBulkLeave) carries its own labelled close button,
 // like every other modal.
-check('LABEL close-button aria-label counts (index 34, teacher 11, parent 2)',
-  count(INDEX, /aria-label="Close"/g) === 34 &&
+check('LABEL close-button aria-label counts (index 36, teacher 11, parent 2)',
+  count(INDEX, /aria-label="Close"/g) === 36 &&
   count(TEACHER, /aria-label="Close"/g) === 11 &&
   count(PARENT, /aria-label="Close"/g) === 2,
   `${count(INDEX, /aria-label="Close"/g)}/${count(TEACHER, /aria-label="Close"/g)}/${count(PARENT, /aria-label="Close"/g)}`);

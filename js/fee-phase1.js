@@ -298,11 +298,53 @@
   }
 
   // --------------------------------------------------------------------------
-  // DUE DATE — fee-portal getFeeDueDate_, LMS adaptation: the LMS has no
-  // per-family dueDay / feeTiming, so timing is always Advance and the
-  // due day is the family's billing_day (default 1), clamped to the
-  // days in the billing month. Returns 'YYYY-MM-DD'.
+  // DUE DATE — fee-portal getFeeDueDate_, adapted. Per-family Due Day +
+  // Fee Timing live in family.notes under `fee_due_day` (1-31) and
+  // `fee_timing` ('Advance' | 'Arrears'); NO D1 column, NO Worker
+  // change. When unset, the defaults preserve the old behaviour
+  // exactly: dueDay = billing_day (default 1), timing = Advance.
+  // Advance: the fee is due inside the billing month, on the due day.
+  // Arrears (fee-portal "End of Month"): the fee is due in the NEXT
+  // month, on the due day. Returns 'YYYY-MM-DD'.
   // --------------------------------------------------------------------------
+  function readFeeDueSettings(family) {
+    var raw = null;
+    try {
+      if (!family) return { dueDay: null, timing: null };
+      if (family.fee_due_day != null || family.fee_timing != null) {
+        raw = { fee_due_day: family.fee_due_day, fee_timing: family.fee_timing };
+      } else if (family.notes && typeof family.notes === 'object') {
+        raw = family.notes;
+      } else if (typeof family.notes === 'string' && family.notes) {
+        raw = JSON.parse(family.notes);
+      }
+    } catch (e) { raw = null; }
+    if (!raw || typeof raw !== 'object') return { dueDay: null, timing: null };
+    var d = parseInt(raw.fee_due_day, 10);
+    return { dueDay: isNaN(d) ? null : d, timing: raw.fee_timing != null ? String(raw.fee_timing) : null };
+  }
+
+  function normalizeFeeTiming(v) {
+    var s = String(v || '').trim().toLowerCase();
+    if (s.indexOf('end') !== -1 || s.indexOf('after') !== -1 || s.indexOf('arrear') !== -1) return 'Arrears';
+    return 'Advance';
+  }
+
+  function dueDayOf(family) {
+    var s = readFeeDueSettings(family);
+    var d = s.dueDay;
+    if (d == null || isNaN(d)) return billingDayOf(family);
+    if (d < 1) d = 1;
+    if (d > 31) d = 31;
+    return d;
+  }
+
+  function feeTimingOf(family) {
+    var s = readFeeDueSettings(family);
+    if (!s.timing) return 'Advance';
+    return normalizeFeeTiming(s.timing);
+  }
+
   function billingDayOf(family) {
     var d = parseInt(family ? family.billing_day : NaN, 10);
     if (isNaN(d)) d = 1;
@@ -313,8 +355,15 @@
 
   function getFeeDueDate(family, monthIdx, year) {
     var y = parseInt(year, 10) || new Date().getFullYear();
-    var day = Math.min(billingDayOf(family), daysInMonth(y, monthIdx));
-    var mm = String(monthIdx + 1);
+    var m = parseInt(monthIdx, 10);
+    if (isNaN(m) || m < 0) m = 0;
+    if (m > 11) m = 11;
+    if (feeTimingOf(family) === 'Arrears') {
+      m = m + 1;
+      if (m > 11) { m = 0; y = y + 1; }
+    }
+    var day = Math.min(dueDayOf(family), daysInMonth(y, m));
+    var mm = String(m + 1);
     if (mm.length < 2) mm = '0' + mm;
     var dd = String(day);
     if (dd.length < 2) dd = '0' + dd;
@@ -522,7 +571,10 @@
 
     var monthlyFee = cls.currentFee;
     var dueDate = cls.currentDueDate;
-    var timingMessage = 'Fee plan: Advance (start of month). The fee for ' + monthName + ' ' + yearInt + ' was due by ' + dueDate + '.';
+    var feeTiming = feeTimingOf(family);
+    var timingMessage = feeTiming === 'Arrears'
+      ? 'Fee plan: Arrears (end of month). The fee for ' + monthName + ' ' + yearInt + ' was due by ' + dueDate + '.'
+      : 'Fee plan: Advance (start of month). The fee for ' + monthName + ' ' + yearInt + ' was due by ' + dueDate + '.';
     var arrearsLabels = cls.arrearsMonths.map(function (a) { return a.month + ' ' + a.year; });
     var studentsNames = '';
     if (Array.isArray(family.students)) {
@@ -556,7 +608,7 @@
       amountPaid: Math.round(amountPaid * 100) / 100,
       outstanding: totalOwed,
       dueDate: dueDate,
-      feeTiming: 'Advance',
+      feeTiming: feeTiming,
       timingMessage: timingMessage,
       statusLabel: cls.currentStatus,
       issueDate: todayStr()
@@ -1458,6 +1510,10 @@
       getApplicableFeeForMonth: getApplicableFeeForMonth,
       getFeeDueDate: getFeeDueDate,
       billingDayOf: billingDayOf,
+      readFeeDueSettings: readFeeDueSettings,
+      normalizeFeeTiming: normalizeFeeTiming,
+      dueDayOf: dueDayOf,
+      feeTimingOf: feeTimingOf,
       dueInvoiceRef: dueInvoiceRef,
       classifyFeeArrears: classifyFeeArrears,
       buildFeeDueInvoiceData: buildFeeDueInvoiceData,

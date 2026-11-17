@@ -1018,7 +1018,13 @@
       container.innerHTML = '';
 
       let hasData = false;
-      for (const cur of FEE_CONFIG.CURRENCIES) {
+      // Fee Upgrade Phase 4 (#11, #70): the grid also shows custom
+      // currencies saved on this device, and every card is clickable —
+      // it opens the per-family drill-down for that currency + month.
+      const gridCurrencies = (window.FeePhase4 && typeof window.FeePhase4.allFeeCurrencies === 'function')
+        ? window.FeePhase4.allFeeCurrencies(FEE_CONFIG.CURRENCIES, window.FeePhase4.getCustomCurrencies(localStorage))
+        : FEE_CONFIG.CURRENCIES.slice();
+      for (const cur of gridCurrencies) {
         const data = currencyRevenue[cur] || { expected: 0, received: 0 };
         if (data.expected === 0 && data.received === 0) continue;
         hasData = true;
@@ -1030,7 +1036,9 @@
           : `${cur} ${Number(val || 0).toLocaleString()}`;
 
         const card = document.createElement('div');
-        card.className = 'p-4 bg-white border border-slate-200/90 rounded-2xl shadow-2xs hover:shadow-md transition space-y-3';
+        card.className = 'p-4 bg-white border border-slate-200/90 rounded-2xl shadow-2xs hover:shadow-md transition space-y-3 cursor-pointer';
+        card.title = 'Click to see the families in ' + cur;
+        card.addEventListener('click', () => openCurrencyDetailModal(cur));
         card.innerHTML = `
           <div class="flex justify-between items-center border-b border-slate-100 pb-2.5">
             <span class="px-2.5 py-1 rounded-lg bg-slate-900 text-white lms-num-id font-bold text-xs tracking-wide">${cur}</span>
@@ -1137,6 +1145,10 @@
       const fee = parseFloat(fam.monthly_fee || 0);
       document.getElementById('feeFormMonthlyFee').value = fee.toFixed(2);
       document.getElementById('feeFormCurrency').value = (fam.currency || 'USD').toUpperCase();
+
+      // Fee Upgrade Phase 4 (#19): pre-select this family's remembered
+      // payment method, if one is saved on this device.
+      applyRememberedPaymentMethod(fam.id);
 
       // Reset proration and advance toggles
       const progToggle = document.getElementById('feeToggleProrated');
@@ -1488,6 +1500,14 @@
       // Fee Upgrade Phase 3: the form was cleared, so the status
       // switcher has no family — hide it (and drop staged toggles).
       renderFeeStatusSwitcher();
+
+      // Fee Upgrade Phase 4 (#31): leave mode off again after a reset.
+      const leaveChk = document.getElementById('chkFeeFormLeave');
+      if (leaveChk) leaveChk.checked = false;
+      document.getElementById('feeFormLeaveBox')?.classList.add('hidden');
+      if (amtInput) amtInput.required = true;
+      const leaveSubmitBtn = document.getElementById('btnSubmitFeePayment');
+      if (leaveSubmitBtn) leaveSubmitBtn.innerHTML = '<i class="fa-solid fa-file-invoice"></i> Save Payment &amp; Generate Official Invoice';
     }
 
     // Proration Toggle & Calculator
@@ -1625,6 +1645,15 @@
       const famId = document.getElementById('feeFormFamilyId').value;
       if (!famId) {
         lmsNotify("Please search and select a family account first.");
+        return;
+      }
+
+      // Fee Upgrade Phase 4 (#31): leave from the fee form — record a
+      // leave for this family instead of collecting a fee. The shared
+      // leave core (applyStudentLeave) runs once per student, same
+      // validation and schedule clean-up as the Leave tab.
+      if (document.getElementById('chkFeeFormLeave')?.checked) {
+        await submitFeeFormLeave(famId);
         return;
       }
 
@@ -1771,6 +1800,10 @@
         lmsNotify('Fee saved on this device, but cloud sync failed — this receipt is marked unsynced. Use Sync to retry sending it to the cloud.', { type: 'error' });
       }
 
+      // Fee Upgrade Phase 4 (#19): remember this family's payment
+      // method on this device for the next fee form.
+      rememberPaymentMethodForFamily(famId, paymentRecord.paymentMethod);
+
       // Open Official Printable Receipt Modal
       openFeeInvoiceModal(paymentRecord);
 
@@ -1876,13 +1909,14 @@
         }
       }
 
-      // Format WhatsApp Message link
+      // Format WhatsApp Message link — Fee Upgrade Phase 4 (#42): the
+      // message text now comes from the tested builder in js/fee-phase4.js
+      // (identical text; the receipt carries no PDF link — LMS PDFs are
+      // client-side and never stored).
       const cleanPhone = (r.whatsapp || '').replace(/[^0-9]/g, '');
-      let creditMsg = '';
-      if (credAmt > 0) creditMsg += `Advance Credit Deducted: *- ${cur} ${credAmt.toFixed(2)}*\n`;
-      if (excessAmt > 0) creditMsg += `Next Month Advance Credit: *+ ${cur} ${excessAmt.toFixed(2)}*\n`;
-
-      const waMsg = `Assalam-o-Alaikum Respected ${r.parentName},\n\n*OFFICIAL TUITION FEE RECEIPT - ${academyName().toUpperCase()}*\n--------------------------------------\nReceipt No: *${r.receiptNo}*\nDate: *${r.date}*\nStudent(s): *${r.studentsNames}*\nBilling Period: *${r.month} ${r.year}*\nTotal Due: *${cur} ${parseFloat(r.totalPayable || 0).toFixed(2)}*\n${creditMsg}Amount Paid: *${cur} ${parseFloat(r.amountPaid || 0).toFixed(2)}*\nRemaining Balance: *${cur} ${remaining.toFixed(2)}*\nStatus: *${r.status}*\n--------------------------------------\nJazakAllahu Khairan!\n*${academyName()} Accounts*`;
+      const waMsg = (window.FeePhase4 && typeof window.FeePhase4.buildReceiptWhatsAppMessage === 'function')
+        ? window.FeePhase4.buildReceiptWhatsAppMessage(r, { academyName: academyName(), creditAmt: credAmt, excessAmt: excessAmt, remaining: remaining })
+        : `Assalam-o-Alaikum Respected ${r.parentName},\n\nFee Receipt ${r.receiptNo} — ${cur} ${parseFloat(r.amountPaid || 0).toFixed(2)} for ${r.month} ${r.year}.`;
       const waBtn = document.getElementById('feeInvWhatsAppBtn');
       if (waBtn) {
         if (CURRENT_ROLE === 'manager') {
@@ -2446,7 +2480,9 @@
       tbody.innerHTML = pendPage.pageRows.map(item => {
         const cleanPhone = (item.whatsapp || '').replace(/[^0-9]/g, '');
         const periodStr = `${item.selectedMonth || targetMonth} ${item.selectedYear || targetYear}`;
-        const waMsg = `Assalam-o-Alaikum Respected ${item.parentName},\nThis is an official fee reminder from *${academyName()}*.\nOur records show that your tuition fee for the month of *${periodStr}* (*${item.currency} ${item.dueAmount.toFixed(2)}*) for enrolled student(s): *${item.studentsNames}* has not yet reached us.\nKindly pay your fee at the earliest. *If you have already paid, please share the payment screenshot or receipt with us so we can update your account immediately.*\nJazakAllahu Khairan!`;
+        const waMsg = (window.FeePhase4 && typeof window.FeePhase4.buildPendingWhatsAppMessage === 'function')
+          ? window.FeePhase4.buildPendingWhatsAppMessage(item, periodStr, academyName())
+          : `Assalam-o-Alaikum Respected ${item.parentName},\nFee reminder for ${periodStr}: ${item.currency} ${item.dueAmount.toFixed(2)} is due.`;
         const waUrl = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(waMsg)}`;
 
         const rawEmail = item.email || getFamilyEmailAddress(item.family);
@@ -3494,7 +3530,9 @@ Official Email: ${offEmail}`;
 
       tbody.innerHTML = defPage.pageRows.map(item => {
         const cleanPhone = (item.whatsapp || '').replace(/[^0-9]/g, '');
-        const waMsg = `Assalam-o-Alaikum Respected ${item.parentName},\n*URGENT FEE NOTICE — AL-HUDA ISLAMIC CENTRE*\nYour tuition fee for enrolled student(s) *${item.studentsNames}* has been pending for *${item.unpaidMonthsCount} months* (${item.unpaidMonthsText}).\nTotal Outstanding Arrears: *${item.currency} ${item.totalArrearsDue.toFixed(2)}*.\nKindly submit your overdue tuition fee as soon as possible. If already paid, please share the payment screenshot or receipt.\nJazakAllahu Khairan!`;
+        const waMsg = (window.FeePhase4 && typeof window.FeePhase4.buildDefaulterWhatsAppMessage === 'function')
+          ? window.FeePhase4.buildDefaulterWhatsAppMessage(item, academyName())
+          : `Assalam-o-Alaikum Respected ${item.parentName},\nFee notice: ${item.currency} ${item.totalArrearsDue.toFixed(2)} outstanding for ${item.unpaidMonthsCount} months.`;
         const waUrl = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(waMsg)}`;
 
         const displayedEmail = item.email
@@ -4404,3 +4442,255 @@ Official Email: ${offEmail}`;
       }
     }
 
+
+    // ============================================================
+    // FEE UPGRADE PHASE 4 — SMALL WINS (#6, #11, #19, #42/#50, #31, #66, #70)
+    // ============================================================
+
+    // ---- #6 — Universal search (families / fee records / receipts) ----
+    function openUniversalSearchModal() {
+      openModal('modalUniversalSearch');
+      const input = document.getElementById('txtUniversalSearch');
+      if (input) { input.value = ''; input.focus(); }
+      const box = document.getElementById('universalSearchResults');
+      if (box) box.innerHTML = '<p class="text-xs text-slate-500 font-semibold">Type at least 2 characters to search across loaded families, fee records and receipts.</p>';
+    }
+
+    function runUniversalSearch() {
+      const box = document.getElementById('universalSearchResults');
+      const q = (document.getElementById('txtUniversalSearch')?.value || '').trim();
+      if (!box) return;
+      if (!window.FeePhase4) {
+        box.innerHTML = '<p class="text-xs text-rose-600 font-bold">Search is unavailable right now. Please reload the page.</p>';
+        return;
+      }
+      if (q.length < 2) {
+        box.innerHTML = '<p class="text-xs text-slate-500 font-semibold">Type at least 2 characters to search.</p>';
+        return;
+      }
+      const res = window.FeePhase4.universalSearch({ families: CACHED_FEE_FAMILIES || [], records: getStoredFeeRecords(), query: q });
+      if (res.families.length === 0 && res.receipts.length === 0) {
+        box.innerHTML = '<p class="text-xs text-slate-500 font-semibold">No family or receipt matches "' + window.FeePhase4.esc(q) + '".</p>';
+        return;
+      }
+      let html = '';
+      if (res.families.length) {
+        html += '<div><p class="text-[11px] font-extrabold uppercase tracking-wider text-slate-400 mb-1">Families (' + res.families.length + ')</p>' + res.families.map(f => window.FeePhase4.universalSearchFamilyRowHtml(f)).join('') + '</div>';
+      }
+      if (res.receipts.length) {
+        html += '<div><p class="text-[11px] font-extrabold uppercase tracking-wider text-slate-400 mb-1">Receipts (' + res.receipts.length + ')</p>' + res.receipts.map(r => window.FeePhase4.universalSearchReceiptRowHtml(r)).join('') + '</div>';
+      }
+      box.innerHTML = html;
+    }
+
+    function selectFeeFamilyFromSearch(familyId) {
+      closeModal('modalUniversalSearch');
+      selectFeeFamily(familyId);
+    }
+
+    function openFeeReceiptFromSearch(receiptNo) {
+      const rec = (getStoredFeeRecords() || []).find(r => String(r.receiptNo) === String(receiptNo));
+      if (!rec) { lmsNotify('That receipt could not be found.'); return; }
+      closeModal('modalUniversalSearch');
+      openFeeInvoiceModal(rec);
+    }
+
+    // ---- #11 — Currency drill-down (per-family rows + previous months) ----
+    function openCurrencyDetailModal(currency) {
+      const cur = String(currency || '').toUpperCase();
+      const mSel = document.getElementById('feeDashMonthSelect');
+      const ySel = document.getElementById('feeDashYearSelect');
+      const monthName = mSel ? mSel.value : (FEE_CONFIG.MONTHS[new Date().getMonth()] || 'September');
+      const year = ySel ? parseInt(ySel.value, 10) : new Date().getFullYear();
+      const monthIdx = FEE_CONFIG.MONTHS.findIndex(m => m.toLowerCase() === String(monthName).toLowerCase());
+      const title = document.getElementById('currencyDetailTitle');
+      if (title) title.innerHTML = '<i class="fa-solid fa-coins text-amber-600"></i> ' + cur + ' — ' + monthName + ' ' + year;
+      const body = document.getElementById('currencyDetailBody');
+      const prev = document.getElementById('currencyDetailPrev');
+      openModal('modalCurrencyDetail');
+      if (!window.FeePhase4 || !body) {
+        if (body) body.innerHTML = '<p class="text-xs text-rose-600 font-bold">Currency detail is unavailable right now. Please reload the page.</p>';
+        return;
+      }
+      const overrides = getStoredMatrixOverrides();
+      const feeForMonth = (fam, m, y) => feeFormApplicableFeeDetails(fam, m, y).fee;
+      const isLeave = (fam, m, y) => {
+        const mn = FEE_CONFIG.MONTHS[m];
+        const chk = (typeof checkFamilyLeaveInMonth === 'function') ? checkFamilyLeaveInMonth(fam.id, mn, y) : null;
+        const ov = overrides[String(fam.id).toUpperCase() + '_' + mn.toLowerCase() + '_' + y];
+        return !!(chk && chk.isLeave) || !!(ov && ov.status === 'leave');
+      };
+      const isNotEnrolled = (fam, m, y) => {
+        const ov = overrides[String(fam.id).toUpperCase() + '_' + FEE_CONFIG.MONTHS[m].toLowerCase() + '_' + y];
+        return !!(ov && ov.status === 'not_enrolled');
+      };
+      const isPreAdmission = (fam, m, y) => isFamilyPreAdmission(fam, m, y);
+      const rows = window.FeePhase4.buildCurrencyDetailRows({
+        families: CACHED_FEE_FAMILIES || [], records: getStoredFeeRecords(),
+        currency: cur, monthIdx: monthIdx, year: year,
+        feeForMonth: feeForMonth, isLeave: isLeave, isNotEnrolled: isNotEnrolled, isPreAdmission: isPreAdmission
+      });
+      const prevMonths = window.FeePhase4.buildCurrencyPrevMonths({
+        families: CACHED_FEE_FAMILIES || [], records: getStoredFeeRecords(),
+        currency: cur, monthIdx: monthIdx, year: year,
+        feeForMonth: feeForMonth, isLeave: isLeave, isNotEnrolled: isNotEnrolled, isPreAdmission: isPreAdmission
+      });
+      const esc = window.FeePhase4.esc;
+      const fmt = (val) => typeof formatLmsCurrencyHtml === 'function'
+        ? formatLmsCurrencyHtml(val, cur)
+        : cur + ' ' + Number(val || 0).toLocaleString();
+      let totalFee = 0, totalPaid = 0, totalRem = 0;
+      rows.forEach(r => { totalFee += r.fee; totalPaid += r.paid; totalRem += r.remaining; });
+      const statusPill = (s) => s === 'Paid' ? 'bg-emerald-100 text-emerald-800 border-emerald-300'
+        : s === 'Partial' ? 'bg-amber-100 text-amber-800 border-amber-300'
+        : s === 'On Leave' ? 'bg-slate-100 text-slate-600 border-slate-300'
+        : s === 'Paid (Status)' ? 'bg-teal-100 text-teal-800 border-teal-300'
+        : 'bg-rose-100 text-rose-800 border-rose-300';
+      body.innerHTML = rows.length === 0
+        ? '<p class="text-xs text-slate-500 font-semibold">No ' + cur + ' families are enrolled for ' + monthName + ' ' + year + '.</p>'
+        : '<div class="overflow-x-auto"><table class="w-full text-xs">'
+          + '<thead><tr class="text-left text-slate-500 border-b border-slate-200">'
+          + '<th class="py-2 pr-2 font-extrabold">Family</th><th class="py-2 pr-2 font-extrabold">Students</th>'
+          + '<th class="py-2 pr-2 font-extrabold text-right">Fee</th><th class="py-2 pr-2 font-extrabold text-right">Paid</th>'
+          + '<th class="py-2 pr-2 font-extrabold text-right">Remaining</th><th class="py-2 font-extrabold">Status</th></tr></thead>'
+          + '<tbody>' + rows.map(r =>
+            '<tr class="border-b border-slate-100 hover:bg-slate-50">'
+            + '<td class="py-2 pr-2"><button type="button" onclick="closeModal(\'modalCurrencyDetail\'); selectFeeFamily(\'' + esc(r.familyId) + '\')" class="font-extrabold text-emerald-800 hover:underline text-left">' + esc(r.parentName) + ' <span class="font-mono text-slate-500">' + esc(r.familyId) + '</span></button></td>'
+            + '<td class="py-2 pr-2 font-semibold text-slate-600">' + esc(r.studentsNames) + '</td>'
+            + '<td class="py-2 pr-2 font-bold text-right">' + fmt(r.fee) + '</td>'
+            + '<td class="py-2 pr-2 font-bold text-right text-emerald-700">' + fmt(r.paid) + '</td>'
+            + '<td class="py-2 pr-2 font-bold text-right ' + (r.remaining > 0 ? 'text-rose-700' : 'text-slate-500') + '">' + fmt(r.remaining) + '</td>'
+            + '<td class="py-2"><span class="px-2 py-0.5 rounded-full border text-[10px] font-bold ' + statusPill(r.status) + '">' + esc(r.status) + '</span></td></tr>'
+          ).join('') + '</tbody>'
+          + '<tfoot><tr class="font-extrabold text-slate-900">'
+          + '<td class="py-2 pr-2" colspan="2">Total (' + rows.length + ' families)</td>'
+          + '<td class="py-2 pr-2 text-right">' + fmt(totalFee) + '</td>'
+          + '<td class="py-2 pr-2 text-right text-emerald-700">' + fmt(totalPaid) + '</td>'
+          + '<td class="py-2 pr-2 text-right ' + (totalRem > 0 ? 'text-rose-700' : '') + '">' + fmt(totalRem) + '</td><td></td></tr></tfoot>'
+          + '</table></div>'
+          + '<p class="text-[11px] text-slate-500 font-semibold mt-2">Click a family to open it in Collect Fee. Months settled by a one-tap status (no payment) show as "Paid (Status)".</p>';
+      if (prev) {
+        prev.innerHTML = '<h4 class="text-xs font-extrabold text-slate-900 mb-2">Previous Months — ' + cur + '</h4>'
+          + '<div class="overflow-x-auto"><table class="w-full text-xs"><thead><tr class="text-left text-slate-500 border-b border-slate-200">'
+          + '<th class="py-2 pr-2 font-extrabold">Month</th><th class="py-2 pr-2 font-extrabold text-right">Expected</th>'
+          + '<th class="py-2 pr-2 font-extrabold text-right">Received</th><th class="py-2 font-extrabold text-right">Pending</th></tr></thead><tbody>'
+          + prevMonths.map(pm =>
+            '<tr class="border-b border-slate-100"><td class="py-2 pr-2 font-bold text-slate-700">' + esc(pm.month) + ' ' + pm.year + '</td>'
+            + '<td class="py-2 pr-2 font-bold text-right">' + fmt(pm.expected) + '</td>'
+            + '<td class="py-2 pr-2 font-bold text-right text-emerald-700">' + fmt(pm.received) + '</td>'
+            + '<td class="py-2 font-bold text-right ' + (pm.pending > 0 ? 'text-rose-700' : 'text-slate-500') + '">' + fmt(pm.pending) + '</td></tr>'
+          ).join('') + '</tbody></table></div>';
+      }
+    }
+
+    // ---- #19 — Remembered payment method (localStorage only) ----
+    function applyRememberedPaymentMethod(familyId) {
+      if (!window.FeePhase4) return;
+      const sel = document.getElementById('feeFormPaymentMethod');
+      if (!sel) return;
+      const m = window.FeePhase4.rememberedMethodFor(window.FeePhase4.loadRememberedMethods(localStorage), familyId);
+      if (m) sel.value = m;
+    }
+
+    function rememberPaymentMethodForFamily(familyId, method) {
+      if (!window.FeePhase4) return;
+      try { window.FeePhase4.saveRememberedMethod(localStorage, familyId, method); } catch (e) { /* device-only, never fatal */ }
+    }
+
+    // ---- #31 — Leave from inside the Collect Fee form ----
+    function toggleFeeFormLeaveMode() {
+      const chk = document.getElementById('chkFeeFormLeave');
+      const box = document.getElementById('feeFormLeaveBox');
+      const btn = document.getElementById('btnSubmitFeePayment');
+      const amt = document.getElementById('feeFormAmountPaid');
+      const on = !!(chk && chk.checked);
+      if (box) box.classList.toggle('hidden', !on);
+      // In leave mode no amount is collected, so the required amount
+      // field must not block the submit.
+      if (amt) amt.required = !on;
+      if (btn) btn.innerHTML = on
+        ? '<i class="fa-solid fa-plane-departure"></i> Record Leave for This Month'
+        : '<i class="fa-solid fa-file-invoice"></i> Save Payment &amp; Generate Official Invoice';
+      if (on) updateFeeFormLeaveSummary();
+    }
+
+    function feeFormLeaveStateOf() {
+      return (window.FeePhase2 && typeof window.FeePhase2.studentLeaveState === 'function')
+        ? (s) => window.FeePhase2.studentLeaveState(s)
+        : null;
+    }
+
+    function updateFeeFormLeaveSummary() {
+      const el = document.getElementById('feeFormLeaveSummary');
+      if (!el || !window.FeePhase4) return;
+      const famId = document.getElementById('feeFormFamilyId')?.value || '';
+      const fam = (CACHED_FEE_FAMILIES || []).find(f => String(f.id).toUpperCase() === String(famId).toUpperCase());
+      const monthName = document.getElementById('feeFormMonth')?.value || '';
+      const year = parseInt(document.getElementById('feeFormYear')?.value, 10) || new Date().getFullYear();
+      const monthIdx = FEE_CONFIG.MONTHS.findIndex(m => m.toLowerCase() === String(monthName).toLowerCase());
+      if (!fam) { el.innerText = 'Select a family first.'; return; }
+      if (monthIdx < 0) { el.innerText = 'Choose a fee month first.'; return; }
+      const students = (fam.students || []).filter(s => (s.status || '').toLowerCase() !== 'trial');
+      const plan = window.FeePhase4.planFeeFormLeave(students, monthIdx, year, '', feeFormLeaveStateOf());
+      const win = plan.window;
+      let line = FEE_CONFIG.MONTHS[monthIdx] + ' ' + year + ' (' + win.startDate + ' to ' + win.returnDate + '): ' + plan.todo.length + ' student(s) will go on leave.';
+      if (plan.skipped.length) line += ' ' + plan.skipped.map(s => s.name + ' — ' + s.reason).join('; ');
+      el.innerText = line;
+    }
+
+    async function submitFeeFormLeave(famId) {
+      const fam = (CACHED_FEE_FAMILIES || []).find(f => String(f.id).toUpperCase() === String(famId).toUpperCase());
+      if (!fam) { lmsNotify('Please search and select a family account first.'); return; }
+      const monthName = document.getElementById('feeFormMonth')?.value || '';
+      const year = parseInt(document.getElementById('feeFormYear')?.value, 10) || new Date().getFullYear();
+      const monthIdx = FEE_CONFIG.MONTHS.findIndex(m => m.toLowerCase() === String(monthName).toLowerCase());
+      if (monthIdx < 0) { lmsNotify('Please choose a valid fee month first.'); return; }
+      const reason = (document.getElementById('txtFeeFormLeaveReason')?.value || '').trim();
+      const students = (fam.students || []).filter(s => (s.status || '').toLowerCase() !== 'trial');
+      const plan = window.FeePhase4.planFeeFormLeave(students, monthIdx, year, reason, feeFormLeaveStateOf());
+      if (plan.todo.length === 0) {
+        lmsNotify('No student of this family can go on leave for this month.' + (plan.skipped.length ? ' ' + plan.skipped.map(s => s.name + ' — ' + s.reason).join('; ') : ''));
+        return;
+      }
+      const proceed = await lmsConfirm({
+        title: 'Record Leave for ' + monthName + ' ' + year + '?',
+        message: 'This records a leave for ' + plan.todo.length + ' student(s) of ' + (fam.parent_name || fam.id) + ' from ' + plan.window.startDate + ' to ' + plan.window.returnDate + '. Schedules and assignments are paused for that month, exactly as on the Leave tab.' + (plan.skipped.length ? '\n\nSkipped: ' + plan.skipped.map(s => s.name + ' — ' + s.reason).join('; ') : ''),
+        confirmText: 'Record Leave',
+        cancelText: 'Cancel',
+        variant: 'warning'
+      });
+      if (!proceed) return;
+      const btn = document.getElementById('btnSubmitFeePayment');
+      if (btn) { btn.disabled = true; btn.innerHTML = 'Recording leave...'; }
+      let result;
+      try {
+        result = await window.FeePhase4.runFeeFormLeave(plan, { applyLeave: window.applyStudentLeave });
+      } finally {
+        if (btn) btn.disabled = false;
+      }
+      if (result.ok) {
+        lmsNotify('Leave recorded for ' + result.applied.length + ' student(s) for ' + monthName + ' ' + year + '.');
+      } else {
+        lmsNotify('Leave recorded for ' + result.applied.length + ' student(s); ' + result.failed.length + ' could not be saved: ' + result.failed.map(f => f.name + ' — ' + f.error).join('; '), { type: 'error' });
+      }
+      resetFeeForm();
+      await loadFeeDashboardStats();
+    }
+
+    // ---- #66 — Families CSV export (manager contacts masked) ----
+    function exportFamiliesCsv() {
+      if (!window.FeePhase4) { lmsNotify('CSV export is unavailable right now. Please reload the page.'); return; }
+      const families = (typeof ALL_FAMILIES !== 'undefined' && Array.isArray(ALL_FAMILIES) && ALL_FAMILIES.length)
+        ? ALL_FAMILIES
+        : (CACHED_FEE_FAMILIES || []);
+      const csv = window.FeePhase4.buildFamiliesCsv(families, { isManager: (typeof CURRENT_ROLE !== 'undefined' && CURRENT_ROLE === 'manager') });
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = window.FeePhase4.familiesCsvFilename(new Date());
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    }

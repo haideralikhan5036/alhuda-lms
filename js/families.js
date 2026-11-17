@@ -256,6 +256,11 @@
       document.getElementById('famCity').value = '';
       document.getElementById('famMonthlyFee').value = '100';
       document.getElementById('famUsername').value = '';
+      // Fee Upgrade Phase 4 (#9/#13): Due Day + Fee Timing start blank.
+      const dueDayInput = document.getElementById('famDueDayInput');
+      if (dueDayInput) dueDayInput.value = '';
+      const timingSel = document.getElementById('famFeeTimingSelect');
+      if (timingSel) timingSel.value = '';
 
       const nextId = getNextFamilyId();
       const badge = document.getElementById('famGeneratedIdBadge');
@@ -570,11 +575,30 @@
         return;
       }
 
+      // Fee Upgrade Phase 4 (#9/#13): Due Day + Fee Timing, stored in
+      // family.notes (no D1 column, no Worker change). Blank = unset.
+      let feeDueDay = null;
+      let feeTiming = null;
+      try {
+        if (window.FeePhase4) {
+          feeDueDay = window.FeePhase4.parseDueDayInput(document.getElementById('famDueDayInput')?.value);
+          feeTiming = window.FeePhase4.parseFeeTimingInput(document.getElementById('famFeeTimingSelect')?.value);
+        } else {
+          const dRaw = (document.getElementById('famDueDayInput')?.value || '').trim();
+          const dNum = parseInt(dRaw, 10);
+          feeDueDay = dRaw === '' || isNaN(dNum) ? null : Math.min(31, Math.max(1, dNum));
+          const tRaw = (document.getElementById('famFeeTimingSelect')?.value || '').trim();
+          feeTiming = tRaw === '' ? null : tRaw;
+        }
+      } catch (e) { feeDueDay = null; feeTiming = null; }
+
       const notesPayload = {
         city: city || '',
         email: email || '',
         parent_email: email || '',
         custom_notes: city ? `City: ${city}` : '',
+        fee_due_day: feeDueDay,
+        fee_timing: feeTiming,
         portal_credentials: {
           username,
           parent_name,
