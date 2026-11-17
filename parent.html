@@ -2331,15 +2331,59 @@
       if (existingParentToken) {
         const _pp = decodeParentJwtPayload(existingParentToken);
         if (_pp && _pp.role === 'parent' && typeof _pp.exp === 'number' && Date.now() / 1000 < _pp.exp) {
-          try {
-            const _famRes = await db.from('families').select('*').eq('id', _pp.sub).single();
-            if (_famRes && _famRes.data && _famRes.data.id) {
-              const _stuRes = await db.from('students').select('*').eq('family_id', _pp.sub);
-              await showParentDashboardView(_famRes.data, (_stuRes && _stuRes.data) || [], parsedParent ? parsedParent.selected_student_id : null);
-              return;
+          // REFRESH REGRESSION FIX (2026-11-17): the re-check below
+          // used to run ONCE — any transient failure (network blip,
+          // Worker cold start, slow probe, mirror miss) dropped a
+          // valid-token user to the login screen. Retry transient
+          // failures with the same [700, 1500]ms backoff as the login
+          // POST (PR #142). Only an AUTHORITATIVE failure ends the
+          // session: a SESSION_EXPIRED error, or a live 'd1' answer
+          // with no family record. After exhausted transient
+          // failures, restore the dashboard from the session snapshot
+          // the login flow stored (family id + parent name, no
+          // students yet — the portal's live sync refills them when
+          // D1 answers; renderCurrentStudentData tolerates no
+          // student). A 401 still routes to login.
+          const _bootRetryDelays = [700, 1500];
+          let _authoritative = false;
+          for (let _attempt = 0; _attempt < 3 && !_authoritative; _attempt++) {
+            if (_attempt > 0) {
+              await new Promise((resolve) => setTimeout(resolve, _bootRetryDelays[_attempt - 1]));
             }
-          } catch (err) {
-            console.warn('[Parent Session] Token session check failed:', err);
+            try {
+              const _famRes = await db.from('families').select('*').eq('id', _pp.sub).single();
+              if (_famRes && _famRes.error && _famRes.error.code === 'SESSION_EXPIRED') {
+                _authoritative = true;
+                break;
+              }
+              if (_famRes && _famRes.data && _famRes.data.id) {
+                const _stuRes = await db.from('students').select('*').eq('family_id', _pp.sub);
+                await showParentDashboardView(_famRes.data, (_stuRes && _stuRes.data) || [], parsedParent ? parsedParent.selected_student_id : null);
+                return;
+              }
+              // A live answer with no family record means the record
+              // genuinely is not there — authoritative, no retry.
+              if (_famRes && _famRes._lmsSource === 'd1') {
+                _authoritative = true;
+                break;
+              }
+              // Anything else (mirror miss, empty error) is transient:
+              // loop and retry.
+            } catch (err) {
+              console.warn('[Parent Session] Token session check failed:', err);
+              // Transient throw: loop and retry.
+            }
+          }
+          if (!_authoritative) {
+            // Exhausted transient failures: restore from the login-time
+            // session snapshot when it names this token's family.
+            try {
+              const _snap = parsedParent;
+              if (_snap && String(_snap.family_id || '') === String(_pp.sub)) {
+                await showParentDashboardView({ id: _snap.family_id, parent_name: _snap.parent_name || 'Family' }, [], _snap.selected_student_id || null);
+                return;
+              }
+            } catch (e) {}
           }
         } else {
           clearParentToken();

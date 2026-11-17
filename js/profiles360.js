@@ -8176,7 +8176,13 @@ async function submitTeacherCoverAssign(teacherId, leaveId, dateStr, studentId, 
       student_id: student.id,
       student_name: student.name || 'Student',
       student_status: student.status || 'Active',
-      course_name: scheduleRow.course_name || student.course || '',
+      // REGRESSION FIX (2026-11-17): the snapshot must carry the
+      // student's assigned course even when the source schedule's
+      // course_name is empty — legacy rows predate the Phase 3 writer
+      // that populates it. student.course is not a students-table
+      // column, so that fallback was dead and covered students got
+      // "No course assigned" in the cover teacher's lesson form.
+      course_name: scheduleRow.course_name || (window.Assignments ? Assignments.studentCourseName(student) : '') || '',
       cover_date: dateStr,
       schedule_id: scheduleRow.id,
       start_time: scheduleRow.start_time || '',

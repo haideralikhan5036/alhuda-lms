@@ -97,11 +97,13 @@ const TEACHER_SRC = fs.readFileSync(path.join(REPO_ROOT, 'teacher.html'), 'utf8'
   check('P2-20 time-change submit appends to time_change_history', TEACHER_SRC.includes("appendTeacherRequestToHistory(meta, 'time_change_request', 'time_change_history', reqObj)"));
   // P2-21: no server delete of class_schedules remains in teacher.html.
   check('P2-21 no class_schedules delete left in teacher.html', !TEACHER_SRC.includes("from('class_schedules').delete()"));
-  // P2-23: every remaining allBooks[0] is a comment or the modal-open
-  // default (an initial dropdown value, not a stale-id resolution).
+  // P2-23: no allBooks[0] stale-id resolution remains at all — the
+  // advance modal-open default that used to be the one exception now
+  // scopes to the student's own books (2026-11-17 regression fix),
+  // so the global-list fallback is gone from teacher.html entirely.
   const codeLines = TEACHER_SRC.split('\n').filter((l) => !l.trim().startsWith('//') && !l.trim().startsWith('*'));
   const remaining = codeLines.filter((l) => l.includes('allBooks[0]'));
-  check('P2-23 only the modal-open default still uses allBooks[0]', remaining.length === 1 && remaining[0].includes('onAdvanceCourseBookChanged'), JSON.stringify(remaining));
+  check('P2-23 no allBooks[0] stale-id resolution remains in teacher.html', remaining.length === 0, JSON.stringify(remaining));
   const notFoundCount = (TEACHER_SRC.match(/Course book not found/g) || []).length;
   check('P2-23 fail-closed message present at all fixed sites (>=8)', notFoundCount >= 8, 'found ' + notFoundCount);
   // P2-26: the Absent/Leave transition branch preserves prior JSON.
