@@ -125,7 +125,8 @@ const FAMILIES = [
   { id: 'FAM-C', parent_name: 'Partial Family', monthly_fee: 5000, currency: 'PKR', status: 'Active', students: [{ name: 'C1', status: 'Active', joining_date: '2026-09-05' }], notes: '{}' },
   { id: 'FAM-D', parent_name: 'Deactivated Family', monthly_fee: 5000, currency: 'PKR', status: 'Inactive', students: [{ name: 'D1', status: 'Inactive', joining_date: '2026-01-05' }], notes: '{}' },
   { id: 'FAM-E', parent_name: 'On Leave Family', monthly_fee: 5000, currency: 'PKR', status: 'Active', students: [{ name: 'E1', status: 'Active', joining_date: '2026-09-05' }], notes: '{}' },
-  { id: 'FAM-F', parent_name: 'Defaulter Family', monthly_fee: 5000, currency: 'PKR', status: 'Active', students: [{ name: 'F1', status: 'Active', joining_date: '2026-09-05' }], notes: '{}' }
+  { id: 'FAM-F', parent_name: 'Defaulter Family', monthly_fee: 5000, currency: 'PKR', status: 'Active', students: [{ name: 'F1', status: 'Active', joining_date: '2026-09-05' }], notes: '{}' },
+  { id: 'FAM-G', parent_name: 'Arrears Family', monthly_fee: 5000, currency: 'PKR', status: 'Active', students: [{ name: 'G1', status: 'Active', joining_date: '2026-09-05' }], notes: '{}' }
 ];
 // FAM-A: November paid in full. FAM-B: November unpaid. FAM-C: November partial.
 // FAM-D (deactivated): November CANCELLED payment + 4 unpaid months — must
@@ -134,13 +135,21 @@ const FAMILIES = [
 // defaulter only if cancelled records are ignored. Every live family is
 // enrolled September 2026 with September + October paid, so only F reaches
 // 3 unpaid months.
+// FAM-G: September + October paid, but November it pays ONLY the month's
+// fee (5000) while 5000 of arrears still stand (remainingBalance 5000) —
+// the Paid KPI must NOT count it, and neither must the receipts chip,
+// even though the amount paid equals the month's fee. That is the
+// review-caught chip fix: "paid" means the whole bill settled, not
+// "paid >= this month's fee".
 const RECORDS = [
   rec('FAM-A', 'September', 2026, 5000, 0), rec('FAM-A', 'October', 2026, 5000, 0),
   rec('FAM-B', 'September', 2026, 5000, 0), rec('FAM-B', 'October', 2026, 5000, 0),
   rec('FAM-C', 'September', 2026, 5000, 0), rec('FAM-C', 'October', 2026, 5000, 0),
   rec('FAM-E', 'September', 2026, 5000, 0), rec('FAM-E', 'October', 2026, 5000, 0),
+  rec('FAM-G', 'September', 2026, 5000, 0), rec('FAM-G', 'October', 2026, 5000, 0),
   rec('FAM-A', 'November', 2026, 5000, 0),
   rec('FAM-C', 'November', 2026, 2000, 3000, 'Partial (Balance Remaining)'),
+  rec('FAM-G', 'November', 2026, 5000, 5000, 'Partial (Balance Remaining)'),
   rec('FAM-D', 'November', 2026, 5000, 0, 'Cancelled', 'R-FAM-D-CANCEL'),
   rec('FAM-D', 'January', 2026, 0, 5000, 'Pending', 'R-FAM-D-JAN'),
   rec('FAM-D', 'February', 2026, 0, 5000, 'Pending', 'R-FAM-D-FEB'),
@@ -148,11 +157,27 @@ const RECORDS = [
   rec('FAM-D', 'April', 2026, 0, 5000, 'Pending', 'R-FAM-D-APR'),
   rec('FAM-F', 'September', 2026, 5000, 0, 'Cancelled', 'R-FAM-F-CANCEL')
 ];
+// Second scenario (credit-settled): FAM-H's November bill is covered by
+// credit — a zero-amount record with remainingBalance 0. The Paid KPI
+// counts it (remainingBalance <= 0), so the receipts chip must count it
+// too, even though nothing was paid in cash.
+const FAMILIES_H = [
+  { id: 'FAM-A', parent_name: 'Paid Family', monthly_fee: 5000, currency: 'PKR', status: 'Active', students: [{ name: 'A1', status: 'Active', joining_date: '2026-09-05' }], notes: '{}' },
+  { id: 'FAM-H', parent_name: 'Credit Settled Family', monthly_fee: 5000, currency: 'PKR', status: 'Active', students: [{ name: 'H1', status: 'Active', joining_date: '2026-09-05' }], notes: '{}' }
+];
+const RECORDS_H = [
+  rec('FAM-A', 'September', 2026, 5000, 0), rec('FAM-A', 'October', 2026, 5000, 0),
+  rec('FAM-H', 'September', 2026, 5000, 0), rec('FAM-H', 'October', 2026, 5000, 0),
+  rec('FAM-A', 'November', 2026, 5000, 0),
+  rec('FAM-H', 'November', 2026, 0, 0, 'Paid in Full')
+];
 const OVERRIDES = {
   'FAM-E_november_2026': { familyId: 'FAM-E', month: 'November', year: 2026, status: 'leave', notes: 'Approved Leave' }
 };
 
-function makeHarness() {
+function makeHarness(familiesArg, recordsArg) {
+  const fams = familiesArg || FAMILIES;
+  const recs = recordsArg || RECORDS;
   const HIDDEN = new Set(['feeAdvanceBox']);
   const elements = new Map();
   const documentStub = {
@@ -166,7 +191,7 @@ function makeHarness() {
   documentStub.getElementById('feeDashMonthSelect').value = 'November';
   documentStub.getElementById('feeDashYearSelect').value = '2026';
   const store = {
-    alhuda_fee_records: JSON.stringify(RECORDS),
+    alhuda_fee_records: JSON.stringify(recs),
     alhuda_fee_matrix_overrides: JSON.stringify(OVERRIDES)
   };
   const localStorageStub = {
@@ -238,7 +263,7 @@ function makeHarness() {
   windowStub.__switchTabCalls = switchTabCalls;
   windowStub.__setDirectoryKpiCalls = setDirectoryKpiCalls;
   windowStub.__subTabCalls = subTabCalls;
-  const api = factory(windowStub, documentStub, localStorageStub, console, FAMILIES);
+  const api = factory(windowStub, documentStub, localStorageStub, console, fams);
   return { api, el: (id) => documentStub.getElementById(id), switchTabCalls, setDirectoryKpiCalls, subTabCalls };
 }
 
@@ -261,14 +286,14 @@ await h.api.loadFeeDashboardStats();
 
 {
   const counts = h.api.kpiCounts;
-  check('dashboard: Active Families = 4 (A, B, C, F — E on leave, D deactivated)', String(h.el('kpiFeeTotalFamilies').innerText) === '4', String(h.el('kpiFeeTotalFamilies').innerText));
-  check('dashboard: Paid Families = 1 (A only)', String(h.el('kpiFeePaidCount').innerText) === '1', String(h.el('kpiFeePaidCount').innerText));
-  check('dashboard: Pendings = 3 (B, C, F — strictly November)', String(h.el('kpiFeePendingCount').innerText) === '3', String(h.el('kpiFeePendingCount').innerText));
+  check('dashboard: Active Families = 5 (A, B, C, F, G — E on leave, D deactivated)', String(h.el('kpiFeeTotalFamilies').innerText) === '5', String(h.el('kpiFeeTotalFamilies').innerText));
+  check('dashboard: Paid Families = 1 (A only — G pays the month fee but arrears stand)', String(h.el('kpiFeePaidCount').innerText) === '1', String(h.el('kpiFeePaidCount').innerText));
+  check('dashboard: Pendings = 4 (B, C, F, G — strictly November)', String(h.el('kpiFeePendingCount').innerText) === '4', String(h.el('kpiFeePendingCount').innerText));
   check('dashboard: Defaulters = 1 (F only — 3+ months)', String(h.el('kpiFeeDefaultersCount').innerText) === '1', String(h.el('kpiFeeDefaultersCount').innerText));
   check('dashboard: On Leave = 1 (E only)', String(h.el('kpiFeeLeaveCount').innerText) === '1', String(h.el('kpiFeeLeaveCount').innerText));
-  check('dashboard: KPI count cache matches the painted counts', counts && counts.active === 4 && counts.paid === 1 && counts.pendings === 3 && counts.defaulters === 1 && counts.onLeave === 1, JSON.stringify(counts));
+  check('dashboard: KPI count cache matches the painted counts', counts && counts.active === 5 && counts.paid === 1 && counts.pendings === 4 && counts.defaulters === 1 && counts.onLeave === 1, JSON.stringify(counts));
   const pendingIds = (h.api.cachedPending || []).map((p) => p.familyId).sort();
-  check('count == list: Pending list holds exactly B, C, F', pendingIds.join(',') === 'FAM-B,FAM-C,FAM-F', pendingIds.join(','));
+  check('count == list: Pending list holds exactly B, C, F, G', pendingIds.join(',') === 'FAM-B,FAM-C,FAM-F,FAM-G', pendingIds.join(','));
   const defIds = (h.api.cachedDefaulters || []).map((d) => d.familyId).sort();
   check('count == list: Defaulters list holds exactly F', defIds.join(',') === 'FAM-F', defIds.join(','));
   check('count == list: the deactivated family is in NO list', !pendingIds.includes('FAM-D') && !defIds.includes('FAM-D'));
@@ -284,7 +309,7 @@ await h.api.loadFeeDashboardStats();
   check('click On Leave: opens the Families tab with the v3 leave filter', h.switchTabCalls.includes('tab-families') && h.setDirectoryKpiCalls.some((c) => c[0] === 'leave'));
   h.api.handleFeeKpiClick('paid');
   check('click Paid: opens Receipts filtered to the selected month', h.subTabCalls.includes('fee-subtab-receipts') && h.api.receiptsFilter && h.api.receiptsFilter.monthIdx === 10 && h.api.receiptsFilter.year === 2026, JSON.stringify(h.api.receiptsFilter));
-  check('click Paid: the receipts chip states the month + fully-paid count (A only, C is partial)', h.el('feeReceiptsMonthChipText').innerText.indexOf('November 2026') !== -1 && h.el('feeReceiptsMonthChipText').innerText.indexOf('1 paid family') !== -1 && h.el('feeReceiptsMonthChipText').innerText.indexOf('(2 receipts)') !== -1, h.el('feeReceiptsMonthChipText').innerText);
+  check('click Paid: the receipts chip states the month + fully-paid count (A only — C is partial, G still owes arrears)', h.el('feeReceiptsMonthChipText').innerText.indexOf('November 2026') !== -1 && h.el('feeReceiptsMonthChipText').innerText.indexOf('1 paid family') !== -1 && h.el('feeReceiptsMonthChipText').innerText.indexOf('(3 receipts)') !== -1, h.el('feeReceiptsMonthChipText').innerText);
   h.api.handleFeeKpiClick('pendings');
   check('click Pendings: opens the existing Pending sub-view', h.subTabCalls.includes('fee-subtab-pending'));
   h.api.handleFeeKpiClick('defaulters');
@@ -292,6 +317,18 @@ await h.api.loadFeeDashboardStats();
   check('click: the last-clicked card carries the selected state', h.el('feeKpiCard-defaulters').classList.contains('fee-kpi-selected') && h.el('feeKpiCard-defaulters').getAttribute('aria-pressed') === 'true');
   check('click: only one card is selected at a time', ['active', 'paid', 'pendings', 'leave'].every((k) => !h.el('feeKpiCard-' + k).classList.contains('fee-kpi-selected')));
   check('click: re-loading the dashboard clears the selection', (() => { h.api.loadFeeDashboardStats(); return h.api.kpiSelected === null; })());
+}
+
+{
+  // Credit-settled scenario: H pays nothing in cash in November — the
+  // bill is covered by credit (remainingBalance 0). The Paid KPI counts
+  // it, so the receipts chip must count it too.
+  const h2 = makeHarness(FAMILIES_H, RECORDS_H);
+  await h2.api.loadFeeDashboardStats();
+  check('credit-settled: Paid Families = 2 (A + H)', String(h2.el('kpiFeePaidCount').innerText) === '2', String(h2.el('kpiFeePaidCount').innerText));
+  check('credit-settled: Pendings = 0', String(h2.el('kpiFeePendingCount').innerText) === '0', String(h2.el('kpiFeePendingCount').innerText));
+  h2.api.handleFeeKpiClick('paid');
+  check('credit-settled: the receipts chip counts the credit-settled family', h2.el('feeReceiptsMonthChipText').innerText.indexOf('2 paid families') !== -1 && h2.el('feeReceiptsMonthChipText').innerText.indexOf('(2 receipts)') !== -1, h2.el('feeReceiptsMonthChipText').innerText);
 }
 
 const failed = results.filter((r) => !r.pass);

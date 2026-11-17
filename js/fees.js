@@ -1142,19 +1142,31 @@
       const fams = {};
       inMonth.forEach(r => {
         const key = String(r.familyId || '').toUpperCase();
-        if (!fams[key]) fams[key] = { paid: 0, due: 0 };
-        fams[key].paid += Math.max(0, parseFloat(r.amountPaid) || 0);
+        if (!fams[key]) fams[key] = true;
       });
-      // "Paid families" here means the same as the Paid KPI card: the month
-      // is settled in full (paid >= due). A partial payer has receipts in
-      // the month but is NOT a paid family.
+      // "Paid families" here means the same as the Paid KPI card: the
+      // month's bill is settled in full — a record for the month has
+      // remainingBalance <= 0. The bill includes any arrears, so paying
+      // only the month's fee while arrears stand does NOT count (a
+      // partial payer has receipts in the month but is NOT a paid
+      // family); a credit-settled zero-amount record DOES count, exactly
+      // as the dashboard's paidMap does. ADJ status-paid months have no
+      // receipt, so they never enter this list — the count is the paid
+      // families among the receipts shown.
       let famCount = 0;
       Object.keys(fams).forEach((key) => {
-        const fam = (typeof CACHED_FEE_FAMILIES !== 'undefined' ? CACHED_FEE_FAMILIES : []).find((f) => String(f.id || '').toUpperCase() === key);
-        if (!fam) return;
-        const det = feeFormApplicableFeeDetails(fam, FEE_RECEIPTS_MONTH_FILTER.monthIdx, FEE_RECEIPTS_MONTH_FILTER.year);
-        fams[key].due += (det.fee || 0);
-        if (fams[key].due > 0 && fams[key].paid >= fams[key].due - 0.01) famCount++;
+        const settled = records.some((r) => {
+          if (String(r.familyId || '').toUpperCase() !== key) return false;
+          if (window.FeePhase6 && typeof window.FeePhase6.isReceiptInMonth === 'function') {
+            if (!window.FeePhase6.isReceiptInMonth(r, FEE_RECEIPTS_MONTH_FILTER.monthIdx, FEE_RECEIPTS_MONTH_FILTER.year)) return false;
+          } else {
+            if (String(r.month).toLowerCase() !== (FEE_CONFIG.MONTHS[FEE_RECEIPTS_MONTH_FILTER.monthIdx] || '').toLowerCase()) return false;
+            if (parseInt(r.year, 10) !== FEE_RECEIPTS_MONTH_FILTER.year) return false;
+            if (String(r.status || '').toLowerCase().indexOf('cancel') !== -1) return false;
+          }
+          return parseFloat(r.remainingBalance || 0) <= 0;
+        });
+        if (settled) famCount++;
       });
       const text = document.getElementById('feeReceiptsMonthChipText');
       if (text) text.innerText = 'Showing receipts for ' + label + ' — ' + famCount + ' paid famil' + (famCount === 1 ? 'y' : 'ies') + ' (' + inMonth.length + ' receipt' + (inMonth.length === 1 ? '' : 's') + ')';
