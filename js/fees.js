@@ -30,6 +30,7 @@
     let FEE_KPI_COUNTS = { active: 0, paid: 0, pendings: 0, defaulters: 0, onLeave: 0 };
     let FEE_RECEIPTS_MONTH_FILTER = null; // { monthIdx, year } | null
     let FEE_MULTI_MONTH_SELECTED = []; // [{ monthIdx, year }] chronological
+    let FEE_MULTI_MONTH_YEAR = null; // chosen year in the dropdown; null = follow the form year
     let FEE_PENDING_REMIND_RUNNING = false;
     let FEE_DEFAULTER_REMIND_RUNNING = false;
     let CACHED_ANNUAL_FEE_MATRIX = [];
@@ -1785,12 +1786,29 @@
 
     function clearMultiMonthSelection() {
       FEE_MULTI_MONTH_SELECTED = [];
+      FEE_MULTI_MONTH_YEAR = null;
       const grid = document.getElementById('feeMultiMonthGrid');
       if (grid) grid.innerHTML = '';
       const rev = document.getElementById('feeMultiMonthReview');
       if (rev) rev.innerText = 'No months selected yet — pick months above.';
       const tot = document.getElementById('feeMultiMonthTotal');
       if (tot) tot.innerText = '';
+    }
+
+    // The year shown in the Multi Month row: the dropdown choice, kept
+    // while it stays in the form year either side, else the form year.
+    function getMultiMonthYear() {
+      const anchor = multiMonthFormAnchor();
+      const years = [anchor.year - 1, anchor.year, anchor.year + 1];
+      if (FEE_MULTI_MONTH_YEAR === null || years.indexOf(FEE_MULTI_MONTH_YEAR) === -1) FEE_MULTI_MONTH_YEAR = anchor.year;
+      return FEE_MULTI_MONTH_YEAR;
+    }
+
+    function handleMultiMonthYearChange() {
+      const sel = document.getElementById('feeMultiMonthYear');
+      const y = sel ? parseInt(sel.value, 10) : NaN;
+      if (!isNaN(y)) FEE_MULTI_MONTH_YEAR = y;
+      renderMultiMonthSelector();
     }
 
     function buildMultiMonthOptionsForForm() {
@@ -1827,10 +1845,20 @@
       const grid = document.getElementById('feeMultiMonthGrid');
       if (!grid) return;
       const options = buildMultiMonthOptionsForForm();
+      const year = getMultiMonthYear();
+      // The row shows one year at a time (12 months); the dropdown
+      // offers the form year either side.
+      const yearSel = document.getElementById('feeMultiMonthYear');
+      if (yearSel) {
+        const anchor = multiMonthFormAnchor();
+        const years = [anchor.year - 1, anchor.year, anchor.year + 1];
+        yearSel.innerHTML = years.map(function (y) { return '<option value="' + y + '"' + (y === year ? ' selected' : '') + '>' + y + '</option>'; }).join('');
+        yearSel.value = String(year);
+      }
+      const yearOptions = options.filter(function (o) { return o.year === year; });
       const selectedKeys = {};
       getMultiMonthSelection().forEach(function (s) { selectedKeys[s.monthIdx + '-' + s.year] = true; });
-      const cur = document.getElementById('feeFormCurrency') ? document.getElementById('feeFormCurrency').value : 'USD';
-      grid.innerHTML = options.map(function (o) {
+      grid.innerHTML = yearOptions.map(function (o) {
         const sel = !!selectedKeys[o.monthIdx + '-' + o.year];
         const disabled = o.state === 'not_enrolled' || o.state === 'leave' || o.state === 'no_fee';
         let badge = '';
@@ -1843,8 +1871,8 @@
           : (disabled ? 'border-slate-200 bg-slate-50 opacity-60 cursor-not-allowed' : 'border-blue-200 bg-white hover:border-blue-400 hover:shadow-sm');
         const title = disabled ? o.reason : (o.state === 'paid' ? 'Already paid — click to include as a second payment (you will be asked first)' : 'Click to ' + (sel ? 'remove ' : 'add ') + o.label);
         return '<button type="button" ' + (disabled ? 'disabled ' : '') + 'onclick="toggleMultiMonthSelection(' + o.monthIdx + ', ' + o.year + ')" title="' + title + '" class="fee-mm-box p-2 rounded-xl border text-left transition focus:outline-none focus:ring-2 focus:ring-emerald-500 ' + stateCls + '">' +
-          '<span class="block text-[11px] font-extrabold text-slate-800">' + o.label + '</span>' +
-          '<span class="block text-[11px] font-bold text-slate-600 font-num mt-0.5">' + (o.fee === null || o.fee === undefined ? '—' : cur + ' ' + o.fee.toFixed(2) + (o.paidSoFar > 0 ? ' <span class="text-emerald-700">(paid ' + o.paidSoFar.toFixed(2) + ')</span>' : '')) + '</span>' +
+          '<span class="block text-[11px] font-extrabold text-slate-800">' + FEE_CONFIG.MONTHS[o.monthIdx] + '</span>' +
+          '<span class="block text-[10px] font-bold text-slate-600 font-num mt-0.5">' + (o.fee === null || o.fee === undefined ? '—' : o.fee.toFixed(2) + (o.paidSoFar > 0 ? ' <span class="text-emerald-700">(paid ' + o.paidSoFar.toFixed(2) + ')</span>' : '')) + '</span>' +
           '<span class="block mt-1">' + (sel ? '<span class="px-1.5 py-0.5 rounded-full text-[9px] font-black bg-emerald-600 text-white">Selected</span> ' : '') + badge + '</span>' +
           '</button>';
       }).join('');

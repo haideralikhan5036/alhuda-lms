@@ -3289,8 +3289,13 @@
               </label>
 
               <div id="feeAdvanceBox" class="hidden pt-3 border-t border-blue-200 space-y-3">
-                <p class="text-[11px] font-bold text-blue-900">Click months to add them. Click again to remove. Each month is charged its actual fee for that month — never one fee times the number of months.</p>
-                <div id="feeMultiMonthGrid" class="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-5 gap-2"></div>
+                <div class="flex items-start justify-between gap-3 flex-wrap">
+                  <p class="text-[11px] font-bold text-blue-900 flex-1 min-w-[220px]">Pick a year, then click months to add them. Click again to remove. Each month is charged its actual fee for that month — never one fee times the number of months.</p>
+                  <label class="flex items-center gap-1.5 text-xs font-extrabold text-blue-950 shrink-0">Year:
+                    <select id="feeMultiMonthYear" onchange="handleMultiMonthYearChange()" class="p-1.5 bg-white border border-blue-300 rounded-lg text-xs font-bold text-slate-800"></select>
+                  </label>
+                </div>
+                <div id="feeMultiMonthGrid" class="grid grid-cols-4 sm:grid-cols-6 lg:grid-cols-12 gap-2"></div>
                 <div class="pt-2 border-t border-blue-200">
                   <p id="feeMultiMonthReview" class="text-[11px] font-bold text-slate-600">No months selected yet — pick months above.</p>
                   <p id="feeMultiMonthTotal" class="text-xs font-extrabold text-blue-950 mt-1"></p>

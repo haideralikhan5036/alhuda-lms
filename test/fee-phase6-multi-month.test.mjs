@@ -133,8 +133,9 @@ const OPTS_ARGS = {
 
 {
   const opts = F.buildMultiMonthOptions(OPTS_ARGS);
-  check('selector window is 25 months (12 back to 12 forward)', opts.length === 25, String(opts.length));
-  check('selector is anchored on the form month', opts[12].label === 'November 2026' && opts[0].label === 'November 2025' && opts[24].label === 'November 2027');
+  check('selector window is 36 months (3 full years around the form year)', opts.length === 36, String(opts.length));
+  check('selector is anchored on the form year', opts[0].label === 'January 2025' && opts[12].label === 'January 2026' && opts[22].label === 'November 2026' && opts[35].label === 'December 2027');
+  check('every year in the window has all 12 months', [2025, 2026, 2027].every((y) => opts.filter((o) => o.year === y).length === 12));
   const byKey = {};
   opts.forEach((o) => { byKey[o.key] = o; });
   check('paid month is identified (October 2026)', byKey['2026-10'].state === 'paid');
@@ -148,7 +149,7 @@ const OPTS_ARGS = {
 {
   // No family yet: the window still builds (fees unknown, not "no fee").
   const opts = F.buildMultiMonthOptions({ fam: null, records: [], overrides: {}, anchorMonthIdx: 10, anchorYear: 2026, enrollment: null, isLeaveMonth: () => false, applicableFee: () => null });
-  check('no family: the selector window still builds 25 months', opts.length === 25, String(opts.length));
+  check('no family: the selector window still builds 36 months', opts.length === 36, String(opts.length));
   check('no family: every month is available (not disabled as no-fee)', opts.every((o) => o.state === 'available'), opts.filter((o) => o.state !== 'available').map((o) => o.label + ':' + o.state).join(','));
   check('no family: fees are unknown, not zero', opts.every((o) => o.fee === null), JSON.stringify(opts.slice(0, 3).map((o) => o.fee)));
   const tot = F.multiMonthSelectionTotal([opts[12], opts[13]]);
@@ -280,6 +281,7 @@ function makeSubmitHarness(records, confirmResult) {
     let CLOUD_FEE_RECORDS_CACHE = null;
     let CLOUD_MATRIX_OVERRIDES_CACHE = null;
     let FEE_MULTI_MONTH_SELECTED = [];
+    let FEE_MULTI_MONTH_YEAR = null;
     const CACHED_FEE_FAMILIES = families;
     const ALL_LEAVE_RECORDS = [];
     const lmsNotify = window.lmsNotify || (() => {});
@@ -309,6 +311,8 @@ function makeSubmitHarness(records, confirmResult) {
     ${extractFunction(FEES_SRC, 'isMultiMonthMode')}
     ${extractFunction(FEES_SRC, 'multiMonthFormAnchor')}
     ${extractFunction(FEES_SRC, 'getMultiMonthSelection')}
+    ${extractFunction(FEES_SRC, 'getMultiMonthYear')}
+    ${extractFunction(FEES_SRC, 'handleMultiMonthYearChange')}
     ${extractFunction(FEES_SRC, 'clearMultiMonthSelection')}
     ${extractFunction(FEES_SRC, 'buildMultiMonthOptionsForForm')}
     ${extractFunction(FEES_SRC, 'renderMultiMonthSelector')}
@@ -317,7 +321,7 @@ function makeSubmitHarness(records, confirmResult) {
     ${extractFunction(FEES_SRC, 'toggleMultiMonthSelection')}
     ${extractFunction(FEES_SRC, 'handleAdvanceFeeToggle')}
     ${extractFunction(FEES_SRC, 'handleFeePaymentSubmit')}
-    return { triggerFeeBalanceRecalc, handleAdvanceFeeToggle, toggleMultiMonthSelection, getMultiMonthSelection, handleFeePaymentSubmit, getStoredFeeRecords, get lastModal() { return lastModal; } };
+    return { triggerFeeBalanceRecalc, handleAdvanceFeeToggle, toggleMultiMonthSelection, getMultiMonthSelection, handleMultiMonthYearChange, handleFeePaymentSubmit, getStoredFeeRecords, get lastModal() { return lastModal; } };
   `);
   const api = factory(windowStub, documentStub, localStorageStub, console, [FAM]);
   return {
@@ -458,7 +462,7 @@ function makeSubmitHarness(records, confirmResult) {
   h.el('feeToggleAdvance').checked = true;
   h.api.handleAdvanceFeeToggle();
   const boxes = (h.el('feeMultiMonthGrid').innerHTML.match(/fee-mm-box/g) || []).length;
-  check('no family: the month grid still renders 25 boxes', boxes === 25, 'boxes=' + boxes);
+  check('no family: the month grid still renders the 12 months of the form year', boxes === 12, 'boxes=' + boxes);
   check('no family: boxes show no fee yet (— instead of 0.00)', h.el('feeMultiMonthGrid').innerHTML.indexOf('—') !== -1 && h.el('feeMultiMonthGrid').innerHTML.indexOf('0.00') === -1);
   h.api.toggleMultiMonthSelection(10, 2026); // November
   h.api.toggleMultiMonthSelection(11, 2026); // December
@@ -468,10 +472,40 @@ function makeSubmitHarness(records, confirmResult) {
   h.setForm();
   h.api.triggerFeeBalanceRecalc();
   const boxesAfter = (h.el('feeMultiMonthGrid').innerHTML.match(/fee-mm-box/g) || []).length;
-  check('family picked later: the grid still shows 25 boxes', boxesAfter === 25, 'boxes=' + boxesAfter);
+  check('family picked later: the grid still shows the 12 months of the form year', boxesAfter === 12, 'boxes=' + boxesAfter);
   check('family picked later: the earlier selection survives', h.api.getMultiMonthSelection().length === 2, String(h.api.getMultiMonthSelection().length));
   check('family picked later: fees fill in (7500 + 7500)', h.el('feeFormMonthlyFee').value === '15000.00', h.el('feeFormMonthlyFee').value);
   check('family picked later: boxes now show the real fee', h.el('feeMultiMonthGrid').innerHTML.indexOf('7500.00') !== -1);
+}
+
+{
+  // One line of 12 months + year dropdown: the row shows the form
+  // year by default, the dropdown offers the year either side, and
+  // a selection survives switching years.
+  const h = makeSubmitHarness([rec('August', 2026, 7500, 0)], true);
+  h.setForm();
+  h.el('feeToggleAdvance').checked = true;
+  h.api.handleAdvanceFeeToggle();
+  const boxes = (h.el('feeMultiMonthGrid').innerHTML.match(/fee-mm-box/g) || []).length;
+  check('year row: one line shows exactly the 12 months of the form year', boxes === 12, 'boxes=' + boxes);
+  const yearHtml = h.el('feeMultiMonthYear').innerHTML;
+  check('year row: the dropdown offers the form year either side', yearHtml.indexOf('2025') !== -1 && yearHtml.indexOf('2026') !== -1 && yearHtml.indexOf('2027') !== -1 && h.el('feeMultiMonthYear').value === '2026', yearHtml + ' value=' + h.el('feeMultiMonthYear').value);
+  check('year row: chips show month names only (the year lives in the dropdown)', h.el('feeMultiMonthGrid').innerHTML.indexOf('>January<') !== -1 && h.el('feeMultiMonthGrid').innerHTML.indexOf('>September<') !== -1 && h.el('feeMultiMonthGrid').innerHTML.indexOf('>December<') !== -1 && h.el('feeMultiMonthGrid').innerHTML.indexOf('January 2026<') === -1 && h.el('feeMultiMonthYear').value === '2026');
+  // Switch to 2025: 12 boxes of 2025 (all not-enrolled for this family).
+  h.el('feeMultiMonthYear').value = '2025';
+  h.api.handleMultiMonthYearChange();
+  const boxes25 = (h.el('feeMultiMonthGrid').innerHTML.match(/fee-mm-box/g) || []).length;
+  check('year row: switching year shows that year, 12 months', boxes25 === 12 && h.el('feeMultiMonthGrid').innerHTML.indexOf('>December<') !== -1 && h.el('feeMultiMonthGrid').innerHTML.indexOf('December 2025<') === -1 && h.el('feeMultiMonthYear').value === '2025', 'boxes=' + boxes25);
+  // Cross-year selection: December 2026 + January 2027.
+  h.el('feeMultiMonthYear').value = '2026';
+  h.api.handleMultiMonthYearChange();
+  h.api.toggleMultiMonthSelection(11, 2026); // December 2026
+  h.el('feeMultiMonthYear').value = '2027';
+  h.api.handleMultiMonthYearChange();
+  h.api.toggleMultiMonthSelection(0, 2027); // January 2027
+  check('year row: selection survives switching years', h.api.getMultiMonthSelection().length === 2, String(h.api.getMultiMonthSelection().length));
+  check('year row: cross-year total is per-month actual fees', h.el('feeFormMonthlyFee').value === '15000.00', h.el('feeFormMonthlyFee').value);
+  check('year row: the review lists both years', h.el('feeMultiMonthReview').innerText.indexOf('December 2026') !== -1 && h.el('feeMultiMonthReview').innerText.indexOf('January 2027') !== -1);
 }
 
 const failed = results.filter((r) => !r.pass);
