@@ -3332,6 +3332,8 @@
               <div>
                 <label for="feeFormMonthlyFee" class="block text-xs font-bold text-slate-700 mb-1">Current Agreed Tuition Fee:</label>
                 <input type="number" step="any" id="feeFormMonthlyFee" placeholder="0.00" oninput="recalcFeeTotalLive()" class="w-full p-2.5 bg-white border border-slate-300 rounded-xl text-xs font-bold font-num text-slate-900">
+                <p id="feeFormMasterFeeLine" class="text-[11px] text-slate-500 mt-1"></p>
+                <div id="feeFormFeeSourceNote" style="display:none;" class="mt-1.5 p-2.5 rounded-xl text-[11px] leading-relaxed"></div>
               </div>
 
               <div>
@@ -3416,6 +3418,9 @@
             <div class="flex justify-end items-center gap-3 pt-4 border-t border-slate-100 flex-wrap">
               <button type="button" onclick="resetFeeForm()" class="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition flex items-center gap-1.5">
                 <i class="fa-solid fa-rotate-left"></i> Reset Form
+              </button>
+              <button type="button" onclick="window.FeePhase1 && window.FeePhase1.openFeeDueInvoiceModalFromForm()" class="px-4 py-2.5 bg-amber-100 hover:bg-amber-200 text-amber-800 border border-amber-300 rounded-xl text-xs font-bold transition flex items-center gap-1.5">
+                <i class="fa-solid fa-file-invoice-dollar"></i> Due Invoice
               </button>
               <button type="submit" id="btnSubmitFeePayment" class="px-6 py-2.5 bg-emerald-700 hover:bg-emerald-800 text-white rounded-xl text-xs font-black transition flex items-center gap-2 shadow-sm">
                 <i class="fa-solid fa-file-invoice"></i> Save Payment &amp; Generate Official Invoice
@@ -3670,6 +3675,41 @@
         <div id="feeMatrixTablePager"></div>
       <!-- ============================================================ -->
       <div id="feeSubView-receipts" class="fee-subview-panel hidden space-y-5">
+        <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs space-y-4">
+
+          <div class="flex justify-between items-center flex-wrap gap-3">
+            <div>
+              <h3 class="text-base font-extrabold text-slate-900 flex items-center gap-2">
+                <i class="fa-solid fa-file-invoice-dollar text-amber-600"></i> Fee Due Invoices
+              </h3>
+              <p class="text-xs text-slate-500">Payment requests issued to families — not receipts. Generate one from the Collect Fee form.</p>
+            </div>
+
+            <button onclick="window.FeePhase1 && window.FeePhase1.loadFeeDueInvoicesList()" class="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition flex items-center gap-1 shadow-xs">
+              <i class="fa-solid fa-arrows-rotate"></i> Refresh Invoices
+            </button>
+          </div>
+
+          <div class="overflow-x-auto touch-scroll rounded-xl border border-slate-200">
+            <table class="w-full text-left text-xs border-collapse min-w-[850px]">
+              <thead class="bg-slate-50 text-slate-600 font-extrabold border-b border-slate-200 uppercase tracking-wider text-[11px]">
+                <tr>
+                  <th class="p-3">Invoice Ref</th>
+                  <th class="p-3">Issue Date</th>
+                  <th class="p-3">Family ID</th>
+                  <th class="p-3">Parent Name</th>
+                  <th class="p-3">Billing Period</th>
+                  <th class="p-3">Outstanding Due</th>
+                  <th class="p-3">Status</th>
+                  <th class="p-3 text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody id="feeDueInvoicesTableBody" class="divide-y divide-slate-100">
+                <tr><td colspan="8" class="p-8 text-center text-slate-400">Loading due invoices...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
         <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs space-y-4">
           
           <div class="flex justify-between items-center flex-wrap gap-3">
@@ -6680,6 +6720,147 @@
       </div>
     </div>
   </div>
+  <!-- FEE UPGRADE PHASE 1: FEE DUE INVOICE MODAL (a payment request, NOT a receipt) -->
+  <div id="modalFeeDueInvoice" class="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 hidden items-center justify-center p-2 sm:p-4 overflow-y-auto">
+    <div class="bg-white rounded-2xl max-w-2xl w-full border border-slate-200 shadow-2xl overflow-hidden my-auto max-h-[94vh] flex flex-col">
+
+      <div class="p-3.5 sm:p-5 bg-slate-50 border-b border-slate-200 flex justify-between items-center shrink-0">
+        <h3 class="font-extrabold text-slate-900 text-sm flex items-center gap-2">
+          <i class="fa-solid fa-file-invoice-dollar text-amber-600"></i> Fee Due Invoice — Payment Request
+        </h3>
+        <button onclick="closeModal('modalFeeDueInvoice')" class="text-slate-400 hover:text-slate-700 text-2xl font-bold leading-none" aria-label="Close">&times;</button>
+      </div>
+
+      <div class="p-3 sm:p-6 space-y-4 flex-1 overflow-y-auto touch-scroll" id="feeDuePrintArea">
+        <div id="feeDueInvCard" class="border-2 border-amber-700 rounded-xl sm:rounded-2xl p-3.5 sm:p-5 bg-white space-y-3.5 sm:space-y-4 shadow-xs">
+
+          <!-- INVOICE HEADER WITH OFFICIAL ACADEMY LOGO -->
+          <div class="border-b-2 border-amber-700 pb-3 sm:pb-4 flex justify-between items-start sm:items-center flex-col sm:flex-row gap-2.5 sm:gap-3">
+            <div class="flex items-center gap-2.5 sm:gap-3.5">
+              <img id="feeDueLogoImg" src="alhuda_logo.jpg" alt="Al-Huda Islamic Centre" class="w-12 h-12 sm:w-16 sm:h-16 object-cover rounded-xl shadow-xs border border-amber-700/30 bg-black shrink-0">
+              <div>
+                <h2 class="text-base sm:text-2xl font-black text-emerald-900 tracking-tight font-serif">AL-HUDA ISLAMIC CENTRE</h2>
+                <p class="text-[11px] sm:text-xs text-slate-600 font-medium">Online Quran &amp; Islamic Studies Academy</p>
+                <p class="text-[10px] sm:text-[11px] text-slate-400 font-mono">Official Tuition Fee Due Invoice</p>
+              </div>
+            </div>
+            <div class="text-left sm:text-right flex sm:flex-col items-center sm:items-end justify-between w-full sm:w-auto pt-1 sm:pt-0 border-t border-amber-100 sm:border-t-0">
+              <div id="feeDueStatusStamp" class="inline-block px-2.5 py-0.5 sm:px-3 sm:py-1 rounded-md text-[10px] sm:text-[11px] font-black border-2 border-amber-600 bg-amber-50 text-amber-800 tracking-wider">
+                PAYMENT REQUEST — NOT A PAYMENT RECEIPT
+              </div>
+              <div class="text-[11px] sm:text-xs text-slate-500 mt-0.5 sm:mt-1">
+                Invoice Ref: <strong id="feeDueRef" class="text-amber-900 font-mono font-bold">Not issued</strong>
+              </div>
+            </div>
+          </div>
+
+          <!-- FAMILY DETAILS GRID -->
+          <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2 sm:gap-2.5 bg-slate-50 p-2.5 sm:p-3 rounded-xl border border-slate-200 text-xs">
+            <div><span class="text-slate-500 font-bold block">Parent / Guardian:</span> <strong id="feeDueParentName" class="text-slate-900 block truncate">--</strong></div>
+            <div><span class="text-slate-500 font-bold block">Family Account ID:</span> <strong id="feeDueFamilyId" class="text-emerald-900 font-mono block">--</strong></div>
+            <div><span class="text-slate-500 font-bold block">Student(s) Enrolled:</span> <strong id="feeDueStudentsNames" class="text-slate-900 block truncate">--</strong></div>
+            <div><span class="text-slate-500 font-bold block">Issue Date:</span> <strong id="feeDueIssueDate" class="text-slate-800 font-mono block">--</strong></div>
+            <div><span class="text-slate-500 font-bold block">Parent Email:</span> <strong id="feeDueParentEmail" class="text-slate-800 font-mono block truncate">--</strong></div>
+            <div><span class="text-slate-500 font-bold block">WhatsApp / Phone:</span> <strong id="feeDueWhatsAppNo" class="text-slate-800 font-mono block">--</strong></div>
+          </div>
+
+          <!-- ITEMIZED CHARGES TABLE -->
+          <div class="rounded-xl border border-slate-200 overflow-x-auto touch-scroll text-xs">
+            <table class="w-full text-left border-collapse min-w-[280px]">
+              <thead class="bg-amber-800 text-white font-bold text-[11px]">
+                <tr>
+                  <th class="p-2.5">Particulars / Description</th>
+                  <th class="p-2.5">Billing Period</th>
+                  <th class="p-2.5 text-right">Amount</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-slate-100">
+                <tr>
+                  <td class="p-2.5 font-bold text-slate-800" id="feeDueDescription">Tuition Fee</td>
+                  <td class="p-2.5 text-slate-600" id="feeDuePeriod">--</td>
+                  <td class="p-2.5 text-right font-mono font-bold text-slate-900" id="feeDueCurrentDue">--</td>
+                </tr>
+              </tbody>
+              <tbody id="feeDueArrearsBody" class="divide-y divide-slate-100"></tbody>
+              <tbody class="divide-y divide-slate-100">
+                <tr id="feeDuePrevBalanceRow" class="hidden bg-amber-50/70">
+                  <td class="p-2.5 text-amber-900 font-bold">Previous Overdue Arrears (Past Months)</td>
+                  <td class="p-2.5 text-amber-800">Prior Dues</td>
+                  <td class="p-2.5 text-right font-mono font-bold text-amber-900" id="feeDuePrevBalanceAmt">--</td>
+                </tr>
+                <tr class="bg-slate-50 font-extrabold text-slate-900">
+                  <td colspan="2" class="p-2.5">Net Total Payable:</td>
+                  <td class="p-2.5 text-right font-mono" id="feeDueGrossTotal">--</td>
+                </tr>
+                <tr id="feeDueDiscountRow" class="hidden text-rose-700">
+                  <td colspan="2" class="p-2.5 italic">Fee Concession / Discount:</td>
+                  <td class="p-2.5 text-right font-mono font-bold" id="feeDueDiscountAmt">--</td>
+                </tr>
+                <tr class="bg-slate-50 font-bold text-slate-800">
+                  <td colspan="2" class="p-2.5">Amount Paid (this month):</td>
+                  <td class="p-2.5 text-right font-mono" id="feeDueTotalPaid">--</td>
+                </tr>
+                <tr class="bg-rose-100/90 font-black text-rose-950 text-sm">
+                  <td colspan="2" class="p-3">TOTAL OUTSTANDING DUE:</td>
+                  <td class="p-3 text-right font-mono font-bold" id="feeDueOutstandingAmt">--</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <!-- DUE DATE BOX -->
+          <div class="p-3.5 bg-amber-50 border-2 border-dashed border-amber-400 rounded-xl space-y-1">
+            <div class="flex items-center gap-2 font-black text-xs text-amber-900">
+              <i class="fa-solid fa-calendar-day text-amber-600"></i>
+              <span>Due Date: <strong id="feeDueDateText" class="text-amber-950">--</strong></span>
+            </div>
+            <p class="text-[11px] text-amber-800" id="feeDueTimingText"></p>
+          </div>
+
+          <!-- PLEASE NOTE BOX -->
+          <div class="p-3.5 bg-slate-50 border-2 border-dashed border-slate-300 rounded-xl space-y-1">
+            <div class="flex items-center gap-2 font-black text-xs text-slate-800">
+              <i class="fa-solid fa-circle-info text-slate-500"></i>
+              <span>Please note</span>
+            </div>
+            <p class="text-[11px] text-slate-600">
+              This is a payment request, not a payment receipt. A receipt will be issued once the payment is received. If you have already paid, please ignore this invoice or contact the academy office.
+            </p>
+          </div>
+
+          <!-- PRAYER / FOOTER NOTE -->
+          <div class="text-center pt-3 border-t border-dashed border-slate-200 text-[11px] text-slate-500 space-y-1">
+            <p class="font-bold text-slate-700">JazakAllahu Khairan! Thank you for partnering with Al-Huda Islamic Centre.</p>
+            <p class="italic text-[10px]">"May Allah (SWT) bless your children with wisdom, piety, and the highest status in both worlds."</p>
+          </div>
+
+        </div>
+        <p id="feeDueSavedNote" class="hidden text-center text-[11px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-xl px-3 py-2">This invoice has been saved and can be reopened from the Fee Due Invoices list.</p>
+      </div>
+
+      <!-- MODAL FOOTER BUTTONS -->
+      <div class="p-2.5 sm:p-4 bg-slate-50 border-t border-slate-200 grid grid-cols-2 sm:flex sm:justify-end items-center gap-2 shrink-0">
+        <button id="feeDueBtnGenerate" onclick="window.FeePhase1 && window.FeePhase1.generateFeeDueInvoice()" class="px-3 py-2 sm:px-4 sm:py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 shadow-2xs">
+          <i class="fa-solid fa-floppy-disk"></i> Generate &amp; Save Invoice
+        </button>
+        <button id="feeDueBtnDownloadPdf" onclick="window.FeePhase1 && window.FeePhase1.downloadFeeDueInvoicePDF()" class="px-3 py-2 sm:px-4 sm:py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 shadow-2xs">
+          <i class="fa-solid fa-file-pdf"></i> Download PDF
+        </button>
+        <button id="feeDueBtnSendEmail" onclick="window.FeePhase1 && window.FeePhase1.sendFeeDueInvoiceEmail()" class="px-3 py-2 sm:px-4 sm:py-2 bg-sky-600 hover:bg-sky-700 text-white rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 shadow-2xs">
+          <i class="fa-solid fa-envelope"></i> Send Email
+        </button>
+        <button onclick="window.FeePhase1 && window.FeePhase1.printFeeDueInvoice()" class="px-3 py-2 sm:px-4 sm:py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 shadow-2xs">
+          <i class="fa-solid fa-print"></i> Print
+        </button>
+        <a id="feeDueWhatsAppBtn" href="#" target="_blank" class="px-3 py-2 sm:px-4 sm:py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 shadow-2xs">
+          <i class="fa-brands fa-whatsapp"></i> WhatsApp
+        </a>
+        <button onclick="closeModal('modalFeeDueInvoice')" class="col-span-2 sm:col-span-1 px-4 py-2 sm:px-5 sm:py-2 bg-slate-800 hover:bg-black text-white rounded-xl text-xs font-bold transition shadow-2xs text-center">
+          Done
+        </button>
+      </div>
+    </div>
+  </div>
 
   <!-- ============================================================ -->
   <!-- MODAL 2: ANNUAL MATRIX QUICK ACTION (1-CLICK STATUS OVERRIDE) -->
@@ -7320,6 +7501,7 @@
   <script src="js/schedule.js"></script>
   <script src="js/payroll.js"></script>
   <script src="js/fee-tables.js"></script>
+  <script src="js/fee-phase1.js"></script>
   <script src="js/course-catalogue.js"></script>
   <script src="js/academy-profile.js"></script>
   <script src="js/assignments.js"></script>

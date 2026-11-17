@@ -93,8 +93,11 @@ check('LABEL parent has no unlabeled static close button left',
 // Index count 31 -> 32 (Leave Screen Audit fixes, 2026-11-10): the
 // new Extend Leave modal (modalExtendLeave) carries its own labelled
 // close button, like every other modal.
-check('LABEL close-button aria-label counts (index 32, teacher 11, parent 2)',
-  count(INDEX, /aria-label="Close"/g) === 32 &&
+// Index count 32 -> 33 (Fee Upgrade Phase 1, 2026-11-17): the new Fee
+// Due Invoice modal (modalFeeDueInvoice) carries its own labelled
+// close button, like every other modal.
+check('LABEL close-button aria-label counts (index 33, teacher 11, parent 2)',
+  count(INDEX, /aria-label="Close"/g) === 33 &&
   count(TEACHER, /aria-label="Close"/g) === 11 &&
   count(PARENT, /aria-label="Close"/g) === 2,
   `${count(INDEX, /aria-label="Close"/g)}/${count(TEACHER, /aria-label="Close"/g)}/${count(PARENT, /aria-label="Close"/g)}`);

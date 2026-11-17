@@ -2039,6 +2039,9 @@ function _buildFamilyPaymentsTabHtml(family, payData) {
                           <i class="fa-regular fa-envelope"></i>
                         </button>
 
+                        <!-- Undo Payment (Fee Upgrade Phase 1: newest receipt only) -->
+                        ${family360UndoButtonHtml(r)}
+
                         <!-- Delete Payment Entry (Batch 2: managers CANCEL instead — see deleteFamilyPaymentRecord) -->
                         <button onclick="deleteFamilyPaymentRecord('${_esc360(family.id)}', '${_esc360(r.recordId)}', '${_esc360(r.month)}', '${_esc360(r.year)}')"
                                 class="w-8 h-8 rounded-lg border border-rose-300 bg-rose-50 hover:bg-rose-100 text-rose-700 flex items-center justify-center transition cursor-pointer"
@@ -3951,7 +3954,7 @@ function openEditFamilyProfileModal(familyId) {
         <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
           <div>
             <label class="font-extrabold text-slate-700 block mb-1">Monthly Fee</label>
-            <input type="number" step="0.01" id="fwEditFamFee" value="${_esc360(family.monthly_fee || 0)}" class="w-full p-2.5 rounded-xl border border-slate-300 font-bold text-slate-900">
+            <input type="number" step="0.01" id="fwEditFamFee" value="${_esc360(family.monthly_fee || 0)}" oninput="window.FeePhase1 && window.FeePhase1.checkFamilyFeeChange('${_esc360(family.id)}')" class="w-full p-2.5 rounded-xl border border-slate-300 font-bold text-slate-900">
           </div>
           <div>
             <label class="font-extrabold text-slate-700 block mb-1">Currency</label>
@@ -3965,6 +3968,55 @@ function openEditFamilyProfileModal(familyId) {
               <option value="Google Meet" ${bio.meeting_platform === 'Google Meet' ? 'selected' : ''}>Google Meet</option>
               <option value="Microsoft Teams" ${bio.meeting_platform === 'Microsoft Teams' ? 'selected' : ''}>Microsoft Teams</option>
             </select>
+          </div>
+        </div>
+
+        <!-- FEE UPGRADE PHASE 1 (Batches 19-21): fee-change timeline. The
+             Monthly Fee field above is the new fee; this section adds the
+             Apply-From presets, the reason, the live protection notice and
+             the recorded timeline. Empty fee field = keep the current fee. -->
+        <div class="rounded-2xl border border-emerald-200 bg-emerald-50/50 overflow-hidden">
+          <button type="button" onclick="window.FeePhase1 && window.FeePhase1.toggleFeeRevisionSection()" class="w-full flex items-center justify-between px-3.5 py-2.5 text-left">
+            <span class="font-extrabold text-emerald-950 text-xs flex items-center gap-2"><i class="fa-solid fa-clock-rotate-left text-emerald-700"></i> Fee Change — Effective From <span class="text-[10px] font-bold text-emerald-700">(optional)</span></span>
+            <span class="flex items-center gap-2">
+              <span id="feeRevisionBadge" class="px-2 py-0.5 rounded-full text-[10px] font-bold" style="background:#d1fae5;">Click to Expand</span>
+              <i id="feeRevisionChevron" class="fa-solid fa-chevron-down text-emerald-700 transition-transform" style="transform:rotate(0deg);"></i>
+            </span>
+          </button>
+          <div id="feeRevisionBody" style="display:none;" class="px-3.5 pb-3.5 pt-1 space-y-3 border-t border-emerald-200">
+            <p id="feeChangeDetectedHint" style="display:none;" class="text-[11px] font-bold text-emerald-800 bg-emerald-100 border border-emerald-200 rounded-xl px-2.5 py-1.5">The fee amount changed — choose when the new fee takes effect below. Past months stay at the old fee.</p>
+            <div>
+              <span class="font-extrabold text-slate-700 block mb-1">Recorded Fee Changes</span>
+              ${window.FeePhase1 ? window.FeePhase1.feeTimelineListHtml(family) : '<p class="text-[11px] text-slate-500">No fee changes recorded yet.</p>'}
+            </div>
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div>
+                <label class="font-extrabold text-slate-700 block mb-1">Apply Fee Change From</label>
+                <select id="fwFeeEffectivePreset" onchange="window.FeePhase1 && window.FeePhase1.onFeeEffectivePresetChange()" class="w-full p-2.5 rounded-xl border border-slate-300 font-bold text-slate-800">
+                  <option value="current">Current Month</option>
+                  <option value="previous">Previous Month</option>
+                  <option value="next">Next Month</option>
+                  <option value="prev3">Previous Three Months</option>
+                  <option value="custom">Custom Month...</option>
+                </select>
+              </div>
+              <div>
+                <label class="font-extrabold text-slate-700 block mb-1">Starting Month</label>
+                <select id="fwFeeEffectiveMonth" disabled onchange="window.FeePhase1 && window.FeePhase1.updateFeeProtectionNotice()" class="w-full p-2.5 rounded-xl border border-slate-300 font-bold text-slate-800">
+                  ${['January','February','March','April','May','June','July','August','September','October','November','December'].map((m, i) => `<option value="${m}" ${i === new Date().getMonth() ? 'selected' : ''}>${m}</option>`).join('')}
+                </select>
+              </div>
+              <div>
+                <label class="font-extrabold text-slate-700 block mb-1">Starting Year</label>
+                <input type="number" id="fwFeeEffectiveYear" disabled value="${new Date().getFullYear()}" class="w-full p-2.5 rounded-xl border border-slate-300 font-bold text-slate-800">
+              </div>
+            </div>
+            <div>
+              <label class="font-extrabold text-slate-700 block mb-1">Reason for Change (optional)</label>
+              <input type="text" id="fwFeeChangeReason" maxlength="160" placeholder="e.g. Annual fee review" class="w-full p-2.5 rounded-xl border border-slate-300 font-bold text-slate-800">
+            </div>
+            <p id="fwFeeRevisionNoticeText" data-family-id="${_esc360(family.id)}" class="text-[11px] leading-relaxed text-slate-700 bg-white border border-emerald-200 rounded-xl px-2.5 py-2"></p>
+            <p id="fwFeeChangePreviewText" class="text-[11px] leading-relaxed text-slate-700"></p>
           </div>
         </div>
 
@@ -4015,7 +4067,12 @@ async function submitEditFamilyProfileForm(e, familyId) {
   const country = document.getElementById('fwEditFamCountry').value.trim();
   const city = document.getElementById('fwEditFamCity').value.trim();
   const timezone = document.getElementById('fwEditFamTz').value.trim();
-  const monthly_fee = parseFloat(document.getElementById('fwEditFamFee').value) || 0;
+  // Fee Upgrade Phase 1 (Batch 21): the fee field is optional — empty
+  // means KEEP the current fee (it never zeroes it). A changed fee is
+  // recorded as a fee revision below, effective from the chosen month.
+  const feeFieldRaw = (document.getElementById('fwEditFamFee').value || '').trim();
+  const oldFee = parseFloat(family.monthly_fee || 0);
+  const monthly_fee = feeFieldRaw === '' ? oldFee : (parseFloat(feeFieldRaw) || 0);
   const currency = document.getElementById('fwEditFamCurr').value.trim() || 'USD';
   const meeting_platform = document.getElementById('fwEditFamPlatform').value;
   const username = document.getElementById('fwEditFamUser').value.trim();
@@ -4031,6 +4088,28 @@ async function submitEditFamilyProfileForm(e, familyId) {
   }
 
   const fNotes = _parseFamilyStructuredNotes(family);
+  if (Math.abs(monthly_fee - oldFee) > 0.01) {
+    if (window.FeePhase1 && typeof window.FeePhase1.buildFeeRevisionForEdit === 'function') {
+      const presetEl = document.getElementById('fwFeeEffectivePreset');
+      const monthEl = document.getElementById('fwFeeEffectiveMonth');
+      const yearEl = document.getElementById('fwFeeEffectiveYear');
+      const reasonEl = document.getElementById('fwFeeChangeReason');
+      const built = window.FeePhase1.buildFeeRevisionForEdit(family, {
+        newFee: monthly_fee,
+        preset: presetEl ? presetEl.value : 'current',
+        month: monthEl ? monthEl.value : '',
+        year: yearEl ? yearEl.value : '',
+        reason: reasonEl ? reasonEl.value : ''
+      });
+      if (built.error) {
+        lmsNotify(built.error, { type: 'error' });
+        return;
+      }
+      if (built.revision) {
+        fNotes.fee_revisions = window.FeePhase1.upsertFeeRevision(fNotes.fee_revisions, built.revision);
+      }
+    }
+  }
   fNotes.bio_meta = {
     ...fNotes.bio_meta,
     telephone,
@@ -4258,10 +4337,31 @@ function emailSpecificFamilyInvoice(familyId, recordId, month, year) {
   viewFamilyPaymentInvoiceModal(familyId, recordId, month, year);
 }
 
-async function deleteFamilyPaymentRecord(familyId, recordId, month, year) {
+// Fee Upgrade Phase 1 — Undo button for the 360 payments list: only a
+// real (AH-REC-) PAID receipt that is still the newest live payment for
+// its family + month gets the button. Cancelled, unpaid, AUTO and
+// numberless rows never do.
+function family360UndoButtonHtml(r) {
+  if (!r || r.status !== 'PAID') return '';
+  if (!String(r.recordId || '').startsWith('AH-REC-')) return '';
+  if (!window.FeePhase1 || typeof window.FeePhase1.isNewestPaymentRow !== 'function') return '';
+  if (typeof getStoredFeeRecords !== 'function') return '';
+  const all = getStoredFeeRecords() || [];
+  if (!window.FeePhase1.isNewestPaymentRow(all, r.recordId).ok) return '';
+  return `<button onclick="window.FeePhase1.requestUndoFeePayment('${String(r.recordId).replace(/'/g, "\\'")}')" class="w-8 h-8 rounded-lg border border-amber-300 bg-amber-50 hover:bg-amber-100 text-amber-700 flex items-center justify-center transition cursor-pointer" title="Undo this payment"><i class="fa-solid fa-rotate-left"></i></button>`;
+}
+
+async function deleteFamilyPaymentRecord(familyId, recordId, month, year, opts) {
+  // Fee Upgrade Phase 1 — Undo mode: { undo: true, skipConfirm: true }.
+  // The receipt is removed/cancelled exactly like a delete, except the
+  // month is NOT added to deleted_payment_months (so it becomes due
+  // again) and only the receipt's own rows are touched (never every
+  // record of the month). Returns true when something changed.
+  opts = opts || {};
+  const undoMode = !!opts.undo;
   if (window.CURRENT_ROLE === 'teacher' || window.CURRENT_ROLE === 'student') {
     lmsNotify('Access Denied: Only Admin/Management can delete payment entries.');
-    return;
+    return false;
   }
 
   // Batch 2: a MANAGER never hard-deletes a payment record. The entry
@@ -4272,22 +4372,25 @@ async function deleteFamilyPaymentRecord(familyId, recordId, month, year) {
   const _role360 = (typeof CURRENT_ROLE !== 'undefined' && CURRENT_ROLE) || window.CURRENT_ROLE || '';
   if (_role360 === 'manager') {
     const mgrFamily = (window.ALL_FAMILIES || []).find(f => String(f.id).toUpperCase() === String(familyId).toUpperCase());
-    if (!mgrFamily) return;
+    if (!mgrFamily) return false;
 
-    if (!(await lmsConfirm(`Cancel the payment/invoice entry for ${month} ${year}?\n\nManagers cannot permanently delete payment records. This entry will be kept on the record and marked as Cancelled.`))) return;
-    const cancelReason = await lmsPrompt('Reason for cancellation (required):', '');
-    if (cancelReason === null) return;
-    if (!String(cancelReason).trim()) {
-      lmsNotify('A cancellation reason is required.');
-      return;
+    let reasonText = 'Undone (Undo Payment)';
+    if (!opts.skipConfirm) {
+      if (!(await lmsConfirm(`Cancel the payment/invoice entry for ${month} ${year}?\n\nManagers cannot permanently delete payment records. This entry will be kept on the record and marked as Cancelled.`))) return false;
+      const cancelReason = await lmsPrompt('Reason for cancellation (required):', '');
+      if (cancelReason === null) return false;
+      if (!String(cancelReason).trim()) {
+        lmsNotify('A cancellation reason is required.');
+        return false;
+      }
+      reasonText = String(cancelReason).trim();
     }
-    const reasonText = String(cancelReason).trim();
     const cancelledAt = new Date().toISOString();
 
     const mfNotes = _parseFamilyStructuredNotes(mgrFamily);
     let found = false;
     (mfNotes.fee_history || []).forEach(r => {
-      if (r && (r.receiptNo === recordId || (String(r.month).toLowerCase() === String(month).toLowerCase() && String(r.year) === String(year)))) {
+      if (r && (r.receiptNo === recordId || (!undoMode && String(r.month).toLowerCase() === String(month).toLowerCase() && String(r.year) === String(year)))) {
         r.status = 'Cancelled';
         r.cancel_reason = reasonText;
         r.cancelled_by = 'manager';
@@ -4295,7 +4398,7 @@ async function deleteFamilyPaymentRecord(familyId, recordId, month, year) {
         found = true;
       }
     });
-    if (!found && String(recordId).startsWith('AUTO-')) {
+    if (!undoMode && !found && String(recordId).startsWith('AUTO-')) {
       // Auto-generated monthly row: no stored record exists yet, so
       // persist an explicit Cancelled record for that month (it also
       // stops the row regenerating as an ordinary unpaid month).
@@ -4332,8 +4435,25 @@ async function deleteFamilyPaymentRecord(familyId, recordId, month, year) {
     }
 
     if (!found) {
+      // Undo mode: the receipt may live only in the payments table
+      // (fee_read_360 on). Cancel the table row instead of giving up.
+      if (undoMode) {
+        let tableCancelled = false;
+        try {
+          if (window.FeeTables && typeof window.FeeTables.dualWritePaymentCancelled === 'function') {
+            const dw = await window.FeeTables.dualWritePaymentCancelled({ receiptNo: recordId, familyId: mgrFamily.id, month, year }, 'manager', reasonText);
+            tableCancelled = !!(dw && dw.found);
+          }
+        } catch (e) { /* dual-write must never affect the outcome */ }
+        if (tableCancelled) {
+          delete _fee360TableCache[String(mgrFamily.id || '').toUpperCase()];
+          _notify360(`Payment undone for ${month} ${year} — the month is due again.`);
+          _renderFamilyWorkspaceDOM();
+          return true;
+        }
+      }
       lmsNotify('That payment entry could not be found as a stored record, so nothing was cancelled.');
-      return;
+      return false;
     }
 
     await _saveFamilyStructuredNotes(mgrFamily.id, mfNotes);
@@ -4350,28 +4470,37 @@ async function deleteFamilyPaymentRecord(familyId, recordId, month, year) {
       try { loadFeeDashboardStats(); } catch (err) {}
     }
     delete _fee360TableCache[String(mgrFamily.id || '').toUpperCase()]; // Batch 6D-2: see manual-invoice save — drop the stale table cache before re-rendering
-    _notify360(`Payment entry for ${month} ${year} cancelled (kept on record).`);
+    _notify360(undoMode ? `Payment undone for ${month} ${year} — the month is due again.` : `Payment entry for ${month} ${year} cancelled (kept on record).`);
     _renderFamilyWorkspaceDOM();
-    return;
+    return true;
   }
 
-  if (!(await lmsConfirm(`Are you sure you want to delete the payment/invoice entry for ${month} ${year}?\n\nThis will remove the record from the backend and recalculate financial totals.`))) return;
+  if (!opts.skipConfirm && !(await lmsConfirm(`Are you sure you want to delete the payment/invoice entry for ${month} ${year}?\n\nThis will remove the record from the backend and recalculate financial totals.`))) return false;
 
   const family = (window.ALL_FAMILIES || []).find(f => String(f.id).toUpperCase() === String(familyId).toUpperCase());
-  if (!family) return;
+  if (!family) return false;
 
   const fNotes = _parseFamilyStructuredNotes(family);
-  fNotes.fee_history = (fNotes.fee_history || []).filter(r => r.receiptNo !== recordId && !(String(r.month).toLowerCase() === String(month).toLowerCase() && String(r.year) === String(year)));
+  // Undo mode removes ONLY this receipt's rows; the delete path also
+  // removes every record of the month.
+  fNotes.fee_history = (fNotes.fee_history || []).filter(r => undoMode
+    ? r.receiptNo !== recordId
+    : (r.receiptNo !== recordId && !(String(r.month).toLowerCase() === String(month).toLowerCase() && String(r.year) === String(year))));
 
   const ovKey = `${String(family.id).toUpperCase()}_${month}_${year}`;
   if (fNotes.matrix_overrides && ovKey in fNotes.matrix_overrides) {
     delete fNotes.matrix_overrides[ovKey];
   }
 
-  if (!Array.isArray(fNotes.deleted_payment_months)) fNotes.deleted_payment_months = [];
-  const delKey = `${String(month).toLowerCase()}_${year}`;
-  if (!fNotes.deleted_payment_months.includes(delKey)) {
-    fNotes.deleted_payment_months.push(delKey);
+  // Undo mode deliberately does NOT mark the month deleted: the 360
+  // list regenerates an unpaid row for it, i.e. the fee becomes due
+  // again — which is the whole point of an undo.
+  if (!undoMode) {
+    if (!Array.isArray(fNotes.deleted_payment_months)) fNotes.deleted_payment_months = [];
+    const delKey = `${String(month).toLowerCase()}_${year}`;
+    if (!fNotes.deleted_payment_months.includes(delKey)) {
+      fNotes.deleted_payment_months.push(delKey);
+    }
   }
 
   if (typeof getStoredFeeRecords === 'function' && typeof saveStoredFeeRecords === 'function') {
@@ -4385,7 +4514,7 @@ async function deleteFamilyPaymentRecord(familyId, recordId, month, year) {
   // (reason "deleted by owner") — financial rows are never hard-deleted.
   try {
     if (window.FeeTables && typeof window.FeeTables.dualWritePaymentCancelled === 'function') {
-      window.FeeTables.dualWritePaymentCancelled({ receiptNo: recordId, familyId: family.id, month, year }, 'owner', 'deleted by owner');
+      window.FeeTables.dualWritePaymentCancelled({ receiptNo: recordId, familyId: family.id, month, year }, 'owner', undoMode ? 'undone by owner' : 'deleted by owner');
     }
   } catch (e) { /* dual-write must never affect the legacy delete */ }
   if (typeof loadFeeDashboardStats === 'function') {
@@ -4393,8 +4522,9 @@ async function deleteFamilyPaymentRecord(familyId, recordId, month, year) {
   }
 
   delete _fee360TableCache[String(family.id || '').toUpperCase()]; // Batch 6D-2: see manual-invoice save — drop the stale table cache before re-rendering
-  _notify360(`Payment entry for ${month} ${year} deleted and financial totals updated.`);
+  _notify360(undoMode ? `Payment undone for ${month} ${year} — the month is due again.` : `Payment entry for ${month} ${year} deleted and financial totals updated.`);
   _renderFamilyWorkspaceDOM();
+  return true;
 }
 
 // ============================================================================

@@ -81,7 +81,10 @@ check('profiles360 has the table cache + prefetch', PROFILES.includes('_fee360Ta
 check('profiles360 checks the 360 read flag', PROFILES.includes('READ_FLAG_360'));
 check('profiles360 prefetch hooked into openFamily360Profile', PROFILES.includes('openFamily360Profile') && PROFILES.indexOf('_prefetch360Payments(family.id)') > -1);
 check('profiles360 legacy merge intact (receiptNo keying still present)', PROFILES.includes('mergedMap.set(r.receiptNo, r)'));
-check('profiles360 write sites invalidate the cache (4)', (PROFILES.match(/delete _fee360TableCache\[/g) || []).length === 4, String((PROFILES.match(/delete _fee360TableCache\[/g) || []).length));
+// Fee Upgrade Phase 1: 5 sites — the undo table-only path in
+// deleteFamilyPaymentRecord (manager, table-only receipt) invalidates
+// the cache too, because the cancelled table row makes it stale.
+check('profiles360 write sites invalidate the cache (5)', (PROFILES.match(/delete _fee360TableCache\[/g) || []).length === 5, String((PROFILES.match(/delete _fee360TableCache\[/g) || []).length));
 check('profiles360 AUTO rows generation intact', PROFILES.includes('AUTO-${famId}-${mName}-2026') || PROFILES.includes('AUTO-'));
 
 const failed = results.filter((x) => !x.pass);

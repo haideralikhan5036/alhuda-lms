@@ -746,10 +746,118 @@
       }
       if (!res || res.error) return null;
       var rows = res.data || [];
+      // Fee Upgrade Phase 1: a due-invoice row is a payment REQUEST, not
+      // a receipt — it must never surface in any money reader. Due
+      // invoices have their own loader (loadDueInvoicesForFamily below).
+      rows = rows.filter(function (row) { return !row || row.record_kind !== 'due_invoice'; });
       return rows.map(function (row) { return paymentLegacyFromRow(row); });
     } catch (e) {
       return null;
     }
+  }
+
+  // --------------------------------------------------------------------------
+  // Fee Upgrade Phase 1 — Fee Due Invoice rows (record_kind =
+  // 'due_invoice'). A due invoice is a payment request, not a receipt:
+  // its receipt_no carries the DUE-YYYYMM-<FAMILYID> ref (server-side
+  // UNIQUE), and it is stored in the payments table so issuing is
+  // idempotent. No money reader ever sees these rows — see the filter
+  // in loadPaymentsForFamily above.
+  // --------------------------------------------------------------------------
+  function dueInvoiceRowFromData(d) {
+    d = d || {};
+    return {
+      family_id: d.familyId != null ? String(d.familyId) : null,
+      receipt_no: d.invoiceRef != null ? String(d.invoiceRef) : null,
+      record_kind: 'due_invoice',
+      billing_period: periodFromMonthYear(d.month, d.year) || null,
+      month_label: d.month != null ? String(d.month) : null,
+      payment_date: d.issueDate || null,
+      amount_paid: d.amountPaid != null ? d.amountPaid : 0,
+      discount: d.discount != null ? d.discount : 0,
+      total_payable: d.totalPayable != null ? d.totalPayable : null,
+      monthly_fee: d.monthlyFee != null ? d.monthlyFee : null,
+      previous_balance: d.previousArrears != null ? d.previousArrears : 0,
+      credit_deducted: 0,
+      remaining_balance: d.outstanding != null ? d.outstanding : null,
+      excess_paid: 0,
+      currency: d.currency || null,
+      payment_method: null,
+      transaction_id: null,
+      status: 'Issued',
+      status_label: 'Fee Due Invoice',
+      is_prorated: 0,
+      is_advance: 0,
+      advance_months_count: 0,
+      active_days: 0,
+      joining_date: null,
+      students_names: d.studentsNames || null,
+      notes: d.timingMessage || null,
+      created_by: currentActor(),
+      legacy_json: JSON.stringify(d),
+      legacy_source: 'fee_due_invoice'
+    };
+  }
+
+  function dueInvoiceFromRow(row) {
+    row = row || {};
+    var base = _parseLegacyJson(row);
+    var d = Object.assign({}, base);
+    if (row.receipt_no != null) d.invoiceRef = row.receipt_no;
+    if (row.family_id != null) d.familyId = row.family_id;
+    if (row.amount_paid != null) d.amountPaid = Number(row.amount_paid);
+    if (row.total_payable != null) d.totalPayable = Number(row.total_payable);
+    if (row.discount != null) d.discount = Number(row.discount);
+    if (row.remaining_balance != null) d.outstanding = Number(row.remaining_balance);
+    if (row.currency != null) d.currency = row.currency;
+    if (row.month_label != null) d.month = row.month_label;
+    if (!d.year && row.billing_period) {
+      var y = parseInt(String(row.billing_period).slice(0, 4), 10);
+      if (!isNaN(y)) d.year = y;
+    }
+    if (!d.issueDate && row.payment_date != null) d.issueDate = row.payment_date;
+    if (row.status != null) d.status = row.status;
+    if (row.cancelled_at) d.cancelledAt = row.cancelled_at;
+    if (row.created_at) d.createdAt = row.created_at;
+    if (!Array.isArray(d.arrearsDetail)) d.arrearsDetail = [];
+    return d;
+  }
+
+  async function loadDueInvoicesForFamily(familyId) {
+    try {
+      var client = getDb();
+      if (!client) return null;
+      var res;
+      if (typeof familyId === 'string' && familyId !== '') {
+        res = await client.from('payments').select('*').eq('family_id', familyId);
+      } else {
+        res = await client.from('payments').select('*');
+      }
+      if (!res || res.error) return null;
+      var rows = (res.data || []).filter(function (row) { return row && row.record_kind === 'due_invoice'; });
+      return rows.map(function (row) { return dueInvoiceFromRow(row); });
+    } catch (e) {
+      return null;
+    }
+  }
+
+  // Insert a due invoice, idempotently: when a row with the same DUE ref
+  // already exists the stored row is returned UNCHANGED (an issued
+  // invoice is never overwritten by re-generating it).
+  async function insertDueInvoiceRow(data) {
+    var client = _requireDb();
+    if (!data || !data.invoiceRef) throw new Error('Due invoice has no reference.');
+    var sel = await client.from('payments').select('*').eq('receipt_no', String(data.invoiceRef)).limit(1);
+    if (sel && sel.error) throw new Error(_errText(sel.error, 'due invoice lookup failed'));
+    var existing = (sel && sel.data) || [];
+    if (existing.length && existing[0].id) {
+      return { row: dueInvoiceFromRow(existing[0]), existed: true };
+    }
+    var built = dueInvoiceRowFromData(data);
+    var ins = await client.from('payments').insert([built]);
+    if (ins && ins.error) throw new Error(_errText(ins.error, 'due invoice insert failed'));
+    var inserted = (ins && ins.data) || [];
+    return { row: inserted.length ? dueInvoiceFromRow(inserted[0]) : dueInvoiceFromRow(built), existed: false };
   }
 
   // --------------------------------------------------------------------------
@@ -977,6 +1085,10 @@
     READ_FLAG_SALARY: READ_FLAG_SALARY,
     getReadMode: getReadMode,
     loadPaymentsForFamily: loadPaymentsForFamily,
+    loadDueInvoicesForFamily: loadDueInvoicesForFamily,
+    dueInvoiceRowFromData: dueInvoiceRowFromData,
+    dueInvoiceFromRow: dueInvoiceFromRow,
+    insertDueInvoiceRow: insertDueInvoiceRow,
     loadSlipsForTeacher: loadSlipsForTeacher,
     unionTableWithLegacy: unionTableWithLegacy,
     diffSlipLists: diffSlipLists,
