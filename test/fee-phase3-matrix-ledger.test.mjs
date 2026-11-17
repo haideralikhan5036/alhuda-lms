@@ -16,6 +16,7 @@ const TABLES_SRC = fs.readFileSync(path.join(REPO_ROOT, 'js/fee-tables.js'), 'ut
 const PHASE1_SRC = fs.readFileSync(path.join(REPO_ROOT, 'js/fee-phase1.js'), 'utf8');
 const PHASE3_SRC = fs.readFileSync(path.join(REPO_ROOT, 'js/fee-phase3.js'), 'utf8');
 const PHASE5_SRC = fs.readFileSync(path.join(REPO_ROOT, 'js/fee-phase5.js'), 'utf8');
+const PHASE6_SRC = fs.readFileSync(path.join(REPO_ROOT, 'js/fee-phase6.js'), 'utf8');
 const INDEX_SRC = fs.readFileSync(path.join(REPO_ROOT, 'index.html'), 'utf8');
 const P360_SRC = fs.readFileSync(path.join(REPO_ROOT, 'js/profiles360.js'), 'utf8');
 
@@ -153,11 +154,17 @@ function makeMatrixHarness(records, overrides) {
   // feeReceiptPdfCellHtml helper — load the real module so the real
   // stored/pending predicate is exercised, not the fallback.
   vm.runInNewContext(PHASE5_SRC, phaseSandbox);
+  // Fee Dashboard + Form Improvements: renderFeeReceiptsHistoryRows
+  // now applies the Paid-KPI month filter through FeePhase6.
+  vm.runInNewContext(PHASE6_SRC, phaseSandbox);
 
   const factory = new Function('window', 'document', 'localStorage', 'console', 'families', `
     ${extractConst(FEES_SRC, 'FEE_CONFIG')}
     let CLOUD_FEE_RECORDS_CACHE = null;
     let CLOUD_MATRIX_OVERRIDES_CACHE = null;
+    // Fee Dashboard + Form Improvements: the Paid-KPI receipts month
+    // filter state read by renderFeeReceiptsHistoryRows.
+    let FEE_RECEIPTS_MONTH_FILTER = null;
     const CACHED_FEE_FAMILIES = families;
     const ALL_LEAVE_RECORDS = [];
     const lmsNotify = window.lmsNotify || (() => {});
@@ -302,15 +309,21 @@ check('fees.js matrix modal status badge names a status-paid month', FEES_SRC.in
 check('fees.js applyMatrixAction handles mark_paid / mark_unpaid', FEES_SRC.includes("if (actionType === 'mark_paid' || actionType === 'mark_unpaid')") && FEES_SRC.includes('await markMonthPaid(familyId, mIdx, targetYearInt)') && FEES_SRC.includes('await markMonthUnpaid(familyId, mIdx, targetYearInt)'));
 check('fees.js ledger cards carry the one-tap button', FEES_SRC.includes('ledgerStatusButtonHtml(window.FeePhase3.uiStateForMonth(m), m.month)'));
 check('fees.js ledger has the mark handlers', FEES_SRC.includes('async function ledgerMarkMonthPaid(monthName)') && FEES_SRC.includes('async function ledgerMarkMonthUnpaid(monthName)'));
-check('fees.js switcher renders on family/month/year change', FEES_SRC.includes('renderFeeStatusSwitcher();') && FEES_SRC.includes('function renderFeeStatusSwitcher()'));
-check('fees.js switcher staged save/cancel exist', FEES_SRC.includes('async function saveStagedMonthStatuses()') && FEES_SRC.includes('function cancelStagedMonthStatuses()') && FEES_SRC.includes('function toggleStagedMonthStatus(monthIdx)'));
+// Fee Dashboard + Form Improvements: the Phase 3 staged switcher is
+// REMOVED from the Collect Fee form (the brief removes only the form
+// section — the Ledger + Matrix one-tap buttons and the shared mark
+// path stay, asserted above and below).
+check('fees.js Collect Fee form no longer renders the status switcher', !FEES_SRC.includes('renderFeeStatusSwitcher') && !FEES_SRC.includes('function feeStatusSwitcherFamilyYear'));
+check('fees.js staged switcher save/cancel/toggle are gone', !FEES_SRC.includes('saveStagedMonthStatuses') && !FEES_SRC.includes('cancelStagedMonthStatuses') && !FEES_SRC.includes('toggleStagedMonthStatus') && !FEES_SRC.includes('FEE_STATUS_STAGED'));
+check('fees.js switchFeeSubTab / recalc / reset / refresh no longer call the switcher', !/switchFeeSubTab[\s\S]{0,1200}renderFeeStatusSwitcher/.test(FEES_SRC) && !/function refreshFeeViewsAfterStatusChange[\s\S]{0,400}renderFeeStatusSwitcher/.test(FEES_SRC));
 check('fees.js shared write path exists with the cloud fail-closed Unpaid', FEES_SRC.includes('async function markMonthPaid(familyId, monthIdx, year)') && FEES_SRC.includes('async function markMonthUnpaid(familyId, monthIdx, year)') && FEES_SRC.includes("code: 'cloud_failed'"));
 check('fees.js Mark Unpaid removes from family-notes fee_history', FEES_SRC.includes('async function removeFeeHistoryRecords(familyId, receiptNos)') && FEES_SRC.includes('notesObj.fee_history = notesObj.fee_history.filter'));
 check('fees.js Mark Unpaid cancels (never deletes) the payments-table row', FEES_SRC.includes('dualWritePaymentCancelled') && FEES_SRC.includes("'status removed by one-tap Unpaid'"));
 
 // ---- wiring: index.html ------------------------------------------------------------------
 check('index.html loads js/fee-phase3.js right after fee-phase2.js', INDEX_SRC.indexOf('<script src="js/fee-phase3.js"></script>') > INDEX_SRC.indexOf('<script src="js/fee-phase2.js"></script>') && INDEX_SRC.indexOf('<script src="js/fee-phase3.js"></script>') > 0);
-check('index.html Collect Fee switcher card exists with grid + enrollment + save/cancel', ['feeStatusSwitcherCard', 'feeStatusSwitcherGrid', 'feeStatusEnrollmentRow', 'feeStatusStagedLine', 'btnFeeStatusSaveStaged', 'btnFeeStatusCancelStaged'].every((id) => INDEX_SRC.includes('id="' + id + '"')));
+check('index.html Collect Fee switcher card is gone (grid + enrollment + save/cancel)', ['feeStatusSwitcherCard', 'feeStatusSwitcherGrid', 'feeStatusEnrollmentRow', 'feeStatusStagedLine', 'btnFeeStatusSaveStaged', 'btnFeeStatusCancelStaged'].every((id) => !INDEX_SRC.includes('id="' + id + '"')));
+check('index.html keeps the fee-phase3.js script (Ledger/Matrix one-tap still use it)', INDEX_SRC.includes('<script src="js/fee-phase3.js"></script>'));
 check('index.html matrix modal has the status buttons container', INDEX_SRC.includes('id="matrixActionStatusButtons"'));
 {
   const buf = fs.readFileSync(path.join(REPO_ROOT, 'index.html'));
@@ -326,7 +339,7 @@ check('profiles360.js delete refuses an ADJ row', P360_SRC.includes("/^ADJ-\\d{6
 // ---- role gating: one-tap follows the Collect Fee scope (owner + manager) -----------------
 check('fees.js mark functions have NO owner-only gate (manager allowed, same as Collect Fee)', !/markMonthPaid[\s\S]{0,400}CURRENT_ROLE === 'owner'/.test(FEES_SRC) && !/markMonthUnpaid[\s\S]{0,400}CURRENT_ROLE === 'owner'/.test(FEES_SRC));
 check('fees.js the write path still validates through FeePhase3 (never trusts the UI)', FEES_SRC.includes('window.FeePhase3.validateMarkPaid') && FEES_SRC.includes('window.FeePhase3.validateMarkUnpaid'));
-check('fees.js + index.html new Phase 3 UI strings are professional English', ['Marked Paid (status — no payment)', 'Could not remove the status from the cloud', 'Enrolled from', 'marked Unpaid — the month is due again'].every((s) => FEES_SRC.includes(s)) && INDEX_SRC.includes('Month Statuses -- One-Tap Paid / Unpaid'));
+check('fees.js new Phase 3 UI strings are professional English', ['Marked Paid (status — no payment)', 'Could not remove the status from the cloud', 'marked Paid (status — no payment recorded)', 'marked Unpaid — the month is due again'].every((s) => FEES_SRC.includes(s)));
 
 const failed = results.filter((x) => !x.pass);
 console.log(`\n${results.length - failed.length}/${results.length} checks passed`);

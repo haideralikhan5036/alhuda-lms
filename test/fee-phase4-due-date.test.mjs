@@ -83,10 +83,13 @@ const ctxFor = (today) => ({ today, records: [], feeForMonth: () => 7500, enroll
 check('index.html loads js/fee-phase4.js right after fee-phase3.js', INDEX_SRC.indexOf('<script src="js/fee-phase4.js"></script>') > INDEX_SRC.indexOf('<script src="js/fee-phase3.js"></script>') && INDEX_SRC.indexOf('<script src="js/fee-phase4.js"></script>') > 0);
 check('index.html has the universal search modal + button', INDEX_SRC.includes('id="modalUniversalSearch"') && INDEX_SRC.includes('openUniversalSearchModal()') && INDEX_SRC.includes('id="txtUniversalSearch"'));
 check('index.html has the currency drill-down modal', INDEX_SRC.includes('id="modalCurrencyDetail"') && INDEX_SRC.includes('id="currencyDetailBody"') && INDEX_SRC.includes('id="currencyDetailPrev"'));
-check('index.html has the leave-from-fee-form toggle', INDEX_SRC.includes('id="chkFeeFormLeave"') && INDEX_SRC.includes('toggleFeeFormLeaveMode()') && INDEX_SRC.includes('id="feeFormLeaveBox"'));
+// Fee Dashboard + Form Improvements: leave-from-fee-form is REMOVED
+// from the Collect Fee form (owner-confirmed). The Leave tab and the
+// shared leave core stay untouched.
+check('index.html has NO leave-from-fee-form toggle/box', !INDEX_SRC.includes('id="chkFeeFormLeave"') && !INDEX_SRC.includes('toggleFeeFormLeaveMode()') && !INDEX_SRC.includes('id="feeFormLeaveBox"') && !INDEX_SRC.includes('id="txtFeeFormLeaveReason"'));
 check('index.html has the families CSV export button', INDEX_SRC.includes('exportFamiliesCsv()'));
 check('index.html Add Family form has Due Day + Fee Timing fields', INDEX_SRC.includes('id="famDueDayInput"') && INDEX_SRC.includes('id="famFeeTimingSelect"'));
-check('index.html has no Roman Urdu in the new Phase 4 UI strings', !/chkFeeFormLeave[\\s\\S]{0,400}chhutti|mujhe|tumhara/i.test(INDEX_SRC));
+check('index.html fee form keeps no leave wiring at all', !/chkFeeFormLeave|toggleFeeFormLeaveMode|submitFeeFormLeave|feeFormLeaveBox/i.test(INDEX_SRC));
 
 // ---- Phase 4 wiring: js/fees.js ----------------------------------------------
 check('fees.js currency grid includes custom currencies + click to drill down', FEES_SRC.includes('allFeeCurrencies') && FEES_SRC.includes("card.addEventListener('click', () => openCurrencyDetailModal(cur))"));
@@ -96,8 +99,8 @@ check('fees.js pending WhatsApp uses the tested builder', FEES_SRC.includes('bui
 check('fees.js defaulter WhatsApp uses the tested builder', FEES_SRC.includes('buildDefaulterWhatsAppMessage'));
 check('fees.js applies the remembered method when a family is picked', FEES_SRC.includes('applyRememberedPaymentMethod(fam.id)'));
 check('fees.js saves the remembered method after a payment', FEES_SRC.includes('rememberPaymentMethodForFamily(famId, paymentRecord.paymentMethod)'));
-check('fees.js intercepts the submit for leave-from-fee-form', FEES_SRC.includes('submitFeeFormLeave(famId)') && FEES_SRC.includes('chkFeeFormLeave'));
-check('fees.js leave submit reuses the shared leave core', FEES_SRC.includes('applyLeave: window.applyStudentLeave'));
+check('fees.js submit no longer branches to leave-from-fee-form', !FEES_SRC.includes('submitFeeFormLeave') && !FEES_SRC.includes('chkFeeFormLeave') && !FEES_SRC.includes('toggleFeeFormLeaveMode') && !FEES_SRC.includes('updateFeeFormLeaveSummary'));
+check('fees.js fee-form leave runner is gone, Phase 4 module keeps its helpers', !FEES_SRC.includes('function submitFeeFormLeave') && PHASE4_SRC.includes('function planFeeFormLeave') && PHASE4_SRC.includes('function runFeeFormLeave'));
 check('fees.js has the CSV export with manager masking', FEES_SRC.includes('function exportFamiliesCsv') && FEES_SRC.includes("buildFamiliesCsv(families, { isManager:"));
 
 // ---- Phase 4 wiring: js/families.js + js/profiles360.js ----------------------
