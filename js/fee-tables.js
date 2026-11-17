@@ -267,7 +267,7 @@
     return {
       family_id: rec.familyId != null ? String(rec.familyId) : null,
       receipt_no: rec.receiptNo != null ? String(rec.receiptNo) : null,
-      record_kind: rec.isManualInvoice ? 'manual_invoice' : 'payment',
+      record_kind: rec.recordKind || (rec.isManualInvoice ? 'manual_invoice' : 'payment'),
       billing_period: periodFromMonthYear(rec.month, rec.year) || (rec.date ? String(rec.date).slice(0, 7) : null),
       month_label: rec.month != null ? String(rec.month) : null,
       payment_date: rec.date || null,
@@ -749,7 +749,10 @@
       // Fee Upgrade Phase 1: a due-invoice row is a payment REQUEST, not
       // a receipt — it must never surface in any money reader. Due
       // invoices have their own loader (loadDueInvoicesForFamily below).
-      rows = rows.filter(function (row) { return !row || row.record_kind !== 'due_invoice'; });
+      // Fee Upgrade Phase 3: an ADJ status row (record_kind
+      // 'month_status') is not money either — it only marks a month
+      // paid. It is filtered here for the same reason.
+      rows = rows.filter(function (row) { return !row || (row.record_kind !== 'due_invoice' && row.record_kind !== 'month_status'); });
       return rows.map(function (row) { return paymentLegacyFromRow(row); });
     } catch (e) {
       return null;

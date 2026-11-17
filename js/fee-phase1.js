@@ -77,6 +77,17 @@
     return s === 'cancelled' || s.indexOf('cancel') !== -1;
   }
 
+  // Fee Upgrade Phase 3 — an ADJ status row (record_kind
+  // 'month_status', ref ADJ-YYYYMM-...) is not a payment and must never
+  // shadow a real payment here, or count as arrears below. Mirror of
+  // FeePhase3.isMonthStatusRow — this file loads first, so the predicate
+  // is duplicated here and pinned by tests on both sides.
+  function isMonthStatusRow(r) {
+    if (!r) return false;
+    if (String(r.recordKind || '') === 'month_status') return true;
+    return /^ADJ-\d{6}-/i.test(String(r.receiptNo || ''));
+  }
+
   function escHtml(s) {
     return String(s == null ? '' : s)
       .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
@@ -354,6 +365,22 @@
       return s;
     }
 
+    // Fee Upgrade Phase 3 — a month is status-paid when an ADJ row
+    // exists for it AND no real payment exists (money always wins over
+    // a stale status row). Uses the local isMonthStatusRow mirror above.
+    function hasStatusRow(mIdx, y) {
+      var famUpper = String(family ? family.id : '').toUpperCase();
+      var statusRow = null;
+      var realRow = null;
+      records.forEach(function (r) {
+        if (!r || isCancelledRecord(r)) return;
+        if (String(r.familyId || '').toUpperCase() !== famUpper) return;
+        if (monthIdxOf(r.month) !== mIdx || parseInt(r.year, 10) !== parseInt(y, 10)) return;
+        if (isMonthStatusRow(r)) statusRow = r; else realRow = r;
+      });
+      return !!statusRow && !realRow;
+    }
+
     // Current month.
     var curDueDate = getFeeDueDate(family, monthIdx, year);
     var curIsDue = today >= curDueDate;
@@ -368,6 +395,11 @@
       currentDueAmount = 0;
     } else if (isNotEnrolled(monthName, year)) {
       currentStatus = 'notEnrolled';
+      currentDueAmount = 0;
+    } else if (hasStatusRow(monthIdx, year)) {
+      // Fee Upgrade Phase 3: marked Paid by one-tap status — settled,
+      // no money recorded, nothing outstanding.
+      currentStatus = 'paid';
       currentDueAmount = 0;
     } else if (curRecs.length > 0 && curRemaining <= 0.01) {
       currentStatus = 'paid';
@@ -396,7 +428,7 @@
         var leave = isLeave(mName, y);
         var dueDate = getFeeDueDate(family, m, y);
         var isDue = today >= dueDate;
-        if ((!leave || !leave.isLeave) && !isNotEnrolled(mName, y) && !isPreAdmission(m, y) && isDue) {
+        if ((!leave || !leave.isLeave) && !isNotEnrolled(mName, y) && !isPreAdmission(m, y) && !hasStatusRow(m, y) && isDue) {
           var mRecs = monthRecords(m, y);
           var mFee = feeForMonth(m, y);
           var mRemaining = Math.max(0, mFee - paidPlusDiscount(mRecs));
@@ -553,11 +585,11 @@
 
   function isNewestPaymentRow(records, receiptNo) {
     var all = Array.isArray(records) ? records : [];
-    var group = receiptGroupRows(all, receiptNo).filter(function (r) { return !isCancelledRecord(r); });
+    var group = receiptGroupRows(all, receiptNo).filter(function (r) { return !isCancelledRecord(r) && !isMonthStatusRow(r); });
     if (group.length === 0) {
       return { ok: false, reason: 'That payment could not be found, so nothing was undone.' };
     }
-    var live = all.filter(function (r) { return r && !isCancelledRecord(r); });
+    var live = all.filter(function (r) { return r && !isCancelledRecord(r) && !isMonthStatusRow(r); });
     for (var g = 0; g < group.length; g++) {
       var row = group[g];
       var famUpper = String(row.familyId || '').toUpperCase();

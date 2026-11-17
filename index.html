@@ -3431,6 +3431,27 @@
             </div>
           </form>
         </div>
+
+        <!-- FEE UPGRADE PHASE 3: STAGED MONTH STATUSES -- one-tap Paid / Unpaid -->
+        <div id="feeStatusSwitcherCard" class="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs space-y-4 hidden">
+          <div class="flex justify-between items-center flex-wrap gap-2">
+            <div>
+              <h3 class="text-base font-extrabold text-slate-900 flex items-center gap-2">
+                <i class="fa-solid fa-toggle-on text-emerald-700"></i> Month Statuses -- One-Tap Paid / Unpaid
+              </h3>
+              <p class="text-xs text-slate-500 mt-0.5">Mark months Paid without a payment, or Unpaid again. Changes are staged -- Save applies them all at once. A month with a real payment cannot be marked Unpaid here; undo that payment first.</p>
+            </div>
+          </div>
+          <div id="feeStatusSwitcherGrid" class="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-6 gap-2"></div>
+          <div id="feeStatusEnrollmentRow" class="pt-3 border-t border-slate-100"></div>
+          <div class="flex justify-between items-center flex-wrap gap-2 pt-1">
+            <p id="feeStatusStagedLine" class="text-[11px] font-bold text-slate-500">Click a Due month to stage Mark Paid, or a status-paid month to stage Mark Unpaid.</p>
+            <div class="flex gap-2">
+              <button type="button" id="btnFeeStatusCancelStaged" onclick="cancelStagedMonthStatuses()" disabled class="px-4 py-2 bg-white border border-slate-300 hover:bg-slate-100 disabled:opacity-50 text-slate-700 rounded-xl text-xs font-bold transition">Cancel</button>
+              <button type="button" id="btnFeeStatusSaveStaged" onclick="saveStagedMonthStatuses()" disabled class="px-4 py-2 bg-emerald-700 hover:bg-emerald-800 disabled:bg-slate-300 disabled:text-slate-500 text-white rounded-xl text-xs font-bold transition">Save Changes</button>
+            </div>
+          </div>
+        </div>
       </div>
 
       <!-- ============================================================ -->
@@ -7028,6 +7049,9 @@
           </button>
         </div>
 
+        <!-- FEE UPGRADE PHASE 3: ONE-TAP PAID / UNPAID for this month -->
+        <div id="matrixActionStatusButtons" class="space-y-2"></div>
+
       </div>
 
       <div class="p-3 bg-slate-50 border-t border-slate-100 flex justify-end">
@@ -7563,6 +7587,7 @@
   <script src="js/fee-tables.js"></script>
   <script src="js/fee-phase1.js"></script>
   <script src="js/fee-phase2.js"></script>
+  <script src="js/fee-phase3.js"></script>
   <script src="js/course-catalogue.js"></script>
   <script src="js/academy-profile.js"></script>
   <script src="js/assignments.js"></script>
