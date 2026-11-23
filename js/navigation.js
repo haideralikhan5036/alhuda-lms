@@ -357,6 +357,36 @@
     }
     window.restoreAdminTabFromHash = restoreAdminTabFromHash;
 
+    // Button-delay build (2026-11-20, audit §5(i)1/7): set
+    // skeleton/loading rows SYNCHRONOUSLY on every sidebar tab click,
+    // before the tab's loader runs — the tab body must never sit on
+    // stale content while a loader fetches. Copy of the existing good
+    // patterns (Fee Save spinner, Bulk Collect progress, Leaves
+    // spinner). Only the tab being entered is touched, and only
+    // elements that exist.
+    function paintTabSkeleton(tabId) {
+      try {
+        const spinnerRow = (cols, label) => '<tr><td colspan="' + cols + '" class="p-8 text-center text-slate-400"><i class="fa-solid fa-spinner fa-spin mr-2"></i>' + label + '</td></tr>';
+        if (tabId === 'tab-dashboard') {
+          ['kpiDashTotal', 'kpiDashCurrent', 'kpiDashRunning', 'kpiDashLive', 'kpiDashCompleted', 'kpiDashRemaining', 'kpiDashAbsent', 'kpiDashLeave', 'kpiDashTrial'].forEach(id => { const el = document.getElementById(id); if (el) el.innerText = '…'; });
+          const dashBody = document.getElementById('dashClassesTableBody');
+          if (dashBody) dashBody.innerHTML = spinnerRow(6, 'Loading today\'s classes...');
+        } else if (tabId === 'tab-salaries') {
+          const salBody = document.getElementById('salariesTableBody');
+          if (salBody) salBody.innerHTML = spinnerRow(7, 'Compiling automated course-based teacher payroll...');
+        } else if (tabId === 'tab-attendance') {
+          const attBody = document.getElementById('attendanceTableBody');
+          if (attBody) attBody.innerHTML = spinnerRow(6, 'Loading attendance...');
+        } else if (tabId === 'tab-trials') {
+          const trialsBox = document.getElementById('trialsListContainer');
+          if (trialsBox) trialsBox.innerHTML = '<div class="col-span-full p-8 text-center text-slate-400"><i class="fa-solid fa-spinner fa-spin mr-2"></i>Loading trial classes...</div>';
+        } else if (tabId === 'tab-leaves') {
+          const leavesBody = document.getElementById('leavesTableBody');
+          if (leavesBody) leavesBody.innerHTML = spinnerRow(7, 'Loading leave records...');
+        }
+      } catch (e) {}
+    }
+
     function switchTab(tabId) {
       if (typeof CURRENT_ROLE !== 'undefined' && CURRENT_ROLE === 'manager' && OWNER_ONLY_TABS.includes(tabId)) {
         lmsNotify('Access Denied: This area is available to the Owner only.');
@@ -424,6 +454,10 @@
         target.classList.remove('hidden');
         target.classList.add('block');
       }
+
+      // Skeleton first, synchronously, before any loader runs.
+      // Guarded: unit harnesses extract switchTab alone.
+      if (typeof paintTabSkeleton === 'function') paintTabSkeleton(targetId);
 
       if (targetId === 'tab-dashboard') {
         if ((!DASH_STUDENT_CHART || !DASH_REVENUE_CHART) && typeof playDashboardGraphsEntranceAnimation === 'function') {

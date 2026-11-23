@@ -812,7 +812,13 @@
         if (typeof db === 'undefined' || !db || typeof db.from !== 'function') return map;
         let query = db.from('salary_adjustments').select('*').eq('kind', 'advance');
         if (query && typeof query.order === 'function') query = query.order('created_at', { ascending: true });
-        const res = await query;
+        // Button-delay build (2026-11-20, audit §5(ii)1): the manual
+        // requests read runs in parallel with the adjustments read
+        // instead of after it — the two reads are independent.
+        const [res, mRes] = await Promise.all([
+          Promise.resolve(query),
+          Promise.resolve(db.from('advance_manual_requests').select('*'))
+        ]);
         const rows = (res && !res.error && Array.isArray(res.data)) ? res.data : [];
         rows.forEach((r) => {
           if (!r || r.cancelled_at) return;
@@ -835,7 +841,6 @@
         // not yet consumed by a finalized slip), keyed onto their
         // ledger entry by adjustment + period.
         try {
-          const mRes = await db.from('advance_manual_requests').select('*');
           const mRows = (mRes && !mRes.error && Array.isArray(mRes.data)) ? mRes.data : [];
           mRows.forEach((m) => {
             if (!m || m.recovery_id) return;
@@ -1253,9 +1258,10 @@
     async function calculateMonthlySalaries(forceRefresh = false) {
       const tbody = document.getElementById('salariesTableBody');
       if (!tbody) return;
-      if (!Array.isArray(ALL_TEACHERS) || ALL_TEACHERS.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="7" class="p-8 text-center text-slate-400"><i class="fa-solid fa-spinner fa-spin text-xl text-brandGold mb-2 block"></i> Compiling automated course-based teacher payroll...</td></tr>';
-      }
+      // Button-delay build (2026-11-20, audit §5(i)7): always show a
+      // spinner while compiling — not only when the teacher cache is
+      // empty — so a Salaries click never sits on stale rows.
+      tbody.innerHTML = '<tr><td colspan="7" class="p-8 text-center text-slate-400"><i class="fa-solid fa-spinner fa-spin text-xl text-brandGold mb-2 block"></i> Compiling automated course-based teacher payroll...</td></tr>';
 
       const selectedMonth = document.getElementById('salaryMonthSelect')?.value || 'September 2026';
 
@@ -1318,22 +1324,25 @@
       // Real ledger rows are loaded once; students without rows get a
       // derived period (Assignments.deriveFor), so no live record needed
       // a backfill write for the new engine to cover everyone.
+      // Button-delay build (2026-11-20, audit §5(ii)1): the three
+      // ledger loads run in parallel — the synchronous per-teacher
+      // compile below is unchanged.
       const payrollCfg = payrollSettings();
       const monthBounds = parsePayrollMonthBounds(selectedMonth);
-      let assignmentRows = [];
+      const [assignmentRowsLoaded, advanceLedgerByTeacher, coverRowsForMonth] = await Promise.all([
+        (async () => { if (!window.Assignments) return []; try { return await Assignments.loadAll({ force: Boolean(forceRefresh) }); } catch (e) { return []; } })(),
+        loadAdvanceLedgerForCompile(),
+        loadCoverRowsForCompile(monthBounds)
+      ]);
+      let assignmentRows = assignmentRowsLoaded;
       if (window.Assignments) {
-        try { assignmentRows = await Assignments.loadAll(); } catch (e) { assignmentRows = []; }
         try { assignmentRows = assignmentRows.concat(Assignments.deriveFor(students, assignmentRows, scheds)); } catch (e) {}
       }
-      // Salary Restructuring Phase 3: outstanding plan-advance ledger
-      // rows for the planned-recovery computation in the live branch.
-      const advanceLedgerByTeacher = await loadAdvanceLedgerForCompile();
       const payrollWarnings = [];
 
       // Teacher Cover / Substitute (2026-11-13): this month's active
       // cover rows + the salary choice of every leave record (the
       // choice lives on the leave record in the teacher's meta).
-      const coverRowsForMonth = await loadCoverRowsForCompile(monthBounds);
       const coverLeaveChoices = buildCoverLeaveChoiceMap(teachers);
 
       // Commission #2 Phase 1: the D5 pricing gate for this month and

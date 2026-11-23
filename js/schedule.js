@@ -1658,11 +1658,15 @@
       const dObj = new Date(date);
       const day = dObj.getDay() === 0 ? 7 : dObj.getDay();
 
-      const { data: scheds } = await db.from('class_schedules')
-        .select('*, students(name), teachers(full_name)')
-        .eq('day_of_week', day);
-
-      const { data: logs } = await db.from('attendance_logs').select('*').eq('date', date);
+      // Button-delay build (2026-11-20, audit §5(ii)1): spinner before
+      // the first await, and the two independent reads in parallel.
+      tbody.innerHTML = '<tr><td colspan="6" class="p-8 text-center text-slate-400"><i class="fa-solid fa-spinner fa-spin mr-2"></i>Loading attendance...</td></tr>';
+      const [{ data: scheds }, { data: logs }] = await Promise.all([
+        db.from('class_schedules')
+          .select('*, students(name), teachers(full_name)')
+          .eq('day_of_week', day),
+        db.from('attendance_logs').select('*').eq('date', date)
+      ]);
       const logsMap = {};
       (logs || []).forEach(l => logsMap[l.schedule_id] = l);
 
@@ -1780,6 +1784,14 @@
       const noteInput = document.getElementById('note_' + schedule_id);
       const lesson_notes = noteInput ? noteInput.value.trim() : '';
 
+      // Button-delay build (2026-11-20, audit §5(i)1): immediate
+      // feedback on the clicked button, before the first await.
+      const _clickedBtn = (typeof event !== 'undefined' && event && event.target && event.target.closest) ? event.target.closest('button') : null;
+      if (_clickedBtn) {
+        _clickedBtn.disabled = true;
+        _clickedBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Saving...';
+      }
+
       // Audit P1-3: report a failed attendance save honestly instead of
       // reloading the lists as if it were saved (the note text stays so
       // the entry can be retried).
@@ -1793,9 +1805,13 @@
       }], { onConflict: 'schedule_id,date' });
       if (schedAttError) {
         console.warn('[LMS] operation failed:', (schedAttError.message || schedAttError)); lmsNotify('The attendance could not be saved. Please try again.', { type: 'error' });
+        // Restore the row buttons (the clicked one was disabled above).
+        loadAttendanceList();
         return;
       }
 
+      // Both reloads stay fire-and-forget: the row update
+      // (loadAttendanceList) never waits for the monitor reload.
       loadAttendanceList();
       loadLiveMonitorData();
     }

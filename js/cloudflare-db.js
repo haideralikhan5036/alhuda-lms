@@ -166,10 +166,26 @@
     return prefix + Date.now().toString(36).toUpperCase() + '-' + Math.random().toString(36).substring(2, 6).toUpperCase();
   }
 
+  // Button-delay build (2026-11-20): loadLocalDbStore used to
+  // JSON.parse the whole mirror on every call, so no two calls ever
+  // shared an array reference and the per-table fragment cache in
+  // saveLocalDbStore could never hit. The parsed store is now reused
+  // while the raw localStorage string is unchanged; any write through
+  // saveLocalDbStore, any removal (logout wipe, other code), or any
+  // other tab's change (a different raw string) invalidates it, so a
+  // load always reflects what is actually stored.
+  let _localStoreCache = { raw: null, store: null };
   function loadLocalDbStore() {
+    let raw = null;
+    try {
+      raw = localStorage.getItem(LOCAL_DB_STORAGE_KEY);
+    } catch (e) {
+      raw = null;
+    }
+    if (_localStoreCache.store && _localStoreCache.raw === raw) return _localStoreCache.store;
+
     let store = null;
     try {
-      const raw = localStorage.getItem(LOCAL_DB_STORAGE_KEY);
       if (raw) store = JSON.parse(raw);
     } catch (e) {
       store = null;
@@ -207,12 +223,48 @@
       }
     } catch (e) {}
 
+    _localStoreCache = { raw: raw, store: store };
     return store;
   }
 
-  function saveLocalDbStore(store) {
+  // Button-delay build (2026-11-20, audit §1.6): the whole local mirror
+  // used to be re-stringified on EVERY fetch — JSON.stringify(whole
+  // store) — even when one unfiltered select had only replaced a single
+  // table. The stored mirror is unchanged (same key, same JSON shape
+  // and contents, same table order); only the write cost changes.
+  // Each table's JSON fragment is cached against the exact array
+  // reference it was built from, and only a table whose array was
+  // replaced (or that the caller names as changed — in-place
+  // mutations such as unshift keep the same reference, so the caller
+  // must name them) is re-stringified. The loader below reuses the
+  // parsed store while the raw string is unchanged, so the references
+  // — and therefore the fragments — survive across calls.
+  let _mirrorTableJson = {};
+  function saveLocalDbStore(store, changedTables) {
     try {
-      localStorage.setItem(LOCAL_DB_STORAGE_KEY, JSON.stringify(store));
+      const parts = [];
+      TABLES.forEach(t => {
+        const rows = Array.isArray(store[t]) ? store[t] : [];
+        const cached = _mirrorTableJson[t];
+        const changed = !changedTables || changedTables.indexOf(t) !== -1;
+        if (cached && cached.ref === rows && !changed) {
+          parts.push(JSON.stringify(t) + ':' + cached.json);
+          return;
+        }
+        const json = JSON.stringify(rows);
+        _mirrorTableJson[t] = { ref: rows, json: json };
+        parts.push(JSON.stringify(t) + ':' + json);
+      });
+      // Any non-table keys on the store (none are written today) keep
+      // their old behaviour: stringified in place, after the tables.
+      Object.keys(store || {}).forEach(k => {
+        if (TABLES.indexOf(k) === -1) parts.push(JSON.stringify(k) + ':' + JSON.stringify(store[k]));
+      });
+      const out = '{' + parts.join(',') + '}';
+      localStorage.setItem(LOCAL_DB_STORAGE_KEY, out);
+      // The written string is now the cached raw, so the next load
+      // reuses this same store object (and its fragment cache hits).
+      _localStoreCache = { raw: out, store: store };
     } catch (e) {
       console.warn('[Cloudflare DB] Local mirror save notice:', e);
     }
@@ -374,7 +426,7 @@
         }
         inserted.push(row);
       });
-      saveLocalDbStore(store);
+      saveLocalDbStore(store, [table]);
       return { data: single ? (inserted[0] || null) : inserted, error: null };
     }
 
@@ -396,13 +448,13 @@
         }
         return r;
       });
-      saveLocalDbStore(store);
+      saveLocalDbStore(store, [table]);
       return { data: single ? (updated[0] || null) : updated, error: null };
     }
 
     if (action === 'delete') {
       store[table] = store[table].filter(r => !filters.every(f => matchFilter(r, f)));
-      saveLocalDbStore(store);
+      saveLocalDbStore(store, [table]);
       return { data: [], error: null };
     }
 
@@ -832,7 +884,7 @@
               }
               return clean;
             });
-            saveLocalDbStore(store);
+            saveLocalDbStore(store, [payload.table]);
           }
           if (payload.table === 'families' && result && result.data) {
             const list = Array.isArray(result.data) ? result.data : [result.data];
@@ -1239,6 +1291,10 @@
     }
     try { wipe(localStorage); } catch (e) {}
     try { wipe(sessionStorage); } catch (e) {}
+    // The mirror key is gone: drop the parsed-store and fragment
+    // caches too, or the next load would resurrect the wiped mirror.
+    _localStoreCache = { raw: null, store: null };
+    _mirrorTableJson = {};
   };
 
   // Override window.supabase.createClient so all portals (Admin, Manager, Teacher, Parent) automatically use Cloudflare D1 + R2

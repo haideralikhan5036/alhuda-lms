@@ -314,12 +314,44 @@
         const normalizePhone = (p) => String(p || '').replace(/[^0-9]/g, '').slice(-10);
         const normalizeName = (n) => String(n || '').trim().toLowerCase().replace(/\s+/g, ' ');
 
-        // 1. Fetch students from Supabase (including active trials and regular students that started as trials)
+        // 1. Trial students from the shared core cache (button-delay
+        // build 2026-11-20, audit §1.4/§5(ii)2) — no fresh whole-table
+        // students select on a warm cache. The core ALL_STUDENTS
+        // list is regular-students only, so the source is the core
+        // load's RAW families (their embedded students include trial
+        // and converted rows), joined to families and teachers from
+        // the same cache. Only when the core cache is empty (core
+        // load failed / unavailable) does this fall back to the
+        // direct fetch — the Families loader pattern. The derivation
+        // is inline here (not a helper) so the name-extracting unit
+        // harnesses keep working.
         try {
-          const { data: supaStudents, error } = await db.from('students')
-            .select('*, families(*), teachers(*)');
+          let supaStudents = [];
+          try {
+            if (typeof ensureCoreLmsDataLoaded === 'function') await ensureCoreLmsDataLoaded();
+          } catch (e) {}
+          const _famById = {};
+          const _rawFams = (typeof RAW_ALL_FAMILIES !== 'undefined' && Array.isArray(RAW_ALL_FAMILIES)) ? RAW_ALL_FAMILIES : [];
+          const _fams = (typeof ALL_FAMILIES !== 'undefined' && Array.isArray(ALL_FAMILIES)) ? ALL_FAMILIES : [];
+          _rawFams.concat(_fams).forEach(f => { if (f && f.id) { const k = String(f.id).toUpperCase(); if (!_famById[k]) _famById[k] = f; } });
+          const _tchById = {};
+          ((typeof ALL_TEACHERS !== 'undefined' && Array.isArray(ALL_TEACHERS)) ? ALL_TEACHERS : []).forEach(t => { if (t && t.id) _tchById[String(t.id)] = t; });
+          const _byId = {};
+          const _pushStu = (st) => {
+            if (!st || !st.id) return;
+            const k = String(st.id);
+            if (_byId[k]) return;
+            _byId[k] = { ...st, families: _famById[String(st.family_id || '').toUpperCase()] || st.families || null, teachers: (st.assigned_teacher_id && _tchById[String(st.assigned_teacher_id)]) || st.teachers || null };
+          };
+          _rawFams.forEach(f => (Array.isArray(f.students) ? f.students : []).forEach(_pushStu));
+          ((typeof ALL_STUDENTS !== 'undefined' && Array.isArray(ALL_STUDENTS)) ? ALL_STUDENTS : []).forEach(_pushStu);
+          supaStudents = Object.values(_byId);
+          if (supaStudents.length === 0) {
+            const { data: freshStudents, error: freshError } = await db.from('students').select('*, families(*), teachers(*)');
+            if (!freshError && Array.isArray(freshStudents)) supaStudents = freshStudents;
+          }
 
-          if (!error && supaStudents && supaStudents.length > 0) {
+          if (supaStudents && supaStudents.length > 0) {
             supaStudents.forEach(st => {
               let parsedNotes = {};
               try {

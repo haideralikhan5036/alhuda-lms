@@ -2387,7 +2387,7 @@ font-family: var(--font-num) !important;
           Cancel
         </button>
         <button type="button" id="btnSaveAttendance" onclick="saveAttendanceAndLessonNotes()" class="w-full sm:w-auto px-5 py-2.5 bg-brandDark text-white font-extrabold rounded-xl hover:bg-brandDarkest shadow-md transition flex items-center justify-center gap-1.5">
-          <i class="fa-solid fa-floppy-disk"></i> Save Progress
+          <i class="fa-solid fa-floppy-disk"></i> Submit
         </button>
       </div>
     </div>
@@ -4121,6 +4121,10 @@ font-family: var(--font-num) !important;
     let ASSIGNED_STUDENTS = [];
     let ACTIVE_ASSIGNED_STUDENTS = [];
     let LEAVE_ASSIGNED_STUDENTS = [];
+    // Button-delay build (2026-11-20): the portal load's full student
+    // rows for this teacher (trial rows included), so the Trials tab
+    // reuses them instead of re-fetching students.
+    let ALL_TEACHER_STUDENTS_RAW = [];
 
     function isPortalRegularStudent(s) {
       if (!s) return false;
@@ -4389,6 +4393,7 @@ font-family: var(--font-num) !important;
         settleTeacherBranch(studentsPromise), settleTeacherBranch(schedulesPromise), settleTeacherBranch(todayLogsPromise), advanceLogsPromise, settleTeacherBranch(coversPromise)
       ]);
       const assignedStudentsRaw = (studentsRes && studentsRes.rows) || [];
+      ALL_TEACHER_STUDENTS_RAW = assignedStudentsRaw;
       const allScheds = schedFetchRes ? schedFetchRes.data : null;
       const logs = todayLogsRes ? todayLogsRes.data : null;
       // Teacher Cover / Substitute (2026-11-13): a failed cover read
@@ -5291,6 +5296,66 @@ font-family: var(--font-num) !important;
     const _zoomLaunchInFlight = new Set();
     const _startClassInFlight = new Set();
 
+    // Button-delay build (2026-11-20): instant feedback + optimistic
+    // single-row patch. Each class action below shows its busy state
+    // synchronously (before the first await) and, once its own write
+    // has landed, patches just that row in TODAY_CLASSES and re-renders
+    // from memory; the full reload then runs in the background
+    // (reserved for boot, explicit Retry and recovery). Business logic
+    // and guards are unchanged — only timing/rendering moved.
+    function setTeacherRowButtonsBusy(scheduleId, actionMarker, busyLabel) {
+      try {
+        document.querySelectorAll('button[onclick]').forEach(btn => {
+          const oc = btn.getAttribute('onclick') || '';
+          if (oc.indexOf(actionMarker) === -1 || oc.indexOf(String(scheduleId)) === -1) return;
+          if (btn.dataset.lmsOrigHtml === undefined) btn.dataset.lmsOrigHtml = btn.innerHTML;
+          btn.disabled = true;
+          btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> ' + busyLabel;
+        });
+      } catch (e) {}
+    }
+    function restoreTeacherRowButtons(scheduleId, actionMarker) {
+      try {
+        document.querySelectorAll('button[onclick]').forEach(btn => {
+          const oc = btn.getAttribute('onclick') || '';
+          if (oc.indexOf(actionMarker) === -1 || oc.indexOf(String(scheduleId)) === -1) return;
+          if (btn.dataset.lmsOrigHtml !== undefined) { btn.innerHTML = btn.dataset.lmsOrigHtml; delete btn.dataset.lmsOrigHtml; }
+          btn.disabled = false;
+        });
+      } catch (e) {}
+    }
+    function refreshTeacherPortalInBackground() {
+      try { if (typeof loadTeacherPortalData === 'function') loadTeacherPortalData(); } catch (e) {}
+    }
+    function patchTodayClassLocally(scheduleId, status, lessonNotes) {
+      const c = (TODAY_CLASSES || []).find(x => String(x.id) === String(scheduleId));
+      if (!c) return false;
+      if (status === 'Scheduled') {
+        c.log = null;
+        c.isMarked = false;
+        c.status = 'SCHEDULED';
+        c.badgeClass = 'bg-slate-100 text-slate-700 border-slate-200';
+      } else {
+        c.log = { ...(c.log || {}), schedule_id: scheduleId, student_id: c.student_id, teacher_id: CURRENT_TEACHER?.id, status };
+        if (lessonNotes !== undefined && lessonNotes !== null) c.log.lesson_notes = lessonNotes;
+        c.isMarked = ['Completed', 'Present', 'Advance Class', 'Absent', 'Leave'].includes(status);
+        if (status === 'Running') { c.status = 'RUNNING'; c.badgeClass = 'bg-emerald-600 text-white border-emerald-700 font-extrabold shadow-sm animate-pulse'; }
+        else if (status === 'Waiting') { c.status = 'WAITING'; c.badgeClass = 'bg-amber-100 text-amber-900 border-amber-300 font-extrabold animate-pulse'; }
+        else if (status === 'Completed' || status === 'Present') { c.status = 'COMPLETED'; c.badgeClass = 'bg-emerald-100 text-emerald-800 border-emerald-300 font-extrabold'; }
+        else if (status === 'Advance Class') { c.status = '🌟 Advance Class'; c.badgeClass = 'bg-purple-100 text-purple-900 border-purple-300 font-extrabold shadow-2xs'; }
+        else if (status === 'Absent') { c.status = 'ABSENT'; c.badgeClass = 'bg-rose-100 text-rose-800 border-rose-300 font-bold'; }
+        else if (status === 'Leave') { c.status = 'LEAVE'; c.badgeClass = 'bg-blue-100 text-blue-800 border-blue-300 font-bold'; }
+      }
+      try {
+        const done = (TODAY_CLASSES || []).filter(x => x.isMarked).length;
+        const total = (TODAY_CLASSES || []).length;
+        const elDone = document.getElementById('statCompleted'); if (elDone) elDone.innerText = done;
+        const elLeft = document.getElementById('statRemaining'); if (elLeft) elLeft.innerText = total - done;
+      } catch (e) {}
+      try { renderTeacherClassesTable(); } catch (e) {}
+      return true;
+    }
+
     // Smart LMS-to-Zoom Gateway with Punch-In Timestamp Verification
     async function launchTeacherZoomClass(scheduleId, rawMeetingLink, studentName, studentId) {
       if (!rawMeetingLink) {
@@ -5300,9 +5365,15 @@ font-family: var(--font-num) !important;
       const lockKey = String(scheduleId || '');
       if (_zoomLaunchInFlight.has(lockKey)) return;
       _zoomLaunchInFlight.add(lockKey);
+      // Button-delay build (2026-11-20): "Opening Zoom..." shows at
+      // once, before the Waiting upsert. The gate is unchanged: Zoom
+      // still opens ONLY after the upsert succeeds (deliberate
+      // 2026-11-10 fix) — only the feedback is instant.
+      setTeacherRowButtonsBusy(scheduleId, 'launchTeacherZoomClassById', 'Opening Zoom...');
       try {
         await launchTeacherZoomClassLocked(scheduleId, rawMeetingLink, studentName, studentId);
       } finally {
+        restoreTeacherRowButtons(scheduleId, 'launchTeacherZoomClassById');
         _zoomLaunchInFlight.delete(lockKey);
       }
     }
@@ -5539,6 +5610,10 @@ font-family: var(--font-num) !important;
       const lockKey = String(scheduleId || '');
       if (_startClassInFlight.has(lockKey)) return;
       _startClassInFlight.add(lockKey);
+      // Button-delay build (2026-11-20): instant "Starting..." state,
+      // then an optimistic single-row patch + background reload instead
+      // of awaiting the full reload before the row changes.
+      setTeacherRowButtonsBusy(scheduleId, 'handleTeacherStartClass', 'Starting...');
       try {
         const now = new Date();
         const timeStr = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
@@ -5550,9 +5625,11 @@ font-family: var(--font-num) !important;
           notes: `Class started by teacher at ${timeStr} PKT`
         });
         if (res && res.success) {
-          await loadTeacherPortalData();
+          patchTodayClassLocally(scheduleId, 'Running', `Class started by teacher at ${timeStr} PKT`);
+          refreshTeacherPortalInBackground();
         }
       } finally {
+        restoreTeacherRowButtons(scheduleId, 'handleTeacherStartClass');
         _startClassInFlight.delete(lockKey);
       }
     }
@@ -5576,6 +5653,10 @@ font-family: var(--font-num) !important;
       if (!lockKey || _selfResetInFlight.has(lockKey)) return;
       _selfResetInFlight.add(lockKey);
       try {
+        // Button-delay build (2026-11-20): instant "Resetting..." state
+        // while the persisted status is re-read; restored while the
+        // confirm dialog is up, re-set for the delete itself.
+        setTeacherRowButtonsBusy(scheduleId, 'handleTeacherSelfResetClass', 'Resetting...');
         const slot = (TODAY_CLASSES || []).find(c => String(c.id) === String(scheduleId));
         if (!slot) {
           lmsNotify("Class record not found. Please refresh the page.", { type: 'error' });
@@ -5599,6 +5680,7 @@ font-family: var(--font-num) !important;
           return;
         }
 
+        restoreTeacherRowButtons(scheduleId, 'handleTeacherSelfResetClass');
         const confirmed = await lmsConfirm({
           title: 'Reset class?',
           message: `${studentName}'s class is currently ${latestLog.status}. Reset it back to Scheduled? The class will return to its Start Zoom state, as if it had not been started.`,
@@ -5606,6 +5688,7 @@ font-family: var(--font-num) !important;
           cancelText: 'Keep class'
         });
         if (!confirmed) return;
+        setTeacherRowButtonsBusy(scheduleId, 'handleTeacherSelfResetClass', 'Resetting...');
 
         const delRes = await db.from('attendance_logs').delete().eq('schedule_id', scheduleId).eq('date', todayDate);
         if (delRes && delRes.error) {
@@ -5630,30 +5713,32 @@ font-family: var(--font-num) !important;
           status: 'Scheduled'
         });
         lmsNotify(`✅ Class reset for ${studentName} — it is Scheduled again.`);
-        await loadTeacherPortalData();
+        patchTodayClassLocally(scheduleId, 'Scheduled');
+        refreshTeacherPortalInBackground();
       } catch (e) {
         console.error("handleTeacherSelfResetClass exception:", e);
         lmsNotify("Reset failed unexpectedly. The class was NOT reset.", { type: 'error' });
       } finally {
+        restoreTeacherRowButtons(scheduleId, 'handleTeacherSelfResetClass');
         _selfResetInFlight.delete(lockKey);
       }
     }
 
-    async function handleTeacherCompleteClass(scheduleId, studentId, teacherId, studentName) {
-      const now = new Date();
-      const timeStr = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
-      const res = await transitionClassSessionState({
-        scheduleId,
-        studentId,
-        teacherId: teacherId || CURRENT_TEACHER?.id,
-        targetStatus: 'Completed',
-        notes: `Class completed at ${timeStr} PKT`
-      });
-      if (res && res.success) {
-        await loadTeacherPortalData();
-        // Immediately open post-class lesson recording form
-        openAttendanceModal(scheduleId, studentName, '', studentId, 'Completed', '');
+    // Button-delay build (2026-11-20) — END-CLASS POPUP RULE: clicking
+    // Complete opens the lesson popup IMMEDIATELY from in-memory
+    // TODAY_CLASSES. NOTHING is written here: no upsert, no reload, no
+    // status change. The class is completed in the system ONLY when the
+    // teacher presses Submit in the popup — saveAttendanceAndLessonNotes
+    // upserts Completed then (its Present choice maps to Completed).
+    // Cancel / closing the popup writes nothing, the Complete button
+    // stays visible, and the class is NOT marked complete.
+    function handleTeacherCompleteClass(scheduleId, studentId, teacherId, studentName) {
+      const slot = (TODAY_CLASSES || []).find(c => String(c.id) === String(scheduleId));
+      if (!slot) {
+        lmsNotify("Class record not found. Please refresh the page.");
+        return;
       }
+      openAttendanceModal(scheduleId, studentName || slot.students?.name || 'Student', '', studentId || slot.student_id, 'Completed', '');
     }
 
     // OVERDUE-CLASS REMINDER (owner decision 2026-11-05): auto-end is
@@ -5822,8 +5907,11 @@ font-family: var(--font-num) !important;
       }
 
       if (btn) btn.disabled = false;
+      // Button-delay build (2026-11-20): optimistic single-row patch +
+      // background reload (the Saving... feedback above is unchanged).
+      patchTodayClassLocally(scheduleId, outcome, remarks || `Marked as ${outcome} by teacher.`);
       closeLeaveAbsentModal();
-      await loadTeacherPortalData();
+      refreshTeacherPortalInBackground();
     }
 
     // Two-way synchronization listener for Teacher Portal
@@ -7516,7 +7604,7 @@ font-family: var(--font-num) !important;
         const { error } = await db.from('attendance_logs').upsert([upsertRow], { onConflict: 'schedule_id,date' });
         if (error) {
           btn.disabled = false;
-          btn.innerHTML = '<i class="fa-solid fa-floppy-disk"></i> Save Progress';
+          btn.innerHTML = '<i class="fa-solid fa-floppy-disk"></i> Submit';
           console.warn('[LMS] operation failed:', (error.message || error)); lmsNotify('The attendance could not be saved. Please try again.', { type: 'error' });
           return;
         }
@@ -7539,20 +7627,28 @@ font-family: var(--font-num) !important;
         });
 
         btn.disabled = false;
-        btn.innerHTML = '<i class="fa-solid fa-floppy-disk"></i> Save Progress';
+        btn.innerHTML = '<i class="fa-solid fa-floppy-disk"></i> Submit';
+        // Button-delay build (2026-11-20): the row already carries the
+        // saved status + lesson, so patch it locally, show success at
+        // once, and let the full reload run in the background.
+        patchTodayClassLocally(schedule_id, dbStatus, lesson_notes);
         closeAttendanceModal();
-        await loadTeacherPortalData();
         lmsNotify(`✅ Attendance & Lesson Progress Saved Successfully!\n\nStatus: ${dbStatus}\nCourse: Registered & Connected with Student Portal.`);
+        refreshTeacherPortalInBackground();
       } catch (err) {
         console.error("Attendance save error:", err);
         if (attSaved) {
           // The row itself landed; only a post-save step threw. Close
           // without claiming anything further and refresh best-effort.
+          // (The patch is best-effort here: it already ran above when
+          // the throw came later, and a patch failure must never turn
+          // a landed save into a thrown error.)
+          try { patchTodayClassLocally(schedule_id, dbStatus, lesson_notes); } catch (e2) {}
           closeAttendanceModal();
-          try { await loadTeacherPortalData(); } catch (e) {}
+          refreshTeacherPortalInBackground();
         } else {
           btn.disabled = false;
-          btn.innerHTML = '<i class="fa-solid fa-floppy-disk"></i> Save Progress';
+          btn.innerHTML = '<i class="fa-solid fa-floppy-disk"></i> Submit';
           console.warn('[LMS] operation failed:', (err.message || err)); lmsNotify('The attendance could not be saved. Please try again.', { type: 'error' });
         }
       }
@@ -8987,8 +9083,12 @@ font-family: var(--font-num) !important;
       let doneCount = 0;
       const failedKeys = [];
       try {
-        for (const pageKey of pageKeys) {
-          if (!annotationPageIsDirty(pageKey)) { doneCount++; setAnnotationSaveProgress(doneCount, pageKeys.length); continue; }
+        // Button-delay build (2026-11-20): pages upload in parallel
+        // (max 4 in flight) instead of one at a time; each page's
+        // result is recorded against its own key, so the outcome is
+        // the same as the serial loop, only faster.
+        const _annProcessOne = async (pageKey) => {
+          if (!annotationPageIsDirty(pageKey)) { doneCount++; setAnnotationSaveProgress(doneCount, pageKeys.length); return; }
           try {
             const parsed = parseReaderPageKey(pageKey);
             const actions = ANNOTATION_STORE[pageKey] || [];
@@ -9019,7 +9119,15 @@ font-family: var(--font-num) !important;
             failedKeys.push(pageKey);
           }
           setAnnotationSaveProgress(doneCount, pageKeys.length);
-        }
+        };
+        let _annNext = 0;
+        const _annWorkers = Array.from({ length: Math.min(4, pageKeys.length) }, async () => {
+          while (_annNext < pageKeys.length) {
+            const _annKey = pageKeys[_annNext++];
+            await _annProcessOne(_annKey);
+          }
+        });
+        await Promise.all(_annWorkers);
       } finally {
         ANNOTATION_SAVE_IN_FLIGHT = false;
         ANNOTATION_SAVE_FAILED = failedKeys.length > 0;
@@ -9493,6 +9601,23 @@ font-family: var(--font-num) !important;
       if (typeof switchTeacherPortalTab === 'function') switchTeacherPortalTab(key);
     }
 
+    // Button-delay build (2026-11-20): skeleton/loading rows set
+    // synchronously on tab entry, before the tab loader's first await.
+    function showTeacherTabSkeleton(tab) {
+      try {
+        if (tab === 'history') {
+          const el = document.getElementById('lhTeacherHistoryList');
+          if (el) el.innerHTML = '<p class="text-xs text-slate-400 text-center py-6">Loading lesson history...</p>';
+        } else if (tab === 'salaries' || tab === 'advance') {
+          const el = document.getElementById('tSalariesTableBody');
+          if (el) el.innerHTML = '<tr><td colspan="8" class="p-6 text-center text-xs text-slate-400">Loading salary statements...</td></tr>';
+        } else if (tab === 'trials') {
+          const el = document.getElementById('teacherTrialsTableBody');
+          if (el) el.innerHTML = '<tr><td colspan="6" class="p-6 text-center text-xs text-slate-400">Loading trials...</td></tr>';
+        }
+      } catch (e) {}
+    }
+
     function switchTeacherPortalTab(tab) {
       CURRENT_TEACHER_TAB = tab;
       if (TEACHER_PORTAL_TABS.includes(tab)) recordTeacherTabInHash(tab);
@@ -9556,6 +9681,7 @@ font-family: var(--font-num) !important;
           const _lhSel = document.getElementById('lhTeacherStudentSelect');
           if (_lhSel) _lhSel.value = 'all';
         }
+        showTeacherTabSkeleton('history');
         renderTeacherLessonHistory(false);
       } else if (tab === 'trials') {
         if (secKpi) secKpi.classList.add('hidden');
@@ -9567,6 +9693,7 @@ font-family: var(--font-num) !important;
           secTrials.scrollIntoView({ behavior: 'smooth', block: 'start' });
         }
         if (secSalaries) secSalaries.classList.add('hidden');
+        showTeacherTabSkeleton('trials');
         loadTeacherTrialsData();
       } else if (tab === 'salaries') {
         if (secKpi) secKpi.classList.add('hidden');
@@ -9578,6 +9705,7 @@ font-family: var(--font-num) !important;
           secSalaries.classList.remove('hidden');
           secSalaries.scrollIntoView({ behavior: 'smooth', block: 'start' });
         }
+        showTeacherTabSkeleton('salaries');
         loadTeacherPreviousSalaries();
       } else if (tab === 'advance') {
         if (secKpi) secKpi.classList.add('hidden');
@@ -9594,6 +9722,7 @@ font-family: var(--font-num) !important;
         // into the — currently hidden — slips section too, harmless),
         // so the form is fully live even when the teacher lands here
         // first, e.g. via a #advance refresh restore.
+        showTeacherTabSkeleton('advance');
         loadTeacherPreviousSalaries();
       }
     }
@@ -9649,8 +9778,11 @@ font-family: var(--font-num) !important;
       _LH_TEACHER_BLOB_URLS = [];
     }
     function lhTeacherLoadMore() {
-      _LH_TEACHER_LIMIT = _LH_TEACHER_LIMIT >= 1000 ? 1000 : (_LH_TEACHER_LIMIT === 100 ? 300 : 1000);
-      renderTeacherLessonHistory(false);
+      // Button-delay build (2026-11-20): history is capped at 100 rows
+      // (server-side, see renderTeacherLessonHistory) — no 300/1000
+      // escalation. The button is hidden by the render; this stays as
+      // a harmless no-op for any stale reference.
+      _LH_TEACHER_LIMIT = 100;
     }
     // Open history pre-filtered to one student (used by the Today's
     // Classes History button).
@@ -9691,10 +9823,29 @@ font-family: var(--font-num) !important;
         if (c && c.isCoverClass && c.students && c.students.id) nameById[String(c.students.id)] = c.students.name || String(c.students.id);
       });
 
+      // Button-delay build (2026-11-20): Loading state before the
+      // await, and server-side student/date filters with a 100-row cap
+      // instead of fetching up to 1000 rows and filtering in the
+      // browser. No teacher_id filter: the Worker UNION scope
+      // intentionally returns this teacher's rows PLUS rows for
+      // currently-assigned students recorded by other teachers
+      // (shifted students) — a teacher_id filter would silently drop
+      // that history. Client-side filtering below still applies.
+      listEl.innerHTML = '<p class="text-xs text-slate-400 text-center py-6">Loading lesson history...</p>';
+      // Only filter server-side for a KNOWN student id: an unknown id
+      // (e.g. a stale per-student request) must fall back to 'all' and
+      // show every row, exactly like the dropdown logic below does —
+      // filtering the server query by it would return zero rows.
+      const _lhServerStudent = (pendingStudent && pendingStudent !== 'all' && nameById[pendingStudent]) ? pendingStudent
+        : ((selEl && selEl.value && selEl.value !== 'all' && nameById[selEl.value]) ? selEl.value : null);
+      const _lhServerDate = dateEl ? dateEl.value : '';
       let rows = [];
       try {
-        const res = await db.from('attendance_logs').select('*, teachers(full_name)')
+        let _lhQuery = db.from('attendance_logs').select('*, teachers(full_name)')
           .order('date', { ascending: false }).limit(_LH_TEACHER_LIMIT);
+        if (_lhServerStudent) _lhQuery = _lhQuery.eq('student_id', _lhServerStudent);
+        if (_lhServerDate) _lhQuery = _lhQuery.eq('date', _lhServerDate);
+        const res = await _lhQuery;
         rows = (res && res.data) || [];
       } catch (e) {
         listEl.innerHTML = '<p class="text-xs text-rose-600 text-center py-6">Could not load lesson history. Please try again.</p>';
@@ -9736,7 +9887,7 @@ font-family: var(--font-num) !important;
       let visible = entries;
       if (studentFilter && studentFilter !== 'all') visible = visible.filter(e => String(e.studentId) === String(studentFilter));
       if (dateFilter) visible = window.LessonHistory.filterLessonEntries(visible, dateFilter);
-      if (moreBtn) moreBtn.classList.toggle('hidden', !(_LH_TEACHER_LIMIT < 1000 && rows.length >= _LH_TEACHER_LIMIT));
+      if (moreBtn) moreBtn.classList.add('hidden'); // capped at 100 rows — no older-records paging
 
       _lhTeacherRevokeBlobs();
       _LH_TEACHER_VISIBLE_ENTRIES = visible;
@@ -9778,14 +9929,12 @@ font-family: var(--font-num) !important;
         if (e.pageReference) progress.push(`Ref: ${escapeHtml(e.pageReference)}`);
         if (e.lineRange) progress.push(escapeHtml(e.lineRange));
         const progressText = progress.join(' • ');
-        let imgHtml = '';
-        if (e.imageKey) {
-          const url = await window.LessonHistory.loadLessonImageBlobUrl(e.imageKey);
-          if (url) {
-            _LH_TEACHER_BLOB_URLS.push(url);
-            imgHtml = `<a href="${url}" target="_blank" rel="noopener"><img src="${url}" class="max-h-40 rounded-xl border border-slate-200" alt="Lesson image"></a>`;
-          }
-        }
+        // Button-delay build (2026-11-20): images load AFTER the cards
+        // paint, in parallel (max 4 in flight) into their slots, lazily
+        // — one slow R2 fetch no longer stalls the whole list.
+        const imgHtml = e.imageKey
+          ? `<span data-lh-image-slot="${_lhCardIdx}" class="text-[11px] text-slate-400">Loading image...</span>`
+          : '';
         let annotatedHtml = '';
         if (e.annotatedPages && e.annotatedPages.length > 0) {
           annotatedHtml = `<div><button onclick="openTeacherAnnotatedPages(${_lhCardIdx})" class="px-3 py-1.5 rounded-full bg-teal-700 hover:bg-teal-800 text-white text-[11px] font-extrabold transition cursor-pointer">View annotated pages (${e.annotatedPages.length})</button></div>`;
@@ -9811,6 +9960,24 @@ font-family: var(--font-num) !important;
         `);
       }
       listEl.innerHTML = cards.join('');
+      // Fill lesson-image slots in parallel (bounded concurrency).
+      try {
+        const _lhImgJobs = visible.map((e, i) => ({ e, i })).filter(j => j.e && j.e.imageKey);
+        let _lhImgNext = 0;
+        const _lhImgWorkers = Array.from({ length: Math.min(4, _lhImgJobs.length) }, async () => {
+          while (_lhImgNext < _lhImgJobs.length) {
+            const job = _lhImgJobs[_lhImgNext++];
+            try {
+              const url = await window.LessonHistory.loadLessonImageBlobUrl(job.e.imageKey);
+              if (!url) continue;
+              _LH_TEACHER_BLOB_URLS.push(url);
+              const slot = listEl.querySelector('[data-lh-image-slot="' + job.i + '"]');
+              if (slot) slot.outerHTML = `<a href="${url}" target="_blank" rel="noopener"><img src="${url}" loading="lazy" class="max-h-40 rounded-xl border border-slate-200" alt="Lesson image"></a>`;
+            } catch (err) {}
+          }
+        });
+        Promise.all(_lhImgWorkers).catch(() => {});
+      } catch (err) {}
     }
 
     // Lesson History page links (teacher): resolve a SAVED lesson
@@ -9871,6 +10038,18 @@ font-family: var(--font-num) !important;
         savedSalaries = {};
       }
 
+      // Button-delay build (2026-11-20): paint the cached slips
+      // immediately (stale note visible until a live source answers),
+      // and start the independent live reads in parallel — the teacher
+      // row, the carrier families, the salary_slips table and the
+      // advance-request list no longer wait on each other. The live
+      // render at the end swaps these rows in.
+      renderTeacherSalarySlips(savedSalaries, false);
+      const _salTableSlipsPromise = (window.FeeTables && typeof window.FeeTables.loadSlipsForTeacher === 'function')
+        ? window.FeeTables.loadSlipsForTeacher(CURRENT_TEACHER.id).catch(() => null)
+        : Promise.resolve(null);
+      try { const _salAdvP = (typeof loadTeacherAdvanceRequests === 'function') ? loadTeacherAdvanceRequests() : null; if (_salAdvP && typeof _salAdvP.catch === 'function') _salAdvP.catch(() => {}); } catch (e) {}
+
       // 1. Authoritative Backend Sync: Query fresh teacher row and carrier family shared sync
       // Batch B: _salCloudOk records whether this live read succeeded —
       // it feeds the stale-cache note below (shown only when NEITHER live
@@ -9878,7 +10057,15 @@ font-family: var(--font-num) !important;
       let _salCloudOk = false;
       try {
         if (typeof db !== 'undefined' && db) {
-          const { data: tRow } = await db.from('teachers').select('id, address, working_shift, full_name').eq('id', CURRENT_TEACHER.id).maybeSingle();
+          // Button-delay build (2026-11-20): teacher row + carrier
+          // families run in parallel (allSettled, so one failing read
+          // no longer discards the other's merge).
+          const _salTeacherRowP = db.from('teachers').select('id, address, working_shift, full_name').eq('id', CURRENT_TEACHER.id).maybeSingle();
+          const _salCarrierP = db.from('families').select('id, notes').order('created_at', { ascending: true }).limit(5);
+          const _salSettled = await Promise.allSettled([_salTeacherRowP, _salCarrierP]);
+          const tRow = (_salSettled[0].status === 'fulfilled' && _salSettled[0].value) ? _salSettled[0].value.data : null;
+          const carrierFams = (_salSettled[1].status === 'fulfilled' && _salSettled[1].value) ? _salSettled[1].value.data : null;
+          const _salBothOk = _salSettled[0].status === 'fulfilled' && _salSettled[1].status === 'fulfilled';
           if (tRow && tRow.address) {
             const meta = parseEmployeeMeta(tRow.address);
             if (meta && meta.salary_slips && typeof meta.salary_slips === 'object') {
@@ -9892,7 +10079,6 @@ font-family: var(--font-num) !important;
           }
 
           // Also check carrier family row for unified lms_shared_sync.teacher_salaries
-          const { data: carrierFams } = await db.from('families').select('id, notes').order('created_at', { ascending: true }).limit(5);
           if (carrierFams && Array.isArray(carrierFams)) {
             carrierFams.forEach(f => {
               try {
@@ -9909,7 +10095,7 @@ font-family: var(--font-num) !important;
           }
 
           try { localStorage.setItem('alhuda_teacher_salaries', JSON.stringify(savedSalaries)); } catch (e) {}
-          _salCloudOk = true;
+          _salCloudOk = _salBothOk;
         }
       } catch (cloudErr) {
         console.warn('[Teacher Salaries Sync] Using cached vouchers:', cloudErr);
@@ -9955,7 +10141,7 @@ font-family: var(--font-num) !important;
       let _salLiveOk = false;
       try {
         if (window.FeeTables && typeof window.FeeTables.loadSlipsForTeacher === 'function') {
-          const tableSlips = await window.FeeTables.loadSlipsForTeacher(CURRENT_TEACHER.id);
+          const tableSlips = await _salTableSlipsPromise; // started in parallel above
           if (Array.isArray(tableSlips)) {
             _salLiveOk = true;
             const blobList = Object.entries(savedSalaries).map(([k, v]) => ({ slip_key: k, ...(v || {}) }));
@@ -9976,124 +10162,133 @@ font-family: var(--font-num) !important;
       } catch (salaryErr) {
         console.warn('[Teacher Salaries] salary_slips load failed; keeping cached vouchers:', salaryErr);
       }
+
+    // Button-delay build (2026-11-20): salary-slip table render,
+    // extracted so the cached (offline) slips paint immediately on
+    // entry and the live rows swap in when the parallel fetches land.
+    // liveOk drives the stale note: the cached paint shows it, the
+    // live paint hides it when either live source answered.
+    function renderTeacherSalarySlips(savedSalaries, liveOk) {
+      const tbody = document.getElementById('tSalariesTableBody');
+      if (!tbody) return;
       const _salStaleNote = document.getElementById('tSalStaleNote');
-      if (_salStaleNote) _salStaleNote.classList.toggle('hidden', _salLiveOk || _salCloudOk);
-
-      // Collect all slips belonging to logged in teacher
-      const teacherSlips = [];
-      Object.entries(savedSalaries).forEach(([slipKey, slip]) => {
-        if (!slip) return;
-        const tId = slip.teacher_id || slipKey.split('_')[0];
-        if (String(tId) === String(CURRENT_TEACHER.id)) {
-          teacherSlips.push({ slipKey, ...slip });
-        }
-      });
-
-      // Sort by date/timestamp descending
-      teacherSlips.sort((a, b) => {
-        const tA = new Date(a.saved_at || 0).getTime();
-        const tB = new Date(b.saved_at || 0).getTime();
-        return tB - tA;
-      });
-
-      // Compute summary metrics (canonical net, Batch B — see row render).
-      let totalPaid = 0;
-      let latestMonth = '--';
-      teacherSlips.forEach((s, idx) => {
-        const net = (window.FeeTables && typeof window.FeeTables.netPayable === 'function')
-          ? window.FeeTables.netPayable(s.base_subtotal, s.bonus, s.deduction, s.advance_deducted)
-          : (parseFloat(s.net_payable) || 0);
-        if (s.status === 'Paid') {
-          totalPaid += net;
-        }
-        if (idx === 0 && s.month) {
-          latestMonth = s.month;
-        }
-      });
-
-      // Phase 4 (audit P3-cc): "Total Earnings" counts PAID vouchers
-      // only. The old fallback presented the sum of unpaid vouchers as
-      // earnings when nothing was paid yet — pending amounts stay on
-      // their own per-voucher badges, not in the earnings total.
-      const effectiveEarnings = totalPaid;
-      const earningsEl = document.getElementById('tSalTotalEarnings');
-      if (earningsEl) {
-        earningsEl.innerText = `PKR ${effectiveEarnings.toLocaleString()}`;
+      if (_salStaleNote) _salStaleNote.classList.toggle('hidden', !!liveOk);
+    // Collect all slips belonging to logged in teacher
+    const teacherSlips = [];
+    Object.entries(savedSalaries).forEach(([slipKey, slip]) => {
+      if (!slip) return;
+      const tId = slip.teacher_id || slipKey.split('_')[0];
+      if (String(tId) === String(CURRENT_TEACHER.id)) {
+        teacherSlips.push({ slipKey, ...slip });
       }
-      const monthEl = document.getElementById('tSalLatestMonth');
-      if (monthEl) {
-        monthEl.innerText = latestMonth;
-      }
+    });
 
-      if (teacherSlips.length === 0) {
-        tbody.innerHTML = `
-          <tr>
-            <td colspan="8" class="p-8 text-center text-slate-400">
-              <div class="max-w-md mx-auto space-y-2.5 py-4">
-                <div class="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-700 flex items-center justify-center mx-auto text-xl shadow-xs">
-                  <i class="fa-solid fa-receipt"></i>
-                </div>
-                <div class="font-extrabold text-slate-800 text-sm">No Official Salary Statements Disbursed Yet</div>
-                <p class="text-xs text-slate-500">Official monthly compensation vouchers generated and finalized by Al-Huda Administration will appear here with complete itemized student breakdowns and single-click PDF downloads.</p>
+    // Sort by date/timestamp descending
+    teacherSlips.sort((a, b) => {
+      const tA = new Date(a.saved_at || 0).getTime();
+      const tB = new Date(b.saved_at || 0).getTime();
+      return tB - tA;
+    });
+
+    // Compute summary metrics (canonical net, Batch B — see row render).
+    let totalPaid = 0;
+    let latestMonth = '--';
+    teacherSlips.forEach((s, idx) => {
+      const net = (window.FeeTables && typeof window.FeeTables.netPayable === 'function')
+        ? window.FeeTables.netPayable(s.base_subtotal, s.bonus, s.deduction, s.advance_deducted)
+        : (parseFloat(s.net_payable) || 0);
+      if (s.status === 'Paid') {
+        totalPaid += net;
+      }
+      if (idx === 0 && s.month) {
+        latestMonth = s.month;
+      }
+    });
+
+    // Phase 4 (audit P3-cc): "Total Earnings" counts PAID vouchers
+    // only. The old fallback presented the sum of unpaid vouchers as
+    // earnings when nothing was paid yet — pending amounts stay on
+    // their own per-voucher badges, not in the earnings total.
+    const effectiveEarnings = totalPaid;
+    const earningsEl = document.getElementById('tSalTotalEarnings');
+    if (earningsEl) {
+      earningsEl.innerText = `PKR ${effectiveEarnings.toLocaleString()}`;
+    }
+    const monthEl = document.getElementById('tSalLatestMonth');
+    if (monthEl) {
+      monthEl.innerText = latestMonth;
+    }
+
+    if (teacherSlips.length === 0) {
+      tbody.innerHTML = `
+        <tr>
+          <td colspan="8" class="p-8 text-center text-slate-400">
+            <div class="max-w-md mx-auto space-y-2.5 py-4">
+              <div class="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-700 flex items-center justify-center mx-auto text-xl shadow-xs">
+                <i class="fa-solid fa-receipt"></i>
               </div>
-            </td>
-          </tr>
-        `;
-        renderTeacherSalarySummary([]);
-        loadTeacherAdvanceRequests();
-        return;
-      }
+              <div class="font-extrabold text-slate-800 text-sm">No Official Salary Statements Disbursed Yet</div>
+              <p class="text-xs text-slate-500">Official monthly compensation vouchers generated and finalized by Al-Huda Administration will appear here with complete itemized student breakdowns and single-click PDF downloads.</p>
+            </div>
+          </td>
+        </tr>
+      `;
+      renderTeacherSalarySummary([]);
+      return;
+    }
 
-      tbody.innerHTML = teacherSlips.map(s => {
-        const studentsList = s.student_items_snapshot || [];
-        const studentCount = studentsList.length || (s.students ? Object.keys(s.students).length : 0);
-        const isPaid = s.status === 'Paid';
-        const statusBadge = isPaid
-          ? `<span class="px-2.5 py-1 rounded-full text-[10px] font-black bg-emerald-100 text-emerald-800 border border-emerald-300 inline-flex items-center gap-1"><i class="fa-solid fa-circle-check text-emerald-600"></i> Paid</span>`
-          : `<span class="px-2.5 py-1 rounded-full text-[10px] font-black bg-amber-100 text-amber-800 border border-amber-300 inline-flex items-center gap-1"><i class="fa-solid fa-clock text-amber-600"></i> Pending</span>`;
+    tbody.innerHTML = teacherSlips.map(s => {
+      const studentsList = s.student_items_snapshot || [];
+      const studentCount = studentsList.length || (s.students ? Object.keys(s.students).length : 0);
+      const isPaid = s.status === 'Paid';
+      const statusBadge = isPaid
+        ? `<span class="px-2.5 py-1 rounded-full text-[10px] font-black bg-emerald-100 text-emerald-800 border border-emerald-300 inline-flex items-center gap-1"><i class="fa-solid fa-circle-check text-emerald-600"></i> Paid</span>`
+        : `<span class="px-2.5 py-1 rounded-full text-[10px] font-black bg-amber-100 text-amber-800 border border-amber-300 inline-flex items-center gap-1"><i class="fa-solid fa-clock text-amber-600"></i> Pending</span>`;
 
-        // Canonical net (Batch B): stored net_payable is authoritative,
-        // but the formula is re-applied at display time so an approved
-        // advance always moves the shown figure, even on a slip whose
-        // stored net predates the advance. Legacy slips (no
-        // advance_deducted) compute exactly as before.
-        const baseSubtotal = parseFloat(s.base_subtotal) || 0;
-        const bonus = parseFloat(s.bonus) || 0;
-        const deduction = parseFloat(s.deduction) || 0;
-        const advanceDeducted = parseFloat(s.advance_deducted) || 0;
-        const netPayable = (window.FeeTables && typeof window.FeeTables.netPayable === 'function')
-          ? window.FeeTables.netPayable(baseSubtotal, bonus, deduction, advanceDeducted)
-          : (parseFloat(s.net_payable) || 0);
-        const adjParts = [];
-        if (bonus > 0) adjParts.push(`+${bonus.toLocaleString()}`);
-        if (deduction > 0) adjParts.push(`-${deduction.toLocaleString()}`);
-        const adjText = adjParts.length > 0 ? adjParts.join(' / ') + ' PKR' : '--';
-        const advText = advanceDeducted > 0 ? `-${advanceDeducted.toLocaleString()} PKR` : '--';
+      // Canonical net (Batch B): stored net_payable is authoritative,
+      // but the formula is re-applied at display time so an approved
+      // advance always moves the shown figure, even on a slip whose
+      // stored net predates the advance. Legacy slips (no
+      // advance_deducted) compute exactly as before.
+      const baseSubtotal = parseFloat(s.base_subtotal) || 0;
+      const bonus = parseFloat(s.bonus) || 0;
+      const deduction = parseFloat(s.deduction) || 0;
+      const advanceDeducted = parseFloat(s.advance_deducted) || 0;
+      const netPayable = (window.FeeTables && typeof window.FeeTables.netPayable === 'function')
+        ? window.FeeTables.netPayable(baseSubtotal, bonus, deduction, advanceDeducted)
+        : (parseFloat(s.net_payable) || 0);
+      const adjParts = [];
+      if (bonus > 0) adjParts.push(`+${bonus.toLocaleString()}`);
+      if (deduction > 0) adjParts.push(`-${deduction.toLocaleString()}`);
+      const adjText = adjParts.length > 0 ? adjParts.join(' / ') + ' PKR' : '--';
+      const advText = advanceDeducted > 0 ? `-${advanceDeducted.toLocaleString()} PKR` : '--';
 
-        return `
-          <tr class="hover:bg-slate-50/80 transition">
-            <td data-label="Billing Month" class="p-3 font-extrabold text-slate-900">${s.month || 'Statement'}</td>
-            <td data-label="Assigned Students" class="p-3 text-slate-600"><span class="font-bold text-slate-900">${studentCount}</span> Enrolled Students</td>
-            <td data-label="Base Teaching" class="p-3 font-mono text-slate-700 font-bold">${baseSubtotal.toLocaleString()} PKR</td>
-            <td data-label="Adjustments (Bonus/Ded)" class="p-3 text-slate-600 font-mono text-xs">${adjText}</td>
-            <td data-label="Approved Advances" class="p-3 text-slate-600 font-mono text-xs">${advText}</td>
-            <td data-label="Net Payable" class="p-3 text-right font-mono font-black text-emerald-800 text-sm">${netPayable.toLocaleString()} PKR</td>
-            <td data-label="Status" class="p-3 text-center">${statusBadge}</td>
-            <td data-label="Actions" class="p-3 text-right">
-              <div class="inline-flex items-center gap-1.5 justify-end">
-                <button onclick="viewTeacherSalarySlip('${escapeJsAttr(s.slipKey)}')" class="px-3 py-1.5 rounded-lg text-xs font-bold bg-slate-100 hover:bg-slate-200 text-slate-700 transition flex items-center gap-1">
-                  <i class="fa-solid fa-eye text-emerald-700"></i> View Voucher
-                </button>
-                <button onclick="downloadTeacherSalarySlipDirect('${escapeJsAttr(s.slipKey)}')" class="px-2.5 py-1.5 rounded-lg text-xs font-bold bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 transition flex items-center gap-1" title="Download PDF Voucher">
-                  <i class="fa-solid fa-file-pdf"></i>
-                </button>
-              </div>
-            </td>
-          </tr>
-        `;
-      }).join('');
-      renderTeacherSalarySummary(teacherSlips);
-      loadTeacherAdvanceRequests();
+      return `
+        <tr class="hover:bg-slate-50/80 transition">
+          <td data-label="Billing Month" class="p-3 font-extrabold text-slate-900">${s.month || 'Statement'}</td>
+          <td data-label="Assigned Students" class="p-3 text-slate-600"><span class="font-bold text-slate-900">${studentCount}</span> Enrolled Students</td>
+          <td data-label="Base Teaching" class="p-3 font-mono text-slate-700 font-bold">${baseSubtotal.toLocaleString()} PKR</td>
+          <td data-label="Adjustments (Bonus/Ded)" class="p-3 text-slate-600 font-mono text-xs">${adjText}</td>
+          <td data-label="Approved Advances" class="p-3 text-slate-600 font-mono text-xs">${advText}</td>
+          <td data-label="Net Payable" class="p-3 text-right font-mono font-black text-emerald-800 text-sm">${netPayable.toLocaleString()} PKR</td>
+          <td data-label="Status" class="p-3 text-center">${statusBadge}</td>
+          <td data-label="Actions" class="p-3 text-right">
+            <div class="inline-flex items-center gap-1.5 justify-end">
+              <button onclick="viewTeacherSalarySlip('${escapeJsAttr(s.slipKey)}')" class="px-3 py-1.5 rounded-lg text-xs font-bold bg-slate-100 hover:bg-slate-200 text-slate-700 transition flex items-center gap-1">
+                <i class="fa-solid fa-eye text-emerald-700"></i> View Voucher
+              </button>
+              <button onclick="downloadTeacherSalarySlipDirect('${escapeJsAttr(s.slipKey)}')" class="px-2.5 py-1.5 rounded-lg text-xs font-bold bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 transition flex items-center gap-1" title="Download PDF Voucher">
+                <i class="fa-solid fa-file-pdf"></i>
+              </button>
+            </div>
+          </td>
+        </tr>
+      `;
+    }).join('');
+    renderTeacherSalarySummary(teacherSlips);
+    }
+
+      renderTeacherSalarySlips(savedSalaries, _salLiveOk || _salCloudOk);
     }
 
     // =================================================================
@@ -10745,6 +10940,17 @@ font-family: var(--font-num) !important;
       const listEl = document.getElementById('tAdvMyList');
       if (!listEl || !CURRENT_TEACHER || !CURRENT_TEACHER.id) return;
       let rows = null;
+      // Button-delay build (2026-11-20): the salary_adjustments read
+      // starts in parallel with the requests read (both keyed on this
+      // teacher); it is awaited below where its rows are consumed.
+      // A builder that throws synchronously must not crash the loader —
+      // the later await then treats it as an empty adjustments list.
+      let _tAdvAdjPromise = Promise.resolve(null);
+      try {
+        if (typeof db !== 'undefined' && db) {
+          _tAdvAdjPromise = Promise.resolve(db.from('salary_adjustments').select('*').eq('teacher_id', CURRENT_TEACHER.id).eq('kind', 'advance')).catch(() => null);
+        }
+      } catch (e) { _tAdvAdjPromise = Promise.resolve(null); }
       try {
         if (typeof db !== 'undefined' && db) {
           const res = await db.from('advance_requests').select('*').eq('teacher_id', CURRENT_TEACHER.id).order('requested_at', { ascending: false });
@@ -10771,7 +10977,7 @@ font-family: var(--font-num) !important;
       let outstandingTotal = 0;
       try {
         if (typeof db !== 'undefined' && db) {
-          const adjRes = await db.from('salary_adjustments').select('*').eq('teacher_id', CURRENT_TEACHER.id).eq('kind', 'advance');
+          const adjRes = await _tAdvAdjPromise;
           const adjRows = (adjRes && !adjRes.error && Array.isArray(adjRes.data)) ? adjRes.data : [];
           const remainingByAdj = {};
           const planMetaByAdj = {};
@@ -11280,9 +11486,12 @@ font-family: var(--font-num) !important;
 
       const storedTrials = JSON.parse(localStorage.getItem('alhuda_trial_classes_v2') || '[]');
       
-      const { data: dbTrials } = await db.from('students')
-        .select('*')
-        .eq('assigned_teacher_id', CURRENT_TEACHER.id);
+      // Button-delay build (2026-11-20): no duplicate students fetch —
+      // the portal load already fetched this teacher's students
+      // (ALL_TEACHER_STUDENTS_RAW, trial rows included); trials derive
+      // from those rows. Before the first portal load lands, the
+      // localStorage trials below are all there is — no fetch is made.
+      const dbTrials = (typeof ALL_TEACHER_STUDENTS_RAW !== 'undefined' && Array.isArray(ALL_TEACHER_STUDENTS_RAW)) ? ALL_TEACHER_STUDENTS_RAW : [];
 
       const allMerged = [...storedTrials];
       (dbTrials || []).forEach(st => {
@@ -12363,6 +12572,90 @@ font-family: var(--font-num) !important;
       openDigitalBookReader(bookId, page, para, lang);
     }
 
+    // Button-delay build (2026-11-20): advance-class completion email,
+    // fired AFTER the success toast (fire-and-forget from the submit
+    // handler). A failed send is surfaced afterwards as a non-blocking
+    // notice — never silently dropped — and the dedupe registry is
+    // written only on a confirmed send, so a failed send is retried
+    // on re-save. The class record itself is already saved by then.
+    async function sendTeacherAdvanceClassEmail(args) {
+      const studentId = args && args.studentId;
+      const targetDate = args && args.targetDate;
+      const todayDate = args && args.todayDate;
+      const bookTitle = args && args.bookTitle;
+      const page = args && args.page;
+      const lineRange = args && args.lineRange;
+      const sabaqResult = args && args.sabaqResult;
+      const rating = args && args.rating;
+      const remarks = args && args.remarks;
+      const isAdditionalCourse = args && args.isAdditionalCourse;
+      const advAdditionalLesson = args && args.advAdditionalLesson;
+      const studentName = (args && args.studentName) || 'Student';
+      let emailDispatched = false;
+      let emailErrorText = '';
+      const dedupeKey = `adv_mail_${studentId}_${targetDate}_${todayDate}`;
+      let sentEmailRegistry = {};
+      try { sentEmailRegistry = JSON.parse(localStorage.getItem('alhuda_sent_advance_emails') || '{}'); } catch(e) {}
+      if (sentEmailRegistry[dedupeKey]) return;
+      try {
+        const advPayload = {
+          studentId: studentId,
+          template: 'advance-class',
+          scheduledDate: targetDate,
+          bookTitle: bookTitle,
+          page: isAdditionalCourse ? undefined : page,
+          lineRange: lineRange,
+          sabaqResult: sabaqResult,
+          rating: rating,
+          remarks: remarks
+        };
+        Object.keys(advPayload).forEach(k => { if (advPayload[k] === undefined) delete advPayload[k]; });
+        let advRes = null;
+        let advData = null;
+        if (typeof getTeacherToken === 'function' && getTeacherToken()) {
+          advRes = await fetch(getTeacherWorkerBase() + '/api/email/advance-class', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + getTeacherToken() },
+            body: JSON.stringify(advPayload)
+          });
+        } else if (typeof window.getLmsAuthHeaders === 'function') {
+          advRes = await fetch(getTeacherWorkerBase() + '/api/email/advance-class', {
+            method: 'POST',
+            headers: Object.assign({ 'Content-Type': 'application/json' }, window.getLmsAuthHeaders()),
+            body: JSON.stringify(advPayload)
+          });
+        }
+        if (advRes) {
+          try { advData = await advRes.json(); } catch(e) { advData = null; }
+          emailDispatched = !!(advRes.ok && advData && advData.ok === true);
+          if (!emailDispatched) {
+            emailErrorText = (advData && advData.error) ? String(advData.error) : 'the email service could not be reached';
+          }
+        } else {
+          emailErrorText = 'the email service could not be reached';
+        }
+      } catch (advMailErr) {
+        console.warn("Advance class email dispatch notice:", advMailErr);
+        emailDispatched = false;
+        emailErrorText = 'the email service could not be reached';
+      }
+      // Write the dedupe registry entry ONLY after the Worker confirms
+      // the send, so a failed send is retried on re-save.
+      if (emailDispatched) {
+        sentEmailRegistry[dedupeKey] = {
+          sent_at: new Date().toISOString(),
+          student_id: studentId,
+          student_name: studentName,
+          target_date: targetDate
+        };
+        try { localStorage.setItem('alhuda_sent_advance_emails', JSON.stringify(sentEmailRegistry)); } catch(e) {}
+        lmsNotify('📧 Automated completion email has been dispatched to the parent.');
+      } else {
+        lmsNotify(`📧 The completion email could NOT be sent (${emailErrorText || 'the email service could not be reached'}). The advance class record was saved — please inform the parent directly.`, { type: 'error' });
+      }
+    }
+
+
     async function handleAdvanceClassSubmit(event) {
       if (event) event.preventDefault();
       const btn = document.getElementById('btnSaveAdvanceClass');
@@ -12535,94 +12828,26 @@ font-family: var(--font-num) !important;
         // (POST /api/email/advance-class). The Worker resolves the
         // parent's email address server-side from the student record;
         // the address is never resolved, sent to, or shown in this portal.
-        let emailDispatched = false;
-        let emailErrorText = '';
-        const dedupeKey = `adv_mail_${studentId}_${targetDate}_${todayDate}`;
-        let sentEmailRegistry = {};
-        try { sentEmailRegistry = JSON.parse(localStorage.getItem('alhuda_sent_advance_emails') || '{}'); } catch(e) {}
-
-        if (sentEmailRegistry[dedupeKey]) {
-          // Already dispatched by an earlier save of this same advance
-          // class — skip sending a duplicate.
-          emailDispatched = true;
-        } else {
-          try {
-            const advPayload = {
-              studentId: studentId,
-              template: 'advance-class',
-              scheduledDate: targetDate,
-              bookTitle: bookTitle,
-              page: isAdditionalCourse ? undefined : page,
-              lineRange: lineRange,
-              sabaqResult: sabaqResult,
-              rating: rating,
-              remarks: remarks
-            };
-            Object.keys(advPayload).forEach(k => { if (advPayload[k] === undefined) delete advPayload[k]; });
-
-            let advRes = null;
-            let advData = null;
-            if (typeof getTeacherToken === 'function' && getTeacherToken()) {
-              advRes = await fetch(getTeacherWorkerBase() + '/api/email/advance-class', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + getTeacherToken() },
-                body: JSON.stringify(advPayload)
-              });
-            } else if (typeof window.getLmsAuthHeaders === 'function') {
-              advRes = await fetch(getTeacherWorkerBase() + '/api/email/advance-class', {
-                method: 'POST',
-                headers: Object.assign({ 'Content-Type': 'application/json' }, window.getLmsAuthHeaders()),
-                body: JSON.stringify(advPayload)
-              });
-            }
-            if (advRes) {
-              try { advData = await advRes.json(); } catch(e) { advData = null; }
-              emailDispatched = !!(advRes.ok && advData && advData.ok === true);
-              if (!emailDispatched) {
-                emailErrorText = (advData && advData.error) ? String(advData.error) : 'the email service could not be reached';
-              }
-            } else {
-              emailErrorText = 'the email service could not be reached';
-            }
-          } catch (advMailErr) {
-            console.warn("Advance class email dispatch notice:", advMailErr);
-            emailDispatched = false;
-            emailErrorText = 'the email service could not be reached';
-          }
-
-          // Write the dedupe registry entry ONLY after the Worker
-          // confirms the send, so a failed send is retried on re-save.
-          if (emailDispatched) {
-            sentEmailRegistry[dedupeKey] = {
-              sent_at: new Date().toISOString(),
-              student_id: studentId,
-              student_name: studentName,
-              target_date: targetDate
-            };
-            try { localStorage.setItem('alhuda_sent_advance_emails', JSON.stringify(sentEmailRegistry)); } catch(e) {}
-          }
-        }
-
-        const emailNotice = emailDispatched
-          ? `\n\n📧 Automated completion email has been dispatched to the parent.`
-          : `\n\n📧 The completion email could NOT be sent (${emailErrorText || 'the email service could not be reached'}). The class record was saved — please inform the parent directly.`;
-
+        // Button-delay build (2026-11-20): success is shown at once —
+        // the completion email no longer gates the toast. It is fired
+        // now and reports back on its own (sendTeacherAdvanceClassEmail).
+        try { const _advMailP = sendTeacherAdvanceClassEmail({ studentId, targetDate, todayDate, bookTitle, page, lineRange, sabaqResult, rating, remarks, isAdditionalCourse, advAdditionalLesson, studentName }); if (_advMailP && typeof _advMailP.catch === 'function') _advMailP.catch(() => {}); } catch (e) {}
         lmsNotify(`🌟 Advance Class Successfully Recorded!\n\n` +
           `Student: ${studentName}\n` +
           `Advance Target Date: ${targetDate}\n` +
           `Lesson: ${bookTitle}${isAdditionalCourse ? ` (${advAdditionalLesson})` : ` (Page ${page})`}\n` +
-          `Status: 🌟 Advance Class Completed${emailNotice}`
+          `Status: 🌟 Advance Class Completed\n\n📧 The completion email is being sent to the parent.`
         );
 
         closeAdvanceClassModal();
-        await loadTeacherPortalData();
+        refreshTeacherPortalInBackground();
       } catch (err) {
         console.error("Advance class error:", err);
         if (advSaved) {
           // The row itself landed; only a post-save step threw. Close
           // without claiming anything further and refresh best-effort.
           closeAdvanceClassModal();
-          try { await loadTeacherPortalData(); } catch (e) {}
+          refreshTeacherPortalInBackground();
         } else {
           console.warn('[LMS] operation failed:', (err.message || err)); lmsNotify('The advance class could not be saved. Please try again.', { type: 'error' });
         }

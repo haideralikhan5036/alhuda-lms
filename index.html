@@ -1776,7 +1776,7 @@
           <input
             type="text"
             id="dashGlobalSearchInput"
-            oninput="handleDashboardGlobalSearch(this.value)"
+            oninput="debouncedDashboardGlobalSearch(this.value)"
             onfocus="handleDashboardGlobalSearch(this.value)"
             onkeydown="if(event.key==='Enter'){ event.preventDefault(); handleDashboardGlobalSearch(this.value); } else if(event.key==='Escape'){ clearDashboardGlobalSearch(); this.blur(); }"
             autocomplete="off"

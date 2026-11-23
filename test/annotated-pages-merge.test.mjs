@@ -116,7 +116,8 @@ async function runMainSave({ bookId = 'holy-quran-16-line', status = 'Present', 
     getTeacherAllBooks: () => [QAIDA, QURAN],
     db: { from: () => ({ upsert: async (rows) => { upserts.push(rows); return { error: null }; } }) },
     notifyClassSessionSync: () => {}, closeAttendanceModal: () => {},
-    loadTeacherPortalData: async () => {}
+    loadTeacherPortalData: async () => {},
+    patchTodayClassLocally: () => {}, refreshTeacherPortalInBackground: () => {}
   };
   const code = extractConst(TEACHER, 'ADDITIONAL_COURSE_ID') + NL
     + extractLet(TEACHER, 'ANNOTATION_SAVED') + NL
@@ -282,7 +283,8 @@ async function runAdvSave({ bookId = 'qaida-flat', staged = {}, studentId = 'STU
     ADVANCE_SELECTED_STUDENT: { name: 'Test Student' },
     getTeacherAllBooks: () => [QAIDA, QURAN],
     db: { from: () => ({ upsert: async (rows) => { upserts.push(rows); return { error: null }; } }) },
-    closeAdvanceClassModal: () => {}, loadTeacherPortalData: async () => {}
+    closeAdvanceClassModal: () => {}, loadTeacherPortalData: async () => {},
+    refreshTeacherPortalInBackground: () => {}
   };
   const code = extractConst(TEACHER, 'ADDITIONAL_COURSE_ID') + NL
     + extractLet(TEACHER, 'ANNOTATION_SAVED') + NL

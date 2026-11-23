@@ -216,6 +216,10 @@ console.log('== B. compile contrast: ended Nov 10 vs never ended (real engine) =
   // End the assignment through the REAL helper, exactly as the new
   // hooks do, then compile.
   TABLES.student_assignments = [openRow()];
+  // Button-delay build (2026-11-20): Assignments.loadAll() caches
+  // for 60 s, so a re-seeded fixture must invalidate first — the
+  // module cannot see the backing array was swapped.
+  run('Assignments.invalidateCache()');
   await run('Assignments.loadAll()');
   const closed = await run(`Assignments.endAssignment('SX', { last_payable_date: '2026-11-10', end_reason: 'schedule_ended', teacher_id: 'TEX' })`);
   check('endAssignment closed the fixture segment', closed === 1 && TABLES.student_assignments[0].end_date === '2026-11-10');
@@ -349,6 +353,10 @@ console.log('== C. schedule hooks executed (extracted verbatim from js/schedule.
     sb.ALL_STUDENTS = students;
     calls.open.length = 0; calls.end.length = 0; calls.transition.length = 0;
     notifies.length = 0;
+    // Button-delay build (2026-11-20): Assignments.loadAll() caches
+    // for 60 s, so a re-seeded fixture must invalidate first — the
+    // module cannot see the backing array was swapped.
+    A.invalidateCache();
     await A.loadAll();
   }
 
