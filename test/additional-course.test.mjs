@@ -162,6 +162,7 @@ async function runSave({ selectValue, courseName, reference, description }) {
     db: { from: () => ({ upsert: async (rows) => { upserts.push(rows); return { error: null }; } }) },
     notifyClassSessionSync: () => {}, closeAttendanceModal: () => {},
     loadTeacherPortalData: async () => {},
+    patchTodayClassLocally: () => {}, refreshTeacherPortalInBackground: () => {},
   };
   // Lesson History: the save now stamps the PKT date via the REAL
   // getPktNowParts (extracted, not stubbed) -- the sandbox must provide

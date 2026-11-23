@@ -2859,6 +2859,15 @@ async function submitEditSingleStudentForm(e, familyId, studentId) {
   const student = (window.ALL_STUDENTS || []).find(s => String(s.id).toUpperCase() === String(studentId).toUpperCase());
   if (!student) return;
 
+  // Button-delay build (2026-11-20, audit §5(i)1/3): disable the
+  // submit button during the save so the click reads instantly and
+  // cannot double-fire. Restored on every early return / failure;
+  // on success the modal closes, so no restore is needed there.
+  const _saveBtn = (e && e.target && e.target.querySelector) ? e.target.querySelector('button[type="submit"]') : null;
+  const _saveBtnHtml = _saveBtn ? _saveBtn.innerHTML : '';
+  const _restoreSaveBtn = () => { if (_saveBtn) { _saveBtn.disabled = false; _saveBtn.innerHTML = _saveBtnHtml; } };
+  if (_saveBtn) { _saveBtn.disabled = true; _saveBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-1"></i> Saving...'; }
+
   const name = document.getElementById('fwEditStuName').value.trim();
   const joining_date = document.getElementById('fwEditStuJoinDate').value;
   const age = parseInt(document.getElementById('fwEditStuAge').value, 10) || 8;
@@ -2871,6 +2880,7 @@ async function submitEditSingleStudentForm(e, familyId, studentId) {
   if (assigned_teacher_id && typeof validateEligibleTeacherBackend === 'function') {
     const check = await validateEligibleTeacherBackend(assigned_teacher_id);
     if (!check.valid) {
+      _restoreSaveBtn();
       _notify360(check.error, 'error');
       return;
     }
@@ -2963,16 +2973,21 @@ async function submitEditSingleStudentForm(e, familyId, studentId) {
   stuMeta.zoom_link = finalZoomLink;
   stuMeta.meeting_link = finalZoomLink;
 
-  await _saveStudentRecordBackend(student.id, {
-    name,
-    joining_date,
-    age,
-    gender,
-    status,
-    course_id,
-    assigned_teacher_id: effectiveTeacherId,
-    notes: JSON.stringify(stuMeta)
-  });
+  try {
+    await _saveStudentRecordBackend(student.id, {
+      name,
+      joining_date,
+      age,
+      gender,
+      status,
+      course_id,
+      assigned_teacher_id: effectiveTeacherId,
+      notes: JSON.stringify(stuMeta)
+    });
+  } catch (err) {
+    _restoreSaveBtn();
+    throw err;
+  }
 
   try {
     const profiles = JSON.parse(localStorage.getItem('alhuda_student_profiles') || '{}');
@@ -3007,11 +3022,24 @@ async function submitEditSingleStudentForm(e, familyId, studentId) {
     }
   } catch (e) {}
 
-  await syncFamilyStatusFromStudentsBackend(familyId);
-
+  // Button-delay build (2026-11-20, audit §5(i)3): optimistic patch.
+  // _saveStudentRecordBackend already updated ALL_FAMILIES /
+  // ALL_STUDENTS from the save response and re-rendered locally, so
+  // close + notify + reopen from the cache NOW. The family-status
+  // sync and the 360 log refetch run fire-and-forget afterwards —
+  // their data still lands (the reopened profile repaints when its
+  // background refresh completes), but they no longer gate the UI.
+  // The N+1 log refetch itself is untouched, only its blocking.
   _closeWorkspaceModal();
   _notify360(`Student ${name}'s information updated and teacher Student List synchronized!`);
-  await openFamily360Profile(familyId, 'students', true, { selectedStudentId: student.id, studentSubView: 'info' });
+  try {
+    const _reopen = openFamily360Profile(familyId, 'students', true, { selectedStudentId: student.id, studentSubView: 'info' });
+    if (_reopen && typeof _reopen.catch === 'function') _reopen.catch(function () {});
+  } catch (err) {}
+  try {
+    const _sync = syncFamilyStatusFromStudentsBackend(familyId);
+    if (_sync && typeof _sync.catch === 'function') _sync.catch(function () {});
+  } catch (err) {}
 }
 
 /**

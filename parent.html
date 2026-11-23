@@ -1459,7 +1459,7 @@
             <button id="parentLessonAllDatesBtn" onclick="setParentLessonDate('')" class="hidden px-3 py-2 rounded-xl bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 text-xs font-bold transition">
               Show full history
             </button>
-            <button onclick="renderCurrentStudentData()" class="px-3.5 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition flex items-center gap-1.5 shadow-2xs">
+            <button id="parentRefreshLogsBtn" onclick="refreshParentStudentData(this)" class="px-3.5 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition flex items-center gap-1.5 shadow-2xs">
               <i class="fa-solid fa-arrows-rotate"></i> Refresh Logs
             </button>
           </div>
@@ -1786,6 +1786,15 @@
             </div>
           </div>
 
+          <!-- Button-delay build (2026-11-20): the reader shell + loading
+               state show immediately while the page fetch (and its 700ms
+               retries) runs, instead of a blank page. Hidden on load and
+               on the honest error state (1200ms grace unchanged). -->
+          <div id="parentReaderPageLoading" class="hidden absolute inset-0 z-10 flex-col items-center justify-center gap-2 text-stone-500 pointer-events-none">
+            <i class="fa-solid fa-circle-notch fa-spin text-2xl"></i>
+            <p class="text-xs font-bold">Loading page...</p>
+          </div>
+
           <!-- Interactive E-Qaida Stage for Students -->
           <div id="parentReaderInteractiveStage" class="hidden w-full max-w-5xl h-full overflow-y-auto p-2 sm:p-5 bg-slate-950/95 rounded-2xl border border-emerald-900/50 text-slate-100 shadow-2xl space-y-4">
             <div id="parentReaderInteractiveContent">
@@ -2066,27 +2075,55 @@
       if (allBtn) allBtn.classList.toggle('hidden', !PARENT_LESSON_DATE);
       renderCurrentStudentData();
     }
+    // Button-delay build (2026-11-20): lesson images used to fire one
+    // R2 fetch per card with no concurrency cap, all at once. They now
+    // load at most 4 at a time, and only when the card is near the
+    // viewport (IntersectionObserver; browsers without it load at once,
+    // exactly as before). The visible-failure placeholder is unchanged.
     function hydrateParentLessonImages() {
       if (!window.LessonHistory) return;
       PARENT_LESSON_BLOB_URLS.forEach(u => { try { URL.revokeObjectURL(u); } catch (e) {} });
       PARENT_LESSON_BLOB_URLS = [];
-      document.querySelectorAll('img[data-lh-img-key]').forEach(async (img) => {
-        const key = img.getAttribute('data-lh-img-key');
-        if (!key) return;
-        const url = await window.LessonHistory.loadLessonImageBlobUrl(key);
-        if (url && img.isConnected) {
-          PARENT_LESSON_BLOB_URLS.push(url);
-          img.src = url;
-          img.classList.remove('hidden');
-        } else if (img.isConnected) {
-          // Phase 4 (audit P3-hh): fail visibly, not silently — the
-          // parent sees that an image exists but could not be loaded.
-          const ph = document.createElement('span');
-          ph.className = 'inline-block px-2 py-1 rounded-lg bg-slate-100 border border-slate-200 text-slate-500 text-[10px] font-bold';
-          ph.textContent = 'Lesson image could not be loaded.';
-          img.replaceWith(ph);
-        }
-      });
+      const imgs = Array.from(document.querySelectorAll('img[data-lh-img-key]'));
+      if (imgs.length === 0) return;
+      // The batch fetch (js/lesson-history.js) runs at most 4 R2
+      // fetches at a time and returns URLs in input order.
+      const loadBatch = async (list) => {
+        const keys = list.map(img => img.getAttribute('data-lh-img-key'));
+        // Shared bounded batch (js/lesson-history.js); an older cached
+        // copy of that file falls back to one fetch per image.
+        const urls = (typeof window.LessonHistory.loadLessonImageBlobUrls === 'function')
+          ? await window.LessonHistory.loadLessonImageBlobUrls(keys, 4)
+          : await Promise.all(keys.map(k => window.LessonHistory.loadLessonImageBlobUrl(k)));
+        list.forEach((img, i) => {
+          const url = urls[i];
+          if (url && img.isConnected) {
+            PARENT_LESSON_BLOB_URLS.push(url);
+            img.src = url;
+            img.classList.remove('hidden');
+          } else if (img.isConnected) {
+            // Phase 4 (audit P3-hh): fail visibly, not silently — the
+            // parent sees that an image exists but could not be loaded.
+            const ph = document.createElement('span');
+            ph.className = 'inline-block px-2 py-1 rounded-lg bg-slate-100 border border-slate-200 text-slate-500 text-[10px] font-bold';
+            ph.textContent = 'Lesson image could not be loaded.';
+            img.replaceWith(ph);
+          }
+        });
+      };
+      if (typeof IntersectionObserver === 'undefined') {
+        loadBatch(imgs);
+        return;
+      }
+      const pending = new Set(imgs);
+      const observer = new IntersectionObserver((entries) => {
+        const visible = entries.filter(en => en.isIntersecting).map(en => en.target);
+        if (visible.length === 0) return;
+        visible.forEach(img => { pending.delete(img); observer.unobserve(img); });
+        loadBatch(visible);
+        if (pending.size === 0) observer.disconnect();
+      }, { rootMargin: '200px' });
+      imgs.forEach(img => observer.observe(img));
     }
 
     // Reader State
@@ -2205,7 +2242,19 @@
       }
 
       populateStudentDropdown();
-      await renderCurrentStudentData();
+      // A dashboard load started during the login animation (see
+      // handleParentSignIn) is awaited here instead of rendering again.
+      // typeof-guarded: the login flow declares the promise in the same
+      // script, but callers that run this function standalone (and the
+      // boot-retry suite, which executes it extracted) have no such
+      // binding — an unguarded read would throw and drop a valid
+      // session to the login screen.
+      if (typeof _parentLoginDataPromise !== 'undefined' && _parentLoginDataPromise) {
+        try { await _parentLoginDataPromise; } catch (e) {}
+        _parentLoginDataPromise = null;
+      } else {
+        await renderCurrentStudentData();
+      }
       renderPortalLibrary();
       restoreParentTabFromHash();
     }
@@ -2263,16 +2312,27 @@
     // outcome is classified exactly as before.
     async function parentServerLogin(identifier, password) {
       const parentLoginRetryDelays = [700, 1500];
+      // Button-delay build (2026-11-20): this fetch used to have NO
+      // timeout at all, so a hung Worker stalled until the browser's
+      // default timeout. Each attempt now aborts after 5s (the same cap
+      // the logout calls use in js/auth.js and in this file) and the
+      // abort is treated exactly like any other network throw: retry
+      // with the same [700, 1500] backoff, still at most 3 attempts.
+      const parentLoginFetchTimeoutMs = 5000;
       for (let attempt = 0; attempt < 3; attempt++) {
         if (attempt > 0) {
           await new Promise((resolve) => setTimeout(resolve, parentLoginRetryDelays[attempt - 1]));
         }
+        const controller = (typeof AbortController !== 'undefined') ? new AbortController() : null;
+        const timer = controller ? setTimeout(function () { try { controller.abort(); } catch (e) {} }, parentLoginFetchTimeoutMs) : null;
         try {
           const res = await fetch(getParentWorkerBase() + '/api/auth/staff-login', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ role: 'parent', identifier, password })
+            body: JSON.stringify({ role: 'parent', identifier, password }),
+            signal: controller ? controller.signal : undefined
           });
+          if (timer) clearTimeout(timer);
           if ((res.status === 502 || res.status === 503) && attempt < 2) continue;
           if (res.status === 401) {
             const errData = await res.json().catch(() => ({}));
@@ -2283,8 +2343,10 @@
           if (data && data.ok && data.token) return { ok: true, token: data.token, id: data.id };
           return { unreachable: true };
         } catch (e) {
-          // Network throw or unparseable reply: retry; after the last
-          // attempt, fall through to unreachable below.
+          if (timer) clearTimeout(timer);
+          // Network throw (including the 5s abort above) or unparseable
+          // reply: retry; after the last attempt, fall through to
+          // unreachable below.
         }
       }
       return { unreachable: true };
@@ -2351,13 +2413,19 @@
               await new Promise((resolve) => setTimeout(resolve, _bootRetryDelays[_attempt - 1]));
             }
             try {
-              const _famRes = await db.from('families').select('*').eq('id', _pp.sub).single();
+              // Button-delay build (2026-11-20): the family + students
+              // preloads are independent (both keyed by the token id),
+              // so they start in parallel; the students result is only
+              // awaited when the family row actually exists.
+              const _famP = db.from('families').select('*').eq('id', _pp.sub).single();
+              const _stuP = db.from('students').select('*').eq('family_id', _pp.sub);
+              const _famRes = await _famP;
               if (_famRes && _famRes.error && _famRes.error.code === 'SESSION_EXPIRED') {
                 _authoritative = true;
                 break;
               }
               if (_famRes && _famRes.data && _famRes.data.id) {
-                const _stuRes = await db.from('students').select('*').eq('family_id', _pp.sub);
+                const _stuRes = await _stuP;
                 await showParentDashboardView(_famRes.data, (_stuRes && _stuRes.data) || [], parsedParent ? parsedParent.selected_student_id : null);
                 return;
               }
@@ -2424,8 +2492,13 @@
           sessionStorage.setItem('alhuda_parent_token', serverAttempt.token);
         } catch (err) {}
         try {
-          const famRes = await db.from('families').select('*').eq('id', serverAttempt.id).single();
-          const stuRes = await db.from('students').select('*').eq('family_id', serverAttempt.id);
+          // Button-delay build (2026-11-20): the family + students
+          // preloads are independent (both keyed by the login id), so
+          // they run in parallel instead of one after the other.
+          const [famRes, stuRes] = await Promise.all([
+            db.from('families').select('*').eq('id', serverAttempt.id).single(),
+            db.from('students').select('*').eq('family_id', serverAttempt.id)
+          ]);
           if (famRes && famRes.data && famRes.data.id) {
             const authorizedStudents = (stuRes && stuRes.data) || [];
             const sessionPayload = {
@@ -2457,6 +2530,21 @@
               }
             } catch (err) {}
             if (circleShown) {
+              // Button-delay build (2026-11-20): start the dashboard
+              // data load DURING the 1700ms animation instead of after
+              // it — the animation itself is not removed. The state the
+              // render needs is set here, the load starts at once, and
+              // the timer only reveals the dashboard: the
+              // showParentDashboardView call below awaits the
+              // already-running load instead of rendering a second time.
+              try {
+                CURRENT_AUTH_FAMILY = famRes.data;
+                ALL_STUDENTS = authorizedStudents;
+                CURRENT_STUDENT = authorizedStudents[0] || null;
+                populateStudentDropdown();
+                _parentLoginDataPromise = renderCurrentStudentData();
+                _parentLoginDataPromise.catch(function () {});
+              } catch (err) {}
               setTimeout(function () {
                 showParentDashboardView(famRes.data, authorizedStudents, authorizedStudents[0] ? authorizedStudents[0].id : null);
               }, 1700);
@@ -2509,7 +2597,23 @@
       `).join('');
     }
 
-    async function switchStudentAccount(studentId) {
+    // Immediate feedback on the Refresh Logs button: pressed state +
+    // spinner while the render runs (the render itself paints loading
+    // placeholders synchronously; this is the button's own answer).
+    function refreshParentStudentData(btn) {
+      if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin"></i> Refreshing...';
+      }
+      Promise.resolve(renderCurrentStudentData()).catch(function () {}).finally(function () {
+        if (btn) {
+          btn.disabled = false;
+          btn.innerHTML = '<i class="fa-solid fa-arrows-rotate"></i> Refresh Logs';
+        }
+      });
+    }
+
+    async function switchStudentAccount(studentId, options) {
       if (!CURRENT_AUTH_FAMILY) {
         showParentLoginView();
         return;
@@ -2531,11 +2635,12 @@
           sessionStorage.setItem('alhuda_parent_session', JSON.stringify(savedParent));
         }
       } catch (e) {}
-      await renderCurrentStudentData();
+      await renderCurrentStudentData(options || {});
     }
 
     // Derived display label for a student's status (Batch 4, Option B —
     // date-scoped leave): the stored status is never rewritten for a leave
+    // window. A student reads 'On Leave' only when the stored status is a
     // window. A student reads 'On Leave' only when the stored status is a
     // legacy leave value, or while TODAY falls inside the approved leave
     // window recorded in notes: on_leave === true and
@@ -2576,220 +2681,121 @@
       return status === 'Completed' || status === 'Present';
     }
 
-    async function renderCurrentStudentData() {
-      if (!CURRENT_STUDENT) return;
+    // Button-delay build (2026-11-20, audit §2.3 / §5): the parent
+    // render used to run 7-9 sequential awaits and paint everything in
+    // one shot at the end, so a slow fee query delayed the lesson list
+    // even though they are unrelated — and the same chain re-ran on
+    // every background live-sync tick. The reads below are independent
+    // (only the family/student ids are needed, and both are already in
+    // memory), so they now start in parallel and each section paints as
+    // soon as ITS data lands. Nothing about the data, the fee merge, or
+    // the auth/family-scope checks changed — only the order/timing.
+    let _parentRenderSeq = 0;
+    let _parentRenderInFlight = false;
+    let _parentLiveSyncPending = false;
+    // One dashboard data load started during the login animation (see
+    // handleParentSignIn): showParentDashboardView awaits this instead
+    // of rendering a second time.
+    let _parentLoginDataPromise = null;
 
-      // Batch 3.2 (P2-25): refetch the student row on every render, so
-      // admin teacher/status/course changes surface without a re-login
-      // (live sync calls switchStudentAccount -> this function). Family
-      // scope is enforced: a row from another family is ignored. Any
-      // failure keeps the cached row (exactly as before). This never
-      // writes: the parent leave flow still writes notes-only elsewhere.
+    // The student row used to be re-fetched (awaited) on EVERY render
+    // before anything painted. The cached row is now authoritative for
+    // the paint; the fresh row is fetched in the background and only
+    // repaints the hero (name/course) when it actually changed. A
+    // changed teacher/schedule still surfaces on the next render /
+    // live-sync tick, exactly as the old refetch-then-render did for
+    // the FOLLOWING render — the old code's fresh row only ever fed
+    // the render it blocked.
+    function refreshParentStudentRowInBackground(student, seq) {
+      if (!db || !student || !student.id) return;
       try {
-        if (db) {
-          const { data: freshStudent } = await db.from('students').select('*').eq('id', CURRENT_STUDENT.id).single();
-          if (freshStudent) {
-            const cachedFam = String(CURRENT_STUDENT.family_id || '').trim().toUpperCase();
-            const authFam = String(CURRENT_AUTH_FAMILY?.id || '').trim().toUpperCase();
-            const freshFam = String(freshStudent.family_id || '').trim().toUpperCase();
-            if ((!cachedFam || freshFam === cachedFam) && (!authFam || freshFam === authFam)) {
-              const idx = (ALL_STUDENTS || []).findIndex(x => String(x.id) === String(freshStudent.id));
-              if (idx >= 0) ALL_STUDENTS[idx] = freshStudent;
+        db.from('students').select('*').eq('id', student.id).single().then(function (res) {
+          const freshStudent = res && res.data;
+          if (!freshStudent) return;
+          if (seq !== _parentRenderSeq) return; // a newer render owns the screen now
+          const cachedFam = String(student.family_id || '').trim().toUpperCase();
+          const authFam = String(CURRENT_AUTH_FAMILY?.id || '').trim().toUpperCase();
+          const freshFam = String(freshStudent.family_id || '').trim().toUpperCase();
+          if ((!cachedFam || freshFam === cachedFam) && (!authFam || freshFam === authFam)) {
+            const idx = (ALL_STUDENTS || []).findIndex(x => String(x.id) === String(freshStudent.id));
+            if (idx >= 0) ALL_STUDENTS[idx] = freshStudent;
+            if (CURRENT_STUDENT && String(CURRENT_STUDENT.id) === String(freshStudent.id)) {
               CURRENT_STUDENT = freshStudent;
+              const nameEl = document.getElementById('heroWelcomeName');
+              if (nameEl) nameEl.innerText = freshStudent.name;
+              const courseBadge = document.getElementById('studentCourseBadge');
+              if (courseBadge) courseBadge.innerText = freshStudent.course || 'Not Assigned Yet';
             }
           }
-        }
+        }).catch(function () { /* keep cached row */ });
       } catch (e) { /* keep cached row */ }
+    }
 
-      const s = CURRENT_STUDENT;
+    // Immediate feedback for a child switch / date filter / refresh:
+    // the sections show a loading state synchronously, before the first
+    // await, instead of sitting on stale content with zero feedback.
+    function showParentSectionLoading() {
+      const lessons = document.getElementById('parentLessonNotesContainer');
+      if (lessons) lessons.innerHTML = '<div class="p-8 text-center text-slate-400"><i class="fa-solid fa-circle-notch fa-spin text-2xl mb-2 text-brandEmerald"></i><p class="text-xs">Loading lesson records...</p></div>';
+      const att = document.getElementById('attendanceTableBody');
+      if (att) att.innerHTML = '<tr><td colspan="5" class="p-8 text-center text-slate-400 font-bold text-xs">Loading attendance...</td></tr>';
+      const fee = document.getElementById('feeInvoicesTableBody');
+      if (fee) fee.innerHTML = '<tr><td colspan="7" class="p-8 text-center text-slate-400 font-bold text-xs">Loading fee records...</td></tr>';
+    }
 
-      // Update Top Badges & Welcome Text
-      const nameEl = document.getElementById('heroWelcomeName');
-      if (nameEl) nameEl.innerText = s.name;
-
-      const courseBadge = document.getElementById('studentCourseBadge');
-      if (courseBadge) courseBadge.innerText = s.course || 'Not Assigned Yet';
-
-      // 1. Fetch Teacher info (Real DB Only - No Fake Fallback)
-      let teacherName = 'Not Assigned Yet';
-      let teacherZoomLink = '';
-      CURRENT_TEACHER = null;
-
-      if (db && s.assigned_teacher_id) {
-        try {
-          const { data } = await db.from('teachers').select('*').eq('id', s.assigned_teacher_id).single();
-          if (data) {
-            CURRENT_TEACHER = data;
-            teacherName = data.full_name || 'Assigned Teacher';
-            if (data.zoom_link) teacherZoomLink = data.zoom_link;
-          }
-        } catch(e) {}
-      }
-
-      // Check student notes for custom meeting link override
-      if (s.notes) {
-        try {
-          const parsedNotes = typeof s.notes === 'string' ? JSON.parse(s.notes) : s.notes;
-          if (parsedNotes && parsedNotes.meeting_link) teacherZoomLink = parsedNotes.meeting_link;
-        } catch(e) {}
-      }
-
-      // Teacher Cover / Substitute (2026-11-13): leave banner for the
-      // current student's teacher, plus today's cover teacher (if this
-      // student is covered). Best-effort: a failed read hides the
-      // banner and never blocks the portal; before the Worker deploy
-      // the table does not exist yet and the read fails closed.
-      let coverBannerRow = null;
-      let coverTodayRow = null;
-      if (db && s.assigned_teacher_id) {
-        try {
-          const todayStr = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Karachi', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
-          const { data: coverRows } = await db.from('cover_assignments').select('*').eq('absent_teacher_id', s.assigned_teacher_id).eq('status', 'active');
-          const rows = coverRows || [];
-          coverBannerRow = rows.find(r => r.kind === 'banner' && r.start_date && r.end_date && r.start_date <= todayStr && todayStr <= r.end_date) || null;
-          coverTodayRow = rows.find(r => r.kind === 'assign' && r.cover_date === todayStr && String(r.student_id) === String(s.id)) || null;
-        } catch (e) { /* banner stays hidden */ }
-      }
-      const coverBannerEl = document.getElementById('teacherCoverBanner');
-      if (coverBannerEl) {
-        if (coverBannerRow || coverTodayRow) {
-          const reason = coverBannerRow && coverBannerRow.reason ? escapeHtml(coverBannerRow.reason) : '';
-          const coverLine = coverTodayRow
-            ? `<p class="text-sm text-amber-900 mt-1">Today's class will be taught by <strong>${escapeHtml(coverTodayRow.cover_teacher_name || 'substitute teacher')}</strong>.</p>`
-            : '';
-          const leaveLine = `<p class="text-sm sm:text-base font-bold text-amber-900">📢 Your teacher ${escapeHtml(teacherName)} is on leave today.${reason ? ` — ${reason}` : ''}</p>`;
-          coverBannerEl.innerHTML = leaveLine + coverLine;
-          coverBannerEl.classList.remove('hidden');
-        } else {
-          coverBannerEl.classList.add('hidden');
-          coverBannerEl.innerHTML = '';
-        }
-      }
-
-      // 2. Fetch Schedules
-      let schedules = [];
-      if (db) {
-        try {
-          const { data } = await db.from('class_schedules').select('*').eq('student_id', s.id);
-          if (data && data.length > 0) schedules = data;
-        } catch(e) {}
-      }
-      CURRENT_SCHEDULES = schedules;
-
-      // Resolve schedule-level Zoom link if present
-      const scheduleZoom = schedules.find(sc => sc.meeting_link && sc.meeting_link.trim() !== '')?.meeting_link || '';
-      const effectiveZoomLink = (scheduleZoom || teacherZoomLink || '').trim();
-
-      // Helper for formatting time & duration
-      const formatSlotRange = (sc) => {
-        if (!sc || !sc.start_time) return 'No classes scheduled.';
-        const st = sc.start_time.slice(0, 5);
-        const et = sc.end_time ? sc.end_time.slice(0, 5) : '';
-        const to12 = (t24) => {
-          const [hStr, mStr] = t24.split(':');
-          let h = parseInt(hStr, 10);
-          const m = parseInt(mStr || '0', 10);
-          if (isNaN(h)) return t24;
-          const ampm = h >= 12 ? 'PM' : 'AM';
-          const h12 = h % 12 || 12;
-          return `${String(h12).padStart(2, '0')}:${String(m).padStart(2, '0')} ${ampm}`;
-        };
-        const toMin = (t24) => {
-          const [h, m] = t24.split(':').map(Number);
-          return (h * 60) + (m || 0);
-        };
-        if (et && toMin(et) > toMin(st)) {
-          const dur = toMin(et) - toMin(st);
-          return `${to12(st)} - ${to12(et)} (${dur}m)`;
-        }
-        return `${to12(st)}`;
-      };
-
-      // Update Live Class Banner
-      const liveSubject = document.getElementById('liveClassSubject');
-      const liveTeacher = document.getElementById('liveClassTeacher');
-      const liveTime = document.getElementById('liveClassTime');
-      const liveBtn = document.getElementById('btnJoinLiveMeeting');
-
-      if (liveSubject) liveSubject.innerText = s.course || 'No Course Assigned';
-      if (liveTeacher) liveTeacher.innerText = teacherName;
-      if (liveTime) {
-        if (schedules.length > 0) {
-          const daysMap = ['', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-          const activeDays = [...new Set(schedules.map(sc => daysMap[sc.day_of_week] || '').filter(Boolean))].join(', ');
-          liveTime.innerText = `${activeDays} @ ${formatSlotRange(schedules[0])} PKT`;
-        } else {
-          liveTime.innerText = 'No classes scheduled.';
-        }
-      }
-
-      if (liveBtn) {
-        if (effectiveZoomLink && /^https?:\/\//i.test(effectiveZoomLink)) {
-          liveBtn.href = effectiveZoomLink;
-          liveBtn.target = '_blank';
-          liveBtn.onclick = null;
-          liveBtn.className = 'w-full sm:w-auto px-6 py-3.5 rounded-2xl bg-brandDark hover:bg-brandDarkest text-white font-black text-sm shadow-md transition flex items-center justify-center gap-2 text-center';
-          liveBtn.innerHTML = '<i class="fa-solid fa-video text-amber-300"></i> Join Zoom Class';
-        } else {
-          liveBtn.href = 'javascript:void(0)';
-          liveBtn.removeAttribute('target');
-          liveBtn.onclick = (e) => { e.preventDefault(); return false; };
-          liveBtn.className = 'w-full sm:w-auto px-5 py-3 rounded-2xl bg-slate-100 text-slate-500 border border-slate-200 font-bold text-xs flex items-center justify-center gap-2 text-center cursor-not-allowed';
-          liveBtn.innerHTML = '<i class="fa-solid fa-video-slash text-slate-400"></i> Class link not set yet';
-        }
-      }
-
-      // 3. Fetch Attendance Logs & Lesson Progress Notes (Real DB Only)
-      let attLogs = [];
-      if (db) {
-        try {
-          const { data } = await db.from('attendance_logs')
-            .select('*, teachers(full_name)')
-            .eq('student_id', s.id)
-            .order('date', { ascending: false });
-          if (data && data.length > 0) attLogs = data;
-        } catch(e) {}
-      }
-
-      CURRENT_ATTENDANCE = attLogs;
-
-      // Calculate Real Attendance Metrics (0% when no records exist)
-      // Batch 3.2 (P1-6): attendance over DEDUPED entries (the same list
-      // the tables render), counting stored 'Completed' (+ legacy
-      // 'Present') as attended. The old code counted only 'Present' —
-      // a status teachers never store — so every parent saw 0%.
-      // Denominator = every deduped entry (Absent/Leave/Running/Waiting
-      // count as not attended). Falls back to raw logs exactly as
-      // before when the shared reader is unavailable.
-      let attEntries = attLogs;
-      if (window.LessonHistory && typeof window.LessonHistory.dedupeLessonRows === 'function') {
-        try { attEntries = window.LessonHistory.dedupeLessonRows(attLogs).map(en => (en.raw || {})); } catch (e) { attEntries = attLogs; }
-      }
-      const totalClasses = attEntries.length;
-      const presentCount = attEntries.filter(a => a && parentIsAttendedStatus(a.status)).length;
-      const attPercent = totalClasses > 0 ? Math.round((presentCount / totalClasses) * 100) : 0;
-
-      const attRateEl = document.getElementById('parentAttRate');
-      const attCountEl = document.getElementById('parentAttCount');
-      if (attRateEl) attRateEl.innerText = `${attPercent}%`;
-      if (attCountEl) attCountEl.innerText = totalClasses > 0 ? `${presentCount} / ${totalClasses} Classes Present` : 'No data available yet.';
-
-      // 4. Fetch Real Fee Status & Invoices (No Fake Receipts)
+    // Independent reads, each started up-front and each resolving to a
+    // safe empty value on failure (the old code caught and continued
+    // with the same defaults). No helper ever throws.
+    async function fetchParentTeacherRow(student) {
+      if (!db || !student.assigned_teacher_id) return null;
+      try {
+        const { data } = await db.from('teachers').select('*').eq('id', student.assigned_teacher_id).single();
+        return data || null;
+      } catch (e) { return null; }
+    }
+    async function fetchParentCoverRows(s) {
+      if (!db || !s.assigned_teacher_id) return [];
+      try {
+        const todayStr = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Karachi', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
+        const { data } = await db.from('cover_assignments').select('*').eq('absent_teacher_id', s.assigned_teacher_id).eq('status', 'active');
+        return data || [];
+      } catch (e) { return []; }
+    }
+    async function fetchParentSchedules(student) {
+      if (!db) return [];
+      try {
+        const { data } = await db.from('class_schedules').select('*').eq('student_id', student.id);
+        return (data && data.length > 0) ? data : [];
+      } catch (e) { return []; }
+    }
+    async function fetchParentAttendance(student) {
+      if (!db) return [];
+      try {
+        // Bounded: the 500 most recent logs (a student holds ~5 classes
+        // a week, so this is roughly two years) instead of the unbounded
+        // full history. Same order as before (newest first), so the
+        // lesson/attendance views render identically on real data.
+        const { data } = await db.from('attendance_logs')
+          .select('*, teachers(full_name)')
+          .eq('student_id', student.id)
+          .order('date', { ascending: false })
+          .limit(500);
+        return (data && data.length > 0) ? data : [];
+      } catch (e) { return []; }
+    }
+    // Fee history, exactly as the old inline chain: the payments-table
+    // path (flag 'on') wins outright; otherwise the legacy sources are
+    // collected and merged newest-wins. The two legacy server reads
+    // (family row, fee_collections) now run in parallel.
+    async function fetchParentFeeHistory(student) {
       let feeHistory = [];
       let familyData = null;
       let feeHistoryFromTables = false;
-
-      // Batch 6D-2: when the fee_read_parent flag is 'on', the fee history
-      // comes from the payments table (rows translated back to the legacy
-      // record shape by js/fee-tables.js). 'off'/'compare', a failed load,
-      // or a missing helper all fall through to the legacy source chain
-      // below, which runs exactly as before. ('compare' renders legacy on
-      // this page; comparing is done from the owner's tool.)
       try {
         if (window.FeeTables && typeof window.FeeTables.getReadMode === 'function' && typeof window.FeeTables.loadPaymentsForFamily === 'function') {
           const parentReadMode = await window.FeeTables.getReadMode(window.FeeTables.READ_FLAG_PARENT);
           if (parentReadMode === 'on') {
-            const tableFeeHistory = await window.FeeTables.loadPaymentsForFamily(s.family_id || CURRENT_AUTH_FAMILY?.id || '');
+            const tableFeeHistory = await window.FeeTables.loadPaymentsForFamily(student.family_id || CURRENT_AUTH_FAMILY?.id || '');
             if (Array.isArray(tableFeeHistory)) {
               feeHistory = tableFeeHistory;
               feeHistoryFromTables = true;
@@ -2798,19 +2804,20 @@
         }
       } catch (e) { /* fall back to the legacy chain below */ }
 
-      // Batch 3.2 (P2-24): newest-wins merge across ALL legacy sources
-      // (replaces first-non-empty-wins). Each source below only
-      // COLLECTS its list; the merge after the fallbacks decides.
-      // Rank 0 = fee_collections wins ties; then fresh family notes,
-      // cached family notes, device cache. The table path above
-      // (fee_read_parent ON) is untouched and still wins outright.
       let freshFamilyNotes = [];
       let collectionsMapped = [];
       let cachedFamilyNotes = [];
       let localMatched = [];
-      if (!feeHistoryFromTables && db && s.family_id) {
+      if (!feeHistoryFromTables && db && student.family_id) {
+        const famP = (async () => {
+          try { return await db.from('families').select('*').eq('id', student.family_id).single(); } catch (e) { return null; }
+        })();
+        const fcP = (async () => {
+          try { return await db.from('fee_collections').select('*').eq('family_id', student.family_id).order('created_at', { ascending: false }); } catch (e) { return null; }
+        })();
+        const [famRes, fcRes] = await Promise.all([famP, fcP]);
         try {
-          const { data } = await db.from('families').select('*').eq('id', s.family_id).single();
+          const data = famRes && famRes.data;
           if (data) {
             familyData = data;
             if (data.notes) {
@@ -2818,18 +2825,16 @@
               if (pNotes && Array.isArray(pNotes.fee_history)) freshFamilyNotes = pNotes.fee_history;
             }
           }
-        } catch(e) {}
-
-        // Also query fee_collections table if available
+        } catch (e) {}
         try {
-          const { data: fcData } = await db.from('fee_collections').select('*').eq('family_id', s.family_id).order('created_at', { ascending: false });
+          const fcData = fcRes && fcRes.data;
           if (fcData && fcData.length > 0) {
             collectionsMapped = fcData.map((fc) => ({
               receiptNo: fc.receipt_no || null, // Batch 3.2 (P2-27): never invent a receipt number
               date: (fc.payment_date || fc.created_at || '').slice(0, 10),
-              familyId: s.family_id || familyData?.id || '',
+              familyId: student.family_id || familyData?.id || '',
               parentName: familyData?.parent_name || CURRENT_AUTH_FAMILY?.parent_name || 'Parent',
-              studentsNames: s.name,
+              studentsNames: student.name,
               whatsapp: familyData?.whatsapp || familyData?.phone || '',
               email: familyData?.email || '',
               month: fc.billing_month || fc.month || '-',
@@ -2849,7 +2854,7 @@
               status: fc.status || ((fc.remaining_balance ?? 0) <= 0 ? 'Paid in Full' : 'Partial')
             }));
           }
-        } catch(e) {}
+        } catch (e) {}
       }
 
       // Fallback 1: check CURRENT_AUTH_FAMILY notes
@@ -2857,7 +2862,7 @@
         try {
           const pNotes = typeof CURRENT_AUTH_FAMILY.notes === 'string' ? JSON.parse(CURRENT_AUTH_FAMILY.notes) : CURRENT_AUTH_FAMILY.notes;
           if (pNotes && Array.isArray(pNotes.fee_history)) cachedFamilyNotes = pNotes.fee_history;
-        } catch(e) {}
+        } catch (e) {}
       }
 
       // Fallback 2: check localStorage alhuda_fee_records
@@ -2865,7 +2870,7 @@
         try {
           const localFees = JSON.parse(localStorage.getItem('alhuda_fee_records') || '[]');
           if (Array.isArray(localFees) && localFees.length > 0) {
-            const famIdStr = String(s.family_id || CURRENT_AUTH_FAMILY?.id || '').trim().toLowerCase();
+            const famIdStr = String(student.family_id || CURRENT_AUTH_FAMILY?.id || '').trim().toLowerCase();
             // Phase 4 (audit P3-ff): family-id match ONLY. The old
             // student-name fallback could surface another family's
             // cached receipts on a shared device when names collide.
@@ -2896,48 +2901,256 @@
         }
       }
 
-      CURRENT_FEE_HISTORY = feeHistory;
+      return { feeHistory, familyData, feeHistoryFromTables };
+    }
 
-      // Update Fee Card with Real Data Only
-      const feeStatEl = document.getElementById('parentFeeStat');
-      const feeMonthEl = document.getElementById('parentFeeMonth');
-      if (feeHistory.length > 0) {
-        const topFee = feeHistory[0];
-        const isPaid = (parseFloat(topFee?.remainingBalance ?? 0) <= 0 && parseFloat(topFee?.amountPaid ?? 0) > 0) ||
-                       (topFee?.status && String(topFee.status).toLowerCase().includes('paid'));
-        if (feeStatEl) feeStatEl.innerText = isPaid ? 'Paid' : (topFee?.status || 'Recorded');
-        if (feeMonthEl) {
-          const cur = topFee?.currency || 'USD';
-          const amt = parseFloat(topFee?.amountPaid ?? 0).toFixed(0);
-          feeMonthEl.innerText = `${topFee?.month || '-'} (${amt} ${cur})`;
+    async function renderCurrentStudentData(options) {
+      const opts = options || {};
+      // In-flight guard: a background live-sync tick never re-runs the
+      // full chain while a render is already in flight — it is
+      // remembered and runs once when the current render finishes. A
+      // user action (child switch, date filter, refresh) always runs
+      // and invalidates the older render's later section paints via
+      // the sequence number below.
+      if (opts.background && _parentRenderInFlight) { _parentLiveSyncPending = true; return; }
+      if (!CURRENT_STUDENT) return;
+      const mySeq = ++_parentRenderSeq;
+      const isCurrent = () => mySeq === _parentRenderSeq;
+      _parentRenderInFlight = true;
+      try {
+        const s = CURRENT_STUDENT;
+
+        // 0. Hero first, from the cached row, before any await.
+        const nameEl = document.getElementById('heroWelcomeName');
+        if (nameEl) nameEl.innerText = s.name;
+        const courseBadge = document.getElementById('studentCourseBadge');
+        if (courseBadge) courseBadge.innerText = s.course || 'Not Assigned Yet';
+        showParentSectionLoading();
+        refreshParentStudentRowInBackground(s, mySeq);
+
+        // Shared paint state for the section blocks below.
+        const ctx = {
+          teacherName: 'Not Assigned Yet',
+          teacherZoomLink: '',
+          schedules: [],
+          effectiveZoomLink: '',
+          attLogs: []
+        };
+
+        // Start ALL independent reads now, in parallel. Each section
+        // block below paints as soon as ITS data lands — no section
+        // waits for an unrelated one.
+        const teacherP = fetchParentTeacherRow(s);
+        const coverP = fetchParentCoverRows(s);
+        const schedulesP = fetchParentSchedules(s);
+        const attendanceP = fetchParentAttendance(s);
+        const feeP = fetchParentFeeHistory(s);
+
+        // Helper for formatting time & duration (moved up: the live
+        // banner and the timetable both use it, unchanged).
+        const formatSlotRange = (sc) => {
+          if (!sc || !sc.start_time) return 'No classes scheduled.';
+          const st = sc.start_time.slice(0, 5);
+          const et = sc.end_time ? sc.end_time.slice(0, 5) : '';
+          const to12 = (t24) => {
+            const [hStr, mStr] = t24.split(':');
+            let h = parseInt(hStr, 10);
+            const m = parseInt(mStr || '0', 10);
+            if (isNaN(h)) return t24;
+            const ampm = h >= 12 ? 'PM' : 'AM';
+            const h12 = h % 12 || 12;
+            return `${String(h12).padStart(2, '0')}:${String(m).padStart(2, '0')} ${ampm}`;
+          };
+          const toMin = (t24) => {
+            const [h, m] = t24.split(':').map(Number);
+            return (h * 60) + (m || 0);
+          };
+          if (et && toMin(et) > toMin(st)) {
+            const dur = toMin(et) - toMin(st);
+            return `${to12(st)} - ${to12(et)} (${dur}m)`;
+          }
+          return `${to12(st)}`;
+        };
+
+        // 1. Teacher info (Real DB Only - No Fake Fallback)
+        const paintTeacher = teacherP.then(function (teacherRow) {
+          if (!isCurrent()) return;
+          CURRENT_TEACHER = null;
+          if (teacherRow) {
+            CURRENT_TEACHER = teacherRow;
+            ctx.teacherName = teacherRow.full_name || 'Assigned Teacher';
+            if (teacherRow.zoom_link) ctx.teacherZoomLink = teacherRow.zoom_link;
+          }
+          // Check student notes for custom meeting link override
+          if (s.notes) {
+            try {
+              const parsedNotes = typeof s.notes === 'string' ? JSON.parse(s.notes) : s.notes;
+              if (parsedNotes && parsedNotes.meeting_link) ctx.teacherZoomLink = parsedNotes.meeting_link;
+            } catch (e) {}
+          }
+          const liveSubject = document.getElementById('liveClassSubject');
+          if (liveSubject) liveSubject.innerText = s.course || 'No Course Assigned';
+          const liveTeacher = document.getElementById('liveClassTeacher');
+          if (liveTeacher) liveTeacher.innerText = ctx.teacherName;
+        });
+
+        // Teacher Cover / Substitute (2026-11-13): leave banner for the
+        // current student's teacher, plus today's cover teacher (if this
+        // student is covered). Best-effort: a failed read hides the
+        // banner and never blocks the portal; before the Worker deploy
+        // the table does not exist yet and the read fails closed.
+        // It waits for the teacher read too, so the banner names the
+        // teacher (the old sequential code always had the name by now).
+        const paintCover = Promise.all([teacherP, coverP]).then(function (results) {
+          if (!isCurrent()) return;
+          const teacherName = ctx.teacherName;
+          const todayStr = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Karachi', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
+          const list = results[1] || [];
+          const coverBannerRow = list.find(r => r.kind === 'banner' && r.start_date && r.end_date && r.start_date <= todayStr && todayStr <= r.end_date) || null;
+          const coverTodayRow = list.find(r => r.kind === 'assign' && r.cover_date === todayStr && String(r.student_id) === String(s.id)) || null;
+          const coverBannerEl = document.getElementById('teacherCoverBanner');
+          if (coverBannerEl) {
+            if (coverBannerRow || coverTodayRow) {
+              const reason = coverBannerRow && coverBannerRow.reason ? escapeHtml(coverBannerRow.reason) : '';
+              const coverLine = coverTodayRow
+                ? `<p class="text-sm text-amber-900 mt-1">Today's class will be taught by <strong>${escapeHtml(coverTodayRow.cover_teacher_name || 'substitute teacher')}</strong>.</p>`
+                : '';
+              const leaveLine = `<p class="text-sm sm:text-base font-bold text-amber-900">📢 Your teacher ${escapeHtml(teacherName)} is on leave today.${reason ? ` — ${reason}` : ''}</p>`;
+              coverBannerEl.innerHTML = leaveLine + coverLine;
+              coverBannerEl.classList.remove('hidden');
+            } else {
+              coverBannerEl.classList.add('hidden');
+              coverBannerEl.innerHTML = '';
+            }
+          }
+        });
+
+        // 2. Schedules + live-class banner + weekly timetable
+        const paintSchedules = Promise.all([teacherP, schedulesP]).then(function (results) {
+          if (!isCurrent()) return;
+          const schedules = results[1] || [];
+          ctx.schedules = schedules;
+          CURRENT_SCHEDULES = schedules;
+          PARENT_SCHEDULE_MAP = {};
+          (schedules || []).forEach(sc => { if (sc && sc.id) PARENT_SCHEDULE_MAP[String(sc.id)] = sc; });
+
+          // Resolve schedule-level Zoom link if present
+          const scheduleZoom = schedules.find(sc => sc.meeting_link && sc.meeting_link.trim() !== '')?.meeting_link || '';
+          ctx.effectiveZoomLink = (scheduleZoom || ctx.teacherZoomLink || '').trim();
+
+          // Update Live Class Banner
+          const liveTime = document.getElementById('liveClassTime');
+          const liveBtn = document.getElementById('btnJoinLiveMeeting');
+          if (liveTime) {
+            if (schedules.length > 0) {
+              const daysMap = ['', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+              const activeDays = [...new Set(schedules.map(sc => daysMap[sc.day_of_week] || '').filter(Boolean))].join(', ');
+              liveTime.innerText = `${activeDays} @ ${formatSlotRange(schedules[0])} PKT`;
+            } else {
+              liveTime.innerText = 'No classes scheduled.';
+            }
+          }
+          if (liveBtn) {
+            if (ctx.effectiveZoomLink && /^https?:\/\//i.test(ctx.effectiveZoomLink)) {
+              liveBtn.href = ctx.effectiveZoomLink;
+              liveBtn.target = '_blank';
+              liveBtn.onclick = null;
+              liveBtn.className = 'w-full sm:w-auto px-6 py-3.5 rounded-2xl bg-brandDark hover:bg-brandDarkest text-white font-black text-sm shadow-md transition flex items-center justify-center gap-2 text-center';
+              liveBtn.innerHTML = '<i class="fa-solid fa-video text-amber-300"></i> Join Zoom Class';
+            } else {
+              liveBtn.href = 'javascript:void(0)';
+              liveBtn.removeAttribute('target');
+              liveBtn.onclick = (e) => { e.preventDefault(); return false; };
+              liveBtn.className = 'w-full sm:w-auto px-5 py-3 rounded-2xl bg-slate-100 text-slate-500 border border-slate-200 font-bold text-xs flex items-center justify-center gap-2 text-center cursor-not-allowed';
+              liveBtn.innerHTML = '<i class="fa-solid fa-video-slash text-slate-400"></i> Class link not set yet';
+            }
+          }
+          renderWeeklyTimetable(schedules, ctx.teacherName, ctx.effectiveZoomLink);
+        });
+
+        // 3. Attendance logs, metrics, lesson history + attendance table
+        const paintAttendance = Promise.all([teacherP, schedulesP, attendanceP]).then(function (results) {
+          if (!isCurrent()) return;
+          const attLogs = results[2] || [];
+          ctx.attLogs = attLogs;
+          CURRENT_ATTENDANCE = attLogs;
+
+          // Calculate Real Attendance Metrics (0% when no records exist)
+          // Batch 3.2 (P1-6): attendance over DEDUPED entries (the same list
+          // the tables render), counting stored 'Completed' (+ legacy
+          // 'Present') as attended. The old code counted only 'Present' —
+          // a status teachers never store — so every parent saw 0%.
+          // Denominator = every deduped entry (Absent/Leave/Running/Waiting
+          // count as not attended). Falls back to raw logs exactly as
+          // before when the shared reader is unavailable.
+          let attEntries = attLogs;
+          if (window.LessonHistory && typeof window.LessonHistory.dedupeLessonRows === 'function') {
+            try { attEntries = window.LessonHistory.dedupeLessonRows(attLogs).map(en => (en.raw || {})); } catch (e) { attEntries = attLogs; }
+          }
+          const totalClasses = attEntries.length;
+          const presentCount = attEntries.filter(a => a && parentIsAttendedStatus(a.status)).length;
+          const attPercent = totalClasses > 0 ? Math.round((presentCount / totalClasses) * 100) : 0;
+
+          const attRateEl = document.getElementById('parentAttRate');
+          const attCountEl = document.getElementById('parentAttCount');
+          if (attRateEl) attRateEl.innerText = `${attPercent}%`;
+          if (attCountEl) attCountEl.innerText = totalClasses > 0 ? `${presentCount} / ${totalClasses} Classes Present` : 'No data available yet.';
+
+          // Lesson History: dedupe re-saves via the shared reader (latest
+          // created_at per schedule+date wins), then apply the per-child date
+          // filter (exact stored-date match; '' = full history). Schedules
+          // feed the labelled scheduled durations in the cards.
+          let lessonDisplayLogs = attLogs;
+          if (window.LessonHistory) {
+            try {
+              const entries = window.LessonHistory.dedupeLessonRows(attLogs);
+              lessonDisplayLogs = entries.map(en => ({ ...(en.raw || {}), _lhEntry: en }));
+              if (PARENT_LESSON_DATE) lessonDisplayLogs = lessonDisplayLogs.filter(l => String(l.date) === String(PARENT_LESSON_DATE));
+            } catch (e) { lessonDisplayLogs = attLogs; }
+          } else if (PARENT_LESSON_DATE) {
+            lessonDisplayLogs = attLogs.filter(l => String(l.date) === String(PARENT_LESSON_DATE));
+          }
+          renderRecentSabaqLogs(lessonDisplayLogs, ctx.teacherName);
+          renderAttendanceTable(lessonDisplayLogs, ctx.teacherName);
+          setTimeout(hydrateParentLessonImages, 0);
+        });
+
+        // 4. Fee status & invoices
+        const paintFee = feeP.then(function (feeRes) {
+          if (!isCurrent()) return;
+          const feeHistory = (feeRes && feeRes.feeHistory) || [];
+          CURRENT_FEE_HISTORY = feeHistory;
+
+          // Update Fee Card with Real Data Only
+          const feeStatEl = document.getElementById('parentFeeStat');
+          const feeMonthEl = document.getElementById('parentFeeMonth');
+          if (feeHistory.length > 0) {
+            const topFee = feeHistory[0];
+            const isPaid = (parseFloat(topFee?.remainingBalance ?? 0) <= 0 && parseFloat(topFee?.amountPaid ?? 0) > 0) ||
+                           (topFee?.status && String(topFee.status).toLowerCase().includes('paid'));
+            if (feeStatEl) feeStatEl.innerText = isPaid ? 'Paid' : (topFee?.status || 'Recorded');
+            if (feeMonthEl) {
+              const cur = topFee?.currency || 'USD';
+              const amt = parseFloat(topFee?.amountPaid ?? 0).toFixed(0);
+              feeMonthEl.innerText = `${topFee?.month || '-'} (${amt} ${cur})`;
+            }
+          } else {
+            if (feeStatEl) feeStatEl.innerText = '0';
+            if (feeMonthEl) feeMonthEl.innerText = 'No data available yet.';
+          }
+          renderFeeInvoicesTable(feeHistory);
+        });
+
+        await Promise.all([paintTeacher, paintCover, paintSchedules, paintAttendance, paintFee]);
+      } finally {
+        _parentRenderInFlight = false;
+        if (_parentLiveSyncPending) {
+          _parentLiveSyncPending = false;
+          // The tick that arrived mid-render runs once now, debounced
+          // as usual, instead of being dropped.
+          scheduleParentPortalLiveSync();
         }
-      } else {
-        if (feeStatEl) feeStatEl.innerText = '0';
-        if (feeMonthEl) feeMonthEl.innerText = 'No data available yet.';
       }
-
-      // Lesson History: dedupe re-saves via the shared reader (latest
-      // created_at per schedule+date wins), then apply the per-child date
-      // filter (exact stored-date match; '' = full history). Schedules
-      // feed the labelled scheduled durations in the cards.
-      PARENT_SCHEDULE_MAP = {};
-      (schedules || []).forEach(sc => { if (sc && sc.id) PARENT_SCHEDULE_MAP[String(sc.id)] = sc; });
-      let lessonDisplayLogs = attLogs;
-      if (window.LessonHistory) {
-        try {
-          const entries = window.LessonHistory.dedupeLessonRows(attLogs);
-          lessonDisplayLogs = entries.map(en => ({ ...(en.raw || {}), _lhEntry: en }));
-          if (PARENT_LESSON_DATE) lessonDisplayLogs = lessonDisplayLogs.filter(l => String(l.date) === String(PARENT_LESSON_DATE));
-        } catch (e) { lessonDisplayLogs = attLogs; }
-      } else if (PARENT_LESSON_DATE) {
-        lessonDisplayLogs = attLogs.filter(l => String(l.date) === String(PARENT_LESSON_DATE));
-      }
-      // Render Sub-Sections
-      renderRecentSabaqLogs(lessonDisplayLogs, teacherName);
-      renderWeeklyTimetable(schedules, teacherName, effectiveZoomLink);
-      renderAttendanceTable(lessonDisplayLogs, teacherName);
-      renderFeeInvoicesTable(feeHistory);
-      setTimeout(hydrateParentLessonImages, 0);
     }
 
     // Render Recent Lesson Progress Cards
@@ -3156,10 +3369,17 @@
     async function openParentSavedLessonPage(bookId, page, para, language) {
       if (!window.LessonHistory) { lmsNotify('Course book not found.'); return { ok: false, reason: 'BOOK_NOT_FOUND' }; }
       const entry = { bookId: bookId || null, page: (page === null || page === undefined || page === '') ? null : Number(page), para: (para === null || para === undefined || para === '') ? null : Number(para), language: language || null, isAdditionalCourse: bookId === 'additional-course' };
+      // Reader miss path: the catalog hydrate is index-keys-only now,
+      // so a miss also fetches just THIS book's pages (one LIKE query)
+      // before the resolver judges the click a second time.
+      const hydrateForResolve = async () => {
+        if (typeof hydrateParentCustomBooksFromD1 === 'function') { try { await hydrateParentCustomBooksFromD1(); } catch (e) {} }
+        if (typeof hydrateParentBookPagesFromD1 === 'function') { try { await hydrateParentBookPagesFromD1(bookId); } catch (e) {} }
+      };
       const res = await window.LessonHistory.resolveLessonPageWithRefresh(
         entry,
         () => (typeof getParentSavedLessonBooks === 'function' ? getParentSavedLessonBooks() : []),
-        (typeof hydrateParentCustomBooksFromD1 === 'function') ? hydrateParentCustomBooksFromD1 : null
+        (typeof hydrateParentCustomBooksFromD1 === 'function') ? hydrateForResolve : null
       );
       if (res.ok) {
         openParentDigitalReader(res.book.id, res.displayPage, res.para, res.language);
@@ -3835,53 +4055,103 @@
       renderPortalLibrary();
     }
 
+    // Button-delay build (2026-11-20): this used to run
+    // `system_settings select('*')` — the whole 751+ row table — on
+    // every Library tab click and twice at boot, just to read two keys.
+    // It now fetches ONLY the two index keys (in parallel), once per
+    // session; concurrent calls share the one in-flight fetch, and a
+    // failed/empty attempt stays retryable on the next tab click.
+    // Pages are NOT in the index (the catalog strips them; they live in
+    // BOOK_PAGE_<id>_<n> rows), so they are fetched lazily, one book at
+    // a time, only when that book is actually opened — see
+    // hydrateParentBookPagesFromD1 below.
+    let _parentBooksHydrated = false;
+    let _parentBooksHydratePromise = null;
     async function hydrateParentCustomBooksFromD1() {
-      try {
-        if (typeof db === 'undefined' || !db || typeof db.from !== 'function') return;
-        const { data: allSettings } = await db.from('system_settings').select('*');
-        if (!Array.isArray(allSettings) || allSettings.length === 0) return;
-        const settingsMap = new Map(allSettings.map(r => [String(r.key), r.value]));
-
-        // 1. Sync deleted books tombstone list from backend
-        const remoteDeletedRaw = settingsMap.get('alhuda_deleted_books');
-        if (remoteDeletedRaw) {
-          try {
-            const remoteDeleted = JSON.parse(remoteDeletedRaw);
-            if (Array.isArray(remoteDeleted)) {
-              localStorage.setItem('alhuda_deleted_books', JSON.stringify(remoteDeleted));
-            }
-          } catch(e) {}
-        }
-
-        // 2. Sync custom books and filter out any deleted IDs
-        const rawIndex = settingsMap.get('alhuda_custom_books_index') || settingsMap.get('alhuda_custom_books');
-        if (rawIndex !== undefined && rawIndex !== null) {
-          try {
-            const books = JSON.parse(rawIndex);
-            if (Array.isArray(books)) {
-              books.forEach(b => {
-                const total = Number(b.total_pages) || 0;
-                if ((!b.pages || b.pages.length === 0) && total > 0) {
-                  // Preserve page indices: a missing record leaves a hole
-                  // instead of shifting later pages up.
-                  const hydratedPages = new Array(total);
-                  let found = 0;
-                  for (let i = 0; i < total; i++) {
-                    const pVal = settingsMap.get(`BOOK_PAGE_${b.id}_${i}`);
-                    if (pVal) { hydratedPages[i] = pVal; found++; }
-                  }
-                  if (found > 0) b.pages = hydratedPages;
-                }
-              });
-              const deletedIds = JSON.parse(localStorage.getItem('alhuda_deleted_books') || '[]');
-              const cleanBooks = books.filter(b => b && !deletedIds.includes(b.id));
-              localStorage.setItem('alhuda_custom_books', JSON.stringify(cleanBooks));
-            }
-          } catch(e) {}
-        }
-
+      if (_parentBooksHydrated) return;
+      if (_parentBooksHydratePromise) return _parentBooksHydratePromise;
+      _parentBooksHydratePromise = (async function () {
+        try {
+          if (typeof db === 'undefined' || !db || typeof db.from !== 'function') return false;
+          const [idxRes, delRes] = await Promise.all([
+            db.from('system_settings').select('value').eq('key', 'alhuda_custom_books_index').limit(1),
+            db.from('system_settings').select('value').eq('key', 'alhuda_deleted_books').limit(1)
+          ]);
+          let rawIndex = (idxRes && idxRes.data && idxRes.data[0]) ? idxRes.data[0].value : null;
+          if (rawIndex === null || rawIndex === undefined) {
+            // Legacy fallback: the pre-index catalog key.
+            try {
+              const legacyRes = await db.from('system_settings').select('value').eq('key', 'alhuda_custom_books').limit(1);
+              rawIndex = (legacyRes && legacyRes.data && legacyRes.data[0]) ? legacyRes.data[0].value : null;
+            } catch (e) {}
+          }
+          const remoteDeletedRaw = (delRes && delRes.data && delRes.data[0]) ? delRes.data[0].value : null;
+          let gotAnything = false;
+          if (remoteDeletedRaw) {
+            try {
+              const remoteDeleted = JSON.parse(remoteDeletedRaw);
+              if (Array.isArray(remoteDeleted)) {
+                localStorage.setItem('alhuda_deleted_books', JSON.stringify(remoteDeleted));
+                gotAnything = true;
+              }
+            } catch (e) {}
+          }
+          if (rawIndex !== undefined && rawIndex !== null) {
+            try {
+              const books = JSON.parse(rawIndex);
+              if (Array.isArray(books)) {
+                const deletedIds = JSON.parse(localStorage.getItem('alhuda_deleted_books') || '[]');
+                const cleanBooks = books.filter(b => b && !deletedIds.includes(b.id));
+                localStorage.setItem('alhuda_custom_books', JSON.stringify(cleanBooks));
+                gotAnything = true;
+              }
+            } catch (e) {}
+          }
+          return gotAnything;
+        } catch (e) { return false; }
+      })();
+      let ok = false;
+      try { ok = await _parentBooksHydratePromise; } catch (e) { ok = false; }
+      _parentBooksHydratePromise = null;
+      if (ok) {
+        _parentBooksHydrated = true;
         renderPortalLibrary();
-      } catch (e) {}
+      }
+      return ok;
+    }
+
+    // Lazy per-book page hydration: fetch ONLY this book's BOOK_PAGE
+    // rows (one LIKE query, bounded by the book's own page count)
+    // and merge them into the cached catalog entry, preserving page
+    // indices — a missing record leaves a hole instead of shifting
+    // later pages up, exactly as the old whole-table hydration did.
+    // Returns true when at least one page row was found.
+    async function hydrateParentBookPagesFromD1(bookId) {
+      if (!bookId) return false;
+      try {
+        if (typeof db === 'undefined' || !db || typeof db.from !== 'function') return false;
+        let books = [];
+        try { books = JSON.parse(localStorage.getItem('alhuda_custom_books') || '[]'); } catch (e) { books = []; }
+        if (!Array.isArray(books)) books = [];
+        const book = books.find(b => b && String(b.id) === String(bookId));
+        if (!book) return false;
+        if (Array.isArray(book.pages) && book.pages.some(p => !!p)) return true;
+        const total = Number(book.total_pages) || 0;
+        if (total <= 0) return false;
+        const { data: pageRows } = await db.from('system_settings').select('value').like('key', `BOOK_PAGE_${bookId}_%`).limit(total);
+        if (!Array.isArray(pageRows) || pageRows.length === 0) return false;
+        const prefix = `BOOK_PAGE_${bookId}_`;
+        const hydratedPages = new Array(total);
+        let found = 0;
+        pageRows.forEach(r => {
+          const idx = Number(String(r.key || '').slice(prefix.length));
+          if (Number.isInteger(idx) && idx >= 0 && idx < total && r.value) { hydratedPages[idx] = r.value; found++; }
+        });
+        if (found === 0) return false;
+        book.pages = hydratedPages;
+        localStorage.setItem('alhuda_custom_books', JSON.stringify(books));
+        return true;
+      } catch (e) { return false; }
     }
     // =========================================================================
     // OFFICIAL ANNOUNCEMENTS (Admin -> Parent Portal noticeboard)
@@ -3926,11 +4196,11 @@
       } catch (e) {}
     }
     loadParentAnnouncements();
-    setTimeout(loadParentAnnouncements, 2500);
 
-    // Hydrate immediately and after startup delay
+    // Hydrate once at startup (the function itself is session-once;
+    // the old duplicate calls at +500ms / +2500ms re-fetched the whole
+    // table for nothing).
     hydrateParentCustomBooksFromD1();
-    setTimeout(hydrateParentCustomBooksFromD1, 500);
 
     function isMaterialAuthorizedForStudent(book, currentStudent) {
       if (!currentStudent) return true;
@@ -4180,6 +4450,24 @@
         modal.classList.add('flex');
       }
 
+      // Lazy per-book pages: the catalog hydrate no longer ships every
+      // BOOK_PAGE row, so a book opened before its pages were ever
+      // fetched loads only its own rows now. The reader shell is already
+      // open with the loading state; the page re-renders once the rows
+      // land (a slow fetch may briefly show the honest error first —
+      // the successful load hides it again).
+      if ((!book.pages || book.pages.length === 0) && Number(book.total_pages || 0) > 0 && typeof hydrateParentBookPagesFromD1 === 'function') {
+        hydrateParentBookPagesFromD1(book.id).then(function (ok) {
+          if (ok && ACTIVE_READER_BOOK && String(ACTIVE_READER_BOOK.id) === String(book.id)) {
+            try {
+              const fresh = (typeof getParentSavedLessonBooks === 'function' ? getParentSavedLessonBooks() : []).find(b => b.id === book.id);
+              if (fresh && fresh.pages && fresh.pages.length) ACTIVE_READER_BOOK.pages = fresh.pages;
+            } catch (e) {}
+            renderCurrentStudentReaderPage();
+          }
+        });
+      }
+
       renderCurrentStudentReaderPage();
     }
 
@@ -4232,6 +4520,7 @@
         if (AlHudaInteractiveQaida.closeMakharijTeethReferenceModal) AlHudaInteractiveQaida.closeMakharijTeethReferenceModal();
       }
       resetParentReaderZoom();
+      hideParentReaderPageLoading();
       const modal = document.getElementById('modalParentBookReader');
       if (modal) {
         modal.classList.add('hidden');
@@ -4348,11 +4637,15 @@
         }
 
         if (!pageUrl && !isInteractiveBookP) {
+          showParentReaderPageLoading();
           showParentReaderPageError(img, book, ACTIVE_READER_PAGE, 'Page not available.');
           return;
         }
 
-        img.onload = () => { if (PARENT_READER_ERROR_TIMER) { clearTimeout(PARENT_READER_ERROR_TIMER); PARENT_READER_ERROR_TIMER = null; } const ebP = document.getElementById('parentReaderPageError'); if (ebP) ebP.style.display = 'none'; img.style.display = ''; applyParentReaderZoom(); };
+        // Show the loading state immediately: the fetch below (with its
+        // 700ms retries, unchanged) no longer leaves a blank page.
+        showParentReaderPageLoading();
+        img.onload = () => { if (PARENT_READER_ERROR_TIMER) { clearTimeout(PARENT_READER_ERROR_TIMER); PARENT_READER_ERROR_TIMER = null; } const ebP = document.getElementById('parentReaderPageError'); if (ebP) ebP.style.display = 'none'; hideParentReaderPageLoading(); img.style.display = ''; applyParentReaderZoom(); };
         img.onerror = () => {
           img.onerror = null;
           if (!isInteractiveBookP) {
@@ -4435,6 +4728,19 @@
         });
     }
 
+    // Reader loading state (button-delay build 2026-11-20): shown the
+    // moment a page starts loading, hidden when the page paints or
+    // when the honest error finally shows (after its 1200ms grace).
+    // Retry counts, retry delays and the grace are unchanged.
+    function showParentReaderPageLoading() {
+      const el = document.getElementById('parentReaderPageLoading');
+      if (el) { el.classList.remove('hidden'); el.classList.add('flex'); }
+    }
+    function hideParentReaderPageLoading() {
+      const el = document.getElementById('parentReaderPageLoading');
+      if (el) { el.classList.add('hidden'); el.classList.remove('flex'); }
+    }
+
     // Honest empty state for authentic custom-book pages that cannot be displayed.
     let PARENT_READER_ERROR_TIMER = null;
     // Grace period: a page load that recovers within ~1.2s (loader
@@ -4448,6 +4754,7 @@
       }, 1200);
     }
     function showParentReaderPageErrorNow(img, book, pageNum, reason) {
+      hideParentReaderPageLoading();
       if (PARENT_READER_BLOB_URL) {
         try { URL.revokeObjectURL(PARENT_READER_BLOB_URL); } catch (e) {}
         PARENT_READER_BLOB_URL = null;
@@ -4808,6 +5115,16 @@
         return;
       }
 
+      // Button-delay build (2026-11-20): the submit button answers at
+      // once (disabled + "Sending...") instead of sitting unchanged
+      // through the two sequential round-trips.
+      const leaveSubmitBtn = (e && e.submitter) || document.querySelector('#modalLeaveRequest button[type="submit"]');
+      const leaveSubmitBtnHtml = leaveSubmitBtn ? leaveSubmitBtn.innerHTML : '';
+      if (leaveSubmitBtn) {
+        leaveSubmitBtn.disabled = true;
+        leaveSubmitBtn.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin"></i> Sending...';
+      }
+
       try {
         if (typeof db === 'undefined' || !db || !CURRENT_STUDENT || !CURRENT_STUDENT.id) {
           throw new Error('Student record is not available.');
@@ -4856,6 +5173,11 @@
         lmsNotify(`✅ Leave request sent.\n\nYour leave request has been sent to the administration for approval.\n\nStudent: ${leaveRequest.student_name}\nDates: ${startDate} to ${endDate}\nReason: ${reason}\nStatus: Pending`);
       } catch (err) {
         lmsNotify(`Your leave request could NOT be sent. Please check your connection and try again.\n\n${err?.message || err || 'Unknown error'}`);
+      } finally {
+        if (leaveSubmitBtn) {
+          leaveSubmitBtn.disabled = false;
+          leaveSubmitBtn.innerHTML = leaveSubmitBtnHtml;
+        }
       }
     }
 
@@ -4948,7 +5270,10 @@
         const activeTag = document.activeElement ? document.activeElement.tagName : '';
         if (['INPUT', 'TEXTAREA', 'SELECT'].includes(activeTag)) return;
         if (typeof switchStudentAccount === 'function') {
-          switchStudentAccount(CURRENT_STUDENT.id);
+          // Background tick: the in-flight guard inside
+          // renderCurrentStudentData remembers (not drops) a tick that
+          // lands mid-render.
+          switchStudentAccount(CURRENT_STUDENT.id, { background: true });
         }
       }, 450);
     }

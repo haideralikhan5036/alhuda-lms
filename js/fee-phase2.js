@@ -229,6 +229,14 @@
   // -> Promise, monthlyFeeForRow(row) -> number, priorPaidForRow(row) ->
   // number, onRow(index, total, outcome). A row failure never stops the
   // run; an email failure never fails the row (it is reported on it).
+  // Runs the collect loop with BOUNDED CONCURRENCY (button-delay
+  // build 2026-11-20, audit §5(ii)5): up to BULK_COLLECT_CONCURRENCY
+  // families in flight instead of await-in-loop, so N families cost
+  // ~N/5 round-trips of wall time. Receipt emails are sent AFTER all
+  // saves finish (not interleaved), in input order, and an email
+  // failure still never fails the row. Per-row progress (onRow) fires
+  // as each save lands; results stay in input order.
+  var BULK_COLLECT_CONCURRENCY = 5;
   async function runBulkCollect(rows, deps) {
     var list = Array.isArray(rows) ? rows : [];
     if (!deps || typeof deps.saveRecord !== 'function') {
@@ -237,12 +245,14 @@
     if (typeof deps.generateReceiptNo !== 'function') {
       throw new Error('Bulk Collect needs a receipt-number generator.');
     }
-    var results = [];
+    var results = new Array(list.length);
     var paid = 0;
     var failed = 0;
     var totalCollected = {};
-    for (var i = 0; i < list.length; i++) {
-      var row = list[i];
+    var nextIndex = 0;
+    var emailQueue = [];
+    async function collectOne(index) {
+      var row = list[index];
       var record = null;
       var outcome = null;
       try {
@@ -259,12 +269,8 @@
         if (saved && saved.ok) {
           paid++;
           totalCollected[row.currency] = round2((totalCollected[row.currency] || 0) + row.dueAmount);
-          var emailError = null;
-          if (deps.emailReceipts && typeof deps.sendEmail === 'function') {
-            try { await deps.sendEmail(record); }
-            catch (e) { emailError = 'Receipt email could not be sent.'; }
-          }
-          outcome = { row: row, ok: true, receiptNo: record.receiptNo, emailError: emailError };
+          if (deps.emailReceipts && typeof deps.sendEmail === 'function') emailQueue.push({ record: record, index: index });
+          outcome = { row: row, ok: true, receiptNo: record.receiptNo, emailError: null };
         } else {
           failed++;
           outcome = { row: row, ok: false, receiptNo: record.receiptNo, error: (saved && saved.error) || 'Payment could not be saved.' };
@@ -273,9 +279,27 @@
         failed++;
         outcome = { row: row, ok: false, receiptNo: record ? record.receiptNo : null, error: (e && e.message) || 'Payment could not be saved.' };
       }
-      results.push(outcome);
+      results[index] = outcome;
       if (typeof deps.onRow === 'function') {
-        try { deps.onRow(i, list.length, outcome); } catch (e) { /* progress must never break the run */ }
+        try { deps.onRow(index, list.length, outcome); } catch (e) { /* progress must never break the run */ }
+      }
+    }
+    async function worker() {
+      while (nextIndex < list.length) {
+        var index = nextIndex++;
+        await collectOne(index);
+      }
+    }
+    var workerCount = Math.min(BULK_COLLECT_CONCURRENCY, list.length);
+    var workers = [];
+    for (var w = 0; w < workerCount; w++) workers.push(worker());
+    await Promise.all(workers);
+    // Receipt emails after the loop, in input order.
+    for (var e = 0; e < emailQueue.length; e++) {
+      var queued = emailQueue[e];
+      try { await deps.sendEmail(queued.record); }
+      catch (err) {
+        if (results[queued.index]) results[queued.index].emailError = 'Receipt email could not be sent.';
       }
     }
     return { paid: paid, failed: failed, totalCollected: totalCollected, results: results };
@@ -660,6 +684,7 @@
       findBulkCollectDuplicates: findBulkCollectDuplicates,
       buildBulkPaymentRecord: buildBulkPaymentRecord,
       runBulkCollect: runBulkCollect,
+      bulkCollectConcurrency: BULK_COLLECT_CONCURRENCY,
       bulkCollectRowResultHtml: bulkCollectRowResultHtml,
       bulkCollectSummaryHtml: bulkCollectSummaryHtml,
       studentLeaveState: studentLeaveState,

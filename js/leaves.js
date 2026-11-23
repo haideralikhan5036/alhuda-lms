@@ -79,10 +79,50 @@
       return 'ACTIVE';
     }
 
+    // Button-delay build (2026-11-20, audit §5(ii)2): the dashboard
+    // used to run the full leave-check on every load. The automatic
+    // (dashboard) pass now runs once per session; explicit refreshes
+    // (autoPopup === false, from leave actions and the Leaves tab)
+    // always re-run, so badges stay correct after a real change.
+    let _LEAVE_ALERTS_RAN_THIS_SESSION = false;
+
     async function checkLeaveReturnAlertsAndRequests(autoPopup = true) {
       try {
-        const { data: students, error } = await db.from('students').select('*, teachers(*), families(*)');
-        if (error || !students) return;
+        if (autoPopup && _LEAVE_ALERTS_RAN_THIS_SESSION) return;
+        // Button-delay build (2026-11-20, audit §1.4/§5(ii)2):
+        // students from the shared core cache, not a fresh
+        // whole-table select with two joins. Inline (not a helper)
+        // so the name-extracting unit harnesses keep working; the
+        // direct fetch below runs ONLY when the core cache is empty.
+        let students = [];
+        try {
+          if (typeof ensureCoreLmsDataLoaded === 'function') await ensureCoreLmsDataLoaded();
+        } catch (e) {}
+        {
+          const _famById = {};
+          const _rawFams = (typeof RAW_ALL_FAMILIES !== 'undefined' && Array.isArray(RAW_ALL_FAMILIES)) ? RAW_ALL_FAMILIES : [];
+          const _fams = (typeof ALL_FAMILIES !== 'undefined' && Array.isArray(ALL_FAMILIES)) ? ALL_FAMILIES : [];
+          _rawFams.concat(_fams).forEach(f => { if (f && f.id) { const k = String(f.id).toUpperCase(); if (!_famById[k]) _famById[k] = f; } });
+          const _tchById = {};
+          ((typeof ALL_TEACHERS !== 'undefined' && Array.isArray(ALL_TEACHERS)) ? ALL_TEACHERS : []).forEach(t => { if (t && t.id) _tchById[String(t.id)] = t; });
+          const _byId = {};
+          const _pushStu = (st) => {
+            if (!st || !st.id) return;
+            const k = String(st.id);
+            if (_byId[k]) return;
+            _byId[k] = { ...st, families: _famById[String(st.family_id || '').toUpperCase()] || st.families || null, teachers: (st.assigned_teacher_id && _tchById[String(st.assigned_teacher_id)]) || st.teachers || null };
+          };
+          _rawFams.forEach(f => (Array.isArray(f.students) ? f.students : []).forEach(_pushStu));
+          ((typeof ALL_STUDENTS !== 'undefined' && Array.isArray(ALL_STUDENTS)) ? ALL_STUDENTS : []).forEach(_pushStu);
+          students = Object.values(_byId);
+        }
+        if (students.length === 0) {
+          try {
+            const { data: freshStudents, error: freshError } = await db.from('students').select('*, teachers(*), families(*)');
+            if (!freshError && Array.isArray(freshStudents)) students = freshStudents;
+          } catch (e) {}
+        }
+        if (!students) return;
 
         const todayStr = new Date().toISOString().slice(0, 10);
         OVERDUE_LEAVE_STUDENTS = [];
@@ -165,13 +205,21 @@
             const advRes = await db.from('advance_requests').select('*').eq('status', 'Pending').order('requested_at', { ascending: true });
             const advRows = (advRes && !advRes.error && Array.isArray(advRes.data)) ? advRes.data : [];
             if (advRows.length) {
+              // Teacher names from the core cache (button-delay build
+              // 2026-11-20); the direct fetch runs only when the core
+              // cache holds no teachers at all.
               let teacherNames = {};
               try {
-                const tRes = await db.from('teachers').select('id, full_name');
-                if (tRes && !tRes.error && Array.isArray(tRes.data)) {
-                  tRes.data.forEach((t) => { if (t && t.id) teacherNames[String(t.id)] = t.full_name || ''; });
-                }
+                ((typeof ALL_TEACHERS !== 'undefined' && Array.isArray(ALL_TEACHERS)) ? ALL_TEACHERS : []).forEach((t) => { if (t && t.id) teacherNames[String(t.id)] = t.full_name || ''; });
               } catch (e) {}
+              if (Object.keys(teacherNames).length === 0) {
+                try {
+                  const tRes = await db.from('teachers').select('id, full_name');
+                  if (tRes && !tRes.error && Array.isArray(tRes.data)) {
+                    tRes.data.forEach((t) => { if (t && t.id) teacherNames[String(t.id)] = t.full_name || ''; });
+                  }
+                } catch (e) {}
+              }
               advRows.forEach((r) => {
                 if (!r || !r.id) return;
                 PENDING_TEACHER_REQUESTS.push({
@@ -221,6 +269,8 @@
 
         // Render Live 1-Click Approval Banners on Dashboard & Teachers Tab
         renderPendingTimeChangeBanners();
+
+        _LEAVE_ALERTS_RAN_THIS_SESSION = true;
 
         // Persistent Dashboard Alert Modal
         if (autoPopup && OVERDUE_LEAVE_STUDENTS.length > 0) {
@@ -1311,8 +1361,39 @@
       tbody.innerHTML = '<tr><td colspan="7" class="p-8 text-center text-slate-400"><i class="fa-solid fa-spinner fa-spin mr-2"></i>Loading leave records...</td></tr>';
 
       try {
-        const { data: students, error } = await db.from('students').select('*, teachers(*), families(*)');
-        if (error) throw error;
+        // Button-delay build (2026-11-20, audit §1.4/§5(ii)2):
+        // students from the shared core cache — no fresh
+        // whole-table students select on a warm cache. Inline (not
+        // a helper) so the name-extracting unit harnesses keep
+        // working; the direct fetch runs ONLY when the core cache
+        // is empty.
+        let students = [];
+        try {
+          if (typeof ensureCoreLmsDataLoaded === 'function') await ensureCoreLmsDataLoaded();
+        } catch (e) {}
+        {
+          const _famById = {};
+          const _rawFams = (typeof RAW_ALL_FAMILIES !== 'undefined' && Array.isArray(RAW_ALL_FAMILIES)) ? RAW_ALL_FAMILIES : [];
+          const _fams = (typeof ALL_FAMILIES !== 'undefined' && Array.isArray(ALL_FAMILIES)) ? ALL_FAMILIES : [];
+          _rawFams.concat(_fams).forEach(f => { if (f && f.id) { const k = String(f.id).toUpperCase(); if (!_famById[k]) _famById[k] = f; } });
+          const _tchById = {};
+          ((typeof ALL_TEACHERS !== 'undefined' && Array.isArray(ALL_TEACHERS)) ? ALL_TEACHERS : []).forEach(t => { if (t && t.id) _tchById[String(t.id)] = t; });
+          const _byId = {};
+          const _pushStu = (st) => {
+            if (!st || !st.id) return;
+            const k = String(st.id);
+            if (_byId[k]) return;
+            _byId[k] = { ...st, families: _famById[String(st.family_id || '').toUpperCase()] || st.families || null, teachers: (st.assigned_teacher_id && _tchById[String(st.assigned_teacher_id)]) || st.teachers || null };
+          };
+          _rawFams.forEach(f => (Array.isArray(f.students) ? f.students : []).forEach(_pushStu));
+          ((typeof ALL_STUDENTS !== 'undefined' && Array.isArray(ALL_STUDENTS)) ? ALL_STUDENTS : []).forEach(_pushStu);
+          students = Object.values(_byId);
+        }
+        if (students.length === 0) {
+          const { data: freshStudents, error: freshError } = await db.from('students').select('*, teachers(*), families(*)');
+          if (freshError) throw freshError;
+          students = freshStudents || [];
+        }
 
         ALL_LEAVE_RECORDS = [];
         let activeOnLeaveCount = 0;
@@ -1388,6 +1469,13 @@
         setEl('kpiLeavesTotal', `${reactivatedCount} / ${totalRecordsCount}`);
 
         filterLeavesTable();
+
+        // Button-delay build (2026-11-20): the leave-check (badges +
+        // pending requests) now refreshes when the Leaves tab itself
+        // opens, fire-and-forget so it never gates this tab's paint.
+        if (typeof checkLeaveReturnAlertsAndRequests === 'function') {
+          try { const _lc = checkLeaveReturnAlertsAndRequests(false); if (_lc && typeof _lc.catch === 'function') _lc.catch(function () {}); } catch (e) {}
+        }
       } catch (err) {
         tbody.innerHTML = `<tr><td colspan="7" class="p-8 text-center text-rose-500 font-bold">Error loading leaves: ${err.message}</td></tr>`;
       }

@@ -1163,7 +1163,11 @@ if (mergedDeleted.length > 0) {
             READER_LAST_DETAIL = 'Network error after 3 attempts: ' + ((err && err.name) || 'Error') + ': ' + ((err && err.message) || '') + ' - login token: ' + (authVal ? 'present (length ' + authVal.length + ')' : 'MISSING');
           }
           if (typeof onFetchError === 'function') onFetchError(err && err.status);
-          else if (spinner) spinner.classList.add('hidden');
+          // No spinner handling here: the spinner belongs to the caller,
+          // which hides it in its own error path. (The old `else if
+          // (spinner)` branch named a variable that does not exist in
+          // this scope, so a caller without onFetchError would have
+          // thrown here with the spinner stuck visible.)
         });
     }
 

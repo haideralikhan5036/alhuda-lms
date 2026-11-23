@@ -632,7 +632,7 @@ function makeFakeDb(tables) {
   sandbox.window = sandbox;
   vm.createContext(sandbox);
   const lockDecl = TEACHER.slice(TEACHER.indexOf('const _selfResetInFlight'), TEACHER.indexOf(';', TEACHER.indexOf('const _selfResetInFlight')) + 1);
-  vm.runInContext(lockDecl + '\n' + extractFunction(TEACHER, 'handleTeacherSelfResetClass'), sandbox);
+  vm.runInContext(lockDecl + '\n' + extractFunction(TEACHER, 'setTeacherRowButtonsBusy') + '\n' + extractFunction(TEACHER, 'restoreTeacherRowButtons') + '\n' + extractFunction(TEACHER, 'patchTodayClassLocally') + '\n' + extractFunction(TEACHER, 'refreshTeacherPortalInBackground') + '\n' + extractFunction(TEACHER, 'handleTeacherSelfResetClass'), sandbox);
 
   const todayRows = () => tables.attendance_logs.filter(r => r.schedule_id === 'SCH-S1' && r.date === '2026-11-10');
   const controlRows = () => tables.attendance_logs.filter(r => !(r.schedule_id === 'SCH-S1' && r.date === '2026-11-10'));

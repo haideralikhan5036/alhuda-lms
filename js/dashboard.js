@@ -972,6 +972,10 @@
     let _dashLoadInflight = false;
     let _dashRunSeq = 0;
     let _dashRerunRequested = false;
+    // Button-delay build (2026-11-20, audit §1.5/§5(i)6): timestamp of
+    // the last user-initiated dashboard load, so the 15 s heartbeat
+    // can skip a pass right after a click.
+    let _dashLastUserClickAt = 0;
 
     // Batch 7 (F3.4): settle one dashboard branch independently with a
     // timeout, so a single stalled query cannot block every count.
@@ -1045,8 +1049,21 @@
       return stuNotes.is_trial === true && !stuNotes.converted_from_trial && !stuNotes.converted_to_regular;
     }
 
-    async function loadDashboardData() {
+    async function loadDashboardData(opts) {
       const myRun = ++_dashRunSeq;
+      const isBackground = !!(opts && opts.background);
+      if (isBackground) {
+        // Heartbeat pass: never queue behind — or ahead of — a user
+        // click. Skip when a pass is already running/queued, or the
+        // user clicked within the last 5 seconds.
+        if (_dashLoadInflight || _dashRerunRequested) return;
+        if (Date.now() - _dashLastUserClickAt < 5000) return;
+      } else {
+        // A fresh user click wins: it stamps the click time (so the
+        // next heartbeat backs off) and, when a pass is already
+        // running, is the rerun that fires when that pass finishes.
+        _dashLastUserClickAt = Date.now();
+      }
       if (_dashLoadInflight) {
         // Never overlap passes; remember that a fresher pass is owed.
         _dashRerunRequested = true;
@@ -1108,228 +1125,244 @@
         dateLabel.innerText = now.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
       }
 
-      // Execute schedule & attendance queries in parallel, each settled
-      // independently with a timeout (Batch 7 F3.4): one stalled branch
-      // can no longer suppress every Today's Classes count.
-      const hasCachedSchedules = Array.isArray(window.ALL_CLASS_SCHEDULES) && window.ALL_CLASS_SCHEDULES.length > 0;
-      const [schedRes, logsRes, advRes] = await Promise.all([
-        dashSettleBranch(
-          hasCachedSchedules
-            ? Promise.resolve({ data: window.ALL_CLASS_SCHEDULES.filter(sc => Number(sc.day_of_week) === Number(currentDay)) })
-            : db.from('class_schedules').select('*, students(*), teachers(*)').eq('day_of_week', currentDay),
-          []
-        ),
-        dashSettleBranch(db.from('attendance_logs').select('*').eq('date', todayDate), []),
-        dashSettleBranch(db.from('attendance_logs').select('*').eq('status', 'Advance Class'), [])
-      ]);
-      if (myRun !== _dashRunSeq) return; // superseded while waiting
-
-      // SLOW-CLASSES FIX: degradation for the class table. A session
-      // expiry beats everything (login prompt); otherwise any
-      // mirror-served or failed/timed-out branch degrades the table.
-      // The cached-schedules path carries no provenance, so a pass
-      // that started in mirror mode counts as degraded even when the
-      // cache served rows.
-      const _dashBranchResults = [schedRes, logsRes, advRes];
-      if (_dashBranchResults.some(r => r && r.error && r.error.code === 'SESSION_EXPIRED')) {
-        DASH_CLASSES_DEGRADED = { kind: 'session' };
-      } else if (!dashD1Live || _dashBranchResults.some(r => r && (r._lmsSource === 'mirror' || r.error))) {
-        DASH_CLASSES_DEGRADED = { kind: (!dashD1Live || _dashBranchResults.some(r => r && r._lmsSource === 'mirror')) ? 'mirror' : 'error' };
-      } else {
-        DASH_CLASSES_DEGRADED = null;
-      }
-
-      const scheds = schedRes.data || [];
-      const logs = logsRes.data || [];
-      const logsMap = {};
-      (logs || []).forEach(l => logsMap[l.schedule_id] = l);
-
-      let advCoverMap = {};
-      try {
-        const allAdv = advRes.data || [];
-        if (allAdv.length > 0) {
-          allAdv.forEach(al => {
-            try {
-              const meta = JSON.parse(al.lesson_notes);
-              if (meta && meta.advance_target_date === todayDate) {
-                advCoverMap[al.schedule_id] = { log: al, meta };
-                if (al.student_id) advCoverMap['student_' + al.student_id] = { log: al, meta };
+      // Button-delay build (2026-11-20, audit §5(i)2): paint KPIs +
+      // the class table from each branch as it lands instead of
+      // waiting for all three. Schedules + today's logs paint the
+      // table first (the advance branch only adds pre-cover rows);
+      // the advance branch then repaints with cover applied. The
+      // leave badge fills in async afterwards and never gates the
+      // paint. advRes is null on the first paint.
+      const paintDashClassesFromBranches = (schedRes, logsRes, advRes) => {
+              // SLOW-CLASSES FIX: degradation for the class table. A session
+              // expiry beats everything (login prompt); otherwise any
+              // mirror-served or failed/timed-out branch degrades the table.
+              // The cached-schedules path carries no provenance, so a pass
+              // that started in mirror mode counts as degraded even when the
+              // cache served rows.
+              const _dashBranchResults = [schedRes, logsRes, advRes];
+              if (_dashBranchResults.some(r => r && r.error && r.error.code === 'SESSION_EXPIRED')) {
+                DASH_CLASSES_DEGRADED = { kind: 'session' };
+              } else if (!dashD1Live || _dashBranchResults.some(r => r && (r._lmsSource === 'mirror' || r.error))) {
+                DASH_CLASSES_DEGRADED = { kind: (!dashD1Live || _dashBranchResults.some(r => r && r._lmsSource === 'mirror')) ? 'mirror' : 'error' };
+              } else {
+                DASH_CLASSES_DEGRADED = null;
               }
-            } catch(e){}
-          });
-        }
-      } catch(e){}
 
-      let currentMinutes = _pkt ? _pkt.minutes : (now.getHours() * 60 + now.getMinutes());
+              const scheds = schedRes.data || [];
+              const logs = logsRes.data || [];
+              const logsMap = {};
+              (logs || []).forEach(l => logsMap[l.schedule_id] = l);
 
-      let totalToday = 0;
-      let liveCount = 0;
-      let waitingCount = 0;
-      let completedCount = 0;
-      let remainingCount = 0;
-      let absentCount = 0;
-      let leaveCount = 0;
-      let trialCount = 0;
+              let advCoverMap = {};
+              try {
+                const allAdv = advRes.data || [];
+                if (allAdv.length > 0) {
+                  allAdv.forEach(al => {
+                    try {
+                      const meta = JSON.parse(al.lesson_notes);
+                      if (meta && meta.advance_target_date === todayDate) {
+                        advCoverMap[al.schedule_id] = { log: al, meta };
+                        if (al.student_id) advCoverMap['student_' + al.student_id] = { log: al, meta };
+                      }
+                    } catch(e){}
+                  });
+                }
+              } catch(e){}
 
-      DASHBOARD_CLASSES = (scheds || []).map(s => {
-        totalToday++;
-        const log = logsMap[s.id];
-        const [sH, sM] = s.start_time.split(':').map(Number);
-        const [eH, eM] = s.end_time.split(':').map(Number);
-        const startMin = sH * 60 + sM;
-        const endMin = eH * 60 + eM;
+              let currentMinutes = _pkt ? _pkt.minutes : (now.getHours() * 60 + now.getMinutes());
 
-        const isLive = currentMinutes >= startMin && currentMinutes < endMin;
-        const isPast = currentMinutes >= endMin;
-        const isUpcoming = currentMinutes < startMin;
+              let totalToday = 0;
+              let liveCount = 0;
+              let waitingCount = 0;
+              let completedCount = 0;
+              let remainingCount = 0;
+              let absentCount = 0;
+              let leaveCount = 0;
+              let trialCount = 0;
 
-        // Trials Audit Batch 1 (F8): structured flags only — the old
-        // notes-substring test matched every converted student forever,
-        // because conversion writes converted_from_trial / trial_history
-        // into the same notes field.
-        let isTrial = isDashboardTrialClass(s);
-        if (isTrial) trialCount++;
+              DASHBOARD_CLASSES = (scheds || []).map(s => {
+                totalToday++;
+                const log = logsMap[s.id];
+                const [sH, sM] = s.start_time.split(':').map(Number);
+                const [eH, eM] = s.end_time.split(':').map(Number);
+                const startMin = sH * 60 + sM;
+                const endMin = eH * 60 + eM;
 
-        let isLeaveStudent = s.students?.status === 'Leave';
-        let leaveMeta = null;
-        if (s.students?.notes) {
-          try {
-            const p = JSON.parse(s.students.notes);
-            if (p && p.on_leave) {
-              isLeaveStudent = true;
-              leaveMeta = p;
-            }
-          } catch(e) {}
-        }
+                const isLive = currentMinutes >= startMin && currentMinutes < endMin;
+                const isPast = currentMinutes >= endMin;
+                const isUpcoming = currentMinutes < startMin;
 
-        const isCurrentSlot = isLive && !isLeaveStudent;
-        const isRunningMarked = Boolean(log && log.status === 'Running');
+                // Trials Audit Batch 1 (F8): structured flags only — the old
+                // notes-substring test matched every converted student forever,
+                // because conversion writes converted_from_trial / trial_history
+                // into the same notes field.
+                let isTrial = isDashboardTrialClass(s);
+                if (isTrial) trialCount++;
 
-        let status = 'SCHEDULED';
-        let badgeClass = isLive ? 'bg-cyan-100 text-cyan-900 border-cyan-400 font-bold' : 'bg-slate-100 text-slate-700 border-slate-300 font-bold';
-        let filterCategory = 'remaining';
+                let isLeaveStudent = s.students?.status === 'Leave';
+                let leaveMeta = null;
+                if (s.students?.notes) {
+                  try {
+                    const p = JSON.parse(s.students.notes);
+                    if (p && p.on_leave) {
+                      isLeaveStudent = true;
+                      leaveMeta = p;
+                    }
+                  } catch(e) {}
+                }
 
-        if (log) {
-          if (log.status === 'Waiting') {
-            waitingCount++;
-            status = 'WAITING';
-            filterCategory = 'waiting';
-            badgeClass = 'bg-amber-100 text-amber-900 border-amber-400 font-extrabold animate-pulse';
-          } else if (log.status === 'Running') {
-            status = 'RUNNING';
-            filterCategory = 'running';
-            badgeClass = 'bg-emerald-100 text-emerald-900 border-emerald-400 font-extrabold animate-pulse';
-          } else if (log.status === 'Completed' || log.status === 'Present') {
-            completedCount++;
-            status = 'COMPLETED';
-            filterCategory = 'completed';
-            badgeClass = 'bg-teal-100 text-teal-900 border-teal-400 font-extrabold';
-          } else if (log.status === 'Advance Class') {
-            completedCount++;
-            let advTarget = '';
-            try {
-              const parsed = JSON.parse(log.lesson_notes);
-              if (parsed?.advance_target_date) advTarget = ` (For: ${parsed.advance_target_date})`;
-            } catch(e) {}
-            status = `COMPLETED (Advance${advTarget})`;
-            filterCategory = 'completed';
-            badgeClass = 'bg-teal-100 text-teal-900 border-teal-400 font-extrabold';
-          } else if (log.status === 'Absent') {
-            absentCount++;
-            status = 'ABSENT';
-            filterCategory = 'absent';
-            badgeClass = 'bg-rose-100 text-rose-900 border-rose-400 font-extrabold';
-          } else if (log.status === 'Leave') {
-            leaveCount++;
-            status = 'LEAVE';
-            filterCategory = 'leave';
-            badgeClass = 'bg-blue-100 text-blue-900 border-blue-400 font-extrabold';
-          }
-        } else if (advCoverMap[s.id] || advCoverMap['student_' + s.student_id]) {
-          completedCount++;
-          const cov = advCoverMap[s.id] || advCoverMap['student_' + s.student_id];
-          status = `COMPLETED (Pre-Covered ${cov.log.date})`;
-          filterCategory = 'completed';
-          badgeClass = 'bg-teal-100 text-teal-900 border-teal-400 font-extrabold';
-        } else {
-          if (isLeaveStudent) {
-            leaveCount++;
-            const returnInfo = leaveMeta?.return_date ? ` (Returns: ${leaveMeta.return_date.slice(5)})` : '';
-            status = `LEAVE${returnInfo}`;
-            filterCategory = 'leave';
-            badgeClass = 'bg-blue-100 text-blue-900 border-blue-400 font-extrabold';
-          } else if (isLive) {
-            remainingCount++;
-            status = 'SCHEDULED (Live Slot)';
-            filterCategory = 'current';
-            badgeClass = 'bg-cyan-100 text-cyan-900 border-cyan-400 font-extrabold animate-pulse';
-          } else if (isPast) {
-            remainingCount++;
-            status = 'SCHEDULED (Past)';
-            filterCategory = 'remaining';
-            badgeClass = 'bg-amber-100 text-amber-900 border-amber-400 font-bold';
-          } else {
-            remainingCount++;
-            status = 'SCHEDULED';
-            filterCategory = 'remaining';
-            badgeClass = 'bg-slate-100 text-slate-700 border-slate-300 font-bold';
-          }
-        }
+                const isCurrentSlot = isLive && !isLeaveStudent;
+                const isRunningMarked = Boolean(log && log.status === 'Running');
 
-        return {
-          ...s,
-          log,
-          startMin,
-          endMin,
-          isLive,
-          isCurrentSlot,
-          isRunningMarked,
-          isPast,
-          isUpcoming,
-          isTrial,
-          isLeaveStudent,
-          status,
-          badgeClass,
-          filterCategory
-        };
-      });
+                let status = 'SCHEDULED';
+                let badgeClass = isLive ? 'bg-cyan-100 text-cyan-900 border-cyan-400 font-bold' : 'bg-slate-100 text-slate-700 border-slate-300 font-bold';
+                let filterCategory = 'remaining';
 
-      DASHBOARD_CLASSES.sort((a, b) => a.startMin - b.startMin);
+                if (log) {
+                  if (log.status === 'Waiting') {
+                    waitingCount++;
+                    status = 'WAITING';
+                    filterCategory = 'waiting';
+                    badgeClass = 'bg-amber-100 text-amber-900 border-amber-400 font-extrabold animate-pulse';
+                  } else if (log.status === 'Running') {
+                    status = 'RUNNING';
+                    filterCategory = 'running';
+                    badgeClass = 'bg-emerald-100 text-emerald-900 border-emerald-400 font-extrabold animate-pulse';
+                  } else if (log.status === 'Completed' || log.status === 'Present') {
+                    completedCount++;
+                    status = 'COMPLETED';
+                    filterCategory = 'completed';
+                    badgeClass = 'bg-teal-100 text-teal-900 border-teal-400 font-extrabold';
+                  } else if (log.status === 'Advance Class') {
+                    completedCount++;
+                    let advTarget = '';
+                    try {
+                      const parsed = JSON.parse(log.lesson_notes);
+                      if (parsed?.advance_target_date) advTarget = ` (For: ${parsed.advance_target_date})`;
+                    } catch(e) {}
+                    status = `COMPLETED (Advance${advTarget})`;
+                    filterCategory = 'completed';
+                    badgeClass = 'bg-teal-100 text-teal-900 border-teal-400 font-extrabold';
+                  } else if (log.status === 'Absent') {
+                    absentCount++;
+                    status = 'ABSENT';
+                    filterCategory = 'absent';
+                    badgeClass = 'bg-rose-100 text-rose-900 border-rose-400 font-extrabold';
+                  } else if (log.status === 'Leave') {
+                    leaveCount++;
+                    status = 'LEAVE';
+                    filterCategory = 'leave';
+                    badgeClass = 'bg-blue-100 text-blue-900 border-blue-400 font-extrabold';
+                  }
+                } else if (advCoverMap[s.id] || advCoverMap['student_' + s.student_id]) {
+                  completedCount++;
+                  const cov = advCoverMap[s.id] || advCoverMap['student_' + s.student_id];
+                  status = `COMPLETED (Pre-Covered ${cov.log.date})`;
+                  filterCategory = 'completed';
+                  badgeClass = 'bg-teal-100 text-teal-900 border-teal-400 font-extrabold';
+                } else {
+                  if (isLeaveStudent) {
+                    leaveCount++;
+                    const returnInfo = leaveMeta?.return_date ? ` (Returns: ${leaveMeta.return_date.slice(5)})` : '';
+                    status = `LEAVE${returnInfo}`;
+                    filterCategory = 'leave';
+                    badgeClass = 'bg-blue-100 text-blue-900 border-blue-400 font-extrabold';
+                  } else if (isLive) {
+                    remainingCount++;
+                    status = 'SCHEDULED (Live Slot)';
+                    filterCategory = 'current';
+                    badgeClass = 'bg-cyan-100 text-cyan-900 border-cyan-400 font-extrabold animate-pulse';
+                  } else if (isPast) {
+                    remainingCount++;
+                    status = 'SCHEDULED (Past)';
+                    filterCategory = 'remaining';
+                    badgeClass = 'bg-amber-100 text-amber-900 border-amber-400 font-bold';
+                  } else {
+                    remainingCount++;
+                    status = 'SCHEDULED';
+                    filterCategory = 'remaining';
+                    badgeClass = 'bg-slate-100 text-slate-700 border-slate-300 font-bold';
+                  }
+                }
 
-      const currentSlotTotal = DASHBOARD_CLASSES.filter(c => c.isCurrentSlot).length;
-      const runningMarkedTotal = DASHBOARD_CLASSES.filter(c => c.isRunningMarked).length;
+                return {
+                  ...s,
+                  log,
+                  startMin,
+                  endMin,
+                  isLive,
+                  isCurrentSlot,
+                  isRunningMarked,
+                  isPast,
+                  isUpcoming,
+                  isTrial,
+                  isLeaveStudent,
+                  status,
+                  badgeClass,
+                  filterCategory
+                };
+              });
 
-      // SLOW-CLASSES FIX: in a mirror-mode pass the KPI counts would
-      // come from stale mirror data, so keep the '…' pending markers
-      // painted above instead of overwriting them with mirror counts.
-      const setEl = (id, val) => { if (!dashD1Live) return; const el = document.getElementById(id); if (el) el.innerText = val; };
-      setEl('kpiDashTotal', totalToday);
-      setEl('kpiDashCurrent', currentSlotTotal);
-      setEl('kpiDashRunning', runningMarkedTotal);
-      setEl('kpiDashLive', currentSlotTotal);
-      // OWNER (2026-11-10): the "N Waiting" badge on the Current KPI
-      // card was removed at the owner's mark. waitingCount above is
-      // still computed by the log scan; it is simply no longer painted.
-      setEl('kpiDashCompleted', completedCount);
-      setEl('kpiDashRemaining', remainingCount);
-      setEl('kpiDashAbsent', absentCount);
-      setEl('kpiDashLeave', leaveCount);
-      setEl('kpiDashTrial', trialCount);
+              DASHBOARD_CLASSES.sort((a, b) => a.startMin - b.startMin);
 
-      // Also set legacy KPIs if element exists
-      setEl('kpiTotalToday', totalToday);
-      setEl('kpiLiveNow', currentSlotTotal);
-      setEl('kpiCompleted', completedCount);
-      setEl('kpiRemaining', remainingCount);
-      setEl('kpiAbsent', absentCount);
-      setEl('kpiOnLeave', leaveCount);
+              const currentSlotTotal = DASHBOARD_CLASSES.filter(c => c.isCurrentSlot).length;
+              const runningMarkedTotal = DASHBOARD_CLASSES.filter(c => c.isRunningMarked).length;
 
-      if (CURRENT_DASH_FILTER) {
-        renderDashboardClassesTable();
+              // SLOW-CLASSES FIX: in a mirror-mode pass the KPI counts would
+              // come from stale mirror data, so keep the '…' pending markers
+              // painted above instead of overwriting them with mirror counts.
+              const setEl = (id, val) => { if (!dashD1Live) return; const el = document.getElementById(id); if (el) el.innerText = val; };
+              setEl('kpiDashTotal', totalToday);
+              setEl('kpiDashCurrent', currentSlotTotal);
+              setEl('kpiDashRunning', runningMarkedTotal);
+              setEl('kpiDashLive', currentSlotTotal);
+              // OWNER (2026-11-10): the "N Waiting" badge on the Current KPI
+              // card was removed at the owner's mark. waitingCount above is
+              // still computed by the log scan; it is simply no longer painted.
+              setEl('kpiDashCompleted', completedCount);
+              setEl('kpiDashRemaining', remainingCount);
+              setEl('kpiDashAbsent', absentCount);
+              setEl('kpiDashLeave', leaveCount);
+              setEl('kpiDashTrial', trialCount);
+
+              // Also set legacy KPIs if element exists
+              setEl('kpiTotalToday', totalToday);
+              setEl('kpiLiveNow', currentSlotTotal);
+              setEl('kpiCompleted', completedCount);
+              setEl('kpiRemaining', remainingCount);
+              setEl('kpiAbsent', absentCount);
+              setEl('kpiOnLeave', leaveCount);
+
+              if (CURRENT_DASH_FILTER) {
+                renderDashboardClassesTable();
+              }
+      };
+
+      // Advance logs are now date-bounded (audit §5(ii)3): only the
+      // last 30 days are scanned instead of every Advance log ever.
+      // The client-side target-date filter inside the paint step is
+      // unchanged, so the rows shown are identical.
+      const advWindowStart = (() => { const d = new Date(todayDate + 'T00:00:00'); d.setDate(d.getDate() - 30); const mm = String(d.getMonth() + 1).padStart(2, '0'); const dd = String(d.getDate()).padStart(2, '0'); return d.getFullYear() + '-' + mm + '-' + dd; })();
+      const hasCachedSchedules = Array.isArray(window.ALL_CLASS_SCHEDULES) && window.ALL_CLASS_SCHEDULES.length > 0;
+      const schedBranchP = dashSettleBranch(
+        hasCachedSchedules
+          ? Promise.resolve({ data: window.ALL_CLASS_SCHEDULES.filter(sc => Number(sc.day_of_week) === Number(currentDay)) })
+          : db.from('class_schedules').select('*, students(*), teachers(*)').eq('day_of_week', currentDay),
+        []
+      );
+      const logsBranchP = dashSettleBranch(db.from('attendance_logs').select('*').eq('date', todayDate), []);
+      const advBranchP = dashSettleBranch(db.from('attendance_logs').select('*').eq('status', 'Advance Class').gte('date', advWindowStart), []);
+      const [schedRes, logsRes] = await Promise.all([schedBranchP, logsBranchP]);
+      if (myRun !== _dashRunSeq) return; // superseded while waiting
+      paintDashClassesFromBranches(schedRes, logsRes, null);
+      const advRes = await advBranchP;
+      if (myRun !== _dashRunSeq) return; // superseded while waiting
+      paintDashClassesFromBranches(schedRes, logsRes, advRes);
+
+      // Leave badge + pending requests, async: never gates the paint.
+      if (typeof checkLeaveReturnAlertsAndRequests === 'function') {
+        try { const _lp = checkLeaveReturnAlertsAndRequests(); if (_lp && typeof _lp.catch === 'function') _lp.catch(function () {}); } catch (e) {}
       }
-
-      // Check scheduled leave returns and pending teacher requests
-      await checkLeaveReturnAlertsAndRequests();
     }
 
     const loadLiveMonitorData = loadDashboardData;
@@ -2051,6 +2084,16 @@
       return _dashSearchDataPromise;
     }
 
+    // Button-delay build (2026-11-20, audit §5(ii)6): debounce the
+    // universal search (~300 ms) so a keystroke storm cannot fire a
+    // load per character. Enter / focus still search immediately via
+    // handleDashboardGlobalSearch.
+    let _dashSearchDebounceTimer = null;
+    function debouncedDashboardGlobalSearch(rawQuery) {
+      if (_dashSearchDebounceTimer) clearTimeout(_dashSearchDebounceTimer);
+      _dashSearchDebounceTimer = setTimeout(() => { _dashSearchDebounceTimer = null; handleDashboardGlobalSearch(rawQuery); }, 300);
+    }
+
     async function handleDashboardGlobalSearch(rawQuery) {
       const panel = document.getElementById('dashGlobalSearchResultsPanel');
       const clearBtn = document.getElementById('btnClearDashGlobalSearch');
@@ -2073,6 +2116,9 @@
         panel.innerHTML = '';
         return;
       }
+
+      panel.classList.remove('hidden');
+      panel.innerHTML = '<div class="p-5 text-center text-xs text-slate-400 font-semibold"><i class="fa-solid fa-spinner fa-spin mr-1"></i> Searching&hellip;</div>';
 
       await ensureDashboardSearchDataLoaded();
 
@@ -3399,7 +3445,7 @@
         const dashTab = document.getElementById('tab-dashboard');
         const isDashActive = dashTab && !dashTab.classList.contains('hidden');
         if (isDashActive) {
-          if (typeof loadDashboardData === 'function') loadDashboardData();
+          if (typeof loadDashboardData === 'function') loadDashboardData({ background: true });
         } else if (typeof reloadActiveAdminTab === 'function') {
           reloadActiveAdminTab();
         }

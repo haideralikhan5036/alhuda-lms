@@ -856,12 +856,15 @@
             _LAST_CORE_DATA_LOAD_TS = Date.now();
           }
 
-          if (typeof ingestFeeDataFromFamilies === 'function') {
-            try { await ingestFeeDataFromFamilies(rawFamilies); } catch (e) {}
-          }
-          if (typeof hydrateGlobalSharedStateFromCloud === 'function') {
-            try { await hydrateGlobalSharedStateFromCloud(rawFamilies, ALL_TEACHERS); } catch (e) {}
-          }
+          // Button-delay build (2026-11-20, audit §1.4): the two
+          // post-steps are independent, so run them in parallel instead
+          // of sequentially. Both are guarded and failure-tolerant, as
+          // before; hydrateGlobalSharedStateFromCloud re-ingests fees
+          // itself, exactly as it did under the sequential calls.
+          await Promise.all([
+            (async () => { if (typeof ingestFeeDataFromFamilies === 'function') { try { await ingestFeeDataFromFamilies(rawFamilies); } catch (e) {} } })(),
+            (async () => { if (typeof hydrateGlobalSharedStateFromCloud === 'function') { try { await hydrateGlobalSharedStateFromCloud(rawFamilies, ALL_TEACHERS); } catch (e) {} } })()
+          ]);
           if (typeof syncTopCircleNotificationDots === 'function') syncTopCircleNotificationDots();
           if (typeof renderPortalAnnouncementBanners === 'function') renderPortalAnnouncementBanners();
 

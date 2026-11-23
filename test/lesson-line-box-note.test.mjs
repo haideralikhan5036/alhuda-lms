@@ -143,6 +143,7 @@ async function runMainSave({ bookId, lineBox, para = '1', page = '3', status = '
     db: { from: () => ({ upsert: async (rows) => { upserts.push(rows); return { error: null }; } }) },
     notifyClassSessionSync: () => {}, closeAttendanceModal: () => {},
     loadTeacherPortalData: async () => {},
+    patchTodayClassLocally: () => {}, refreshTeacherPortalInBackground: () => {},
   };
   const code = extractConst(TEACHER, 'ADDITIONAL_COURSE_ID') + '\n'
     + extractFunction(TEACHER, 'getPktNowParts') + NL
@@ -220,6 +221,7 @@ async function runAdvSave({ bookId, lineBox, courseName = '' }) {
     getTeacherAllBooks: () => [QAIDA],
     db: { from: () => ({ upsert: async (rows) => { upserts.push(rows); return { error: null }; } }) },
     closeAdvanceClassModal: () => {}, loadTeacherPortalData: async () => {},
+    refreshTeacherPortalInBackground: () => {},
   };
   const code = extractConst(TEACHER, 'ADDITIONAL_COURSE_ID') + NL
     + extractFunction(TEACHER, 'getPktNowParts') + NL

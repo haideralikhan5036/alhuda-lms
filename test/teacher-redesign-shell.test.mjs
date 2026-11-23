@@ -371,6 +371,7 @@ const sandbox = {
   },
   setTimeout: () => 0, clearTimeout: () => {},
   // Recorders for the data loaders the switch function triggers.
+  showTeacherTabSkeleton: () => {}, // button-delay build: loading rows on tab entry (no-op here)
   renderTeacherStudentListTable: () => calls.push('renderStudents'),
   renderTeacherLessonHistory: () => calls.push('renderHistory'),
   loadTeacherTrialsData: () => calls.push('loadTrials'),

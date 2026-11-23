@@ -249,7 +249,17 @@ check('reminder re-checks on a dedicated 30 s interval', TEACHER_HTML.includes('
 check('reminder snooze is 120 s', TEACHER_HTML.includes('TEACHER_REMINDER_SNOOZE_MS = 120000'));
 check('renderTeacherClassesTable re-renders the reminder', extractFunction(TEACHER_HTML, 'renderTeacherClassesTable').includes('checkOverdueClassReminder()'));
 check('transition date comes from getPktNowParts', TEACHER_HTML.includes('const todayDate = getPktNowParts().date;'));
-check('manual complete handler unchanged (transition + modal call intact)', TEACHER_HTML.includes("openAttendanceModal(scheduleId, studentName, '', studentId, 'Completed', '');"));
+// Button-delay build (2026-11-20, owner-approved end-class popup
+// rule): Complete opens the lesson popup immediately and completes
+// the class ONLY when Submit is pressed. The old handler upserted
+// Completed (transitionClassSessionState) + reloaded BEFORE opening
+// the modal; the new handler must do neither — no write, no reload,
+// just the popup from memory. Completion lives in
+// saveAttendanceAndLessonNotes (the popup Submit handler).
+check('manual complete handler opens the lesson popup immediately from memory',
+  TEACHER_HTML.includes("openAttendanceModal(scheduleId, studentName || slot.students?.name || 'Student', '', studentId || slot.student_id, 'Completed', '');"));
+check('manual complete handler performs no completion write or reload before Submit',
+  (() => { const s = extractFunction(TEACHER_HTML, 'handleTeacherCompleteClass'); return !s.includes('transitionClassSessionState') && !s.includes('loadTeacherPortalData') && !s.includes('saveAttendanceAndLessonNotes') && !s.includes('await'); })());
 check('start path has NO concurrent-running block (next class can start first)',
   !/another class is (still )?(running|in progress)/i.test(extractFunction(TEACHER_HTML, 'transitionClassSessionState'))
   && !/another class is (still )?(running|in progress)/i.test(extractFunction(TEACHER_HTML, 'handleTeacherStartClass')));

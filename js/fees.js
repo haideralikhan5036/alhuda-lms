@@ -284,10 +284,20 @@
         CLOUD_MATRIX_OVERRIDES_CACHE = cloudOverrides;
         LAST_CLOUD_FEE_SYNC_TIME = new Date();
 
+        // Button-delay build (2026-11-20, audit §5(ii)7): skip the
+        // whole-store re-stringify when nothing changed — the core
+        // load re-ingests on every tab click, and this write was pure
+        // overhead whenever the fee data was already identical.
+        // The cache above is still refreshed, so readers see the
+        // same data; only the localStorage write is skipped.
+        const _prevFeeRecordsJson = (() => { try { return localStorage.getItem('alhuda_fee_records'); } catch (e) { return null; } })();
+        const _prevFeeOverridesJson = (() => { try { return localStorage.getItem('alhuda_fee_matrix_overrides'); } catch (e) { return null; } })();
+        const _nextFeeRecordsJson = JSON.stringify(combinedRecords);
+        const _nextFeeOverridesJson = JSON.stringify(cloudOverrides);
         // Also mirror to localStorage for instant offline fallback
         try {
-          localStorage.setItem('alhuda_fee_records', JSON.stringify(combinedRecords));
-          localStorage.setItem('alhuda_fee_matrix_overrides', JSON.stringify(cloudOverrides));
+          if (_prevFeeRecordsJson !== _nextFeeRecordsJson) localStorage.setItem('alhuda_fee_records', _nextFeeRecordsJson);
+          if (_prevFeeOverridesJson !== _nextFeeOverridesJson) localStorage.setItem('alhuda_fee_matrix_overrides', _nextFeeOverridesJson);
         } catch(e) {}
 
         updateCloudSyncIndicator('synced');

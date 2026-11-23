@@ -19,6 +19,19 @@
   'use strict';
 
   var _cache = null; // null = not loaded yet; otherwise an array of rows
+  var _cacheLoadedAt = 0;
+  var _loadInflight = null;
+  // Button-delay build (2026-11-20, audit §1.4/§5(ii)2): the ledger
+  // is read on every Salaries click, so cache it with the same 60 s
+  // TTL as the core cache instead of refetching the whole table.
+  // Writes through open()/closeCurrent()/endAssignment() mutate the
+  // cached rows in place, so the cache stays fresh between loads.
+  var ASSIGNMENTS_CACHE_TTL_MS = 60000;
+
+  function invalidateAssignmentsCache() {
+    _cache = null;
+    _cacheLoadedAt = 0;
+  }
 
   function todayStr() {
     var d = new Date();
@@ -51,12 +64,18 @@
     try { return typeof db !== 'undefined' && !!db; } catch (e) { return false; }
   }
 
-  function loadAll() {
+  function loadAll(opts) {
+    opts = opts || {};
+    if (Array.isArray(_cache) && !opts.force && (Date.now() - _cacheLoadedAt < ASSIGNMENTS_CACHE_TTL_MS)) {
+      return Promise.resolve(_cache);
+    }
+    if (_loadInflight && !opts.force) return _loadInflight;
     if (!hasDb()) { _cache = []; return Promise.resolve(_cache); }
-    return Promise.resolve(db.from('student_assignments').select('*'))
+    _loadInflight = Promise.resolve(db.from('student_assignments').select('*'))
       .then(function (res) {
         if (res && !res.error && Array.isArray(res.data)) {
           _cache = res.data;
+          _cacheLoadedAt = Date.now();
         } else if (_cache === null) {
           _cache = [];
         }
@@ -66,7 +85,9 @@
       .catch(function () {
         if (_cache === null) _cache = [];
         return _cache;
-      });
+      })
+      .finally(function () { _loadInflight = null; });
+    return _loadInflight;
   }
 
   function openRowsFor(studentId) {
@@ -421,6 +442,7 @@
 
   window.Assignments = {
     loadAll: loadAll,
+    invalidateCache: invalidateAssignmentsCache,
     open: open,
     closeCurrent: closeCurrent,
     endAssignment: endAssignment,

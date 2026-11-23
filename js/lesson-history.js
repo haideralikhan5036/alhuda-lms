@@ -695,6 +695,31 @@
     }
   }
 
+  // Fetch several lesson images with a bounded pool (at most `cap`
+  // fetches in flight; default 4). The old call sites fired one fetch
+  // per card with no cap at all. Returns the blob URLs in input order,
+  // null for any key that could not be loaded. Callers MUST revoke the
+  // URLs when the view is torn down. Retry semantics are unchanged:
+  // each key goes through loadLessonImageBlobUrl exactly as before.
+  async function loadLessonImageBlobUrls(keys, cap) {
+    var list = Array.isArray(keys) ? keys : [];
+    var out = new Array(list.length).fill(null);
+    if (list.length === 0) return out;
+    var maxInFlight = Math.max(1, Math.min(Number(cap) || 4, list.length));
+    var next = 0;
+    async function lane() {
+      while (next < list.length) {
+        var i = next;
+        next++;
+        try { out[i] = await loadLessonImageBlobUrl(list[i]); } catch (e) { out[i] = null; }
+      }
+    }
+    var lanes = [];
+    for (var l = 0; l < maxInFlight; l++) lanes.push(lane());
+    await Promise.all(lanes);
+    return out;
+  }
+
   // Batch 3.2 (audit P1-6) — attended-status semantics, shared by the
   // parent portal. Teachers store 'Completed' for a held class (the modal
   // 'Present' is mapped to 'Completed' at save time); 'Present' itself is
@@ -933,6 +958,7 @@
     getLessonHistory: getLessonHistory,
     uploadLessonImageOrThrow: uploadLessonImageOrThrow,
     loadLessonImageBlobUrl: loadLessonImageBlobUrl,
+    loadLessonImageBlobUrls: loadLessonImageBlobUrls,
     openAnnotatedPagesViewer: openAnnotatedPagesViewer,
     closeAnnotatedPagesViewer: closeAnnotatedPagesViewer,
     annotatedPageCaption: annotatedPageCaption,
